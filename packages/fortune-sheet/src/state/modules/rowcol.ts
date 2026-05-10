@@ -1,4 +1,4 @@
-import type { MergeCell } from '@workspace/lib/sheets';
+import type { DataVerificationRule, MergeCell } from '@workspace/lib/sheets';
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
 import type { Context } from '../context';
@@ -204,11 +204,9 @@ function shiftStateOnlyFieldsForInsert(
         }
     }
 
-    // Data validation config update. `dataVerification` is loosely typed (`any`)
-    // on Sheet — the editor mutates it through many entry points; we just
-    // re-key entries here without inspecting their shape.
+    // Data validation config update — re-key entries without inspecting shape.
     const { dataVerification } = file;
-    const newDataVerification: Record<string, unknown> = {};
+    const newDataVerification: Record<string, DataVerificationRule> = {};
     if (dataVerification != null) {
         forEach(dataVerification, (_v, key) => {
             const r = Number(key.split('_')[0]);
@@ -490,10 +488,9 @@ function shiftStateOnlyFieldsForDelete(
         }
     }
 
-    // Data validation config update. `dataVerification` is loosely typed (`any`)
-    // on Sheet — see the matching block in shiftStateOnlyFieldsForInsert.
+    // Data validation config update — re-key entries on delete (mirror of insert).
     const { dataVerification } = file;
-    const newDataVerification: Record<string, unknown> = {};
+    const newDataVerification: Record<string, DataVerificationRule> = {};
     if (dataVerification != null) {
         forEach(dataVerification, (_v, key) => {
             const r = Number(key.split('_')[0]);

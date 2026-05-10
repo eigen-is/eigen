@@ -117,6 +117,46 @@ export type BorderInfo = CellBorderInfo | RangeBorderInfo;
 
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
+// Per-cell data-validation rule, produced by the editor's state layer
+// (state/modules/dataVerification.ts) and consumed by the canvas painter
+// (red-triangle indicator + checkbox draw). Keyed by `${row}_${col}` on
+// `Sheet.dataVerification`.
+//
+// `value1` carries the encoded payload as a string regardless of `type`:
+// comma-separated list for `dropdown`, numeric literal for the `number*` and
+// `text_length` variants, "selected" label for `checkbox`, ISO date for `date`.
+// `value2` is only populated for `between`/`notBetween` ranges and is otherwise
+// blank. `checked` is the live checkbox state mutated by `checkboxChange`.
+// `hintShow` + `hintValue` drive the cell-focus hint popup. `prohibitInput`
+// blocks the input when validation fails (read by `updateCell` in cell.ts).
+//
+// `type` and `type2` are `string` rather than a narrow union: the producer in
+// `components/DataVerification/index.tsx` assigns via Radix Select's
+// `onValueChange(value: string)` and threading a union through the dialog
+// requires runtime narrowing at every callback. Known values today:
+// type  ∈ dropdown | checkbox | number | number_integer | number_decimal |
+//         text_content | text_length | date | validity
+// type2 ∈ between | notBetween | equal | notEqualTo | moreThanThe | lessThan |
+//         greaterOrEqualTo | lessThanOrEqualTo | include | exclude |
+//         earlierThan | noEarlierThan | laterThan | noLaterThan |
+//         identificationNumber | phoneNumber | true | ''
+export type DataVerificationRule = {
+    type: string;
+    type2: string;
+    value1: string;
+    value2: string;
+    checked?: boolean;
+    hintShow?: boolean;
+    hintValue?: string;
+    prohibitInput?: boolean;
+    // Editor-side draft fields preserved on the stored rule because the
+    // `DataVerification` dialog spreads `regulation` into the saved item. They
+    // have no effect at validation time but must be permitted by the type.
+    rangeTxt?: string;
+    validity?: string;
+    remote?: boolean;
+};
+
 export type SheetConfig = {
     merge?: Record<string, MergeCell>;
     rowlen?: Record<string, number>;

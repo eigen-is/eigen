@@ -196,6 +196,11 @@ export function DataVerification() {
                     ...item,
                     value1: rangValue,
                     rangeTxt: rangeT,
+                    validity: item.validity ?? '',
+                    remote: item.remote ?? false,
+                    prohibitInput: item.prohibitInput ?? false,
+                    hintShow: item.hintShow ?? false,
+                    hintValue: item.hintValue ?? '',
                 };
             } else {
                 ctx.dataVerification!.dataRegulation! = {

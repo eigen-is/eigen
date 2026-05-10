@@ -2,8 +2,8 @@ import { isNil } from 'es-toolkit/compat';
 import {
     type Context,
     colLocationByIndex,
+    type DataVerificationRule,
     diff,
-    type GlobalCache,
     getCellValue,
     getcellrange,
     getFlowdata,
@@ -19,10 +19,21 @@ import {
     rowLocationByIndex,
     setCellValue,
 } from '..';
+import type { en } from '../locale/en';
+
+// Locale slices passed into confirmMessage from the React dialog — the parent
+// destructures `locale(context)` into these named groups.
+type GeneralDialogLocale = typeof en.generalDialog;
+type DataVerificationLocale = typeof en.dataVerification;
+
+// Cell value handed to validateCellData by callers. Canvas passes the
+// formatted/raw cell value (`Cell['v']` flavour) and `updateCell` in cell.ts
+// passes the user-typed innerText.
+type CellValueForValidation = string | number | boolean | null | undefined;
 
 // TODO: Add mouse selection for multiple ranges later
 // Enable range selection
-export function dataRangeSelection(ctx: Context, cache: GlobalCache, rangT: string, type: string, value: string) {
+export function dataRangeSelection(ctx: Context, rangT: string, type: string, value: string) {
     ctx.rangeDialog!.show = true;
     ctx.rangeDialog!.type = type;
     ctx.rangeDialog!.rangeTxt = value;
@@ -51,12 +62,6 @@ export function dataRangeSelection(ctx: Context, cache: GlobalCache, rangT: stri
     } else {
         ctx.luckysheetCellUpdate = [0, 0];
     }
-
-    // cache.doNotUpdateCell = true;
-    // ctx.formulaCache.rangestart = true;
-    // ctx.formulaCache.rangedrag_column_start = false;
-    // ctx.formulaCache.rangedrag_row_start = false;
-    // ctx.formulaCache.rangechangeindex = 0;
 }
 
 export function getDropdownList(ctx: Context, txt: string) {
@@ -74,7 +79,7 @@ export function getDropdownList(ctx: Context, txt: string) {
 
                 const cell = d[r][c];
 
-                if (!cell || !cell.v) {
+                if (!cell?.v) {
                     continue;
                 }
 
@@ -104,7 +109,7 @@ export function getDropdownList(ctx: Context, txt: string) {
 }
 
 // ID card validation
-export function validateIdCard(ctx: Context, idCard: string) {
+export function validateIdCard(idCard: string) {
     // regex for 15-digit and 18-digit Chinese ID card numbers
     const regIdCard =
         /^(^[1-9]\d{7}((0\d)|(1[0-2]))(([0|1|2]\d)|3[0-1])\d{3}$)|(^[1-9]\d{5}[1-9]\d{3}((0\d)|(1[0-2]))(([0|1|2]\d)|3[0-1])((\d{4})|\d{3}[Xx])$)$/;
@@ -142,176 +147,170 @@ export function validateIdCard(ctx: Context, idCard: string) {
 }
 
 // Data validation
-export function validateCellData(ctx: Context, item: any, cellValue: any) {
-    let { value1, value2 } = item;
-    const { type, type2 } = item;
+export function validateCellData(ctx: Context, item: DataVerificationRule, cellValue: CellValueForValidation) {
+    const { type, type2, value1, value2 } = item;
     if (type === 'dropdown') {
         const list = getDropdownList(ctx, value1);
 
         // for multi-select, check that each value is in the dropdown list
-        if (type2 && cellValue) {
-            return cellValue
-                .toString()
+        if (type2 && cellValue != null && cellValue !== '') {
+            return String(cellValue)
                 .split(',')
-                .every((i: any) => {
-                    return list.indexOf(i) !== -1;
-                });
+                .every((i) => list.indexOf(i) !== -1);
         }
 
-        let result = false;
-
-        for (let i = 0; i < list.length; i += 1) {
-            if (list[i] === cellValue) {
-                result = true;
-                break;
-            }
-        }
-
-        return result;
+        if (cellValue == null) return false;
+        return list.some((v) => v === cellValue);
     }
     if (type === 'checkbox') {
-    } else if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
+        return true;
+    }
+    if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
         if (!isRealNum(cellValue)) {
             return false;
         }
 
-        cellValue = Number(cellValue);
-        if (type === 'number_integer' && cellValue % 1 !== 0) {
+        const n = Number(cellValue);
+        if (type === 'number_integer' && n % 1 !== 0) {
             return false;
         }
 
-        if (type === 'number_decimal' && cellValue % 1 === 0) {
+        if (type === 'number_decimal' && n % 1 === 0) {
             return false;
         }
 
-        value1 = Number(value1);
-        value2 = Number(value2);
+        const v1 = Number(value1);
+        const v2 = Number(value2);
 
-        if (type2 === 'between' && (cellValue < value1 || cellValue > value2)) {
+        if (type2 === 'between' && (n < v1 || n > v2)) {
             return false;
         }
 
-        if (type2 === 'notBetween' && cellValue >= value1 && cellValue <= value2) {
+        if (type2 === 'notBetween' && n >= v1 && n <= v2) {
             return false;
         }
 
-        if (type2 === 'equal' && cellValue !== value1) {
+        if (type2 === 'equal' && n !== v1) {
             return false;
         }
 
-        if (type2 === 'notEqualTo' && cellValue === value1) {
+        if (type2 === 'notEqualTo' && n === v1) {
             return false;
         }
 
-        if (type2 === 'moreThanThe' && cellValue <= value1) {
+        if (type2 === 'moreThanThe' && n <= v1) {
             return false;
         }
 
-        if (type2 === 'lessThan' && cellValue >= value1) {
+        if (type2 === 'lessThan' && n >= v1) {
             return false;
         }
 
-        if (type2 === 'greaterOrEqualTo' && cellValue < value1) {
+        if (type2 === 'greaterOrEqualTo' && n < v1) {
             return false;
         }
 
-        if (type2 === 'lessThanOrEqualTo' && cellValue > value1) {
+        if (type2 === 'lessThanOrEqualTo' && n > v1) {
             return false;
         }
     } else if (type === 'text_content') {
-        cellValue = cellValue.toString();
-        value1 = value1.toString();
+        const s = String(cellValue ?? '');
+        const v1 = String(value1 ?? '');
 
-        if (type2 === 'include' && cellValue.indexOf(value1) === -1) {
+        if (type2 === 'include' && s.indexOf(v1) === -1) {
             return false;
         }
 
-        if (type2 === 'exclude' && cellValue.indexOf(value1) > -1) {
+        if (type2 === 'exclude' && s.indexOf(v1) > -1) {
             return false;
         }
 
-        if (type2 === 'equal' && cellValue !== value1) {
+        if (type2 === 'equal' && s !== v1) {
             return false;
         }
     } else if (type === 'text_length') {
-        cellValue = cellValue.toString().length;
+        const len = String(cellValue ?? '').length;
 
-        value1 = Number(value1);
-        value2 = Number(value2);
+        const v1 = Number(value1);
+        const v2 = Number(value2);
 
-        if (type2 === 'between' && (cellValue < value1 || cellValue > value2)) {
+        if (type2 === 'between' && (len < v1 || len > v2)) {
             return false;
         }
 
-        if (type2 === 'notBetween' && cellValue >= value1 && cellValue <= value2) {
+        if (type2 === 'notBetween' && len >= v1 && len <= v2) {
             return false;
         }
 
-        if (type2 === 'equal' && cellValue !== value1) {
+        if (type2 === 'equal' && len !== v1) {
             return false;
         }
 
-        if (type2 === 'notEqualTo' && cellValue === value1) {
+        if (type2 === 'notEqualTo' && len === v1) {
             return false;
         }
 
-        if (type2 === 'moreThanThe' && cellValue <= value1) {
+        if (type2 === 'moreThanThe' && len <= v1) {
             return false;
         }
 
-        if (type2 === 'lessThan' && cellValue >= value1) {
+        if (type2 === 'lessThan' && len >= v1) {
             return false;
         }
 
-        if (type2 === 'greaterOrEqualTo' && cellValue < value1) {
+        if (type2 === 'greaterOrEqualTo' && len < v1) {
             return false;
         }
 
-        if (type2 === 'lessThanOrEqualTo' && cellValue > value1) {
+        if (type2 === 'lessThanOrEqualTo' && len > v1) {
             return false;
         }
     } else if (type === 'date') {
         if (!isdatetime(cellValue)) {
             return false;
         }
+        // dayjs.ConfigType accepts string|number|Date|Dayjs|null|undefined — coerce
+        // the (narrower) cell value to string so the union stays single-shaped.
+        const dv = String(cellValue ?? '');
 
-        if (type2 === 'between' && (diff(cellValue, value1) < 0 || diff(cellValue, value2) > 0)) {
+        if (type2 === 'between' && (diff(dv, value1) < 0 || diff(dv, value2) > 0)) {
             return false;
         }
 
-        if (type2 === 'notBetween' && diff(cellValue, value1) >= 0 && diff(cellValue, value2) <= 0) {
+        if (type2 === 'notBetween' && diff(dv, value1) >= 0 && diff(dv, value2) <= 0) {
             return false;
         }
 
-        if (type2 === 'equal' && diff(cellValue, value1) !== 0) {
+        if (type2 === 'equal' && diff(dv, value1) !== 0) {
             return false;
         }
 
-        if (type2 === 'notEqualTo' && diff(cellValue, value1) === 0) {
+        if (type2 === 'notEqualTo' && diff(dv, value1) === 0) {
             return false;
         }
 
-        if (type2 === 'earlierThan' && diff(cellValue, value1) >= 0) {
+        if (type2 === 'earlierThan' && diff(dv, value1) >= 0) {
             return false;
         }
 
-        if (type2 === 'noEarlierThan' && diff(cellValue, value1) < 0) {
+        if (type2 === 'noEarlierThan' && diff(dv, value1) < 0) {
             return false;
         }
 
-        if (type2 === 'laterThan' && diff(cellValue, value1) <= 0) {
+        if (type2 === 'laterThan' && diff(dv, value1) <= 0) {
             return false;
         }
 
-        if (type2 === 'noLaterThan' && diff(cellValue, value1) > 0) {
+        if (type2 === 'noLaterThan' && diff(dv, value1) > 0) {
             return false;
         }
     } else if (type === 'validity') {
-        if (type2 === 'identificationNumber' && !validateIdCard(ctx, cellValue)) {
+        const s = String(cellValue ?? '');
+        if (type2 === 'identificationNumber' && !validateIdCard(s)) {
             return false;
         }
 
-        if (type2 === 'phoneNumber' && !/^1[3456789]\d{9}$/.test(cellValue)) {
+        if (type2 === 'phoneNumber' && !/^1[3456789]\d{9}$/.test(s)) {
             return false;
         }
     }
@@ -321,20 +320,16 @@ export function validateCellData(ctx: Context, item: any, cellValue: any) {
 // checkbox handling
 export function checkboxChange(ctx: Context, r: number, c: number) {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    // let historyDataVerification = $.extend(true, {}, _this.dataVerification);
     const currentDataVerification = ctx.luckysheetfile[index].dataVerification ?? {};
     const item = currentDataVerification[`${r}_${c}`];
     item.checked = !item.checked;
-    let value = item.value2;
-    if (item.checked) {
-        value = item.value1;
-    }
+    const value = item.checked ? item.value1 : item.value2;
     const d = getFlowdata(ctx);
     setCellValue(ctx, r, c, d, value);
 }
 
 // error message when data is invalid
-export function getFailureText(ctx: Context, item: any) {
+export function getFailureText(ctx: Context, item: DataVerificationRule) {
     let failureText = '';
     const { type, type2, value1, value2 } = item;
     const optionLabel = ctx.dataVerification?.optionLabel;
@@ -368,7 +363,7 @@ export function getFailureText(ctx: Context, item: any) {
 }
 
 // get the hint text
-export function getHintText(ctx: Context, item: any) {
+export function getHintText(ctx: Context, item: DataVerificationRule) {
     let hintValue = item.hintValue || '';
     if (hintValue) return hintValue;
 
@@ -475,7 +470,7 @@ export function cellFocus(ctx: Context, r: number, c: number, clickMode: boolean
 }
 
 // set the dropdown value
-export function setDropcownValue(ctx: Context, value: string, arr: any) {
+export function setDropcownValue(ctx: Context, value: string, arr: string[]) {
     if (!ctx.luckysheet_select_save) return;
     const d = getFlowdata(ctx);
     if (!d) return;
@@ -484,21 +479,27 @@ export function setDropcownValue(ctx: Context, value: string, arr: any) {
     const colIndex = last.column_focus;
     if (rowIndex == null || colIndex == null) return;
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const item = ctx.luckysheetfile[index].dataVerification[`${rowIndex}_${colIndex}`];
+    const item = ctx.luckysheetfile[index].dataVerification?.[`${rowIndex}_${colIndex}`];
+    if (!item) return;
+    let nextValue = value;
     if (item.type2 === 'true') {
-        value = item.value1
+        nextValue = item.value1
             .split(',')
-            .filter((v: any) => arr.indexOf(v) >= 0)
+            .filter((v) => arr.indexOf(v) >= 0)
             .join(',');
     } else {
         ctx.dataVerificationDropDownList = false;
     }
-    setCellValue(ctx, rowIndex, colIndex, d, value);
+    setCellValue(ctx, rowIndex, colIndex, d, nextValue);
     jfrefreshgrid(ctx, null, undefined);
 }
 
 // input data validation
-export function confirmMessage(ctx: Context, generalDialog: any, dataVerification: any): boolean {
+export function confirmMessage(
+    ctx: Context,
+    generalDialog: GeneralDialogLocale,
+    dataVerification: DataVerificationLocale,
+): boolean {
     const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
     if (range.length === 0) {
         ctx.warnDialog = generalDialog.noSeletionError;

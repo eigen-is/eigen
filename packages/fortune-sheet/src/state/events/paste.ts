@@ -1,3 +1,4 @@
+import type { DataVerificationRule } from '@workspace/lib/sheets';
 import {
     cloneDeep,
     forEach,
@@ -38,8 +39,8 @@ type CutPasteSide = {
     curConfig: SheetConfig;
     cdformat: unknown[] | undefined;
     curCdformat: unknown[] | undefined;
-    dataVerification: Record<string, unknown> | undefined;
-    curDataVerification: Record<string, unknown>;
+    dataVerification: Record<string, DataVerificationRule> | undefined;
+    curDataVerification: Record<string, DataVerificationRule>;
     range: { row: number[]; column: number[] };
 };
 
@@ -1128,7 +1129,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
     const c_dataVerification =
         cloneDeep(ctx.luckysheetfile[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
-    let dataVerification: Record<string, unknown> | null = null;
+    let dataVerification: Record<string, DataVerificationRule> | null = null;
 
     let mth = 0;
     let mtc = 0;
@@ -1218,7 +1219,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
                         if (dataVerification == null) {
                             dataVerification = cloneDeep(
                                 ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!]?.dataVerification || {},
-                            ) as Record<string, unknown>;
+                            );
                         }
 
                         dataVerification![`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
