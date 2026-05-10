@@ -97,7 +97,12 @@ export function FilePreview({
             data-preview-overlay
             className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in"
             style={{ pointerEvents: 'auto' }}
-            onClick={onClose}
+            // React synthetic events bubble through the React tree across portals, so a
+            // click inside the save-to-drive picker (rendered as a JSX child below) would
+            // bubble here and dismiss the preview. Only close on direct overlay clicks.
+            onClick={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
         >
             {/* Header */}
             <div
