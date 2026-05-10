@@ -1,9 +1,29 @@
+import type { BorderInfo, MergeCell } from '@workspace/lib/sheets';
 import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
-import type { CellMatrix } from '../../engine/types';
+import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
+import type { SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
-// Get computed border data for the table
+// Side of a computed cell border. Style accepts string because the FE toolbar
+// pushes `'1'..'13'` into RangeBorderInfo.style; the cell variant in
+// CellBorderInfo is `number`. Canvas painter normalises via `.toString()`.
+type ComputedBorderSide = { color: string; style: number | string };
+type ComputedBorderEntry = {
+    s?: ComputedBorderSide | null;
+    l?: ComputedBorderSide | null;
+    r?: ComputedBorderSide | null;
+    t?: ComputedBorderSide | null;
+    b?: ComputedBorderSide | null;
+};
+type ComputedBorderMap = Record<string, ComputedBorderEntry>;
+
+// Get computed border data for the table.
+// Internally the entries are `ComputedBorderEntry`; the return type stays
+// loose because paste.ts / selection.ts / moveCells.ts / dropCell.ts read the
+// map via repeated template-literal indexing where TS cannot prove non-null
+// after `if (m[k].l)` narrowing. Tighten when those callers are cleaned up
+// under TODO #1.
 export function getBorderInfoComputeRange(
     ctx: Context,
     dataset_row_st: number,
@@ -11,39 +31,35 @@ export function getBorderInfoComputeRange(
     dataset_col_st: number,
     dataset_col_ed: number,
     sheetId?: string,
-) {
-    const borderInfoCompute: Record<string, any> = {};
+    // biome-ignore lint/suspicious/noExplicitAny: see preceding comment
+): Record<string, any> {
+    const borderInfoCompute: ComputedBorderMap = {};
     const flowdata = getFlowdata(ctx);
 
-    let cfg;
+    let cfg: SheetConfig | undefined;
     let data: CellMatrix | null | undefined;
     if (!sheetId) {
         cfg = ctx.config;
         data = flowdata;
     } else {
         const index = getSheetIndex(ctx, sheetId);
-        if (!isNil(index)) {
-            cfg = ctx.luckysheetfile[index].config;
-            data = ctx.luckysheetfile[index].data;
-        } else {
-            return borderInfoCompute;
-        }
+        if (isNil(index)) return borderInfoCompute;
+        cfg = ctx.luckysheetfile[index].config;
+        data = ctx.luckysheetfile[index].data;
     }
     if (!data || !cfg) return borderInfoCompute;
 
-    const { borderInfo } = cfg;
+    // `SheetConfig.borderInfo` is `any[]` (see state/types.ts) because state
+    // producer sites push untagged literals; readers narrow here.
+    const borderInfo: BorderInfo[] = cfg.borderInfo ?? [];
 
-    if (!borderInfo || isEmpty(borderInfo)) return borderInfoCompute;
+    if (isEmpty(borderInfo)) return borderInfoCompute;
 
     for (let i = 0; i < borderInfo.length; i += 1) {
-        const { rangeType } = borderInfo[i];
+        const entry = borderInfo[i];
 
-        if (rangeType === 'range') {
-            const { borderType } = borderInfo[i];
-            const borderColor = borderInfo[i].color;
-            const borderStyle = borderInfo[i].style;
-
-            const borderRange: any = borderInfo[i].range;
+        if (entry.rangeType === 'range') {
+            const { borderType, color: borderColor, style: borderStyle, range: borderRange } = entry;
 
             for (let j = 0; j < borderRange.length; j += 1) {
                 let bd_r1 = borderRange[j].row[0];
@@ -70,9 +86,8 @@ export function getBorderInfoComputeRange(
                 if (borderType === 'border-slash') {
                     const bd_r = borderRange[0].row_focus;
                     const bd_c = borderRange[0].column_focus;
-                    if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                        continue;
-                    }
+                    if (bd_r == null || bd_c == null) continue;
+                    if (cfg.rowhidden?.[bd_r] != null) continue;
                     if (bd_c < dataset_col_st || bd_c > dataset_col_ed) continue;
                     if (bd_r < dataset_row_st || bd_r > dataset_row_ed) continue;
                     if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
@@ -270,9 +285,9 @@ export function getBorderInfoComputeRange(
 
                         for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
                             if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                const cell = data[bd_r][bd_c];
+                                const cell: Cell | null = data[bd_r][bd_c];
 
-                                const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
+                                const mc: MergeCell | undefined = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                                 if (mc?.r === bd_r) {
                                     if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
@@ -594,31 +609,12 @@ export function getBorderInfoComputeRange(
                                     if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                                         borderInfoCompute[`${bd_r}_${bd_c}`] = {};
                                     }
-                                    if (!bd_r === bd_r2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                    if (!bd_c === bd_c2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
                                 }
                             } else if (bd_r === bd_r2 && bd_c === bd_c1) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                                 } else {
                                     if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                                         borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    if (!bd_r === bd_r2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
                                     }
                                     borderInfoCompute[`${bd_r}_${bd_c}`].t = {
                                         color: borderColor,
@@ -636,12 +632,6 @@ export function getBorderInfoComputeRange(
                                         color: borderColor,
                                         style: borderStyle,
                                     };
-                                    if (!bd_c === bd_c2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
                                 }
                             } else if (bd_r === bd_r2 && bd_c === bd_c2) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -678,13 +668,6 @@ export function getBorderInfoComputeRange(
                                         if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                                             borderInfoCompute[`${bd_r}_${bd_c}`] = {};
                                         }
-
-                                        if (!bd_r === bd_r2) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
                                     }
                                 } else {
                                     if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
@@ -695,18 +678,6 @@ export function getBorderInfoComputeRange(
                                         color: borderColor,
                                         style: borderStyle,
                                     };
-                                    if (!bd_r === bd_r2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                    if (!bd_c === bd_c2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
                                 }
                             } else if (bd_r === bd_r2) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -727,13 +698,6 @@ export function getBorderInfoComputeRange(
                                         if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                                             borderInfoCompute[`${bd_r}_${bd_c}`] = {};
                                         }
-
-                                        if (!bd_r === bd_r2) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
                                     }
                                 } else {
                                     if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
@@ -744,12 +708,6 @@ export function getBorderInfoComputeRange(
                                         color: borderColor,
                                         style: borderStyle,
                                     };
-                                    if (!bd_r === bd_r2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
                                     borderInfoCompute[`${bd_r}_${bd_c}`].t = {
                                         color: borderColor,
                                         style: borderStyle,
@@ -774,35 +732,15 @@ export function getBorderInfoComputeRange(
                                         if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                                             borderInfoCompute[`${bd_r}_${bd_c}`] = {};
                                         }
-
-                                        if (!bd_c === bd_c2) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
                                     }
                                 } else {
                                     if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                                         borderInfoCompute[`${bd_r}_${bd_c}`] = {};
                                     }
-
-                                    if (!bd_r === bd_r2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
                                     borderInfoCompute[`${bd_r}_${bd_c}`].t = {
                                         color: borderColor,
                                         style: borderStyle,
                                     };
-                                    if (!bd_c === bd_c2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
                                 }
                             } else if (bd_c === bd_c2) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -823,13 +761,6 @@ export function getBorderInfoComputeRange(
                                         if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                                             borderInfoCompute[`${bd_r}_${bd_c}`] = {};
                                         }
-
-                                        if (!bd_c === bd_c2) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
                                     }
                                 } else {
                                     if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
@@ -844,12 +775,6 @@ export function getBorderInfoComputeRange(
                                         color: borderColor,
                                         style: borderStyle,
                                     };
-                                    if (!bd_c === bd_c2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
                                 }
                             } else {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -870,13 +795,6 @@ export function getBorderInfoComputeRange(
                                         if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                                             borderInfoCompute[`${bd_r}_${bd_c}`] = {};
                                         }
-
-                                        if (!bd_c === bd_c2) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
                                     }
 
                                     if (mc?.c === bd_c) {
@@ -892,13 +810,6 @@ export function getBorderInfoComputeRange(
                                         if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                                             borderInfoCompute[`${bd_r}_${bd_c}`] = {};
                                         }
-
-                                        if (!bd_r === bd_r2) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
                                     }
                                 } else {
                                     if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
@@ -909,22 +820,10 @@ export function getBorderInfoComputeRange(
                                         color: borderColor,
                                         style: borderStyle,
                                     };
-                                    if (!bd_r === bd_r2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
                                     borderInfoCompute[`${bd_r}_${bd_c}`].t = {
                                         color: borderColor,
                                         style: borderStyle,
                                     };
-                                    if (!bd_c === bd_c2) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
                                 }
                             }
                         }
@@ -1121,8 +1020,8 @@ export function getBorderInfoComputeRange(
                     }
                 }
             }
-        } else if (rangeType === 'cell') {
-            const { value } = borderInfo[i] as any;
+        } else if (entry.rangeType === 'cell') {
+            const { value } = entry;
 
             const bd_r = value.row_index;
             const bd_c = value.col_index;
@@ -1141,8 +1040,8 @@ export function getBorderInfoComputeRange(
                 }
 
                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                    const cell = data[bd_r][bd_c];
-                    const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
+                    const cell: Cell | null = data[bd_r][bd_c];
+                    const mc: MergeCell | undefined = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                     if (!isNil(value.l) && bd_c === mc?.c) {
                         // Left border
@@ -1413,23 +1312,21 @@ export function getBorderInfoComputeRange(
     return borderInfoCompute;
 }
 
-export function getBorderInfoCompute(ctx: Context, sheetId?: string) {
-    let borderInfoCompute: any = {};
+// Same loose return as `getBorderInfoComputeRange` — see comment there.
+// biome-ignore lint/suspicious/noExplicitAny: see comment on getBorderInfoComputeRange
+export function getBorderInfoCompute(ctx: Context, sheetId?: string): Record<string, any> {
     const flowdata = getFlowdata(ctx);
 
-    let data: any = {};
+    let data: CellMatrix | null | undefined;
     if (sheetId === undefined) {
         data = flowdata;
     } else {
         const index = getSheetIndex(ctx, sheetId);
-        if (!isNil(index)) {
-            data = ctx.luckysheetfile[index].data;
-        } else {
-            return borderInfoCompute;
-        }
+        if (isNil(index)) return {};
+        data = ctx.luckysheetfile[index].data;
     }
 
-    borderInfoCompute = getBorderInfoComputeRange(ctx, 0, data.length, 0, data[0].length, sheetId);
+    if (!data) return {};
 
-    return borderInfoCompute;
+    return getBorderInfoComputeRange(ctx, 0, data.length, 0, data[0].length, sheetId);
 }

@@ -1,3 +1,4 @@
+import type { MergeCell } from '@workspace/lib/sheets';
 import {
     camelCase,
     cloneDeep,
@@ -457,7 +458,7 @@ export function mergeBorder(ctx: Context, d: CellMatrix, row_index: number, col_
 
 function mergeMove(
     ctx: Context,
-    mc: { r: number; c: number; rs: number; cs: number },
+    mc: MergeCell,
     columnseleted: number[],
     rowseleted: number[],
     s: Partial<Selection>,
@@ -564,7 +565,7 @@ export function mergeMoveMain(
     columnseleted[1] = Math.max(columnseleted[0], columnseleted[1]);
 
     let offloop = true;
-    const mergeMoveData: Record<string, { r: number; c: number; rs: number; cs: number }> = {};
+    const mergeMoveData: Record<string, MergeCell> = {};
 
     while (offloop) {
         offloop = false;

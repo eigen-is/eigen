@@ -1,10 +1,10 @@
+import type { MergeCell } from '@workspace/lib/sheets';
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { FormulaCell, Sheet, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
-type MergeCell = { r: number; c: number; rs: number; cs: number };
 type FilterSelect = { row: number[]; column: number[] };
 type FilterEntry = {
     rowhidden?: Record<number, number>;
