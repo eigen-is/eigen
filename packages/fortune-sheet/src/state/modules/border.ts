@@ -18,7 +18,6 @@ type ComputedBorderEntry = {
 };
 type ComputedBorderMap = Record<string, ComputedBorderEntry>;
 
-// Get computed border data for the table.
 // Internally the entries are `ComputedBorderEntry`; the return type stays
 // loose because paste.ts / selection.ts / moveCells.ts / dropCell.ts read the
 // map via repeated template-literal indexing where TS cannot prove non-null

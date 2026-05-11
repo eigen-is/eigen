@@ -17,36 +17,36 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 ### Core technical debt
 
-1. **Enable biome on `state/`** — in progress on branch `biome-state-cleanup`
-   (3 commits). The biome exclusion in `biome.jsonc` was removed; formatter +
-   bulk dead-code/IE-fallback removal applied across all 88 state files
-   (–3280 LOC net); ~150 `any` annotations replaced with concrete types;
-   16 of 25 `@ts-ignore` directives resolved; 12 critical issues from a
-   parallel code-review pass fixed.
+1. **Enable biome on `state/`** — ✅ done on `biome-state-cleanup` (merged
+   2026-05-10). 218 fortune-sheet files at 0 errors / 0 warnings; typecheck
+   green across all 12 workspaces; 749 fortune-sheet tests + 1189 API tests
+   pass. Net –3,400 LOC across 16 commits.
 
-   **Status as of 2026-05-10:** biome on state/ at 96 errors / 122 warnings
-   (down from 134 / 302). Typecheck + 749 tests pass.
+   **Canonical types landed in `@workspace/lib/sheets`:** `MergeCell`,
+   `BorderInfo` (with `BorderRange`/`BorderType`/`RangeBorderInfo`/
+   `CellBorderInfo`), `DataVerificationRule`. State-only entry shapes
+   (`FilterEntry`, `CalcChainEntry`, `AlternateFormatEntry`) live in
+   `state/types.ts`.
 
-   **Remaining before merge / final flip:**
-   - 7 files reverted to wave-1-only state during the parallel sweep due to
-     stash conflicts with the `bun run lint:fix` PostToolUse hook —
-     `selection.ts`, `border.ts`, `text.ts`, `dataVerification.ts`,
-     `dropCell.ts`, `canvas.ts`, `formula-range.ts`. Each needs a focused
-     type-tightening pass (best done in a worktree or with the hook
-     temporarily disabled). These files account for the bulk of the
-     remaining 96 biome errors.
-   - `state/types.ts` (14 diagnostics) intentionally untouched in this
-     branch; needs its own focused pass once dependents are clean.
-   - 9 of the original 25 `@ts-ignore` directives remain (mostly in the
-     7 reverted files); see Group F list below.
+   **Loose typing kept** (each with a documented biome-ignore + WHY pointing
+   here):
+   - `SheetConfig.borderInfo: any[]` — producers in paste/rowcol/toolbar/
+     selection/dropCell/api/cell push raw object literals whose `rangeType`
+     discriminator isn't `as const`-tagged. Tightening cascades ~30 errors;
+     readers narrow at the use-site (`const borderInfo: BorderInfo[] =
+     cfg.borderInfo ?? []`).
+   - `Sheet.luckysheet_conditionformat_save: any[]` — same producer pattern;
+     wire shape is `ConditionalFormatRule[]` in lib.
+   - `SheetConfig.authority: any` — protection.ts reads a varied flag bag;
+     tightening requires inverting the field set across all protection modes.
+   - `Freezen.freezenhorizontaldata: any[]` / `.freezenverticaldata: any[]` —
+     mixed `(number | number[])[]` runtime shape; consumers pass to helpers
+     expecting plain `number[]`.
 
-   Once typing tightens, collapse state's `Sheet` / `SheetConfig`
-   (`state/types.ts`) into `Omit<lib.Sheet, …> & {editor extras}` — the shared
-   shapes already live in `@workspace/lib/sheets`; only `borderInfo: any[]` and
-   `luckysheet_conditionformat_save: any[]` keep state from extending lib
-   directly today.
+   Once those producers are migrated in lockstep, state's `Sheet` / `SheetConfig`
+   can collapse into `Omit<lib.Sheet, …> & { editor extras }`.
 
-   **Group F ts-ignore sites (deferred per-site work, line numbers as of 2026-04-30):**
+   **Group F `@ts-ignore` sites still pending** (11 remain, deferred per-site work; line numbers as of 2026-04-30):
    - `modules/cell.ts:1222,1224` — runtime-stamped `cell._color` /
      `cell._fontSize` not on the shared `Cell` type. Add as optional fields,
      or narrow.
@@ -171,6 +171,11 @@ at the cleanup. Not introduced by the cleanup, worth fixing in follow-ups:
   writes it back to `ctx.luckysheetfile[currentIndex].luckysheet_conditionformat_save`.
   Format-painter doesn't propagate CF rules. Pre-existing; surfaced during
   the Task 5 type-tightening (2026-05-10).
+- **`events/keyboard.ts:F4` — dead keybinding** — the F4 branch in formula
+  edit mode just `preventDefault()`s without dispatching to
+  `formula.setfreezonFuc`. Standard spreadsheet F4 should cycle a formula
+  reference `A1` → `$A$1` → `A$1` → `$A1` → `A1`. The TODO comment in the
+  body acknowledges this. Re-confirmed during the keyboard.ts review.
 
 ### Review-pass deferrals (BE replay code review, 2026-05-02)
 
