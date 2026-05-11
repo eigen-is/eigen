@@ -1,4 +1,5 @@
 /// <reference path="../modules.d.ts" />
+import { parseA1Range } from '@workspace/fortune-sheet/engine';
 import type { BorderSide, CellBorderInfo, Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import type { Alignment, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 
@@ -96,9 +97,9 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     const theme = extractThemePalette(workbook);
 
     const sheets: Sheet[] = [];
-    workbook.worksheets.forEach((worksheet, index) => {
+    for (const [index, worksheet] of workbook.worksheets.entries()) {
         sheets.push(worksheetToSheet(worksheet, index, theme));
-    });
+    }
     return sheets;
 }
 
@@ -112,13 +113,13 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
 
     // Compute column widths first (needed for auto-fit height estimation).
     const colWidthPx: Record<number, number> = {};
-    (worksheet.columns ?? []).forEach((col, i) => {
+    for (const [i, col] of (worksheet.columns ?? []).entries()) {
         if (col && typeof col.width === 'number' && col.width > 0) {
             const px = Math.round(col.width * 8);
             colWidthPx[i] = px;
             columnlen[String(i)] = px;
         }
-    });
+    }
 
     const DEFAULT_ROW_HEIGHT_PT = 15.75;
     const DEFAULT_ROW_HEIGHT_PX = 20;
@@ -178,41 +179,23 @@ function buildMergeStructures(merges: string[]): {
     const merge: NonNullable<SheetConfig['merge']> = {};
     const anchorByCell = new Map<string, { r: number; c: number; rs?: number; cs?: number }>();
     for (const range of merges) {
-        const parsed = parseRange(range);
+        const parsed = parseA1Range(range);
         if (!parsed) continue;
-        const { top, left, bottom, right } = parsed;
-        const rs = bottom - top + 1;
-        const cs = right - left + 1;
-        merge[`${top}_${left}`] = { r: top, c: left, rs, cs };
-        for (let rr = top; rr <= bottom; rr++) {
-            for (let cc = left; cc <= right; cc++) {
+        const { row: r, col: c } = parsed.start;
+        const { row: br, col: bc } = parsed.end;
+        const rs = br - r + 1;
+        const cs = bc - c + 1;
+        merge[`${r}_${c}`] = { r, c, rs, cs };
+        for (let rr = r; rr <= br; rr++) {
+            for (let cc = c; cc <= bc; cc++) {
                 // Anchor carries rs/cs; non-anchors carry only {r,c} pointing back to anchor.
                 // Fortune-sheet uses `"rs" in cell.mc` as the anchor discriminator.
-                const mc = rr === top && cc === left ? { r: top, c: left, rs, cs } : { r: top, c: left };
+                const mc = rr === r && cc === c ? { r, c, rs, cs } : { r, c };
                 anchorByCell.set(`${rr}:${cc}`, mc);
             }
         }
     }
     return { merge, anchorByCell };
-}
-
-function parseRange(range: string): { top: number; left: number; bottom: number; right: number } | null {
-    const parts = range.split(':');
-    if (parts.length !== 2) return null;
-    const tl = parseA1(parts[0]);
-    const br = parseA1(parts[1]);
-    if (!tl || !br) return null;
-    return { top: tl.r, left: tl.c, bottom: br.r, right: br.c };
-}
-
-function parseA1(addr: string): { r: number; c: number } | null {
-    const match = addr.match(/^([A-Z]+)(\d+)$/);
-    if (!match) return null;
-    let col = 0;
-    for (const ch of match[1]) {
-        col = col * 26 + (ch.charCodeAt(0) - 64);
-    }
-    return { r: Number(match[2]) - 1, c: col - 1 };
 }
 
 const DEFAULT_FONT_SIZE = 11;
