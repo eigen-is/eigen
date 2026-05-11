@@ -584,11 +584,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     cellInput.current === document.activeElement ||
                     document.activeElement?.className === 'fortune-sheet-overlay'
                 ) {
-                    let { clipboardData } = e;
-                    if (!clipboardData) {
-                        // @ts-expect-error
-                        clipboardData = window.clipboardData;
-                    }
+                    const { clipboardData } = e;
                     if (!clipboardData) return;
 
                     // Check for eigen clipboard data from other eigen apps (docs, slides, etc.)

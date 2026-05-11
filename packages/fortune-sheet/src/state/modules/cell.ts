@@ -1,9 +1,7 @@
 import type { MergeCell } from '@workspace/lib/sheets';
 import {
-    camelCase,
     cloneDeep,
     every,
-    forEach,
     indexOf,
     isEmpty,
     isNil,
@@ -31,7 +29,14 @@ import {
     isFormula,
 } from './formula-ui';
 import { setFormulaCellInfo } from './formulaHelper';
-import { attrToCssName, convertSpanToShareString, isInlineStringCell, isInlineStringCT } from './inline-string';
+import {
+    convertSpanToShareString,
+    cssDomKeyForAttr,
+    isInlineStringCell,
+    isInlineStringCT,
+    type StyleAttr,
+    type UnderlineHints,
+} from './inline-string';
 import { getCellTextInfo } from './text';
 import { isRealNull, isRealNum, valueIsError } from './validation';
 
@@ -175,9 +180,8 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     }
 
     if (isRealNull(vupdate)) {
-        if (isPlainObject(cell)) {
-            delete cell!.m;
-            // @ts-expect-error
+        if (cell != null && isPlainObject(cell)) {
+            delete cell.m;
             delete cell.v;
         } else {
             cell = null;
@@ -1025,11 +1029,14 @@ export function getRangeByTxt(ctx: Context, txt: string) {
     return range;
 }
 
-// `status` is the value to compare a cell attribute against — Cell['attr'] for some attr,
-// which spans the full Cell value-space (string/number/CellType/InlineStringSegment[]/…).
-// biome-ignore lint/suspicious/noExplicitAny: compared against Cell[attr] which is the full cell value union
-export function isAllSelectedCellsInStatus(ctx: Context, attr: keyof Cell, status: any) {
-    // editing mode
+// Whether every cell in the active selection carries `status` for the given style
+// attribute. Used by the toolbar to drive on/off toggles for bold / italic /
+// strikethrough / underline. While an inline-string edit is active the check
+// pivots to the rendered DOM and inspects each <span>'s computed style — a span
+// counts as "in status" if its style[<css attr>] is non-empty.
+export function isAllSelectedCellsInStatus(ctx: Context, attr: StyleAttr, status: unknown) {
+    const cssField = cssDomKeyForAttr[attr];
+
     if (!isEmpty(ctx.luckysheetCellUpdate)) {
         const w = window.getSelection();
         if (!w) return false;
@@ -1040,13 +1047,8 @@ export function isAllSelectedCellsInStatus(ctx: Context, attr: keyof Cell, statu
         }
         const { endContainer } = range;
         const { startContainer } = range;
-        // @ts-expect-error
-        const cssField = camelCase(attrToCssName[attr]);
         if (startContainer === endContainer) {
-            return !isEmpty(
-                // @ts-expect-error
-                startContainer.parentElement?.style[cssField],
-            );
+            return !isEmpty(startContainer.parentElement?.style[cssField]);
         }
         if (startContainer.parentElement?.tagName === 'SPAN' && endContainer.parentElement?.tagName === 'SPAN') {
             const startSpan = startContainer.parentNode as HTMLElement | null;
@@ -1059,7 +1061,6 @@ export function isAllSelectedCellsInStatus(ctx: Context, attr: keyof Cell, statu
                 for (let i = startSpanIndex; i <= endSpanIndex; i += 1) {
                     rangeSpans.push(allSpans[i]);
                 }
-                // @ts-expect-error
                 return every(rangeSpans, (s) => !isEmpty(s.style[cssField]));
             }
         }
@@ -1077,8 +1078,10 @@ export function isAllSelectedCellsInStatus(ctx: Context, attr: keyof Cell, statu
     });
 }
 
+const STYLE_KEYS = ['bl', 'it', 'ff', 'fs', 'fc', 'cl', 'un'] as const satisfies readonly StyleAttr[];
+
 export function getFontStyleByCell(
-    cell: Cell | null | undefined,
+    cell: (Cell & UnderlineHints) | null | undefined,
     checksAF?: string[],
     checksCF?: CellFormatStyle | null,
     isCheck = true,
@@ -1087,51 +1090,41 @@ export function getFontStyleByCell(
     if (!cell) {
         return style;
     }
-    // @ts-expect-error
-    forEach(cell, (_v, key: keyof Cell) => {
-        let value = cell[key];
-        if (isCheck) {
-            value = normalizedCellAttr(cell, key);
-        }
+    for (const key of STYLE_KEYS) {
+        const rawValue = cell[key];
+        const value: unknown = isCheck ? normalizedCellAttr(cell, key) : rawValue;
         const valueNum = Number(value);
+
         if (key === 'bl' && valueNum !== 0) {
             style.fontWeight = 'bold';
         }
-
         if (key === 'it' && valueNum !== 0) {
             style.fontStyle = 'italic';
         }
-
         if (key === 'ff' && typeof value === 'string' && value) {
             style.fontFamily = `'${value}', sans-serif`;
         }
-
         if (key === 'fs' && valueNum !== 10) {
             style.fontSize = `${valueNum}pt`;
         }
-
         if ((key === 'fc' && value !== '#000000') || (checksAF?.length ?? 0) > 0 || checksCF?.textColor) {
             if (checksCF?.textColor) {
                 style.color = checksCF.textColor;
-            } else if ((checksAF?.length ?? 0) > 0) {
-                [style.color] = checksAF!;
+            } else if (checksAF && checksAF.length > 0) {
+                [style.color] = checksAF;
             } else {
                 style.color = String(value);
             }
         }
-
         if (key === 'cl' && valueNum !== 0) {
             style.textDecoration = 'line-through';
         }
-
         if (key === 'un' && (valueNum === 1 || valueNum === 3)) {
-            // @ts-expect-error
-            const color = cell._color ?? cell.fc;
-            // @ts-expect-error
-            const fs = cell._fontSize ?? cell.fs;
+            const color = cell._color ?? cell.fc ?? '#000000';
+            const fs = cell._fontSize ?? cell.fs ?? 10;
             style.borderBottom = `${Math.floor(fs / 9)}px solid ${color}`;
         }
-    });
+    }
     return style;
 }
 

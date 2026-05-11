@@ -23,8 +23,9 @@ describe('applyColorScalePreset', () => {
         applyColorScalePreset(ctx, 'colorGradation_1');
         const rules = ctx.luckysheetfile[0].luckysheet_conditionformat_save!;
         expect(rules).toHaveLength(1);
-        expect(rules[0].type).toBe('colorGradation');
-        expect(rules[0].format).toEqual(CF_PRESETS.colorGradation_1);
+        const rule = rules[0];
+        if (rule.type !== 'colorGradation') throw new Error(`expected colorGradation, got ${rule.type}`);
+        expect(rule.format).toEqual(CF_PRESETS.colorGradation_1);
     });
 
     it('ignores unknown preset keys', () => {
@@ -40,8 +41,9 @@ describe('applyDataBarPreset', () => {
         applyDataBarPreset(ctx, 'solidColorDataBar_1');
         const rules = ctx.luckysheetfile[0].luckysheet_conditionformat_save!;
         expect(rules).toHaveLength(1);
-        expect(rules[0].type).toBe('dataBar');
-        expect(rules[0].format).toEqual(CF_PRESETS.solidColorDataBar_1);
+        const rule = rules[0];
+        if (rule.type !== 'dataBar') throw new Error(`expected dataBar, got ${rule.type}`);
+        expect(rule.format).toEqual(CF_PRESETS.solidColorDataBar_1);
     });
 
     it('ignores unknown preset keys', () => {

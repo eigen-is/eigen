@@ -1,4 +1,4 @@
-import type { DataVerificationRule } from '@workspace/lib/sheets';
+import type { ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import {
     cloneDeep,
     forEach,
@@ -37,8 +37,8 @@ type CutPasteSide = {
     curData: CellMatrix;
     config: SheetConfig | undefined;
     curConfig: SheetConfig;
-    cdformat: unknown[] | undefined;
-    curCdformat: unknown[] | undefined;
+    cdformat: ConditionalFormatRule[] | undefined;
+    curCdformat: ConditionalFormatRule[] | undefined;
     dataVerification: Record<string, DataVerificationRule> | undefined;
     curDataVerification: Record<string, DataVerificationRule>;
     range: { row: number[]; column: number[] };
@@ -845,7 +845,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
             ctx.luckysheetfile[getSheetIndex(ctx, copySheetId)!].luckysheet_conditionformat_save,
         );
         const source_curCdformat = cloneDeep(source_cdformat);
-        const ruleArr: unknown[] = [];
+        const ruleArr: ConditionalFormatRule[] = [];
 
         if (source_curCdformat != null && source_curCdformat.length > 0) {
             for (let i = 0; i < source_curCdformat.length; i += 1) {
@@ -878,9 +878,9 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
                 source_curCdformat[i].cellrange = emptyRange;
 
                 if (emptyRange2.length > 0) {
-                    const ruleObj = source_curCdformat[i] ?? {};
-                    ruleObj.cellrange = emptyRange2;
-                    ruleArr.push(ruleObj);
+                    // Clone so the target keeps the operate-part range without aliasing
+                    // back into source_curCdformat[i] (which now owns emptyRange).
+                    ruleArr.push({ ...cloneDeep(source_curCdformat[i]), cellrange: emptyRange2 });
                 }
             }
         }
@@ -1300,7 +1300,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
     }
 
     // check whether the copy range has conditional formatting and data validation
-    let cdformat: unknown[] | undefined;
+    let cdformat: ConditionalFormatRule[] | undefined;
     if (copyRange.copyRange.length === 1) {
         const c_file = ctx.luckysheetfile[getSheetIndex(ctx, copySheetIndex) as number];
         const a_file = ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number];

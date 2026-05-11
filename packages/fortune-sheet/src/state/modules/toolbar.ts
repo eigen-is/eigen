@@ -18,7 +18,12 @@ import {
 } from './formula-ui';
 import { setFormulaCellInfo } from './formulaHelper';
 import { showLinkCard } from './hyperlink';
-import { inlineStyleAffectAttribute, updateInlineStringFormat, updateInlineStringFormatOutside } from './inline-string';
+import {
+    inlineStyleAffectAttribute,
+    type StyleAttr,
+    updateInlineStringFormat,
+    updateInlineStringFormatOutside,
+} from './inline-string';
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
 import { normalizeSelection, selectIsOverlap } from './selection';
@@ -221,7 +226,7 @@ export function updateFormat(
     });
 }
 
-function toggleAttr(ctx: Context, cellInput: HTMLDivElement, attr: keyof Cell) {
+function toggleAttr(ctx: Context, cellInput: HTMLDivElement, attr: StyleAttr) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 

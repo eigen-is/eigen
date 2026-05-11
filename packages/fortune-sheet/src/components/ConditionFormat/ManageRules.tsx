@@ -1,3 +1,4 @@
+import type { ConditionalFormatRule, DefaultConditionalFormatRule, SingleRange } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { X } from 'lucide-react';
@@ -6,14 +7,7 @@ import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import { getSheetIndex, indexToColumnChar, locale } from '../../state';
 
-type Rule = {
-    conditionName: string;
-    conditionValue: unknown[];
-    cellrange: { row: number[]; column: number[] }[];
-    format: { textColor: string | null; cellColor: string | null };
-};
-
-function formatRange(range: { row: number[]; column: number[] }): string {
+function formatRange(range: SingleRange): string {
     const c1 = indexToColumnChar(range.column[0]);
     const c2 = indexToColumnChar(range.column[1]);
     const r1 = range.row[0] + 1;
@@ -22,7 +16,7 @@ function formatRange(range: { row: number[]; column: number[] }): string {
     return `${c1}${r1}:${c2}${r2}`;
 }
 
-function formatRanges(ranges: { row: number[]; column: number[] }[]): string {
+function formatRanges(ranges: SingleRange[]): string {
     return ranges.map(formatRange).join(', ');
 }
 
@@ -40,9 +34,10 @@ const RULE_LABELS: Record<string, string> = {
     last10_percent: 'Bottom N%',
     aboveAverage: 'Above average',
     belowAverage: 'Below average',
+    formula: 'Custom formula',
 };
 
-function describeRule(rule: Rule): string {
+function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
     const label = RULE_LABELS[rule.conditionName] ?? rule.conditionName;
     const values = rule.conditionValue ?? [];
 
@@ -51,17 +46,15 @@ function describeRule(rule: Rule): string {
         case 'lessThan':
         case 'equal':
         case 'textContains':
+        case 'occurrenceDate':
             return values[0] != null ? `${label} ${values[0]}` : label;
         case 'between':
             return values.length >= 2 ? `${label} ${values[0]} and ${values[1]}` : label;
         case 'top10':
-        case 'last10':
-            return values[0] != null ? `${label.replace('N', String(values[0]))}` : label;
         case 'top10_percent':
+        case 'last10':
         case 'last10_percent':
-            return values[0] != null ? `${label.replace('N', String(values[0]))}` : label;
-        case 'occurrenceDate':
-            return values[0] != null ? `${label} ${values[0]}` : label;
+            return values[0] != null ? label.replace('N', String(values[0])) : label;
         case 'duplicateValue':
             return values[0] === '1' ? 'Unique values' : label;
         default:
@@ -69,18 +62,50 @@ function describeRule(rule: Rule): string {
     }
 }
 
-function ColorSwatch({ textColor, cellColor }: { textColor: string | null; cellColor: string | null }) {
-    return (
-        <div
-            className="w-8 h-6 rounded border border-border text-[10px] font-bold flex items-center justify-center shrink-0"
-            style={{
-                backgroundColor: cellColor ?? undefined,
-                color: textColor ?? undefined,
-            }}
-        >
-            Ab
-        </div>
-    );
+function describeRule(rule: ConditionalFormatRule): string {
+    switch (rule.type) {
+        case 'colorGradation':
+            return 'Color scale';
+        case 'dataBar':
+            return 'Data bar';
+        case 'icons':
+            return 'Icon set';
+        case 'default':
+            return describeDefaultRule(rule);
+    }
+}
+
+function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
+    if (rule.type === 'default') {
+        return (
+            <div
+                className="w-8 h-6 rounded border border-border text-[10px] font-bold flex items-center justify-center shrink-0"
+                style={{
+                    backgroundColor: rule.format.cellColor ?? undefined,
+                    color: rule.format.textColor ?? undefined,
+                }}
+            >
+                Ab
+            </div>
+        );
+    }
+    if (rule.type === 'colorGradation') {
+        return (
+            <div
+                className="w-8 h-6 rounded border border-border shrink-0"
+                style={{ background: `linear-gradient(to right, ${rule.format.join(', ')})` }}
+            />
+        );
+    }
+    if (rule.type === 'dataBar') {
+        const [color] = rule.format;
+        return (
+            <div className="w-8 h-6 rounded border border-border shrink-0 flex items-center px-0.5">
+                <div className="h-3 w-5 rounded-sm" style={{ backgroundColor: color }} />
+            </div>
+        );
+    }
+    return <div className="w-8 h-6 rounded border border-border shrink-0" />;
 }
 
 export function ManageRules() {
@@ -90,7 +115,7 @@ export function ManageRules() {
 
     const rules = useMemo(() => {
         const index = getSheetIndex(context, context.currentSheetId) as number;
-        return (context.luckysheetfile[index]?.luckysheet_conditionformat_save ?? []) as Rule[];
+        return context.luckysheetfile[index]?.luckysheet_conditionformat_save ?? [];
     }, [context]);
 
     const deleteRule = (ruleIndex: number) => {
@@ -114,7 +139,7 @@ export function ManageRules() {
                     {rules.map((rule, i) => (
                         // biome-ignore lint/suspicious/noArrayIndexKey: rules list is stable within the dialog lifecycle
                         <div key={i} className="flex items-center gap-3 px-3 py-2 text-sm">
-                            <ColorSwatch textColor={rule.format.textColor} cellColor={rule.format.cellColor} />
+                            <RuleSwatch rule={rule} />
                             <div className="flex-1 min-w-0">
                                 <div className="font-medium truncate">{describeRule(rule)}</div>
                                 <div className="text-xs text-muted-foreground truncate">

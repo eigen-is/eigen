@@ -35,8 +35,6 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      discriminator isn't `as const`-tagged. Tightening cascades ~30 errors;
      readers narrow at the use-site (`const borderInfo: BorderInfo[] =
      cfg.borderInfo ?? []`).
-   - `Sheet.luckysheet_conditionformat_save: any[]` — same producer pattern;
-     wire shape is `ConditionalFormatRule[]` in lib.
    - `SheetConfig.authority: any` — protection.ts reads a varied flag bag;
      tightening requires inverting the field set across all protection modes.
    - `Freezen.freezenhorizontaldata: any[]` / `.freezenverticaldata: any[]` —
@@ -52,29 +50,48 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      fix is to widen lib's `SingleRange` and add narrows at every read site
      that needs a real number.
 
-   Once those producers are migrated in lockstep, state's `Sheet` / `SheetConfig`
-   can collapse into `Omit<lib.Sheet, …> & { editor extras }`.
+   **Tightened on `biome-state-cleanup` (2026-05-11)** — landed alongside Group F:
+   - `Sheet.luckysheet_conditionformat_save` is now `ConditionalFormatRule[]`.
+     `setConditionRules` returns early on names outside the canonical union
+     (previously created silent no-op rules); `appendRule` annotates literals
+     as `ColorGradationRule | DataBarRule`; `paste.ts::CutPasteSide.cdformat`
+     and the cut-paste rule-array narrow through. Tests in
+     `condition-format-presets.test.ts` narrow via `if (rule.type !== …)`
+     guards. Side-fix: the cut-paste rule clone no longer aliases its
+     `cellrange` back into the source rule (the previous code reassigned
+     `cellrange` on the same object twice).
 
-   **Group F `@ts-ignore` sites still pending** (11 remain, deferred per-site work; line numbers as of 2026-04-30):
-   - `modules/cell.ts:1222,1224` — runtime-stamped `cell._color` /
-     `cell._fontSize` not on the shared `Cell` type. Add as optional fields,
-     or narrow.
-   - `events/paste.ts:324,766,1333` — `cfg.merge[key] = …` — `Sheet.config.merge`
-     not typed as `Record<string, MergeCell>`.
-   - `events/paste.ts:1682` — `genarate()` returns untyped tuple →
-     `[cell.m, cell.ct, cell.v] = mask`. Type the return.
-   - `events/paste.ts:1732` — `locale_fontjson[fa]` index sig.
-   - `events/paste.ts:1790,1792` — `parseInt(td.getAttribute(...), 10)` —
-     `getAttribute` returns `string | null`.
-   - `events/mouse-cell.ts:252`, `events/mouse-header.ts:175,541`,
-     `modules/formula-editor.ts:868` — `currSelection.anchorNode?.parentNode`
-     indexed into `childNodes` (es-toolkit `indexOf` typing).
-   - `modules/inline-string.ts:231`, `modules/cell.ts:170,1130,1134,1152,1180` —
-     dynamic-key writes / `delete` on non-optional / `forEach` key annotation.
-   - `api/cell.ts:126,204`, `api/rowcol.ts:24` — `cell[attr] = v`,
-     `attr === "bd"` narrowing, `frozen.type` literal union.
-   - `modules/toolbar.ts:157,186,188` — `value[attr] = focusStatus`,
-     `d[r][c] = {v: value}` then index write.
+   Once the remaining producers (borderInfo, authority, freezen, formula-range)
+   are migrated in lockstep, state's `Sheet` / `SheetConfig` can collapse into
+   `Omit<lib.Sheet, …> & { editor extras }`.
+
+   **Group F `@ts-expect-error` sites — closed on `biome-state-cleanup`
+   (2026-05-11):** all 12 directives in `state/` + `components/Workbook` are
+   gone (the original TODO listed sites that had already been resolved during
+   the state cleanup; the surviving 12 became 0).
+   - `inline-string.ts::removeClassWidthCss` — `attrToCssName` is now `as
+     const` + a typed `isStyleAttr` predicate.
+   - `modules/cell.ts::setCellValue` `delete cell.v` — narrowed via
+     `cell != null && isPlainObject(cell)` (runtime guard, no `!`).
+   - `modules/cell.ts::isAllSelectedCellsInStatus` — parameter is now
+     `StyleAttr`; the CSS DOM key indexes through a typed
+     `cssDomKeyForAttr` map (`keyof CSSStyleDeclaration`) instead of
+     `camelCase(attrToCssName[attr])`.
+   - `modules/cell.ts::getFontStyleByCell` — parameter widened to
+     `Cell & UnderlineHints`; loop iterates the explicit `STYLE_KEYS`
+     literal (`as const satisfies readonly StyleAttr[]`); the lodash
+     `forEach` is gone; underline default fontSize = 10.
+   - `events/mouse-cell.ts` / `events/mouse-header.ts` — formula-range
+     anchor lookup uses `Array.from<Node>(siblings).indexOf(anchorParent)`
+     after widening `anchorParent` to `Node | null` (bypasses the lib.dom
+     ChildNode/ParentNode overlap check).
+   - `components/Workbook/index.tsx::onPaste` — IE-legacy
+     `window.clipboardData` fallback removed (modern browsers always set
+     `e.clipboardData` for paste handlers).
+   - Broken window fixed on touch: `ConditionFormat/ManageRules.tsx`
+     dropped its local `Rule` subset type and `as Rule[]` cast, now
+     narrows per `ConditionalFormatRule` variant (`default` / `dataBar` /
+     `colorGradation` / `icons`) for both the swatch and the description.
 
 2. **CSS migrations** — 3 files remain (size verified 2026-04-28); then delete
    `src/css.d.ts`:

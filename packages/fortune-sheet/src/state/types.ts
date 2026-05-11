@@ -1,4 +1,4 @@
-import type { BorderInfo, DataVerificationRule, MergeCell, Op } from '@workspace/lib/sheets';
+import type { BorderInfo, ConditionalFormatRule, DataVerificationRule, MergeCell, Op } from '@workspace/lib/sheets';
 import type { Patch as ImmerPatch } from 'immer';
 import type { Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange } from '../engine/types';
 import type { PatchOptions } from './utils';
@@ -6,16 +6,17 @@ import type { PatchOptions } from './utils';
 // Shared sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
 // Range, …) live in @workspace/lib/sheets and are re-exported through
 // ../engine/types — surfaced here so state-side consumers don't have to know
-// the canonical home. `Op`, `BorderInfo`, and `DataVerificationRule` live in
-// lib too (the BE document reader replays ops without the engine, the HTML
-// export reads borderInfo, and data-validation rules are touched by the
-// editor + canvas painter); none is engine-conceptual so they're re-exported
-// directly from lib here.
+// the canonical home. `Op`, `BorderInfo`, `ConditionalFormatRule`, and
+// `DataVerificationRule` live in lib too (the BE document reader replays ops
+// without the engine, the HTML export reads borderInfo and CF rules, and
+// data-validation rules are touched by the editor + canvas painter); none is
+// engine-conceptual so they're re-exported directly from lib here.
 export type {
     BorderInfo,
     Cell,
     CellMatrix,
     CellWithRowAndCol,
+    ConditionalFormatRule,
     DataVerificationRule,
     MergeCell,
     Op,
@@ -124,9 +125,9 @@ export type AlternateFormatEntry = {
 
 // Editor-runtime Sheet. Field overlap with lib's `Sheet` (name / id / config /
 // data / celldata / showGridLines / luckysheet_conditionformat_save) — same TODO
-// #1 caveat as SheetConfig. State producer code in conditionFormat.ts pushes
-// untyped rules, hence the `any[]` on luckysheet_conditionformat_save; the wire
-// shape is `ConditionalFormatRule[]` in lib.
+// #1 caveat as SheetConfig. CF rules use the canonical `ConditionalFormatRule`
+// discriminated union from lib; producers in conditionFormat.ts annotate their
+// rule literals explicitly so the discriminator narrows.
 export type Sheet = {
     name: string;
     config?: SheetConfig;
@@ -157,8 +158,7 @@ export type Sheet = {
     isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
     filter_select?: { row: number[]; column: number[] };
-    // biome-ignore lint/suspicious/noExplicitAny: see the Sheet doc above — TODO #1
-    luckysheet_conditionformat_save?: any[];
+    luckysheet_conditionformat_save?: ConditionalFormatRule[];
     luckysheet_alternateformat_save?: AlternateFormatEntry[];
     dataVerification?: Record<string, DataVerificationRule>;
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
