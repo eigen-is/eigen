@@ -57,12 +57,11 @@ export function getSelectionCoordinates(ctx: Context) {
 }
 
 export function getCellsByRange(ctx: Context, range: Selection, options: CommonOptions = {}) {
-    const sheet = getSheet(ctx, options);
-
-    if (!range || typeof range === 'object') {
-        return getdatabyselection(ctx, range, sheet.id!);
+    if (!isPlainObject(range) && !Array.isArray(range)) {
+        throw invalidParams();
     }
-    throw invalidParams();
+    const sheet = getSheet(ctx, options);
+    return getdatabyselection(ctx, range, sheet.id!);
 }
 
 export function getHtmlByRange(ctx: Context, range: Range, options: CommonOptions = {}) {
