@@ -176,6 +176,31 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      in `state/api/rowcol.ts` and `state/events/paste.ts` left for the
      next touch — same "writer narrower than lib field" pattern but
      scoped out of this PR.
+   - `state/api/sheet.ts::initSheetData` now delegates to the engine's
+     `celldataToData(celldata, rowCount?, colCount?)` (re-exported via
+     `state/api/common.ts`) instead of inlining a ~30 LOC `maxBy`/`times`/
+     fill loop. The empty-grid fallback is preserved by passing
+     `row != null && row > 0 ? row : draftCtx.defaultrowNum` per axis —
+     matches the `row > 0 && column > 0` invalid-input guard the sibling
+     `updateSheet` in `state/modules/sheet.ts:158` still uses; `??` alone
+     would treat `row: 0` as "explicitly 0 rows" instead of "use default."
+     Return type tightened `CellMatrix | null` → `CellMatrix`: the null-
+     branch required `lastRowNum=0 && lastColNum=0` simultaneously,
+     unreachable when defaults (84/60) are always > 0. The one caller that
+     checked `temp !== null` (`Workbook/index.tsx:430`) simplifies to a
+     direct assignment. Pre-existing "expand cell data" WHAT-comment
+     dropped on touch.
+   - Closes the `rowlen`/`columnlen` part of the
+     `EditorSheetConfigExtras`-entry follow-up (the `rowhidden` claim was
+     inaccurate — `state/types.ts:126` already had it as
+     `Record<string, number>` end-to-end). `state/api/rowcol.ts::getRowHeight`/
+     `getColumnWidth` local builders flipped `Record<number, number>` →
+     `Record<string, number>` to match lib's canonical `rowlen`/`columnlen`;
+     `state/events/paste.ts:1580` `as Record<number, number>` cast on
+     `cfg.rowlen = {}` removed. Side-fixes on touch in `getRowHeight`/
+     `getColumnWidth`: redundant `Number(item)` calls dropped (param is
+     already `number[]`), inline `size` variable inlined, and `forEach` →
+     `for-of` per the project's for-of-over-array-forEach preference.
 
    **Group F `@ts-expect-error` sites — closed on `biome-state-cleanup`
    (2026-05-11):** all 12 directives in `state/` + `components/Workbook` are
@@ -261,33 +286,25 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    right-click on a tab) already uses shadcn — only the tab bar itself needs
    the pass.
 
-9. **`initSheetData` inlines `celldataToData`** —
-   `state/api/sheet.ts:16-54` builds the dense `data` matrix manually
-   (`maxBy` / `times` / fill loop) when adding/initialising a sheet. Engine
-   has the canonical `celldataToData(celldata, rowCount?, colCount?)`
-   re-exported from `state/api/common.ts` since 2026-05-01. Replace the inline
-   loop, passing `row ?? defaultrowNum`, `column ?? defaultcolumnNum` to
-   preserve the editor's empty-grid fallback.
-
-10. **JSDoc sweep across `state/`** — CODE-STANDARDS.md "No JSDoc". Many
+9. **JSDoc sweep across `state/`** — CODE-STANDARDS.md "No JSDoc". Many
     state-module functions still carry `/** @param {string} type ... */` blocks
     that contradict the actual TS types. Pre-existing legacy; not worth a
     targeted PR but delete on touch (e.g. `state/modules/rowcol.ts:593-601`
     on `insertRowCol`).
 
-11. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
+10. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
     consumes it. Low priority, rename-only with no code impact.
 
 ### Carry-overs from earlier review passes
 
-12. **`applyInsert` / `applyDelete` deep-clone the full target sheet** —
+11. **`applyInsert` / `applyDelete` deep-clone the full target sheet** —
     `cloneDeep(target)` at `engine/rowcol.ts:187,393` clones every field
     (state-only fields included) when the engine writes only `data`, `config`,
     and `luckysheet_conditionformat_save`. State wrapper then mutates the
     state-only fields, throwing away the wasteful clone. Profile first; only
     optimize if row/col ops show up hot.
 
-13. **`events/keyboard.ts:F4` — dead keybinding** — the F4 branch in formula
+12. **`events/keyboard.ts:F4` — dead keybinding** — the F4 branch in formula
     edit mode just `preventDefault()`s. Standard spreadsheet F4 should cycle a
     formula reference `A1` → `$A$1` → `A$1` → `$A1` → `A1`. Treated as feature
     work (DOM-walk the formula editor, parse the reference under the caret,
