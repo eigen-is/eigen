@@ -153,6 +153,29 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      spill ranges, hyperlinks, alternateformat, dataVerification, images,
      pivot-table placeholder, and the editor-only `addRows`/`status`/
      `hide`/`color`/`defaultRowHeight`/`defaultColWidth`.
+   - `EditorSheetConfigExtras` hoisted to `engine/types.ts` to dedupe the
+     four editor-only structural fields the engine's row/col shifter and
+     state both touch (`rowReadOnly`, `colReadOnly`, `customHeight`,
+     `customWidth`). Was declared independently twice
+     (`engine/rowcol.ts::ExtendedSheetConfig` and
+     `state/types.ts::SheetConfig`); both now reference the shared type.
+     Engine is the right home: state imports from `../engine/types`
+     already, and lib stays unaware of editor extras (preserves the
+     `fortune-sheet → lib` direction rule). Standardised key-type on
+     `Record<string, number>` for all four — state had `rowReadOnly`/
+     `colReadOnly` as `Record<number, number>` while the engine used
+     `Record<string, number>`. Six state-side local declarations flipped
+     to match (`state/modules/rowcol.ts` ×5, `InputBox.tsx` ×2,
+     `f_rowhidden_new` on touch). Cleanup on touch in
+     `engine/test/replay-ops.test.ts`: the `// biome-ignore lint/
+     suspicious/noExplicitAny` + `as any` for `{ rowReadOnly: { 0: 1 } }`
+     is gone — the test typed the sheet as
+     `Sheet & { config?: EditorSheetConfigExtras }` instead.
+     Pre-existing `Record<number, number>` annotations on
+     non-EditorSheetConfigExtras fields (`rowlen`/`columnlen`/`rowhidden`)
+     in `state/api/rowcol.ts` and `state/events/paste.ts` left for the
+     next touch — same "writer narrower than lib field" pattern but
+     scoped out of this PR.
 
    **Group F `@ts-expect-error` sites — closed on `biome-state-cleanup`
    (2026-05-11):** all 12 directives in `state/` + `components/Workbook` are

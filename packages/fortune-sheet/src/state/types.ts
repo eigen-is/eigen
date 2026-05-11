@@ -8,7 +8,7 @@ import type {
     Op,
 } from '@workspace/lib/sheets';
 import type { Patch as ImmerPatch } from 'immer';
-import type { Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange } from '../engine/types';
+import type { Cell, CellMatrix, CellWithRowAndCol, EditorSheetConfigExtras, Range, SingleRange } from '../engine/types';
 import type { PatchOptions } from './utils';
 
 // Shared sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
@@ -94,16 +94,15 @@ export type SheetAuthority = {
     defaultSheetHintText?: string;
 };
 
-// Editor-runtime SheetConfig: lib's canonical fields plus state-only extras
-// (custom row/col size overrides, sheet-protection settings, per-row/col
-// read-only locks) that never reach the wire shape.
-export type SheetConfig = LibSheetConfig & {
-    customHeight?: Record<string, number>;
-    customWidth?: Record<string, number>;
-    authority?: SheetAuthority;
-    rowReadOnly?: Record<number, number>;
-    colReadOnly?: Record<number, number>;
-};
+// Editor-runtime SheetConfig: lib's canonical fields plus editor-only extras
+// shared with the engine's row/col shifter (`EditorSheetConfigExtras`: custom
+// row/col size overrides, per-row/col read-only locks) and a state-only
+// `authority` (sheet-protection settings; the engine doesn't shift it). None
+// of these reach the wire shape.
+export type SheetConfig = LibSheetConfig &
+    EditorSheetConfigExtras & {
+        authority?: SheetAuthority;
+    };
 
 export type Image = {
     id: string;
