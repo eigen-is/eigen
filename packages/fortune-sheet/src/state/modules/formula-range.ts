@@ -69,6 +69,12 @@ export function setCaretPosition(ctx: Context, textDom: HTMLElement, children: n
     }
 }
 
+// `selected` is wider than `SingleRange` here — column-header and row-header
+// click handlers pass `row: [null, null]` (or `column: [null, null]`) to denote
+// a whole-column/row reference. `getRangetxt` reads those null sentinels at
+// runtime (cell.ts:993). Widening lib's `SingleRange` to `(number | null)[]`
+// cascades through ~56 consumers and is out of scope for this branch.
+// biome-ignore lint/suspicious/noExplicitAny: see comment above
 export function rangeSetValue(ctx: Context, cellInput: HTMLDivElement, selected: any, fxInput?: HTMLDivElement | null) {
     let $editor = cellInput;
     let $copyTo = fxInput;
