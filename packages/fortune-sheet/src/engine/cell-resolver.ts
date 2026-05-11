@@ -1,4 +1,4 @@
-import type { CalculationChainEntry, Cell, CellMatrix, CellResolver, SheetInfo } from './types';
+import type { CalcChainEntry, Cell, CellMatrix, CellResolver, SheetInfo } from './types';
 
 export type { CellResolver } from './types';
 
@@ -6,7 +6,7 @@ export type SheetData = {
     id: string;
     name: string;
     data: CellMatrix | null;
-    calculationChain: CalculationChainEntry[];
+    calculationChain: CalcChainEntry[];
     dynamicArrayCompute: unknown[];
 };
 
