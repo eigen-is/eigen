@@ -3,9 +3,11 @@ import { activateSheet, addSheet, deleteSheet, scroll, setSheetName, setSheetOrd
 import type { Context } from '../../context';
 import { contextFactory, selectionFactory } from '../factories/context';
 
-// Mock DOM for tests
+// Mock DOM for tests. globalThis is intentionally widened — Bun's test runtime
+// has no DOM by default and these mocks are scoped to this test file.
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 (globalThis as any).document = {
-    createElement: (tag: string) => ({
+    createElement: (_tag: string) => ({
         innerHTML: '',
         style: {},
         setAttribute: () => {},
@@ -23,9 +25,18 @@ describe('fortune-sheet/core/api/workbook', () => {
 
     test('addSheet', () => {
         const ctx = getContext();
-        const settings = { allowEdit: true, row: 60, column: 84 };
-        (settings as any).generateSheetId = () => 'id_3';
-        addSheet(ctx, settings as any);
+        // Settings is Required<…> for the runtime call, but every other field has
+        // a default in the addSheet implementation — only the four exercised here
+        // matter for this assertion. biome-ignore: Partial<Settings> would require
+        // touching the source-of-truth Settings type, out of scope for this test.
+        // biome-ignore lint/suspicious/noExplicitAny: test fixture covers happy path
+        const settings: any = {
+            allowEdit: true,
+            row: 60,
+            column: 84,
+            generateSheetId: () => 'id_3',
+        };
+        addSheet(ctx, settings);
         expect(ctx.luckysheetfile.length).toBe(3);
         expect(ctx.luckysheetfile[2].id).toBe('id_3');
     });

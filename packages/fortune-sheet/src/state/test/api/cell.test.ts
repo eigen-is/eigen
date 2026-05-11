@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { clearCell, getCellValue, setCellFormat, setCellValue } from '../../api/cell';
 import type { Context } from '../../context';
+import type { Cell } from '../../types';
 import { contextFactory, selectionFactory } from '../factories/context';
 
-// Mock DOM for tests
+// Mock DOM for tests. globalThis is intentionally widened — Bun's test runtime
+// has no DOM by default and these mocks are scoped to this test file.
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 (globalThis as any).document = {
-    createElement: (tag: string) => ({
+    createElement: (_tag: string) => ({
         innerHTML: '',
         style: {},
         setAttribute: () => {},
@@ -52,7 +55,7 @@ describe('fortune-sheet/core/api/cell', () => {
             { id: 'id_2', t: 'bl', v: 0 },
             { id: 'id_2', t: 'bg', v: '#ff0' },
         ].forEach((k) => {
-            expect(getCellValue(ctx, 1, 1, { id: k.id, type: k.t as any })).toBe(k.v);
+            expect(getCellValue(ctx, 1, 1, { id: k.id, type: k.t as keyof Cell })).toBe(k.v);
         });
     });
 

@@ -68,8 +68,8 @@ describe('fortune-sheet/core/api/merge', () => {
             [1, 2, 3, 3, 'merge-vertical'],
             [1, 2, 3, 3, 'merge-horizontal'],
         ];
-        testRangeList.forEach((k) =>
-            testMergeCellsAll(k[0] as number, k[1] as number, k[2] as number, k[3] as number, k[4] as string),
-        );
+        testRangeList.forEach((k) => {
+            testMergeCellsAll(k[0] as number, k[1] as number, k[2] as number, k[3] as number, k[4] as string);
+        });
     });
 });
