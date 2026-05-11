@@ -7,6 +7,7 @@ import type { Hooks } from './settings';
 import type {
     ConditionRulesProps,
     DataRegulationProps,
+    FilterEntry,
     FilterOptions,
     GlobalCache,
     Image,
@@ -144,19 +145,7 @@ export type Context = {
     filterchage: boolean; // filter
     filterOptions?: FilterOptions;
     luckysheet_filter_save?: { row: number[]; column: number[] } | undefined;
-    filter: Record<
-        string,
-        {
-            caljs: unknown;
-            rowhidden: Record<string, number>;
-            optionstate: boolean;
-            str: number;
-            edr: number;
-            cindex: number;
-            stc: number;
-            edc: number;
-        }
-    >;
+    filter: Record<string, FilterEntry>;
 
     luckysheet_sheet_move_status: boolean;
     luckysheet_sheet_move_data: unknown[];

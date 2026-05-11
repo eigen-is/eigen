@@ -61,8 +61,8 @@ export type Presence = {
 
 // Editor-runtime SheetConfig. Some fields (merge / rowlen / columnlen / rowhidden /
 // colhidden / borderInfo) overlap with lib's API-shape `SheetConfig`; the editor
-// keeps borderInfo loosely typed (`any[]`) because state producer sites (paste,
-// rowcol, toolbar, selection, dropCell, api/cell) push raw object literals whose
+// keeps borderInfo loosely typed because state producer sites (paste, rowcol,
+// toolbar, selection, dropCell, api/cell) push raw object literals whose
 // `rangeType: 'cell' | 'range'` discriminator isn't `as const`-tagged. Tightening
 // to `BorderInfo[]` is part of TODO #1 — at that point this type should collapse
 // into `Omit<ApiSheetConfig, ...> & { editor extras }`. Readers (border.ts,
@@ -75,7 +75,12 @@ export type SheetConfig = {
     colhidden?: Record<string, number>; // hidden columns
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
+    // biome-ignore lint/suspicious/noExplicitAny: see the SheetConfig doc above — TODO #1
     borderInfo?: any[];
+    // Sheet protection settings — read by protection.ts as a flag bag with
+    // varied shapes (mode-dependent). Tightening requires inverting the field
+    // set across all protection modes.
+    // biome-ignore lint/suspicious/noExplicitAny: cascade-blocked, see comment
     authority?: any;
     rowReadOnly?: Record<number, number>;
     colReadOnly?: Record<number, number>;
@@ -88,6 +93,33 @@ export type Image = {
     left: number;
     top: number;
     mediaName: string;
+};
+
+// Calc-chain entry: dependency-graph node for a formula cell. Engine producers
+// always stamp `id`; consumers in state/modules/rowcol.ts treat the entry as
+// assignable to FormulaCell (which requires id).
+export type CalcChainEntry = { r: number; c: number; id: string; index?: number };
+
+// Per-column filter rule state. Producers in state/modules/filter.ts /
+// rowcol.ts set every field. Variable-shape rule details (FilterMethod,
+// FilterCustomDetail, …) flow through the `[key]: unknown` overflow.
+export type FilterEntry = {
+    caljs: unknown;
+    rowhidden: Record<string, number>;
+    optionstate: boolean;
+    str: number;
+    edr: number;
+    cindex: number;
+    stc: number;
+    edc: number;
+    [key: string]: unknown;
+};
+
+// Alternate-format placeholder entry. The feature never landed; rowcol shifts
+// the cellrange but the array is otherwise empty (see state/modules/cell.ts
+// :1143 where consumers initialise an empty `checksAF: string[]`).
+export type AlternateFormatEntry = {
+    cellrange: { row: [number, number]; column: [number, number] };
 };
 
 // Editor-runtime Sheet. Field overlap with lib's `Sheet` (name / id / config /
@@ -114,20 +146,27 @@ export type Sheet = {
         row: number[];
         column: number[];
     }[];
-    calcChain?: any[];
+    calcChain?: CalcChainEntry[];
     defaultRowHeight?: number;
     defaultColWidth?: number;
     showGridLines?: boolean | number;
-    pivotTable?: any;
+    // Pivot-table config — currently unreferenced in active code (only commented-
+    // out callers in toolbar.ts / merge.ts); kept on the type for upstream
+    // workbook-import compatibility.
+    pivotTable?: unknown;
     isPivotTable?: boolean;
-    filter?: Record<string, any>;
+    filter?: Record<string, FilterEntry>;
     filter_select?: { row: number[]; column: number[] };
+    // biome-ignore lint/suspicious/noExplicitAny: see the Sheet doc above — TODO #1
     luckysheet_conditionformat_save?: any[];
-    luckysheet_alternateformat_save?: any[];
+    luckysheet_alternateformat_save?: AlternateFormatEntry[];
     dataVerification?: Record<string, DataVerificationRule>;
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
-    dynamicArray_compute?: any;
-    dynamicArray?: any[];
+    // Dynamic-array formula source list — entries describe spill ranges; engine
+    // pushes here when a `=A1:A3*2`-style formula is evaluated. Same r/c/id
+    // shape as calcChain; `id` is optional for legacy entries.
+    dynamicArray_compute?: CalcChainEntry[];
+    dynamicArray?: { r: number; c: number; id?: string }[];
     frozen?: {
         type: 'row' | 'column' | 'both' | 'rangeRow' | 'rangeColumn' | 'rangeBoth';
         range?: { row_focus: number; column_focus: number };
@@ -214,8 +253,16 @@ export type History = {
     options?: PatchOptions;
 };
 
+// Pre-computed pixel offsets the freeze line uses to redraw above/below the
+// frozen pane. Producer in state/modules/freeze.ts builds a 5-element array
+// mixing numbers and number[] (positions, scroll offsets, cumulative per-col
+// offsets). The mixed shape is awkward to encode as a tuple because consumers
+// in Sheet/index.tsx pass it to helpers expecting plain `number[]`; tightening
+// is a follow-up.
 export type Freezen = {
+    // biome-ignore lint/suspicious/noExplicitAny: producer/consumer divergence — see comment above
     horizontal?: { freezenhorizontaldata: any[]; top: number };
+    // biome-ignore lint/suspicious/noExplicitAny: producer/consumer divergence — see comment above
     vertical?: { freezenverticaldata: any[]; left: number };
 };
 
