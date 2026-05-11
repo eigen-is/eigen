@@ -1,6 +1,6 @@
 import { cloneDeep, isEmpty } from 'es-toolkit/compat';
 import type { Context } from '../context';
-import type { Range } from '../types';
+import type { Cell, Range } from '../types';
 import { getSheetIndex } from '../utils';
 import { isInlineStringCT } from './inline-string';
 
@@ -36,7 +36,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
                 continue;
             }
 
-            const fv: any = {};
+            const fv: Record<string, Cell> = {};
 
             for (let r = r1; r <= r2; r += 1) {
                 for (let c = c1; c <= c2; c += 1) {
@@ -101,7 +101,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
                     continue;
                 }
 
-                const fv: any = {};
+                const fv: Record<string, Cell> = {};
 
                 for (let r = r1; r <= r2; r += 1) {
                     for (let c = c1; c <= c2; c += 1) {
