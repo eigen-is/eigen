@@ -1,3 +1,4 @@
+import type { BorderInfo, BorderType, RangeBorderInfo } from '@workspace/lib/sheets';
 import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round, set } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine';
 import { genarate, is_date, update } from '../../engine/format';
@@ -1073,19 +1074,18 @@ export function handleClearFormat(ctx: Context) {
         if (ctx.config.borderInfo == null) return false;
         const cfg = ctx.config || {};
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const source_borderInfo = [];
+            const source_borderInfo: BorderInfo[] = [];
 
             for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const bd_rangeType = cfg.borderInfo[i].rangeType;
+                const entry = cfg.borderInfo[i];
 
-                if (bd_rangeType === 'range' && cfg.borderInfo[i].borderType !== 'border-slash') {
-                    const bd_range = cfg.borderInfo[i].range;
+                if (entry.rangeType === 'range' && entry.borderType !== 'border-slash') {
                     let bd_emptyRange: SingleRange[] = [];
 
-                    for (let j = 0; j < bd_range.length; j += 1) {
+                    for (let j = 0; j < entry.range.length; j += 1) {
                         bd_emptyRange = bd_emptyRange.concat(
                             cfSplitRange(
-                                bd_range[j],
+                                entry.range[j],
                                 { row: [rowSt, rowEd], column: [colSt, colEd] },
                                 { row: [rowSt, rowEd], column: [colSt, colEd] },
                                 'restPart',
@@ -1093,27 +1093,25 @@ export function handleClearFormat(ctx: Context) {
                         );
                     }
 
-                    cfg.borderInfo[i].range = bd_emptyRange;
-
-                    source_borderInfo.push(cfg.borderInfo[i]);
-                } else if (bd_rangeType === 'cell') {
-                    const bd_r = cfg.borderInfo[i].value.row_index;
-                    const bd_c = cfg.borderInfo[i].value.col_index;
+                    entry.range = bd_emptyRange;
+                    source_borderInfo.push(entry);
+                } else if (entry.rangeType === 'cell') {
+                    const bd_r = entry.value.row_index;
+                    const bd_c = entry.value.col_index;
 
                     if (!(bd_r >= rowSt && bd_r <= rowEd && bd_c >= colSt && bd_c <= colEd)) {
-                        source_borderInfo.push(cfg.borderInfo[i]);
+                        source_borderInfo.push(entry);
                     }
                 } else if (
-                    bd_rangeType === 'range' &&
-                    cfg.borderInfo[i].borderType === 'border-slash' &&
                     !(
-                        cfg.borderInfo[i].range[0].row[0] >= rowSt &&
-                        cfg.borderInfo[i].range[0].row[0] <= rowEd &&
-                        cfg.borderInfo[i].range[0].column[0] >= colSt &&
-                        cfg.borderInfo[i].range[0].column[0] <= colEd
+                        entry.range[0].row[0] >= rowSt &&
+                        entry.range[0].row[0] <= rowEd &&
+                        entry.range[0].column[0] >= colSt &&
+                        entry.range[0].column[0] <= colEd
                     )
                 ) {
-                    source_borderInfo.push(cfg.borderInfo[i]);
+                    // remaining slash range entries that fall outside the clear rect
+                    source_borderInfo.push(entry);
                 }
             }
 
@@ -1131,40 +1129,12 @@ export function handleTextBackground(ctx: Context, cellInput: HTMLDivElement, co
     setAttr(ctx, cellInput, 'bg', color);
 }
 
-export function handleBorder(ctx: Context, type: string, borderColor?: string, borderStyle?: string) {
-    // *If frontend editing is disabled, abort the next operation
-    // if (!checkIsAllowEdit()) {
-    //   tooltip.info("", locale().pivotTable.errorNotAllowEdit);
-    //   return;
-    // }
-    // if (!checkProtectionFormatCells(Store.currentSheetId)) {
-    //   return;
-    // }
-
-    // const d = editor.deepCopyFlowData(Store.flowdata);
-    // let type = $(this).attr("type");
-    // let type = "border-all";
+export function handleBorder(ctx: Context, type: BorderType, borderColor?: string, borderStyle?: string) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
-    if (type == null) {
-        type = 'border-all';
-    }
 
-    // const subcolormenuid = "luckysheet-icon-borderColor-menuButton";
-    // let color = $(`#${subcolormenuid}`).find(".luckysheet-color-selected").val();
-    // let style = $("#luckysheetborderSizepreview").attr("itemvalue");
-
-    // let color = "#000000";
-    let color = borderColor;
-    let style = borderStyle;
-
-    if (color == null || color === '') {
-        color = '#000';
-    }
-
-    if (style == null || style === '') {
-        style = '1';
-    }
+    const color = borderColor == null || borderColor === '' ? '#000' : borderColor;
+    const style = borderStyle == null || borderStyle === '' ? '1' : borderStyle;
 
     const cfg = ctx.config;
     if (cfg.borderInfo == null) {
@@ -1172,7 +1142,7 @@ export function handleBorder(ctx: Context, type: string, borderColor?: string, b
     }
 
     if (type !== 'border-slash') {
-        const borderInfo = {
+        const borderInfo: RangeBorderInfo = {
             rangeType: 'range',
             borderType: type,
             color,
@@ -1187,7 +1157,7 @@ export function handleBorder(ctx: Context, type: string, borderColor?: string, b
                 for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
                     const range = `${r}_${c}`;
                     if (includes(rangeList, range)) continue;
-                    const borderInfo = {
+                    const borderInfo: RangeBorderInfo = {
                         rangeType: 'range',
                         borderType: type,
                         color,
@@ -1201,18 +1171,10 @@ export function handleBorder(ctx: Context, type: string, borderColor?: string, b
         });
     }
 
-    // server.saveParam("cg", ctx.currentSheetId, cfg.borderInfo, {
-    //   k: "borderInfo",
-    // });
-
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
 
     ctx.luckysheetfile[index].config = ctx.config;
-
-    // setTimeout(function () {
-    //   luckysheetrefreshgrid();
-    // }, 1);
 }
 
 export function handleMerge(ctx: Context, type: string) {

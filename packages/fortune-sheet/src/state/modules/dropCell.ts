@@ -1,3 +1,4 @@
+import type { CellBorderInfo } from '@workspace/lib/sheets';
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine';
@@ -2200,22 +2201,23 @@ export function updateDropCell(ctx: Context) {
                     const bd_r = copy_str_r + ((j - apply_str_r) % csLen);
                     const bd_c = i;
 
-                    if (borderInfoCompute[`${bd_r}_${bd_c}`]) {
-                        const bd_obj = {
+                    const computeEntry = borderInfoCompute[`${bd_r}_${bd_c}`];
+                    if (computeEntry) {
+                        const bd_obj: CellBorderInfo = {
                             rangeType: 'cell',
                             value: {
                                 row_index: j,
                                 col_index: i,
-                                l: borderInfoCompute[`${bd_r}_${bd_c}`].l,
-                                r: borderInfoCompute[`${bd_r}_${bd_c}`].r,
-                                t: borderInfoCompute[`${bd_r}_${bd_c}`].t,
-                                b: borderInfoCompute[`${bd_r}_${bd_c}`].b,
+                                l: computeEntry.l,
+                                r: computeEntry.r,
+                                t: computeEntry.t,
+                                b: computeEntry.b,
                             },
                         };
 
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${j}_${i}`]) {
-                        const bd_obj = {
+                        const bd_obj: CellBorderInfo = {
                             rangeType: 'cell',
                             value: {
                                 row_index: j,
@@ -2288,22 +2290,23 @@ export function updateDropCell(ctx: Context) {
                     const bd_r = copy_end_r - ((apply_end_r - j) % csLen);
                     const bd_c = i;
 
-                    if (borderInfoCompute[`${bd_r}_${bd_c}`]) {
-                        const bd_obj = {
+                    const computeEntry = borderInfoCompute[`${bd_r}_${bd_c}`];
+                    if (computeEntry) {
+                        const bd_obj: CellBorderInfo = {
                             rangeType: 'cell',
                             value: {
                                 row_index: j,
                                 col_index: i,
-                                l: borderInfoCompute[`${bd_r}_${bd_c}`].l,
-                                r: borderInfoCompute[`${bd_r}_${bd_c}`].r,
-                                t: borderInfoCompute[`${bd_r}_${bd_c}`].t,
-                                b: borderInfoCompute[`${bd_r}_${bd_c}`].b,
+                                l: computeEntry.l,
+                                r: computeEntry.r,
+                                t: computeEntry.t,
+                                b: computeEntry.b,
                             },
                         };
 
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${j}_${i}`]) {
-                        const bd_obj = {
+                        const bd_obj: CellBorderInfo = {
                             rangeType: 'cell',
                             value: {
                                 row_index: j,
@@ -2385,22 +2388,23 @@ export function updateDropCell(ctx: Context) {
                     const bd_r = i;
                     const bd_c = copy_str_c + ((j - apply_str_c) % csLen);
 
-                    if (borderInfoCompute[`${bd_r}_${bd_c}`]) {
-                        const bd_obj = {
+                    const computeEntry = borderInfoCompute[`${bd_r}_${bd_c}`];
+                    if (computeEntry) {
+                        const bd_obj: CellBorderInfo = {
                             rangeType: 'cell',
                             value: {
                                 row_index: i,
                                 col_index: j,
-                                l: borderInfoCompute[`${bd_r}_${bd_c}`].l,
-                                r: borderInfoCompute[`${bd_r}_${bd_c}`].r,
-                                t: borderInfoCompute[`${bd_r}_${bd_c}`].t,
-                                b: borderInfoCompute[`${bd_r}_${bd_c}`].b,
+                                l: computeEntry.l,
+                                r: computeEntry.r,
+                                t: computeEntry.t,
+                                b: computeEntry.b,
                             },
                         };
 
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${i}_${j}`]) {
-                        const bd_obj = {
+                        const bd_obj: CellBorderInfo = {
                             rangeType: 'cell',
                             value: {
                                 row_index: i,
@@ -2472,22 +2476,23 @@ export function updateDropCell(ctx: Context) {
                     const bd_r = i;
                     const bd_c = copy_end_c - ((apply_end_c - j) % csLen);
 
-                    if (borderInfoCompute[`${bd_r}_${bd_c}`]) {
-                        const bd_obj = {
+                    const computeEntry = borderInfoCompute[`${bd_r}_${bd_c}`];
+                    if (computeEntry) {
+                        const bd_obj: CellBorderInfo = {
                             rangeType: 'cell',
                             value: {
                                 row_index: i,
                                 col_index: j,
-                                l: borderInfoCompute[`${bd_r}_${bd_c}`].l,
-                                r: borderInfoCompute[`${bd_r}_${bd_c}`].r,
-                                t: borderInfoCompute[`${bd_r}_${bd_c}`].t,
-                                b: borderInfoCompute[`${bd_r}_${bd_c}`].b,
+                                l: computeEntry.l,
+                                r: computeEntry.r,
+                                t: computeEntry.t,
+                                b: computeEntry.b,
                             },
                         };
 
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${i}_${j}`]) {
-                        const bd_obj = {
+                        const bd_obj: CellBorderInfo = {
                             rangeType: 'cell',
                             value: {
                                 row_index: i,

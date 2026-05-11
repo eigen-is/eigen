@@ -1,4 +1,4 @@
-import type { MergeCell } from '@workspace/lib/sheets';
+import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import {
     cloneDeep,
     every,
@@ -1199,7 +1199,7 @@ export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
     return '';
 }
 
-export function getQKBorder(width: string, type: string, color: string) {
+export function getQKBorder(width: string, type: string, color: string): BorderSide {
     let bordertype = '';
 
     if (width.toString().indexOf('pt') > -1) {
@@ -1249,7 +1249,7 @@ export function getQKBorder(width: string, type: string, color: string) {
         }
     }
 
-    return [style, color];
+    return { style, color };
 }
 
 export function getdatabyselection(ctx: Context, range: Selection | undefined, sheetId: string) {

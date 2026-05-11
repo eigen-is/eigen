@@ -74,15 +74,19 @@ export type SingleRange = { row: number[]; column: number[] };
 export type Range = SingleRange[];
 
 export type BorderSide = { style: number; color: string };
+// Editor producers (selection.ts, paste.ts, dropCell.ts) write `l: null` (and
+// peers) to mean "cleared" so the entry survives JSON / Yjs serialization with
+// the slot explicitly absent; readers narrow via `!isNil(value.l)`. Treating
+// null and undefined identically keeps both representations in the type.
 export type CellBorderInfo = {
     rangeType: 'cell';
     value: {
         row_index: number;
         col_index: number;
-        l?: BorderSide;
-        r?: BorderSide;
-        t?: BorderSide;
-        b?: BorderSide;
+        l?: BorderSide | null;
+        r?: BorderSide | null;
+        t?: BorderSide | null;
+        b?: BorderSide | null;
     };
 };
 // Editor's range-border has the same row/column rectangle as a SingleRange plus

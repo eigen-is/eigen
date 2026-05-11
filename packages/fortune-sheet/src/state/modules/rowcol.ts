@@ -1,4 +1,11 @@
-import type { DataVerificationRule, MergeCell } from '@workspace/lib/sheets';
+import type {
+    BorderInfo,
+    CellBorderInfo,
+    DataVerificationRule,
+    MergeCell,
+    RangeBorderInfo,
+    SingleRange,
+} from '@workspace/lib/sheets';
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
 import type { Context } from '../context';
@@ -693,21 +700,19 @@ export function insertRowCol(
 
     // Border config update
     if (type === 'row') {
-        const cellBorderConfig = [];
+        const cellBorderConfig: CellBorderInfo[] = [];
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo = [];
+            const borderInfo: BorderInfo[] = [];
 
             for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const { rangeType } = cfg.borderInfo[i];
+                const entry = cfg.borderInfo[i];
 
-                if (rangeType === 'range') {
-                    const borderRange = cfg.borderInfo[i].range;
+                if (entry.rangeType === 'range') {
+                    const emptyRange: SingleRange[] = [];
 
-                    const emptyRange = [];
-
-                    for (let j = 0; j < borderRange.length; j += 1) {
-                        let bd_r1 = borderRange[j].row[0];
-                        let bd_r2 = borderRange[j].row[1];
+                    for (let j = 0; j < entry.range.length; j += 1) {
+                        let bd_r1 = entry.range[j].row[0];
+                        let bd_r2 = entry.range[j].row[1];
 
                         if (direction === 'lefttop') {
                             if (index <= bd_r1) {
@@ -728,27 +733,27 @@ export function insertRowCol(
                         if (bd_r2 >= bd_r1) {
                             emptyRange.push({
                                 row: [bd_r1, bd_r2],
-                                column: borderRange[j].column,
+                                column: entry.range[j].column,
                             });
                         }
                     }
 
                     if (emptyRange.length > 0) {
-                        const bd_obj = {
+                        const bd_obj: RangeBorderInfo = {
                             rangeType: 'range',
-                            borderType: cfg.borderInfo[i].borderType,
-                            style: cfg.borderInfo[i].style,
-                            color: cfg.borderInfo[i].color,
+                            borderType: entry.borderType,
+                            style: entry.style,
+                            color: entry.color,
                             range: emptyRange,
                         };
 
                         borderInfo.push(bd_obj);
                     }
-                } else if (rangeType === 'cell') {
-                    let { row_index } = cfg.borderInfo[i].value;
+                } else {
+                    let { row_index } = entry.value;
                     // Cache border config at the same position
                     if (row_index === index) {
-                        cellBorderConfig.push(JSON.parse(JSON.stringify(cfg.borderInfo[i])));
+                        cellBorderConfig.push(cloneDeep(entry));
                     }
 
                     if (direction === 'lefttop') {
@@ -761,8 +766,8 @@ export function insertRowCol(
                         }
                     }
 
-                    cfg.borderInfo[i].value.row_index = row_index;
-                    borderInfo.push(cfg.borderInfo[i]);
+                    entry.value.row_index = row_index;
+                    borderInfo.push(entry);
                 }
             }
 
@@ -786,21 +791,19 @@ export function insertRowCol(
             }
         }
     } else {
-        const cellBorderConfig = [];
+        const cellBorderConfig: CellBorderInfo[] = [];
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo = [];
+            const borderInfo: BorderInfo[] = [];
 
             for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const { rangeType } = cfg.borderInfo[i];
+                const entry = cfg.borderInfo[i];
 
-                if (rangeType === 'range') {
-                    const borderRange = cfg.borderInfo[i].range;
+                if (entry.rangeType === 'range') {
+                    const emptyRange: SingleRange[] = [];
 
-                    const emptyRange = [];
-
-                    for (let j = 0; j < borderRange.length; j += 1) {
-                        let bd_c1 = borderRange[j].column[0];
-                        let bd_c2 = borderRange[j].column[1];
+                    for (let j = 0; j < entry.range.length; j += 1) {
+                        let bd_c1 = entry.range[j].column[0];
+                        let bd_c2 = entry.range[j].column[1];
 
                         if (direction === 'lefttop') {
                             if (index <= bd_c1) {
@@ -820,28 +823,28 @@ export function insertRowCol(
 
                         if (bd_c2 >= bd_c1) {
                             emptyRange.push({
-                                row: borderRange[j].row,
+                                row: entry.range[j].row,
                                 column: [bd_c1, bd_c2],
                             });
                         }
                     }
 
                     if (emptyRange.length > 0) {
-                        const bd_obj = {
+                        const bd_obj: RangeBorderInfo = {
                             rangeType: 'range',
-                            borderType: cfg.borderInfo[i].borderType,
-                            style: cfg.borderInfo[i].style,
-                            color: cfg.borderInfo[i].color,
+                            borderType: entry.borderType,
+                            style: entry.style,
+                            color: entry.color,
                             range: emptyRange,
                         };
 
                         borderInfo.push(bd_obj);
                     }
-                } else if (rangeType === 'cell') {
-                    let { col_index } = cfg.borderInfo[i].value;
+                } else {
+                    let { col_index } = entry.value;
                     // Cache border config at the same position
                     if (col_index === index) {
-                        cellBorderConfig.push(JSON.parse(JSON.stringify(cfg.borderInfo[i])));
+                        cellBorderConfig.push(cloneDeep(entry));
                     }
 
                     if (direction === 'lefttop') {
@@ -854,8 +857,8 @@ export function insertRowCol(
                         }
                     }
 
-                    cfg.borderInfo[i].value.col_index = col_index;
-                    borderInfo.push(cfg.borderInfo[i]);
+                    entry.value.col_index = col_index;
+                    borderInfo.push(entry);
                 }
             }
 
@@ -1017,25 +1020,23 @@ export function deleteRowCol(
     // Border config update
     if (type === 'row') {
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo = [];
+            const borderInfo: BorderInfo[] = [];
 
             for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const { rangeType } = cfg.borderInfo[i];
+                const entry = cfg.borderInfo[i];
 
-                if (rangeType === 'range') {
-                    const borderRange = cfg.borderInfo[i].range;
+                if (entry.rangeType === 'range') {
+                    const emptyRange: SingleRange[] = [];
 
-                    const emptyRange = [];
-
-                    for (let j = 0; j < borderRange.length; j += 1) {
-                        let bd_r1 = borderRange[j].row[0];
-                        let bd_r2 = borderRange[j].row[1];
+                    for (let j = 0; j < entry.range.length; j += 1) {
+                        let bd_r1 = entry.range[j].row[0];
+                        let bd_r2 = entry.range[j].row[1];
 
                         for (let r = start; r <= end; r += 1) {
-                            if (r < borderRange[j].row[0]) {
+                            if (r < entry.range[j].row[0]) {
                                 bd_r1 -= 1;
                                 bd_r2 -= 1;
-                            } else if (r <= borderRange[j].row[1]) {
+                            } else if (r <= entry.range[j].row[1]) {
                                 bd_r2 -= 1;
                             }
                         }
@@ -1043,30 +1044,30 @@ export function deleteRowCol(
                         if (bd_r2 >= bd_r1) {
                             emptyRange.push({
                                 row: [bd_r1, bd_r2],
-                                column: borderRange[j].column,
+                                column: entry.range[j].column,
                             });
                         }
                     }
 
                     if (emptyRange.length > 0) {
-                        const bd_obj = {
+                        const bd_obj: RangeBorderInfo = {
                             rangeType: 'range',
-                            borderType: cfg.borderInfo[i].borderType,
-                            style: cfg.borderInfo[i].style,
-                            color: cfg.borderInfo[i].color,
+                            borderType: entry.borderType,
+                            style: entry.style,
+                            color: entry.color,
                             range: emptyRange,
                         };
 
                         borderInfo.push(bd_obj);
                     }
-                } else if (rangeType === 'cell') {
-                    const { row_index } = cfg.borderInfo[i].value;
+                } else {
+                    const { row_index } = entry.value;
 
                     if (row_index < start) {
-                        borderInfo.push(cfg.borderInfo[i]);
+                        borderInfo.push(entry);
                     } else if (row_index > end) {
-                        cfg.borderInfo[i].value.row_index = row_index - (end - start + 1);
-                        borderInfo.push(cfg.borderInfo[i]);
+                        entry.value.row_index = row_index - (end - start + 1);
+                        borderInfo.push(entry);
                     }
                 }
             }
@@ -1075,56 +1076,54 @@ export function deleteRowCol(
         }
     } else {
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo = [];
+            const borderInfo: BorderInfo[] = [];
 
             for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const { rangeType } = cfg.borderInfo[i];
+                const entry = cfg.borderInfo[i];
 
-                if (rangeType === 'range') {
-                    const borderRange = cfg.borderInfo[i].range;
+                if (entry.rangeType === 'range') {
+                    const emptyRange: SingleRange[] = [];
 
-                    const emptyRange = [];
-
-                    for (let j = 0; j < borderRange.length; j += 1) {
-                        let bd_c1 = borderRange[j].column[0];
-                        let bd_c2 = borderRange[j].column[1];
+                    for (let j = 0; j < entry.range.length; j += 1) {
+                        let bd_c1 = entry.range[j].column[0];
+                        let bd_c2 = entry.range[j].column[1];
 
                         for (let c = start; c <= end; c += 1) {
-                            if (c < borderRange[j].column[0]) {
+                            if (c < entry.range[j].column[0]) {
                                 bd_c1 -= 1;
                                 bd_c2 -= 1;
-                            } else if (c <= borderRange[j].column[1]) {
+                            } else if (c <= entry.range[j].column[1]) {
                                 bd_c2 -= 1;
                             }
                         }
 
                         if (bd_c2 >= bd_c1) {
                             emptyRange.push({
-                                row: borderRange[j].row,
+                                row: entry.range[j].row,
                                 column: [bd_c1, bd_c2],
                             });
                         }
                     }
 
                     if (emptyRange.length > 0) {
-                        const bd_obj = {
+                        const bd_obj: RangeBorderInfo = {
                             rangeType: 'range',
-                            borderType: cfg.borderInfo[i].borderType,
-                            style: cfg.borderInfo[i].style,
-                            color: cfg.borderInfo[i].color,
+                            borderType: entry.borderType,
+                            style: entry.style,
+                            color: entry.color,
                             range: emptyRange,
                         };
 
                         borderInfo.push(bd_obj);
                     }
-                } else if (rangeType === 'cell') {
-                    const { col_index } = cfg.borderInfo[i].value;
+                } else {
+                    const { col_index } = entry.value;
 
                     if (col_index < start) {
-                        borderInfo.push(cfg.borderInfo[i]);
+                        borderInfo.push(entry);
                     } else if (col_index > end) {
-                        cfg.borderInfo[i].value.col_index = col_index - (end - start + 1);
-                        borderInfo.push(cfg.borderInfo[i]);
+                        entry.value.col_index = col_index - (end - start + 1);
+                        borderInfo.push(entry);
                     }
                 }
             }

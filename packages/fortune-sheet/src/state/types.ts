@@ -61,13 +61,9 @@ export type Presence = {
 };
 
 // Editor-runtime SheetConfig. Some fields (merge / rowlen / columnlen / rowhidden /
-// colhidden / borderInfo) overlap with lib's API-shape `SheetConfig`; the editor
-// keeps borderInfo loosely typed because state producer sites (paste, rowcol,
-// toolbar, selection, dropCell, api/cell) push raw object literals whose
-// `rangeType: 'cell' | 'range'` discriminator isn't `as const`-tagged. Tightening
-// to `BorderInfo[]` is part of TODO #1 — at that point this type should collapse
-// into `Omit<ApiSheetConfig, ...> & { editor extras }`. Readers (border.ts,
-// canvas.ts) narrow at the use-site via assignment to a `BorderInfo[]` local.
+// colhidden / borderInfo) overlap with lib's API-shape `SheetConfig`; once the
+// remaining loose fields are tightened this type should collapse into
+// `Omit<ApiSheetConfig, ...> & { editor extras }`.
 export type SheetConfig = {
     merge?: Record<string, MergeCell>;
     rowlen?: Record<string, number>; // row heights
@@ -76,8 +72,7 @@ export type SheetConfig = {
     colhidden?: Record<string, number>; // hidden columns
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
-    // biome-ignore lint/suspicious/noExplicitAny: see the SheetConfig doc above — TODO #1
-    borderInfo?: any[];
+    borderInfo?: BorderInfo[];
     // Sheet protection settings — read by protection.ts as a flag bag with
     // varied shapes (mode-dependent). Tightening requires inverting the field
     // set across all protection modes.
