@@ -60,6 +60,21 @@ export type Presence = {
     };
 };
 
+// Sheet-protection settings. Read-only in this fork: no UI or xlsx-import
+// path writes the field today (the upstream luckysheet protect-sheet dialog
+// was never ported; locale strings for the other flags are dead).
+// protection.ts reads only these five fields: `sheet !== 0` toggles
+// protection on; the `selectLockedCells` / `selectunLockedCells` flags allow
+// selection when set to `1` (any other value, including undefined, blocks);
+// `hintText` overrides `defaultSheetHintText` as the warn-dialog body.
+export type SheetAuthority = {
+    sheet?: number;
+    selectLockedCells?: number;
+    selectunLockedCells?: number;
+    hintText?: string;
+    defaultSheetHintText?: string;
+};
+
 // Editor-runtime SheetConfig. Some fields (merge / rowlen / columnlen / rowhidden /
 // colhidden / borderInfo) overlap with lib's API-shape `SheetConfig`; once the
 // remaining loose fields are tightened this type should collapse into
@@ -73,11 +88,7 @@ export type SheetConfig = {
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
     borderInfo?: BorderInfo[];
-    // Sheet protection settings — read by protection.ts as a flag bag with
-    // varied shapes (mode-dependent). Tightening requires inverting the field
-    // set across all protection modes.
-    // biome-ignore lint/suspicious/noExplicitAny: cascade-blocked, see comment
-    authority?: any;
+    authority?: SheetAuthority;
     rowReadOnly?: Record<number, number>;
     colReadOnly?: Record<number, number>;
 };

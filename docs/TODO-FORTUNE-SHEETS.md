@@ -30,8 +30,6 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
    **Loose typing kept** (each with a documented biome-ignore + WHY pointing
    here):
-   - `SheetConfig.authority: any` — protection.ts reads a varied flag bag;
-     tightening requires inverting the field set across all protection modes.
    - `state/modules/formula-range.ts::rangeSetValue(selected: any)` —
      column-header / row-header click handlers pass `row: [null, null]`
      (or `column: [null, null]`) to denote a whole-column/row reference;
@@ -105,10 +103,31 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      overlap clear branch (`else if (borderInfoCompute[\`${h}_${c}\`])`) so
      a slash source whose computed-map coordinates collide with another
      bordered cell in the source range no longer drops silently.
+   - `SheetConfig.authority` is now `SheetAuthority` (was `any`). The fork
+     never ported upstream luckysheet's protect-sheet dialog — no UI or
+     xlsx-import path writes the field, only `protection.ts` reads it. The
+     new type captures exactly the five fields the four readers touch
+     (`sheet`, `selectLockedCells`, `selectunLockedCells`, `hintText`,
+     `defaultSheetHintText`); the dead locale strings (`formatCells`,
+     `insertRows`, `editObjects`, …) were not added per CODE-STANDARDS
+     "no placeholders." Side-fixes in `protection.ts`: the four readers
+     now share a single guard pattern (`aut = sheetFile.config?.authority`
+     + one `isNil(aut) || isNil(aut.sheet) || aut.sheet === 0` early
+     return), replacing two repeated `isNil`-of-`config` + `isNil`-of-`aut`
+     checks per function; dead commented-out `locale()` / `local_protection`
+     lookup and the unreachable `isAllEdit = false` branch (with its
+     `TODO checkProtectionLockedSqref(…)` block) removed from
+     `checkProtectionSelectLockedOrUnLockedCells`; `let ht = ''` +
+     if/else fallback in `checkProtectionFormatCells` collapsed to
+     `ctx.warnDialog = aut.hintText || aut.defaultSheetHintText` (empty
+     strings are falsy, matches the prior `length > 0` semantic);
+     `let selectLockedCells = false; if (...) selectLockedCells = true;`
+     pattern in `checkProtectionAllSelected` collapsed to direct
+     `const` assignment.
 
-   Once the remaining producers (authority, formula-range) are migrated in
-   lockstep, state's `Sheet` / `SheetConfig` can collapse into
-   `Omit<lib.Sheet, …> & { editor extras }`.
+   Once the remaining producer (formula-range) is migrated, state's
+   `Sheet` / `SheetConfig` can collapse into `Omit<lib.Sheet, …> & {
+   editor extras }`.
 
    **Group F `@ts-expect-error` sites — closed on `biome-state-cleanup`
    (2026-05-11):** all 12 directives in `state/` + `components/Workbook` are
