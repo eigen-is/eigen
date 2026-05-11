@@ -29,16 +29,10 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    `state/types.ts`.
 
    **Loose typing kept** (each with a documented biome-ignore + WHY pointing
-   here):
-   - `state/modules/formula-range.ts::rangeSetValue(selected: any)` —
-     column-header / row-header click handlers pass `row: [null, null]`
-     (or `column: [null, null]`) to denote a whole-column/row reference;
-     `getRangetxt` (`cell.ts:993`) explicitly reads those null sentinels at
-     runtime. Canonical `SingleRange = { row: number[]; column: number[] }`
-     is the type lie — widening to `(number | null)[]` cascades through
-     ~56 consumers (most index `.row[0]` as plain `number`). The honest
-     fix is to widen lib's `SingleRange` and add narrows at every read site
-     that needs a real number.
+   here): all previously-listed sites are now closed — see Tightened entries
+   below for `formula-range`, `border`, and the other migrated producers.
+   - ~~`state/modules/formula-range.ts::rangeSetValue(selected: any)`~~ — closed
+     2026-05-11, see below.
    - ~~`state/modules/border.ts::getBorderInfoComputeRange` returns
      `Record<string, any>`~~ — closed 2026-05-11, see below.
 
@@ -124,10 +118,28 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      `let selectLockedCells = false; if (...) selectLockedCells = true;`
      pattern in `checkProtectionAllSelected` collapsed to direct
      `const` assignment.
+   - `rangeSetValue(selected: any)` is now `RangeOrWholeAxis` (discriminated
+     union of `SingleRange | { row: [null,null]; column: number[] } |
+     { row: number[]; column: [null,null] }`, in `state/types.ts`). The whole-
+     axis sentinels from column-header / row-header click handlers are now
+     a typed variant rather than a `[null, null]` lie inside `SingleRange`.
+     `getRangetxt` (the only other reader) widens to the same union; two
+     module-local type predicates (`isWholeColumnRef` / `isWholeRowRef`)
+     drive the narrowing (TS doesn't propagate tuple-vs-array index access
+     into sibling-field narrowing, so the inline `range.row[0] === null`
+     check that was tried first didn't narrow `range.column`). The merge-
+     branch check in `rangeSetValue` now guards `rf !== null && cf !== null`
+     before building the `${rf}_${cf}` merge-key string — semantically a
+     no-op (the previous code stringified to `"null_null"` which never
+     matches a merge key) but lets TS narrow rf/cf to `number` before
+     emitting the `[rf, rf]` / `[cf, cf]` `SingleRange` literal. Lib's
+     `SingleRange = { row: number[]; column: number[] }` stays pure — the
+     10 other `getRangetxt` call sites and ~56 SingleRange consumers across
+     state untouched.
 
-   Once the remaining producer (formula-range) is migrated, state's
-   `Sheet` / `SheetConfig` can collapse into `Omit<lib.Sheet, …> & {
-   editor extras }`.
+   With formula-range migrated, state's `Sheet` / `SheetConfig` can now
+   collapse into `Omit<lib.Sheet, …> & { editor extras }` — no remaining
+   loose-typed producers blocking the merge.
 
    **Group F `@ts-expect-error` sites — closed on `biome-state-cleanup`
    (2026-05-11):** all 12 directives in `state/` + `components/Workbook` are
