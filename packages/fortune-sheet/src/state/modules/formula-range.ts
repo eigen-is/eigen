@@ -1,5 +1,5 @@
 import type { Context } from '../context';
-import type { Rect } from '../types';
+import type { RangeOrWholeAxis, Rect } from '../types';
 import { seletedHighlistByindex } from '.';
 import { getRangetxt, mergeMoveMain } from './cell';
 import { moveToEnd } from './cursor';
@@ -69,13 +69,12 @@ export function setCaretPosition(ctx: Context, textDom: HTMLElement, children: n
     }
 }
 
-// `selected` is wider than `SingleRange` here — column-header and row-header
-// click handlers pass `row: [null, null]` (or `column: [null, null]`) to denote
-// a whole-column/row reference. `getRangetxt` reads those null sentinels at
-// runtime (cell.ts:993). Widening lib's `SingleRange` to `(number | null)[]`
-// cascades through ~56 consumers and is out of scope for this branch.
-// biome-ignore lint/suspicious/noExplicitAny: see comment above
-export function rangeSetValue(ctx: Context, cellInput: HTMLDivElement, selected: any, fxInput?: HTMLDivElement | null) {
+export function rangeSetValue(
+    ctx: Context,
+    cellInput: HTMLDivElement,
+    selected: RangeOrWholeAxis,
+    fxInput?: HTMLDivElement | null,
+) {
     let $editor = cellInput;
     let $copyTo = fxInput;
     if (document.activeElement?.id === 'luckysheet-functionbox-cell') {
@@ -85,7 +84,7 @@ export function rangeSetValue(ctx: Context, cellInput: HTMLDivElement, selected:
     let range = '';
     const rf = selected.row[0];
     const cf = selected.column[0];
-    if (ctx.config.merge != null && `${rf}_${cf}` in ctx.config.merge) {
+    if (rf !== null && cf !== null && ctx.config.merge != null && `${rf}_${cf}` in ctx.config.merge) {
         range = getRangetxt(
             ctx,
             ctx.currentSheetId,

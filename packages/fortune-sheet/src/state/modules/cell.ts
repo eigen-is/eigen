@@ -15,7 +15,7 @@ import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-forma
 import { genarate, update } from '../../engine/format';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
-import type { Range, Selection, SheetConfig, SingleRange } from '../types';
+import type { Range, RangeOrWholeAxis, Selection, SheetConfig } from '../types';
 import { getSheetIndex, indexToColumnChar, rgbToHex } from '../utils';
 import { checkCF, getComputeMap } from './conditionFormat';
 import { getFailureText, validateCellData } from './dataVerification';
@@ -963,8 +963,17 @@ export function getFlattenedRange(ctx: Context, range?: Range) {
     return result;
 }
 
-// Convert a selection range array to a string like A1:A2
-export function getRangetxt(ctx: Context, sheetId: string, range: SingleRange, currentId?: string) {
+function isWholeColumnRef(range: RangeOrWholeAxis): range is { row: [null, null]; column: number[] } {
+    return range.row[0] === null && range.column[0] !== null;
+}
+function isWholeRowRef(range: RangeOrWholeAxis): range is { row: number[]; column: [null, null] } {
+    return range.row[0] !== null && range.column[0] === null;
+}
+
+// Convert a selection range array to a string like A1:A2. `range.row = [null, null]`
+// produces a whole-column ref (`A:A`); `range.column = [null, null]` a whole-row
+// ref (`1:1`) — emitted by column-header / row-header clicks in formula-edit mode.
+export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAxis, currentId?: string) {
     let sheettxt = '';
 
     if (currentId == null) {
@@ -989,23 +998,18 @@ export function getRangetxt(ctx: Context, sheetId: string, range: SingleRange, c
         }
     }
 
-    const row0 = range.row[0];
-    const row1 = range.row[1];
-    const column0 = range.column[0];
-    const column1 = range.column[1];
-
-    if (row0 == null && row1 == null) {
-        return `${sheettxt + indexToColumnChar(column0)}:${indexToColumnChar(column1)}`;
+    if (isWholeColumnRef(range)) {
+        return `${sheettxt + indexToColumnChar(range.column[0])}:${indexToColumnChar(range.column[1])}`;
     }
-    if (column0 == null && column1 == null) {
-        return `${sheettxt + (row0 + 1)}:${row1 + 1}`;
+    if (isWholeRowRef(range)) {
+        return `${sheettxt + (range.row[0] + 1)}:${range.row[1] + 1}`;
     }
 
-    if (column0 === column1 && row0 === row1) {
-        return sheettxt + indexToColumnChar(column0) + (row0 + 1);
+    const { row, column } = range;
+    if (column[0] === column[1] && row[0] === row[1]) {
+        return sheettxt + indexToColumnChar(column[0]) + (row[0] + 1);
     }
-
-    return `${sheettxt + indexToColumnChar(column0) + (row0 + 1)}:${indexToColumnChar(column1)}${row1 + 1}`;
+    return `${sheettxt + indexToColumnChar(column[0]) + (row[0] + 1)}:${indexToColumnChar(column[1])}${row[1] + 1}`;
 }
 
 // Convert a string like A1:A2 to a selection range array

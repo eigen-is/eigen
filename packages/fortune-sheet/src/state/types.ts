@@ -49,6 +49,17 @@ export type Selection = {
     column_select?: boolean;
 };
 
+// Formula-edit selection input. The column-header and row-header click handlers
+// (`mouse-header.ts`, `formula-range.ts::rangeDragColumn`/`rangeDragRow`) pass
+// `[null, null]` as a whole-axis sentinel: `row: [null, null]` denotes a whole-
+// column reference, `column: [null, null]` a whole-row reference. `getRangetxt`
+// emits `A:A` / `1:1` from the sentinel; the data never escapes that formatter.
+// At most one axis is the sentinel (the producers never set both).
+export type RangeOrWholeAxis =
+    | SingleRange
+    | { row: [null, null]; column: number[] }
+    | { row: number[]; column: [null, null] };
+
 export type Presence = {
     sheetId: string;
     username: string;
