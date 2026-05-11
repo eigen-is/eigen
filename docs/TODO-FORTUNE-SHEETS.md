@@ -30,11 +30,6 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
    **Loose typing kept** (each with a documented biome-ignore + WHY pointing
    here):
-   - `SheetConfig.borderInfo: any[]` — producers in paste/rowcol/toolbar/
-     selection/dropCell/api/cell push raw object literals whose `rangeType`
-     discriminator isn't `as const`-tagged. Tightening cascades ~30 errors;
-     readers narrow at the use-site (`const borderInfo: BorderInfo[] =
-     cfg.borderInfo ?? []`).
    - `SheetConfig.authority: any` — protection.ts reads a varied flag bag;
      tightening requires inverting the field set across all protection modes.
    - `Freezen.freezenhorizontaldata: any[]` / `.freezenverticaldata: any[]` —
@@ -49,6 +44,14 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      ~56 consumers (most index `.row[0]` as plain `number`). The honest
      fix is to widen lib's `SingleRange` and add narrows at every read site
      that needs a real number.
+   - `state/modules/border.ts::getBorderInfoComputeRange` returns
+     `Record<string, any>` — every caller (paste/dropCell/moveCells/selection)
+     now captures into a local `computeEntry` after the borderInfo cleanup
+     (2026-05-11), so the original "TS can't prove non-null across template-
+     literal re-indexing" justification no longer holds. Tightening the return
+     to `ComputedBorderMap` would surface the pre-existing tightrope in
+     `paste.ts:1196-1207` (slash branch reads from `minh`/`minc` key rather
+     than the `mth`/`mtc` key the guard checked).
 
    **Tightened on `biome-state-cleanup` (2026-05-11)** — landed alongside Group F:
    - `Sheet.luckysheet_conditionformat_save` is now `ConditionalFormatRule[]`.
@@ -60,9 +63,25 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      guards. Side-fix: the cut-paste rule clone no longer aliases its
      `cellrange` back into the source rule (the previous code reassigned
      `cellrange` on the same object twice).
+   - `SheetConfig.borderInfo` is now `BorderInfo[]` (was `any[]`). Producers
+     in `paste.ts`/`dropCell.ts`/`selection.ts`/`moveCells.ts`/`rowcol.ts`/
+     `toolbar.ts`/`api/cell.ts` annotate each `bd_obj` literal with its
+     variant (`CellBorderInfo`/`RangeBorderInfo`). Reader loops capture
+     `cfg.borderInfo[i]` into a local `entry` for narrowing (the old
+     `cfg.borderInfo[i].range` pattern didn't propagate the discriminator).
+     `handleBorder(ctx, type, ...)` is now typed `BorderType` instead of
+     `string`; `format-menu.tsx` types `borderItems` so `value` flows as
+     `BorderType | 'divider'`. Side-fixes: lib's `CellBorderInfo.value.{l,r,t,b}`
+     widened from `BorderSide | undefined` to `BorderSide | null | undefined`
+     (producers emit explicit `null` for cleared sides, readers `isNil`-check
+     either); `getQKBorder()` returns `BorderSide` directly instead of a
+     `[style, color]` tuple, four call sites simplified; pre-existing typo
+     fix in HTML paste's right-border trigger (`td.style.borderRight` instead
+     of the inherited-from-bl `td.style.borderLeft`); `normalizeSelection`
+     overloaded to preserve non-undefined when callers pass literal arrays.
 
-   Once the remaining producers (borderInfo, authority, freezen, formula-range)
-   are migrated in lockstep, state's `Sheet` / `SheetConfig` can collapse into
+   Once the remaining producers (authority, freezen, formula-range) are
+   migrated in lockstep, state's `Sheet` / `SheetConfig` can collapse into
    `Omit<lib.Sheet, …> & { editor extras }`.
 
    **Group F `@ts-expect-error` sites — closed on `biome-state-cleanup`

@@ -1,10 +1,10 @@
-import type { ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import type { CellBorderInfo, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber, kebabCase, map } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine';
 import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
-import type { Cell, Freezen, Range, Sheet as SheetType, SingleRange } from '../types';
+import type { Cell, Freezen, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
 import { getBorderInfoCompute } from './border';
 import {
@@ -89,6 +89,15 @@ export function seletedHighlistByindex(ctx: Context, r1: number, r2: number, c1:
     return null;
 }
 
+// Overload preserves non-undefined input on return: callers that pass a literal
+// `[...]` get a non-undefined `Selection[]` back, callers that pass
+// `ctx.luckysheet_select_save` get the same `Selection[] | undefined`.
+export function normalizeSelection(ctx: Context, selection: Selection[]): Selection[];
+export function normalizeSelection(ctx: Context, selection: undefined): undefined;
+export function normalizeSelection(
+    ctx: Context,
+    selection: SheetType['luckysheet_select_save'],
+): SheetType['luckysheet_select_save'];
 export function normalizeSelection(ctx: Context, selection: SheetType['luckysheet_select_save']) {
     if (!selection) return selection;
 
@@ -313,16 +322,17 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
                 const x: (Cell | null)[] = flowdata[h];
 
                 for (let c = mtc; c < maxcellCahe; c += 1) {
-                    if (borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
-                        const bd_obj = {
-                            rangeType: 'cell' as const,
+                    const computeEntry = borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
+                    if (computeEntry) {
+                        const bd_obj: CellBorderInfo = {
+                            rangeType: 'cell',
                             value: {
                                 row_index: h,
                                 col_index: c,
-                                l: borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`].l,
-                                r: borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`].r,
-                                t: borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`].t,
-                                b: borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`].b,
+                                l: computeEntry.l,
+                                r: computeEntry.r,
+                                t: computeEntry.t,
+                                b: computeEntry.b,
                             },
                         };
 
@@ -332,8 +342,8 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
 
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${h}_${c}`]) {
-                        const bd_obj = {
-                            rangeType: 'cell' as const,
+                        const bd_obj: CellBorderInfo = {
+                            rangeType: 'cell',
                             value: {
                                 row_index: h,
                                 col_index: c,

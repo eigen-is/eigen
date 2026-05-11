@@ -1,4 +1,4 @@
-import type { BorderInfo, MergeCell } from '@workspace/lib/sheets';
+import type { MergeCell } from '@workspace/lib/sheets';
 import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
@@ -48,9 +48,7 @@ export function getBorderInfoComputeRange(
     }
     if (!data || !cfg) return borderInfoCompute;
 
-    // `SheetConfig.borderInfo` is `any[]` (see state/types.ts) because state
-    // producer sites push untagged literals; readers narrow here.
-    const borderInfo: BorderInfo[] = cfg.borderInfo ?? [];
+    const borderInfo = cfg.borderInfo ?? [];
 
     if (isEmpty(borderInfo)) return borderInfoCompute;
 

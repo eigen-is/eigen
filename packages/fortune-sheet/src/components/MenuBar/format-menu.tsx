@@ -1,3 +1,4 @@
+import type { BorderType } from '@workspace/lib/sheets';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -399,7 +400,7 @@ function BordersSubmenu() {
     const [customColor, setCustomColor] = useState('#000000');
     const [customStyle, setCustomStyle] = useState('1');
 
-    const borderItems = [
+    const borderItems: { text: string; value: BorderType | 'divider' }[] = [
         { text: border.borderTop, value: 'border-top' },
         { text: border.borderBottom, value: 'border-bottom' },
         { text: border.borderLeft, value: 'border-left' },
@@ -420,7 +421,10 @@ function BordersSubmenu() {
             <DropdownMenuSubTrigger>Borders</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
                 {borderItems.map(({ text, value }, ii) =>
-                    value !== 'divider' ? (
+                    value === 'divider' ? (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: separator in static border-items list
+                        <DropdownMenuSeparator key={`divider-${ii}`} />
+                    ) : (
                         <DropdownMenuItem
                             key={value}
                             onClick={() => {
@@ -431,9 +435,6 @@ function BordersSubmenu() {
                         >
                             {text}
                         </DropdownMenuItem>
-                    ) : (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: separator in static border-items list
-                        <DropdownMenuSeparator key={`divider-${ii}`} />
                     ),
                 )}
                 <DropdownMenuSeparator />

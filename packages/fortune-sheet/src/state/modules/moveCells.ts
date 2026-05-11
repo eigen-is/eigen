@@ -1,3 +1,4 @@
+import type { BorderInfo, CellBorderInfo, RangeBorderInfo } from '@workspace/lib/sheets';
 import { cloneDeep, set } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine';
 import type { SingleRange } from '../../engine/types';
@@ -312,20 +313,23 @@ export function onCellsMoveEnd(
             }
         }
     }
-    // Border
+    // Border. Three branches: non-slash range (rect-subtract via cfSplitRange),
+    // cell entry (point check), slash range (per-cell containment of range[0]).
+    // moveCells uses per-cell containment for slash because slash sits on a
+    // single anchor cell, not a rect — different from paste's cutPaste path
+    // (paste.ts:632-660) which passes slash through cfSplitRange anyway.
     if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-        const borderInfo = [];
+        const borderInfo: BorderInfo[] = [];
 
         for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-            const bd_rangeType = cfg.borderInfo[i].rangeType;
+            const entry = cfg.borderInfo[i];
 
-            if (bd_rangeType === 'range' && cfg.borderInfo[i].borderType !== 'border-slash') {
-                const bd_range = cfg.borderInfo[i].range;
+            if (entry.rangeType === 'range' && entry.borderType !== 'border-slash') {
                 let bd_emptyRange: SingleRange[] = [];
-                for (let j = 0; j < bd_range.length; j += 1) {
+                for (let j = 0; j < entry.range.length; j += 1) {
                     bd_emptyRange = bd_emptyRange.concat(
                         cfSplitRange(
-                            bd_range[j],
+                            entry.range[j],
                             { row: last.row, column: last.column },
                             { row: [row_s, row_e], column: [col_s, col_e] },
                             'restPart',
@@ -333,26 +337,25 @@ export function onCellsMoveEnd(
                     );
                 }
 
-                cfg.borderInfo[i].range = bd_emptyRange;
-                borderInfo.push(cfg.borderInfo[i]);
-            } else if (bd_rangeType === 'cell') {
-                const bd_r = cfg.borderInfo[i].value.row_index;
-                const bd_c = cfg.borderInfo[i].value.col_index;
+                entry.range = bd_emptyRange;
+                borderInfo.push(entry);
+            } else if (entry.rangeType === 'cell') {
+                const bd_r = entry.value.row_index;
+                const bd_c = entry.value.col_index;
 
                 if (!(bd_r >= last.row[0] && bd_r <= last.row[1] && bd_c >= last.column[0] && bd_c <= last.column[1])) {
-                    borderInfo.push(cfg.borderInfo[i]);
+                    borderInfo.push(entry);
                 }
             } else if (
-                bd_rangeType === 'range' &&
-                cfg.borderInfo[i].borderType === 'border-slash' &&
                 !(
-                    cfg.borderInfo[i].range[0].row[0] >= last.row[0] &&
-                    cfg.borderInfo[i].range[0].row[0] <= last.row[1] &&
-                    cfg.borderInfo[i].range[0].column[0] >= last.column[0] &&
-                    cfg.borderInfo[i].range[0].column[0] <= last.column[1]
+                    entry.range[0].row[0] >= last.row[0] &&
+                    entry.range[0].row[0] <= last.row[1] &&
+                    entry.range[0].column[0] >= last.column[0] &&
+                    entry.range[0].column[0] <= last.column[1]
                 )
             ) {
-                borderInfo.push(cfg.borderInfo[i]);
+                // remaining slash range entries that fall outside the move's source rect
+                borderInfo.push(entry);
             }
         }
 
@@ -362,19 +365,17 @@ export function onCellsMoveEnd(
     const offsetMC: Record<string, [number, number]> = {};
     for (let r = 0; r < data.length; r += 1) {
         for (let c = 0; c < data[0].length; c += 1) {
-            if (
-                borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`] &&
-                !borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s
-            ) {
-                const bd_obj = {
+            const computeEntry = borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`];
+            if (computeEntry && !computeEntry.s) {
+                const bd_obj: CellBorderInfo = {
                     rangeType: 'cell',
                     value: {
                         row_index: r + row_s,
                         col_index: c + col_s,
-                        l: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].l,
-                        r: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].r,
-                        t: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].t,
-                        b: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].b,
+                        l: computeEntry.l,
+                        r: computeEntry.r,
+                        t: computeEntry.t,
+                        b: computeEntry.b,
                     },
                 };
 
@@ -383,12 +384,12 @@ export function onCellsMoveEnd(
                 }
 
                 cfg.borderInfo.push(bd_obj);
-            } else if (borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`]) {
-                const bd_obj = {
+            } else if (computeEntry) {
+                const bd_obj: RangeBorderInfo = {
                     rangeType: 'range',
                     borderType: 'border-slash',
-                    color: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s.color!,
-                    style: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s.style!,
+                    color: computeEntry.s.color,
+                    style: computeEntry.s.style,
                     range: normalizeSelection(ctx, [{ row: [r + row_s, r + row_s], column: [c + col_s, c + col_s] }]),
                 };
 
