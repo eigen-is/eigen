@@ -1,15 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../rowcol';
+import type { EditorSheetConfigExtras } from '../types';
 
 // Sheet shape with the editor-runtime extras the engine passes through but lib's
 // canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards,
 // frozen/filter/dataVerification state-only fields).
 type TestSheet = Sheet & {
-    config?: SheetConfig & {
-        rowReadOnly?: Record<string, number>;
-        colReadOnly?: Record<string, number>;
-    };
+    config?: SheetConfig & EditorSheetConfigExtras;
     frozen?: unknown;
     filter?: unknown;
     dataVerification?: unknown;

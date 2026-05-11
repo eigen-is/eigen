@@ -195,8 +195,8 @@ export const InputBox: React.FC = () => {
     );
 
     const cfg = context.config || {};
-    const rowReadOnly: Record<number, number> = cfg.rowReadOnly || {};
-    const colReadOnly: Record<number, number> = cfg.colReadOnly || {};
+    const rowReadOnly: Record<string, number> = cfg.rowReadOnly || {};
+    const colReadOnly: Record<string, number> = cfg.colReadOnly || {};
 
     const edit = !((colReadOnly[col_index] || rowReadOnly[row_index]) && context.allowEdit === true);
 

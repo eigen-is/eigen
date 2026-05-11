@@ -104,7 +104,7 @@ function shiftStateOnlyFieldsForInsert(
 
                 forEach(filter, (_v, k) => {
                     const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: Record<number, number> = {};
+                    const f_rowhidden_new: Record<string, number> = {};
                     forEach(f_rowhidden, (_v1, nstr) => {
                         const n = parseFloat(nstr);
 
@@ -369,7 +369,7 @@ function shiftStateOnlyFieldsForDelete(
             if (newFilterObj.filter_select != null && filter != null) {
                 forEach(filter, (_v, k) => {
                     const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: Record<number, number> = {};
+                    const f_rowhidden_new: Record<string, number> = {};
                     forEach(f_rowhidden, (_v1, nstr) => {
                         const n = parseFloat(nstr);
 
@@ -619,7 +619,7 @@ export function insertRowCol(
 
     // rowReadOnly/colReadOnly shift (state-only; engine handles rowlen/columnlen/rowhidden/colhidden)
     if (type === 'row') {
-        const rowReadOnly_new: Record<number, number> = {};
+        const rowReadOnly_new: Record<string, number> = {};
         forEach(cfg.rowReadOnly, (_v, rstr) => {
             const r = parseFloat(rstr);
             if (r < index) {
@@ -630,7 +630,7 @@ export function insertRowCol(
         });
         cfg.rowReadOnly = rowReadOnly_new;
     } else {
-        const columnReadOnly_new: Record<number, number> = {};
+        const columnReadOnly_new: Record<string, number> = {};
         forEach(cfg.colReadOnly, (_v, cstr) => {
             const c = parseFloat(cstr);
             if (c < index) {
@@ -930,7 +930,7 @@ export function deleteRowCol(
 
     // rowReadOnly/colReadOnly shift (state-only; engine handles rowlen/columnlen/rowhidden/colhidden)
     if (type === 'row') {
-        const rowReadOnly_new: Record<number, number> = {};
+        const rowReadOnly_new: Record<string, number> = {};
         forEach(cfg.rowReadOnly, (_v, rstr) => {
             const r = parseFloat(rstr);
             if (r < start) {
@@ -941,7 +941,7 @@ export function deleteRowCol(
         });
         cfg.rowReadOnly = rowReadOnly_new;
     } else {
-        const columnReadOnly_new: Record<number, number> = {};
+        const columnReadOnly_new: Record<string, number> = {};
         forEach(cfg.colReadOnly, (_v, cstr) => {
             const c = parseFloat(cstr);
             if (c < start) {

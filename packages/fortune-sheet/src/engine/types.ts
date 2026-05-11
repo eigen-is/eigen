@@ -24,6 +24,18 @@ export type { CellCoordinate };
 
 import type { Cell, CellMatrix } from '@workspace/lib/sheets';
 
+// Editor-only SheetConfig overlay: structural per-row/col flags the state layer
+// reads/writes and the engine's row/col shifter shifts, but the BE/wire-shape
+// `SheetConfig` in `@workspace/lib/sheets` never serializes. Hoisted here so
+// state's `SheetConfig` and `engine/rowcol.ts::ExtendedSheetConfig` share one
+// declaration instead of independently re-listing the same four fields.
+export type EditorSheetConfigExtras = {
+    rowReadOnly?: Record<string, number>;
+    colReadOnly?: Record<string, number>;
+    customHeight?: Record<string, number>;
+    customWidth?: Record<string, number>;
+};
+
 // Single cell reference resolved from a label like `A1` or `Sheet1!$A$1`.
 export type CellInfo = {
     label: string;

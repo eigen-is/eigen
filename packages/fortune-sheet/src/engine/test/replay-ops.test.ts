@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import { replaySheetsOps } from '../replay-ops';
+import type { EditorSheetConfigExtras } from '../types';
 
 const baseSheet = (id: string, name: string): Sheet => ({ id, name, order: 0, data: [[null]], config: {} });
 
@@ -284,13 +285,12 @@ describe('replaySheetsOps', () => {
         // The engine throws RowColError as a UI-layer signal. On the BE replay
         // path they must not propagate, or every export/preview crashes when an
         // op queue happens to target a readOnly row.
-        const sheet: Sheet = {
+        const sheet: Sheet & { config?: EditorSheetConfigExtras } = {
             id: 's1',
             name: 'Sheet1',
             order: 0,
             data: [[{ v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } }]],
-            // biome-ignore lint/suspicious/noExplicitAny: rowReadOnly lives on state's ExtendedSheetConfig
-            config: { rowReadOnly: { 0: 1 } } as any,
+            config: { rowReadOnly: { 0: 1 } },
         };
         const ops: Op[][] = [
             [
