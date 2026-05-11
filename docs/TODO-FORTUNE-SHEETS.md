@@ -275,12 +275,17 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    fresh values; today the consumer reads the last-saved `cell.v` from the
    snapshot, which is fine. See [SHEETS.md § Headless Formula Engine](SHEETS.md#headless-formula-engine).
 
-6. **`from-xlsx.ts::parseA1` duplicates engine's `parseA1`** —
-   `apps/api/src/lib/import/sheets/from-xlsx.ts:208-216` defines a private
-   `parseA1` that returns `{r, c}` and only handles plain `A1` addresses.
-   The engine's exported `parseA1` (`@workspace/fortune-sheet/engine`) returns
-   `{col, row}` and handles `$`-absolute references and sheet-name prefixes.
-   Replace and adapt the two `parseRange` callsites to swap the field names.
+6. **`from-xlsx.ts::parseA1` duplicates engine's `parseA1`** — ✅ done on
+   `biome-state-cleanup` (2026-05-11). Replaced the private `parseA1` +
+   `parseRange` helpers with engine's `parseA1Range` from
+   `@workspace/fortune-sheet/engine`; `buildMergeStructures` now destructures
+   `{ start, end }` with `row`/`col` fields instead of
+   `{ top, left, bottom, right }`. ExcelJS's `worksheet.model.merges` always
+   normalises to plain `"A1:B2"`-style ranges, so the engine's wider acceptance
+   (`$`-absolute refs, sheet prefixes, single-cell input) doesn't change xlsx
+   behaviour. Adjacent broken-window flips: two `Array.prototype.forEach` loops
+   in the same file converted to `for-of` with `.entries()`. Test at
+   `apps/api/src/test/sheets-import.test.ts:209` continues to pass.
 
 7. **PDF export computes `buildBorderMap` + `getGridBounds` twice per sheet** —
    `apps/api/src/lib/export/sheets/pdf.ts` calls `getSheetContentSize(sheet)`
