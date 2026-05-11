@@ -42,6 +42,15 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    - `Freezen.freezenhorizontaldata: any[]` / `.freezenverticaldata: any[]` —
      mixed `(number | number[])[]` runtime shape; consumers pass to helpers
      expecting plain `number[]`.
+   - `state/modules/formula-range.ts::rangeSetValue(selected: any)` —
+     column-header / row-header click handlers pass `row: [null, null]`
+     (or `column: [null, null]`) to denote a whole-column/row reference;
+     `getRangetxt` (`cell.ts:993`) explicitly reads those null sentinels at
+     runtime. Canonical `SingleRange = { row: number[]; column: number[] }`
+     is the type lie — widening to `(number | null)[]` cascades through
+     ~56 consumers (most index `.row[0]` as plain `number`). The honest
+     fix is to widen lib's `SingleRange` and add narrows at every read site
+     that needs a real number.
 
    Once those producers are migrated in lockstep, state's `Sheet` / `SheetConfig`
    can collapse into `Omit<lib.Sheet, …> & { editor extras }`.
