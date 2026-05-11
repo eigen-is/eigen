@@ -8,11 +8,6 @@ import { getFontSet } from '../modules/text';
 import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
 
-/**
- * Adjusts mouse coordinates to account for frozen rows/columns.
- * Returns corrected x/y positions and flags indicating whether the mouse
- * is inside a frozen region.
- */
 export function fixPositionOnFrozenCells(
     freeze: Freezen | undefined,
     x: number,

@@ -308,11 +308,16 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    right-click on a tab) already uses shadcn — only the tab bar itself needs
    the pass.
 
-9. **JSDoc sweep across `state/`** — CODE-STANDARDS.md "No JSDoc". Many
-    state-module functions still carry `/** @param {string} type ... */` blocks
-    that contradict the actual TS types. Pre-existing legacy; not worth a
-    targeted PR but delete on touch (e.g. `state/modules/rowcol.ts:593-601`
-    on `insertRowCol`).
+9. **JSDoc sweep across `state/`** — ✅ done on `biome-state-cleanup`
+    (2026-05-11). Removed the only remaining `@param`-style JSDoc block
+    (`state/modules/rowcol.ts::insertRowCol`) plus 8 other `/** */` TSDoc-style
+    blocks across `state/events/mouse-{drag,header,resize}.ts` and
+    `state/modules/rowcol.ts`. Most were WHAT-style restatements of the
+    function name; the `mouse-header.ts` block was a duplicated WHY comment
+    that the variable names already convey. One genuine WHY
+    (`context/modal.tsx::ModalOptions.modal`) converted to `//` form to keep
+    the "stays interactive" note while dropping the JSDoc syntax. Net –40 LOC
+    across 6 files. Zero `/** */` blocks remain in the package source.
 
 10. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
     consumes it. Low priority, rename-only with no code impact.

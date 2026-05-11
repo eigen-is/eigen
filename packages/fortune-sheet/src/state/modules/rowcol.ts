@@ -574,15 +574,6 @@ function adjustSelectionForInsert(
     }
 }
 
-/**
- * Insert rows or columns
- * @param {string} type 'row' or 'column'
- * @param {number} index insertion position index
- * @param {number} count number of rows (or columns) to insert
- * @param {string} direction insertion direction: 'lefttop' or 'rightbottom'
- * @param {string | number} id target sheet id
- * @returns
- */
 export function insertRowCol(
     ctx: Context,
     op: {
@@ -1205,11 +1196,6 @@ export function hideSelected(ctx: Context, type: string) {
         } */
         ctx.config.rowhidden = rowhidden;
         const rowLen = ctx.luckysheetfile[index].data!.length;
-        /**
-         * Check if the row to hide is the last row.
-         * It is the last row when: index === table length - 1, or
-         * a value in the hidden array minus 1 equals the index.
-         */
         const isEndRow =
             rowLen - 1 === rowhiddenNumber ||
             Object.keys(rowhidden).findIndex((o) => parseInt(o, 10) - 1 === rowhiddenNumber) >= 0;
