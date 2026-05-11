@@ -1,4 +1,12 @@
-import type { BorderInfo, ConditionalFormatRule, DataVerificationRule, MergeCell, Op } from '@workspace/lib/sheets';
+import type {
+    BorderInfo,
+    ConditionalFormatRule,
+    DataVerificationRule,
+    Sheet as LibSheet,
+    SheetConfig as LibSheetConfig,
+    MergeCell,
+    Op,
+} from '@workspace/lib/sheets';
 import type { Patch as ImmerPatch } from 'immer';
 import type { Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange } from '../engine/types';
 import type { PatchOptions } from './utils';
@@ -86,19 +94,12 @@ export type SheetAuthority = {
     defaultSheetHintText?: string;
 };
 
-// Editor-runtime SheetConfig. Some fields (merge / rowlen / columnlen / rowhidden /
-// colhidden / borderInfo) overlap with lib's API-shape `SheetConfig`; once the
-// remaining loose fields are tightened this type should collapse into
-// `Omit<ApiSheetConfig, ...> & { editor extras }`.
-export type SheetConfig = {
-    merge?: Record<string, MergeCell>;
-    rowlen?: Record<string, number>; // row heights
-    columnlen?: Record<string, number>; // column widths
-    rowhidden?: Record<string, number>; // hidden rows
-    colhidden?: Record<string, number>; // hidden columns
+// Editor-runtime SheetConfig: lib's canonical fields plus state-only extras
+// (custom row/col size overrides, sheet-protection settings, per-row/col
+// read-only locks) that never reach the wire shape.
+export type SheetConfig = LibSheetConfig & {
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
-    borderInfo?: BorderInfo[];
     authority?: SheetAuthority;
     rowReadOnly?: Record<number, number>;
     colReadOnly?: Record<number, number>;
@@ -140,22 +141,13 @@ export type AlternateFormatEntry = {
     cellrange: { row: [number, number]; column: [number, number] };
 };
 
-// Editor-runtime Sheet. Field overlap with lib's `Sheet` (name / id / config /
-// data / celldata / showGridLines / luckysheet_conditionformat_save) — same TODO
-// #1 caveat as SheetConfig. CF rules use the canonical `ConditionalFormatRule`
-// discriminated union from lib; producers in conditionFormat.ts annotate their
-// rule literals explicitly so the discriminator narrows.
-export type Sheet = {
-    name: string;
+// Editor-runtime Sheet: lib's canonical fields plus state-only extras (selection
+// state, calc chain, filters, frozen panes, dynamic-array spill ranges, …) that
+// never reach the wire shape. `config` is widened to state's SheetConfig.
+export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
-    order?: number;
     color?: string;
-    data?: CellMatrix;
-    celldata?: CellWithRowAndCol[];
-    id?: string;
     images?: Image[];
-    column?: number;
-    row?: number;
     addRows?: number;
     status?: number;
     hide?: number;
@@ -167,7 +159,6 @@ export type Sheet = {
     calcChain?: CalcChainEntry[];
     defaultRowHeight?: number;
     defaultColWidth?: number;
-    showGridLines?: boolean | number;
     // Pivot-table config — currently unreferenced in active code (only commented-
     // out callers in toolbar.ts / merge.ts); kept on the type for upstream
     // workbook-import compatibility.
@@ -175,7 +166,6 @@ export type Sheet = {
     isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
     filter_select?: { row: number[]; column: number[] };
-    luckysheet_conditionformat_save?: ConditionalFormatRule[];
     luckysheet_alternateformat_save?: AlternateFormatEntry[];
     dataVerification?: Record<string, DataVerificationRule>;
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
