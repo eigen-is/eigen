@@ -3,6 +3,64 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.0.2] - 2026-05-11
+
+Maintenance release. Email-notification flows, guest-access controls, XLSX import, security
+hardening, and a major spreadsheet quality pass.
+
+### Added
+
+- **Sheets** — XLSX import: open an `.xlsx` file in Drive to convert it into an Eigen sheet,
+  preserving cell values, number formats, formulas, merged cells, borders, fonts, and column/
+  row sizes
+- **Mail** — autolink bare `http(s)://` URLs in received message bodies
+- **Admin → Email notifications** — four toggles controlling outbound mail: calendar invitations
+  to attendees, file ACL additions, file access requests, and shared-file collaborators
+- **Admin → Guest access** — open-signup toggle and inactivity-days threshold (defaults:
+  open-signup on, cleanup after 7 days of inactivity)
+- **Drive** — email shared-file collaborators via a composer pre-populated with the user's
+  email signature (uses the same LightEditor that powers chat)
+- **Drive** — outbound notifications on access requests, ACL additions, and shares (gated by
+  the new admin toggles)
+- **Calendar** — email Eigen-user attendees on invite, gated by the calendar-invite toggle
+- **User** — owner-info popover on user and team avatars
+
+### Changed
+
+- **Spreadsheet edits made before auto-flush** survive page reload. The backend replays pending
+  ops on read (and on XLSX export), so a freshly typed cell value is preserved if you reload
+  before the next auto-flush
+- **Calendar wire format** — server timestamps travel as native `Date` end-to-end via Eden
+  Treaty's reviver (previously Unix-second integers)
+- **Mail** — share, access-request, attachment, and collaborator emails share a single HTML
+  shell with unified chip styling across mail, chat, and drive
+- **Mail** — duplicate new-mail notifications are deduped via a stable tag
+- **UI popovers** — edge-collision padding and dynamic max-height so they no longer clip at the
+  viewport edge
+
+### Fixed
+
+- **Spreadsheet paste** — slash-direction border paste across multi-tile copies no longer crashes
+- **Spreadsheet row/col ops** — read-only ranges and malformed ops surface clear errors instead
+  of corrupting sheet state
+- **Dialogs** — pointer events that start inside a dialog and end outside no longer dismiss it
+  (e.g. selecting text that overshoots the edge)
+- **LightEditor** — trims trailing empty paragraphs before save (chat, mail, drive composers)
+- **Welcome/invite email headers** — encode UTF-8 correctly (RFC 2047)
+- **Shared-document emails** — plain-text fallback now includes the document URL
+- **Postfix** — DKIM signs mail relayed from the docker bridge network interface
+- **Postfix** — per-recipient delivery limit set to 1 for the Eigen pipe
+- **Guest cleanup** — skips when initial setup is incomplete; reconciles on every login to repair
+  session/user drift; OTP request race fixed
+- **About dialog** — `builtAt` renders in a localized format
+
+### Security
+
+- **Mail templates** — user-provided tokens in welcome/invite emails are HTML-escaped
+- **Guest OTP requests** — rate-limited (3 per email per hour, 10 per IP per hour) via an
+  in-memory limiter
+- **Mail body links** — open in a new tab with `rel="noopener noreferrer"`
+
 ## [0.0.1] - 2026-05-03
 
 First public release. Self-hostable workspace with email, file storage, documents, spreadsheets,
