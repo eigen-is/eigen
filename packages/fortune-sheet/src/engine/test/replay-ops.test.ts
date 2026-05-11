@@ -281,10 +281,9 @@ describe('replaySheetsOps', () => {
     });
 
     test('engine readOnly throw is caught and op skipped on the replay path', () => {
-        // The engine throws bare Error('readOnly') / Error('maxExceeded') as
-        // signals for the UI layer. On the BE replay path they must not
-        // propagate, or every export/preview crashes when an op queue happens
-        // to target a readOnly row.
+        // The engine throws RowColError as a UI-layer signal. On the BE replay
+        // path they must not propagate, or every export/preview crashes when an
+        // op queue happens to target a readOnly row.
         const sheet: Sheet = {
             id: 's1',
             name: 'Sheet1',

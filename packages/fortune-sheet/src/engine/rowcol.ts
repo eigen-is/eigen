@@ -17,6 +17,22 @@ export type DeleteRowColOp = {
     id: string;
 };
 
+export type RowColErrorCode = 'readOnly' | 'maxExceeded';
+
+// Engine signals an aborted row/col op via this typed error rather than a
+// bare-string `new Error('readOnly')`. UI callers (ContextMenu/MenuBar) branch
+// on `code`; the BE replay path catches and skips. The contract is enforced at
+// the type level so the catch sites don't depend on message punctuation.
+export class RowColError extends Error {
+    readonly code: RowColErrorCode;
+
+    constructor(code: RowColErrorCode) {
+        super(code);
+        this.name = 'RowColError';
+        this.code = code;
+    }
+}
+
 // SheetConfig in lib types only the fields the BE needs to read. The engine also
 // shifts editor-runtime fields that live alongside but aren't lib-typed.
 type ExtendedSheetConfig = SheetConfig & {
@@ -178,10 +194,10 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
     const data = target.data;
     if (!data) return sheets;
 
-    if (op.type === 'row' && cfg.rowReadOnly?.[op.index]) throw new Error('readOnly');
-    if (op.type === 'column' && cfg.colReadOnly?.[op.index]) throw new Error('readOnly');
-    if (op.type === 'row' && data.length + op.count >= 10000) throw new Error('maxExceeded');
-    if (op.type === 'column' && data[0] && data[0].length + op.count >= 1000) throw new Error('maxExceeded');
+    if (op.type === 'row' && cfg.rowReadOnly?.[op.index]) throw new RowColError('readOnly');
+    if (op.type === 'column' && cfg.colReadOnly?.[op.index]) throw new RowColError('readOnly');
+    if (op.type === 'row' && data.length + op.count >= 10000) throw new RowColError('maxExceeded');
+    if (op.type === 'column' && data[0] && data[0].length + op.count >= 1000) throw new RowColError('maxExceeded');
 
     const { count } = op;
     const newTarget = cloneDeep(target);
@@ -381,12 +397,12 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
 
     if (op.type === 'row' && cfg.rowReadOnly) {
         for (let i = op.start; i <= op.end; i += 1) {
-            if (cfg.rowReadOnly[i]) throw new Error('readOnly');
+            if (cfg.rowReadOnly[i]) throw new RowColError('readOnly');
         }
     }
     if (op.type === 'column' && cfg.colReadOnly) {
         for (let i = op.start; i <= op.end; i += 1) {
-            if (cfg.colReadOnly[i]) throw new Error('readOnly');
+            if (cfg.colReadOnly[i]) throw new RowColError('readOnly');
         }
     }
 

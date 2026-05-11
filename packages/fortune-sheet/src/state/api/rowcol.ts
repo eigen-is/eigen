@@ -47,18 +47,7 @@ export function insertRowOrColumn(
     }
 
     const sheet = getSheet(ctx, options);
-
-    try {
-        insertRowCol(ctx, {
-            type,
-            index,
-            count,
-            direction,
-            id: sheet.id!,
-        });
-    } catch (e: unknown) {
-        console.error(e);
-    }
+    insertRowCol(ctx, { type, index, count, direction, id: sheet.id! });
 }
 
 export function deleteRowOrColumn(
@@ -87,46 +76,11 @@ export function hideRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' 
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
 
     if (type === 'row') {
-        /* TODO: worksheet protection check
-        if (
-          !checkProtectionAuthorityNormal(Store.currentSheetIndex, "formatRows")
-        ) {
-          return ;
-        } */
-        const rowhidden = ctx.config.rowhidden ?? {};
-
-        rowColInfo.forEach((r) => {
-            rowhidden[r] = 0;
-        });
-
-        /* save undo; in lucky this is done as follows, but it is not needed in this project
-          if(Store.clearjfundo){
-            let redo = {};
-            redo["type"] = "showHidRows";
-            redo["sheetIndex"] = Store.currentSheetIndex;
-            redo["config"] = $.extend(true, {}, Store.config);
-            redo["curconfig"] = cfg;
-
-            Store.jfundo.length  = 0;
-            Store.jfredo.push(redo);
-        } */
-        ctx.config.rowhidden = rowhidden;
-        // const rowLen = ctx.luckysheetfile[index].data!.length;
-        /**
-         * check whether the row to be hidden is the last column
-         * conditions for being the last column: the index to hide === sheet length - 1, or
-         * the number in the hidden array - 1 === the index to hide
-         */
-    } else if (type === 'column') {
-        // hide column
-        const colhidden = ctx.config.colhidden ?? {};
-
-        rowColInfo.forEach((r) => {
-            colhidden[r] = 0;
-        });
-
-        ctx.config.colhidden = colhidden;
-        // const columnLen = ctx.luckysheetfile[index].data![0].length;
+        const rowhidden = (ctx.config.rowhidden ??= {});
+        for (const r of rowColInfo) rowhidden[r] = 0;
+    } else {
+        const colhidden = (ctx.config.colhidden ??= {});
+        for (const r of rowColInfo) colhidden[r] = 0;
     }
     ctx.luckysheetfile[index].config = ctx.config;
 }
@@ -141,46 +95,11 @@ export function showRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' 
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
 
     if (type === 'row') {
-        /* TODO: worksheet protection check
-        if (
-          !checkProtectionAuthorityNormal(Store.currentSheetIndex, "formatRows")
-        ) {
-          return ;
-        } */
-        const rowhidden = ctx.config.rowhidden ?? {};
-
-        rowColInfo.forEach((r) => {
-            delete rowhidden[r];
-        });
-
-        /* save undo; in lucky this is done as follows, but it is not needed in this project
-          if(Store.clearjfundo){
-            let redo = {};
-            redo["type"] = "showHidRows";
-            redo["sheetIndex"] = Store.currentSheetIndex;
-            redo["config"] = $.extend(true, {}, Store.config);
-            redo["curconfig"] = cfg;
-
-            Store.jfundo.length  = 0;
-            Store.jfredo.push(redo);
-        } */
-        ctx.config.rowhidden = rowhidden;
-        // const rowLen = ctx.luckysheetfile[index].data!.length;
-        /**
-         * check whether the row to be hidden is the last column
-         * conditions for being the last column: the index to hide === sheet length - 1, or
-         * the number in the hidden array - 1 === the index to hide
-         */
-    } else if (type === 'column') {
-        // hide column
-        const colhidden = ctx.config.colhidden ?? {};
-
-        rowColInfo.forEach((r) => {
-            delete colhidden[r];
-        });
-
-        ctx.config.colhidden = colhidden;
-        // const columnLen = ctx.luckysheetfile[index].data![0].length;
+        const rowhidden = (ctx.config.rowhidden ??= {});
+        for (const r of rowColInfo) delete rowhidden[r];
+    } else {
+        const colhidden = (ctx.config.colhidden ??= {});
+        for (const r of rowColInfo) delete colhidden[r];
     }
     ctx.luckysheetfile[index].config = ctx.config;
 }

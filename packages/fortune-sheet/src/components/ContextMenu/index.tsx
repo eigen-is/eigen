@@ -14,6 +14,7 @@ import {
 import { Check, CircleOff } from 'lucide-react';
 import React, { useCallback, useContext } from 'react';
 import { type SetContextOptions, WorkbookContext } from '../../context';
+import { RowColError } from '../../engine';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -126,9 +127,9 @@ export const ContextMenu: React.FC = () => {
                                               insertRowCol(draftCtx, insertRowColOp);
                                               draftCtx.contextMenu = {};
                                           } catch (err) {
-                                              if (err instanceof Error && err.message === 'maxExceeded')
+                                              if (err instanceof RowColError && err.code === 'maxExceeded')
                                                   showAlert(rightclick.columnOverLimit, 'ok');
-                                              else if (err instanceof Error && err.message === 'readOnly')
+                                              else if (err instanceof RowColError && err.code === 'readOnly')
                                                   showAlert(rightclick.cannotInsertOnColumnReadOnly, 'ok');
                                               draftCtx.contextMenu = {};
                                           }
@@ -184,9 +185,9 @@ export const ContextMenu: React.FC = () => {
                                               insertRowCol(draftCtx, insertRowColOp);
                                               draftCtx.contextMenu = {};
                                           } catch (err) {
-                                              if (err instanceof Error && err.message === 'maxExceeded')
+                                              if (err instanceof RowColError && err.code === 'maxExceeded')
                                                   showAlert(rightclick.rowOverLimit, 'ok');
-                                              else if (err instanceof Error && err.message === 'readOnly')
+                                              else if (err instanceof RowColError && err.code === 'readOnly')
                                                   showAlert(rightclick.cannotInsertOnRowReadOnly, 'ok');
                                               draftCtx.contextMenu = {};
                                           }
@@ -244,7 +245,7 @@ export const ContextMenu: React.FC = () => {
                                         try {
                                             deleteRowCol(draftCtx, deleteRowColOp);
                                         } catch (e) {
-                                            if (e instanceof Error && e.message === 'readOnly') {
+                                            if (e instanceof RowColError && e.code === 'readOnly') {
                                                 showAlert(rightclick.cannotDeleteColumnReadOnly, 'ok');
                                             }
                                         }
@@ -291,7 +292,7 @@ export const ContextMenu: React.FC = () => {
                                         try {
                                             deleteRowCol(draftCtx, deleteRowColOp);
                                         } catch (e) {
-                                            if (e instanceof Error && e.message === 'readOnly') {
+                                            if (e instanceof RowColError && e.code === 'readOnly') {
                                                 showAlert(rightclick.cannotDeleteRowReadOnly, 'ok');
                                             }
                                         }

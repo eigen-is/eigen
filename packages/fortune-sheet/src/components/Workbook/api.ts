@@ -1,6 +1,7 @@
 import { cloneDeep } from 'es-toolkit/compat';
 import { applyPatches } from 'immer';
 import type { SetContextOptions } from '../../context';
+import { RowColError } from '../../engine';
 import type { Cell, CellMatrix } from '../../engine/types';
 import {
     addSheet,
@@ -43,22 +44,28 @@ export function generateAPIs(
             setContext(
                 (ctx_) => {
                     const [patches, specialOps] = opToPatch(ctx_, ops);
-                    if (specialOps.length > 0) {
-                        const [specialOp] = specialOps;
+                    for (const specialOp of specialOps) {
                         if (specialOp.op === 'insertRowCol') {
                             try {
                                 insertRowCol(ctx_, specialOp.value, false);
                             } catch (e) {
-                                console.error(e);
+                                if (!(e instanceof RowColError)) throw e;
+                                console.warn('[sheet] insertRowCol op skipped:', e.code);
                             }
                         } else if (specialOp.op === 'deleteRowCol') {
-                            deleteRowCol(ctx_, specialOp.value);
-                        } else if (specialOp.op === 'addSheet') {
-                            const name = patches.filter((path) => path.path[0] === 'name')?.[0]?.value;
-                            if (specialOp.value?.id) {
-                                addSheet(ctx_, settings, specialOp.value.id, false, name, specialOp.value);
+                            try {
+                                deleteRowCol(ctx_, specialOp.value);
+                            } catch (e) {
+                                if (!(e instanceof RowColError)) throw e;
+                                console.warn('[sheet] deleteRowCol op skipped:', e.code);
                             }
-                            // After adding a sheet, initialize its data
+                        } else if (specialOp.op === 'addSheet') {
+                            // opToPatch prefixes every immer-patch path with 'luckysheetfile', so the
+                            // pre-existing `patches.filter(path[0] === 'name')` lookup was always empty.
+                            // addSheet pulls the name from `specialOp.value.name` (sheetData) directly.
+                            if (specialOp.value?.id) {
+                                addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value);
+                            }
                             const fileIndex = getSheetIndex(ctx_, specialOp.value.id) as number;
                             api.initSheetData(ctx_, fileIndex, specialOp.value);
                         } else if (specialOp.op === 'deleteSheet') {
