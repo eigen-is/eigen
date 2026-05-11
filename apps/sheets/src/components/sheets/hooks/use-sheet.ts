@@ -98,7 +98,12 @@ export function useSheet(
             const snapshot = stateMap.get('snapshot') as string | undefined;
             if (!snapshot) return;
             try {
-                const data = JSON.parse(snapshot) as Sheet[];
+                // Replay any pending ops on top of the remote snapshot. When browser
+                // A flushes while B has unflushed local ops, B's edits survive Yjs
+                // merge and must be reapplied here or they're lost on next render.
+                const initial = JSON.parse(snapshot) as Sheet[];
+                const pending = opsArray.toArray() as Op[][];
+                const data = pending.length > 0 ? replaySheetsOps(initial, pending) : initial;
                 latestDataRef.current = data;
                 setInitialData(data);
                 setSnapshotVersion((v) => v + 1);
@@ -165,17 +170,17 @@ export function useSheet(
         isLocalSnapshotRef.current = true;
         restoreYjsDoc(doc, state, (v) => v);
 
-        const stateMap = doc.getMap('state');
-        const snapshot = stateMap.get('snapshot') as string | undefined;
-        if (snapshot) {
-            try {
-                const data = JSON.parse(snapshot) as Sheet[];
-                latestDataRef.current = data;
-                setInitialData(data);
-                setSnapshotVersion((v) => v + 1);
-            } catch (e) {
-                console.error('[sheet] handleRestore: failed:', e);
-            }
+        const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
+        if (!snapshot) return;
+        try {
+            const initial = JSON.parse(snapshot) as Sheet[];
+            const pending = doc.getArray('ops').toArray() as Op[][];
+            const data = pending.length > 0 ? replaySheetsOps(initial, pending) : initial;
+            latestDataRef.current = data;
+            setInitialData(data);
+            setSnapshotVersion((v) => v + 1);
+        } catch (e) {
+            console.error('[sheet] handleRestore: failed:', e);
         }
     }, []);
 
