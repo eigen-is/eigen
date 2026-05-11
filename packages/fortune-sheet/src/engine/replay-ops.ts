@@ -2,7 +2,7 @@ import type { Op, Sheet } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
 import { celldataToData, dataToCelldata } from './celldata';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
+import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from './rowcol';
 
 // immer's patch plugin is a global, idempotent enable. Calling here means any
 // consumer of replaySheetsOps gets it transitively without a separate bootstrap.
@@ -33,7 +33,9 @@ function asDeleteValue(v: unknown): DeleteValue | null {
 function asSheet(v: unknown): Sheet | null {
     if (!v || typeof v !== 'object') return null;
     const sheet = v as Sheet;
-    if (typeof sheet.name !== 'string') return null;
+    // id is technically optional on Sheet but every patchToOp producer stamps it.
+    // A sheet without an id silently breaks subsequent ops referencing that sheet.
+    if (typeof sheet.id !== 'string' || typeof sheet.name !== 'string') return null;
     return sheet;
 }
 
@@ -100,15 +102,14 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                     console.warn('[sheets] insertRowCol op has malformed value', op.value);
                     continue;
                 }
-                // The engine throws bare 'readOnly' / 'maxExceeded' Errors that
-                // are sentinel signals for the UI layer; on the BE replay path
-                // (export, preview, server-side read) there is no user to alert
-                // and the offending op should be skipped, not propagate up and
-                // crash the whole render.
+                // RowColError is a UI-layer signal (readOnly / maxExceeded). On
+                // the BE replay path (export, preview, server-side read) there
+                // is no user to alert, so skip rather than propagate.
                 try {
                     result = applySheetsInsertRowCol(result, { ...v, id: op.id });
                 } catch (e) {
-                    console.warn('[sheets] insertRowCol op skipped:', (e as Error).message);
+                    if (!(e instanceof RowColError)) throw e;
+                    console.warn('[sheets] insertRowCol op skipped:', e.code);
                 }
             } else if (op.op === 'deleteRowCol' && op.id) {
                 const v = asDeleteValue(op.value);
@@ -119,7 +120,8 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                 try {
                     result = applySheetsDeleteRowCol(result, { ...v, id: op.id });
                 } catch (e) {
-                    console.warn('[sheets] deleteRowCol op skipped:', (e as Error).message);
+                    if (!(e instanceof RowColError)) throw e;
+                    console.warn('[sheets] deleteRowCol op skipped:', e.code);
                 }
             }
         }

@@ -7,6 +7,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
+import { RowColError } from '../../engine';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -137,7 +138,7 @@ export function EditMenu() {
                                     try {
                                         deleteRowCol(draftCtx, deleteRowColOp);
                                     } catch (e) {
-                                        if (e instanceof Error && e.message === 'readOnly') {
+                                        if (e instanceof RowColError && e.code === 'readOnly') {
                                             showAlert(rightclick.cannotDeleteRowReadOnly, 'ok');
                                         }
                                     }
@@ -168,7 +169,7 @@ export function EditMenu() {
                                     try {
                                         deleteRowCol(draftCtx, deleteRowColOp);
                                     } catch (e) {
-                                        if (e instanceof Error && e.message === 'readOnly') {
+                                        if (e instanceof RowColError && e.code === 'readOnly') {
                                             showAlert(rightclick.cannotDeleteColumnReadOnly, 'ok');
                                         }
                                     }

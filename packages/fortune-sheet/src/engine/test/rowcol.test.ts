@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../rowcol';
+import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../rowcol';
 
 // Sheet shape with the editor-runtime extras the engine passes through but lib's
 // canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards,
@@ -259,15 +259,10 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
                 config: { rowReadOnly: { '0': 1 } },
             }),
         ];
-        expect(() =>
-            applySheetsInsertRowCol(sheets, {
-                type: 'row',
-                index: 0,
-                count: 1,
-                direction: 'lefttop',
-                id: 's1',
-            }),
-        ).toThrow('readOnly');
+        const run = () =>
+            applySheetsInsertRowCol(sheets, { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 's1' });
+        expect(run).toThrow(RowColError);
+        expect(getThrownCode(run)).toBe('readOnly');
     });
 
     test('throws maxExceeded for row count >= 10000', () => {
@@ -278,15 +273,10 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
                 new Array(9999).fill(null).map(() => [cell('x')]),
             ),
         ];
-        expect(() =>
-            applySheetsInsertRowCol(sheets, {
-                type: 'row',
-                index: 0,
-                count: 1,
-                direction: 'lefttop',
-                id: 's1',
-            }),
-        ).toThrow('maxExceeded');
+        const run = () =>
+            applySheetsInsertRowCol(sheets, { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 's1' });
+        expect(run).toThrow(RowColError);
+        expect(getThrownCode(run)).toBe('maxExceeded');
     });
 
     test('delete throws readOnly when any row in [start, end] is read-only', () => {
@@ -295,7 +285,9 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
                 config: { rowReadOnly: { '1': 1 } },
             }),
         ];
-        expect(() => applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 2, id: 's1' })).toThrow('readOnly');
+        const run = () => applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 2, id: 's1' });
+        expect(run).toThrow(RowColError);
+        expect(getThrownCode(run)).toBe('readOnly');
     });
 
     test('delete throws readOnly for column range', () => {
@@ -304,11 +296,20 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
                 config: { colReadOnly: { '2': 1 } },
             }),
         ];
-        expect(() => applySheetsDeleteRowCol(sheets, { type: 'column', start: 1, end: 2, id: 's1' })).toThrow(
-            'readOnly',
-        );
+        const run = () => applySheetsDeleteRowCol(sheets, { type: 'column', start: 1, end: 2, id: 's1' });
+        expect(run).toThrow(RowColError);
+        expect(getThrownCode(run)).toBe('readOnly');
     });
 });
+
+function getThrownCode(fn: () => void): string | undefined {
+    try {
+        fn();
+    } catch (e) {
+        return e instanceof RowColError ? e.code : undefined;
+    }
+    return undefined;
+}
 
 describe('applySheetsInsertRowCol — passthrough', () => {
     test('state-only fields on input pass through engine unchanged', () => {

@@ -6,6 +6,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import './index.css';
 import { debounce } from 'es-toolkit/compat';
 import { type SetContextOptions, WorkbookContext } from '../../context';
+import { RowColError } from '../../engine';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -279,7 +280,7 @@ export const SheetOverlay: React.FC = () => {
                 try {
                     insertRowCol(draftCtx, insertRowColOp, false);
                 } catch (err) {
-                    if (err instanceof Error && err.message === 'maxExceeded') showAlert(rightclick.rowOverLimit);
+                    if (err instanceof RowColError && err.code === 'maxExceeded') showAlert(rightclick.rowOverLimit);
                 }
             },
             { insertRowColOp },

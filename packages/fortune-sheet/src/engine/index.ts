@@ -47,6 +47,8 @@ export {
     applySheetsInsertRowCol,
     type DeleteRowColOp,
     type InsertRowColOp,
+    RowColError,
+    type RowColErrorCode,
 } from './rowcol';
 export type {
     CalculationChainEntry,
