@@ -149,82 +149,20 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 11. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
     consumes it. Low priority, rename-only with no code impact.
 
-### Bugs surfaced during the biome-state-cleanup review (2026-05-10)
+### Carry-overs from earlier review passes
 
-These are pre-existing bugs the parallel code review pass found while looking
-at the cleanup. Not introduced by the cleanup, worth fixing in follow-ups:
-
-- **`formula-exec.ts:470` — off-by-one** — `dynamicArray_compute[0]` inside a
-  `j`-indexed loop reads the first element on every iteration; should be
-  `[j]`. Causes `getAllFunctionGroup` to return duplicates of the first
-  dynamic-array cell instead of all of them.
-- **`api/range.ts:62` — dead `throw invalidParams()`** — `if (!range || typeof
-  range === 'object')` is always true for `Selection`-typed input, making the
-  fallthrough unreachable. Either remove the dead throw or swap to
-  `isPlainObject(range)`.
-- **`api/rowcol.ts:59` — silently-swallowed `insertRowCol` errors** — `try
-  { insertRowCol(...) } catch (e) { console.error(e); }` returns undefined to
-  callers with no signal that the insert failed. Re-throw or convert to a
-  typed `RowColError` (see #12 below).
-- **`formula-cache.ts:121` cross-file DOM mismatch** — `rangeSetValueTo`
-  carries an explicit `biome-ignore noExplicitAny` because `formula-editor.ts
-  :474` assigns a `NodeListOf<HTMLSpanElement>` to it while
-  `formula-range.ts:111` reads `.parentNode` (which exists on `Node`, not
-  `NodeList`). The latter call silently falls through. Fix the assignment in
-  `formula-editor.ts:474` to set the right kind of node.
-- **`formula-editor.ts:353-363` — pre-existing crash path on `$span[i]`** —
-  `indexOf` returns `-1`, `$span[-1].classList` throws. Already on the
-  Group F ts-ignore list above; the review re-confirmed it.
-- **`selection.ts:pasteHandlerOfPaintModel` — dead-write on `cdformat`** —
-  function builds up a `cdformat: ConditionalFormatRule[]` array but never
-  writes it back to `ctx.luckysheetfile[currentIndex].luckysheet_conditionformat_save`.
-  Format-painter doesn't propagate CF rules. Pre-existing; surfaced during
-  the Task 5 type-tightening (2026-05-10).
-- **`events/keyboard.ts:F4` — dead keybinding** — the F4 branch in formula
-  edit mode just `preventDefault()`s without dispatching to
-  `formula.setfreezonFuc`. Standard spreadsheet F4 should cycle a formula
-  reference `A1` → `$A$1` → `A$1` → `$A1` → `A1`. The TODO comment in the
-  body acknowledges this. Re-confirmed during the keyboard.ts review.
-
-### Review-pass deferrals (BE replay code review, 2026-05-02)
-
-12. **Tagged engine errors instead of bare-string sentinels** — `engine/rowcol.ts`
-    throws `new Error('readOnly')` / `new Error('maxExceeded')` (lines 181-184,
-    384-389). `engine/replay-ops.ts` now catches by `(e as Error).message` so
-    the string is load-bearing. Replace with a `RowColError` class (or
-    symbol-tagged sentinel) so the contract is enforced at the type level and
-    the catch site doesn't depend on message punctuation.
-
-13. **`engine/replay-ops.ts::asSheet` should require `id: string`** — every
-    producer of `addSheet` ops stamps an id (`patchToOp` does this
-    unconditionally), but the validator currently accepts an `addSheet` op
-    whose `value` only has `name: string`. A sheet without an id silently
-    breaks subsequent ops referencing that sheet.
-
-14. **`applyInsert` / `applyDelete` deep-clone the full target sheet** —
+12. **`applyInsert` / `applyDelete` deep-clone the full target sheet** —
     `cloneDeep(target)` at `engine/rowcol.ts:187,393` clones every field
     (state-only fields included) when the engine writes only `data`, `config`,
     and `luckysheet_conditionformat_save`. State wrapper then mutates the
     state-only fields, throwing away the wasteful clone. Profile first; only
     optimize if row/col ops show up hot.
 
-15. **`(delta.insert as Op[][])` cast in `apps/sheets/.../use-sheet.ts`** —
-    Yjs's delta type is `unknown` so a cast is unavoidable, but adding an
-    `Array.isArray(delta.insert)` runtime check before the cast would be more
-    honest.
-
-### Pre-existing FE op-application caveats
-
-16. **`Workbook/api.ts:applyOp` only processes `specialOps[0]`** — when a
-    remote op batch contains 2+ special ops (e.g. two delete-rows), the
-    receiver silently drops everything after the first. `replaySheetsOps`
-    does NOT have this bug; only the live `applyOp` path. Today nothing emits
-    multi-special batches, but the guard is missing.
-
-17. **`stateMap.observe` doesn't replay pending ops on remote snapshot flush**
-    — when browser A flushes a snapshot while ops from B are in flight, B's
-    local-but-unflushed edits can be lost. Pre-existing; not introduced or
-    fixed by this branch.
+13. **`events/keyboard.ts:F4` — dead keybinding** — the F4 branch in formula
+    edit mode just `preventDefault()`s. Standard spreadsheet F4 should cycle a
+    formula reference `A1` → `$A$1` → `A$1` → `$A1` → `A1`. Treated as feature
+    work (DOM-walk the formula editor, parse the reference under the caret,
+    cycle `$` markers, restore selection), not a bug fix — separate effort.
 
 ---
 
