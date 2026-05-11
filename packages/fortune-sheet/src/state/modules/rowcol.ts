@@ -2,19 +2,10 @@ import type { DataVerificationRule, MergeCell } from '@workspace/lib/sheets';
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
 import type { Context } from '../context';
-import type { FormulaCell, Sheet, SheetConfig } from '../types';
+import type { FilterEntry, FormulaCell, Sheet, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
 type FilterSelect = { row: number[]; column: number[] };
-type FilterEntry = {
-    rowhidden?: Record<number, number>;
-    cindex?: number;
-    str?: number;
-    edr?: number;
-    stc?: number;
-    edc?: number;
-    [key: string]: unknown;
-};
 type FilterObj = { filter_select: FilterSelect | null; filter: Record<string, FilterEntry> | null };
 
 const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet) => {
