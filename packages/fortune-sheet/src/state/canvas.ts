@@ -1,4 +1,6 @@
 import { isEmpty, isPlainObject, sortedIndex } from 'es-toolkit/compat';
+import type { ComputeMap } from '../engine/conditional-format';
+import type { CellMatrix } from '../engine/types';
 import { type defaultContext, getFlowdata } from './context';
 import { checkCF, getComputeMap, validateCellData } from './modules';
 import { getBorderInfoComputeRange } from './modules/border';
@@ -17,7 +19,7 @@ export const defaultStyle = {
 } as const;
 
 // Check if value is a pure number
-function isRealNum(val: any) {
+function isRealNum(val: unknown) {
     return !Number.isNaN(Number(val));
 }
 
@@ -25,14 +27,14 @@ const BORDER_FIX = [-1, 0, 0, -1] as const;
 
 function setLineDash(
     canvasborder: CanvasRenderingContext2D,
-    type: any,
+    type: number | string,
     hv: string,
     moveX: number,
     moveY: number,
     toX: number,
     toY: number,
 ) {
-    const borderType: any = {
+    const borderType: Record<string, string> = {
         '0': 'none',
         '1': 'Thin',
         '2': 'Hair',
@@ -49,18 +51,18 @@ function setLineDash(
         '13': 'Thick',
     };
 
-    type = borderType[type.toString()];
+    const typeName = borderType[type.toString()] ?? '';
 
     try {
-        if (type === 'Hair') {
+        if (typeName === 'Hair') {
             canvasborder.setLineDash([1, 2]);
-        } else if (type.includes('DashDotDot')) {
+        } else if (typeName.includes('DashDotDot')) {
             canvasborder.setLineDash([2, 2, 5, 2, 2]);
-        } else if (type.includes('DashDot')) {
+        } else if (typeName.includes('DashDot')) {
             canvasborder.setLineDash([2, 5, 2]);
-        } else if (type.includes('Dotted')) {
+        } else if (typeName.includes('Dotted')) {
             canvasborder.setLineDash([2]);
-        } else if (type.includes('Dashed')) {
+        } else if (typeName.includes('Dashed')) {
             canvasborder.setLineDash([3]);
         } else {
             canvasborder.setLineDash([0]);
@@ -71,7 +73,7 @@ function setLineDash(
 
     canvasborder.beginPath();
 
-    if (type.includes('Medium')) {
+    if (typeName.includes('Medium')) {
         if (hv === 'h') {
             canvasborder.moveTo(moveX, moveY - 0.5);
             canvasborder.lineTo(toX, toY - 0.5);
@@ -81,7 +83,7 @@ function setLineDash(
         }
 
         canvasborder.lineWidth = 2;
-    } else if (type === 'Thick') {
+    } else if (typeName === 'Thick') {
         canvasborder.moveTo(moveX, moveY);
         canvasborder.lineTo(toX, toY);
         canvasborder.lineWidth = 3;
@@ -92,12 +94,17 @@ function setLineDash(
     }
 }
 
+// Overflow map: per-row map of cell-column → the source-cell that overflows
+// into this column (text wraps across adjacent empty cells).
+type CellOverflowItem = { r: number; stc: number; edc: number };
+type CellOverflowMap = Record<number, Record<number, CellOverflowItem> | undefined>;
+
 // Module-level cache that persists across Canvas instances.
 // Previously this lived on the Canvas class and was reset to {} on every
 // new Canvas(), making it completely useless. The existing setTimeout in
 // drawMain invalidates it after 100ms of idle time.
-let sharedCellOverflowMapCache: any = {};
-let sharedMeasureTextCacheTimeOut: any;
+let sharedCellOverflowMapCache: CellOverflowMap = {};
+let sharedMeasureTextCacheTimeOut: ReturnType<typeof setTimeout> | undefined;
 
 export class Canvas {
     private canvasElement: HTMLCanvasElement;
@@ -130,10 +137,8 @@ export class Canvas {
         renderCtx.textBaseline = defaultStyle.textBaseline;
         renderCtx.fillStyle = defaultStyle.fillStyle;
 
-        let dataset_row_st;
-        let dataset_row_ed;
-        dataset_row_st = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
-        dataset_row_ed = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight + drawHeight);
+        let dataset_row_st = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
+        let dataset_row_ed = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight + drawHeight);
 
         if (dataset_row_st === -1) {
             dataset_row_st = 0;
@@ -147,10 +152,10 @@ export class Canvas {
         renderCtx.rect(0, offsetTop - 1, this.sheetCtx.rowHeaderWidth - 1, drawHeight - 2);
         renderCtx.clip();
 
-        let end_r;
-        let start_r;
+        let end_r = 0;
+        let start_r = 0;
         const bodrder05 = 0.5; // Default 0.5
-        let preEndR;
+        let preEndR: number | undefined;
         for (let r = dataset_row_st; r <= dataset_row_ed; r += 1) {
             if (r === 0) {
                 start_r = -scrollHeight - 1;
@@ -269,10 +274,8 @@ export class Canvas {
         renderCtx.textBaseline = defaultStyle.textBaseline;
         renderCtx.fillStyle = defaultStyle.fillStyle;
 
-        let dataset_col_st;
-        let dataset_col_ed;
-        dataset_col_st = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth);
-        dataset_col_ed = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth + drawWidth);
+        let dataset_col_st = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth);
+        let dataset_col_ed = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth + drawWidth);
 
         if (dataset_col_st === -1) {
             dataset_col_st = 0;
@@ -286,10 +289,10 @@ export class Canvas {
         renderCtx.rect(offsetLeft - 1, 0, drawWidth, this.sheetCtx.columnHeaderHeight - 1);
         renderCtx.clip();
 
-        let end_c;
-        let start_c;
+        let end_c = 0;
+        let start_c = 0;
         const bodrder05 = 0.5; // Default 0.5
-        let preEndC;
+        let preEndC: number | undefined;
         for (let c = dataset_col_st; c <= dataset_col_ed; c += 1) {
             if (c === 0) {
                 start_c = -scrollWidth;
@@ -513,8 +516,8 @@ export class Canvas {
             endX: number;
             firstcolumnlen: number;
         }[] = [];
-        const mergeCache: any = {};
-        const borderOffset: any = {};
+        const mergeCache: Record<string, number> = {};
+        const borderOffset: Record<string, { startY: number; startX: number; endY: number; endX: number }> = {};
 
         const bodrder05 = 0.5; // Default 0.5
         const drawGridLines = !this.sheetCtx.luckysheetcurrentisPivotTable && this.sheetCtx.showGridLines;
@@ -522,12 +525,7 @@ export class Canvas {
         this.sheetCtx.hooks.beforeRenderCellArea?.(flowdata, renderCtx);
 
         for (let r = rowStart; r <= rowEnd; r += 1) {
-            let startY;
-            if (r === 0) {
-                startY = -scrollHeight - 1;
-            } else {
-                startY = this.sheetCtx.visibledatarow[r - 1] - scrollHeight - 1;
-            }
+            const startY = r === 0 ? -scrollHeight - 1 : this.sheetCtx.visibledatarow[r - 1] - scrollHeight - 1;
 
             const endY = this.sheetCtx.visibledatarow[r] - scrollHeight;
 
@@ -536,12 +534,7 @@ export class Canvas {
             }
 
             for (let c = colStart; c <= colEnd; c += 1) {
-                let startX;
-                if (c === 0) {
-                    startX = -scrollWidth;
-                } else {
-                    startX = this.sheetCtx.visibledatacolumn[c - 1] - scrollWidth;
-                }
+                const startX = c === 0 ? -scrollWidth : this.sheetCtx.visibledatacolumn[c - 1] - scrollWidth;
 
                 const endX = this.sheetCtx.visibledatacolumn[c] - scrollWidth;
 
@@ -617,8 +610,8 @@ export class Canvas {
             }
         }
 
-        const dynamicArrayCompute: any = {};
-        const cfCompute: any = getComputeMap(this.sheetCtx);
+        const dynamicArrayCompute: Record<string, { v: unknown }> = {};
+        const cfCompute = getComputeMap(this.sheetCtx);
 
         // Overflow cell configuration for render area
         const cellOverflowMap = this.getCellOverflowMap(renderCtx, colStart, colEnd, rowStart, rowEnd);
@@ -824,7 +817,7 @@ export class Canvas {
         // Border rendering
         if ((this.sheetCtx.config?.borderInfo?.length ?? 0) > 0) {
             const renderBorder = (
-                style: any,
+                style: number | string,
                 color: string,
                 dir: string,
                 moveX: number,
@@ -951,7 +944,7 @@ export class Canvas {
         rowEnd: number,
     ) {
         const flowdata = getFlowdata(this.sheetCtx);
-        const map: any = {};
+        const map: CellOverflowMap = {};
         const data = flowdata;
         if (!data) {
             return map;
@@ -996,8 +989,8 @@ export class Canvas {
                     const startX = c - 1 < 0 ? 0 : this.sheetCtx.visibledatacolumn[c - 1];
                     const endX = this.sheetCtx.visibledatacolumn[c];
 
-                    let stc;
-                    let edc;
+                    let stc = c;
+                    let edc = c;
 
                     if (endX - startX < textMetrics) {
                         if (horizonAlign === '0') {
@@ -1063,11 +1056,9 @@ export class Canvas {
                             edc,
                         };
 
-                        if (map[r] == null) {
-                            map[r] = {};
-                        }
-
-                        map[r][c] = item;
+                        const rowMap = map[r] ?? {};
+                        rowMap[c] = item;
+                        map[r] = rowMap;
 
                         hasCellOver = true;
                     }
@@ -1091,17 +1082,17 @@ export class Canvas {
         endY: number,
         endX: number,
         renderCtx: CanvasRenderingContext2D,
-        cfCompute: any,
+        cfCompute: ComputeMap | null,
         offsetLeft: number,
         offsetTop: number,
-        dynamicArrayCompute: any,
-        cellOverflowMap: any,
+        dynamicArrayCompute: Record<string, { v: unknown }>,
+        cellOverflowMap: CellOverflowMap,
         colStart: number,
         colEnd: number,
         scrollHeight: number,
         scrollWidth: number,
-        bodrder05: any,
-        flowdata: any,
+        bodrder05: number,
+        flowdata: CellMatrix,
         drawGridLines = false,
         isMerge = false,
     ) {
@@ -1164,7 +1155,7 @@ export class Canvas {
             const verticalAlignPos = endY + offsetTop - 2;
             renderCtx.textBaseline = 'bottom';
 
-            renderCtx.fillText(value == null ? '' : value, horizonAlignPos, verticalAlignPos);
+            renderCtx.fillText(value == null ? '' : String(value), horizonAlignPos, verticalAlignPos);
         }
 
         // Comment indicator triangle
@@ -1252,19 +1243,19 @@ export class Canvas {
         startX: number,
         endY: number,
         endX: number,
-        value: any,
+        value: string | number | boolean | null | undefined,
         renderCtx: CanvasRenderingContext2D,
-        cfCompute: any,
+        cfCompute: ComputeMap | null,
         offsetLeft: number,
         offsetTop: number,
-        dynamicArrayCompute: any,
-        cellOverflowMap: any,
+        _dynamicArrayCompute: Record<string, { v: unknown }>,
+        cellOverflowMap: CellOverflowMap,
         colStart: number,
         colEnd: number,
         scrollHeight: number,
         scrollWidth: number,
         bodrder05: number,
-        flowdata: any,
+        flowdata: CellMatrix,
         drawGridLines = false,
         isMerge = false,
     ) {
@@ -1399,7 +1390,7 @@ export class Canvas {
             renderCtx.rect(pos_x, pos_y, cellWidth, cellHeight);
             renderCtx.clip();
 
-            const measureText = getMeasureText(value, renderCtx);
+            const measureText = getMeasureText(value ?? '', renderCtx);
             const textMetrics = measureText.width + 14;
             const oneLineTextHeight = measureText.actualBoundingBoxDescent + measureText.actualBoundingBoxAscent;
 
@@ -1442,7 +1433,7 @@ export class Canvas {
 
             // Text
             renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
-            renderCtx.fillText(value == null ? '' : value, horizonAlignPos + 14, verticalAlignPos_text);
+            renderCtx.fillText(value == null ? '' : String(value), horizonAlignPos + 14, verticalAlignPos_text);
 
             renderCtx.restore();
         } else {
@@ -1642,25 +1633,15 @@ export class Canvas {
         scrollWidth: number,
         offsetLeft: number,
         offsetTop: number,
-        cfCompute: any,
-        flowdata: any,
+        cfCompute: ComputeMap | null,
+        flowdata: CellMatrix,
     ) {
         // Overflow cell start/end row/column coordinates
-        let startY;
-        if (r === 0) {
-            startY = -scrollHeight - 1;
-        } else {
-            startY = this.sheetCtx.visibledatarow[r - 1] - scrollHeight - 1;
-        }
+        const startY = r === 0 ? -scrollHeight - 1 : this.sheetCtx.visibledatarow[r - 1] - scrollHeight - 1;
 
         const endY = this.sheetCtx.visibledatarow[r] - scrollHeight;
 
-        let startX;
-        if (stc === 0) {
-            startX = -scrollWidth;
-        } else {
-            startX = this.sheetCtx.visibledatacolumn[stc - 1] - scrollWidth;
-        }
+        const startX = stc === 0 ? -scrollWidth : this.sheetCtx.visibledatacolumn[stc - 1] - scrollWidth;
 
         const endX = this.sheetCtx.visibledatacolumn[edc] - scrollWidth;
 
@@ -1716,9 +1697,9 @@ export class Canvas {
         traceDir: string,
         horizonAlign: string,
         textMetrics: number,
-    ): any {
+    ): { success: boolean; r: number; c: number } {
         const flowdata = getFlowdata(this.sheetCtx);
-        if (!flowdata) return {};
+        if (!flowdata) return { success: false, r, c: traceC };
         const data = flowdata;
 
         // Trace terminates if column index is out of array bounds
@@ -1803,10 +1784,10 @@ export class Canvas {
                 c: traceC,
             };
         }
-        return null;
+        return { success: false, r, c: traceC };
     }
 
-    private cellOverflow_colIn(map: any, r: number, c: number, col_st: number, col_ed: number) {
+    private cellOverflow_colIn(map: CellOverflowMap, r: number, c: number, _col_st: number, col_ed: number) {
         let colIn = false; // Whether this cell is within an overflow cell's render range
         let colLast = false; // Whether this cell is the last column in an overflow cell's render range
         let rowIndex: number | undefined; // Overflow cell row index
@@ -1816,9 +1797,10 @@ export class Canvas {
 
         if (map) {
             for (const rkey of Object.keys(map)) {
-                const row = map[rkey];
+                const row = map[Number(rkey)];
+                if (!row) continue;
                 for (const ckey of Object.keys(row)) {
-                    const mapItem = row[ckey];
+                    const mapItem = row[Number(ckey)];
                     const ri = Number(rkey);
                     const ci = Number(ckey);
 
