@@ -5,6 +5,7 @@ import {
     Canvas,
     type Context,
     type Freezen,
+    type FreezenAxisData,
     handleGlobalWheel,
     initFreeze,
     type Sheet as SheetType,
@@ -19,11 +20,15 @@ import { SheetOverlay } from '../SheetOverlay';
 
 type ScrollPos = { scrollLeft: number; scrollTop: number };
 
-function drawFrozenBoth(tc: Canvas, ctx: Context, scroll: ScrollPos, horizontalData: number[], verticalData: number[]) {
-    const [hPx, , hScrollTop] = horizontalData;
-    const [vPx, , vScrollWidth] = verticalData;
-    const vOffset = vPx - vScrollWidth;
-    const hOffset = hPx - hScrollTop;
+function drawFrozenBoth(
+    tc: Canvas,
+    ctx: Context,
+    scroll: ScrollPos,
+    horizontalData: FreezenAxisData,
+    verticalData: FreezenAxisData,
+) {
+    const vOffset = verticalData.pos - verticalData.scroll;
+    const hOffset = horizontalData.pos - horizontalData.scroll;
 
     tc.drawMain({
         scrollWidth: scroll.scrollLeft + vOffset,
@@ -34,36 +39,35 @@ function drawFrozenBoth(tc: Canvas, ctx: Context, scroll: ScrollPos, horizontalD
     });
     tc.drawMain({
         scrollWidth: scroll.scrollLeft + vOffset,
-        scrollHeight: hScrollTop,
-        drawHeight: hPx,
+        scrollHeight: horizontalData.scroll,
+        drawHeight: horizontalData.pos,
         offsetLeft: vOffset + ctx.rowHeaderWidth,
     });
     tc.drawMain({
-        scrollWidth: vScrollWidth,
+        scrollWidth: verticalData.scroll,
         scrollHeight: scroll.scrollTop + hOffset,
-        drawWidth: vPx,
+        drawWidth: verticalData.pos,
         offsetTop: hOffset + ctx.columnHeaderHeight,
     });
     tc.drawMain({
-        scrollWidth: vScrollWidth,
-        scrollHeight: hScrollTop,
-        drawWidth: vPx,
-        drawHeight: hPx,
+        scrollWidth: verticalData.scroll,
+        scrollHeight: horizontalData.scroll,
+        drawWidth: verticalData.pos,
+        drawHeight: horizontalData.pos,
     });
 
     tc.drawColumnHeader(scroll.scrollLeft + vOffset, undefined, vOffset + ctx.rowHeaderWidth);
-    tc.drawColumnHeader(vScrollWidth, vPx);
+    tc.drawColumnHeader(verticalData.scroll, verticalData.pos);
     tc.drawRowHeader(scroll.scrollTop + hOffset, undefined, hOffset + ctx.columnHeaderHeight);
-    tc.drawRowHeader(hScrollTop, hPx);
+    tc.drawRowHeader(horizontalData.scroll, horizontalData.pos);
     tc.drawFreezeLine({
         horizontalTop: hOffset + ctx.columnHeaderHeight - 2,
         verticalLeft: vOffset + ctx.rowHeaderWidth - 2,
     });
 }
 
-function drawFrozenHorizontal(tc: Canvas, ctx: Context, scroll: ScrollPos, horizontalData: number[]) {
-    const [hPx, , hScrollTop] = horizontalData;
-    const hOffset = hPx - hScrollTop;
+function drawFrozenHorizontal(tc: Canvas, ctx: Context, scroll: ScrollPos, horizontalData: FreezenAxisData) {
+    const hOffset = horizontalData.pos - horizontalData.scroll;
 
     tc.drawMain({
         scrollWidth: scroll.scrollLeft,
@@ -73,19 +77,18 @@ function drawFrozenHorizontal(tc: Canvas, ctx: Context, scroll: ScrollPos, horiz
     });
     tc.drawMain({
         scrollWidth: scroll.scrollLeft,
-        scrollHeight: hScrollTop,
-        drawHeight: hPx,
+        scrollHeight: horizontalData.scroll,
+        drawHeight: horizontalData.pos,
     });
 
     tc.drawColumnHeader(scroll.scrollLeft);
     tc.drawRowHeader(scroll.scrollTop + hOffset, undefined, hOffset + ctx.columnHeaderHeight);
-    tc.drawRowHeader(hScrollTop, hPx);
+    tc.drawRowHeader(horizontalData.scroll, horizontalData.pos);
     tc.drawFreezeLine({ horizontalTop: hOffset + ctx.columnHeaderHeight - 2 });
 }
 
-function drawFrozenVertical(tc: Canvas, ctx: Context, scroll: ScrollPos, verticalData: number[]) {
-    const [vPx, , vScrollWidth] = verticalData;
-    const vOffset = vPx - vScrollWidth;
+function drawFrozenVertical(tc: Canvas, ctx: Context, scroll: ScrollPos, verticalData: FreezenAxisData) {
+    const vOffset = verticalData.pos - verticalData.scroll;
 
     tc.drawMain({
         scrollWidth: scroll.scrollLeft + vOffset,
@@ -93,14 +96,14 @@ function drawFrozenVertical(tc: Canvas, ctx: Context, scroll: ScrollPos, vertica
         offsetLeft: vOffset + ctx.rowHeaderWidth,
     });
     tc.drawMain({
-        scrollWidth: vScrollWidth,
+        scrollWidth: verticalData.scroll,
         scrollHeight: scroll.scrollTop,
-        drawWidth: vPx,
+        drawWidth: verticalData.pos,
     });
 
     tc.drawRowHeader(scroll.scrollTop);
     tc.drawColumnHeader(scroll.scrollLeft + vOffset, undefined, vOffset + ctx.rowHeaderWidth);
-    tc.drawColumnHeader(vScrollWidth, vPx);
+    tc.drawColumnHeader(verticalData.scroll, verticalData.pos);
     tc.drawFreezeLine({ verticalLeft: vOffset + ctx.rowHeaderWidth - 2 });
 }
 

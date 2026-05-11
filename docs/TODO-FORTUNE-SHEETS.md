@@ -32,9 +32,6 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    here):
    - `SheetConfig.authority: any` — protection.ts reads a varied flag bag;
      tightening requires inverting the field set across all protection modes.
-   - `Freezen.freezenhorizontaldata: any[]` / `.freezenverticaldata: any[]` —
-     mixed `(number | number[])[]` runtime shape; consumers pass to helpers
-     expecting plain `number[]`.
    - `state/modules/formula-range.ts::rangeSetValue(selected: any)` —
      column-header / row-header click handlers pass `row: [null, null]`
      (or `column: [null, null]`) to denote a whole-column/row reference;
@@ -79,9 +76,20 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      fix in HTML paste's right-border trigger (`td.style.borderRight` instead
      of the inherited-from-bl `td.style.borderLeft`); `normalizeSelection`
      overloaded to preserve non-undefined when callers pass literal arrays.
+   - `Freezen.freezen{horizontal,vertical}data` is now a named-object
+     `FreezenAxisData` (`{ pos, boundary, scroll, cumulative, edge }`) — was
+     `any[]` masking a `[number, number, number, number[], number]` tuple
+     with magic-index reads across 8 functions. Producer in `freeze.ts`
+     emits the object literal; `scrollToFrozenRowCol`, `fixPositionOnFrozenCells`,
+     `fix{Row,Column}StyleOverflowInFreeze`, and the three `drawFrozen*` helpers
+     in `Sheet/index.tsx` now read named fields. Dead `Freezen.horizontal.top`
+     and `Freezen.vertical.left` outer fields removed (written, never read).
+     Side-fixes: two commented-out jQuery scrollbar callbacks deleted; the
+     `boundary + offset` accumulation in `scrollToFrozenRowCol` collapsed
+     from three statements to one per axis.
 
-   Once the remaining producers (authority, freezen, formula-range) are
-   migrated in lockstep, state's `Sheet` / `SheetConfig` can collapse into
+   Once the remaining producers (authority, formula-range) are migrated in
+   lockstep, state's `Sheet` / `SheetConfig` can collapse into
    `Omit<lib.Sheet, …> & { editor extras }`.
 
    **Group F `@ts-expect-error` sites — closed on `biome-state-cleanup`

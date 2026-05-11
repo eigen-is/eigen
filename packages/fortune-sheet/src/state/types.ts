@@ -248,17 +248,20 @@ export type History = {
     options?: PatchOptions;
 };
 
-// Pre-computed pixel offsets the freeze line uses to redraw above/below the
-// frozen pane. Producer in state/modules/freeze.ts builds a 5-element array
-// mixing numbers and number[] (positions, scroll offsets, cumulative per-col
-// offsets). The mixed shape is awkward to encode as a tuple because consumers
-// in Sheet/index.tsx pass it to helpers expecting plain `number[]`; tightening
-// is a follow-up.
+// Pre-computed offsets the freeze line uses to redraw above/below the frozen
+// pane. Built by state/modules/freeze.ts; consumed by event handlers,
+// selection-overflow math, and the Sheet canvas-draw helpers.
+export type FreezenAxisData = {
+    pos: number; // pixel position of the freeze boundary (visibledatarow/col at row_st/col_st)
+    boundary: number; // first row/col index immediately past the freeze boundary
+    scroll: number; // scroll offset captured at freeze init (currently always 0)
+    cumulative: number[]; // post-boundary cumulative pixel offsets, passed to sortedIndex to map scroll → row/col
+    edge: number; // viewport edge px: boundary pos − 2 + header dimension
+};
+
 export type Freezen = {
-    // biome-ignore lint/suspicious/noExplicitAny: producer/consumer divergence — see comment above
-    horizontal?: { freezenhorizontaldata: any[]; top: number };
-    // biome-ignore lint/suspicious/noExplicitAny: producer/consumer divergence — see comment above
-    vertical?: { freezenverticaldata: any[]; left: number };
+    horizontal?: { freezenhorizontaldata: FreezenAxisData };
+    vertical?: { freezenverticaldata: FreezenAxisData };
 };
 
 export type GlobalCache = {
