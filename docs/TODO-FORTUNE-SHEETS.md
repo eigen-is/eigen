@@ -136,10 +136,23 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      `SingleRange = { row: number[]; column: number[] }` stays pure — the
      10 other `getRangetxt` call sites and ~56 SingleRange consumers across
      state untouched.
-
-   With formula-range migrated, state's `Sheet` / `SheetConfig` can now
-   collapse into `Omit<lib.Sheet, …> & { editor extras }` — no remaining
-   loose-typed producers blocking the merge.
+   - State's `Sheet` and `SheetConfig` (in `state/types.ts`) now collapse
+     onto lib's canonical shapes: `SheetConfig = LibSheetConfig & { editor
+     extras }`, `Sheet = Omit<LibSheet, 'config'> & { config?: SheetConfig;
+     editor extras }`. All overlapping fields were byte-identical (incl.
+     `showGridLines: boolean | number` which lib was already widened to)
+     — pure additive collapse, no field type changes, ~25 LOC removed.
+     `engine/rowcol.ts` had used the `SheetConfig & { rowReadOnly,
+     colReadOnly, customHeight, customWidth }` pattern locally since the
+     engine extraction; the state-side collapse generalises it. `config`
+     is `Omit`'d because state's SheetConfig is wider; all other lib
+     fields flow through transparently. Editor extras kept on state:
+     `SheetConfig` adds `customHeight`/`customWidth`/`authority`/
+     `rowReadOnly`/`colReadOnly`; `Sheet` adds 21 fields covering
+     selection state, calc chain, filters, frozen panes, dynamic-array
+     spill ranges, hyperlinks, alternateformat, dataVerification, images,
+     pivot-table placeholder, and the editor-only `addRows`/`status`/
+     `hide`/`color`/`defaultRowHeight`/`defaultColWidth`.
 
    **Group F `@ts-expect-error` sites — closed on `biome-state-cleanup`
    (2026-05-11):** all 12 directives in `state/` + `components/Workbook` are
