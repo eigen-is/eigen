@@ -2,9 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { handleCellAreaMouseDown } from '../../events/mouse';
 import { updateCell } from '../../index';
 
-// Mock DOM for tests
-(globalThis as any).document = {
-    createElement: (tag: string) => ({
+// Mock DOM for tests. globalThis is intentionally widened — Bun's test runtime
+// has no DOM by default and these mocks are scoped to this test file.
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+const g = globalThis as any;
+g.document = {
+    createElement: (_tag: string) => ({
         innerHTML: '',
         style: {},
         setAttribute: () => {},
@@ -20,13 +23,13 @@ import { updateCell } from '../../index';
 };
 
 // Mock DOM classes
-(globalThis as any).MouseEvent = class MouseEvent {
+g.MouseEvent = class MouseEvent {
     type: string;
     button: number = 0;
     pageX: number = 0;
     pageY: number = 0;
 
-    constructor(type: string, options: any = {}) {
+    constructor(type: string, options: Record<string, unknown> = {}) {
         this.type = type;
         Object.assign(this, options);
     }

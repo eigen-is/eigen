@@ -10,6 +10,7 @@ import {
     setRowHeight,
 } from '../../api/rowcol';
 import type { Context } from '../../context';
+import type { Cell } from '../../types';
 import { contextFactory, selectionFactory } from '../factories/context';
 
 describe('fortune-sheet/core/api/rowcol', () => {
@@ -66,12 +67,10 @@ describe('fortune-sheet/core/api/rowcol', () => {
                     if (k.d === 'rightbottom') {
                         l += 1;
                     }
-                    let receivedValue;
-                    if (k.t === 'row') {
-                        receivedValue = ctx.luckysheetfile[0]?.data?.[k.i + i + l]?.[j];
-                    } else {
-                        receivedValue = ctx.luckysheetfile[0]?.data?.[j]?.[k.i + i + l];
-                    }
+                    const receivedValue =
+                        k.t === 'row'
+                            ? ctx.luckysheetfile[0]?.data?.[k.i + i + l]?.[j]
+                            : ctx.luckysheetfile[0]?.data?.[j]?.[k.i + i + l];
                     expect(receivedValue).toEqual([0, 2].includes(j) ? emptyTmpl : null);
                 }
             }
@@ -109,7 +108,7 @@ describe('fortune-sheet/core/api/rowcol', () => {
             deleteRowOrColumn(ctx, k.type as 'row' | 'column', k.start, k.end);
             range(0, k.rawData().length - slen).forEach((i) => {
                 range(0, k.rawData()[0].length - slen).forEach((j) => {
-                    let expectedValue;
+                    let expectedValue: () => Cell | null;
                     if (k.type === 'row') {
                         expectedValue = () => {
                             if (i < k.start) return k.rawData()[i][j];
