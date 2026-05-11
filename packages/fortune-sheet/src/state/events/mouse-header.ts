@@ -336,13 +336,6 @@ export function handleRowHeaderMouseDown(
                 column_focus: 0,
                 row_select: true,
             });
-            /**
-             * Set ctx.luckysheet_select_status = true so that the mouse can continue
-             * selecting while held down.
-             * Set ctx.luckysheet_scroll_status = true to allow scrollbar movement
-             * during multi-select.
-             * When luckysheet_select_status is true, mouseRender in mouse.ts executes.
-             */
             ctx.luckysheet_select_status = true;
             ctx.luckysheet_scroll_status = true;
         }
@@ -664,13 +657,6 @@ export function handleColumnHeaderMouseDown(
                 column_focus: col_index,
                 column_select: true,
             });
-            /**
-             * Set ctx.luckysheet_select_status = true so that the mouse can continue
-             * selecting while held down.
-             * Set ctx.luckysheet_scroll_status = true to allow scrollbar movement
-             * during multi-select.
-             * When luckysheet_select_status is true, mouseRender in mouse.ts executes.
-             */
             ctx.luckysheet_select_status = true;
             ctx.luckysheet_scroll_status = true;
         }

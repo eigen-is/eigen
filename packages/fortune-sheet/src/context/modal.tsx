@@ -2,7 +2,7 @@ import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
 import React, { useCallback, useMemo, useState } from 'react';
 
 export type ModalOptions = {
-    /** When false, no backdrop and the rest of the page stays interactive (e.g. range picker). */
+    // When false, no backdrop and the rest of the page stays interactive (e.g. range picker).
     modal?: boolean;
 };
 

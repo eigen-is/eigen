@@ -27,7 +27,6 @@ export function useDialog() {
         [hideModal, showModal],
     );
 
-    /** Show a dialog without a modal backdrop — the rest of the page stays interactive. */
     const showNonModalDialog = useCallback(
         (content: React.ReactNode, options: Omit<ModalOptions, 'modal'> = {}) => {
             showModal(content, { ...options, modal: false });

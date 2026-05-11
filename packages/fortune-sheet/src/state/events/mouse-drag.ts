@@ -29,7 +29,6 @@ import { fixPositionOnFrozenCells } from './mouse-resize';
 // mouseRender sub-functions (private)
 // ---------------------------------------------------------------------------
 
-/** Handle cell selection drag while mouse is held down. */
 function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEvent, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;
@@ -162,7 +161,6 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     scrollToFrozenRowCol(ctx, globalCache.freezen?.[ctx.currentSheetId]);
 }
 
-/** Column width resize drag. */
 function renderColResize(ctx: Context, e: MouseEvent, scrollX: HTMLDivElement, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollX.scrollLeft - window.scrollX;
@@ -178,7 +176,6 @@ function renderColResize(ctx: Context, e: MouseEvent, scrollX: HTMLDivElement, c
     }
 }
 
-/** Row height resize drag. */
 function renderRowResize(ctx: Context, e: MouseEvent, scrollY: HTMLDivElement, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollY.scrollTop - window.scrollY;
@@ -194,7 +191,6 @@ function renderRowResize(ctx: Context, e: MouseEvent, scrollY: HTMLDivElement, c
     }
 }
 
-/** Column freeze drag. */
 function renderColFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + ctx.scrollLeft - window.scrollX;
@@ -219,7 +215,6 @@ function renderColFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElem
     }
 }
 
-/** Row freeze drag. */
 function renderRowFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + ctx.scrollTop - window.scrollY;
