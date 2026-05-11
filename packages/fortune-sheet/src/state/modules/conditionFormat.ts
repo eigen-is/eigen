@@ -1,3 +1,10 @@
+import type {
+    ColorGradationRule,
+    ConditionalFormatConditionName,
+    DataBarRule,
+    DefaultConditionalFormatRule,
+    SingleRange,
+} from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine';
 import { evaluateConditionalFormat } from '../../engine';
@@ -8,6 +15,35 @@ import { getSheetIndex } from '../utils';
 import { getCellValue, getRangeByTxt } from './cell';
 import { execfunction, functionCopy } from './formula-ui';
 import { checkProtectionFormatCells } from './protection';
+
+const KNOWN_CONDITION_NAMES = [
+    'greaterThan',
+    'lessThan',
+    'equal',
+    'textContains',
+    'between',
+    'occurrenceDate',
+    'duplicateValue',
+    'top10',
+    'top10_percent',
+    'last10',
+    'last10_percent',
+    'aboveAverage',
+    'belowAverage',
+    'formula',
+] as const satisfies readonly ConditionalFormatConditionName[];
+
+function isKnownConditionName(s: string): s is ConditionalFormatConditionName {
+    return (KNOWN_CONDITION_NAMES as readonly string[]).includes(s);
+}
+
+// Coerce a raw cell value (which can be any of Cell['v'] = string | number |
+// boolean | undefined) into the `(string | number)[]` shape stored on the rule.
+function toRuleValue(raw: unknown): string | number {
+    if (typeof raw === 'number' || typeof raw === 'string') return raw;
+    if (raw == null) return '';
+    return String(raw);
+}
 
 // Set condition rules
 export function setConditionRules(
@@ -21,14 +57,17 @@ export function setConditionRules(
         return;
     }
 
-    // condition name
+    // The dialog seeds rules.rulesType from a substring of the rangeDialog type
+    // (`conditionRules` prefix stripped) and never validates against the engine's
+    // canonical name set. Bail out on names the engine doesn't recognise rather
+    // than persisting a rule that would silently no-op on every paint.
+    if (!isKnownConditionName(rules.rulesType)) {
+        return;
+    }
     const conditionName = rules.rulesType;
 
-    // condition cell
-    const conditionRange = [];
-
-    // condition value
-    const conditionValue = [];
+    const conditionRange: SingleRange[] = [];
+    const conditionValue: (string | number)[] = [];
 
     if (
         conditionName === 'greaterThan' ||
@@ -36,27 +75,23 @@ export function setConditionRules(
         conditionName === 'equal' ||
         conditionName === 'textContains'
     ) {
-        let v = rules.rulesValue;
-        const rangeArr = getRangeByTxt(ctx, v);
+        const rangeArr = getRangeByTxt(ctx, rules.rulesValue);
         // check whether the condition value is a selection range
         if (rangeArr.length > 1) {
-            const r1 = rangeArr[0]?.row[0];
-            const r2 = rangeArr[0]?.row[1];
-            const c1 = rangeArr[0]?.column[0];
-            const c2 = rangeArr[0]?.column[1];
+            const first = rangeArr[0];
+            if (!first) return;
+            const [r1, r2] = first.row;
+            const [c1, c2] = first.column;
             if (r1 === r2 && c1 === c2) {
                 const d = getFlowdata(ctx);
                 if (!d || isNil(r1) || isNil(c1)) return;
-                v = getCellValue(r1, c1, d);
-                conditionRange.push({
-                    row: rangeArr?.[0]?.row,
-                    column: rangeArr?.[0]?.column,
-                });
-                conditionValue.push(v);
+                conditionRange.push({ row: first.row, column: first.column });
+                conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
             } else {
                 ctx.warnDialog = conditionformat.onlySingleCell;
             }
         } else if (rangeArr.length === 0) {
+            const v = rules.rulesValue;
             if (Number.isNaN(v) || v === '') {
                 ctx.warnDialog = conditionformat.conditionValueCanOnly;
                 return;
@@ -64,29 +99,24 @@ export function setConditionRules(
             conditionValue.push(v);
         }
     } else if (conditionName === 'between') {
-        let v1 = rules.betweenValue.value1;
-        let v2 = rules.betweenValue.value2;
+        const v1 = rules.betweenValue.value1;
+        const v2 = rules.betweenValue.value2;
 
-        // convert value to array coordinates
         const rangeArr1 = getRangeByTxt(ctx, v1);
         if (rangeArr1.length > 1) {
             ctx.warnDialog = conditionformat.onlySingleCell;
             return;
         }
         if (rangeArr1.length === 1) {
-            const r1 = rangeArr1[0]?.row[0];
-            const r2 = rangeArr1[0]?.row[1];
-            const c1 = rangeArr1[0]?.column[0];
-            const c2 = rangeArr1[0]?.column[1];
+            const first = rangeArr1[0];
+            if (!first) return;
+            const [r1, r2] = first.row;
+            const [c1, c2] = first.column;
             if (r1 === r2 && c1 === c2) {
                 const d = getFlowdata(ctx);
                 if (!d || isNil(r1) || isNil(c1)) return;
-                v1 = getCellValue(r1, c1, d);
-                conditionRange.push({
-                    row: rangeArr1?.[0]?.row,
-                    column: rangeArr1?.[0]?.column,
-                });
-                conditionValue.push(v1);
+                conditionRange.push({ row: first.row, column: first.column });
+                conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
             } else {
                 ctx.warnDialog = conditionformat.onlySingleCell;
                 return;
@@ -104,18 +134,15 @@ export function setConditionRules(
             return;
         }
         if (rangeArr2.length === 1) {
-            const r1 = rangeArr2[0]?.row[0];
-            const r2 = rangeArr2[0]?.row[1];
-            const c1 = rangeArr2[0]?.column[0];
-            const c2 = rangeArr2[0]?.column[1];
+            const first = rangeArr2[0];
+            if (!first) return;
+            const [r1, r2] = first.row;
+            const [c1, c2] = first.column;
             if (r1 === r2 && c1 === c2) {
                 const d = getFlowdata(ctx);
                 if (!d || isNil(r1) || isNil(c1)) return;
-                v2 = getCellValue(r1, c1, d);
-                conditionRange.push({
-                    row: rangeArr2?.[0]?.row,
-                    column: rangeArr2?.[0]?.column,
-                });
+                conditionRange.push({ row: first.row, column: first.column });
+                conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
             } else {
                 ctx.warnDialog = conditionformat.onlySingleCell;
                 return;
@@ -143,34 +170,21 @@ export function setConditionRules(
         conditionName === 'last10_percent'
     ) {
         const v = rules.projectValue;
-        if (parseInt(v, 10).toString() !== v || parseInt(v, 10) < 1 || parseInt(v, 10) > 1000) {
+        const n = parseInt(v, 10);
+        if (n.toString() !== v || n < 1 || n > 1000) {
             ctx.warnDialog = conditionformat.pleaseEnterInteger;
             return;
         }
         conditionValue.push(v);
-    } else {
-        conditionValue.push(conditionName);
     }
 
-    // color
-    let textColor = null;
-    if (rules.textColor.check) {
-        textColor = rules.textColor.color;
-    }
+    const textColor = rules.textColor.check ? rules.textColor.color : null;
+    const cellColor = rules.cellColor.check ? rules.cellColor.color : null;
 
-    let cellColor = null;
-    if (rules.cellColor.check) {
-        cellColor = rules.cellColor.color;
-    }
-
-    // construct the current rule
-    const rule = {
+    const rule: DefaultConditionalFormatRule = {
         type: 'default',
         cellrange: ctx.luckysheet_select_save ?? [],
-        format: {
-            textColor,
-            cellColor,
-        },
+        format: { textColor, cellColor },
         conditionName,
         conditionRange,
         conditionValue,
@@ -287,7 +301,7 @@ export function applyDataBarPreset(ctx: Context, presetKey: string) {
 
 function appendRule(ctx: Context, type: 'colorGradation' | 'dataBar', format: string[]) {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const rule = {
+    const rule: ColorGradationRule | DataBarRule = {
         type,
         cellrange: ctx.luckysheet_select_save ?? [],
         format,

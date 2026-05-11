@@ -1,4 +1,4 @@
-import { indexOf, isEmpty, isNil, last, set } from 'es-toolkit/compat';
+import { isEmpty, isNil, last, set } from 'es-toolkit/compat';
 import { type Context, getFlowdata } from '../context';
 import {
     cancelActiveImgItem,
@@ -233,14 +233,12 @@ export function handleCellAreaMouseDown(
 
                     const currSelection = window.getSelection();
                     if (currSelection == null) return;
-                    ctx.formulaCache.functionRangeIndex = [
-                        indexOf(
-                            currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
-                            // @ts-expect-error
-                            currSelection.anchorNode?.parentNode,
-                        ),
-                        currSelection.anchorOffset,
-                    ];
+                    // `parentNode` resolves to `ParentNode | null` in lib.dom while childNodes are
+                    // `ChildNode`; widening to `Node` lets indexOf match the same DOM reference.
+                    const anchorParent: Node | null = currSelection.anchorNode?.parentNode ?? null;
+                    const siblings = anchorParent?.parentNode?.childNodes;
+                    const rangeIndex = anchorParent && siblings ? Array.from<Node>(siblings).indexOf(anchorParent) : -1;
+                    ctx.formulaCache.functionRangeIndex = [rangeIndex, currSelection.anchorOffset];
 
                     /* Re-add closing parenthesis before display */
                     cellInput.innerHTML = vText;

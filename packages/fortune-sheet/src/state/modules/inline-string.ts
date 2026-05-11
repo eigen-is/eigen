@@ -7,6 +7,11 @@ import { selectTextContent, selectTextContentCross } from './cursor';
 type InlineStringCell = Cell & { ct: { t: 'inlineStr'; s: InlineStringSegment[] } };
 type InlineStringCT = { t: 'inlineStr'; s: InlineStringSegment[] };
 
+// Mapping from Cell style-attribute keys to their CSS property names. Used by the
+// inline-string CSS pipeline (parsing span styles back to cell attributes) and as
+// the set of style attrs `getFontStyleByCell` / `isAllSelectedCellsInStatus` know
+// about. Kept `as const` so consumers can derive `StyleAttr` and so the CSS-name
+// values are literal-typed for downstream string comparisons.
 export const attrToCssName = {
     bl: 'font-weight',
     it: 'font-style',
@@ -15,7 +20,32 @@ export const attrToCssName = {
     fc: 'color',
     cl: 'text-decoration',
     un: 'border-bottom',
-};
+} as const;
+
+export type StyleAttr = keyof typeof attrToCssName;
+
+export function isStyleAttr(key: PropertyKey): key is StyleAttr {
+    return typeof key === 'string' && key in attrToCssName;
+}
+
+// CamelCased counterparts of `attrToCssName`. Pre-computed (rather than
+// `camelCase(attrToCssName[attr])` at runtime) so the value type is
+// `keyof CSSStyleDeclaration`, which lets consumers index `element.style[...]`
+// without a cast.
+export const cssDomKeyForAttr = {
+    bl: 'fontWeight',
+    it: 'fontStyle',
+    ff: 'fontFamily',
+    fs: 'fontSize',
+    fc: 'color',
+    cl: 'textDecoration',
+    un: 'borderBottom',
+} as const satisfies Record<StyleAttr, keyof CSSStyleDeclaration>;
+
+// Cell fields stamped transiently by `getCssText` for the underline (`un`) branch.
+// They never persist on stored cells — only read by `getFontStyleByCell` to size /
+// colour the rendered underline.
+export type UnderlineHints = { _color?: string; _fontSize?: number };
 
 export const inlineStyleAffectAttribute = {
     bl: 1,
@@ -224,8 +254,7 @@ function removeClassWidthCss(cssText: string, ukey: string) {
     if (ukey == null || ukey.length === 0) {
         return cssText;
     }
-    if (ukey in attrToCssName) {
-        // @ts-expect-error
+    if (isStyleAttr(ukey)) {
         ukey = attrToCssName[ukey];
     }
     if (cssText.indexOf(ukey) > -1) {
@@ -251,7 +280,7 @@ function removeClassWidthCss(cssText: string, ukey: string) {
 }
 
 function getCssText(cssText: string, attr: keyof Cell, value: unknown) {
-    const styleObj: Cell & { _fontSize?: number; _color?: string } = {};
+    const styleObj: Cell & UnderlineHints = {};
     (styleObj as Record<string, unknown>)[attr] = value;
     if (attr === 'un') {
         let fontColor = getClassWithcss(cssText, 'color');
