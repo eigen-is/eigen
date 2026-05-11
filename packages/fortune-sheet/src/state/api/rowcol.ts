@@ -192,14 +192,13 @@ export function getRowHeight(ctx: Context, rows: number[], options: CommonOption
     const cfg = sheet.config || {};
     const rowlen = cfg.rowlen || {};
 
-    const rowlenObj: Record<number, number> = {};
+    const rowlenObj: Record<string, number> = {};
 
-    rows.forEach((item) => {
-        if (Number(item) >= 0) {
-            const size = rowlen[Number(item)] || ctx.defaultrowlen;
-            rowlenObj[Number(item)] = size;
+    for (const item of rows) {
+        if (item >= 0) {
+            rowlenObj[item] = rowlen[item] || ctx.defaultrowlen;
         }
-    });
+    }
 
     return rowlenObj;
 }
@@ -214,14 +213,13 @@ export function getColumnWidth(ctx: Context, columns: number[], options: CommonO
     const cfg = sheet.config || {};
     const columnlen = cfg.columnlen || {};
 
-    const columnlenObj: Record<number, number> = {};
+    const columnlenObj: Record<string, number> = {};
 
-    columns.forEach((item) => {
-        if (Number(item) >= 0) {
-            const size = columnlen[Number(item)] || ctx.defaultcollen;
-            columnlenObj[Number(item)] = size;
+    for (const item of columns) {
+        if (item >= 0) {
+            columnlenObj[item] = columnlen[item] || ctx.defaultcollen;
         }
-    });
+    }
 
     return columnlenObj;
 }

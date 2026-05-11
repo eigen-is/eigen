@@ -1577,7 +1577,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         ctx.luckysheetfile[index].config = {};
                     }
                     if (isNil(ctx.luckysheetfile[index].config!.rowlen)) {
-                        ctx.luckysheetfile[index].config!.rowlen = {} as Record<number, number>;
+                        ctx.luckysheetfile[index].config!.rowlen = {};
                     }
                     const rowHeightList = ctx.luckysheetfile[index].config!.rowlen!;
                     forEach(trList, (tr) => {

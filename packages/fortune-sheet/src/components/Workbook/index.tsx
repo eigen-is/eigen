@@ -425,12 +425,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (!sheet) return;
 
                     let { data } = sheet;
-                    // expand cell data
                     if (!data || data.length === 0) {
-                        const temp = api.initSheetData(draftCtx, sheetIdx, sheet);
-                        if (temp !== null) {
-                            data = temp;
-                        }
+                        data = api.initSheetData(draftCtx, sheetIdx, sheet);
                     }
 
                     if (

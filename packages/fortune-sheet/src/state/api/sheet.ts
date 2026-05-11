@@ -1,11 +1,11 @@
-import { cloneDeep, isUndefined, maxBy, times } from 'es-toolkit/compat';
+import { cloneDeep, isUndefined } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import type { CellMatrix } from '../../engine/types';
 import { api, execfunction, insertUpdateFunctionGroup, locale } from '..';
 import type { Context } from '../context';
-import type { CellWithRowAndCol, Sheet, SingleRange } from '../types';
+import type { Sheet, SingleRange } from '../types';
 import { getSheetIndex } from '../utils';
-import { dataToCelldata, getSheet } from './common';
+import { celldataToData, dataToCelldata, getSheet } from './common';
 
 export function getAllSheets(ctx: Context) {
     return ctx.luckysheetfile;
@@ -13,38 +13,25 @@ export function getAllSheets(ctx: Context) {
 
 export { getSheet };
 
-export function initSheetData(draftCtx: Context, index: number, newData: Sheet): CellMatrix | null {
+export function initSheetData(draftCtx: Context, index: number, newData: Sheet): CellMatrix {
     const { celldata, row, column } = newData;
-    const lastRow = maxBy<CellWithRowAndCol>(celldata, 'r');
-    const lastCol = maxBy(celldata, 'c');
-    let lastRowNum = (lastRow?.r ?? 0) + 1;
-    let lastColNum = (lastCol?.c ?? 0) + 1;
-    if (row != null && column != null && row > 0 && column > 0) {
-        lastRowNum = Math.max(lastRowNum, row);
-        lastColNum = Math.max(lastColNum, column);
+    const expandedData = celldataToData(
+        celldata ?? [],
+        row != null && row > 0 ? row : draftCtx.defaultrowNum,
+        column != null && column > 0 ? column : draftCtx.defaultcolumnNum,
+    );
+    if (draftCtx.luckysheetfile[index] == null) {
+        newData.data = expandedData;
+        delete newData.celldata;
+        draftCtx.luckysheetfile.push(newData);
     } else {
-        lastRowNum = Math.max(lastRowNum, draftCtx.defaultrowNum);
-        lastColNum = Math.max(lastColNum, draftCtx.defaultcolumnNum);
-    }
-    if (lastRowNum && lastColNum) {
-        const expandedData: Sheet['data'] = times(lastRowNum, () => times(lastColNum, () => null));
-        celldata?.forEach((d) => {
-            expandedData[d.r][d.c] = d.v;
-        });
-        if (draftCtx.luckysheetfile[index] == null) {
-            newData.data = expandedData;
-            delete newData.celldata;
-            draftCtx.luckysheetfile.push(newData);
-        } else {
-            draftCtx.luckysheetfile[index].data = expandedData;
-            delete draftCtx.luckysheetfile[index].celldata;
-            if (newData.config) {
-                draftCtx.luckysheetfile[index].config = newData.config;
-            }
+        draftCtx.luckysheetfile[index].data = expandedData;
+        delete draftCtx.luckysheetfile[index].celldata;
+        if (newData.config) {
+            draftCtx.luckysheetfile[index].config = newData.config;
         }
-        return expandedData;
     }
-    return null;
+    return expandedData;
 }
 
 export function hideSheet(ctx: Context, sheetId: string) {
