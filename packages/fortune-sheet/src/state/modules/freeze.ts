@@ -61,18 +61,14 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
             row_st = 0;
         }
 
-        const top = ctx.visibledatarow[row_st] - 2 - scrollTop + ctx.columnHeaderHeight;
-        const freezenhorizontaldata = [
-            ctx.visibledatarow[row_st],
-            row_st + 1,
-            scrollTop,
-            cutVolumn(ctx.visibledatarow, row_st + 1),
-            top,
-        ];
-
         freezen.horizontal = {
-            freezenhorizontaldata,
-            top,
+            freezenhorizontaldata: {
+                pos: ctx.visibledatarow[row_st],
+                boundary: row_st + 1,
+                scroll: scrollTop,
+                cumulative: cutVolumn(ctx.visibledatarow, row_st + 1),
+                edge: ctx.visibledatarow[row_st] - 2 - scrollTop + ctx.columnHeaderHeight,
+            },
         };
     }
     if (type === 'rangeColumn' || type === 'rangeBoth') {
@@ -89,18 +85,14 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
             col_st = 0;
         }
 
-        const left = ctx.visibledatacolumn[col_st] - 2 - scrollLeft + ctx.rowHeaderWidth;
-        const freezenverticaldata = [
-            ctx.visibledatacolumn[col_st],
-            col_st + 1,
-            scrollLeft,
-            cutVolumn(ctx.visibledatacolumn, col_st + 1),
-            left,
-        ];
-
         freezen.vertical = {
-            freezenverticaldata,
-            left,
+            freezenverticaldata: {
+                pos: ctx.visibledatacolumn[col_st],
+                boundary: col_st + 1,
+                scroll: scrollLeft,
+                cumulative: cutVolumn(ctx.visibledatacolumn, col_st + 1),
+                edge: ctx.visibledatacolumn[col_st] - 2 - scrollLeft + ctx.rowHeaderWidth,
+            },
         };
     }
 
@@ -132,17 +124,11 @@ export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) 
         [column] = select_save[0].column;
     }
 
-    const freezenverticaldata = freeze?.vertical?.freezenverticaldata;
-    const freezenhorizontaldata = freeze?.horizontal?.freezenhorizontaldata;
+    const verticalData = freeze?.vertical?.freezenverticaldata;
+    const horizontalData = freeze?.horizontal?.freezenhorizontaldata;
 
-    if (freezenverticaldata != null && column != null) {
-        let freezen_colindex = freezenverticaldata[1];
-
-        const offset = sortedIndex(freezenverticaldata[3], ctx.scrollLeft);
-
-        const top = freezenverticaldata[4];
-
-        freezen_colindex += offset;
+    if (verticalData != null && column != null) {
+        let freezen_colindex = verticalData.boundary + sortedIndex(verticalData.cumulative, ctx.scrollLeft);
 
         if (column >= ctx.visibledatacolumn.length) {
             column = ctx.visibledatacolumn.length - 1;
@@ -155,22 +141,13 @@ export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) 
         const column_px = ctx.visibledatacolumn[column];
         const freezen_px = ctx.visibledatacolumn[freezen_colindex];
 
-        if (column_px <= freezen_px + top) {
+        if (column_px <= freezen_px + verticalData.edge) {
             ctx.scrollLeft = 0;
-            // setTimeout(function () {
-            //   $("#luckysheet-scrollbar-x").scrollLeft(0);
-            // }, 100);
         }
     }
 
-    if (freezenhorizontaldata != null && row != null) {
-        let freezen_rowindex = freezenhorizontaldata[1];
-
-        const offset = sortedIndex(freezenhorizontaldata[3], ctx.scrollTop);
-
-        const left = freezenhorizontaldata[4];
-
-        freezen_rowindex += offset;
+    if (horizontalData != null && row != null) {
+        let freezen_rowindex = horizontalData.boundary + sortedIndex(horizontalData.cumulative, ctx.scrollTop);
 
         if (row >= ctx.visibledatarow.length) {
             row = ctx.visibledatarow.length - 1;
@@ -183,11 +160,8 @@ export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) 
         const row_px = ctx.visibledatarow[row];
         const freezen_px = ctx.visibledatarow[freezen_rowindex];
 
-        if (row_px <= freezen_px + left) {
+        if (row_px <= freezen_px + horizontalData.edge) {
             ctx.scrollTop = 0;
-            // setTimeout(function () {
-            //   $("#luckysheet-scrollbar-y").scrollTop(0);
-            // }, 100);
         }
     }
 }

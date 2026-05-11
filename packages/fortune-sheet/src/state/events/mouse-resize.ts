@@ -25,16 +25,16 @@ export function fixPositionOnFrozenCells(
 
     if (!freeze) return { x, y, inHorizontalFreeze, inVerticalFreeze };
 
-    const freezenverticaldata = freeze?.vertical?.freezenverticaldata;
-    const freezenhorizontaldata = freeze?.horizontal?.freezenhorizontaldata;
+    const verticalData = freeze?.vertical?.freezenverticaldata;
+    const horizontalData = freeze?.horizontal?.freezenhorizontaldata;
 
-    if (freezenverticaldata != null && mouseX < freezenverticaldata[0] - freezenverticaldata[2]) {
-        x = mouseX + freezenverticaldata[2];
+    if (verticalData != null && mouseX < verticalData.pos - verticalData.scroll) {
+        x = mouseX + verticalData.scroll;
         inVerticalFreeze = true;
     }
 
-    if (freezenhorizontaldata != null && mouseY < freezenhorizontaldata[0] - freezenhorizontaldata[2]) {
-        y = mouseY + freezenhorizontaldata[2];
+    if (horizontalData != null && mouseY < horizontalData.pos - horizontalData.scroll) {
+        y = mouseY + horizontalData.scroll;
         inHorizontalFreeze = true;
     }
 

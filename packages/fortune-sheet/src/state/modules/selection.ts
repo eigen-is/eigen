@@ -1989,14 +1989,14 @@ export function fixRowStyleOverflowInFreeze(
 
     const ret: ReturnType<typeof fixRowStyleOverflowInFreeze> = {};
     const { scrollTop } = ctx;
-    const freezenhorizontaldata = freeze.horizontal?.freezenhorizontaldata;
+    const horizontalData = freeze.horizontal?.freezenhorizontaldata;
 
     let rangeshow = true;
 
-    if (freezenhorizontaldata != null) {
-        const freezenTop = freezenhorizontaldata[0];
-        const freezen_rowindex = freezenhorizontaldata[1];
-        const offTop = scrollTop - freezenhorizontaldata[2];
+    if (horizontalData != null) {
+        const freezenTop = horizontalData.pos;
+        const freezen_rowindex = horizontalData.boundary;
+        const offTop = scrollTop - horizontalData.scroll;
 
         const row = ctx.visibledatarow[r2];
         const row_pre = r1 - 1 === -1 ? 0 : ctx.visibledatarow[r1 - 1];
@@ -2048,14 +2048,14 @@ export function fixColumnStyleOverflowInFreeze(
 
     const ret: ReturnType<typeof fixColumnStyleOverflowInFreeze> = {};
     const { scrollLeft } = ctx;
-    const freezenverticaldata = freeze.vertical?.freezenverticaldata;
+    const verticalData = freeze.vertical?.freezenverticaldata;
 
     let rangeshow = true;
 
-    if (freezenverticaldata != null) {
-        const freezenLeft = freezenverticaldata[0];
-        const freezen_colindex = freezenverticaldata[1];
-        const offLeft = scrollLeft - freezenverticaldata[2];
+    if (verticalData != null) {
+        const freezenLeft = verticalData.pos;
+        const freezen_colindex = verticalData.boundary;
+        const offLeft = scrollLeft - verticalData.scroll;
 
         const col = ctx.visibledatacolumn[c2];
         const col_pre = c1 - 1 === -1 ? 0 : ctx.visibledatacolumn[c1 - 1];
