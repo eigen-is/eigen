@@ -117,8 +117,7 @@ export class FormulaCache {
 
     rangeResizeTo?: HTMLDivElement[];
 
-    // biome-ignore lint/suspicious/noExplicitAny: assigned to Node, HTMLSpanElement, and NodeList in formula-editor.ts; reads use Node API — no shared base type
-    rangeSetValueTo?: any;
+    rangeSetValueTo?: Node | null;
 
     rangeIndex?: number;
 

@@ -466,13 +466,8 @@ export function getAllFunctionGroup(ctx: Context): FormulaCell[] {
 
         ret = ret.concat(calcChain);
 
-        for (let j = 0; j < dynamicArray_compute.length; j += 1) {
-            const d = dynamicArray_compute[0];
-            ret.push({
-                r: d.r,
-                c: d.c,
-                id: d.id,
-            });
+        for (const d of dynamicArray_compute) {
+            ret.push({ r: d.r, c: d.c, id: d.id });
         }
     }
 

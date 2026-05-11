@@ -466,44 +466,29 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
     currFile.config = cfg;
     currFile.dataVerification = dataVerification;
 
-    // Latent pre-existing bug: the cloned CF rule list (cdformat) is built up
-    // and pushed to but never written back to ctx.luckysheetfile, so the format
-    // painter doesn't actually propagate CF rules. Kept as-is to scope this
-    // pass to type tightening; see TODO-FORTUNE-SHEETS.md follow-up.
-    let cdformat: ConditionalFormatRule[] | null = null;
     const copyIndex = getSheetIndex(ctx, copySheetIndex);
-    if (!copyIndex) return;
+    if (copyIndex == null) return;
     const ruleArr: ConditionalFormatRule[] | undefined = cloneDeep(
         ctx.luckysheetfile[copyIndex].luckysheet_conditionformat_save,
     );
+    if (isNil(ruleArr) || ruleArr.length === 0) return;
 
-    if (!isNil(ruleArr) && ruleArr.length > 0) {
-        const currentIndex = getSheetIndex(ctx, ctx.currentSheetId) as number;
-        cdformat = cloneDeep(ctx.luckysheetfile[currentIndex].luckysheet_conditionformat_save) ?? [];
+    const cdformat: ConditionalFormatRule[] = cloneDeep(currFile.luckysheet_conditionformat_save) ?? [];
+    const copyRangeBox: SingleRange = { row: [c_r1, c_r2], column: [c_c1, c_c2] };
+    const applyRangeBox: SingleRange = { row: [minh, maxh], column: [minc, maxc] };
 
-        for (let i = 0; i < ruleArr.length; i += 1) {
-            const cdformat_cellrange = ruleArr[i].cellrange;
-            let emptyRange: SingleRange[] = [];
-
-            for (let j = 0; j < cdformat_cellrange.length; j += 1) {
-                const range = cfSplitRange(
-                    cdformat_cellrange[j],
-                    { row: [c_r1, c_r2], column: [c_c1, c_c2] },
-                    { row: [minh, maxh], column: [minc, maxc] },
-                    'operatePart',
-                );
-
-                if (range.length > 0) {
-                    emptyRange = emptyRange.concat(range);
-                }
-            }
-
-            if (emptyRange.length > 0) {
-                ruleArr[i].cellrange = [{ row: [minh, maxh], column: [minc, maxc] }];
-                cdformat.push(ruleArr[i]);
-            }
+    for (const rule of ruleArr) {
+        const overlaps = rule.cellrange.some(
+            (cr) => cfSplitRange(cr, copyRangeBox, applyRangeBox, 'operatePart').length > 0,
+        );
+        if (overlaps) {
+            // Fresh per-rule box so a later mutation on one rule can't bleed into the others.
+            rule.cellrange = [{ row: [...applyRangeBox.row], column: [...applyRangeBox.column] }];
+            cdformat.push(rule);
         }
     }
+
+    currFile.luckysheet_conditionformat_save = cdformat;
 }
 
 // shift + arrow key / ctrl + shift + arrow key functionality

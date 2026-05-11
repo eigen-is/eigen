@@ -340,74 +340,46 @@ export function getrangeseleciton() {
 function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Context) {
     const { functionlist } = locale(ctx);
     if (isEmpty(ctx.formulaCache.functionlistMap)) {
-        for (let i = 0; i < functionlist.length; i += 1) {
-            ctx.formulaCache.functionlistMap[functionlist[i].n] = functionlist[i];
+        for (const fn of functionlist) {
+            ctx.formulaCache.functionlistMap[fn.n] = fn;
         }
     }
-    if (!currSelection) {
-        return null;
-    }
 
-    const $prev = currSelection;
     const $span = $editer.querySelectorAll('span');
     const currentIndex = indexOf(currSelection.parentNode?.childNodes, currSelection);
-    let i = currentIndex;
+    if (currentIndex < 0 || !$span[currentIndex]) return null;
 
-    if ($prev == null) {
-        return null;
+    if ($span[currentIndex].classList.contains('luckysheet-formula-text-func')) {
+        return $span[currentIndex].textContent;
     }
 
-    let funcName = null;
-    let paramindex = null;
+    let exceptIndex: [number, number] = [-1, -1];
+    for (let i = currentIndex - 1; i > 0; i -= 1) {
+        const $cur = $span[i];
+        if (
+            !$cur.classList.contains('luckysheet-formula-text-func') &&
+            !(trim($cur.textContent || '').toUpperCase() in ctx.formulaCache.functionlistMap)
+        ) {
+            continue;
+        }
 
-    if ($span[i].classList.contains('luckysheet-formula-text-func')) {
-        funcName = $span[i].textContent;
-    } else {
-        let $cur = null;
-        let exceptIndex = [-1, -1];
-
-        // eslint-disable-next-line no-plusplus
-        while (--i > 0) {
-            $cur = $span[i];
-
-            if (
-                $cur.classList.contains('luckysheet-formula-text-func') ||
-                trim($cur.textContent || '').toUpperCase() in ctx.formulaCache.functionlistMap
-            ) {
-                funcName = $cur.textContent;
-                paramindex = null;
-                let endstate = true;
-
-                for (let a = i; a <= currentIndex; a += 1) {
-                    if (!paramindex) {
-                        paramindex = 0;
-                    }
-
-                    if (a >= exceptIndex[0] && a <= exceptIndex[1]) {
-                        continue;
-                    }
-
-                    $cur = $span[a];
-                    if ($cur.classList.contains('luckysheet-formula-text-rpar')) {
-                        exceptIndex = [i, a];
-                        funcName = null;
-                        endstate = false;
-                        break;
-                    }
-
-                    if ($cur.classList.contains('luckysheet-formula-text-comma')) {
-                        paramindex += 1;
-                    }
-                }
-
-                if (endstate) {
-                    break;
-                }
+        // The function header at $span[i] may not actually bracket the caret —
+        // if any rpar appears between i and currentIndex, this is a closed call,
+        // not the enclosing one. Skip it (recording the bracket span in
+        // exceptIndex so nested closed calls aren't reconsidered).
+        let closedAt = -1;
+        for (let a = i; a <= currentIndex; a += 1) {
+            if (a >= exceptIndex[0] && a <= exceptIndex[1]) continue;
+            if ($span[a].classList.contains('luckysheet-formula-text-rpar')) {
+                closedAt = a;
+                break;
             }
         }
+        if (closedAt === -1) return $cur.textContent;
+        exceptIndex = [i, closedAt];
     }
 
-    return funcName;
+    return null;
 }
 
 export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
@@ -468,10 +440,9 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
 
         if (txt.length === 0 && anchorElement.querySelectorAll('span').length > 1) {
             const ahr = anchorElement.querySelectorAll('span');
-            txt = trim(ahr[ahr.length - 2].innerText);
-
-            txt = trim(ahr[ahr.length - 2].innerText);
-            ctx.formulaCache.rangeSetValueTo = ahr;
+            const prev = ahr[ahr.length - 2];
+            txt = trim(prev.innerText);
+            ctx.formulaCache.rangeSetValueTo = prev;
         }
 
         const lasttxt = txt.substring(txt.length - 1, 1);

@@ -459,7 +459,9 @@ export function handleGlobalKeyDown(
         ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
         e.preventDefault();
     } else if (kstr === 'F4' && ctx.luckysheetCellUpdate.length > 0) {
-        // TODO: toggle absolute/relative refs in the formula editor (formula.setfreezonFuc)
+        // F4 should cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1).
+        // Tracked as feature work in docs/TODO-FORTUNE-SHEETS.md; for now just suppress
+        // the browser default so the address-bar dropdown doesn't open mid-edit.
         e.preventDefault();
     } else if (kstr === 'Escape' && ctx.luckysheetCellUpdate.length > 0) {
         cancelNormalSelected(ctx);
