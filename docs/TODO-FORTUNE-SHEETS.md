@@ -25,8 +25,10 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    **Canonical types landed in `@workspace/lib/sheets`:** `MergeCell`,
    `BorderInfo` (with `BorderRange`/`BorderType`/`RangeBorderInfo`/
    `CellBorderInfo`), `DataVerificationRule`. State-only entry shapes
-   (`FilterEntry`, `CalcChainEntry`, `AlternateFormatEntry`) live in
-   `state/types.ts`.
+   (`FilterEntry`, `AlternateFormatEntry`) live in `state/types.ts`.
+   `CalcChainEntry` and `AncestorFormulaCell` are engine-canonical (formula
+   dep graph + calc-chain node) — defined in `engine/types.ts` and
+   re-exported through `state/types.ts`.
 
    **Loose typing kept** (each with a documented biome-ignore + WHY pointing
    here): all previously-listed sites are now closed — see Tightened entries
@@ -201,6 +203,21 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      `getColumnWidth`: redundant `Number(item)` calls dropped (param is
      already `number[]`), inline `size` variable inlined, and `forEach` →
      `for-of` per the project's for-of-over-array-forEach preference.
+   - Cross-area type dedup driven by a state+engine+lib type audit:
+     `AncestorFormulaCell` (formula dep-graph adjacency, used by both engine
+     `FormulaCellInfo` and state `FormulaCell`) was declared identically in
+     `engine/types.ts` and `state/types.ts`; hoisted to engine and exported,
+     state imports. `CalculationChainEntry` (engine) and `CalcChainEntry`
+     (state) had the same shape modulo state's optional `index?`; unified
+     under engine's `CalcChainEntry` (rename + `index?` added), four call-
+     sites renamed (`engine/cell-resolver.ts`, `engine/index.ts`,
+     `state/modules/formula-cache.ts`, package root `index.ts`). Local
+     `FilterSelect` type in `state/modules/rowcol.ts:15` was a shadow of
+     lib's `SingleRange`; dropped, `FilterObj` uses `SingleRange` directly.
+     Side-fixes on touch in `state/types.ts`: `Sheet.luckysheet_selection_range`
+     and `Sheet.filter_select` field types flipped from inline
+     `{ row: number[]; column: number[] }` to `SingleRange[]` /
+     `SingleRange` — same lib shape, three fewer inline declarations.
 
    **Group F `@ts-expect-error` sites — closed on `biome-state-cleanup`
    (2026-05-11):** all 12 directives in `state/` + `components/Workbook` are

@@ -59,7 +59,10 @@ export type FormulaDependency = {
     sheetId: string | undefined;
 };
 
-type AncestorFormulaCell = {
+// Dependency-graph adjacency: maps the `${r}_${c}_${index}` key of each
+// adjacent formula cell to a refcount. Used as both the `parents` and
+// `chidren` field type on FormulaCellInfo (engine) and FormulaCell (state).
+export type AncestorFormulaCell = {
     [rxcxix: string]: number;
 };
 
@@ -90,14 +93,18 @@ export type CellResolver = {
 export type SheetInfo = {
     id: string;
     name: string;
-    calculationChain: CalculationChainEntry[];
+    calculationChain: CalcChainEntry[];
     dynamicArrayCompute: unknown[];
 };
 
-export type CalculationChainEntry = {
+// Calc-chain entry: dependency-graph node for a formula cell. Engine producers
+// always stamp `r`/`c`/`id`; state's UI ordering layer adds an optional
+// `index` used by formula-cache.execFunctionExist consumers.
+export type CalcChainEntry = {
     r: number;
     c: number;
     id: string;
+    index?: number;
 };
 
 export type EvaluationResult = {

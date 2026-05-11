@@ -51,7 +51,7 @@ export {
     type RowColErrorCode,
 } from './rowcol';
 export type {
-    CalculationChainEntry,
+    CalcChainEntry,
     CellResolver,
     EvaluationResult,
     FormulaEngineState,

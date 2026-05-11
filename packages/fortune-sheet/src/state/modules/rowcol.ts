@@ -12,8 +12,7 @@ import type { Context } from '../context';
 import type { FilterEntry, FormulaCell, Sheet, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
-type FilterSelect = { row: number[]; column: number[] };
-type FilterObj = { filter_select: FilterSelect | null; filter: Record<string, FilterEntry> | null };
+type FilterObj = { filter_select: SingleRange | null; filter: Record<string, FilterEntry> | null };
 
 const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet) => {
     Object.entries(merge_new).forEach(([, v]) => {

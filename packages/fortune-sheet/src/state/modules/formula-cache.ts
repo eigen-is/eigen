@@ -1,7 +1,7 @@
 import { isNil } from 'es-toolkit/compat';
 import { FormulaEngine, isFormula } from '../../engine/formula-engine';
 import type {
-    CalculationChainEntry,
+    CalcChainEntry,
     Cell,
     CellMatrix,
     CellResolver,
@@ -133,7 +133,7 @@ export class FormulaCache {
 
     functionlistMap: Record<string, unknown>;
 
-    execFunctionExist?: CalculationChainEntry[];
+    execFunctionExist?: CalcChainEntry[];
 
     engine: FormulaEngine;
 

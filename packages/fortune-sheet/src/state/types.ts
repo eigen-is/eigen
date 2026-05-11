@@ -8,19 +8,30 @@ import type {
     Op,
 } from '@workspace/lib/sheets';
 import type { Patch as ImmerPatch } from 'immer';
-import type { Cell, CellMatrix, CellWithRowAndCol, EditorSheetConfigExtras, Range, SingleRange } from '../engine/types';
+import type {
+    AncestorFormulaCell,
+    CalcChainEntry,
+    Cell,
+    CellMatrix,
+    CellWithRowAndCol,
+    EditorSheetConfigExtras,
+    Range,
+    SingleRange,
+} from '../engine/types';
 import type { PatchOptions } from './utils';
 
-// Shared sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
-// Range, …) live in @workspace/lib/sheets and are re-exported through
-// ../engine/types — surfaced here so state-side consumers don't have to know
-// the canonical home. `Op`, `BorderInfo`, `ConditionalFormatRule`, and
-// `DataVerificationRule` live in lib too (the BE document reader replays ops
-// without the engine, the HTML export reads borderInfo and CF rules, and
-// data-validation rules are touched by the editor + canvas painter); none is
-// engine-conceptual so they're re-exported directly from lib here.
+// Types surfaced here so state-side consumers don't have to know the canonical
+// home. Sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
+// Range) live in @workspace/lib/sheets and re-export through ../engine/types;
+// Op / BorderInfo / ConditionalFormatRule / DataVerificationRule live in lib
+// directly (the BE document reader replays ops without the engine, the HTML
+// export reads borderInfo and CF rules, and data-validation rules are touched
+// by the editor + canvas painter — none is engine-conceptual). AncestorFormulaCell
+// and CalcChainEntry are engine-only (formula dep graph + calc-chain node).
 export type {
+    AncestorFormulaCell,
     BorderInfo,
+    CalcChainEntry,
     Cell,
     CellMatrix,
     CellWithRowAndCol,
@@ -113,11 +124,6 @@ export type Image = {
     mediaName: string;
 };
 
-// Calc-chain entry: dependency-graph node for a formula cell. Engine producers
-// always stamp `id`; consumers in state/modules/rowcol.ts treat the entry as
-// assignable to FormulaCell (which requires id).
-export type CalcChainEntry = { r: number; c: number; id: string; index?: number };
-
 // Per-column filter rule state. Producers in state/modules/filter.ts /
 // rowcol.ts set every field. Variable-shape rule details (FilterMethod,
 // FilterCustomDetail, …) flow through the `[key]: unknown` overflow.
@@ -151,10 +157,7 @@ export type Sheet = Omit<LibSheet, 'config'> & {
     status?: number;
     hide?: number;
     luckysheet_select_save?: Selection[];
-    luckysheet_selection_range?: {
-        row: number[];
-        column: number[];
-    }[];
+    luckysheet_selection_range?: SingleRange[];
     calcChain?: CalcChainEntry[];
     defaultRowHeight?: number;
     defaultColWidth?: number;
@@ -164,7 +167,7 @@ export type Sheet = Omit<LibSheet, 'config'> & {
     pivotTable?: unknown;
     isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
-    filter_select?: { row: number[]; column: number[] };
+    filter_select?: SingleRange;
     luckysheet_alternateformat_save?: AlternateFormatEntry[];
     dataVerification?: Record<string, DataVerificationRule>;
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
@@ -335,10 +338,6 @@ export type GlobalCache = {
 };
 
 // FORMULA
-type AncestorFormulaCell = {
-    [rxcxix: string]: number;
-};
-
 export type FormulaCell = {
     r: number;
     c: number;

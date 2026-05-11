@@ -39,7 +39,7 @@ export {
     toLabel,
 } from './engine/parser';
 export type {
-    CalculationChainEntry,
+    CalcChainEntry,
     Cell,
     CellMatrix,
     CellResolver,
