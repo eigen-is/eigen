@@ -41,14 +41,8 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      ~56 consumers (most index `.row[0]` as plain `number`). The honest
      fix is to widen lib's `SingleRange` and add narrows at every read site
      that needs a real number.
-   - `state/modules/border.ts::getBorderInfoComputeRange` returns
-     `Record<string, any>` — every caller (paste/dropCell/moveCells/selection)
-     now captures into a local `computeEntry` after the borderInfo cleanup
-     (2026-05-11), so the original "TS can't prove non-null across template-
-     literal re-indexing" justification no longer holds. Tightening the return
-     to `ComputedBorderMap` would surface the pre-existing tightrope in
-     `paste.ts:1196-1207` (slash branch reads from `minh`/`minc` key rather
-     than the `mth`/`mtc` key the guard checked).
+   - ~~`state/modules/border.ts::getBorderInfoComputeRange` returns
+     `Record<string, any>`~~ — closed 2026-05-11, see below.
 
    **Tightened on `biome-state-cleanup` (2026-05-11)** — landed alongside Group F:
    - `Sheet.luckysheet_conditionformat_save` is now `ConditionalFormatRule[]`.
@@ -87,6 +81,30 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      Side-fixes: two commented-out jQuery scrollbar callbacks deleted; the
      `boundary + offset` accumulation in `scrollToFrozenRowCol` collapsed
      from three statements to one per axis.
+   - `getBorderInfoComputeRange` / `getBorderInfoCompute` return
+     `ComputedBorderMap` (was `Record<string, any>`). `ComputedBorderEntry`
+     reuses lib's canonical `BorderSide` for each side; the producer coerces
+     `RangeBorderInfo.style` from `number | string` to `number` once at the
+     entry, so the 8 consumer sites (canvas/paste/dropCell/moveCells/selection)
+     assign computed sides into `CellBorderInfo.value.{l,r,t,b}` without per-
+     site casts. `selection.ts::rangeValueToHtml` now captures
+     `borderInfoCompute[\`${r}_${c}\`]` once per cell into a local before
+     reading sides — was repeated template-literal indexing across the
+     merged-cell histogram and the two non-merged blocks (~190 LOC dropped).
+     Side-fixes: histogram bump pattern factored into a `bumpHistogram`
+     helper (was 8 inlined `isNil`/`+= 1` quadruples); pre-existing
+     `${r}_${c}` typo at the `bl_obj` (left edge of merged cell) site
+     fixed — was sampling top-left's `.l.style` for every cell on the left
+     edge instead of the per-cell value, masking mixed-style edges on
+     non-uniform merges; non-merged border CSS factored into a
+     `cellBorderCss(border)` helper (was 4 × ~5 LOC duplicated across two
+     branches). Pre-existing slash-branch bug in `paste.ts` (multi-tile
+     slash paste using `minh`/`minc` offsets) committed as a separate fix
+     ahead of the type tightening; a follow-up reorder swaps the slash-copy
+     branch (now `else if (computeEntry?.s)`) ahead of the within-sheet
+     overlap clear branch (`else if (borderInfoCompute[\`${h}_${c}\`])`) so
+     a slash source whose computed-map coordinates collide with another
+     bordered cell in the source range no longer drops silently.
 
    Once the remaining producers (authority, formula-range) are migrated in
    lockstep, state's `Sheet` / `SheetConfig` can collapse into

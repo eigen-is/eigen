@@ -1,4 +1,4 @@
-import type { CellBorderInfo, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import type { BorderSide, CellBorderInfo, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber, kebabCase, map } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine';
@@ -6,7 +6,7 @@ import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
 import type { Cell, Freezen, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
-import { getBorderInfoCompute } from './border';
+import { type ComputedBorderEntry, getBorderInfoCompute } from './border';
 import {
     getCellValue,
     getDataBySelectionNoCopy,
@@ -25,10 +25,22 @@ export const selectionCache = {
 
 // HTML copy-export builds a histogram of border colors and line styles along
 // each side of a merged cell so it can pick the dominant value (>= half the
-// edge length) for the rendered `<td>` border. Keys come from
-// `borderInfoCompute[r_c].{l,r,t,b}.{color,style}` — color is always a string,
-// style is `number | string` but coerces to string when used as a key.
+// edge length) for the rendered `<td>` border.
 type BorderEdgeHistogram = { color: Record<string, number>; style: Record<string, number> };
+
+function bumpHistogram(hist: BorderEdgeHistogram, side: BorderSide) {
+    hist.style[side.style] = (hist.style[side.style] ?? 0) + 1;
+    hist.color[side.color] = (hist.color[side.color] ?? 0) + 1;
+}
+
+function cellBorderCss(border: ComputedBorderEntry): string {
+    let css = '';
+    if (border.l) css += `border-left:${getHtmlBorderStyle(border.l.style, border.l.color)}`;
+    if (border.r) css += `border-right:${getHtmlBorderStyle(border.r.style, border.r.color)}`;
+    if (border.b) css += `border-bottom:${getHtmlBorderStyle(border.b.style, border.b.color)}`;
+    if (border.t) css += `border-top:${getHtmlBorderStyle(border.t.style, border.t.color)}`;
+    return css;
+}
 
 export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
     const { scrollLeft, scrollTop } = ctx;
@@ -1485,88 +1497,20 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
 
                             for (let bd_r = r; bd_r < r + cell.mc.rs!; bd_r += 1) {
                                 for (let bd_c = c; bd_c < c + cell.mc.cs!; bd_c += 1) {
-                                    if (
-                                        bd_r === r &&
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] &&
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].t
-                                    ) {
-                                        const linetype = borderInfoCompute[`${bd_r}_${bd_c}`].t.style;
-                                        const bcolor = borderInfoCompute[`${bd_r}_${bd_c}`].t.color;
+                                    const cellBorder = borderInfoCompute[`${bd_r}_${bd_c}`];
+                                    if (!cellBorder) continue;
 
-                                        if (isNil(bt_obj.style[linetype])) {
-                                            bt_obj.style[linetype] = 1;
-                                        } else {
-                                            bt_obj.style[linetype] += 1;
-                                        }
-
-                                        if (isNil(bt_obj.color[bcolor])) {
-                                            bt_obj.color[bcolor] = 1;
-                                        } else {
-                                            bt_obj.color[bcolor] += 1;
-                                        }
+                                    if (bd_r === r && cellBorder.t) {
+                                        bumpHistogram(bt_obj, cellBorder.t);
                                     }
-
-                                    if (
-                                        bd_r === r + cell.mc.rs! - 1 &&
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] &&
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].b
-                                    ) {
-                                        const linetype = borderInfoCompute[`${bd_r}_${bd_c}`].b.style;
-                                        const bcolor = borderInfoCompute[`${bd_r}_${bd_c}`].b.color;
-
-                                        if (isNil(bb_obj.style[linetype])) {
-                                            bb_obj.style[linetype] = 1;
-                                        } else {
-                                            bb_obj.style[linetype] += 1;
-                                        }
-
-                                        if (isNil(bb_obj.color[bcolor])) {
-                                            bb_obj.color[bcolor] = 1;
-                                        } else {
-                                            bb_obj.color[bcolor] += 1;
-                                        }
+                                    if (bd_r === r + cell.mc.rs! - 1 && cellBorder.b) {
+                                        bumpHistogram(bb_obj, cellBorder.b);
                                     }
-
-                                    if (
-                                        bd_c === c &&
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] &&
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].l
-                                    ) {
-                                        const linetype = borderInfoCompute[`${r}_${c}`].l.style;
-                                        const bcolor = borderInfoCompute[`${bd_r}_${bd_c}`].l.color;
-
-                                        if (isNil(bl_obj.style[linetype])) {
-                                            bl_obj.style[linetype] = 1;
-                                        } else {
-                                            bl_obj.style[linetype] += 1;
-                                        }
-
-                                        if (isNil(bl_obj.color[bcolor])) {
-                                            bl_obj.color[bcolor] = 1;
-                                        } else {
-                                            bl_obj.color[bcolor] += 1;
-                                        }
+                                    if (bd_c === c && cellBorder.l) {
+                                        bumpHistogram(bl_obj, cellBorder.l);
                                     }
-
-                                    if (
-                                        bd_c === c + cell.mc.cs! - 1 &&
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] &&
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].r
-                                    ) {
-                                        const linetype = borderInfoCompute[`${bd_r}_${bd_c}`].r.style;
-                                        const bcolor = borderInfoCompute[`${bd_r}_${bd_c}`].r.color;
-
-                                        if (isNil(br_obj.style[linetype])) {
-                                            br_obj.style[linetype] = 1;
-                                        } else {
-                                            br_obj.style[linetype] += 1;
-                                        }
-
-                                        if (isNil(br_obj.color[bcolor])) {
-                                            br_obj.color[bcolor] = 1;
-                                        } else {
-                                            br_obj.color[bcolor] += 1;
-                                        }
+                                    if (bd_c === c + cell.mc.cs! - 1 && cellBorder.r) {
+                                        bumpHistogram(br_obj, cellBorder.r);
                                     }
                                 }
                             }
@@ -1662,35 +1606,9 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                         continue;
                     }
                 } else {
-                    // Border
-                    if (borderInfoCompute?.[`${r}_${c}`]) {
-                        // Left border
-                        if (borderInfoCompute[`${r}_${c}`].l) {
-                            const linetype = borderInfoCompute[`${r}_${c}`].l.style;
-                            const bcolor = borderInfoCompute[`${r}_${c}`].l.color;
-                            style += `border-left:${getHtmlBorderStyle(linetype, bcolor)}`;
-                        }
-
-                        // Right border
-                        if (borderInfoCompute[`${r}_${c}`].r) {
-                            const linetype = borderInfoCompute[`${r}_${c}`].r.style;
-                            const bcolor = borderInfoCompute[`${r}_${c}`].r.color;
-                            style += `border-right:${getHtmlBorderStyle(linetype, bcolor)}`;
-                        }
-
-                        // Bottom border
-                        if (borderInfoCompute[`${r}_${c}`].b) {
-                            const linetype = borderInfoCompute[`${r}_${c}`].b.style;
-                            const bcolor = borderInfoCompute[`${r}_${c}`].b.color;
-                            style += `border-bottom:${getHtmlBorderStyle(linetype, bcolor)}`;
-                        }
-
-                        // Top border
-                        if (borderInfoCompute[`${r}_${c}`].t) {
-                            const linetype = borderInfoCompute[`${r}_${c}`].t.style;
-                            const bcolor = borderInfoCompute[`${r}_${c}`].t.color;
-                            style += `border-top:${getHtmlBorderStyle(linetype, bcolor)}`;
-                        }
+                    const cellBorder = borderInfoCompute?.[`${r}_${c}`];
+                    if (cellBorder) {
+                        style += cellBorderCss(cellBorder);
                     }
                 }
 
@@ -1726,35 +1644,9 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
             } else {
                 let style = '';
 
-                // Border
-                if (borderInfoCompute?.[`${r}_${c}`]) {
-                    // Left border
-                    if (borderInfoCompute[`${r}_${c}`].l) {
-                        const linetype = borderInfoCompute[`${r}_${c}`].l.style;
-                        const bcolor = borderInfoCompute[`${r}_${c}`].l.color;
-                        style += `border-left:${getHtmlBorderStyle(linetype, bcolor)}`;
-                    }
-
-                    // Right border
-                    if (borderInfoCompute[`${r}_${c}`].r) {
-                        const linetype = borderInfoCompute[`${r}_${c}`].r.style;
-                        const bcolor = borderInfoCompute[`${r}_${c}`].r.color;
-                        style += `border-right:${getHtmlBorderStyle(linetype, bcolor)}`;
-                    }
-
-                    // Bottom border
-                    if (borderInfoCompute[`${r}_${c}`].b) {
-                        const linetype = borderInfoCompute[`${r}_${c}`].b.style;
-                        const bcolor = borderInfoCompute[`${r}_${c}`].b.color;
-                        style += `border-bottom:${getHtmlBorderStyle(linetype, bcolor)}`;
-                    }
-
-                    // Top border
-                    if (borderInfoCompute[`${r}_${c}`].t) {
-                        const linetype = borderInfoCompute[`${r}_${c}`].t.style;
-                        const bcolor = borderInfoCompute[`${r}_${c}`].t.color;
-                        style += `border-top:${getHtmlBorderStyle(linetype, bcolor)}`;
-                    }
+                const cellBorder = borderInfoCompute?.[`${r}_${c}`];
+                if (cellBorder) {
+                    style += cellBorderCss(cellBorder);
                 }
 
                 column += '';

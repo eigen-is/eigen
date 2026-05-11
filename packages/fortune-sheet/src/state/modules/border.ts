@@ -1,28 +1,26 @@
-import type { MergeCell } from '@workspace/lib/sheets';
+import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
-// Side of a computed cell border. Style accepts string because the FE toolbar
-// pushes `'1'..'13'` into RangeBorderInfo.style; the cell variant in
-// CellBorderInfo is `number`. Canvas painter normalises via `.toString()`.
-type ComputedBorderSide = { color: string; style: number | string };
-type ComputedBorderEntry = {
-    s?: ComputedBorderSide | null;
-    l?: ComputedBorderSide | null;
-    r?: ComputedBorderSide | null;
-    t?: ComputedBorderSide | null;
-    b?: ComputedBorderSide | null;
+// Resolved per-cell border map keyed by `${row}_${col}`. Each side may be:
+//   undefined → no border ever set on this side
+//   null      → border explicitly cleared (preserved across serialize)
+//   BorderSide→ active border
+// Producers (paste/dropCell/moveCells/selection) write entries back into
+// `CellBorderInfo.value` whose sides are typed the same way, so the shapes
+// line up without per-call coercion.
+export type ComputedBorderEntry = {
+    s?: BorderSide | null;
+    l?: BorderSide | null;
+    r?: BorderSide | null;
+    t?: BorderSide | null;
+    b?: BorderSide | null;
 };
-type ComputedBorderMap = Record<string, ComputedBorderEntry>;
+export type ComputedBorderMap = Record<string, ComputedBorderEntry>;
 
-// Internally the entries are `ComputedBorderEntry`; the return type stays
-// loose because paste.ts / selection.ts / moveCells.ts / dropCell.ts read the
-// map via repeated template-literal indexing where TS cannot prove non-null
-// after `if (m[k].l)` narrowing. Tighten when those callers are cleaned up
-// under TODO #1.
 export function getBorderInfoComputeRange(
     ctx: Context,
     dataset_row_st: number,
@@ -30,8 +28,7 @@ export function getBorderInfoComputeRange(
     dataset_col_st: number,
     dataset_col_ed: number,
     sheetId?: string,
-    // biome-ignore lint/suspicious/noExplicitAny: see preceding comment
-): Record<string, any> {
+): ComputedBorderMap {
     const borderInfoCompute: ComputedBorderMap = {};
     const flowdata = getFlowdata(ctx);
 
@@ -56,7 +53,11 @@ export function getBorderInfoComputeRange(
         const entry = borderInfo[i];
 
         if (entry.rangeType === 'range') {
-            const { borderType, color: borderColor, style: borderStyle, range: borderRange } = entry;
+            const { borderType, color: borderColor, range: borderRange } = entry;
+            // RangeBorderInfo.style is `number | string` (toolbar pushes '1'..'13'
+            // as strings); coerce to number here so ComputedBorderEntry sides
+            // match the canonical BorderSide shape end-to-end.
+            const borderStyle = typeof entry.style === 'string' ? Number(entry.style) : entry.style;
 
             for (let j = 0; j < borderRange.length; j += 1) {
                 let bd_r1 = borderRange[j].row[0];
@@ -1309,9 +1310,7 @@ export function getBorderInfoComputeRange(
     return borderInfoCompute;
 }
 
-// Same loose return as `getBorderInfoComputeRange` — see comment there.
-// biome-ignore lint/suspicious/noExplicitAny: see comment on getBorderInfoComputeRange
-export function getBorderInfoCompute(ctx: Context, sheetId?: string): Record<string, any> {
+export function getBorderInfoCompute(ctx: Context, sheetId?: string): ComputedBorderMap {
     const flowdata = getFlowdata(ctx);
 
     let data: CellMatrix | null | undefined;
