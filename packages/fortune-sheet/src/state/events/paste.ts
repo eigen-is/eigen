@@ -1194,12 +1194,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
 
                         cfg.borderInfo.push(bd_obj);
                     } else if (computeEntry) {
-                        // Pre-existing: the `minh`/`minc` offsets here differ from the
-                        // `mth`/`mtc` offsets in branches 1 & 2, so for multi-tile paste this
-                        // samples the first tile's slash border regardless of current tile. The
-                        // `!` flags the latent fragility — `getBorderInfoComputeRange` still
-                        // returns `Record<string, any>` so TS won't catch a missing key today.
-                        const slashSide = borderInfoCompute[`${c_r1 + h - minh}_${c_c1 + c - minc}`].s!;
+                        const slashSide = computeEntry.s!;
                         const bd_obj: RangeBorderInfo = {
                             rangeType: 'range',
                             borderType: 'border-slash',
