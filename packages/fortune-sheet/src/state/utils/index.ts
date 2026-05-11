@@ -30,13 +30,8 @@ export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean, ct
 
 // color: convert rgb to hex
 export function rgbToHex(color: string): string {
-    let rgb;
-
-    if (color.indexOf('rgba') > -1) {
-        rgb = color.replace('rgba(', '').replace(')', '').split(',');
-    } else {
-        rgb = color.replace('rgb(', '').replace(')', '').split(',');
-    }
+    const stripped = color.indexOf('rgba') > -1 ? color.replace('rgba(', '') : color.replace('rgb(', '');
+    const rgb = stripped.replace(')', '').split(',');
 
     const r = Number(rgb[0]);
     const g = Number(rgb[1]);
@@ -153,14 +148,13 @@ export function getNowDateTime(format: number) {
     return time;
 }
 
-// replace ${xxx} placeholders in temp with the corresponding values
-// temp: a string (here an HTML string), dataarry: an object like {"xxx": "replacement value"}
-// e.g. luckysheet.replaceHtml("${image}", {"image":"abc","jskdjslf":"abc"})  ==>  abc
-export function replaceHtml(temp: string, dataarry: any) {
+// Replace ${xxx} placeholders in `temp` (an HTML/string template) with values
+// from `dataarry`. Keys not present in `dataarry` are left in place verbatim.
+export function replaceHtml(temp: string, dataarry: Record<string, string | number>): string {
     return temp.replace(/\$\{([\w]+)\}/g, (s1, s2) => {
         const s = dataarry[s2];
         if (typeof s !== 'undefined') {
-            return s;
+            return String(s);
         }
         return s1;
     });

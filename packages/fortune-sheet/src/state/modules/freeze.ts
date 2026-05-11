@@ -116,7 +116,7 @@ export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) 
     const select_save = ctx.luckysheet_select_save;
     if (!select_save) return;
 
-    let row;
+    let row: number | undefined;
     const { row_focus } = select_save[0];
     if (row_focus === select_save[0].row[0]) {
         [, row] = select_save[0].row;
@@ -124,7 +124,7 @@ export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) 
         [row] = select_save[0].row;
     }
 
-    let column;
+    let column: number | undefined;
     const { column_focus } = select_save[0];
     if (column_focus === select_save[0].column[0]) {
         [, column] = select_save[0].column;

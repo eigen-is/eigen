@@ -145,7 +145,7 @@ export function goToLink(
         }
         window.open(linkAddress);
     } else if (linkType === 'sheet') {
-        let sheetId;
+        let sheetId: string | undefined;
         ctx.luckysheetfile.forEach((f) => {
             if (linkAddress === f.name) {
                 sheetId = f.id;
@@ -184,7 +184,7 @@ export function isLinkValid(ctx: Context, linkType: string, linkAddress: string)
     return { isValid: true, tooltip: '' };
 }
 
-export function onRangeSelectionModalMoveStart(ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
+export function onRangeSelectionModalMoveStart(_ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
     const box = document.querySelector('div.fortune-link-modify-modal.range-selection-modal') as HTMLDivElement;
     if (!box) return;
     const { width, height } = box.getBoundingClientRect();

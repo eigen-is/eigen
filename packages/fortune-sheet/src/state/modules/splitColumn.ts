@@ -76,7 +76,7 @@ export function getDataArr(regStr: string, ctx: Context) {
         for (let r = r1; r <= r2; r += 1) {
             let rowArr = [];
             const cell = data![r][c];
-            let value;
+            let value: string | number | boolean | null | undefined;
             if (cell !== null && cell.m !== null) {
                 value = cell.m;
             } else {
@@ -107,18 +107,14 @@ export function getDataArr(regStr: string, ctx: Context) {
         for (let r = r1; r <= r2; r += 1) {
             const rowArr = [];
             const cell = data![r][c];
-            let value;
+            let value: string | number | boolean | null | undefined;
             if (cell !== null && cell.m !== null) {
                 value = cell.m;
             } else {
                 value = getCellValue(r, c, data!);
             }
 
-            if (value === null) {
-                value = '';
-            }
-
-            rowArr.push(value);
+            rowArr.push(value == null ? '' : String(value));
 
             arr.push(rowArr);
         }
