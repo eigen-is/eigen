@@ -384,7 +384,7 @@ export function onCellsMoveEnd(
                 }
 
                 cfg.borderInfo.push(bd_obj);
-            } else if (computeEntry) {
+            } else if (computeEntry?.s) {
                 const bd_obj: RangeBorderInfo = {
                     rangeType: 'range',
                     borderType: 'border-slash',

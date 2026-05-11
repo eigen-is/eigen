@@ -1175,7 +1175,26 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
                         }
 
                         cfg.borderInfo.push(bd_obj);
+                    } else if (computeEntry?.s) {
+                        const slashSide = computeEntry.s;
+                        const bd_obj: RangeBorderInfo = {
+                            rangeType: 'range',
+                            borderType: 'border-slash',
+                            color: slashSide.color,
+                            style: slashSide.style,
+                            range: normalizeSelection(ctx, [{ row: [h, h], column: [c, c] }]),
+                        };
+
+                        if (cfg.borderInfo == null) {
+                            cfg.borderInfo = [];
+                        }
+
+                        cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${h}_${c}`]) {
+                        // Source has no border at this cell, but source's borderInfo
+                        // contains an entry at the destination coords (within-sheet
+                        // overlap). Push an explicit null-sides entry so the dest's
+                        // pre-existing borders clear at render time.
                         const bd_obj: CellBorderInfo = {
                             rangeType: 'cell',
                             value: {
@@ -1189,21 +1208,6 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
                         };
 
                         if (isNil(cfg.borderInfo)) {
-                            cfg.borderInfo = [];
-                        }
-
-                        cfg.borderInfo.push(bd_obj);
-                    } else if (computeEntry) {
-                        const slashSide = computeEntry.s!;
-                        const bd_obj: RangeBorderInfo = {
-                            rangeType: 'range',
-                            borderType: 'border-slash',
-                            color: slashSide.color,
-                            style: slashSide.style,
-                            range: normalizeSelection(ctx, [{ row: [h, h], column: [c, c] }]),
-                        };
-
-                        if (cfg.borderInfo == null) {
                             cfg.borderInfo = [];
                         }
 
