@@ -170,7 +170,7 @@ export const SheetOverlay: React.FC = () => {
                 setContext(
                     (draftCtx) => {
                         // Skip link-card hover detection during active selection drag
-                        if (!draftCtx.luckysheet_select_status && !draftCtx.luckysheet_scroll_status) {
+                        if (!draftCtx.selectionActive && !draftCtx.scrolling) {
                             overShowLinkCard(
                                 draftCtx,
                                 refs.globalCache,
@@ -434,7 +434,7 @@ export const SheetOverlay: React.FC = () => {
                     style={{
                         width: context.cellmainWidth,
                         height: context.cellmainHeight,
-                        cursor: context.luckysheet_cell_selected_extend ? 'crosshair' : 'default',
+                        cursor: context.cellSelectExtending ? 'crosshair' : 'default',
                     }}
                 >
                     <div id="fortune-formula-functionrange" />
@@ -490,15 +490,15 @@ export const SheetOverlay: React.FC = () => {
                     <div
                         className="fortune-change-size-line"
                         hidden={
-                            !context.luckysheet_cols_change_size &&
-                            !context.luckysheet_rows_change_size &&
-                            !context.luckysheet_cols_freeze_drag &&
-                            !context.luckysheet_rows_freeze_drag
+                            !context.colsResizing &&
+                            !context.rowsResizing &&
+                            !context.colsFreezeDragging &&
+                            !context.rowsFreezeDragging
                         }
                     />
                     <div
                         className="fortune-freeze-drag-line"
-                        hidden={!context.luckysheet_cols_freeze_drag && !context.luckysheet_rows_freeze_drag}
+                        hidden={!context.colsFreezeDragging && !context.rowsFreezeDragging}
                     />
                     <div
                         className="luckysheet-cell-selected-focus"

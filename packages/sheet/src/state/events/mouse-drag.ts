@@ -55,7 +55,7 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     const col_index = col_location[2];
 
     if (!checkProtectionSelectLockedOrUnLockedCells(ctx, row_index, col_index, ctx.currentSheetId)) {
-        ctx.luckysheet_select_status = false;
+        ctx.selectionActive = false;
         return;
     }
 
@@ -256,7 +256,7 @@ function mouseRender(
     const rect = container.getBoundingClientRect();
 
     // Auto-scroll when dragging near edges
-    if (ctx.luckysheet_scroll_status && !ctx.luckysheet_cols_change_size && !ctx.luckysheet_rows_change_size) {
+    if (ctx.scrolling && !ctx.colsResizing && !ctx.rowsResizing) {
         const left = ctx.scrollLeft;
         const top = ctx.scrollTop;
         const x = e.pageX - rect.left - window.scrollX;
@@ -292,7 +292,7 @@ function mouseRender(
     }
 
     // Drag selection
-    if (ctx.luckysheet_select_status) {
+    if (ctx.selectionActive) {
         renderCellSelection(ctx, globalCache, e, container);
     } else if (ctx.formulaCache.rangestart) {
         rangeDrag(ctx, e, cellInput, scrollX.scrollLeft, scrollY.scrollTop, container, fxInput);
@@ -300,24 +300,24 @@ function mouseRender(
         rangeDragRow(ctx, e, cellInput, scrollX.scrollLeft, scrollY.scrollTop, container, fxInput);
     } else if (ctx.formulaCache.rangedrag_column_start) {
         rangeDragColumn(ctx, e, cellInput, scrollX.scrollLeft, scrollY.scrollTop, container, fxInput);
-    } else if (ctx.luckysheet_rows_selected_status) {
+    } else if (ctx.rowsSelected) {
         // Row selection drag — not yet implemented
-    } else if (ctx.luckysheet_cols_selected_status) {
+    } else if (ctx.colsSelected) {
         // Column selection drag — not yet implemented
-    } else if (ctx.luckysheet_cell_selected_move) {
+    } else if (ctx.cellSelectMoving) {
         // Cell move drag — not yet implemented
-    } else if (ctx.luckysheet_cell_selected_extend) {
+    } else if (ctx.cellSelectExtending) {
         onDropCellSelect(ctx, e, scrollX, scrollY, container);
-    } else if (ctx.luckysheet_cols_change_size) {
+    } else if (ctx.colsResizing) {
         // Column width resize drag
         renderColResize(ctx, e, scrollX, container);
-    } else if (ctx.luckysheet_rows_change_size) {
+    } else if (ctx.rowsResizing) {
         // Row height resize drag
         renderRowResize(ctx, e, scrollY, container);
-    } else if (ctx.luckysheet_cols_freeze_drag) {
+    } else if (ctx.colsFreezeDragging) {
         // Column freeze drag
         renderColFreezeDrag(ctx, e, container);
-    } else if (ctx.luckysheet_rows_freeze_drag) {
+    } else if (ctx.rowsFreezeDragging) {
         // Row freeze drag
         renderRowFreezeDrag(ctx, e, container);
     }
@@ -344,14 +344,14 @@ export function handleOverlayMouseMove(
     onRangeSelectionModalMove(globalCache, e);
 
     if (
-        !!ctx.luckysheet_scroll_status ||
-        !!ctx.luckysheet_select_status ||
-        !!ctx.luckysheet_rows_selected_status ||
-        !!ctx.luckysheet_cols_selected_status ||
-        !!ctx.luckysheet_cell_selected_move ||
-        !!ctx.luckysheet_cell_selected_extend ||
-        !!ctx.luckysheet_cols_change_size ||
-        !!ctx.luckysheet_rows_change_size
+        !!ctx.scrolling ||
+        !!ctx.selectionActive ||
+        !!ctx.rowsSelected ||
+        !!ctx.colsSelected ||
+        !!ctx.cellSelectMoving ||
+        !!ctx.cellSelectExtending ||
+        !!ctx.colsResizing ||
+        !!ctx.rowsResizing
     ) {
         mouseRender(ctx, globalCache, e, cellInput, scrollX, scrollY, container, fxInput);
     }
@@ -388,7 +388,7 @@ export function handleOverlayMouseUp(
     }
 
     // Main data pane
-    if (ctx.luckysheet_select_status) {
+    if (ctx.selectionActive) {
         // Format painter
         if (ctx.luckysheetPaintModelOn) {
             pasteHandlerOfPaintModel(ctx, ctx.luckysheet_copy_save);
@@ -399,29 +399,29 @@ export function handleOverlayMouseUp(
         }
     }
 
-    ctx.luckysheet_select_status = false;
-    ctx.luckysheet_scroll_status = false;
+    ctx.selectionActive = false;
+    ctx.scrolling = false;
 
     // Row header pane
-    ctx.luckysheet_rows_selected_status = false;
+    ctx.rowsSelected = false;
 
     // Column header pane
-    ctx.luckysheet_cols_selected_status = false;
+    ctx.colsSelected = false;
 
-    ctx.luckysheet_model_move_state = false;
+    ctx.modalDragging = false;
 
     // Change row height
-    if (ctx.luckysheet_rows_change_size) {
-        ctx.luckysheet_rows_change_size = false;
+    if (ctx.rowsResizing) {
+        ctx.rowsResizing = false;
 
         const { scrollTop } = ctx;
         const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop - window.scrollY;
         const winH = rect.height;
 
-        let delta = y + 3 - ctx.luckysheet_rows_change_size_start[0];
+        let delta = y + 3 - ctx.rowsResizeStart[0];
 
         if (y >= winH - 20 + scrollTop) {
-            delta = winH - 20 - ctx.luckysheet_rows_change_size_start[0] + scrollTop;
+            delta = winH - 20 - ctx.rowsResizeStart[0] + scrollTop;
         }
 
         const cfg = ctx.config;
@@ -435,10 +435,8 @@ export function handleOverlayMouseUp(
 
         let size = ctx.defaultrowlen;
 
-        if (ctx.visibledatarow[ctx.luckysheet_rows_change_size_start[1]] != null) {
-            size =
-                ctx.visibledatarow[ctx.luckysheet_rows_change_size_start[1]] -
-                (ctx.visibledatarow[ctx.luckysheet_rows_change_size_start[1] - 1] || 0);
+        if (ctx.visibledatarow[ctx.rowsResizeStart[1]] != null) {
+            size = ctx.visibledatarow[ctx.rowsResizeStart[1]] - (ctx.visibledatarow[ctx.rowsResizeStart[1] - 1] || 0);
         }
 
         size += delta;
@@ -447,9 +445,9 @@ export function handleOverlayMouseUp(
             size = 10;
         }
 
-        cfg.customHeight[ctx.luckysheet_rows_change_size_start[1]] = 1;
+        cfg.customHeight[ctx.rowsResizeStart[1]] = 1;
 
-        const changeRowIndex = ctx.luckysheet_rows_change_size_start[1];
+        const changeRowIndex = ctx.rowsResizeStart[1];
         let changeRowSelected = false;
         if ((ctx.luckysheet_select_save?.length ?? 0) > 0) {
             ctx.luckysheet_select_save
@@ -471,7 +469,7 @@ export function handleOverlayMouseUp(
                     }
                 });
         } else {
-            cfg.rowlen[ctx.luckysheet_rows_change_size_start[1]] = Math.ceil(size);
+            cfg.rowlen[ctx.rowsResizeStart[1]] = Math.ceil(size);
         }
 
         // config
@@ -482,17 +480,17 @@ export function handleOverlayMouseUp(
     }
 
     // Change column width
-    if (ctx.luckysheet_cols_change_size) {
-        ctx.luckysheet_cols_change_size = false;
+    if (ctx.colsResizing) {
+        ctx.colsResizing = false;
 
         const { scrollLeft } = ctx;
         const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft - window.scrollX;
         const winW = rect.width;
 
-        let delta = x + 3 - ctx.luckysheet_cols_change_size_start[0];
+        let delta = x + 3 - ctx.colsResizeStart[0];
 
         if (x >= winW - 100 + scrollLeft) {
-            delta = winW - 100 - ctx.luckysheet_cols_change_size_start[0] + scrollLeft;
+            delta = winW - 100 - ctx.colsResizeStart[0] + scrollLeft;
         }
 
         const cfg = ctx.config;
@@ -505,11 +503,11 @@ export function handleOverlayMouseUp(
         }
 
         let firstcolumnlen = ctx.defaultcollen;
-        if (ctx.config.columnlen != null && ctx.config.columnlen[ctx.luckysheet_cols_change_size_start[1]] != null) {
-            firstcolumnlen = ctx.config.columnlen[ctx.luckysheet_cols_change_size_start[1]];
+        if (ctx.config.columnlen != null && ctx.config.columnlen[ctx.colsResizeStart[1]] != null) {
+            firstcolumnlen = ctx.config.columnlen[ctx.colsResizeStart[1]];
         }
 
-        let size = (cfg.columnlen[ctx.luckysheet_cols_change_size_start[1]] || ctx.defaultcollen) + delta;
+        let size = (cfg.columnlen[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta;
 
         if (Math.abs(size - firstcolumnlen) < 3) {
             return;
@@ -518,9 +516,9 @@ export function handleOverlayMouseUp(
             size = 10;
         }
 
-        cfg.customWidth[ctx.luckysheet_cols_change_size_start[1]] = 1;
+        cfg.customWidth[ctx.colsResizeStart[1]] = 1;
 
-        const changeColumnIndex = ctx.luckysheet_cols_change_size_start[1];
+        const changeColumnIndex = ctx.colsResizeStart[1];
         let changeColumnSelected = false;
         if ((ctx.luckysheet_select_save?.length ?? 0) > 0) {
             ctx.luckysheet_select_save
@@ -542,7 +540,7 @@ export function handleOverlayMouseUp(
                     }
                 });
         } else {
-            cfg.columnlen[ctx.luckysheet_cols_change_size_start[1]] = Math.ceil(size);
+            cfg.columnlen[ctx.colsResizeStart[1]] = Math.ceil(size);
         }
 
         // config
@@ -553,8 +551,8 @@ export function handleOverlayMouseUp(
     }
 
     // Column freeze drag end
-    if (ctx.luckysheet_cols_freeze_drag) {
-        ctx.luckysheet_cols_freeze_drag = false;
+    if (ctx.colsFreezeDragging) {
+        ctx.colsFreezeDragging = false;
 
         const { scrollLeft } = ctx;
         const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft - window.scrollX;
@@ -598,8 +596,8 @@ export function handleOverlayMouseUp(
     }
 
     // Row freeze drag end
-    if (ctx.luckysheet_rows_freeze_drag) {
-        ctx.luckysheet_rows_freeze_drag = false;
+    if (ctx.rowsFreezeDragging) {
+        ctx.rowsFreezeDragging = false;
 
         const { scrollTop } = ctx;
         const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop - window.scrollY;
@@ -639,7 +637,7 @@ export function handleOverlayMouseUp(
     }
 
     // Selection fill/extend
-    if (ctx.luckysheet_cell_selected_extend) {
+    if (ctx.cellSelectExtending) {
         onDropCellSelectEnd(ctx, e, container);
     }
 }

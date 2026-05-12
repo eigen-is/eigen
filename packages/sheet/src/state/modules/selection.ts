@@ -1848,7 +1848,7 @@ export function selectAll(ctx: Context) {
     if (!flowdata) return;
 
     // $("#luckysheet-wa-functionbox-confirm").click();
-    ctx.luckysheet_select_status = false;
+    ctx.selectionActive = false;
 
     ctx.luckysheet_select_save = [
         {

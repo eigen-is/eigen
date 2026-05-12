@@ -394,8 +394,8 @@ export function hideDropCellSelection(container: HTMLDivElement) {
 }
 
 export function createDropCellRange(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
-    ctx.luckysheet_cell_selected_extend = true;
-    ctx.luckysheet_scroll_status = true;
+    ctx.cellSelectExtending = true;
+    ctx.scrolling = true;
 
     const { scrollLeft, scrollTop } = ctx;
     const rect = container.getBoundingClientRect();
@@ -411,7 +411,7 @@ export function createDropCellRange(ctx: Context, e: MouseEvent, container: HTML
     const col = col_location[1];
     const col_index = col_location[2];
 
-    ctx.luckysheet_cell_selected_extend_index = [row_index, col_index];
+    ctx.cellSelectExtendIndex = [row_index, col_index];
 
     showDropCellSelection(
         {
@@ -446,8 +446,8 @@ export function onDropCellSelect(
     const col_pre = col_location[0];
     const col_index = col_location[2];
 
-    const row_index_original = ctx.luckysheet_cell_selected_extend_index[0];
-    const col_index_original = ctx.luckysheet_cell_selected_extend_index[1];
+    const row_index_original = ctx.cellSelectExtendIndex[0];
+    const col_index_original = ctx.cellSelectExtendIndex[1];
 
     if (!ctx.luckysheet_select_save) return;
     let row_s = ctx.luckysheet_select_save[0].row[0];
@@ -2554,7 +2554,7 @@ export function updateDropCell(ctx: Context) {
 }
 
 export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
-    ctx.luckysheet_cell_selected_extend = false;
+    ctx.cellSelectExtending = false;
     hideDropCellSelection(container);
 
     // if (
@@ -2580,8 +2580,8 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
     const col_pre = col_location[0];
     const col_index = col_location[2];
 
-    const row_index_original = ctx.luckysheet_cell_selected_extend_index[0];
-    const col_index_original = ctx.luckysheet_cell_selected_extend_index[1];
+    const row_index_original = ctx.cellSelectExtendIndex[0];
+    const col_index_original = ctx.cellSelectExtendIndex[1];
 
     const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
     if (

@@ -78,7 +78,7 @@ export function FxEditor() {
         }
         if (
             (context.luckysheet_select_save?.length ?? 0) > 0 &&
-            !context.luckysheet_cell_selected_move &&
+            !context.cellSelectMoving &&
             isAllowEdit(context, context.luckysheet_select_save)
         ) {
             setFocused(true);

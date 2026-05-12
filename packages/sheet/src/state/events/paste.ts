@@ -1518,8 +1518,8 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             isEqual
         ) {
             // clipboard content matches what was copied from luckysheet itself
-            if (ctx.luckysheet_paste_iscut) {
-                ctx.luckysheet_paste_iscut = false;
+            if (ctx.pasteIsCut) {
+                ctx.pasteIsCut = false;
                 pasteHandlerOfCutPaste(ctx, ctx.luckysheet_copy_save);
                 ctx.luckysheet_selection_range = [];
                 // selection.clearcopy(e);
@@ -1846,8 +1846,8 @@ export function handlePasteByClick(ctx: Context, clipboardData: string, triggerT
 
     // If we have an internal copy/cut save, use that
     if (ctx.luckysheet_copy_save?.copyRange != null && ctx.luckysheet_copy_save.copyRange.length > 0) {
-        if (ctx.luckysheet_paste_iscut) {
-            ctx.luckysheet_paste_iscut = false;
+        if (ctx.pasteIsCut) {
+            ctx.pasteIsCut = false;
             pasteHandlerOfCutPaste(ctx, ctx.luckysheet_copy_save);
         } else {
             pasteHandlerOfCopyPaste(ctx, ctx.luckysheet_copy_save);

@@ -63,7 +63,7 @@ export function handleRowHeaderMouseDown(
     let height = row - row_pre - 1;
     let rowseleted = [row_index, row_index];
 
-    ctx.luckysheet_scroll_status = true;
+    ctx.scrolling = true;
 
     // Formula-related
     if (!isEmpty(ctx.luckysheetCellUpdate)) {
@@ -251,12 +251,12 @@ export function handleRowHeaderMouseDown(
         }
 
         updateCell(ctx, ctx.luckysheetCellUpdate[0], ctx.luckysheetCellUpdate[1], cellInput);
-        ctx.luckysheet_rows_selected_status = true;
+        ctx.rowsSelected = true;
     } else {
-        ctx.luckysheet_rows_selected_status = true;
+        ctx.rowsSelected = true;
     }
 
-    if (ctx.luckysheet_rows_selected_status) {
+    if (ctx.rowsSelected) {
         if (e.shiftKey) {
             // Shift+click on row header to select range
             const last = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]); // Last selection
@@ -336,8 +336,8 @@ export function handleRowHeaderMouseDown(
                 column_focus: 0,
                 row_select: true,
             });
-            ctx.luckysheet_select_status = true;
-            ctx.luckysheet_scroll_status = true;
+            ctx.selectionActive = true;
+            ctx.scrolling = true;
         }
     }
 }
@@ -390,7 +390,7 @@ export function handleColumnHeaderMouseDown(
     let width = col - col_pre - 1;
     let columnseleted = [col_index, col_index];
 
-    ctx.luckysheet_scroll_status = true;
+    ctx.scrolling = true;
 
     // Formula-related
     if (!isEmpty(ctx.luckysheetCellUpdate)) {
@@ -575,12 +575,12 @@ export function handleColumnHeaderMouseDown(
             return;
         }
         updateCell(ctx, ctx.luckysheetCellUpdate[0], ctx.luckysheetCellUpdate[1], cellInput);
-        ctx.luckysheet_cols_selected_status = true;
+        ctx.colsSelected = true;
     } else {
-        ctx.luckysheet_cols_selected_status = true;
+        ctx.colsSelected = true;
     }
 
-    if (ctx.luckysheet_cols_selected_status) {
+    if (ctx.colsSelected) {
         if (e.shiftKey) {
             // Shift+click on column header to select range
             const last = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]); // Last selection
@@ -657,8 +657,8 @@ export function handleColumnHeaderMouseDown(
                 column_focus: col_index,
                 column_select: true,
             });
-            ctx.luckysheet_select_status = true;
-            ctx.luckysheet_scroll_status = true;
+            ctx.selectionActive = true;
+            ctx.scrolling = true;
         }
     }
 }

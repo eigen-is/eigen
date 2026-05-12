@@ -171,7 +171,7 @@ export function handleWithCtrlOrMetaKey(
 
     if (e.shiftKey) {
         ctx.luckysheet_shiftpositon = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
-        ctx.luckysheet_shiftkeydown = true;
+        ctx.shiftKeyDown = true;
 
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             // Ctrl + Shift + Arrow: extend selection toward next edge
@@ -322,7 +322,7 @@ function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
     if (ctx.luckysheetCellUpdate.length > 0) return;
 
     ctx.luckysheet_shiftpositon = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
-    ctx.luckysheet_shiftkeydown = true;
+    ctx.shiftKeyDown = true;
 
     // Shift + Arrow: extend selection by one cell
     switch (e.key) {
@@ -346,11 +346,7 @@ function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
 }
 
 export function handleArrowKey(ctx: Context, e: KeyboardEvent) {
-    if (
-        ctx.luckysheetCellUpdate.length > 0 ||
-        ctx.luckysheet_cell_selected_move ||
-        ctx.luckysheet_cell_selected_extend
-    ) {
+    if (ctx.luckysheetCellUpdate.length > 0 || ctx.cellSelectMoving || ctx.cellSelectExtending) {
         return;
     }
 
@@ -383,7 +379,7 @@ export function handleGlobalKeyDown(
     handleRedo: () => void,
     canvas?: CanvasRenderingContext2D,
 ) {
-    ctx.luckysheet_select_status = false;
+    ctx.selectionActive = false;
     const kcode = e.keyCode;
     const kstr = e.key;
     if (!isEmpty(ctx.contextMenu) || ctx.filterContextMenu) {

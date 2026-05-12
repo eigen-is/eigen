@@ -30,11 +30,11 @@ describe('handleCut', () => {
                 },
             ],
         }) as Context;
-        ctx.luckysheet_paste_iscut = false;
+        ctx.pasteIsCut = false;
 
         handleCut(ctx);
 
-        expect(ctx.luckysheet_paste_iscut).toBe(true);
+        expect(ctx.pasteIsCut).toBe(true);
         expect(ctx.luckysheet_selection_range).toHaveLength(1);
         expect(ctx.luckysheet_copy_save?.dataSheetId).toBe('id_1');
     });
@@ -43,10 +43,10 @@ describe('handleCut', () => {
         const ctx = contextFactory({
             luckysheet_select_save: [],
         }) as Context;
-        ctx.luckysheet_paste_iscut = false;
+        ctx.pasteIsCut = false;
 
         handleCut(ctx);
 
-        expect(ctx.luckysheet_paste_iscut).toBe(false);
+        expect(ctx.pasteIsCut).toBe(false);
     });
 });
