@@ -4,7 +4,7 @@ import type { CellMatrix, ConditionalFormatRule, SingleRange } from './types';
 import { isRealNull } from './validation';
 
 // CF rule shapes (`ConditionalFormatRule`, `DataBarRule`, etc.) are defined in
-// `@workspace/lib/sheets` since they live on `Sheet.luckysheet_conditionformat_save`
+// `@workspace/lib/sheets` since they live on `Sheet.conditionalFormatRules`
 // — see engine/types.ts for the re-export.
 
 export type DataBar =

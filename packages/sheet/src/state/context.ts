@@ -118,14 +118,14 @@ export type Context = {
             scrollLeft: number;
             scrollTop: number;
             selectionActive: boolean;
-            luckysheet_select_save: Sheet['luckysheet_select_save'];
-            luckysheet_selection_range: Sheet['luckysheet_selection_range'];
+            selections: Sheet['selections'];
+            formulaRangeSelections: Sheet['formulaRangeSelections'];
         }
     >;
 
     selectionActive: boolean;
-    luckysheet_select_save: Sheet['luckysheet_select_save'];
-    luckysheet_selection_range: Sheet['luckysheet_selection_range'];
+    selections: Sheet['selections'];
+    formulaRangeSelections: Sheet['formulaRangeSelections'];
     formulaRangeHighlight: ({
         rangeIndex: number;
         backgroundColor: string;
@@ -313,8 +313,8 @@ export function defaultContext(refs: RefValues): Context {
         sheetScrollRecord: {},
 
         selectionActive: false,
-        luckysheet_select_save: undefined,
-        luckysheet_selection_range: [],
+        selections: undefined,
+        formulaRangeSelections: [],
         formulaRangeHighlight: [],
         formulaRangeSelect: undefined,
         functionCandidates: [],
@@ -518,7 +518,7 @@ export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {
     const colCount = rowCount === 0 ? 0 : data[0].length;
 
     calcRowColSize(ctx, rowCount, colCount);
-    normalizeSelection(ctx, ctx.luckysheet_select_save);
+    normalizeSelection(ctx, ctx.selections);
 }
 
 export function updateContextWithCanvas(ctx: Context, canvas: HTMLCanvasElement, placeholder: HTMLDivElement) {

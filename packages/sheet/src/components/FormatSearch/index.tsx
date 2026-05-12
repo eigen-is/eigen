@@ -50,7 +50,7 @@ export function FormatSearch({
             if (index == null) return;
             const selectedFormatVal = toolbarFormat[selectedFormatIndex].value;
 
-            for (const selection of ctx.luckysheet_select_save ?? []) {
+            for (const selection of ctx.selections ?? []) {
                 for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
                     for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
                         const cell = ctx.sheets[index].data?.[r][c];

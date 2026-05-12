@@ -18,10 +18,10 @@ export function CustomSort() {
     const { sort } = locale(context);
     const { hideDialog } = useDialog();
 
-    const col_start = context.luckysheet_select_save![0].column[0];
-    const col_end = context.luckysheet_select_save![0].column[1];
-    const row_start = context.luckysheet_select_save![0].row[0];
-    const row_end = context.luckysheet_select_save![0].row[1];
+    const col_start = context.selections![0].column[0];
+    const col_end = context.selections![0].column[1];
+    const row_start = context.selections![0].row[0];
+    const row_end = context.selections![0].row[1];
 
     const sheetIndex = getSheetIndex(context, context.currentSheetId) as number;
 

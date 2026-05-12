@@ -51,7 +51,7 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
     }, [functionlist, selectedType, searchText]);
 
     const onConfirm = useCallback(() => {
-        const last = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
+        const last = context.selections?.[context.selections.length - 1];
         let row_index = last?.row_focus;
         let col_index = last?.column_focus;
         if (!last) {
@@ -89,7 +89,7 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
         });
     }, [
         cellInput,
-        context.luckysheet_select_save,
+        context.selections,
         filteredFunctionList,
         globalCache,
         selectedFuncIndex,

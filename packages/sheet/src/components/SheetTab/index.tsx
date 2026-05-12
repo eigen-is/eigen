@@ -113,8 +113,8 @@ export const SheetTab: React.FC = () => {
                                                         scrollLeft: draftCtx.scrollLeft,
                                                         scrollTop: draftCtx.scrollTop,
                                                         selectionActive: draftCtx.selectionActive,
-                                                        luckysheet_select_save: draftCtx.luckysheet_select_save,
-                                                        luckysheet_selection_range: draftCtx.luckysheet_selection_range,
+                                                        selections: draftCtx.selections,
+                                                        formulaRangeSelections: draftCtx.formulaRangeSelections,
                                                     };
                                                     draftCtx.currentSheetId = singleSheet.id!;
                                                     cancelActiveImgItem(draftCtx, refs.globalCache);

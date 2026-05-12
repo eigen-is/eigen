@@ -19,7 +19,7 @@ import { contextFactory, selectionFactory } from '../factories/context';
 describe('sheet/core/api/cell', () => {
     const getContext = () =>
         contextFactory({
-            luckysheet_select_save: selectionFactory([0, 0], [0, 0], 0, 0),
+            selections: selectionFactory([0, 0], [0, 0], 0, 0),
             sheets: [
                 {
                     id: 'id_1',

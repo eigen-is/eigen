@@ -183,7 +183,7 @@ export function setConditionRules(
 
     const rule: DefaultConditionalFormatRule = {
         type: 'default',
-        cellrange: ctx.luckysheet_select_save ?? [],
+        cellrange: ctx.selections ?? [],
         format: { textColor, cellColor },
         conditionName,
         conditionRange,
@@ -191,10 +191,10 @@ export function setConditionRules(
     };
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    const ruleArr = ctx.sheets[index].luckysheet_conditionformat_save ?? [];
+    const ruleArr = ctx.sheets[index].conditionalFormatRules ?? [];
     ruleArr.push(rule);
 
-    ctx.sheets[index].luckysheet_conditionformat_save = ruleArr;
+    ctx.sheets[index].conditionalFormatRules = ruleArr;
 }
 
 // Cache for getComputeMap — avoids recomputing the entire CF map on every
@@ -213,7 +213,7 @@ export function invalidateCFCache() {
 export function getComputeMap(ctx: Context): ComputeMap | null {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return null;
-    const ruleArr = ctx.sheets[index].luckysheet_conditionformat_save;
+    const ruleArr = ctx.sheets[index].conditionalFormatRules;
     const { data } = ctx.sheets[index];
     if (isNil(data)) return null;
 
@@ -282,7 +282,7 @@ export const CF_PRESETS: Record<string, string[]> = {
 export function clearSheetRules(ctx: Context) {
     if (!checkProtectionFormatCells(ctx)) return;
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    ctx.sheets[index].luckysheet_conditionformat_save = [];
+    ctx.sheets[index].conditionalFormatRules = [];
 }
 
 export function applyColorScalePreset(ctx: Context, presetKey: string) {
@@ -303,10 +303,10 @@ function appendRule(ctx: Context, type: 'colorGradation' | 'dataBar', format: st
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const rule: ColorGradationRule | DataBarRule = {
         type,
-        cellrange: ctx.luckysheet_select_save ?? [],
+        cellrange: ctx.selections ?? [],
         format,
     };
-    const existing = ctx.sheets[index].luckysheet_conditionformat_save ?? [];
+    const existing = ctx.sheets[index].conditionalFormatRules ?? [];
     existing.push(rule);
-    ctx.sheets[index].luckysheet_conditionformat_save = existing;
+    ctx.sheets[index].conditionalFormatRules = existing;
 }

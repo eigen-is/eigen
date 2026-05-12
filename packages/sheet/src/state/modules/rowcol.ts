@@ -568,9 +568,9 @@ function adjustSelectionForInsert(
         file.column = d[0]?.length;
     }
 
-    file.luckysheet_select_save = range;
+    file.selections = range;
     if (file.id === ctx.currentSheetId) {
-        ctx.luckysheet_select_save = range;
+        ctx.selections = range;
     }
 }
 
@@ -633,7 +633,7 @@ export function insertRowCol(
     }
 
     // Alternating colors config update
-    const AFarr = file.luckysheet_alternateformat_save;
+    const AFarr = file.alternateFormatRules;
     const newAFarr = [];
     if (AFarr != null && AFarr.length > 0) {
         for (let i = 0; i < AFarr.length; i += 1) {
@@ -873,7 +873,7 @@ export function insertRowCol(
         }
     }
 
-    file.luckysheet_alternateformat_save = newAFarr;
+    file.alternateFormatRules = newAFarr;
     file.config = cfg;
 
     shiftStateOnlyFieldsForInsert(ctx, { ...op, id });
@@ -944,7 +944,7 @@ export function deleteRowCol(
     }
 
     // Alternating colors config update
-    const AFarr = file.luckysheet_alternateformat_save;
+    const AFarr = file.alternateFormatRules;
     const newAFarr = [];
     if (AFarr != null && AFarr.length > 0) {
         for (let i = 0; i < AFarr.length; i += 1) {
@@ -1122,11 +1122,11 @@ export function deleteRowCol(
         }
     }
 
-    file.luckysheet_alternateformat_save = newAFarr;
+    file.alternateFormatRules = newAFarr;
     file.config = cfg;
 
     shiftStateOnlyFieldsForDelete(ctx, { ...op, id });
-    ctx.luckysheet_select_save = undefined;
+    ctx.selections = undefined;
 
     const merge_new = file.config?.merge ?? {};
     refreshLocalMergeData(merge_new, file);
@@ -1166,7 +1166,7 @@ export function computeRowlenArr(ctx: Context, rowHeight: number, cfg: SheetConf
 
 // Hide selected rows/columns
 export function hideSelected(ctx: Context, type: string) {
-    if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length > 1) return 'noMulti';
+    if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     // Hide rows
     if (type === 'row') {
@@ -1177,8 +1177,8 @@ export function hideSelected(ctx: Context, type: string) {
           return ;
         } */
         const rowhidden = ctx.config.rowhidden ?? {};
-        const r1 = ctx.luckysheet_select_save[0].row[0];
-        const r2 = ctx.luckysheet_select_save[0].row[1];
+        const r1 = ctx.selections[0].row[0];
+        const r2 = ctx.selections[0].row[1];
         const rowhiddenNumber = r2;
         for (let r = r1; r <= r2; r += 1) {
             rowhidden[r] = 0;
@@ -1200,17 +1200,17 @@ export function hideSelected(ctx: Context, type: string) {
             rowLen - 1 === rowhiddenNumber ||
             Object.keys(rowhidden).findIndex((o) => parseInt(o, 10) - 1 === rowhiddenNumber) >= 0;
         if (isEndRow) {
-            ctx.luckysheet_select_save[0].row[0] -= 1;
-            ctx.luckysheet_select_save[0].row[1] -= 1;
+            ctx.selections[0].row[0] -= 1;
+            ctx.selections[0].row[1] -= 1;
         } else {
-            ctx.luckysheet_select_save[0].row[0] += 1;
-            ctx.luckysheet_select_save[0].row[1] += 1;
+            ctx.selections[0].row[0] += 1;
+            ctx.selections[0].row[1] += 1;
         }
     } else if (type === 'column') {
         // Hide columns
         const colhidden = ctx.config.colhidden ?? {};
-        const c1 = ctx.luckysheet_select_save[0].column[0];
-        const c2 = ctx.luckysheet_select_save[0].column[1];
+        const c1 = ctx.selections[0].column[0];
+        const c2 = ctx.selections[0].column[1];
         const colhiddenNumber = c2;
         for (let c = c1; c <= c2; c += 1) {
             colhidden[c] = 0;
@@ -1222,11 +1222,11 @@ export function hideSelected(ctx: Context, type: string) {
             columnLen - 1 === colhiddenNumber ||
             Object.keys(colhidden).findIndex((o) => parseInt(o, 10) - 1 === colhiddenNumber) >= 0;
         if (isEndColumn) {
-            ctx.luckysheet_select_save[0].column[0] -= 1;
-            ctx.luckysheet_select_save[0].column[1] -= 1;
+            ctx.selections[0].column[0] -= 1;
+            ctx.selections[0].column[1] -= 1;
         } else {
-            ctx.luckysheet_select_save[0].column[0] += 1;
-            ctx.luckysheet_select_save[0].column[1] += 1;
+            ctx.selections[0].column[0] += 1;
+            ctx.selections[0].column[1] += 1;
         }
     }
     ctx.sheets[index].config = ctx.config;
@@ -1235,13 +1235,13 @@ export function hideSelected(ctx: Context, type: string) {
 
 // Show (unhide) selected rows/columns
 export function showSelected(ctx: Context, type: string) {
-    if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length > 1) return 'noMulti';
+    if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     // Unhide rows
     if (type === 'row') {
         const rowhidden = ctx.config.rowhidden ?? {};
-        const r1 = ctx.luckysheet_select_save[0].row[0];
-        const r2 = ctx.luckysheet_select_save[0].row[1];
+        const r1 = ctx.selections[0].row[0];
+        const r2 = ctx.selections[0].row[1];
         for (let r = r1; r <= r2; r += 1) {
             delete rowhidden[r];
         }
@@ -1249,8 +1249,8 @@ export function showSelected(ctx: Context, type: string) {
     } else if (type === 'column') {
         // Unhide columns
         const colhidden = ctx.config.colhidden ?? {};
-        const c1 = ctx.luckysheet_select_save[0].column[0];
-        const c2 = ctx.luckysheet_select_save[0].column[1];
+        const c1 = ctx.selections[0].column[0];
+        const c2 = ctx.selections[0].column[1];
         for (let c = c1; c <= c2; c += 1) {
             delete colhidden[c];
         }
@@ -1262,10 +1262,10 @@ export function showSelected(ctx: Context, type: string) {
 
 // Check if the current selection is on a hidden row/column
 export function isShowHidenCR(ctx: Context): boolean {
-    if (!ctx.luckysheet_select_save || (!ctx.config.colhidden && !ctx.config.rowhidden)) return false;
+    if (!ctx.selections || (!ctx.config.colhidden && !ctx.config.rowhidden)) return false;
     // If the current selection is on a hidden row/column, it is not editable
     if (!!ctx.config.colhidden && size(ctx.config.colhidden) >= 1) {
-        const ctxColumn = ctx.luckysheet_select_save[0]?.column?.[0];
+        const ctxColumn = ctx.selections[0]?.column?.[0];
         const isHidenColumn =
             Object.keys(ctx.config.colhidden).findIndex((o) => {
                 return ctxColumn === parseInt(o, 10);
@@ -1275,7 +1275,7 @@ export function isShowHidenCR(ctx: Context): boolean {
         }
     }
     if (!!ctx.config.rowhidden && size(ctx.config.rowhidden) >= 1) {
-        const ctxRow = ctx.luckysheet_select_save[0]?.row?.[0];
+        const ctxRow = ctx.selections[0]?.row?.[0];
         const isHidenRow =
             Object.keys(ctx.config.rowhidden).findIndex((o) => {
                 return ctxRow === parseInt(o, 10);
@@ -1290,8 +1290,8 @@ export function isShowHidenCR(ctx: Context): boolean {
 // Count hidden rows/columns to skip during keyboard navigation
 export function hideCRCount(ctx: Context, type: string): number {
     let count = 1;
-    if (!ctx.luckysheet_select_save) return 0;
-    const section = ctx.luckysheet_select_save[0];
+    if (!ctx.selections) return 0;
+    const section = ctx.selections[0];
     const rowhidden = ctx.config.rowhidden ?? {};
     const colhidden = ctx.config.colhidden ?? {};
     if (type === 'ArrowUp' || type === 'ArrowDown') {

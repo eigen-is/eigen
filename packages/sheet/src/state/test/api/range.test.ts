@@ -16,12 +16,12 @@ import { contextFactory, selectionFactory } from '../factories/context';
 describe('sheet/core/api/range', () => {
     const getContext = () =>
         contextFactory({
-            luckysheet_select_save: selectionFactory([0, 0], [0, 0], 0, 0),
+            selections: selectionFactory([0, 0], [0, 0], 0, 0),
         }) as Context;
 
     test('getSelection', async () => {
         const ctx = getContext();
-        ctx.luckysheet_select_save = [
+        ctx.selections = [
             {
                 row: [0, 0],
                 column: [0, 1],
@@ -70,7 +70,7 @@ describe('sheet/core/api/range', () => {
 
     test('getSelectionCoordinates', async () => {
         const ctx = getContext();
-        ctx.luckysheet_select_save = [
+        ctx.selections = [
             { row: [0, 0], column: [0, 1] },
             { row: [2, 3], column: [2, 3] },
         ];
@@ -103,12 +103,12 @@ describe('sheet/core/api/range', () => {
             ],
             {},
         );
-        if (ctx.luckysheet_select_save) {
-            expect(ctx.luckysheet_select_save[0]).toMatchObject({
+        if (ctx.selections) {
+            expect(ctx.selections[0]).toMatchObject({
                 row: [0, 0],
                 column: [0, 1],
             });
-            expect(ctx.luckysheet_select_save[1]).toMatchObject({
+            expect(ctx.selections[1]).toMatchObject({
                 row: [2, 3],
                 column: [2, 3],
             });

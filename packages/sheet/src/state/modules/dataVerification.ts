@@ -37,8 +37,8 @@ export function dataRangeSelection(ctx: Context, rangT: string, type: string, va
     ctx.rangeDialog!.show = true;
     ctx.rangeDialog!.type = type;
     ctx.rangeDialog!.rangeTxt = value;
-    if (ctx.luckysheet_select_save && !!rangT) {
-        const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+    if (ctx.selections && !!rangT) {
+        const last = ctx.selections[ctx.selections.length - 1];
         const row_index = last.row_focus as number;
         const col_index = last.column_focus as number;
         ctx.editingCellPosition = [row_index, col_index];
@@ -471,10 +471,10 @@ export function cellFocus(ctx: Context, r: number, c: number, clickMode: boolean
 
 // set the dropdown value
 export function setDropcownValue(ctx: Context, value: string, arr: string[]) {
-    if (!ctx.luckysheet_select_save) return;
+    if (!ctx.selections) return;
     const d = getFlowdata(ctx);
     if (!d) return;
-    const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.selections[ctx.selections.length - 1];
     const rowIndex = last.row_focus;
     const colIndex = last.column_focus;
     if (rowIndex == null || colIndex == null) return;

@@ -17,7 +17,7 @@ function makeSheet(cells: { r: number; c: number; v: Cell }[], rules?: Condition
         name: 'Sheet1',
         celldata: cells.map(({ r, c, v }) => ({ r, c, v })),
         data,
-        ...(rules ? { luckysheet_conditionformat_save: rules } : {}),
+        ...(rules ? { conditionalFormatRules: rules } : {}),
     };
 }
 

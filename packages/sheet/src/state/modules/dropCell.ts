@@ -449,16 +449,16 @@ export function onDropCellSelect(
     const row_index_original = ctx.cellSelectExtendIndex[0];
     const col_index_original = ctx.cellSelectExtendIndex[1];
 
-    if (!ctx.luckysheet_select_save) return;
-    let row_s = ctx.luckysheet_select_save[0].row[0];
-    let row_e = ctx.luckysheet_select_save[0].row[1];
-    let col_s = ctx.luckysheet_select_save[0].column[0];
-    let col_e = ctx.luckysheet_select_save[0].column[1];
+    if (!ctx.selections) return;
+    let row_s = ctx.selections[0].row[0];
+    let row_e = ctx.selections[0].row[1];
+    let col_s = ctx.selections[0].column[0];
+    let col_e = ctx.selections[0].column[1];
 
-    let top = ctx.luckysheet_select_save[0].top_move;
-    let height = ctx.luckysheet_select_save[0].height_move;
-    let left = ctx.luckysheet_select_save[0].left_move;
-    let width = ctx.luckysheet_select_save[0].width_move;
+    let top = ctx.selections[0].top_move;
+    let height = ctx.selections[0].height_move;
+    let left = ctx.selections[0].left_move;
+    let width = ctx.selections[0].width_move;
 
     if (top == null || height == null || left == null || width == null) return;
     if (Math.abs(row_index_original - row_index) > Math.abs(col_index_original - col_index)) {
@@ -482,11 +482,11 @@ export function onDropCellSelect(
     }
     if (y < 0) {
         row_s = 0;
-        [row_e] = ctx.luckysheet_select_save[0].row;
+        [row_e] = ctx.selections[0].row;
     }
     if (x < 0) {
         col_s = 0;
-        [col_e] = ctx.luckysheet_select_save[0].column;
+        [col_e] = ctx.selections[0].column;
     }
 
     showDropCellSelection({ left, width, top, height }, container);
@@ -2517,7 +2517,7 @@ export function updateDropCell(ctx: Context) {
     }
 
     // conditional format
-    const cdformat = file.luckysheet_conditionformat_save;
+    const cdformat = file.conditionalFormatRules;
     if (cdformat != null && cdformat.length > 0) {
         for (let i = 0; i < cdformat.length; i += 1) {
             const cdformat_cellrange = cdformat[i].cellrange;
@@ -2548,7 +2548,7 @@ export function updateDropCell(ctx: Context) {
     //   cdformat,
     //   dataVerification,
     // };
-    jfrefreshgrid(ctx, d, ctx.luckysheet_select_save);
+    jfrefreshgrid(ctx, d, ctx.selections);
 
     // selectHightlightShow();
 }
@@ -2559,7 +2559,7 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
 
     // if (
     //   !checkProtectionLockedRangeList(
-    //     ctx.luckysheet_select_save,
+    //     ctx.selections,
     //     ctx.currentSheetId
     //   )
     // ) {
@@ -2583,7 +2583,7 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
     const row_index_original = ctx.cellSelectExtendIndex[0];
     const col_index_original = ctx.cellSelectExtendIndex[1];
 
-    const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.selections?.[ctx.selections.length - 1];
     if (
         last &&
         last.top != null &&
@@ -2617,8 +2617,8 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
             dropCellCache.applyType = '1';
         }
 
-        if (ctx.luckysheet_select_save == null) return;
-        const { top_move, left_move } = ctx.luckysheet_select_save[0];
+        if (ctx.selections == null) return;
+        const { top_move, left_move } = ctx.selections[0];
         if (Math.abs(row_index_original - row_index) > Math.abs(col_index_original - col_index)) {
             if (!(row_index >= row_s && row_index <= row_e)) {
                 if (top_move != null && top_move >= row_pre) {
@@ -2755,7 +2755,7 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
         last.row = [row_s, row_e];
         last.column = [col_s, col_e];
 
-        ctx.luckysheet_select_save = normalizeSelection(ctx, [
+        ctx.selections = normalizeSelection(ctx, [
             {
                 row: [row_s, row_e],
                 column: [col_s, col_e],

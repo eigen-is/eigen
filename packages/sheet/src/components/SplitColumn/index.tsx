@@ -30,8 +30,8 @@ export function SplitColumn() {
     const certainBtn = useCallback(() => {
         hideDialog();
         const dataArr = getDataArr(splitOperate, context);
-        const r = context.luckysheet_select_save![0].row[0];
-        const c = context.luckysheet_select_save![0].column[0];
+        const r = context.selections![0].row[0];
+        const c = context.selections![0].column[0];
         if (dataArr[0].length === 1) return;
         let dataCover = false;
         const data = getFlowdata(context);

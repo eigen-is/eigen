@@ -73,8 +73,8 @@ export const SheetOverlay: React.FC = () => {
                     );
 
                     if (
-                        draftCtx.luckysheet_select_save?.[0] != null &&
-                        Object.keys(draftCtx.luckysheet_select_save[0]).length > 0 &&
+                        draftCtx.selections?.[0] != null &&
+                        Object.keys(draftCtx.selections[0]).length > 0 &&
                         refs.cellInput.current
                     ) {
                         setTimeout(() => {
@@ -294,7 +294,7 @@ export const SheetOverlay: React.FC = () => {
             const currentSheet = draftCtx.sheets[sheetIndex];
 
             // Only reset selection if there's no existing selection
-            if (!currentSheet.luckysheet_select_save?.length) {
+            if (!currentSheet.selections?.length) {
                 api.setSelection(draftCtx, [{ row: [0], column: [0] }], {});
             }
         });
@@ -348,7 +348,7 @@ export const SheetOverlay: React.FC = () => {
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: range text recomputed on selection/sheet changes; context.config.merge is read but stable per sheet
     const rangeText = useMemo(() => {
-        const lastSelection = context.luckysheet_select_save?.at(-1);
+        const lastSelection = context.selections?.at(-1);
         if (!(lastSelection && lastSelection.row_focus != null && lastSelection.column_focus != null)) return '';
         const rf = lastSelection.row_focus;
         const cf = lastSelection.column_focus;
@@ -364,11 +364,11 @@ export const SheetOverlay: React.FC = () => {
         // Format single-cell selections (e.g., "AA12" → "AA. 12")
         // Format range selections (e.g., "A1:BB100" → "A. 1: BB. 100")
         return rawRangeTxt.replace(/([A-Z]+)(\d+)/g, '$1. $2');
-    }, [context.currentSheetId, context.luckysheet_select_save]);
+    }, [context.currentSheetId, context.selections]);
 
     const cellValue = () => {
-        if ((context.luckysheet_select_save?.length ?? 0) > 0) {
-            const selection = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
+        if ((context.selections?.length ?? 0) > 0) {
+            const selection = context.selections?.[context.selections.length - 1];
             if (!selection) return '';
             const sheetIndex = getSheetIndex(context, context.currentSheetId);
             if (sheetIndex === undefined || sheetIndex === null) return '';
@@ -503,9 +503,9 @@ export const SheetOverlay: React.FC = () => {
                     <div
                         className="luckysheet-cell-selected-focus"
                         style={
-                            (context.luckysheet_select_save?.length ?? 0) > 0
+                            (context.selections?.length ?? 0) > 0
                                 ? (() => {
-                                      const selection = context.luckysheet_select_save!.at(-1)!;
+                                      const selection = context.selections!.at(-1)!;
                                       return Object.assign(
                                           {
                                               left: selection.left,
@@ -532,9 +532,9 @@ export const SheetOverlay: React.FC = () => {
                         }
                         onMouseDown={(e) => e.preventDefault()}
                     />
-                    {(context.luckysheet_selection_range?.length ?? 0) > 0 && (
+                    {(context.formulaRangeSelections?.length ?? 0) > 0 && (
                         <div id="fortune-selection-copy">
-                            {context.luckysheet_selection_range!.map((range) => {
+                            {context.formulaRangeSelections!.map((range) => {
                                 const r1 = range.row[0];
                                 const r2 = range.row[1];
                                 const c1 = range.column[0];
@@ -573,9 +573,9 @@ export const SheetOverlay: React.FC = () => {
                         id="fortune-cell-selected-move"
                         onMouseDown={(e) => e.preventDefault()}
                     />
-                    {(context.luckysheet_select_save?.length ?? 0) > 0 && (
+                    {(context.selections?.length ?? 0) > 0 && (
                         <div id="luckysheet-cell-selected-boxs">
-                            {context.luckysheet_select_save!.map((selection) => (
+                            {context.selections!.map((selection) => (
                                 <div
                                     key={`${selection.row[0]}-${selection.row[1]}-${selection.column[0]}-${selection.column[1]}`}
                                     id="luckysheet-cell-selected"

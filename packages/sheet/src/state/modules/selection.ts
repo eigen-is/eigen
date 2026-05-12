@@ -103,14 +103,11 @@ export function seletedHighlistByindex(ctx: Context, r1: number, r2: number, c1:
 
 // Overload preserves non-undefined input on return: callers that pass a literal
 // `[...]` get a non-undefined `Selection[]` back, callers that pass
-// `ctx.luckysheet_select_save` get the same `Selection[] | undefined`.
+// `ctx.selections` get the same `Selection[] | undefined`.
 export function normalizeSelection(ctx: Context, selection: Selection[]): Selection[];
 export function normalizeSelection(ctx: Context, selection: undefined): undefined;
-export function normalizeSelection(
-    ctx: Context,
-    selection: SheetType['luckysheet_select_save'],
-): SheetType['luckysheet_select_save'];
-export function normalizeSelection(ctx: Context, selection: SheetType['luckysheet_select_save']) {
+export function normalizeSelection(ctx: Context, selection: SheetType['selections']): SheetType['selections'];
+export function normalizeSelection(ctx: Context, selection: SheetType['selections']) {
     if (!selection) return selection;
 
     const flowdata = getFlowdata(ctx);
@@ -236,7 +233,7 @@ export function selectTitlesRange(map: Record<string, number>) {
 }
 
 export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyState']) {
-    // if (!checkProtectionLockedRangeList(ctx.luckysheet_select_save, ctx.currentSheetId)) {
+    // if (!checkProtectionLockedRangeList(ctx.selections, ctx.currentSheetId)) {
     //   return;
     // }
     const cfg = ctx.config;
@@ -258,9 +255,9 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     const copyData = cloneDeep(getdatabyselection(ctx, { row: [c_r1, c_r2], column: [c_c1, c_c2] }, copySheetIndex));
 
     // Apply range
-    if (!ctx.luckysheet_select_save) return;
+    if (!ctx.selections) return;
     // Selected region
-    const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.selections[ctx.selections.length - 1];
     // Selected region output
     const minh = last.row[0];
     let maxh = last.row[1]; // Apply range: first and last rows
@@ -487,12 +484,10 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
 
     const copyIndex = getSheetIndex(ctx, copySheetIndex);
     if (copyIndex == null) return;
-    const ruleArr: ConditionalFormatRule[] | undefined = cloneDeep(
-        ctx.sheets[copyIndex].luckysheet_conditionformat_save,
-    );
+    const ruleArr: ConditionalFormatRule[] | undefined = cloneDeep(ctx.sheets[copyIndex].conditionalFormatRules);
     if (isNil(ruleArr) || ruleArr.length === 0) return;
 
-    const cdformat: ConditionalFormatRule[] = cloneDeep(currFile.luckysheet_conditionformat_save) ?? [];
+    const cdformat: ConditionalFormatRule[] = cloneDeep(currFile.conditionalFormatRules) ?? [];
     const copyRangeBox: SingleRange = { row: [c_r1, c_r2], column: [c_c1, c_c2] };
     const applyRangeBox: SingleRange = { row: [minh, maxh], column: [minc, maxc] };
 
@@ -507,7 +502,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
         }
     }
 
-    currFile.luckysheet_conditionformat_save = cdformat;
+    currFile.conditionalFormatRules = cdformat;
 }
 
 // shift + arrow key / ctrl + shift + arrow key functionality
@@ -667,7 +662,7 @@ export function moveHighlightCell(
     let col_index_ed: number | undefined;
 
     if (type === 'rangeOfSelect') {
-        const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+        const last = ctx.selections?.[ctx.selections.length - 1];
         if (!last) {
             console.error('moveHighlightCell: no selection found');
             return;
@@ -774,7 +769,7 @@ export function moveHighlightCell(
         last.column_focus = col_index;
         last.moveXY = { x: moveX, y: moveY };
 
-        normalizeSelection(ctx, ctx.luckysheet_select_save);
+        normalizeSelection(ctx, ctx.selections);
         // TODO pivotTable.pivotclick(row_index, col_index);
         // TODO formula.fucntionboxshow(row_index, col_index);
         scrollToHighlightCell(ctx, row_index, col_index);
@@ -954,7 +949,7 @@ export function moveHighlightCell(
     */
 
     // Notify the server of cell move
-    // server.saveParam("mv", ctx.currentSheetId, ctx.luckysheet_select_save);
+    // server.saveParam("mv", ctx.currentSheetId, ctx.selections);
 }
 
 // shift + arrow key: adjust the selection range
@@ -972,9 +967,9 @@ export function moveHighlightRange(
     let col_pre: number;
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return;
-    if (isNil(ctx.luckysheet_select_save)) return;
+    if (isNil(ctx.selections)) return;
     if (type === 'rangeOfSelect') {
-        const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+        const last = ctx.selections[ctx.selections.length - 1];
         let curR = last.row[0];
         let endR = last.row[1];
         let curC = last.column[0];
@@ -1140,7 +1135,7 @@ export function moveHighlightRange(
         }
         last.row = rowseleted;
         last.column = columnseleted;
-        normalizeSelection(ctx, ctx.luckysheet_select_save);
+        normalizeSelection(ctx, ctx.selections);
 
         if (postion === 'down') {
             const rowToScroll = last.row_focus === last.row[0] ? last.row[1] : last.row[0];
@@ -1685,14 +1680,14 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
 export function copy(ctx: Context) {
     const flowdata = getFlowdata(ctx);
 
-    ctx.luckysheet_selection_range = [];
+    ctx.formulaRangeSelections = [];
     // Copy range
     const copyRange = [];
     let RowlChange = false;
     let HasMC = false;
 
-    for (let s = 0; s < (ctx.luckysheet_select_save?.length ?? 0); s += 1) {
-        const range = ctx.luckysheet_select_save![s];
+    for (let s = 0; s < (ctx.selections?.length ?? 0); s += 1) {
+        const range = ctx.selections![s];
 
         const r1 = range.row[0];
         const r2 = range.row[1];
@@ -1721,7 +1716,7 @@ export function copy(ctx: Context) {
             }
         }
 
-        ctx.luckysheet_selection_range.push({
+        ctx.formulaRangeSelections.push({
             row: range.row,
             column: range.column,
         });
@@ -1736,7 +1731,7 @@ export function copy(ctx: Context) {
         HasMC,
     };
 
-    const cpdata = rangeValueToHtml(ctx, ctx.currentSheetId, ctx.luckysheet_select_save);
+    const cpdata = rangeValueToHtml(ctx, ctx.currentSheetId, ctx.selections);
 
     if (cpdata) {
         ctx.iscopyself = true;
@@ -1750,7 +1745,7 @@ export function deleteSelectedCellText(ctx: Context): string {
         return 'allowEdit';
     }
 
-    const selection = ctx.luckysheet_select_save;
+    const selection = ctx.selections;
     if (selection && !isEmpty(selection)) {
         const d = getFlowdata(ctx);
         if (!d) return 'dataNullError';
@@ -1800,7 +1795,7 @@ export function deleteSelectedCellText(ctx: Context): string {
                 }
             }
         }
-        // jfrefreshgrid(d, ctx.luckysheet_select_save);
+        // jfrefreshgrid(d, ctx.selections);
 
         // // Clear the content of the editor box
         // // Note: the functionInputHanddler method copies this element's content to #luckysheet-functionbox-cell
@@ -1812,8 +1807,8 @@ export function deleteSelectedCellText(ctx: Context): string {
 // Whether selections overlap. Accepts the editor `Selection[]` (default) or a
 // `Range` (SingleRange[]); both share the `{row, column}` rectangle the test
 // needs.
-export function selectIsOverlap(ctx: Context, range?: Range | SheetType['luckysheet_select_save']) {
-    const ranges = cloneDeep(range ?? ctx.luckysheet_select_save) ?? [];
+export function selectIsOverlap(ctx: Context, range?: Range | SheetType['selections']) {
+    const ranges = cloneDeep(range ?? ctx.selections) ?? [];
 
     let overlap = false;
     const seen: Record<string, true> = {};
@@ -1850,7 +1845,7 @@ export function selectAll(ctx: Context) {
     // $("#luckysheet-wa-functionbox-confirm").click();
     ctx.selectionActive = false;
 
-    ctx.luckysheet_select_save = [
+    ctx.selections = [
         {
             row: [0, flowdata.length - 1],
             column: [0, flowdata[0].length - 1],
@@ -1861,7 +1856,7 @@ export function selectAll(ctx: Context) {
         },
     ];
 
-    normalizeSelection(ctx, ctx.luckysheet_select_save);
+    normalizeSelection(ctx, ctx.selections);
 }
 
 export function fixRowStyleOverflowInFreeze(
@@ -1982,7 +1977,7 @@ export function fixColumnStyleOverflowInFreeze(
 }
 
 export function calcSelectionInfo(ctx: Context) {
-    const selection = ctx.luckysheet_select_save!;
+    const selection = ctx.selections!;
     let numberC = 0;
     let count = 0;
     let sum = 0;

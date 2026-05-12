@@ -123,7 +123,7 @@ function additionalCellOps(
 }
 
 export function filterPatch(patches: Patch[]) {
-    return patches.filter((p) => p.path[0] === 'sheets' && p.path[2] !== 'luckysheet_select_save');
+    return patches.filter((p) => p.path[0] === 'sheets' && p.path[2] !== 'selections');
 }
 
 export function extractFormulaCellOps(ops: Op[]) {

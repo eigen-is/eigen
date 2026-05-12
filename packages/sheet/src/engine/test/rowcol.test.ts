@@ -110,10 +110,10 @@ describe('applySheetsInsertRowCol — row', () => {
         expect(result[0].config?.rowhidden).toEqual({ '2': 0, '3': 0 });
     });
 
-    test('insert shifts luckysheet_conditionformat_save range row[0]', () => {
+    test('insert shifts conditionalFormatRules range row[0]', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
-                luckysheet_conditionformat_save: [
+                conditionalFormatRules: [
                     {
                         type: 'default',
                         conditionName: 'greaterThan',
@@ -131,7 +131,7 @@ describe('applySheetsInsertRowCol — row', () => {
             direction: 'lefttop',
             id: 's1',
         });
-        const cf = result[0].luckysheet_conditionformat_save![0];
+        const cf = result[0].conditionalFormatRules![0];
         expect(cf.cellrange[0].row).toEqual([2, 3]);
     });
 });

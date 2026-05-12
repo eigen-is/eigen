@@ -124,10 +124,10 @@ export function searchNext(
     }
     let range: Selection[];
     if (
-        size(ctx.luckysheet_select_save) === 0 ||
-        (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
+        size(ctx.selections) === 0 ||
+        (ctx.selections?.length === 1 &&
+            ctx.selections[0].row[0] === ctx.selections[0].row[1] &&
+            ctx.selections[0].column[0] === ctx.selections[0].column[1])
     ) {
         range = [
             {
@@ -138,7 +138,7 @@ export function searchNext(
             },
         ];
     } else {
-        range = cloneDeep(ctx.luckysheet_select_save) ?? [];
+        range = cloneDeep(ctx.selections) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(searchText, range, flowdata, checkModes);
@@ -150,18 +150,18 @@ export function searchNext(
     let count = 0;
 
     if (
-        size(ctx.luckysheet_select_save) === 0 ||
-        (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
+        size(ctx.selections) === 0 ||
+        (ctx.selections?.length === 1 &&
+            ctx.selections[0].row[0] === ctx.selections[0].row[1] &&
+            ctx.selections[0].column[0] === ctx.selections[0].column[1])
     ) {
-        if (size(ctx.luckysheet_select_save) === 0) {
+        if (size(ctx.selections) === 0) {
             count = 0;
         } else {
             for (let i = 0; i < searchIndexArr.length; i += 1) {
                 if (
-                    searchIndexArr[i].r === ctx.luckysheet_select_save![0].row[0] &&
-                    searchIndexArr[i].c === ctx.luckysheet_select_save![0].column[0]
+                    searchIndexArr[i].r === ctx.selections![0].row[0] &&
+                    searchIndexArr[i].c === ctx.selections![0].column[0]
                 ) {
                     if (i === searchIndexArr.length - 1) {
                         count = 0;
@@ -174,7 +174,7 @@ export function searchNext(
             }
         }
 
-        ctx.luckysheet_select_save = normalizeSelection(ctx, [
+        ctx.selections = normalizeSelection(ctx, [
             {
                 row: [searchIndexArr[count].r, searchIndexArr[count].r],
                 column: [searchIndexArr[count].c, searchIndexArr[count].c],
@@ -218,7 +218,7 @@ export function searchNext(
             }
         }
 
-        ctx.luckysheet_select_save = range;
+        ctx.selections = range;
     }
 
     // selectHightlightShow();
@@ -245,10 +245,10 @@ export function searchAll(
 
     let range: Selection[];
     if (
-        size(ctx.luckysheet_select_save) === 0 ||
-        (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
+        size(ctx.selections) === 0 ||
+        (ctx.selections?.length === 1 &&
+            ctx.selections[0].row[0] === ctx.selections[0].row[1] &&
+            ctx.selections[0].column[0] === ctx.selections[0].column[1])
     ) {
         range = [
             {
@@ -257,7 +257,7 @@ export function searchAll(
             },
         ];
     } else {
-        range = cloneDeep(ctx.luckysheet_select_save) ?? [];
+        range = cloneDeep(ctx.selections) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(searchText, range, flowdata, checkModes);
@@ -299,7 +299,7 @@ export function searchAll(
         // }
     }
 
-    ctx.luckysheet_select_save = normalizeSelection(ctx, [
+    ctx.selections = normalizeSelection(ctx, [
         {
             row: [searchIndexArr[0].r, searchIndexArr[0].r],
             column: [searchIndexArr[0].c, searchIndexArr[0].c],
@@ -370,10 +370,10 @@ export function replace(
 
     let range: Selection[];
     if (
-        size(ctx.luckysheet_select_save) === 0 ||
-        (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
+        size(ctx.selections) === 0 ||
+        (ctx.selections?.length === 1 &&
+            ctx.selections[0].row[0] === ctx.selections[0].row[1] &&
+            ctx.selections[0].column[0] === ctx.selections[0].column[1])
     ) {
         range = [
             {
@@ -382,7 +382,7 @@ export function replace(
             },
         ];
     } else {
-        range = cloneDeep(ctx.luckysheet_select_save) ?? [];
+        range = cloneDeep(ctx.selections) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(searchText, range, flowdata, checkModes);
@@ -393,7 +393,7 @@ export function replace(
 
     let count = null;
 
-    const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.selections?.[ctx.selections.length - 1];
     const rf = last?.row_focus;
     const cf = last?.column_focus;
 
@@ -448,9 +448,9 @@ export function replace(
         setCellValue(ctx, r, c, d, v);
     }
 
-    ctx.luckysheet_select_save = normalizeSelection(ctx, [{ row: [r, r], column: [c, c] }]);
+    ctx.selections = normalizeSelection(ctx, [{ row: [r, r], column: [c, c] }]);
 
-    // jfrefreshgrid(d, ctx.luckysheet_select_save);
+    // jfrefreshgrid(d, ctx.selections);
     // selectHightlightShow();
 
     scrollToHighlightCell(ctx, r, c);
@@ -480,10 +480,10 @@ export function replaceAll(
 
     let range: Selection[];
     if (
-        size(ctx.luckysheet_select_save) === 0 ||
-        (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
+        size(ctx.selections) === 0 ||
+        (ctx.selections?.length === 1 &&
+            ctx.selections[0].row[0] === ctx.selections[0].row[1] &&
+            ctx.selections[0].column[0] === ctx.selections[0].column[1])
     ) {
         range = [
             {
@@ -492,7 +492,7 @@ export function replaceAll(
             },
         ];
     } else {
-        range = cloneDeep(ctx.luckysheet_select_save) ?? [];
+        range = cloneDeep(ctx.selections) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(searchText, range, flowdata, checkModes);
@@ -547,7 +547,7 @@ export function replaceAll(
 
     // jfrefreshgrid(d, range);
 
-    ctx.luckysheet_select_save = normalizeSelection(ctx, range);
+    ctx.selections = normalizeSelection(ctx, range);
 
     const succeedInfo = replaceHtml(findAndReplace.successTip, {
         xlength: replaceCount,

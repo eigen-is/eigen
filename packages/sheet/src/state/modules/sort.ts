@@ -92,8 +92,8 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0
     //   return;
     // }
     if (ctx.allowEdit === false) return;
-    if (ctx.luckysheet_select_save == null) return;
-    if (ctx.luckysheet_select_save.length > 1) {
+    if (ctx.selections == null) return;
+    if (ctx.selections.length > 1) {
         // if (isEditMode()) {
         //   alert("Cannot perform this action on a multi-selection. Please select a single range and try again.");
         // } else {
@@ -114,10 +114,10 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0
     const d = flowdata;
     if (d == null) return;
 
-    const r1 = ctx.luckysheet_select_save[0].row[0];
-    const r2 = ctx.luckysheet_select_save[0].row[1];
-    const c1 = ctx.luckysheet_select_save[0].column[0];
-    const c2 = ctx.luckysheet_select_save[0].column[1];
+    const r1 = ctx.selections[0].row[0];
+    const r2 = ctx.selections[0].row[1];
+    const c1 = ctx.selections[0].column[0];
+    const c2 = ctx.selections[0].column[1];
 
     let str: number | null = null;
     let edr: number | undefined;

@@ -9,7 +9,7 @@ import { type CommonOptions, getSheet } from './common';
 import { invalidParams } from './errors';
 
 export function getSelection(ctx: Context) {
-    return ctx.luckysheet_select_save?.map((selection) => ({
+    return ctx.selections?.map((selection) => ({
         row: selection.row,
         column: selection.column,
     }));
@@ -42,7 +42,7 @@ export function getCellsByFlattenRange(ctx: Context, range?: { r: number; c: num
 
 export function getSelectionCoordinates(ctx: Context) {
     const result: string[] = [];
-    const rangeArr = cloneDeep(ctx.luckysheet_select_save);
+    const rangeArr = cloneDeep(ctx.selections);
     const sheetId = ctx.currentSheetId;
 
     rangeArr?.forEach((ele) => {
@@ -71,9 +71,9 @@ export function getHtmlByRange(ctx: Context, range: Range, options: CommonOption
 
 export function setSelection(ctx: Context, range: Range, options: CommonOptions) {
     const sheet = getSheet(ctx, options);
-    sheet.luckysheet_select_save = normalizeSelection(ctx, range);
+    sheet.selections = normalizeSelection(ctx, range);
     if (ctx.currentSheetId === sheet.id) {
-        ctx.luckysheet_select_save = sheet.luckysheet_select_save;
+        ctx.selections = sheet.selections;
     }
 }
 

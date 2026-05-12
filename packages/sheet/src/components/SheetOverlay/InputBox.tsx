@@ -33,7 +33,7 @@ export const InputBox: React.FC = () => {
     const prevCellUpdate = usePrevious<unknown[]>(context.editingCellPosition);
     const prevSheetId = usePrevious<string>(context.currentSheetId);
     const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
-    const firstSelection = context.luckysheet_select_save?.[0];
+    const firstSelection = context.selections?.[0];
     const row_index = firstSelection?.row_focus as number;
     const col_index = firstSelection?.column_focus as number;
     const preText = useRef('');
@@ -108,7 +108,7 @@ export const InputBox: React.FC = () => {
     // biome-ignore lint/correctness/useExhaustiveDependencies: only re-checks hidden-row/col status when selection changes
     useEffect(() => {
         setIsHidenRC(isShowHidenCR(context));
-    }, [context.luckysheet_select_save]);
+    }, [context.selections]);
 
     const [inputFocused, setInputFocused] = useState(false);
     const formulaAutocomplete = useFormulaAutocomplete({ targetRef: inputRef, enabled: inputFocused });
@@ -175,7 +175,7 @@ export const InputBox: React.FC = () => {
                         isBlur
                     )
                         return;
-                    if (!isAllowEdit(draftCtx, draftCtx.luckysheet_select_save)) {
+                    if (!isAllowEdit(draftCtx, draftCtx.selections)) {
                         return;
                     }
                     handleFormulaInput(draftCtx, refs.fxInput.current, refs.cellInput.current!, kcode, preText.current);

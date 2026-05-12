@@ -48,7 +48,7 @@ export function handleRowHeaderMouseDown(
     if (e.button === 2) {
         // If right-click is inside selection, stop mousedown handling
         const flowdata = getFlowdata(ctx);
-        const isInSelection = ctx.luckysheet_select_save?.some(
+        const isInSelection = ctx.selections?.some(
             (obj_s) =>
                 obj_s.row != null &&
                 row_index >= obj_s.row[0] &&
@@ -259,7 +259,7 @@ export function handleRowHeaderMouseDown(
     if (ctx.rowsSelected) {
         if (e.shiftKey) {
             // Shift+click on row header to select range
-            const last = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]); // Last selection
+            const last = cloneDeep(ctx.selections?.[ctx.selections.length - 1]); // Last selection
             if (!last || isNil(last.top) || isNil(last.height) || isNil(last.row_focus)) {
                 return;
             }
@@ -296,9 +296,9 @@ export function handleRowHeaderMouseDown(
             last.top_move = _top;
             last.height_move = _height;
 
-            ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] = last;
+            ctx.selections![ctx.selections!.length - 1] = last;
         } else if (e.ctrlKey || e.metaKey) {
-            ctx.luckysheet_select_save?.push({
+            ctx.selections?.push({
                 left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
                 width:
                     colLocationByIndex(0, ctx.visibledatacolumn)[1] -
@@ -317,8 +317,8 @@ export function handleRowHeaderMouseDown(
                 row_select: true,
             });
         } else {
-            ctx.luckysheet_select_save = [];
-            ctx.luckysheet_select_save.push({
+            ctx.selections = [];
+            ctx.selections.push({
                 left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
                 width:
                     colLocationByIndex(0, ctx.visibledatacolumn)[1] -
@@ -375,7 +375,7 @@ export function handleColumnHeaderMouseDown(
     // Right-click: check if inside existing selection
     if (e.button === 2) {
         const flowdata = getFlowdata(ctx);
-        const isInSelection = ctx.luckysheet_select_save?.some(
+        const isInSelection = ctx.selections?.some(
             (obj_s) =>
                 obj_s.column != null &&
                 col_index >= obj_s.column[0] &&
@@ -583,7 +583,7 @@ export function handleColumnHeaderMouseDown(
     if (ctx.colsSelected) {
         if (e.shiftKey) {
             // Shift+click on column header to select range
-            const last = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]); // Last selection
+            const last = cloneDeep(ctx.selections?.[ctx.selections.length - 1]); // Last selection
 
             let _left = 0;
             let _width = 0;
@@ -622,10 +622,10 @@ export function handleColumnHeaderMouseDown(
             last.left_move = _left;
             last.width_move = _width;
 
-            ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] = last;
+            ctx.selections![ctx.selections!.length - 1] = last;
         } else if (e.ctrlKey || e.metaKey) {
             // Add to selection
-            ctx.luckysheet_select_save?.push({
+            ctx.selections?.push({
                 left,
                 width,
                 top: rowLocationByIndex(0, ctx.visibledatarow)[0],
@@ -641,8 +641,8 @@ export function handleColumnHeaderMouseDown(
                 column_select: true,
             });
         } else {
-            ctx.luckysheet_select_save = [];
-            ctx.luckysheet_select_save.push({
+            ctx.selections = [];
+            ctx.selections.push({
                 left,
                 width,
                 top: rowLocationByIndex(0, ctx.visibledatarow)[0],

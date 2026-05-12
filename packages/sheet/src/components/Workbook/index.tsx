@@ -177,12 +177,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // Calculate selection info
         // biome-ignore lint/correctness/useExhaustiveDependencies: selection-info recompute is intentionally selection-only; firing on every props/context change would churn
         useEffect(() => {
-            const selection = context.luckysheet_select_save;
+            const selection = context.selections;
             if (selection) {
                 const re = calcSelectionInfo(context);
                 setCalInfo(re);
             }
-        }, [context.luckysheet_select_save]);
+        }, [context.selections]);
 
         const emitOp = useCallback(
             (ctx: Context, patches: Patch[], options?: SetContextOptions, undo: boolean = false) => {
@@ -355,10 +355,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         }, [emitOp]);
 
         useEffect(() => {
-            if (context.luckysheet_select_save != null) {
-                mergedSettings.hooks?.afterSelectionChange?.(context.currentSheetId, context.luckysheet_select_save[0]);
+            if (context.selections != null) {
+                mergedSettings.hooks?.afterSelectionChange?.(context.currentSheetId, context.selections[0]);
             }
-        }, [context.currentSheetId, context.luckysheet_select_save, mergedSettings.hooks]);
+        }, [context.currentSheetId, context.selections, mergedSettings.hooks]);
 
         const providerValue = useMemo(
             () => ({
@@ -428,22 +428,22 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
 
                     if (
-                        (!draftCtx.luckysheet_select_save || draftCtx.luckysheet_select_save.length === 0) &&
-                        sheet.luckysheet_select_save &&
-                        sheet.luckysheet_select_save.length > 0
+                        (!draftCtx.selections || draftCtx.selections.length === 0) &&
+                        sheet.selections &&
+                        sheet.selections.length > 0
                     ) {
-                        draftCtx.luckysheet_select_save = sheet.luckysheet_select_save;
+                        draftCtx.selections = sheet.selections;
                     }
-                    if (draftCtx.luckysheet_select_save?.length === 0) {
+                    if (draftCtx.selections?.length === 0) {
                         if (data?.[0]?.[0]?.mc && data?.[0]?.[0]?.mc?.rs != null && data?.[0]?.[0]?.mc?.cs != null) {
-                            draftCtx.luckysheet_select_save = [
+                            draftCtx.selections = [
                                 {
                                     row: [0, data[0][0].mc.rs - 1],
                                     column: [0, data[0][0].mc.cs - 1],
                                 },
                             ];
                         } else {
-                            draftCtx.luckysheet_select_save = [
+                            draftCtx.selections = [
                                 {
                                     row: [0, 0],
                                     column: [0, 0],
@@ -618,12 +618,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     ele.innerHTML = txtdata;
 
                     const trList = ele.querySelectorAll('table tr');
-                    const maxRow = trList.length + context.luckysheet_select_save![0].row[0];
+                    const maxRow = trList.length + context.selections![0].row[0];
                     const rowToBeAdded =
                         maxRow -
                         context.sheets[getSheetIndex(context, context!.currentSheetId! as string) as number].data!
                             .length;
-                    const range = context.luckysheet_select_save;
+                    const range = context.selections;
                     if (rowToBeAdded > 0) {
                         const insertRowColOp: SetContextOptions['insertRowColOp'] = {
                             type: 'row',
@@ -637,7 +637,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         setContextWithProduce(
                             (draftCtx) => {
                                 insertRowCol(draftCtx, insertRowColOp);
-                                draftCtx.luckysheet_select_save = range;
+                                draftCtx.selections = range;
                             },
                             {
                                 insertRowColOp,

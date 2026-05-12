@@ -169,7 +169,7 @@ export const ColumnHeader: React.FC = () => {
     );
 
     useEffect(() => {
-        const s = context.luckysheet_select_save;
+        const s = context.selections;
         if (s == null) return;
 
         let columnTitleMap = {};
@@ -190,7 +190,7 @@ export const ColumnHeader: React.FC = () => {
             }
         }
         setSelectedLocation(selects);
-    }, [context.luckysheet_select_save, context.visibledatacolumn]);
+    }, [context.selections, context.visibledatacolumn]);
 
     useEffect(() => {
         containerRef.current!.scrollLeft = context.scrollLeft;

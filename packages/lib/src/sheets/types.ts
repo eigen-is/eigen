@@ -214,5 +214,5 @@ export type Sheet = {
     row?: number;
     column?: number;
     showGridLines?: boolean | number;
-    luckysheet_conditionformat_save?: ConditionalFormatRule[];
+    conditionalFormatRules?: ConditionalFormatRule[];
 };

@@ -24,7 +24,7 @@ export function removeActiveImage(ctx: Context) {
 }
 
 export function insertImage(ctx: Context, mediaName: string, width: number, height: number) {
-    const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.selections?.[ctx.selections.length - 1];
     let rowIndex = last?.row_focus;
     let colIndex = last?.column_focus;
     if (!last) {

@@ -35,13 +35,13 @@ describe('handleCut', () => {
         handleCut(ctx);
 
         expect(ctx.pasteIsCut).toBe(true);
-        expect(ctx.luckysheet_selection_range).toHaveLength(1);
+        expect(ctx.formulaRangeSelections).toHaveLength(1);
         expect(ctx.copyState?.dataSheetId).toBe('id_1');
     });
 
     it('does not set the cut flag when selection is empty', () => {
         const ctx = contextFactory({
-            luckysheet_select_save: [],
+            selections: [],
         }) as Context;
         ctx.pasteIsCut = false;
 

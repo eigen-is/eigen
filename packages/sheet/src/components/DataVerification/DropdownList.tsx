@@ -16,7 +16,7 @@ export function DropDownList() {
 
     const cellInfo = useMemo(() => {
         if (!open) return null;
-        const last = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
+        const last = context.selections?.[context.selections.length - 1];
         if (!last) return null;
         const { row_focus: r, column_focus: c } = last;
         if (r == null || c == null) return null;

@@ -182,7 +182,7 @@ export function clearFilter(ctx: Context) {
 }
 
 export function createFilter(ctx: Context) {
-    if (size(ctx.luckysheet_select_save) > 1) {
+    if (size(ctx.selections) > 1) {
         return;
     }
     if (size(ctx.activeFilterRange) > 0) {
@@ -195,7 +195,7 @@ export function createFilter(ctx: Context) {
         return;
     }
 
-    const last = ctx.luckysheet_select_save?.[0];
+    const last = ctx.selections?.[0];
     const flowdata = getFlowdata(ctx);
     let filterSave: Selection[] | undefined;
     if (last == null || flowdata == null) return;
@@ -222,14 +222,14 @@ export function createFilter(ctx: Context) {
         }
 
         filterSave = normalizeSelection(ctx, [{ row: [curR, curR], column: [st_c ?? 0, ed_c] }]);
-        ctx.luckysheet_select_save = filterSave;
+        ctx.selections = filterSave;
 
         ctx.shiftAnchor = cloneDeep(last);
     } else if (last.row[1] - last.row[0] < 2) {
         ctx.shiftAnchor = cloneDeep(last);
     }
 
-    ctx.activeFilterRange = cloneDeep(filterSave?.[0] || ctx.luckysheet_select_save?.[0]);
+    ctx.activeFilterRange = cloneDeep(filterSave?.[0] || ctx.selections?.[0]);
 
     createFilterOptions(ctx, ctx.activeFilterRange, undefined, true);
 }

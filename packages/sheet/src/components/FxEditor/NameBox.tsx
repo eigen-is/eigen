@@ -7,7 +7,7 @@ export function NameBox() {
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: depending on the full context object would re-compute on every change; merge config is read but stable per sheet
     const rangeText = useMemo(() => {
-        const lastSelection = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
+        const lastSelection = context.selections?.[context.selections.length - 1];
         if (!(lastSelection && lastSelection.row_focus != null && lastSelection.column_focus != null)) return '';
         const rf = lastSelection.row_focus;
         const cf = lastSelection.column_focus;
@@ -18,7 +18,7 @@ export function NameBox() {
             });
         }
         return getRangetxt(context, context.currentSheetId, lastSelection);
-    }, [context.currentSheetId, context.luckysheet_select_save]);
+    }, [context.currentSheetId, context.selections]);
 
     return (
         <div className="w-[99px] border-r border-border text-sm flex items-center">

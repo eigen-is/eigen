@@ -156,8 +156,8 @@ export type Sheet = Omit<LibSheet, 'config'> & {
     addRows?: number;
     status?: number;
     hide?: number;
-    luckysheet_select_save?: Selection[];
-    luckysheet_selection_range?: SingleRange[];
+    selections?: Selection[];
+    formulaRangeSelections?: SingleRange[];
     calcChain?: CalcChainEntry[];
     defaultRowHeight?: number;
     defaultColWidth?: number;
@@ -168,7 +168,7 @@ export type Sheet = Omit<LibSheet, 'config'> & {
     isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
     filter_select?: SingleRange;
-    luckysheet_alternateformat_save?: AlternateFormatEntry[];
+    alternateFormatRules?: AlternateFormatEntry[];
     dataVerification?: Record<string, DataVerificationRule>;
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
     // Dynamic-array formula source list — entries describe spill ranges; engine

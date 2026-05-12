@@ -218,7 +218,7 @@ export function updateFormat(
         cfg.rowlen = {};
     }
 
-    forEach(ctx.luckysheet_select_save, (selection) => {
+    forEach(ctx.selections, (selection) => {
         const [row_st, row_ed] = selection.row;
         const [col_st, col_ed] = selection.column;
 
@@ -617,9 +617,9 @@ export function autoSelectionFormula(
         }
     }
 
-    if (!ctx.luckysheet_select_save) return;
+    if (!ctx.selections) return;
 
-    forEach(ctx.luckysheet_select_save, (selection) => {
+    forEach(ctx.selections, (selection) => {
         const [st_r, ed_r] = selection.row;
         const [st_c, ed_c] = selection.column;
         const row_index = selection.row_focus;
@@ -728,13 +728,13 @@ export function cancelPaintModel(ctx: Context) {
     // $("#luckysheet-sheettable_0").removeClass("luckysheetPaintCursor");
     if (ctx.copyState === null) return;
     if (ctx.copyState?.dataSheetId === ctx.currentSheetId) {
-        ctx.luckysheet_selection_range = [];
+        ctx.formulaRangeSelections = [];
     } else {
         if (!ctx.copyState) return;
         const index = getSheetIndex(ctx, ctx.copyState.dataSheetId);
         if (!index) return;
-        // ctx.sheets[getSheetIndex(ctx.copyState["dataSheetIndex"])].luckysheet_selection_range = [];
-        ctx.sheets[index].luckysheet_selection_range = [];
+        // ctx.sheets[getSheetIndex(ctx.copyState["dataSheetIndex"])].formulaRangeSelections = [];
+        ctx.sheets[index].formulaRangeSelections = [];
     }
 
     ctx.copyState = {
@@ -767,10 +767,10 @@ export function handlePercentageFormat(ctx: Context, cellInput: HTMLDivElement) 
 
 export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
-    if (!flowdata || !ctx.luckysheet_select_save) return;
+    if (!flowdata || !ctx.selections) return;
 
-    const row_index = ctx.luckysheet_select_save[0].row_focus;
-    const col_index = ctx.luckysheet_select_save[0].column_focus;
+    const row_index = ctx.selections[0].row_focus;
+    const col_index = ctx.selections[0].column_focus;
     if (row_index === undefined || col_index === undefined) return;
 
     let foucsStatus = normalizedAttr(flowdata, row_index, col_index, 'ct');
@@ -844,9 +844,9 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
 export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
-    if (!ctx.luckysheet_select_save) return;
-    const row_index = ctx.luckysheet_select_save[0].row_focus;
-    const col_index = ctx.luckysheet_select_save[0].column_focus;
+    if (!ctx.selections) return;
+    const row_index = ctx.selections[0].row_focus;
+    const col_index = ctx.selections[0].column_focus;
     if (row_index === undefined || col_index === undefined) return;
     let foucsStatus = normalizedAttr(flowdata, row_index, col_index, 'ct');
     const cell = flowdata[row_index][col_index];
@@ -960,7 +960,7 @@ export function handleFormatPainter(ctx: Context) {
     // let locale_paint = _locale.paint;
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
-    if (ctx.luckysheet_select_save == null || ctx.luckysheet_select_save.length === 0) {
+    if (ctx.selections == null || ctx.selections.length === 0) {
         // if(isEditMode()){
         //     alert(locale_paint.tipSelectRange);
         // }
@@ -969,7 +969,7 @@ export function handleFormatPainter(ctx: Context) {
         // }
         return;
     }
-    if (ctx.luckysheet_select_save.length > 1) {
+    if (ctx.selections.length > 1) {
         // if(isEditMode()){
         //     alert(locale_paint.tipNotMulti);
         // }
@@ -984,11 +984,11 @@ export function handleFormatPainter(ctx: Context) {
 
     let has_PartMC = false;
 
-    const r1 = ctx.luckysheet_select_save[0].row[0];
-    const r2 = ctx.luckysheet_select_save[0].row[1];
+    const r1 = ctx.selections[0].row[0];
+    const r2 = ctx.selections[0].row[1];
 
-    const c1 = ctx.luckysheet_select_save[0].column[0];
-    const c2 = ctx.luckysheet_select_save[0].column[1];
+    const c1 = ctx.selections[0].column[0];
+    const c2 = ctx.selections[0].column[1];
 
     has_PartMC = hasPartMC(ctx, ctx.config, r1, r2, c1, c2);
 
@@ -1004,17 +1004,17 @@ export function handleFormatPainter(ctx: Context) {
 
     // $("#luckysheet-sheettable_0").addClass("luckysheetPaintCursor");
 
-    ctx.luckysheet_selection_range = [
+    ctx.formulaRangeSelections = [
         {
-            row: ctx.luckysheet_select_save[0].row,
-            column: ctx.luckysheet_select_save[0].column,
+            row: ctx.selections[0].row,
+            column: ctx.selections[0].column,
         },
     ];
 
     let RowlChange = false;
     let HasMC = false;
 
-    for (let r = ctx.luckysheet_select_save[0].row[0]; r <= ctx.luckysheet_select_save[0].row[1]; r += 1) {
+    for (let r = ctx.selections[0].row[0]; r <= ctx.selections[0].row[1]; r += 1) {
         if (ctx.config.rowhidden != null && ctx.config.rowhidden[r] != null) {
             continue;
         }
@@ -1023,7 +1023,7 @@ export function handleFormatPainter(ctx: Context) {
             RowlChange = true;
         }
 
-        for (let c = ctx.luckysheet_select_save[0].column[0]; c <= ctx.luckysheet_select_save[0].column[1]; c += 1) {
+        for (let c = ctx.selections[0].column[0]; c <= ctx.selections[0].column[1]; c += 1) {
             const flowdata = getFlowdata(ctx);
             if (!flowdata) return;
             const cell = flowdata[r][c];
@@ -1036,8 +1036,8 @@ export function handleFormatPainter(ctx: Context) {
         dataSheetId: ctx.currentSheetId,
         copyRange: [
             {
-                row: ctx.luckysheet_select_save[0].row,
-                column: ctx.luckysheet_select_save[0].column,
+                row: ctx.selections[0].row,
+                column: ctx.selections[0].column,
             },
         ],
         RowlChange,
@@ -1053,7 +1053,7 @@ export function handleClearFormat(ctx: Context) {
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
-    ctx.luckysheet_select_save?.every((selection) => {
+    ctx.selections?.every((selection) => {
         const [rowSt, rowEd] = selection.row;
         const [colSt, colEd] = selection.column;
         for (let r = rowSt; r <= rowEd; r += 1) {
@@ -1146,12 +1146,12 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
             borderType: type,
             color,
             style,
-            range: cloneDeep(ctx.luckysheet_select_save) || [],
+            range: cloneDeep(ctx.selections) || [],
         };
         cfg.borderInfo.push(borderInfo);
     } else {
         const rangeList: string[] = [];
-        forEach(ctx.luckysheet_select_save, (selection) => {
+        forEach(ctx.selections, (selection) => {
             for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
                 for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
                     const range = `${r}_${c}`;
@@ -1194,12 +1194,12 @@ export function handleMerge(ctx: Context, type: string) {
 
     if (ctx.config.merge != null) {
         let has_PartMC = false;
-        if (!ctx.luckysheet_select_save) return;
-        for (let s = 0; s < ctx.luckysheet_select_save.length; s += 1) {
-            const r1 = ctx.luckysheet_select_save[s].row[0];
-            const r2 = ctx.luckysheet_select_save[s].row[1];
-            const c1 = ctx.luckysheet_select_save[s].column[0];
-            const c2 = ctx.luckysheet_select_save[s].column[1];
+        if (!ctx.selections) return;
+        for (let s = 0; s < ctx.selections.length; s += 1) {
+            const r1 = ctx.selections[s].row[0];
+            const r2 = ctx.selections[s].row[1];
+            const c1 = ctx.selections[s].column[0];
+            const c2 = ctx.selections[s].column[1];
 
             has_PartMC = hasPartMC(ctx, ctx.config, r1, r2, c1, c2);
 
@@ -1221,9 +1221,9 @@ export function handleMerge(ctx: Context, type: string) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    if (!ctx.luckysheet_select_save) return;
+    if (!ctx.selections) return;
 
-    mergeCells(ctx, ctx.currentSheetId, ctx.luckysheet_select_save, type);
+    mergeCells(ctx, ctx.currentSheetId, ctx.selections, type);
 }
 
 export function handleSort(ctx: Context, isAsc: boolean) {
@@ -1242,7 +1242,7 @@ export function handleFreeze(ctx: Context, type: string) {
         return;
     }
 
-    const firstSelection = ctx.luckysheet_select_save?.[0];
+    const firstSelection = ctx.selections?.[0];
     if (!firstSelection) return;
 
     let { row_focus, column_focus } = firstSelection;
@@ -1283,7 +1283,7 @@ export function handleSum(
 export function handleLink(ctx: Context) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
-    const selection = ctx.luckysheet_select_save?.[0];
+    const selection = ctx.selections?.[0];
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && selection != null) {
         showLinkCard(ctx, selection.row[0], selection.column[0], true);

@@ -59,7 +59,7 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
         return;
     }
 
-    const last = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
+    const last = cloneDeep(ctx.selections?.[ctx.selections.length - 1]);
 
     if (
         !last ||
@@ -141,7 +141,7 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     last.height_move = height;
 
     // Check if selecting entire row
-    const isMaxColumn = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1].column;
+    const isMaxColumn = ctx.selections![ctx.selections!.length - 1].column;
     const colMax = ctx.visibledatacolumn.length - 1;
     if (isMaxColumn![0] === 0 && isMaxColumn![1] === colMax) {
         last.column[1] = colMax;
@@ -149,14 +149,14 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     }
 
     // Check if selecting entire column
-    const isMaxRow = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1].row;
+    const isMaxRow = ctx.selections![ctx.selections!.length - 1].row;
     const rowMax = ctx.visibledatarow.length - 1;
     if (isMaxRow![0] === 0 && isMaxRow![1] === rowMax) {
         last.row[1] = rowMax;
         last.height_move = ctx.visibledatarow[rowMax] - 1;
     }
 
-    ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] = last;
+    ctx.selections![ctx.selections!.length - 1] = last;
 
     scrollToFrozenRowCol(ctx, globalCache.freezen?.[ctx.currentSheetId]);
 }
@@ -449,8 +449,8 @@ export function handleOverlayMouseUp(
 
         const changeRowIndex = ctx.rowsResizeStart[1];
         let changeRowSelected = false;
-        if ((ctx.luckysheet_select_save?.length ?? 0) > 0) {
-            ctx.luckysheet_select_save
+        if ((ctx.selections?.length ?? 0) > 0) {
+            ctx.selections
                 ?.filter((select) => select.row_select)
                 ?.some((select) => {
                     if (changeRowIndex >= select.row[0] && changeRowIndex <= select.row[1]) {
@@ -461,7 +461,7 @@ export function handleOverlayMouseUp(
         }
         if (changeRowSelected) {
             cfg.rowlen ||= {};
-            ctx.luckysheet_select_save
+            ctx.selections
                 ?.filter((select) => select.row_select)
                 ?.forEach((select) => {
                     for (let r = select.row[0]; r <= select.row[1]; r += 1) {
@@ -520,8 +520,8 @@ export function handleOverlayMouseUp(
 
         const changeColumnIndex = ctx.colsResizeStart[1];
         let changeColumnSelected = false;
-        if ((ctx.luckysheet_select_save?.length ?? 0) > 0) {
-            ctx.luckysheet_select_save
+        if ((ctx.selections?.length ?? 0) > 0) {
+            ctx.selections
                 ?.filter((select) => select.column_select)
                 ?.some((select) => {
                     if (changeColumnIndex >= select.column[0] && changeColumnIndex <= select.column[1]) {
@@ -532,7 +532,7 @@ export function handleOverlayMouseUp(
         }
         if (changeColumnSelected) {
             cfg.columnlen ||= {};
-            ctx.luckysheet_select_save
+            ctx.selections
                 ?.filter((select) => select.column_select)
                 ?.forEach((select) => {
                     for (let r = select.column[0]; r <= select.column[1]; r += 1) {

@@ -63,14 +63,14 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                 draftCtx.scrollLeft = r.scrollLeft ?? 0;
                 draftCtx.scrollTop = r.scrollTop ?? 0;
                 draftCtx.selectionActive = r.selectionActive ?? false;
-                draftCtx.luckysheet_select_save = r.luckysheet_select_save ?? undefined;
+                draftCtx.selections = r.selections ?? undefined;
             } else {
                 draftCtx.scrollLeft = 0;
                 draftCtx.scrollTop = 0;
                 draftCtx.selectionActive = false;
-                draftCtx.luckysheet_select_save = undefined;
+                draftCtx.selections = undefined;
             }
-            draftCtx.luckysheet_selection_range = [];
+            draftCtx.formulaRangeSelections = [];
         });
     }, [context.sheetScrollRecord, setContext]);
 
@@ -292,8 +292,8 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                 scrollLeft: draftCtx.scrollLeft,
                 scrollTop: draftCtx.scrollTop,
                 selectionActive: draftCtx.selectionActive,
-                luckysheet_select_save: draftCtx.luckysheet_select_save,
-                luckysheet_selection_range: draftCtx.luckysheet_selection_range,
+                selections: draftCtx.selections,
+                formulaRangeSelections: draftCtx.formulaRangeSelections,
             };
             draftCtx.dataVerificationDropDownList = false;
             draftCtx.currentSheetId = sheet.id!;
