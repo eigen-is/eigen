@@ -386,16 +386,6 @@ function activeFormulaInput(
         top: row_pre,
         height: row - row_pre - 1,
     });
-    // $("#fortune-formula-functionrange-select")
-    //   .css({
-    //     left: col_pre,
-    //     width: col - col_pre - 1,
-    //     top: row_pre,
-    //     height: row - row_pre - 1,
-    //   })
-    //   .show(); TODO！！！
-
-    // $("#luckysheet-formula-help-c").hide();
 }
 
 function backFormulaInput(
@@ -725,7 +715,6 @@ export function autoSelectionFormula(
 }
 
 export function cancelPaintModel(ctx: Context) {
-    // $("#luckysheet-sheettable_0").removeClass("luckysheetPaintCursor");
     if (ctx.copyState === null) return;
     if (ctx.copyState?.dataSheetId === ctx.currentSheetId) {
         ctx.formulaRangeSelections = [];
@@ -745,8 +734,6 @@ export function cancelPaintModel(ctx: Context) {
     };
 
     ctx.formatPainterOn = false;
-    // $("#luckysheetpopover").fadeOut(200,function(){
-    //     $("#luckysheetpopover").remove();
 }
 
 export function handleCurrencyFormat(ctx: Context, cellInput: HTMLDivElement) {
@@ -998,11 +985,7 @@ export function handleFormatPainter(ctx: Context) {
         return;
     }
 
-    // tooltip.popover("<i class='fa fa-paint-brush'></i> "+locale_paint.start+"", "topCenter", true, null, locale_paint.end,function(){
     cancelPaintModel(ctx);
-    // });
-
-    // $("#luckysheet-sheettable_0").addClass("luckysheetPaintCursor");
 
     ctx.formulaRangeSelections = [
         {
