@@ -245,6 +245,37 @@ See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the full pattern.
 Export `invalidateFoo(queryClient, ...)` functions from hook files, next to the query key definitions.
 Apps use these instead of importing `useQueryClient` and calling `invalidateQueries()` directly.
 
+### Z-Index / Layering
+
+One scale, project-wide. Higher values are progressively rarer — if you reach for one, justify it
+with a comment.
+
+| Layer                                        | z-index | Examples                                                |
+|----------------------------------------------|---------|---------------------------------------------------------|
+| Document content                             | auto    | Default; everything flows                               |
+| In-content floating UI                       | 10      | Inline autocompletes, chat/contact suggestion lists     |
+| Sheet canvas-internal overlays               | 8–30    | Selection, freeze handles, scrollbars, hint boxes — scoped under `cellArea` |
+| Mobile sidebar backdrop                      | 40      | `sidebar-container.tsx`                                 |
+| Portaled UI (dropdowns, popovers, dialogs)   | 50      | shadcn / Radix default — leave it alone                 |
+| Full-screen overlay                          | 100     | `FilePreview`                                           |
+| Dialog above preview                         | 200     | `DialogContent` with `abovePreview` prop                |
+| Toaster                                      | library | Sonner manages its own stack                            |
+
+Rules:
+
+- **App-level components don't set z-index.** Use layout instead — flex sibling (slides pattern) or
+  absolute inside a parent that establishes a stacking context (docs pattern with `position: relative
+  overflow-hidden`). Side panels (comments, properties) belong here.
+- **`position: relative` alone does *not* establish a stacking context** — the element needs a
+  `z-index` other than `auto` (or one of: `transform`, `opacity < 1`, `filter`, `isolation: isolate`,
+  `will-change`). If you want to contain children's z-indices, add `isolation: isolate`.
+- **Don't override shadcn primitives' z-50.** If a portaled menu is being covered, fix the offending
+  high z-index, don't escalate the menu.
+- **Anything > 50 needs a comment** explaining why (current exceptions are `FilePreview` and the
+  `abovePreview` Dialog prop).
+- **The sheet engine's `cellArea` is its own world** — overlays under it stay ≤ 30; portaled menus
+  rely on shadcn's z-50 to land above.
+
 ## Self-Review Checklist
 
 Before declaring any task complete, review every changed file against this list:
@@ -258,3 +289,5 @@ Before declaring any task complete, review every changed file against this list:
 - Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen?
 - Do new `useQuery` hooks have `enabled` guards and `staleTime`?
 - Does the new code match the patterns and naming of its neighbors?
+- Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a
+  `// Why:` comment? (See § Z-Index / Layering)
