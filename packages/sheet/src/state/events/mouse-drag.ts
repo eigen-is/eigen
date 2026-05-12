@@ -391,7 +391,7 @@ export function handleOverlayMouseUp(
     if (ctx.selectionActive) {
         // Format painter
         if (ctx.luckysheetPaintModelOn) {
-            pasteHandlerOfPaintModel(ctx, ctx.luckysheet_copy_save);
+            pasteHandlerOfPaintModel(ctx, ctx.copyState);
             if (ctx.luckysheetPaintSingle) {
                 // Single-use format painter
                 cancelPaintModel(ctx);

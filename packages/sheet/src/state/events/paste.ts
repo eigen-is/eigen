@@ -507,7 +507,7 @@ function setCellHyperlink(
     ctx.sheets[index]!.hyperlink![`${r}_${c}`] = link;
 }
 
-function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_copy_save']) {
+function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     // if (
     //   !checkProtectionLockedRangeList(
     //     ctx.luckysheet_select_save,
@@ -584,18 +584,18 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
     const dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification) || {};
 
     // if the selection contains hyperlinks
-    if (ctx.luckysheet_select_save?.length === 1 && ctx.luckysheet_copy_save?.copyRange.length === 1) {
-        forEach(ctx.luckysheet_copy_save?.copyRange, (range) => {
+    if (ctx.luckysheet_select_save?.length === 1 && ctx.copyState?.copyRange.length === 1) {
+        forEach(ctx.copyState?.copyRange, (range) => {
             for (let r = 0; r <= range.row[1] - range.row[0]; r += 1) {
                 for (let c = 0; c <= range.column[1] - range.column[0]; c += 1) {
-                    const index = getSheetIndex(ctx, ctx.luckysheet_copy_save?.dataSheetId as string) as number;
+                    const index = getSheetIndex(ctx, ctx.copyState?.dataSheetId as string) as number;
                     if (
                         ctx.sheets[index]!.data![r + range.row[0]][c + range.column[0]]?.hl &&
                         ctx.sheets[index].hyperlink![`${r}_${c}`]
                     ) {
                         setCellHyperlink(
                             ctx,
-                            ctx.luckysheet_copy_save?.dataSheetId as string,
+                            ctx.copyState?.dataSheetId as string,
                             r + ctx.luckysheet_select_save![0].row[0],
                             c + ctx.luckysheet_select_save![0].column[0],
                             ctx.sheets[index].hyperlink![`${r}_${c}`],
@@ -985,7 +985,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
     }
 }
 
-function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_copy_save']) {
+function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) {
     // if (
     //   !checkProtectionLockedRangeList(
     //     ctx.luckysheet_select_save,
@@ -1347,18 +1347,18 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
     file.dataVerification = cloneDeep({ ...file.dataVerification, ...dataVerification });
 
     // if the selection contains hyperlinks
-    if (ctx.luckysheet_select_save?.length === 1 && ctx.luckysheet_copy_save?.copyRange.length === 1) {
-        forEach(ctx.luckysheet_copy_save?.copyRange, (range) => {
+    if (ctx.luckysheet_select_save?.length === 1 && ctx.copyState?.copyRange.length === 1) {
+        forEach(ctx.copyState?.copyRange, (range) => {
             for (let r = 0; r <= range.row[1] - range.row[0]; r += 1) {
                 for (let c = 0; c <= range.column[1] - range.column[0]; c += 1) {
-                    const index = getSheetIndex(ctx, ctx.luckysheet_copy_save?.dataSheetId as string) as number;
+                    const index = getSheetIndex(ctx, ctx.copyState?.dataSheetId as string) as number;
                     if (
                         ctx.sheets[index]!.data![r + range.row[0]][c + range.column[0]]?.hl &&
                         ctx.sheets[index].hyperlink![`${r}_${c}`]
                     ) {
                         setCellHyperlink(
                             ctx,
-                            ctx.luckysheet_copy_save?.dataSheetId as string,
+                            ctx.copyState?.dataSheetId as string,
                             r + ctx.luckysheet_select_save![0].row[0],
                             c + ctx.luckysheet_select_save![0].column[0],
                             ctx.sheets[index].hyperlink![`${r}_${c}`],
@@ -1412,8 +1412,8 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         let isEqual = true;
         if (
             txtdata.indexOf('fortune-copy-action-table') > -1 &&
-            ctx.luckysheet_copy_save?.copyRange != null &&
-            ctx.luckysheet_copy_save.copyRange.length > 0
+            ctx.copyState?.copyRange != null &&
+            ctx.copyState.copyRange.length > 0
         ) {
             // parse clipboard content
             const cpDataArr = [];
@@ -1439,12 +1439,12 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             }
 
             // content of the copy area on the current page
-            const copy_r1 = ctx.luckysheet_copy_save.copyRange[0].row[0];
-            const copy_r2 = ctx.luckysheet_copy_save.copyRange[0].row[1];
-            const copy_c1 = ctx.luckysheet_copy_save.copyRange[0].column[0];
-            const copy_c2 = ctx.luckysheet_copy_save.copyRange[0].column[1];
+            const copy_r1 = ctx.copyState.copyRange[0].row[0];
+            const copy_r2 = ctx.copyState.copyRange[0].row[1];
+            const copy_c1 = ctx.copyState.copyRange[0].column[0];
+            const copy_c2 = ctx.copyState.copyRange[0].column[1];
 
-            const copy_index = ctx.luckysheet_copy_save.dataSheetId;
+            const copy_index = ctx.copyState.dataSheetId;
 
             let d: CellMatrix | null | undefined;
             if (copy_index === ctx.currentSheetId) {
@@ -1513,18 +1513,18 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
         if (
             txtdata.indexOf('fortune-copy-action-table') > -1 &&
-            ctx.luckysheet_copy_save?.copyRange != null &&
-            ctx.luckysheet_copy_save.copyRange.length > 0 &&
+            ctx.copyState?.copyRange != null &&
+            ctx.copyState.copyRange.length > 0 &&
             isEqual
         ) {
             // clipboard content matches what was copied from luckysheet itself
             if (ctx.pasteIsCut) {
                 ctx.pasteIsCut = false;
-                pasteHandlerOfCutPaste(ctx, ctx.luckysheet_copy_save);
+                pasteHandlerOfCutPaste(ctx, ctx.copyState);
                 ctx.luckysheet_selection_range = [];
                 // selection.clearcopy(e);
             } else {
-                pasteHandlerOfCopyPaste(ctx, ctx.luckysheet_copy_save);
+                pasteHandlerOfCopyPaste(ctx, ctx.copyState);
             }
         } else if (txtdata.indexOf('fortune-copy-action-image') > -1) {
             // imageCtrl.pasteImgItem();
@@ -1845,12 +1845,12 @@ export function handlePasteByClick(ctx: Context, clipboardData: string, triggerT
     }
 
     // If we have an internal copy/cut save, use that
-    if (ctx.luckysheet_copy_save?.copyRange != null && ctx.luckysheet_copy_save.copyRange.length > 0) {
+    if (ctx.copyState?.copyRange != null && ctx.copyState.copyRange.length > 0) {
         if (ctx.pasteIsCut) {
             ctx.pasteIsCut = false;
-            pasteHandlerOfCutPaste(ctx, ctx.luckysheet_copy_save);
+            pasteHandlerOfCutPaste(ctx, ctx.copyState);
         } else {
-            pasteHandlerOfCopyPaste(ctx, ctx.luckysheet_copy_save);
+            pasteHandlerOfCopyPaste(ctx, ctx.copyState);
         }
     } else if (clipboardData && triggerType !== 'btn') {
         const isExcelFormula = clipboardData.startsWith('=');

@@ -18,9 +18,9 @@ export function FilterOptions() {
         setContext((draftCtx) => {
             const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
             if (sheetIdx == null) return;
-            draftCtx.luckysheet_filter_save = draftCtx.sheets[sheetIdx].filter_select;
+            draftCtx.activeFilterRange = draftCtx.sheets[sheetIdx].filter_select;
             draftCtx.filter = draftCtx.sheets[sheetIdx].filter || {};
-            createFilterOptions(draftCtx, draftCtx.luckysheet_filter_save, undefined);
+            createFilterOptions(draftCtx, draftCtx.activeFilterRange, undefined);
         });
     }, [visibledatarow, visibledatacolumn, setContext, currentSheetId, filter_select]);
 

@@ -170,7 +170,7 @@ export function handleWithCtrlOrMetaKey(
     if (!flowdata) return;
 
     if (e.shiftKey) {
-        ctx.luckysheet_shiftpositon = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
+        ctx.shiftAnchor = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
         ctx.shiftKeyDown = true;
 
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
@@ -321,7 +321,7 @@ export function handleWithCtrlOrMetaKey(
 function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
     if (ctx.luckysheetCellUpdate.length > 0) return;
 
-    ctx.luckysheet_shiftpositon = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
+    ctx.shiftAnchor = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
     ctx.shiftKeyDown = true;
 
     // Shift + Arrow: extend selection by one cell
