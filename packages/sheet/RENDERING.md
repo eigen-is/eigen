@@ -97,7 +97,7 @@ The selection box is a React div overlay, not drawn on canvas.
 
 - **Focus cell**: `.luckysheet-cell-selected-focus` — `z-index: 14`, light blue bg + blue border
 - **Selection range(s)**: `.luckysheet-cell-selected` — one div per range in
-  `context.luckysheet_select_save`, `z-index: 15`, with 4 border divs + center handle
+  `context.selections`, `z-index: 15`, with 4 border divs + center handle
 - **Copy indicator**: dashed blue border, `z-index: 18`
 - **Move indicator**: `.fortune-cell-selected-move`, `z-index: 16`
 - **Extend indicator**: `.fortune-cell-selected-extend`, `z-index: 16`
