@@ -49,7 +49,7 @@ export const ContextMenu: React.FC = () => {
     const { rightclick, drag, generalDialog, info } = locale(context);
     const getMenuElement = useCallback(
         (name: string, i: number) => {
-            const selection = context.luckysheet_select_save?.[0];
+            const selection = context.selections?.[0];
             if (name === '|') {
                 return <DropdownMenuSeparator key={`divider-${i}`} />;
             }
@@ -59,7 +59,7 @@ export const ContextMenu: React.FC = () => {
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
-                                if ((draftCtx.luckysheet_select_save?.length ?? 0) > 1) {
+                                if ((draftCtx.selections?.length ?? 0) > 1) {
                                     showAlert(rightclick.noMulti, 'ok');
                                     draftCtx.contextMenu = {};
                                     return;
@@ -107,7 +107,7 @@ export const ContextMenu: React.FC = () => {
                               key={`add-col-${dir}`}
                               className={menuItemClass}
                               onClick={(e) => {
-                                  const position = context.luckysheet_select_save?.[0]?.column?.[0];
+                                  const position = context.selections?.[0]?.column?.[0];
                                   if (position == null) return;
                                   const countStr = (e.currentTarget as HTMLDivElement).querySelector('input')?.value;
                                   if (countStr == null) return;
@@ -165,7 +165,7 @@ export const ContextMenu: React.FC = () => {
                               key={`add-row-${dir}`}
                               className={menuItemClass}
                               onClick={(e) => {
-                                  const position = context.luckysheet_select_save?.[0]?.row?.[0];
+                                  const position = context.selections?.[0]?.row?.[0];
                                   if (position == null) return;
                                   const countStr = e.currentTarget.querySelector('input')?.value;
                                   if (countStr == null) return;
@@ -229,7 +229,7 @@ export const ContextMenu: React.FC = () => {
                                 };
                                 setContext(
                                     (draftCtx) => {
-                                        if ((draftCtx.luckysheet_select_save?.length ?? 0) > 1) {
+                                        if ((draftCtx.selections?.length ?? 0) > 1) {
                                             showAlert(rightclick.noMulti, 'ok');
                                             draftCtx.contextMenu = {};
                                             draftCtx.dataVerificationDropDownList = false;
@@ -277,7 +277,7 @@ export const ContextMenu: React.FC = () => {
                                 };
                                 setContext(
                                     (draftCtx) => {
-                                        if ((draftCtx.luckysheet_select_save?.length ?? 0) > 1) {
+                                        if ((draftCtx.selections?.length ?? 0) > 1) {
                                             showAlert(rightclick.noMulti, 'ok');
                                             draftCtx.contextMenu = {};
                                             return;
@@ -362,12 +362,12 @@ export const ContextMenu: React.FC = () => {
             }
             if (name === 'set-row-height') {
                 const rowHeight = selection?.height || context.defaultrowlen;
-                const shownRowHeight = context.luckysheet_select_save?.some(
+                const shownRowHeight = context.selections?.some(
                     (section) => section.height_move !== (rowHeight + 1) * (section.row[1] - section.row[0] + 1) - 1,
                 )
                     ? ''
                     : rowHeight;
-                return context.luckysheet_select_save?.some((section) => section.row_select) ? (
+                return context.selections?.some((section) => section.row_select) ? (
                     <div
                         key="set-row-height"
                         className={menuItemClass}
@@ -386,7 +386,7 @@ export const ContextMenu: React.FC = () => {
                                 }
                                 const numRowHeight = parseInt(targetRowHeight, 10);
                                 const rowHeightList: Record<string, number> = {};
-                                for (const section of draftCtx.luckysheet_select_save ?? []) {
+                                for (const section of draftCtx.selections ?? []) {
                                     for (let rowNum = section.row[0]; rowNum <= section.row[1]; rowNum += 1) {
                                         rowHeightList[rowNum] = numRowHeight;
                                     }
@@ -416,13 +416,13 @@ export const ContextMenu: React.FC = () => {
             }
             if (name === 'set-column-width') {
                 const colWidth = selection?.width || context.defaultcollen;
-                const shownColWidth = context.luckysheet_select_save?.some(
+                const shownColWidth = context.selections?.some(
                     (section) =>
                         section.width_move !== (colWidth + 1) * (section.column[1] - section.column[0] + 1) - 1,
                 )
                     ? ''
                     : colWidth;
-                return context.luckysheet_select_save?.some((section) => section.column_select) ? (
+                return context.selections?.some((section) => section.column_select) ? (
                     <div
                         key="set-column-width"
                         className={menuItemClass}
@@ -441,7 +441,7 @@ export const ContextMenu: React.FC = () => {
                                 }
                                 const numColWidth = parseInt(targetColWidth, 10);
                                 const colWidthList: Record<string, number> = {};
-                                for (const section of draftCtx.luckysheet_select_save ?? []) {
+                                for (const section of draftCtx.selections ?? []) {
                                     for (let colNum = section.column[0]; colNum <= section.column[1]; colNum += 1) {
                                         colWidthList[colNum] = numColWidth;
                                     }
@@ -590,7 +590,7 @@ export const ContextMenu: React.FC = () => {
                 );
             }
             if (name === 'comment') {
-                const last = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
+                const last = context.selections?.[context.selections.length - 1];
                 let row_index = last?.row_focus;
                 let col_index = last?.column_focus;
                 if (!last) {
@@ -720,7 +720,7 @@ export const ContextMenu: React.FC = () => {
         [
             context,
             context.currentSheetId,
-            context.luckysheet_select_save,
+            context.selections,
             context.defaultrowlen,
             context.defaultcollen,
             rightclick,

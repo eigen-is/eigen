@@ -148,7 +148,7 @@ export const RowHeader: React.FC = () => {
     );
 
     useEffect(() => {
-        const s = context.luckysheet_select_save || [];
+        const s = context.selections || [];
         let rowTitleMap: Record<number, number> = {};
         for (let i = 0; i < s.length; i += 1) {
             const r1 = s[i].row[0];
@@ -167,7 +167,7 @@ export const RowHeader: React.FC = () => {
             }
         }
         setSelectedLocation(selects);
-    }, [context.luckysheet_select_save, context.visibledatarow]);
+    }, [context.selections, context.visibledatarow]);
 
     useEffect(() => {
         containerRef.current!.scrollTop = context.scrollTop;

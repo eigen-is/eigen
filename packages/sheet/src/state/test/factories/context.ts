@@ -16,7 +16,7 @@ export function contextFactory({ ...params }: Partial<Context> = {}): Partial<Co
         currentSheetId: 'id_1',
         allowEdit: true,
         config: {},
-        luckysheet_select_save: [
+        selections: [
             {
                 row: [0, 0],
                 column: [1, 1],

@@ -105,7 +105,7 @@ export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
 }
 
 export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) {
-    const select_save = ctx.luckysheet_select_save;
+    const select_save = ctx.selections;
     if (!select_save) return;
 
     let row: number | undefined;

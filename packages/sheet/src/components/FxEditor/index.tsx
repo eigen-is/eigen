@@ -30,7 +30,7 @@ export function FxEditor() {
     const [focused, setFocused] = useState(false);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
     const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
-    const firstSelection = context.luckysheet_select_save?.[0];
+    const firstSelection = context.selections?.[0];
     const prevFirstSelection = usePrevious(firstSelection);
     const prevSheetId = usePrevious(context.currentSheetId);
     const recentText = useRef('');
@@ -69,7 +69,7 @@ export function FxEditor() {
         } else {
             refs.fxInput.current!.innerHTML = '';
         }
-    }, [context.sheets, context.currentSheetId, context.luckysheet_select_save]);
+    }, [context.sheets, context.currentSheetId, context.selections]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: callback only refreshed when sheet/selection-shape changes — derived helpers (allowEdit, etc.) are read fresh from `context`
     const onFocus = useCallback(() => {
@@ -77,13 +77,13 @@ export function FxEditor() {
             return;
         }
         if (
-            (context.luckysheet_select_save?.length ?? 0) > 0 &&
+            (context.selections?.length ?? 0) > 0 &&
             !context.cellSelectMoving &&
-            isAllowEdit(context, context.luckysheet_select_save)
+            isAllowEdit(context, context.selections)
         ) {
             setFocused(true);
             setContext((draftCtx) => {
-                const last = draftCtx.luckysheet_select_save![draftCtx.luckysheet_select_save!.length - 1];
+                const last = draftCtx.selections![draftCtx.selections!.length - 1];
 
                 if (last.row_focus == null || last.column_focus == null) return;
                 draftCtx.editingCellPosition = [last.row_focus, last.column_focus];
@@ -91,14 +91,7 @@ export function FxEditor() {
                 // formula.rangeResizeTo = $("#luckysheet-functionbox-cell");
             });
         }
-    }, [
-        context.config,
-        context.luckysheet_select_save,
-        context.sheets,
-        context.currentSheetId,
-        refs.globalCache,
-        setContext,
-    ]);
+    }, [context.config, context.selections, context.sheets, context.currentSheetId, refs.globalCache, setContext]);
 
     const formulaAutocomplete = useFormulaAutocomplete({ targetRef: refs.fxInput, enabled: focused });
 
@@ -127,7 +120,7 @@ export function FxEditor() {
                                 draftCtx.editingCellPosition[1],
                                 refs.fxInput.current!,
                             );
-                            draftCtx.luckysheet_select_save = [
+                            draftCtx.selections = [
                                 {
                                     row: [lastCellUpdate[0], lastCellUpdate[0]],
                                     column: [lastCellUpdate[1], lastCellUpdate[1]],
@@ -205,11 +198,11 @@ export function FxEditor() {
         if (isHidenRC) {
             return false;
         }
-        if (!isAllowEdit(context, context.luckysheet_select_save)) {
+        if (!isAllowEdit(context, context.selections)) {
             return false;
         }
         return true;
-    }, [context.config, context.luckysheet_select_save, context.sheets, context.currentSheetId, isHidenRC]);
+    }, [context.config, context.selections, context.sheets, context.currentSheetId, isHidenRC]);
 
     return (
         <aside>

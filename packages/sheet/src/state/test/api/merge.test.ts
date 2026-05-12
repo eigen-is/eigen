@@ -7,7 +7,7 @@ import { contextFactory, selectionFactory } from '../factories/context';
 describe('sheet/core/api/merge', () => {
     const getContext = () =>
         contextFactory({
-            luckysheet_select_save: selectionFactory([0, 1], [0, 1], 0, 0),
+            selections: selectionFactory([0, 1], [0, 1], 0, 0),
         }) as Context;
 
     test('mergeCells and cancelMerge', async () => {

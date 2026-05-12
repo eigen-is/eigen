@@ -159,7 +159,7 @@ export function goToLink(
         const col_pre = range.column[0] - 1 === -1 ? 0 : ctx.visibledatacolumn[range.column[0] - 1];
         scrollbarX.scrollLeft = col_pre;
         scrollbarY.scrollLeft = row_pre;
-        ctx.luckysheet_select_save = normalizeSelection(ctx, [range]);
+        ctx.selections = normalizeSelection(ctx, [range]);
         changeSheet(ctx, range.sheetId || ctx.currentSheetId);
     }
     ctx.linkCard = undefined;

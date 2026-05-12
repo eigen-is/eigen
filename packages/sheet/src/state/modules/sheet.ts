@@ -14,8 +14,8 @@ function storeSheetParam(ctx: Context) {
     if (index == null) return;
     const file = ctx.sheets[index];
     file.config = ctx.config;
-    file.luckysheet_select_save = ctx.luckysheet_select_save;
-    file.luckysheet_selection_range = ctx.luckysheet_selection_range;
+    file.selections = ctx.selections;
+    file.formulaRangeSelections = ctx.formulaRangeSelections;
 }
 
 export function storeSheetParamALL(ctx: Context) {

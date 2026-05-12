@@ -143,8 +143,8 @@ function renderSheet(sheet: Sheet, isLast: boolean, engine: FormulaEngine, resol
     // painter does the same fallback). Formula-based rules get a resolver-backed evaluator so
     // `=A1>10` style rules can fire server-side.
     const cfMap: ComputeMap | null =
-        sheet.luckysheet_conditionformat_save && sheet.data
-            ? evaluateConditionalFormat(sheet.luckysheet_conditionformat_save, sheet.data, {
+        sheet.conditionalFormatRules && sheet.data
+            ? evaluateConditionalFormat(sheet.conditionalFormatRules, sheet.data, {
                   evaluateFormula: buildCfFormulaEvaluator(engine, resolver, sheet.id ?? sheet.name),
               })
             : null;

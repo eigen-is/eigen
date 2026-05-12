@@ -30,7 +30,7 @@ export function jfrefreshgrid(
     }
 
     if (range == null) {
-        range = ctx.luckysheet_select_save;
+        range = ctx.selections;
         if (range == null) return;
     }
 

@@ -223,9 +223,9 @@ export function chatatABC(n: number) {
     return s.toUpperCase();
 }
 
-export function isAllowEdit(ctx: Context, range?: Sheet['luckysheet_select_save']) {
+export function isAllowEdit(ctx: Context, range?: Sheet['selections']) {
     const cfg = ctx.config;
-    const judgeRange = isUndefined(range) ? ctx.luckysheet_select_save : range;
+    const judgeRange = isUndefined(range) ? ctx.selections : range;
     return (
         every(judgeRange, (selection) => {
             for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {

@@ -15,7 +15,7 @@ export function handleCopy(ctx: Context): boolean {
         cancelPaintModel(ctx);
     }
 
-    const selection = ctx.luckysheet_select_save;
+    const selection = ctx.selections;
     if (!selection || isEmpty(selection)) {
         return false;
     }
@@ -48,26 +48,21 @@ export function handleCopy(ctx: Context): boolean {
     }
 
     // warn when multiple selections have conditional formatting
-    const cdformat = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].luckysheet_conditionformat_save;
-    if (
-        !isNil(ctx.luckysheet_select_save) &&
-        ctx.luckysheet_select_save.length > 1 &&
-        !isNil(cdformat) &&
-        cdformat.length > 0
-    ) {
+    const cdformat = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].conditionalFormatRules;
+    if (!isNil(ctx.selections) && ctx.selections.length > 1 && !isNil(cdformat) && cdformat.length > 0) {
         let hasCF = false;
 
         const cf_compute = getComputeMap(ctx);
 
-        for (let s = 0; s < ctx.luckysheet_select_save.length; s += 1) {
+        for (let s = 0; s < ctx.selections.length; s += 1) {
             if (hasCF) {
                 break;
             }
 
-            const r1 = ctx.luckysheet_select_save[s].row[0];
-            const r2 = ctx.luckysheet_select_save[s].row[1];
-            const c1 = ctx.luckysheet_select_save[s].column[0];
-            const c2 = ctx.luckysheet_select_save[s].column[1];
+            const r1 = ctx.selections[s].row[0];
+            const r2 = ctx.selections[s].row[1];
+            const c1 = ctx.selections[s].column[0];
+            const c2 = ctx.selections[s].column[1];
 
             for (let r = r1; r <= r2; r += 1) {
                 if (hasCF) {

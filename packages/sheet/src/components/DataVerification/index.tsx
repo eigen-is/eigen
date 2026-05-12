@@ -153,16 +153,16 @@ export function DataVerification() {
             let rangeT = '';
 
             // If there's a selection, convert it to string form for display
-            if (ctx.luckysheet_select_save) {
-                const range = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+            if (ctx.selections) {
+                const range = ctx.selections[ctx.selections.length - 1];
                 rangeT = getRangetxt(context, context.currentSheetId, range, context.currentSheetId);
             }
 
             // Initialize values
             const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
             const ctxDataVerification = ctx.sheets[index].dataVerification ?? {};
-            if (!ctx.luckysheet_select_save) return;
-            const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+            if (!ctx.selections) return;
+            const last = ctx.selections[ctx.selections.length - 1];
             const rowIndex = last.row_focus;
             const colIndex = last.column_focus;
             if (rowIndex == null || colIndex == null) return;

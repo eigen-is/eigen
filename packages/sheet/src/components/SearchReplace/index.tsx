@@ -200,7 +200,7 @@ export function SearchReplace() {
                                 key={v.cellPosition}
                                 onClick={() => {
                                     setContext((draftCtx) => {
-                                        draftCtx.luckysheet_select_save = normalizeSelection(draftCtx, [
+                                        draftCtx.selections = normalizeSelection(draftCtx, [
                                             { row: [v.r, v.r], column: [v.c, v.c] },
                                         ]);
                                         scrollToHighlightCell(draftCtx, v.r, v.c);

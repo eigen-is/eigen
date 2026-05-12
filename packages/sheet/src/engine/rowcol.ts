@@ -330,8 +330,8 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
 
     newTarget.config = newCfg;
 
-    if (target.luckysheet_conditionformat_save != null) {
-        newTarget.luckysheet_conditionformat_save = target.luckysheet_conditionformat_save.map((cf) => {
+    if (target.conditionalFormatRules != null) {
+        newTarget.conditionalFormatRules = target.conditionalFormatRules.map((cf) => {
             const newRanges = cf.cellrange.map((range) => {
                 let r1 = range.row[0];
                 let r2 = range.row[1];
@@ -496,9 +496,9 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
 
     newTarget.config = newCfg;
 
-    if (target.luckysheet_conditionformat_save != null) {
+    if (target.conditionalFormatRules != null) {
         const newCFarr = [];
-        for (const cf of target.luckysheet_conditionformat_save) {
+        for (const cf of target.conditionalFormatRules) {
             const cf_new_range = [];
             for (const range of cf.cellrange) {
                 let r1 = range.row[0];
@@ -549,7 +549,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
                 newCFarr.push({ ...cf, cellrange: cf_new_range });
             }
         }
-        newTarget.luckysheet_conditionformat_save = newCFarr;
+        newTarget.conditionalFormatRules = newCFarr;
     }
 
     let result: S[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];

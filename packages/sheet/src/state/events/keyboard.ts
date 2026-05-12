@@ -29,7 +29,7 @@ export function handleGlobalEnter(
     } else if (ctx.editingCellPosition.length > 0) {
         const [r, c] = ctx.editingCellPosition;
         updateCell(ctx, r, c, cellInput, undefined, canvas);
-        ctx.luckysheet_select_save = [
+        ctx.selections = [
             {
                 row: [r, r],
                 column: [c, c],
@@ -39,8 +39,8 @@ export function handleGlobalEnter(
         ];
         moveHighlightCell(ctx, 'down', 1, 'rangeOfSelect');
         e.preventDefault();
-    } else if ((ctx.luckysheet_select_save?.length ?? 0) > 0) {
-        const last = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];
+    } else if ((ctx.selections?.length ?? 0) > 0) {
+        const last = ctx.selections![ctx.selections!.length - 1];
         if (last.row_focus == null || last.column_focus == null) return;
         ctx.editingCellPosition = [last.row_focus, last.column_focus];
         e.preventDefault();
@@ -94,9 +94,7 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     const maxRow = file.row;
     const maxCol = file.column;
     const last: Selection | undefined =
-        ctx.luckysheet_select_save && ctx.luckysheet_select_save.length > 0
-            ? ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1]
-            : undefined;
+        ctx.selections && ctx.selections.length > 0 ? ctx.selections[ctx.selections.length - 1] : undefined;
     if (!last) return;
 
     const currR = last.row_focus;
@@ -170,14 +168,14 @@ export function handleWithCtrlOrMetaKey(
     if (!flowdata) return;
 
     if (e.shiftKey) {
-        ctx.shiftAnchor = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
+        ctx.shiftAnchor = cloneDeep(ctx.selections?.[ctx.selections.length - 1]);
         ctx.shiftKeyDown = true;
 
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             // Ctrl + Shift + Arrow: extend selection toward next edge
             handleControlPlusArrowKey(ctx, e, true);
         } else if ([';', '"', ':', "'"].includes(e.key)) {
-            const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+            const last = ctx.selections?.[ctx.selections.length - 1];
             if (!last || last.row_focus == null || last.column_focus == null) return;
 
             const row_index = last.row_focus;
@@ -212,7 +210,7 @@ export function handleWithCtrlOrMetaKey(
         ctx.showReplace = true;
     } else if (e.code === 'KeyV') {
         // Ctrl + V: paste — multi-range selections are not supported, bail
-        if ((ctx.luckysheet_select_save?.length ?? 0) > 1) {
+        if ((ctx.selections?.length ?? 0) > 1) {
             return;
         }
 
@@ -232,14 +230,14 @@ export function handleWithCtrlOrMetaKey(
         // Ctrl + A: select all
         selectAll(ctx);
     } else if (e.code === 'KeyD') {
-        if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
+        if (!ctx.selections || ctx.selections.length === 0) {
             return;
         }
 
         e.preventDefault();
         e.stopPropagation();
 
-        const selectedRange = ctx.luckysheet_select_save[0];
+        const selectedRange = ctx.selections[0];
         const { row, column } = selectedRange;
 
         if (!row || !column) return;
@@ -272,14 +270,14 @@ export function handleWithCtrlOrMetaKey(
 
         jfrefreshgrid(ctx, null, undefined);
     } else if (e.code === 'KeyR') {
-        if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
+        if (!ctx.selections || ctx.selections.length === 0) {
             return;
         }
 
         e.preventDefault();
         e.stopPropagation();
 
-        const selectedRange = ctx.luckysheet_select_save[0];
+        const selectedRange = ctx.selections[0];
         const { row, column } = selectedRange;
 
         if (!row || !column) return;
@@ -321,7 +319,7 @@ export function handleWithCtrlOrMetaKey(
 function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
     if (ctx.editingCellPosition.length > 0) return;
 
-    ctx.shiftAnchor = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
+    ctx.shiftAnchor = cloneDeep(ctx.selections?.[ctx.selections.length - 1]);
     ctx.shiftKeyDown = true;
 
     // Shift + Arrow: extend selection by one cell
@@ -386,8 +384,8 @@ export function handleGlobalKeyDown(
         return;
     }
 
-    if (kstr === 'Escape' && !!ctx.luckysheet_selection_range) {
-        ctx.luckysheet_selection_range = [];
+    if (kstr === 'Escape' && !!ctx.formulaRangeSelections) {
+        ctx.formulaRangeSelections = [];
     }
 
     const allowEdit = isAllowEdit(ctx);
@@ -449,7 +447,7 @@ export function handleGlobalKeyDown(
             return;
         }
 
-        const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+        const last = ctx.selections?.[ctx.selections.length - 1];
         if (!last || last.row_focus == null || last.column_focus == null) return;
 
         ctx.editingCellPosition = [last.row_focus, last.column_focus];
@@ -507,9 +505,9 @@ export function handleGlobalKeyDown(
         (e.ctrlKey && kcode === 86)
     ) {
         if (!allowEdit) return;
-        if (!isEmpty(ctx.luckysheet_select_save) && kstr !== 'CapsLock' && kcode !== 18) {
+        if (!isEmpty(ctx.selections) && kstr !== 'CapsLock' && kcode !== 18) {
             // Activate the input box and forward the keypress to it.
-            const last = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];
+            const last = ctx.selections![ctx.selections!.length - 1];
             if (last.row_focus == null || last.column_focus == null) return;
             ctx.editingCellPosition = [last.row_focus, last.column_focus];
             cache.overwriteCell = true;

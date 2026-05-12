@@ -102,7 +102,7 @@ export function handleCellAreaMouseDown(
     // Right-click handling
     if (e.button === 2) {
         // If right-click is inside selection, stop mousedown handling
-        const isInSelection = ctx.luckysheet_select_save?.some(
+        const isInSelection = ctx.selections?.some(
             (obj_s) =>
                 obj_s.row != null &&
                 row_index >= obj_s.row[0] &&
@@ -314,7 +314,7 @@ export function handleCellAreaMouseDown(
                 height,
             });
             e.preventDefault();
-            return; // skip ctx.luckysheet_select_save to prevent clearing cellInput
+            return; // skip ctx.selections to prevent clearing cellInput
         }
         updateCell(ctx, ctx.editingCellPosition[0], ctx.editingCellPosition[1], cellInput, undefined, canvas);
         ctx.selectionActive = true;
@@ -326,7 +326,7 @@ export function handleCellAreaMouseDown(
     if (ctx.selectionActive) {
         if (e.shiftKey) {
             // Shift+click: select range
-            const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]; // last selection
+            const last = ctx.selections?.[ctx.selections.length - 1]; // last selection
             if (
                 last &&
                 last.top != null &&
@@ -390,11 +390,11 @@ export function handleCellAreaMouseDown(
                 last.width_move = width;
                 last.top_move = top;
                 last.height_move = height;
-                ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] = last;
+                ctx.selections![ctx.selections!.length - 1] = last;
             }
         } else if (e.ctrlKey || e.metaKey) {
             // Add to selection
-            ctx.luckysheet_select_save?.push({
+            ctx.selections?.push({
                 left: col_pre,
                 width: col - col_pre - 1,
                 top: row_pre,
@@ -410,7 +410,7 @@ export function handleCellAreaMouseDown(
             });
         } else {
             // eslint-disable-next-line prefer-const
-            ctx.luckysheet_select_save = [
+            ctx.selections = [
                 {
                     left: col_pre,
                     width: col - col_pre - 1,
@@ -431,7 +431,7 @@ export function handleCellAreaMouseDown(
         }
     }
 
-    ctx.luckysheet_select_save = normalizeSelection(ctx, ctx.luckysheet_select_save);
+    ctx.selections = normalizeSelection(ctx, ctx.selections);
 
     if (ctx.hooks.afterCellMouseDown) {
         setTimeout(() => {
@@ -500,7 +500,7 @@ export function handleCellAreaDoubleClick(
     }
 
     // Check if current and focus coordinates match; correct if not
-    const { column_focus, row_focus } = ctx.luckysheet_select_save![0];
+    const { column_focus, row_focus } = ctx.selections![0];
     if (!isNil(column_focus) && !isNil(row_focus) && (column_focus !== col_index || row_focus !== row_index)) {
         row_index = row_focus;
         col_index = column_focus;
@@ -567,7 +567,7 @@ export function handleContextMenu(
         const col_pre = col_location[0];
         const col_index = col_location[2];
         // If right-click is inside selection, skip selection handling
-        const isInSelection = ctx.luckysheet_select_save?.some(
+        const isInSelection = ctx.selections?.some(
             (obj_s) =>
                 obj_s.row != null &&
                 row_index >= obj_s.row[0] &&
@@ -591,7 +591,7 @@ export function handleContextMenu(
                 );
                 if (changeparam != null) {
                     const [columnseleted, rowseleted, top, height, left, width] = changeparam;
-                    ctx.luckysheet_select_save?.push({
+                    ctx.selections?.push({
                         left,
                         width: width - 1,
                         top,
@@ -608,7 +608,7 @@ export function handleContextMenu(
                     return;
                 }
             }
-            ctx.luckysheet_select_save?.push({
+            ctx.selections?.push({
                 left: col_pre,
                 width: col - col_pre - 1,
                 top: row_pre,
@@ -641,7 +641,7 @@ export function handleContextMenu(
             );
             if (changeparam != null) {
                 const [columnseleted, rowseleted, top, height, left, width] = changeparam;
-                ctx.luckysheet_select_save = [
+                ctx.selections = [
                     {
                         left,
                         width: width - 1,
@@ -660,7 +660,7 @@ export function handleContextMenu(
                 return;
             }
         }
-        ctx.luckysheet_select_save = [
+        ctx.selections = [
             {
                 left: col_pre,
                 width: col - col_pre - 1,
@@ -693,7 +693,7 @@ export function handleContextMenu(
         const row_pre = row_location[0];
         const row_index = row_location[2];
         // If right-click is inside selection, skip selection handling
-        const isInSelection = ctx.luckysheet_select_save?.some(
+        const isInSelection = ctx.selections?.some(
             (obj_s) =>
                 obj_s.row != null && row_index >= obj_s.row[0] && row_index <= obj_s.row[1] && !obj_s.column_select,
         );
@@ -705,8 +705,8 @@ export function handleContextMenu(
         const top = row_pre;
         const height = row - row_pre - 1;
         const rowseleted = [row_index, row_index];
-        ctx.luckysheet_select_save = [];
-        ctx.luckysheet_select_save.push({
+        ctx.selections = [];
+        ctx.selections.push({
             left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
             width:
                 colLocationByIndex(0, ctx.visibledatacolumn)[1] - colLocationByIndex(0, ctx.visibledatacolumn)[0] - 1,
@@ -742,7 +742,7 @@ export function handleContextMenu(
         const col_pre = col_location[0];
         const col_index = col_location[2];
         // If right-click is inside selection, skip selection handling
-        const isInSelection = ctx.luckysheet_select_save?.some(
+        const isInSelection = ctx.selections?.some(
             (obj_s) =>
                 obj_s.row != null && col_index >= obj_s.column[0] && col_index <= obj_s.column[1] && !obj_s.row_select,
         );
@@ -751,8 +751,8 @@ export function handleContextMenu(
         const left = col_pre;
         const width = col - col_pre - 1;
         const columnseleted = [col_index, col_index];
-        ctx.luckysheet_select_save = [];
-        ctx.luckysheet_select_save.push({
+        ctx.selections = [];
+        ctx.selections.push({
             left,
             width,
             top: rowLocationByIndex(0, ctx.visibledatarow)[0],

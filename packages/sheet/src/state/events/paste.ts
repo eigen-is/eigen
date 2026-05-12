@@ -146,19 +146,19 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
     // editor.webWorkerFlowDataCache(ctx.flowdata); // store data in worker
     // ctx.sheets[getSheetIndex(ctx.currentSheetId)].data = ctx.flowdata;
 
-    // luckysheet_select_save
+    // selections
     if (ctx.currentSheetId === target.sheetId) {
-        ctx.luckysheet_select_save = [{ row: target.range.row, column: target.range.column }];
+        ctx.selections = [{ row: target.range.row, column: target.range.column }];
     } else {
-        ctx.luckysheet_select_save = [{ row: source.range.row, column: source.range.column }];
+        ctx.selections = [{ row: source.range.row, column: source.range.column }];
     }
-    if (ctx.luckysheet_select_save.length > 0) {
+    if (ctx.selections.length > 0) {
         // if there is a selection, refresh the selection highlight
         // selectHightlightShow();
     }
     // conditional formatting
-    ctx.sheets[getSheetIndex(ctx, source.sheetId)!].luckysheet_conditionformat_save = source.curCdformat;
-    ctx.sheets[getSheetIndex(ctx, target.sheetId)!].luckysheet_conditionformat_save = target.curCdformat;
+    ctx.sheets[getSheetIndex(ctx, source.sheetId)!].conditionalFormatRules = source.curCdformat;
+    ctx.sheets[getSheetIndex(ctx, target.sheetId)!].conditionalFormatRules = target.curCdformat;
 
     // data validation
     // if (ctx.currentSheetId === source.sheetId) {
@@ -209,11 +209,11 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
 
     // // source sheet
     // server.saveParam("all", source["sheetId"], source["curCdformat"], {
-    //   k: "luckysheet_conditionformat_save",
+    //   k: "conditionalFormatRules",
     // });
     // // destination sheet
     // server.saveParam("all", target["sheetId"], target["curCdformat"], {
-    //   k: "luckysheet_conditionformat_save",
+    //   k: "conditionalFormatRules",
     // });
 
     // // source sheet
@@ -234,7 +234,7 @@ type CellBorderMap = Record<string, Pick<CellBorderInfo['value'], 'l' | 'r' | 't
 function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: CellBorderMap) {
     // if (
     //   !checkProtectionLockedRangeList(
-    //     ctx.luckysheet_select_save,
+    //     ctx.selections,
     //     ctx.currentSheetId
     //   )
     // ) {
@@ -243,7 +243,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    if ((ctx.luckysheet_select_save?.length ?? 0) !== 1) {
+    if ((ctx.selections?.length ?? 0) !== 1) {
         // if (isEditMode()) {
         //   alert("Cannot perform this operation on multiple selection areas, please select a single area and try again");
         // } else {
@@ -272,9 +272,9 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         const copyh = data.length;
         const copyc = data[0].length;
 
-        const minh = ctx.luckysheet_select_save![0].row[0]; // first and last row of apply range
+        const minh = ctx.selections![0].row[0]; // first and last row of apply range
         const maxh = minh + copyh - 1;
-        const minc = ctx.luckysheet_select_save![0].column[0]; // first and last column of apply range
+        const minc = ctx.selections![0].column[0]; // first and last column of apply range
         const maxc = minc + copyc - 1;
 
         // return with a warning if the apply range contains partially merged cells
@@ -386,7 +386,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
             }
         }
 
-        ctx.luckysheet_select_save = [{ row: [minh, maxh], column: [minc, maxc] }];
+        ctx.selections = [{ row: [minh, maxh], column: [minc, maxc] }];
 
         ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config = cfg;
         jfrefreshgrid(ctx, null, undefined);
@@ -407,7 +407,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         const d = getFlowdata(ctx); // fetch data
         if (!d) return;
 
-        const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+        const last = ctx.selections?.[ctx.selections.length - 1];
         if (!last) return;
 
         const curR = last.row == null ? 0 : last.row[0];
@@ -484,9 +484,9 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         //   const allParam = {
         //     RowlChange: true,
         //   };
-        //   jfrefreshgrid(d, ctx.luckysheet_select_save, allParam);
+        //   jfrefreshgrid(d, ctx.selections, allParam);
         // } else {
-        //   jfrefreshgrid(d, ctx.luckysheet_select_save);
+        //   jfrefreshgrid(d, ctx.selections);
         //   selectHightlightShow();
         // }
         jfrefreshgrid(ctx, null, undefined);
@@ -510,7 +510,7 @@ function setCellHyperlink(
 function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     // if (
     //   !checkProtectionLockedRangeList(
-    //     ctx.luckysheet_select_save,
+    //     ctx.selections,
     //     ctx.currentSheetId
     //   )
     // ) {
@@ -542,7 +542,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     const copyc = copyData[0].length;
 
     // apply range
-    const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.selections?.[ctx.selections.length - 1];
     if (!last || last.row_focus == null || last.column_focus == null) return;
 
     const minh = last.row_focus;
@@ -584,7 +584,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     const dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification) || {};
 
     // if the selection contains hyperlinks
-    if (ctx.luckysheet_select_save?.length === 1 && ctx.copyState?.copyRange.length === 1) {
+    if (ctx.selections?.length === 1 && ctx.copyState?.copyRange.length === 1) {
         forEach(ctx.copyState?.copyRange, (range) => {
             for (let r = 0; r <= range.row[1] - range.row[0]; r += 1) {
                 for (let c = 0; c <= range.column[1] - range.column[0]; c += 1) {
@@ -596,8 +596,8 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                         setCellHyperlink(
                             ctx,
                             ctx.copyState?.dataSheetId as string,
-                            r + ctx.luckysheet_select_save![0].row[0],
-                            c + ctx.luckysheet_select_save![0].column[0],
+                            r + ctx.selections![0].row[0],
+                            c + ctx.selections![0].column[0],
                             ctx.sheets[index].hyperlink![`${r}_${c}`],
                         );
                     }
@@ -837,7 +837,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         }
 
         // conditional formatting
-        const source_cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].luckysheet_conditionformat_save);
+        const source_cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].conditionalFormatRules);
         const source_curCdformat = cloneDeep(source_cdformat);
         const ruleArr: ConditionalFormatRule[] = [];
 
@@ -879,9 +879,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             }
         }
 
-        const target_cdformat = cloneDeep(
-            ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].luckysheet_conditionformat_save,
-        );
+        const target_cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].conditionalFormatRules);
         let target_curCdformat = cloneDeep(target_cdformat);
         if (ruleArr.length > 0) {
             target_curCdformat = target_curCdformat?.concat(ruleArr);
@@ -926,7 +924,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         };
     } else {
         // conditional formatting
-        const cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].luckysheet_conditionformat_save);
+        const cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].conditionalFormatRules);
         const curCdformat = cloneDeep(cdformat);
         if (curCdformat != null && curCdformat.length > 0) {
             for (let i = 0; i < curCdformat.length; i += 1) {
@@ -988,7 +986,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
 function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) {
     // if (
     //   !checkProtectionLockedRangeList(
-    //     ctx.luckysheet_select_save,
+    //     ctx.selections,
     //     ctx.currentSheetId
     //   )
     // ) {
@@ -1068,7 +1066,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     const copyc = copyData[0].length;
 
     // apply range
-    const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.selections?.[ctx.selections.length - 1];
     if (!last) return;
     const minh = last.row[0];
     let maxh = last.row[1]; // first and last row of apply range
@@ -1299,10 +1297,10 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
         const c_file = ctx.sheets[getSheetIndex(ctx, copySheetIndex) as number];
         const a_file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number];
 
-        const ruleArr_cf = cloneDeep(c_file.luckysheet_conditionformat_save);
+        const ruleArr_cf = cloneDeep(c_file.conditionalFormatRules);
 
         if (!isNil(ruleArr_cf) && ruleArr_cf.length > 0) {
-            cdformat = cloneDeep(a_file.luckysheet_conditionformat_save) ?? [];
+            cdformat = cloneDeep(a_file.conditionalFormatRules) ?? [];
 
             for (let i = 0; i < ruleArr_cf.length; i += 1) {
                 const cf_range = ruleArr_cf[i].cellrange;
@@ -1343,11 +1341,11 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     last.column = [minc, maxc];
 
     file.config = cfg;
-    file.luckysheet_conditionformat_save = cdformat;
+    file.conditionalFormatRules = cdformat;
     file.dataVerification = cloneDeep({ ...file.dataVerification, ...dataVerification });
 
     // if the selection contains hyperlinks
-    if (ctx.luckysheet_select_save?.length === 1 && ctx.copyState?.copyRange.length === 1) {
+    if (ctx.selections?.length === 1 && ctx.copyState?.copyRange.length === 1) {
         forEach(ctx.copyState?.copyRange, (range) => {
             for (let r = 0; r <= range.row[1] - range.row[0]; r += 1) {
                 for (let c = 0; c <= range.column[1] - range.column[0]; c += 1) {
@@ -1359,8 +1357,8 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                         setCellHyperlink(
                             ctx,
                             ctx.copyState?.dataSheetId as string,
-                            r + ctx.luckysheet_select_save![0].row[0],
-                            c + ctx.luckysheet_select_save![0].column[0],
+                            r + ctx.selections![0].row[0],
+                            c + ctx.selections![0].column[0],
                             ctx.sheets[index].hyperlink![`${r}_${c}`],
                         );
                     }
@@ -1369,13 +1367,13 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
         });
     }
 
-    jfrefreshgrid(ctx, d, ctx.luckysheet_select_save);
+    jfrefreshgrid(ctx, d, ctx.selections);
 }
 
 function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
     // plaintext formula is applied only to one cell
-    const r = ctx.luckysheet_select_save![0].row[0];
-    const c = ctx.luckysheet_select_save![0].column[0];
+    const r = ctx.selections![0].row[0];
+    const c = ctx.selections![0].column[0];
 
     const funcV = execfunction(ctx, formulaStr, r, c, undefined, undefined, true);
 
@@ -1507,7 +1505,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
         const locale_fontjson = locale(ctx).fontjson;
 
-        if (ctx.hooks.beforePaste?.(ctx.luckysheet_select_save, txtdata) === false) {
+        if (ctx.hooks.beforePaste?.(ctx.selections, txtdata) === false) {
             return;
         }
 
@@ -1521,7 +1519,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             if (ctx.pasteIsCut) {
                 ctx.pasteIsCut = false;
                 pasteHandlerOfCutPaste(ctx, ctx.copyState);
-                ctx.luckysheet_selection_range = [];
+                ctx.formulaRangeSelections = [];
                 // selection.clearcopy(e);
             } else {
                 pasteHandlerOfCopyPaste(ctx, ctx.copyState);
@@ -1576,7 +1574,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                     const rowHeightList = ctx.sheets[index].config!.rowlen!;
                     forEach(trList, (tr) => {
                         let c = 0;
-                        const targetR = ctx.luckysheet_select_save![0].row[0] + r;
+                        const targetR = ctx.selections![0].row[0] + r;
 
                         const targetRowHeight = !isNil(tr.getAttribute('height'))
                             ? parseInt(tr.getAttribute('height') as string, 10)
@@ -1711,8 +1709,8 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                     colspan = 1;
                                 }
 
-                                const r_ab = ctx.luckysheet_select_save![0].row[0] + r;
-                                const c_ab = ctx.luckysheet_select_save![0].column[0] + c;
+                                const r_ab = ctx.selections![0].row[0] + r;
+                                const c_ab = ctx.selections![0].column[0] + c;
 
                                 for (let rp = 0; rp < rowspan; rp += 1) {
                                     for (let cp = 0; cp < colspan; cp += 1) {
@@ -1805,7 +1803,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                     setRowHeight(ctx, rowHeightList);
                 }
 
-                ctx.luckysheet_selection_range = [];
+                ctx.formulaRangeSelections = [];
                 pasteHandler(ctx, data, borderInfo);
                 // $("#fortune-copy-content").empty();
                 ele.remove();
@@ -1840,7 +1838,7 @@ export function handlePasteByClick(ctx: Context, clipboardData: string, triggerT
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    if (ctx.hooks.beforePaste?.(ctx.luckysheet_select_save, clipboardData) === false) {
+    if (ctx.hooks.beforePaste?.(ctx.selections, clipboardData) === false) {
         return;
     }
 

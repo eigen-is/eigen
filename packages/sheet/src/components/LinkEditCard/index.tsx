@@ -58,7 +58,7 @@ export function LinkEditCard({
     const setRangeModalVisible = useCallback(
         (visible: boolean) =>
             setContext((draftCtx) => {
-                draftCtx.luckysheet_select_save! = lastCell.current!;
+                draftCtx.selections! = lastCell.current!;
                 if (draftCtx.linkCard != null) draftCtx.linkCard.selectingCellRange = visible;
             }),
         [setContext],
@@ -123,11 +123,9 @@ export function LinkEditCard({
             return;
         }
         if (selectingCellRange) {
-            const len = context.luckysheet_select_save?.length ?? 0;
+            const len = context.selections?.length ?? 0;
             if (len > 0) {
-                setLinkAddress(
-                    getRangetxt(context, context.currentSheetId, context.luckysheet_select_save![len - 1], ''),
-                );
+                setLinkAddress(getRangetxt(context, context.currentSheetId, context.selections![len - 1], ''));
             }
         }
     }, [context, selectingCellRange]);

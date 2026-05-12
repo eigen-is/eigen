@@ -57,7 +57,7 @@ export function onCellsMoveStart(
         column: [col_pre, col, col_index],
     } = getCellLocationByMouse(ctx, e, scrollbarX, scrollbarY, container);
 
-    const range = ctx.luckysheet_select_save?.at(-1);
+    const range = ctx.selections?.at(-1);
     if (range == null) return;
 
     if (row_index < range.row[0]) {
@@ -113,35 +113,30 @@ export function onCellsMove(
 
     const row_index_original = ctx.cellSelectMoveIndex[0];
     const col_index_original = ctx.cellSelectMoveIndex[1];
-    if (ctx.luckysheet_select_save == null) return;
-    let row_s = ctx.luckysheet_select_save[0].row[0] - row_index_original + row_index;
-    let row_e = ctx.luckysheet_select_save[0].row[1] - row_index_original + row_index;
+    if (ctx.selections == null) return;
+    let row_s = ctx.selections[0].row[0] - row_index_original + row_index;
+    let row_e = ctx.selections[0].row[1] - row_index_original + row_index;
 
-    let col_s = ctx.luckysheet_select_save[0].column[0] - col_index_original + col_index;
-    let col_e = ctx.luckysheet_select_save[0].column[1] - col_index_original + col_index;
+    let col_s = ctx.selections[0].column[0] - col_index_original + col_index;
+    let col_e = ctx.selections[0].column[1] - col_index_original + col_index;
 
     if (row_s < 0 || y < 0) {
         row_s = 0;
-        row_e = ctx.luckysheet_select_save[0].row[1] - ctx.luckysheet_select_save[0].row[0];
+        row_e = ctx.selections[0].row[1] - ctx.selections[0].row[0];
     }
 
     if (col_s < 0 || x < 0) {
         col_s = 0;
-        col_e = ctx.luckysheet_select_save[0].column[1] - ctx.luckysheet_select_save[0].column[0];
+        col_e = ctx.selections[0].column[1] - ctx.selections[0].column[0];
     }
 
     if (row_e >= ctx.visibledatarow.length - 1 || y > winH) {
-        row_s =
-            ctx.visibledatarow.length - 1 - ctx.luckysheet_select_save[0].row[1] + ctx.luckysheet_select_save[0].row[0];
+        row_s = ctx.visibledatarow.length - 1 - ctx.selections[0].row[1] + ctx.selections[0].row[0];
         row_e = ctx.visibledatarow.length - 1;
     }
 
     if (col_e >= ctx.visibledatacolumn.length - 1 || x > winW) {
-        col_s =
-            ctx.visibledatacolumn.length -
-            1 -
-            ctx.luckysheet_select_save[0].column[1] +
-            ctx.luckysheet_select_save[0].column[0];
+        col_s = ctx.visibledatacolumn.length - 1 - ctx.selections[0].column[1] + ctx.selections[0].column[0];
         col_e = ctx.visibledatacolumn.length - 1;
     }
 
@@ -204,8 +199,8 @@ export function onCellsMoveEnd(
     }
 
     const d = getFlowdata(ctx);
-    if (d == null || ctx.luckysheet_select_save == null) return;
-    const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+    if (d == null || ctx.selections == null) return;
+    const last = ctx.selections[ctx.selections.length - 1];
 
     const data = cloneDeep(getdatabyselection(ctx, last, ctx.currentSheetId));
 
@@ -432,7 +427,7 @@ export function onCellsMoveEnd(
     }
 
     // Conditional format
-    const cdformat = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].luckysheet_conditionformat_save ?? [];
+    const cdformat = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].conditionalFormatRules ?? [];
     if (cdformat != null && cdformat.length > 0) {
         for (let i = 0; i < cdformat.length; i += 1) {
             const cdformat_cellrange = cdformat[i].cellrange;
@@ -451,14 +446,14 @@ export function onCellsMoveEnd(
     }
 
     let rf: number;
-    if (ctx.luckysheet_select_save[0].row_focus === ctx.luckysheet_select_save[0].row[0]) {
+    if (ctx.selections[0].row_focus === ctx.selections[0].row[0]) {
         rf = row_s;
     } else {
         rf = row_e;
     }
 
     let cf: number;
-    if (ctx.luckysheet_select_save[0].column_focus === ctx.luckysheet_select_save[0].column[0]) {
+    if (ctx.selections[0].column_focus === ctx.selections[0].column[0]) {
         cf = col_s;
     } else {
         cf = col_e;
@@ -472,7 +467,7 @@ export function onCellsMoveEnd(
     last.column = [col_s, col_e];
     last.row_focus = rf;
     last.column_focus = cf;
-    ctx.luckysheet_select_save = normalizeSelection(ctx, [last]);
+    ctx.selections = normalizeSelection(ctx, [last]);
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex != null) {
         ctx.sheets[sheetIndex].config = cloneDeep(cfg);

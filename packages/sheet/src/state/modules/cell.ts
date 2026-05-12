@@ -929,7 +929,7 @@ export function getcellFormula(ctx: Context, r: number, c: number, i: string, da
 }
 
 export function getRange(ctx: Context) {
-    const rangeArr = cloneDeep(ctx.luckysheet_select_save);
+    const rangeArr = cloneDeep(ctx.selections);
     const result: Range = [];
     if (!rangeArr) return result;
 
@@ -1257,8 +1257,8 @@ export function getQKBorder(width: string, type: string, color: string): BorderS
 }
 
 export function getdatabyselection(ctx: Context, range: Selection | undefined, sheetId: string) {
-    if (range == null && ctx.luckysheet_select_save) {
-        [range] = ctx.luckysheet_select_save;
+    if (range == null && ctx.selections) {
+        [range] = ctx.selections;
     }
 
     if (!range) return [];

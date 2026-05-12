@@ -41,10 +41,10 @@ export function RangeDialog() {
     // Keep the input in sync with the user's selection in the spreadsheet.
     // biome-ignore lint/correctness/useExhaustiveDependencies: only re-syncs when the selection changes; getRangetxt reads `context` directly
     useEffect(() => {
-        if (!context.luckysheet_select_save) return;
-        const range = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
+        if (!context.selections) return;
+        const range = context.selections[context.selections.length - 1];
         setRangeTxt2(getRangetxt(context, context.currentSheetId, range, context.currentSheetId));
-    }, [context.luckysheet_select_save]);
+    }, [context.selections]);
 
     return (
         <>

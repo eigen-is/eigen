@@ -30,7 +30,7 @@ export function EditMenu() {
     const { showDialog } = useDialog();
     const { toolbar, rightclick, button, generalDialog } = locale(context);
 
-    const selection = context.luckysheet_select_save?.[0];
+    const selection = context.selections?.[0];
     const canUndo = refs.globalCache.undoList.length > 0;
     const canRedo = refs.globalCache.redoList.length > 0;
 

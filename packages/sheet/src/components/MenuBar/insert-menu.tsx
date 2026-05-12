@@ -16,11 +16,11 @@ export function InsertMenu() {
     const { showDialog, hideDialog } = useDialog();
     const { toolbar, rightclick, formula } = locale(context);
 
-    const selection = context.luckysheet_select_save?.[0];
+    const selection = context.selections?.[0];
     const rowFocus = selection?.row_focus;
     const columnFocus = selection?.column_focus;
 
-    const last = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
+    const last = context.selections?.[context.selections.length - 1];
     const commentRow = last?.row_focus ?? last?.row[0] ?? 0;
     const commentCol = last?.column_focus ?? last?.column[0] ?? 0;
 
