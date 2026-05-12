@@ -396,6 +396,16 @@ off. Walk through if you touch the related surface.
   - Hostile op queue (queue an insertRowCol against a `rowReadOnly` row, or
     push past 10000 rows): export still succeeds with a console warn,
     skipping the offending op rather than crashing the render.
+- **Z-index cleanup** (`sheet-z-index-cleanup` merge, 2026-05-12). The
+  comments-panel-over-notification-dropdown collision is verified. Still
+  owed across the surfaces that lost their explicit `style={{ zIndex }}`:
+  cell context menu (right-click), filter menu + filter-by-color submenu,
+  formula autocomplete / function hint, all-sheets selector dropdown,
+  sheet-tab dropdown + color submenu + tab context menu, LinkEditCard.
+  All should layer cleanly above the canvas and below shadcn dialogs (z-50);
+  scrollbars (now z-30) should not poke through them. Also verify the
+  comments panel re-measure: open it on a wide sheet, scroll, freeze a
+  column, then close it — canvas should reflow without glitches.
 
 ---
 
@@ -478,6 +488,25 @@ walks the DOM (not the React tree) and short-circuits selection movement.
 
 `FilterMenu` is exempt — it mounts at the `Workbook` root, sibling of
 `<Sheet />`, not a `cellArea` descendant.
+
+### Layering / z-index
+
+Project-wide convention lives in
+[`docs/CODE-STANDARDS.md` § Z-Index / Layering](CODE-STANDARDS.md#z-index--layering).
+Sheet-package specifics:
+
+- **Canvas-internal overlays stay ≤ z-30.** Selection layers z-8…z-20;
+  scrollbars, data-validation hint box, context-menu scrim, LinkEditCard,
+  bottom-controll-row all sit at z-20–30. Mobile touch handle at z-25.
+  Filter button (column header) at z-12. Image boxes at z-19/z-20.
+- **Portaled Radix menus rely on shadcn's z-50 default.** Cell context menu,
+  filter menu (+ submenu), formula autocomplete/hint, all-sheets selector,
+  sheet-tab menus — none carry an inline `style={{ zIndex }}`. If a menu
+  appears under something, fix the offender, don't bump the menu.
+- **App-level chrome around the workbook must not introduce z-index.** The
+  comments panel is a flex sibling next to the canvas; treat any future
+  side panel the same way (slides pattern). The previous `zIndex: 1005`
+  wrapper covered the topbar's notification dropdown — don't reintroduce it.
 
 ### Package location
 
