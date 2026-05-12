@@ -15,9 +15,18 @@ export async function buildDataUriMap(mount: Mount, mediaByName: Map<string, Dri
     return map;
 }
 
-// Public-facing API URL for client-rendered preview HTML. VITE_API_HOST includes reverse
-// proxy prefixes (e.g. /eigen), API_URL is the internal URL without prefix.
-const PUBLIC_API_URL = process.env['VITE_API_HOST'] || process.env['API_URL'] || 'http://localhost:8000';
+// Public-facing API URL for preview HTML embedded in exported documents. The frontend
+// convention switched to relative VITE_API_HOST (e.g. "/eigen"), so resolve against the
+// absolute API_URL here — these <img src=...> URLs end up in HTML that may be rendered
+// in contexts (PDF export, mail) where there is no current origin to splice in.
+function resolvePublicApiUrl(): string {
+    const apiHost = process.env['VITE_API_HOST'] || '';
+    const apiUrl = process.env['API_URL'] || 'http://localhost:8000';
+    if (/^https?:\/\//.test(apiHost)) return apiHost;
+    if (!apiHost) return apiUrl;
+    return `${apiUrl}${apiHost.startsWith('/') ? apiHost : `/${apiHost}`}`;
+}
+const PUBLIC_API_URL = resolvePublicApiUrl();
 
 export function buildPreviewUrl(drivePath: DrivePath, file: DrivePath): string {
     return `${PUBLIC_API_URL}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.id}/preview`;

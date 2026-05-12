@@ -1,4 +1,5 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
+import { getSpaceAppUrl } from '@workspace/lib/api';
 import type { AuthContextType } from '@workspace/lib/auth';
 import { lazy, Suspense } from 'react';
 
@@ -13,7 +14,7 @@ type MyRouterContext = {
 export const Route = createRootRouteWithContext<MyRouterContext>()({
     beforeLoad: ({ context }) => {
         if (context.auth.isAuthenticated && window.location.pathname === '/') {
-            window.location.href = `${import.meta.env.VITE_APP_SPACE_URL}`;
+            window.location.href = getSpaceAppUrl();
             return new Promise(() => {});
         }
     },

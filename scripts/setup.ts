@@ -57,6 +57,8 @@ async function askYesNo(question: string, defaultYes: boolean): Promise<boolean>
 
 const isDomain = (s: string) => /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/i.test(s);
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+const isIPv4 = (s: string) => /^(?:\d{1,3}\.){3}\d{1,3}$/.test(s);
+const isPort = (s: string) => /^\d+$/.test(s) && +s > 0 && +s < 65536;
 
 // Strip protocol/path users may paste in by accident.
 function cleanDomain(s: string): string {
@@ -94,6 +96,22 @@ async function promptEmail(question: string, fallback: string): Promise<string> 
         const value = await ask(question, fallback);
         if (isEmail(value)) return value;
         console.log('  Please enter a valid email address.');
+    }
+}
+
+async function promptIPv4(question: string, fallback: string): Promise<string> {
+    while (true) {
+        const value = await ask(question, fallback);
+        if (isIPv4(value)) return value;
+        console.log('  Please enter a valid IPv4 address (e.g. 127.0.0.1 or 0.0.0.0).');
+    }
+}
+
+async function promptPort(question: string, fallback: string): Promise<string> {
+    while (true) {
+        const value = await ask(question, fallback);
+        if (isPort(value)) return value;
+        console.log('  Please enter a port between 1 and 65535.');
     }
 }
 
@@ -224,6 +242,17 @@ const useHostProxy = await askYesNo(
     'Run Eigen behind an existing webserver on this host (nginx, Caddy, …)?',
     existing.COMPOSE_PROFILES?.includes('static') ?? false,
 );
+// Only the static profile binds a port to the host (the host webserver proxies to it).
+// The edge profile already takes 80/443 from the bundled Caddy and ignores these.
+let staticHost = existing.EIGEN_STATIC_HOST || '127.0.0.1';
+let staticPort = existing.EIGEN_STATIC_PORT || '8080';
+if (useHostProxy) {
+    console.log('\nThe bundled `eigen-static` container is reached by your host webserver.');
+    console.log('  127.0.0.1 = localhost-only (recommended when the proxy is on the same host)');
+    console.log('  0.0.0.0   = exposed on all interfaces (LAN-reachable, useful for testing)');
+    staticHost = await promptIPv4('  Bind host', staticHost);
+    staticPort = await promptPort('  Bind port', staticPort);
+}
 const adminEmail = await promptEmail(
     'Admin email (Let’s Encrypt + setup wizard)',
     existing.ACME_EMAIL || `admin@${mailDomain}`,
@@ -263,9 +292,11 @@ ACME_EMAIL=${adminEmail}
 # edge        = bundled Caddy only (host runs its own mail server)
 # static      = bundled frontend only (host runs both webserver and mail)
 COMPOSE_PROFILES=${composeProfiles}
-# Host bind for the static container; reached by your host webserver. Only used with 'static'.
-# Use 0.0.0.0:8080 to expose on the LAN, 127.0.0.1:8080 for localhost-only.
-EIGEN_STATIC_BIND=127.0.0.1:8080
+# Host:port the bundled \`eigen-static\` container binds on. Only used with the 'static'
+# profile — your host webserver proxies to this. 127.0.0.1 = localhost-only,
+# 0.0.0.0 = all interfaces (LAN-reachable).
+EIGEN_STATIC_HOST=${staticHost}
+EIGEN_STATIC_PORT=${staticPort}
 ${subnetBlock}
 
 # === SMTP RELAY (optional — required if your VPS blocks outbound port 25) ===
@@ -278,21 +309,25 @@ SMTP_RELAY_PASSWORD=${existing.SMTP_RELAY_PASSWORD ?? ''}
 # === ADVANCED (auto-derived — only edit if you know what you're doing) ===
 PRODUCTION=1
 API_URL=https://${domain}
-VITE_API_HOST=https://${domain}/eigen
-COOKIE_DOMAIN=.${domain}
+# VITE_API_HOST and the per-app URLs are RELATIVE on purpose. The frontend bundle
+# resolves them against window.location.origin at runtime, so the same build serves
+# correctly via the public domain, a LAN IP, a tunnel, or any other reverse-proxy
+# hostname. Don't hardcode an absolute URL here unless API and apps live on
+# different origins (rare; would also need CORS + cookie tweaks).
+VITE_API_HOST=/eigen
 TRUSTED_NETWORKS=127.0.0.0/8,::1,172.16.0.0/12
 
-VITE_APP_SPACE_URL=https://${domain}/space
-VITE_APP_MAIL_URL=https://${domain}/mail
-VITE_APP_CALENDAR_URL=https://${domain}/calendar
-VITE_APP_CONTACTS_URL=https://${domain}/contacts
-VITE_APP_DRIVE_URL=https://${domain}/drive
-VITE_APP_DOCS_URL=https://${domain}/docs
-VITE_APP_STICKIES_URL=https://${domain}/stickies
-VITE_APP_CHAT_URL=https://${domain}/chat
-VITE_APP_ADMIN_URL=https://${domain}/admin
-VITE_APP_SLIDES_URL=https://${domain}/slides
-VITE_APP_SHEETS_URL=https://${domain}/sheets
+VITE_APP_SPACE_URL=/space
+VITE_APP_MAIL_URL=/mail
+VITE_APP_CALENDAR_URL=/calendar
+VITE_APP_CONTACTS_URL=/contacts
+VITE_APP_DRIVE_URL=/drive
+VITE_APP_DOCS_URL=/docs
+VITE_APP_STICKIES_URL=/stickies
+VITE_APP_CHAT_URL=/chat
+VITE_APP_ADMIN_URL=/admin
+VITE_APP_SLIDES_URL=/slides
+VITE_APP_SHEETS_URL=/sheets
 `;
 
 writeFileSync(ENV_PATH, env);

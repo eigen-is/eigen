@@ -65,8 +65,13 @@ services:
     build:
       context: .
       dockerfile: docker/static/Dockerfile
+    # Long-form bind so EIGEN_STATIC_HOST/PORT substitute cleanly. Avoid the short-form
+    # `${IP}:${PORT}:8080` shape — the colon between vars confuses some Compose versions.
     ports:
-      - "${EIGEN_STATIC_BIND:-127.0.0.1:8080}:8080"
+      - target: 8080
+        published: "${EIGEN_STATIC_PORT:-8080}"
+        host_ip: "${EIGEN_STATIC_HOST:-127.0.0.1}"
+        protocol: tcp
     environment:
       DOMAIN: ${DOMAIN}
       MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}

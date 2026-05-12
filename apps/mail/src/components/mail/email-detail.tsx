@@ -1,3 +1,4 @@
+import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatFullDateTime } from '@workspace/lib/date';
 import type { AddressObject, Attachment, Email, EmailAddress, MaildirMailbox } from '@workspace/lib/types/mail';
 import { Toolbar, TooltipButton, UserAvatar } from '@workspace/ui';
@@ -132,11 +133,7 @@ export function MailLink({
         email && (
             <span className="text-xs text-muted-foreground">
                 {mailLink ? (
-                    <a
-                        className="hover:underline"
-                        href={`${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${email}`}
-                        title={email}
-                    >
+                    <a className="hover:underline" href={getMailComposeUrl(email)} title={email}>
                         {label}
                     </a>
                 ) : (
