@@ -42,7 +42,7 @@ export const SheetTab: React.FC = () => {
         const tabCurrent = tabContainerRef.current;
         if (!tabCurrent) return;
         setIsShowScrollBtn(tabCurrent.scrollWidth - 2 > tabCurrent.clientWidth);
-    }, [context.luckysheetfile]);
+    }, [context.sheets]);
 
     const onAddSheetClick = useCallback(
         () =>
@@ -101,7 +101,7 @@ export const SheetTab: React.FC = () => {
                                 collisionPadding={8}
                                 style={{ zIndex: 10002 }}
                             >
-                                {context.luckysheetfile
+                                {context.sheets
                                     .slice()
                                     .sort((s1, s2) => Number(s1.order) - Number(s2.order))
                                     .map((singleSheet) => (
@@ -147,7 +147,7 @@ export const SheetTab: React.FC = () => {
                         id="fortune-sheettab-container-c"
                         ref={tabContainerRef}
                     >
-                        {[...context.luckysheetfile]
+                        {[...context.sheets]
                             .sort((a, b) => Number(a.order) - Number(b.order))
                             .map((sheet) => (
                                 <SheetItem key={sheet.id} sheet={sheet} />

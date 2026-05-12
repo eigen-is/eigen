@@ -115,13 +115,13 @@ export function ManageRules() {
 
     const rules = useMemo(() => {
         const index = getSheetIndex(context, context.currentSheetId) as number;
-        return context.luckysheetfile[index]?.luckysheet_conditionformat_save ?? [];
+        return context.sheets[index]?.luckysheet_conditionformat_save ?? [];
     }, [context]);
 
     const deleteRule = (ruleIndex: number) => {
         setContext((ctx) => {
             const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-            const arr = ctx.luckysheetfile[index].luckysheet_conditionformat_save;
+            const arr = ctx.sheets[index].luckysheet_conditionformat_save;
             if (arr) arr.splice(ruleIndex, 1);
         });
     };

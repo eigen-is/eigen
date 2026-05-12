@@ -120,7 +120,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                 const droppingId = sheet.id;
                 let draggingSheet: Sheet | undefined;
                 let droppingSheet: Sheet | undefined;
-                [...draftCtx.luckysheetfile]
+                [...draftCtx.sheets]
                     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
                     .forEach((f, i) => {
                         f.order = i;
@@ -129,13 +129,13 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                     });
                 if (draggingSheet && droppingSheet) {
                     draggingSheet.order = droppingSheet.order! - 0.1;
-                    [...draftCtx.luckysheetfile]
+                    [...draftCtx.sheets]
                         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
                         .forEach((f, i) => {
                             f.order = i;
                         });
                 } else if (draggingSheet && isDropPlaceholder) {
-                    draggingSheet.order = draftCtx.luckysheetfile.length;
+                    draggingSheet.order = draftCtx.sheets.length;
                 }
             });
             setDragOver(false);
@@ -149,7 +149,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             if (context.allowEdit === false || !sheet) return;
             setContext((ctx) => {
                 let currentOrder = -1;
-                const sorted = ctx.luckysheetfile.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                const sorted = ctx.sheets.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                 for (const [i, _sheet] of sorted.entries()) {
                     _sheet.order = i;
                     if (_sheet.id === sheet.id) currentOrder = i;
@@ -170,10 +170,8 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                         <M.Item
                             key={name}
                             onClick={() => {
-                                const shownSheets = context.luckysheetfile.filter(
-                                    (s) => s.hide === undefined || s.hide !== 1,
-                                );
-                                if (context.luckysheetfile.length > 1 && shownSheets.length > 1) {
+                                const shownSheets = context.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
+                                if (context.sheets.length > 1 && shownSheets.length > 1) {
                                     showAlert(sheetconfig.confirmDelete, 'yesno', () => {
                                         setContext(
                                             (ctx) => {
@@ -223,9 +221,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                             onClick={() => {
                                 if (context.allowEdit === false || !sheet) return;
                                 setContext((ctx) => {
-                                    const shownSheets = ctx.luckysheetfile.filter(
-                                        (s) => s.hide === undefined || s.hide !== 1,
-                                    );
+                                    const shownSheets = ctx.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
                                     if (shownSheets.length > 1) api.hideSheet(ctx, sheet.id as string);
                                     else showAlert(sheetconfig.noMoreSheet, 'ok');
                                 });
@@ -260,7 +256,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                             onClick={() => {
                                 if (context.allowEdit === false || !sheet?.id) return;
                                 setContext((ctx) => {
-                                    for (const f of ctx.luckysheetfile) f.status = sheet.id === f.id ? 1 : 0;
+                                    for (const f of ctx.sheets) f.status = sheet.id === f.id ? 1 : 0;
                                 });
                             }}
                         >

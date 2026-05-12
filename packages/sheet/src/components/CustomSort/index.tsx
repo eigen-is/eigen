@@ -29,7 +29,7 @@ export function CustomSort() {
         const list: string[] = [];
         if (isTitleChange) {
             for (let i = col_start; i <= col_end; i += 1) {
-                const cell = context.luckysheetfile[sheetIndex].data?.[row_start]?.[i];
+                const cell = context.sheets[sheetIndex].data?.[row_start]?.[i];
                 const colHeaderValue = cell?.m || cell?.v;
                 if (colHeaderValue) {
                     list.push(colHeaderValue as string);
@@ -45,7 +45,7 @@ export function CustomSort() {
             }
         }
         setRangeColChar(list);
-    }, [col_end, col_start, context.luckysheetfile, isTitleChange, row_start, sheetIndex, sort.columnOperation]);
+    }, [col_end, col_start, context.sheets, isTitleChange, row_start, sheetIndex, sort.columnOperation]);
 
     return (
         <>

@@ -20,7 +20,7 @@ describe('sheet/core/api/cell', () => {
     const getContext = () =>
         contextFactory({
             luckysheet_select_save: selectionFactory([0, 0], [0, 0], 0, 0),
-            luckysheetfile: [
+            sheets: [
                 {
                     id: 'id_1',
                     name: 'Sheet1',
@@ -74,7 +74,7 @@ describe('sheet/core/api/cell', () => {
     test('clearCell', async () => {
         const ctx = getContext();
         clearCell(ctx, 1, 0, { id: 'id_1' });
-        expect(ctx.luckysheetfile[0]?.data?.[1]?.[0]).toEqual({});
+        expect(ctx.sheets[0]?.data?.[1]?.[0]).toEqual({});
     });
 
     test('setCellFormat', async () => {
@@ -82,7 +82,7 @@ describe('sheet/core/api/cell', () => {
         setCellFormat(ctx, 0, 0, 'bl', 1, { id: 'id_1' });
         setCellFormat(ctx, 0, 0, 'bg', '#ff0', { id: 'id_1' });
         setCellFormat(ctx, 0, 0, 'ct', { fa: 'General', t: 'n' }, { id: 'id_1' });
-        expect(ctx.luckysheetfile[0]?.data?.[0]?.[0]).toEqual({
+        expect(ctx.sheets[0]?.data?.[0]?.[0]).toEqual({
             bg: '#ff0',
             bl: 1,
             ct: { fa: 'General', t: 'n' },

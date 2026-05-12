@@ -280,7 +280,7 @@ export function searchAll(
         searchResult.push({
             r: searchIndexArr[i].r,
             c: searchIndexArr[i].c,
-            sheetName: ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) || 0]?.name,
+            sheetName: ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) || 0]?.name,
             sheetId: ctx.currentSheetId,
             cellPosition: `${chatatABC(searchIndexArr[i].c)}${searchIndexArr[i].r + 1}`,
             value: value_ShowEs,
@@ -289,7 +289,7 @@ export function searchAll(
         // searchAllHtml +=
         //   `<div class="boxItem" data-row="${searchIndexArr[i].r}" data-col="${searchIndexArr[i].c}" data-sheetIndex="${ctx.currentSheetIndex}">` +
         //   `<span>${
-        //     ctx.luckysheetfile[getSheetIndex(ctx.currentSheetIndex)].name
+        //     ctx.sheets[getSheetIndex(ctx.currentSheetIndex)].name
         //   }</span>` +
         //   `<span>${chatatABC(searchIndexArr[i].c)}${
         //     searchIndexArr[i].r + 1

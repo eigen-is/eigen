@@ -14,9 +14,9 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
     const patches: Patch[] = [];
     for (const op of normalOps) {
         // Without a sheet id we cannot derive a Sheet[]-rooted path. These ops
-        // appear when the sheet reducer reassigns ctx.luckysheetfile
+        // appear when the sheet reducer reassigns ctx.sheets
         // wholesale (e.g. row/col mutations) — immer emits a synthetic
-        // ['luckysheetfile'] replace patch as a side effect. The paired
+        // ['sheets'] replace patch as a side effect. The paired
         // insertRowCol/deleteRowCol special op already carries the semantics,
         // so dropping the synthetic patch here is safe; applying it would
         // throw immer error 14 ('only supports array indices') on the array.

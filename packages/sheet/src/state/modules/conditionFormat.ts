@@ -191,10 +191,10 @@ export function setConditionRules(
     };
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    const ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save ?? [];
+    const ruleArr = ctx.sheets[index].luckysheet_conditionformat_save ?? [];
     ruleArr.push(rule);
 
-    ctx.luckysheetfile[index].luckysheet_conditionformat_save = ruleArr;
+    ctx.sheets[index].luckysheet_conditionformat_save = ruleArr;
 }
 
 // Cache for getComputeMap — avoids recomputing the entire CF map on every
@@ -213,8 +213,8 @@ export function invalidateCFCache() {
 export function getComputeMap(ctx: Context): ComputeMap | null {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return null;
-    const ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save;
-    const { data } = ctx.luckysheetfile[index];
+    const ruleArr = ctx.sheets[index].luckysheet_conditionformat_save;
+    const { data } = ctx.sheets[index];
     if (isNil(data)) return null;
 
     // Return cached result if inputs haven't changed (reference equality)
@@ -282,7 +282,7 @@ export const CF_PRESETS: Record<string, string[]> = {
 export function clearSheetRules(ctx: Context) {
     if (!checkProtectionFormatCells(ctx)) return;
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    ctx.luckysheetfile[index].luckysheet_conditionformat_save = [];
+    ctx.sheets[index].luckysheet_conditionformat_save = [];
 }
 
 export function applyColorScalePreset(ctx: Context, presetKey: string) {
@@ -306,7 +306,7 @@ function appendRule(ctx: Context, type: 'colorGradation' | 'dataBar', format: st
         cellrange: ctx.luckysheet_select_save ?? [],
         format,
     };
-    const existing = ctx.luckysheetfile[index].luckysheet_conditionformat_save ?? [];
+    const existing = ctx.sheets[index].luckysheet_conditionformat_save ?? [];
     existing.push(rule);
-    ctx.luckysheetfile[index].luckysheet_conditionformat_save = existing;
+    ctx.sheets[index].luckysheet_conditionformat_save = existing;
 }

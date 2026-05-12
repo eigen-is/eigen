@@ -18,7 +18,7 @@ describe('sheet/core/api/sheet', () => {
     test('calculateFormula works before currentSheetId is initialized', () => {
         const ctx = contextFactory({
             currentSheetId: '',
-            luckysheetfile: [
+            sheets: [
                 {
                     name: 'Sheet1',
                     id: 'id_1',
@@ -41,7 +41,7 @@ describe('sheet/core/api/sheet', () => {
     test("calculateFormula without id writes each sheet's result to its own sheet", () => {
         const ctx = contextFactory({
             currentSheetId: 'id_1',
-            luckysheetfile: [
+            sheets: [
                 {
                     name: 'Sheet1',
                     id: 'id_1',

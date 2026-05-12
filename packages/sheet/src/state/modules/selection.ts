@@ -48,7 +48,7 @@ export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
     const winW = ctx.cellmainWidth;
 
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    const sheet = sheetIndex == null ? null : ctx.luckysheetfile[sheetIndex];
+    const sheet = sheetIndex == null ? null : ctx.sheets[sheetIndex];
 
     if (!sheet) return;
 
@@ -301,8 +301,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
     const rowMaxLength = flowdata.length;
 
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
-    const c_dataVerification =
-        cloneDeep(ctx.luckysheetfile[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
+    const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
     let dataVerification: Record<string, DataVerificationRule> | undefined;
 
     let mth = 0;
@@ -377,9 +376,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
                         if (dataVerification == null) {
                             dataVerification =
-                                cloneDeep(
-                                    ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification,
-                                ) ?? {};
+                                cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification) ?? {};
                         }
 
                         dataVerification[`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
@@ -484,14 +481,14 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
         }
     }
 
-    const currFile = ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!];
+    const currFile = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
     currFile.config = cfg;
     currFile.dataVerification = dataVerification;
 
     const copyIndex = getSheetIndex(ctx, copySheetIndex);
     if (copyIndex == null) return;
     const ruleArr: ConditionalFormatRule[] | undefined = cloneDeep(
-        ctx.luckysheetfile[copyIndex].luckysheet_conditionformat_save,
+        ctx.sheets[copyIndex].luckysheet_conditionformat_save,
     );
     if (isNil(ruleArr) || ruleArr.length === 0) return;
 
@@ -1382,7 +1379,7 @@ function getHtmlBorderStyle(type: string | number, color: string) {
 export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) {
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return '';
-    const sheet = ctx.luckysheetfile[idx];
+    const sheet = ctx.sheets[idx];
 
     const rowIndexArr: number[] = [];
     const colIndexArr: number[] = [];
@@ -1775,7 +1772,7 @@ export function deleteSelectedCellText(ctx: Context): string {
             return 'partMC';
         }
 
-        const hyperlinkMap = ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!].hyperlink;
+        const hyperlinkMap = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].hyperlink;
 
         for (let s = 0; s < selection.length; s += 1) {
             const r1 = selection[s].row[0];
@@ -1783,8 +1780,8 @@ export function deleteSelectedCellText(ctx: Context): string {
             const c1 = selection[s].column[0];
             const c2 = selection[s].column[1];
             const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-            if (sheetIndex !== null && ctx.luckysheetfile[sheetIndex].data) {
-                const { data = [] } = ctx.luckysheetfile[sheetIndex] ?? {};
+            if (sheetIndex !== null && ctx.sheets[sheetIndex].data) {
+                const { data = [] } = ctx.sheets[sheetIndex] ?? {};
 
                 for (let r = r1; r <= r2; r += 1) {
                     for (let c = c1; c <= c2; c += 1) {

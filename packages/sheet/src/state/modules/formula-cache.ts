@@ -63,7 +63,7 @@ export function createContextResolver(ctx: Context): CellResolver {
             return getFlowdata(ctx, sheetId) ?? null;
         },
         getSheets() {
-            return ctx.luckysheetfile.map((f) => ({
+            return ctx.sheets.map((f) => ({
                 id: f.id ?? '',
                 name: f.name,
                 calculationChain: f.calcChain ?? [],

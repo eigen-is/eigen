@@ -12,7 +12,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return;
 
-    const sheet = ctx.luckysheetfile[idx];
+    const sheet = ctx.sheets[idx];
 
     const cfg = sheet.config || {};
     if (cfg.merge == null) {

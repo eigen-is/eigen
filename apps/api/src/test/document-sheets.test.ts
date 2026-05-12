@@ -353,11 +353,11 @@ describe('document/sheets — patch op replay', () => {
         expect(result[0].celldata?.[0]?.v?.v).toBe('after');
     });
 
-    test('reads doc with snapshot + wholesale luckysheetfile replace + insertRowCol → no crash, row inserted', async () => {
+    test('reads doc with snapshot + wholesale sheets replace + insertRowCol → no crash, row inserted', async () => {
         // Real op shape from the Annual Calendar regression: when
-        // the sheet reducer reassigns ctx.luckysheetfile during a row/col
+        // the sheet reducer reassigns ctx.sheets during a row/col
         // mutation, immer emits a synthetic replace patch with no sheet id and
-        // path ['luckysheetfile']. Applying that patch on Sheet[] root throws
+        // path ['sheets']. Applying that patch on Sheet[] root throws
         // immer error 14. opToPatchOnSheets drops it; the paired insertRowCol
         // special op carries the semantics.
         const sheetsPath = await drivePost<DrivePath>(
@@ -381,7 +381,7 @@ describe('document/sheets — patch op replay', () => {
             },
         ];
         const batch: Op[] = [
-            { op: 'replace', path: ['luckysheetfile'], value: sheets },
+            { op: 'replace', path: ['sheets'], value: sheets },
             {
                 op: 'insertRowCol',
                 id: 'sheet-1',

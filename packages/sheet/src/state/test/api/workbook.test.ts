@@ -37,16 +37,16 @@ describe('sheet/core/api/workbook', () => {
             generateSheetId: () => 'id_3',
         };
         addSheet(ctx, settings);
-        expect(ctx.luckysheetfile.length).toBe(3);
-        expect(ctx.luckysheetfile[2].id).toBe('id_3');
+        expect(ctx.sheets.length).toBe(3);
+        expect(ctx.sheets[2].id).toBe('id_3');
     });
 
     test('deleteSheet', () => {
         const ctx = getContext();
         deleteSheet(ctx);
-        expect(ctx.luckysheetfile.length).toBe(1);
+        expect(ctx.sheets.length).toBe(1);
         deleteSheet(ctx, { id: 'id_2' });
-        expect(ctx.luckysheetfile.length).toBe(0);
+        expect(ctx.sheets.length).toBe(0);
     });
 
     test('activateSheet', () => {
@@ -60,19 +60,19 @@ describe('sheet/core/api/workbook', () => {
     test('setSheetName', () => {
         const ctx = getContext();
         setSheetName(ctx, 'winner');
-        expect(ctx.luckysheetfile[0].name).toBe('winner');
+        expect(ctx.sheets[0].name).toBe('winner');
         setSheetName(ctx, 'winner', { id: 'id_2' });
-        expect(ctx.luckysheetfile[1].name).toBe('winner');
+        expect(ctx.sheets[1].name).toBe('winner');
     });
 
     test('setSheetOrder', () => {
         const ctx = getContext();
         setSheetOrder(ctx, { id_1: 2, id_2: 1 });
-        expect(ctx.luckysheetfile[0].order).toBe(1);
-        expect(ctx.luckysheetfile[1].order).toBe(0);
+        expect(ctx.sheets[0].order).toBe(1);
+        expect(ctx.sheets[1].order).toBe(0);
         setSheetOrder(ctx, { id_1: 1, id_2: 2 });
-        expect(ctx.luckysheetfile[0].order).toBe(0);
-        expect(ctx.luckysheetfile[1].order).toBe(1);
+        expect(ctx.sheets[0].order).toBe(0);
+        expect(ctx.sheets[1].order).toBe(1);
     });
 
     test('scroll', () => {

@@ -16,7 +16,7 @@ g.sessionStorage = { setItem: () => {} };
 describe('handleCut', () => {
     it('marks the copy range as cut and populates copy data', () => {
         const ctx = contextFactory({
-            luckysheetfile: [
+            sheets: [
                 {
                     name: 'sheet',
                     id: 'id_1',

@@ -170,11 +170,11 @@ describe('replaySheetsOps', () => {
         expect(result[0].celldata).toEqual([{ r: 0, c: 0, v: { v: 'b', m: 'a', ct: { fa: 'General', t: 'g' } } }]);
     });
 
-    test('FE-emitted [luckysheetfile] wholesale replace is dropped, paired insertRowCol applies', () => {
+    test('FE-emitted [sheets] wholesale replace is dropped, paired insertRowCol applies', () => {
         // Reproduces the export crash: row/col mutations in the sheet
-        // reducer reassign ctx.luckysheetfile, so immer emits a synthetic
+        // reducer reassign ctx.sheets, so immer emits a synthetic
         // wholesale-replace patch alongside the insertRowCol special op. The
-        // synthetic patch has no sheet id and a path of ['luckysheetfile']
+        // synthetic patch has no sheet id and a path of ['sheets']
         // which is not applicable to a Sheet[] root (immer error 14).
         const sheet: Sheet = {
             id: 's1',
@@ -185,7 +185,7 @@ describe('replaySheetsOps', () => {
         };
         const ops: Op[][] = [
             [
-                { op: 'replace', path: ['luckysheetfile'], value: [{ ...sheet }] },
+                { op: 'replace', path: ['sheets'], value: [{ ...sheet }] },
                 {
                     op: 'insertRowCol',
                     id: 's1',

@@ -650,7 +650,7 @@ export function updateCell(
 
     // Data validation: block input when the entered data is invalid
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const { dataVerification } = ctx.luckysheetfile[index];
+    const { dataVerification } = ctx.sheets[index];
     if (!isNil(dataVerification)) {
         const dvItem = dataVerification[`${r}_${c}`];
         if (!isNil(dvItem) && dvItem.prohibitInput && !validateCellData(ctx, dvItem, inputText)) {
@@ -843,7 +843,7 @@ export function updateCell(
     /*
     let RowlChange = false;
     const cfg =
-      ctx.luckysheetfile?.[getSheetIndex(ctx, ctx.currentSheetId)]?.config ||
+      ctx.sheets?.[getSheetIndex(ctx, ctx.currentSheetId)]?.config ||
       {};
     if (!cfg.rowlen) {
       cfg.rowlen = {};
@@ -860,7 +860,7 @@ export function updateCell(
         // let fontset = luckysheetfontformat(d[r][c]);
         // offlinecanvas.font = fontset;
 
-        const cfg = ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId as string) as number].config || {};
+        const cfg = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId as string) as number].config || {};
         if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
             // let currentRowLen = defaultrowlen;
             // if(!isNil(cfg["rowlen"][r])){
@@ -984,7 +984,7 @@ export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAx
         // If the sheet name contains ', replace it with '' when referencing
         const index = getSheetIndex(ctx, sheetId);
         if (index == null) return '';
-        sheettxt = ctx.luckysheetfile[index].name.replace(/'/g, "''");
+        sheettxt = ctx.sheets[index].name.replace(/'/g, "''");
         // If the name contains characters other than a-z, A-Z, 0-9, underscore, etc., wrap it in single quotes
         if (
             // biome-ignore lint/suspicious/noMisleadingCharacterClass: matches XML 1.0 NameStartChar/NameChar — combining marks are spec-required in the continuation class
@@ -1271,8 +1271,8 @@ export function getdatabyselection(ctx: Context, range: Selection | undefined, s
     let d: CellMatrix | null | undefined;
     let cfg: SheetConfig | undefined;
     if (sheetId != null && sheetId !== ctx.currentSheetId) {
-        d = ctx.luckysheetfile[getSheetIndex(ctx, sheetId)!].data;
-        cfg = ctx.luckysheetfile[getSheetIndex(ctx, sheetId)!].config;
+        d = ctx.sheets[getSheetIndex(ctx, sheetId)!].data;
+        cfg = ctx.sheets[getSheetIndex(ctx, sheetId)!].config;
     } else {
         d = getFlowdata(ctx);
         cfg = ctx.config;

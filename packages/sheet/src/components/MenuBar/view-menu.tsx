@@ -17,7 +17,7 @@ export function ViewMenu() {
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
-    const hidden = context.luckysheetfile.filter((s): s is typeof s & { id: string } => s.hide === 1 && s.id != null);
+    const hidden = context.sheets.filter((s): s is typeof s & { id: string } => s.hide === 1 && s.id != null);
 
     return (
         <>

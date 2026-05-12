@@ -8,7 +8,7 @@ import { getSheetIndex } from '../utils';
 import { celldataToData, dataToCelldata, getSheet } from './common';
 
 export function getAllSheets(ctx: Context) {
-    return ctx.luckysheetfile;
+    return ctx.sheets;
 }
 
 export { getSheet };
@@ -20,15 +20,15 @@ export function initSheetData(draftCtx: Context, index: number, newData: Sheet):
         row != null && row > 0 ? row : draftCtx.defaultrowNum,
         column != null && column > 0 ? column : draftCtx.defaultcolumnNum,
     );
-    if (draftCtx.luckysheetfile[index] == null) {
+    if (draftCtx.sheets[index] == null) {
         newData.data = expandedData;
         delete newData.celldata;
-        draftCtx.luckysheetfile.push(newData);
+        draftCtx.sheets.push(newData);
     } else {
-        draftCtx.luckysheetfile[index].data = expandedData;
-        delete draftCtx.luckysheetfile[index].celldata;
+        draftCtx.sheets[index].data = expandedData;
+        delete draftCtx.sheets[index].celldata;
         if (newData.config) {
-            draftCtx.luckysheetfile[index].config = newData.config;
+            draftCtx.sheets[index].config = newData.config;
         }
     }
     return expandedData;
@@ -37,16 +37,16 @@ export function initSheetData(draftCtx: Context, index: number, newData: Sheet):
 export function hideSheet(ctx: Context, sheetId: string) {
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
-    ctx.luckysheetfile[index].hide = 1;
-    ctx.luckysheetfile[index].status = 0;
-    const shownSheets = ctx.luckysheetfile.filter((sheet) => isUndefined(sheet.hide) || sheet?.hide !== 1);
+    ctx.sheets[index].hide = 1;
+    ctx.sheets[index].status = 0;
+    const shownSheets = ctx.sheets.filter((sheet) => isUndefined(sheet.hide) || sheet?.hide !== 1);
     ctx.currentSheetId = shownSheets[0].id as string;
 }
 
 export function showSheet(ctx: Context, sheetId: string) {
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
-    ctx.luckysheetfile[index].hide = undefined;
+    ctx.sheets[index].hide = undefined;
 }
 
 function generateCopySheetName(ctx: Context, sheetId: string) {
@@ -54,7 +54,7 @@ function generateCopySheetName(ctx: Context, sheetId: string) {
     const copyWord = `(${info.copy}`;
     const SheetIndex = getSheetIndex(ctx, sheetId);
     if (SheetIndex == null) return sheetId;
-    let sheetName = ctx.luckysheetfile[SheetIndex].name;
+    let sheetName = ctx.sheets[SheetIndex].name;
     const copy_i = sheetName.indexOf(copyWord);
     let index: number = 0;
 
@@ -65,8 +65,8 @@ function generateCopySheetName(ctx: Context, sheetId: string) {
     const nameCopy = sheetName + copyWord;
     const sheetNames = [];
 
-    for (let i = 0; i < ctx.luckysheetfile.length; i += 1) {
-        const fileName = ctx.luckysheetfile[i].name;
+    for (let i = 0; i < ctx.sheets.length; i += 1) {
+        const fileName = ctx.sheets[i].name;
         sheetNames.push(fileName);
         const st_i = fileName.indexOf(nameCopy);
 
@@ -100,28 +100,28 @@ function generateCopySheetName(ctx: Context, sheetId: string) {
 export function copySheet(ctx: Context, sheetId: string) {
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
-    const order = ctx.luckysheetfile[index].order! + 1;
+    const order = ctx.sheets[index].order! + 1;
     const sheetName = generateCopySheetName(ctx, sheetId);
-    const sheetData = cloneDeep(ctx.luckysheetfile[index]);
+    const sheetData = cloneDeep(ctx.sheets[index]);
     delete sheetData.id;
     delete sheetData.status;
     sheetData.celldata = dataToCelldata(sheetData.data);
     delete sheetData.data;
-    api.addSheet(ctx, undefined, uuidv4(), ctx.luckysheetfile[index].isPivotTable, sheetName, sheetData);
+    api.addSheet(ctx, undefined, uuidv4(), ctx.sheets[index].isPivotTable, sheetName, sheetData);
     const sheetOrderList: Record<string, number> = {};
-    sheetOrderList[ctx.luckysheetfile[ctx.luckysheetfile.length - 1].id as string] = order;
+    sheetOrderList[ctx.sheets[ctx.sheets.length - 1].id as string] = order;
     api.setSheetOrder(ctx, sheetOrderList);
 }
 
 function calculateSheetFromula(ctx: Context, id: string, range?: SingleRange) {
     const index = getSheetIndex(ctx, id);
     if (index == null) return;
-    if (!ctx.luckysheetfile[index].data) return;
+    if (!ctx.sheets[index].data) return;
 
     if (!range) {
         range = {
-            row: [0, ctx.luckysheetfile[index].data!.length - 1],
-            column: [0, ctx.luckysheetfile[index].data![0].length - 1],
+            row: [0, ctx.sheets[index].data!.length - 1],
+            column: [0, ctx.sheets[index].data![0].length - 1],
         };
     }
     const rowCount = range.row[1] - range.row[0] + 1;
@@ -132,7 +132,7 @@ function calculateSheetFromula(ctx: Context, id: string, range?: SingleRange) {
             const r = range.row[0] + _r;
             const c = range.column[0] + _c;
 
-            const formula = ctx.luckysheetfile[index].data![r][c]?.f;
+            const formula = ctx.sheets[index].data![r][c]?.f;
             if (!formula) {
                 continue;
             }
@@ -148,7 +148,7 @@ export function calculateFormula(ctx: Context, id?: string, range?: SingleRange)
         calculateSheetFromula(ctx, id, range);
         return;
     }
-    ctx.luckysheetfile.forEach((sheet_obj) => {
+    ctx.sheets.forEach((sheet_obj) => {
         if (!sheet_obj.id) return;
         calculateSheetFromula(ctx, sheet_obj.id, range);
     });

@@ -1314,7 +1314,7 @@ export class Canvas {
 
         const index = getSheetIndex(this.sheetCtx, this.sheetCtx.currentSheetId) as number;
 
-        const { dataVerification } = this.sheetCtx.luckysheetfile[index];
+        const { dataVerification } = this.sheetCtx.sheets[index];
 
         if (dataVerification?.[`${r}_${c}`] && !validateCellData(this.sheetCtx, dataVerification[`${r}_${c}`], value)) {
             // Data validation error indicator (red triangle top-left)

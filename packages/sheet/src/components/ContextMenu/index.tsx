@@ -237,7 +237,7 @@ export const ContextMenu: React.FC = () => {
                                         }
                                         const slen = ed_index - st_index + 1;
                                         const index = getSheetIndex(draftCtx, context.currentSheetId) as number;
-                                        if ((draftCtx.luckysheetfile[index].data?.[0]?.length ?? 0) <= slen) {
+                                        if ((draftCtx.sheets[index].data?.[0]?.length ?? 0) <= slen) {
                                             showAlert(rightclick.cannotDeleteAllColumn, 'ok');
                                             draftCtx.contextMenu = {};
                                             return;
@@ -284,7 +284,7 @@ export const ContextMenu: React.FC = () => {
                                         }
                                         const slen = ed_index - st_index + 1;
                                         const index = getSheetIndex(draftCtx, context.currentSheetId) as number;
-                                        if ((draftCtx.luckysheetfile[index].data?.length ?? 0) <= slen) {
+                                        if ((draftCtx.sheets[index].data?.length ?? 0) <= slen) {
                                             showAlert(rightclick.cannotDeleteAllRow, 'ok');
                                             draftCtx.contextMenu = {};
                                             return;

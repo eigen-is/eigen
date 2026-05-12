@@ -11,14 +11,14 @@ export function ChangeColor({ triggerParentUpdate: _triggerParentUpdate }: Chang
     const { context, setContext } = useContext(WorkbookContext);
     const { sheetconfig } = locale(context);
     const [selectColor, setSelectColor] = useState<string | undefined>(
-        context.luckysheetfile[getSheetIndex(context, context.currentSheetId) as number].color,
+        context.sheets[getSheetIndex(context, context.currentSheetId) as number].color,
     );
 
     useEffect(() => {
         setContext((ctx: Context) => {
             if (ctx.allowEdit === false) return;
             const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-            ctx.luckysheetfile[index].color = selectColor;
+            ctx.sheets[index].color = selectColor;
         });
     }, [selectColor, setContext]);
 

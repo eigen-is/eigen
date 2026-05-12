@@ -52,8 +52,8 @@ describe('sheet/core/api/range', () => {
 
     test('getCellsByFlattenRange', async () => {
         const ctx = getContext();
-        if (ctx.luckysheetfile[0]?.data) {
-            ctx.luckysheetfile[0].data = [
+        if (ctx.sheets[0]?.data) {
+            ctx.sheets[0].data = [
                 [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
                 [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
                 [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
@@ -80,8 +80,8 @@ describe('sheet/core/api/range', () => {
 
     test('getCellsByRange', async () => {
         const ctx = getContext();
-        if (ctx.luckysheetfile[0]?.data?.[0]) {
-            ctx.luckysheetfile[0].data[0][0] = { v: 66 };
+        if (ctx.sheets[0]?.data?.[0]) {
+            ctx.sheets[0].data[0][0] = { v: 66 };
         }
         expect(getCellsByRange(ctx, { row: [0, 0], column: [0, 0] })).toEqual([[{ v: 66 }]]);
     });
@@ -122,14 +122,14 @@ describe('sheet/core/api/range', () => {
             [5, 7],
         ];
         setCellValuesByRange(ctx, expectedData, { row: [1, 2], column: [1, 2] }, null, { id: 'id_2' });
-        expect(ctx.luckysheetfile[1]?.data?.[2]?.[2]?.v).toBe(7);
-        expect(ctx.luckysheetfile[1]?.data?.[1]?.[2]?.v).toBe(3);
+        expect(ctx.sheets[1]?.data?.[2]?.[2]?.v).toBe(7);
+        expect(ctx.sheets[1]?.data?.[1]?.[2]?.v).toBe(3);
     });
 
     test('setCellFormatByRange', async () => {
         const ctx = getContext();
         setCellFormatByRange(ctx, 'bg', '#f00', { row: [1, 2], column: [1, 2] }, { id: 'id_2' });
-        expect(ctx.luckysheetfile[1]?.data?.[2]?.[2]).toEqual({ bg: '#f00' });
-        expect(ctx.luckysheetfile[1]?.data?.[2]?.[1]).toEqual({ bg: '#f00' });
+        expect(ctx.sheets[1]?.data?.[2]?.[2]).toEqual({ bg: '#f00' });
+        expect(ctx.sheets[1]?.data?.[2]?.[1]).toEqual({ bg: '#f00' });
     });
 });

@@ -44,13 +44,13 @@ describe('sheet/core/api/merge', () => {
             mergeCells(ctx, ranges, mergeMode);
             range(r0, r1 + 1).forEach((r) => {
                 range(c0, c1 + 1).forEach((c) => {
-                    expect(ctx.luckysheetfile[0]?.data?.[r]?.[c]?.mc).toEqual(expectedValue(r, c, mergeMode));
+                    expect(ctx.sheets[0]?.data?.[r]?.[c]?.mc).toEqual(expectedValue(r, c, mergeMode));
                 });
             });
             cancelMerge(ctx, ranges);
             range(r0, r1 + 1).forEach((r) => {
                 range(c0, c1 + 1).forEach((c) => {
-                    expect(ctx.luckysheetfile[0]?.data?.[r]?.[c]?.mc).toEqual(undefined);
+                    expect(ctx.sheets[0]?.data?.[r]?.[c]?.mc).toEqual(undefined);
                 });
             });
         };

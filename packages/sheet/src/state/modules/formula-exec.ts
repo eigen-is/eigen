@@ -94,7 +94,7 @@ export function getcellrange(
     let sheetId: string | undefined;
     let sheetdata: CellMatrix | null | undefined = null;
 
-    const { luckysheetfile } = ctx;
+    const { sheets } = ctx;
 
     if (txt.indexOf('!') > -1) {
         if (txt in ctx.formulaCache.cellTextToIndexList) {
@@ -112,7 +112,7 @@ export function getcellrange(
         rangetxt = starttxt2 ? `${starttxt1}:${starttxt2}` : starttxt1;
         sheettxt = sheettxt1.replace(/^'|'$/g, '').replace(/\\'/g, "'").replace(/''/g, "'");
 
-        forEach(luckysheetfile, (f) => {
+        forEach(sheets, (f) => {
             if (sheettxt === f.name) {
                 sheetId = f.id;
                 sheetdata = f.data;
@@ -132,8 +132,8 @@ export function getcellrange(
         if (index == null) {
             return null;
         }
-        sheettxt = luckysheetfile[index].name;
-        sheetId = luckysheetfile[index].id;
+        sheettxt = sheets[index].name;
+        sheetId = sheets[index].id;
         sheetdata = flowdata;
         rangetxt = txt;
     }
@@ -449,10 +449,10 @@ export function isFunctionRange(
 }
 
 export function getAllFunctionGroup(ctx: Context): FormulaCell[] {
-    const { luckysheetfile } = ctx;
+    const { sheets } = ctx;
     let ret: FormulaCell[] = [];
-    for (let i = 0; i < luckysheetfile.length; i += 1) {
-        const file = luckysheetfile[i];
+    for (let i = 0; i < sheets.length; i += 1) {
+        const file = sheets[i];
         let { calcChain } = file;
 
         let { dynamicArray_compute } = file;
@@ -479,7 +479,7 @@ export function delFunctionGroup(ctx: Context, r: number, c: number, id?: string
         id = ctx.currentSheetId;
     }
 
-    const file = ctx.luckysheetfile[getSheetIndex(ctx, id)!];
+    const file = ctx.sheets[getSheetIndex(ctx, id)!];
 
     const { calcChain } = file;
     if (calcChain != null) {
@@ -527,12 +527,12 @@ export function insertUpdateFunctionGroup(
         id = ctx.currentSheetId;
     }
 
-    const { luckysheetfile } = ctx;
+    const { sheets } = ctx;
     const idx = getSheetIndex(ctx, id);
     if (idx == null) {
         return;
     }
-    const file = luckysheetfile[idx];
+    const file = sheets[idx];
 
     let { calcChain } = file;
     if (calcChain == null) {
@@ -557,7 +557,7 @@ export function insertUpdateFunctionGroup(
     };
     calcChain.push(cc);
     file.calcChain = calcChain;
-    ctx.luckysheetfile = luckysheetfile;
+    ctx.sheets = sheets;
 }
 
 export type ExecFunctionResult = [boolean, Cell['v'], string];
@@ -605,14 +605,14 @@ export function execfunction(
 }
 
 export function groupValuesRefresh(ctx: Context): void {
-    const { luckysheetfile } = ctx;
+    const { sheets } = ctx;
     if (ctx.groupValuesRefreshData.length === 0) return;
 
     for (const item of ctx.groupValuesRefreshData) {
         const idx = getSheetIndex(ctx, item.id);
         if (idx == null) continue;
 
-        const { data } = luckysheetfile[idx];
+        const { data } = sheets[idx];
         if (data == null) continue;
 
         setCellValue(ctx, item.r, item.c, data, { v: item.v, f: item.f });

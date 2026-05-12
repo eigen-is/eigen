@@ -11,15 +11,15 @@ export function FilterOptions() {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const { filterOptions, currentSheetId, filter, visibledatarow, visibledatacolumn } = context;
     const sheetIndex = getSheetIndex(context, context.currentSheetId);
-    const { filter_select, frozen } = context.luckysheetfile[sheetIndex!];
+    const { filter_select, frozen } = context.sheets[sheetIndex!];
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional triggers — body reads `draftCtx` so biome can't see the connection
     useEffect(() => {
         setContext((draftCtx) => {
             const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
             if (sheetIdx == null) return;
-            draftCtx.luckysheet_filter_save = draftCtx.luckysheetfile[sheetIdx].filter_select;
-            draftCtx.filter = draftCtx.luckysheetfile[sheetIdx].filter || {};
+            draftCtx.luckysheet_filter_save = draftCtx.sheets[sheetIdx].filter_select;
+            draftCtx.filter = draftCtx.sheets[sheetIdx].filter || {};
             createFilterOptions(draftCtx, draftCtx.luckysheet_filter_save, undefined);
         });
     }, [visibledatarow, visibledatacolumn, setContext, currentSheetId, filter_select]);

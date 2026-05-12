@@ -69,7 +69,7 @@ export function getDropdownList(ctx: Context, txt: string) {
     if (iscelldata(txt)) {
         const range = getcellrange(ctx, txt);
         const index = getSheetIndex(ctx, range?.sheetId || ctx.currentSheetId) as number;
-        const d = ctx.luckysheetfile[index].data;
+        const d = ctx.sheets[index].data;
         if (!d || !range) return [];
         for (let r = range.row[0]; r <= range.row[1]; r += 1) {
             for (let c = range.column[0]; c <= range.column[1]; c += 1) {
@@ -320,7 +320,7 @@ export function validateCellData(ctx: Context, item: DataVerificationRule, cellV
 // checkbox handling
 export function checkboxChange(ctx: Context, r: number, c: number) {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const currentDataVerification = ctx.luckysheetfile[index].dataVerification ?? {};
+    const currentDataVerification = ctx.sheets[index].dataVerification ?? {};
     const item = currentDataVerification[`${r}_${c}`];
     item.checked = !item.checked;
     const value = item.checked ? item.value1 : item.value2;
@@ -409,7 +409,7 @@ export function cellFocus(ctx: Context, r: number, c: number, clickMode: boolean
     showHintBox.style.display = 'none';
     dropDownBtn.style.display = 'none';
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const { dataVerification } = ctx.luckysheetfile[index];
+    const { dataVerification } = ctx.sheets[index];
     ctx.dataVerificationDropDownList = false;
     if (!dataVerification) return;
     let row = ctx.visibledatarow[r];
@@ -479,7 +479,7 @@ export function setDropcownValue(ctx: Context, value: string, arr: string[]) {
     const colIndex = last.column_focus;
     if (rowIndex == null || colIndex == null) return;
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const item = ctx.luckysheetfile[index].dataVerification?.[`${rowIndex}_${colIndex}`];
+    const item = ctx.sheets[index].dataVerification?.[`${rowIndex}_${colIndex}`];
     if (!item) return;
     let nextValue = value;
     if (item.type2 === 'true') {

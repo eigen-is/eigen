@@ -53,7 +53,7 @@ export function FormatSearch({
             for (const selection of ctx.luckysheet_select_save ?? []) {
                 for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
                     for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
-                        const cell = ctx.luckysheetfile[index].data?.[r][c];
+                        const cell = ctx.sheets[index].data?.[r][c];
                         if (!cell) continue;
 
                         if (type === 'date') {

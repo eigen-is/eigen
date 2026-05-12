@@ -158,9 +158,9 @@ export function updateFormatCell(
                     // else{
                     (value as Record<string, unknown>)[attr as string] = foucsStatus;
                     // }
-                    ctx.luckysheetfile[sheetIndex].config ||= {};
-                    const cfg = ctx.luckysheetfile[sheetIndex].config!;
-                    const cellWidth = cfg.columnlen?.[c] || ctx.luckysheetfile[sheetIndex].defaultColWidth;
+                    ctx.sheets[sheetIndex].config ||= {};
+                    const cfg = ctx.sheets[sheetIndex].config!;
+                    const cellWidth = cfg.columnlen?.[c] || ctx.sheets[sheetIndex].defaultColWidth;
                     if (attr === 'fs' && canvas) {
                         const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
                             r,
@@ -169,8 +169,7 @@ export function updateFormatCell(
                         });
                         if (textInfo?.textHeightAll == null) continue;
                         const rowHeight = round(textInfo.textHeightAll);
-                        const currentRowHeight =
-                            cfg.rowlen?.[r] || ctx.luckysheetfile[sheetIndex].defaultRowHeight || 19;
+                        const currentRowHeight = cfg.rowlen?.[r] || ctx.sheets[sheetIndex].defaultRowHeight || 19;
                         if (rowHeight > currentRowHeight && (!cfg.customHeight || cfg.customHeight[r] !== 1)) {
                             if (cfg.rowlen === undefined) cfg.rowlen = {};
                             set(cfg, `rowlen.${r}`, rowHeight);
@@ -734,8 +733,8 @@ export function cancelPaintModel(ctx: Context) {
         if (!ctx.luckysheet_copy_save) return;
         const index = getSheetIndex(ctx, ctx.luckysheet_copy_save.dataSheetId);
         if (!index) return;
-        // ctx.luckysheetfile[getSheetIndex(ctx.luckysheet_copy_save["dataSheetIndex"])].luckysheet_selection_range = [];
-        ctx.luckysheetfile[index].luckysheet_selection_range = [];
+        // ctx.sheets[getSheetIndex(ctx.luckysheet_copy_save["dataSheetIndex"])].luckysheet_selection_range = [];
+        ctx.sheets[index].luckysheet_selection_range = [];
     }
 
     ctx.luckysheet_copy_save = {
@@ -1115,7 +1114,7 @@ export function handleClearFormat(ctx: Context) {
                 }
             }
 
-            ctx.luckysheetfile[index].config!.borderInfo = source_borderInfo;
+            ctx.sheets[index].config!.borderInfo = source_borderInfo;
         }
         return true;
     });
@@ -1174,7 +1173,7 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
 
-    ctx.luckysheetfile[index].config = ctx.config;
+    ctx.sheets[index].config = ctx.config;
 }
 
 export function handleMerge(ctx: Context, type: string) {
@@ -1235,7 +1234,7 @@ export function handleFreeze(ctx: Context, type: string) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    const file = ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!];
+    const file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
     if (!file) return;
 
     if (type === 'freeze-cancel') {

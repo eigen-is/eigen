@@ -82,7 +82,7 @@ export function hideRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' 
         const colhidden = (ctx.config.colhidden ??= {});
         for (const r of rowColInfo) colhidden[r] = 0;
     }
-    ctx.luckysheetfile[index].config = ctx.config;
+    ctx.sheets[index].config = ctx.config;
 }
 
 export function showRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' | 'column') {
@@ -101,7 +101,7 @@ export function showRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' 
         const colhidden = (ctx.config.colhidden ??= {});
         for (const r of rowColInfo) delete colhidden[r];
     }
-    ctx.luckysheetfile[index].config = ctx.config;
+    ctx.sheets[index].config = ctx.config;
 }
 
 export function setRowHeight(

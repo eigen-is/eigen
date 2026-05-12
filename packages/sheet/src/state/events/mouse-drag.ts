@@ -478,7 +478,7 @@ export function handleOverlayMouseUp(
         ctx.config = cfg;
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
-        ctx.luckysheetfile[idx].config = ctx.config;
+        ctx.sheets[idx].config = ctx.config;
     }
 
     // Change column width
@@ -549,7 +549,7 @@ export function handleOverlayMouseUp(
         ctx.config = cfg;
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
-        ctx.luckysheetfile[idx].config = ctx.config;
+        ctx.sheets[idx].config = ctx.config;
     }
 
     // Column freeze drag end
@@ -563,25 +563,25 @@ export function handleOverlayMouseUp(
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
         if (col_index < 0) {
-            const { frozen } = ctx.luckysheetfile[idx];
+            const { frozen } = ctx.sheets[idx];
             if (frozen) {
                 if (frozen.type === 'rangeBoth' || frozen.type === 'both') {
                     frozen.type = 'rangeRow';
                 } else if (frozen.type === 'column' || frozen.type === 'rangeColumn') {
-                    delete ctx.luckysheetfile[idx].frozen;
+                    delete ctx.sheets[idx].frozen;
                 }
             }
             const freezeHandle = container.querySelector('.fortune-cols-freeze-handle') as HTMLDivElement;
             if (freezeHandle) {
                 freezeHandle.style.left = `${ctx.scrollLeft}px`;
             }
-        } else if (!ctx.luckysheetfile[idx].frozen) {
-            ctx.luckysheetfile[idx].frozen = {
+        } else if (!ctx.sheets[idx].frozen) {
+            ctx.sheets[idx].frozen = {
                 type: 'rangeColumn',
                 range: { column_focus: col_index, row_focus: 0 },
             };
         } else {
-            const frozen = ctx.luckysheetfile[idx].frozen!;
+            const frozen = ctx.sheets[idx].frozen!;
             if (!frozen.range) {
                 frozen.range = { column_focus: col_index, row_focus: 0 };
             } else {
@@ -608,21 +608,21 @@ export function handleOverlayMouseUp(
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
         if (row_index < 0) {
-            const { frozen } = ctx.luckysheetfile[idx];
+            const { frozen } = ctx.sheets[idx];
             if (frozen) {
                 if (frozen.type === 'rangeBoth' || frozen.type === 'both') {
                     frozen.type = 'rangeColumn';
                 } else if (frozen.type === 'row' || frozen.type === 'rangeRow') {
-                    delete ctx.luckysheetfile[idx].frozen;
+                    delete ctx.sheets[idx].frozen;
                 }
             }
-        } else if (!ctx.luckysheetfile[idx].frozen) {
-            ctx.luckysheetfile[idx].frozen = {
+        } else if (!ctx.sheets[idx].frozen) {
+            ctx.sheets[idx].frozen = {
                 type: 'rangeRow',
                 range: { column_focus: 0, row_focus: row_index },
             };
         } else {
-            const frozen = ctx.luckysheetfile[idx].frozen!;
+            const frozen = ctx.sheets[idx].frozen!;
             if (!frozen.range) {
                 frozen.range = { column_focus: 0, row_focus: row_index };
             } else {

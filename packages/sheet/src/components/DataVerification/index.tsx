@@ -99,7 +99,7 @@ export function DataVerification() {
                             item.value1 = list.join(',');
                         }
                         const currentDataVerification =
-                            ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification ?? {};
+                            ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification ?? {};
 
                         const str = range[range.length - 1]?.row[0];
                         const edr = range[range.length - 1]?.row[1];
@@ -116,7 +116,7 @@ export function DataVerification() {
                                 }
                             }
                         }
-                        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification =
+                        ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification =
                             currentDataVerification;
                     }
                 });
@@ -128,7 +128,7 @@ export function DataVerification() {
                         return;
                     }
                     const currentDataVerification =
-                        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification ?? {};
+                        ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification ?? {};
                     const str = range[range.length - 1]?.row[0];
                     const edr = range[range.length - 1]?.row[1];
                     const stc = range[range.length - 1]?.column[0];
@@ -160,7 +160,7 @@ export function DataVerification() {
 
             // Initialize values
             const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-            const ctxDataVerification = ctx.luckysheetfile[index].dataVerification ?? {};
+            const ctxDataVerification = ctx.sheets[index].dataVerification ?? {};
             if (!ctx.luckysheet_select_save) return;
             const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
             const rowIndex = last.row_focus;

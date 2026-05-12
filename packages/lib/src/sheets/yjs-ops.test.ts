@@ -23,12 +23,12 @@ describe('opToPatchOnSheets', () => {
     });
 
     test('op with no id → dropped (no Sheet[]-rooted mapping)', () => {
-        // The wholesale ['luckysheetfile'] replace patch that immer emits when
-        // the sheet reducer reassigns ctx.luckysheetfile (row/col ops)
+        // The wholesale ['sheets'] replace patch that immer emits when
+        // the sheet reducer reassigns ctx.sheets (row/col ops)
         // would otherwise produce a Sheet[]-rooted patch with a non-numeric
         // key, throwing immer error 14 in applyPatches.
         const ops: Op[] = [
-            { op: 'replace', path: ['luckysheetfile'], value: SHEETS },
+            { op: 'replace', path: ['sheets'], value: SHEETS },
             { op: 'add', path: ['something'], value: 1 },
         ];
         const [patches] = opToPatchOnSheets(SHEETS, ops);

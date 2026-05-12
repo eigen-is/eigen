@@ -40,8 +40,8 @@ export function getBorderInfoComputeRange(
     } else {
         const index = getSheetIndex(ctx, sheetId);
         if (isNil(index)) return borderInfoCompute;
-        cfg = ctx.luckysheetfile[index].config;
-        data = ctx.luckysheetfile[index].data;
+        cfg = ctx.sheets[index].config;
+        data = ctx.sheets[index].data;
     }
     if (!data || !cfg) return borderInfoCompute;
 
@@ -1319,7 +1319,7 @@ export function getBorderInfoCompute(ctx: Context, sheetId?: string): ComputedBo
     } else {
         const index = getSheetIndex(ctx, sheetId);
         if (isNil(index)) return {};
-        data = ctx.luckysheetfile[index].data;
+        data = ctx.sheets[index].data;
     }
 
     if (!data) return {};
