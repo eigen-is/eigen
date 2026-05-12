@@ -10,13 +10,7 @@ import {
     rangeHightlightselected,
     rangeSetValue,
 } from '../modules';
-import {
-    cancelFunctionrangeSelected,
-    luckysheetUpdateCell,
-    mergeBorder,
-    mergeMoveMain,
-    updateCell,
-} from '../modules/cell';
+import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, setEditingCell, updateCell } from '../modules/cell';
 import { showLinkCard } from '../modules/hyperlink';
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
 import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
@@ -506,7 +500,7 @@ export function handleCellAreaDoubleClick(
         col_index = column_focus;
     }
 
-    luckysheetUpdateCell(ctx, row_index, col_index);
+    setEditingCell(ctx, row_index, col_index);
 }
 
 export function handleContextMenu(
