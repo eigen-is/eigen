@@ -21,7 +21,19 @@ type DriveItemRef = {
     mimeType: string;
 };
 
-export const API_HOST = import.meta.env.VITE_API_HOST as string;
+// Resolve API host to an absolute URL. A relative VITE_API_HOST (e.g. "/eigen") gets
+// prefixed with window.location.origin at module load — that lets the same bundle work
+// when accessed via the public domain, a LAN IP, a tunnel, etc. Absolute values
+// (e.g. "http://localhost:8000" in dev) are passed through unchanged. WebSocket and SSE
+// helpers below depend on this being absolute.
+function resolveApiHost(): string {
+    const raw = (import.meta.env.VITE_API_HOST as string) || '';
+    if (/^https?:\/\//.test(raw)) return raw;
+    if (typeof window === 'undefined') return raw; // SSR / build-time evaluation: no origin to splice in
+    return `${window.location.origin}${raw.startsWith('/') ? raw : `/${raw}`}`;
+}
+
+export const API_HOST = resolveApiHost();
 
 export const api = treaty<app>(API_HOST, {
     fetch: {

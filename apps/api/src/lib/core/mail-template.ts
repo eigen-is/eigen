@@ -36,8 +36,14 @@ export type EmailShellInput = {
     recipientEmail?: string;
 };
 
+// Frontend per-app URLs are relative in production (e.g. "/docs"). Outbound emails need
+// absolute URLs — recipients click them from their inbox, where window.location is not us.
+// Resolve against API_URL (the public absolute origin written by setup).
 function appUrl(name: string, fallback: string): string {
-    return process.env[name] || fallback;
+    const value = process.env[name] || fallback;
+    if (/^https?:\/\//.test(value)) return value;
+    const base = process.env['API_URL'] || 'http://localhost:8000';
+    return `${base}${value.startsWith('/') ? value : `/${value}`}`;
 }
 
 function buildReferenceUrl(ref: AttachmentReference): string {

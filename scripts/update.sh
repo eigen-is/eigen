@@ -24,8 +24,22 @@ add_var_if_missing() {
 if [ -f .env.production ]; then
     echo "Checking .env.production for new variables..."
     add_var_if_missing COMPOSE_PROFILES "edge,mail"
-    add_var_if_missing EIGEN_STATIC_BIND "127.0.0.1:8080"
     add_var_if_missing MAIL_DOMAIN "$(grep '^DOMAIN=' .env.production | cut -d= -f2-)"
+
+    # Migrate EIGEN_STATIC_BIND (single "ip:port" value) → EIGEN_STATIC_HOST + EIGEN_STATIC_PORT.
+    # The compose long-form ports binding needs them split. If the user customised BIND
+    # (e.g. EIGEN_STATIC_BIND=0.0.0.0:9090) we preserve their values; otherwise defaults
+    # match the previous behaviour.
+    if ! grep -q '^EIGEN_STATIC_HOST=' .env.production && ! grep -q '^EIGEN_STATIC_PORT=' .env.production; then
+        old_bind=$(grep '^EIGEN_STATIC_BIND=' .env.production | cut -d= -f2- | tr -d '"' | tr -d "'")
+        host=$(echo "$old_bind" | cut -d: -f1)
+        port=$(echo "$old_bind" | cut -d: -f2)
+        : "${host:=127.0.0.1}"
+        : "${port:=8080}"
+        echo "EIGEN_STATIC_HOST=${host}" >> .env.production
+        echo "EIGEN_STATIC_PORT=${port}" >> .env.production
+        echo "  Migrated: split EIGEN_STATIC_BIND → EIGEN_STATIC_HOST=${host}, EIGEN_STATIC_PORT=${port}"
+    fi
 fi
 
 echo "Loading environment..."
