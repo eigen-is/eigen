@@ -105,7 +105,7 @@ export function orderbydatafiler(
 // Create filter options
 export function createFilterOptions(
     ctx: Context,
-    activeFilterRange:
+    filterRange:
         | {
               row: number[];
               column: number[];
@@ -119,15 +119,15 @@ export function createFilterOptions(
     if (sheetId != null && sheetId !== ctx.currentSheetId) return;
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) return;
-    if (activeFilterRange == null || size(activeFilterRange) === 0) {
+    if (filterRange == null || size(filterRange) === 0) {
         delete ctx.filterOptions;
         return;
     }
 
-    const r1 = activeFilterRange.row[0];
-    const r2 = activeFilterRange.row[1];
-    const c1 = activeFilterRange.column[0];
-    const c2 = activeFilterRange.column[1];
+    const r1 = filterRange.row[0];
+    const r2 = filterRange.row[1];
+    const c1 = filterRange.column[0];
+    const c2 = filterRange.column[1];
 
     const row = ctx.visibledatarow[r2] ?? 0;
     const row_pre = r1 - 1 === -1 ? 0 : (ctx.visibledatarow[r1 - 1] ?? 0);
@@ -159,7 +159,7 @@ export function createFilterOptions(
 
     if (saveData) {
         const file = ctx.sheets[sheetIndex];
-        file.filterRange = activeFilterRange;
+        file.filterRange = filterRange;
     }
     ctx.filterOptions = options;
 }
@@ -170,7 +170,7 @@ export function clearFilter(ctx: Context) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const hiddenRows = reduce(ctx.filter, (pre, curr) => Object.assign(pre, curr?.rowhidden || {}), {});
     ctx.config.rowhidden = omit(ctx.config.rowhidden, Object.keys(hiddenRows));
-    ctx.activeFilterRange = undefined;
+    ctx.filterRange = undefined;
     ctx.filterOptions = undefined;
     ctx.filterContextMenu = undefined;
     ctx.filter = {};
@@ -185,7 +185,7 @@ export function createFilter(ctx: Context) {
     if (size(ctx.selections) > 1) {
         return;
     }
-    if (size(ctx.activeFilterRange) > 0) {
+    if (size(ctx.filterRange) > 0) {
         clearFilter(ctx);
         return;
     }
@@ -229,9 +229,9 @@ export function createFilter(ctx: Context) {
         ctx.shiftAnchor = cloneDeep(last);
     }
 
-    ctx.activeFilterRange = cloneDeep(filterSave?.[0] || ctx.selections?.[0]);
+    ctx.filterRange = cloneDeep(filterSave?.[0] || ctx.selections?.[0]);
 
-    createFilterOptions(ctx, ctx.activeFilterRange, undefined, true);
+    createFilterOptions(ctx, ctx.filterRange, undefined, true);
 }
 
 export type FilterDate = {

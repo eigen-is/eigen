@@ -144,7 +144,7 @@ export type Context = {
 
     filterchage: boolean; // filter
     filterOptions?: FilterOptions;
-    activeFilterRange?: { row: number[]; column: number[] } | undefined;
+    filterRange?: { row: number[]; column: number[] } | undefined;
     filter: Record<string, FilterEntry>;
 
     sheetTabDragging: boolean;
