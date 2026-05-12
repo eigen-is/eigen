@@ -274,7 +274,6 @@ export const FilterMenu: React.FC = () => {
                 align="start"
                 collisionPadding={8}
                 className="w-auto p-1 text-sm"
-                style={{ zIndex: 1010 }}
                 onContextMenu={(e) => e.stopPropagation()}
             >
                 {settings.filterContextMenu?.map((name, i) => {
@@ -324,7 +323,6 @@ export const FilterMenu: React.FC = () => {
                                     align="start"
                                     sideOffset={4}
                                     className="w-auto p-2 text-sm"
-                                    style={{ zIndex: 1011 }}
                                     onMouseEnter={openSubMenu}
                                     onMouseLeave={closeSubMenu}
                                 >

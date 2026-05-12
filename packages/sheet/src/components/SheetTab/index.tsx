@@ -95,12 +95,7 @@ export const SheetTab: React.FC = () => {
                                     <LayoutGrid width={16} height={16} aria-hidden="true" />
                                 </div>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                                side="top"
-                                align="start"
-                                collisionPadding={8}
-                                style={{ zIndex: 10002 }}
-                            >
+                            <DropdownMenuContent side="top" align="start" collisionPadding={8}>
                                 {context.sheets
                                     .slice()
                                     .sort((s1, s2) => Number(s1.order) - Number(s2.order))
