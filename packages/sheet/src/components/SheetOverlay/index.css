@@ -254,7 +254,7 @@
     width: 16px;
     height: 16px;
     padding: 5px;
-    z-index: 100;
+    z-index: 25;
     pointer-events: auto;
     touch-action: auto;
 }
@@ -394,7 +394,7 @@
     /* background: #000; */
     bottom: 38px;
     left: 0px;
-    z-index: 1000;
+    z-index: 20;
 }
 
 .fortune-cols-change-size,
@@ -730,7 +730,7 @@
     color: #897bff;
     cursor: pointer;
     position: absolute;
-    z-index: 200;
+    z-index: 12;
     border: 1px solid #897bff;
     border-radius: 3px;
     top: 3px;
@@ -782,7 +782,7 @@
     border: 1px solid #ccc;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     position: absolute;
-    z-index: 1000;
+    z-index: 30;
     user-select: none;
     cursor: default;
     white-space: nowrap;
