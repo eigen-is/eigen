@@ -102,9 +102,9 @@ engine/
   reader and the FE Yjs sync handler — single source of truth for both initial-load paths.
 - `applySheetsInsertRowCol<S extends Sheet>(sheets, op)` / `applySheetsDeleteRowCol<S extends Sheet>(sheets, op)`
   — pure data shifts for row/col ops over lib.Sheet-typed fields (`data`, `config.merge`, `config.rowhidden`,
-  `luckysheet_conditionformat_save`, cross-sheet formula refs). Generic over `S` so the editor's wider
+  `conditionalFormatRules`, cross-sheet formula refs). Generic over `S` so the editor's wider
   `state.Sheet[]` flows through with its extras unchanged. State-only fields (filter / frozen /
-  dataVerification / hyperlink / calcChain / luckysheet_select_save) are shifted by the state wrapper
+  dataVerification / hyperlink / calcChain / selections) are shifted by the state wrapper
   in `state/modules/rowcol.ts` after the engine call.
 
 **Architecture boundary:** Context-coupled orchestration functions (`execFunctionGroup`, `groupValuesRefresh`,
@@ -129,7 +129,7 @@ canvas painter uses on the client.
 import { evaluateConditionalFormat } from '@workspace/sheet/engine';
 
 const styles = evaluateConditionalFormat(
-    sheet.luckysheet_conditionformat_save,
+    sheet.conditionalFormatRules,
     sheet.data,
 );
 // styles["3_4"] === { cellColor: "#ff8888" }

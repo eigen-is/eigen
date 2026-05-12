@@ -39,7 +39,8 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      `Record<string, any>`~~ — closed 2026-05-11, see below.
 
    **Tightened on `biome-state-cleanup` (2026-05-11)** — landed alongside Group F:
-   - `Sheet.luckysheet_conditionformat_save` is now `ConditionalFormatRule[]`.
+   - `Sheet.conditionalFormatRules` (renamed from `luckysheet_conditionformat_save`
+     on 2026-05-12) is now `ConditionalFormatRule[]`.
      `setConditionRules` returns early on names outside the canonical union
      (previously created silent no-op rules); `appendRule` annotates literals
      as `ColorGradationRule | DataBarRule`; `paste.ts::CutPasteSide.cdformat`
@@ -214,8 +215,9 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
      `state/modules/formula-cache.ts`, package root `index.ts`). Local
      `FilterSelect` type in `state/modules/rowcol.ts:15` was a shadow of
      lib's `SingleRange`; dropped, `FilterObj` uses `SingleRange` directly.
-     Side-fixes on touch in `state/types.ts`: `Sheet.luckysheet_selection_range`
-     and `Sheet.filter_select` field types flipped from inline
+     Side-fixes on touch in `state/types.ts`: `Sheet.formulaRangeSelections`
+     (then `luckysheet_selection_range`) and `Sheet.filterRange` (then
+     `filter_select`) field types flipped from inline
      `{ row: number[]; column: number[] }` to `SingleRange[]` /
      `SingleRange` — same lib shape, three fewer inline declarations.
 
@@ -327,7 +329,7 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 11. **`applyInsert` / `applyDelete` deep-clone the full target sheet** —
     `cloneDeep(target)` at `engine/rowcol.ts:187,393` clones every field
     (state-only fields included) when the engine writes only `data`, `config`,
-    and `luckysheet_conditionformat_save`. State wrapper then mutates the
+    and `conditionalFormatRules`. State wrapper then mutates the
     state-only fields, throwing away the wasteful clone. Profile first; only
     optimize if row/col ops show up hot.
 
