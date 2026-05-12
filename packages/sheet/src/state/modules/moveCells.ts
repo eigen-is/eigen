@@ -306,10 +306,10 @@ export function onCellsMoveEnd(
             }
 
             d[r][c] = null;
-            const link = ctx.luckysheetfile[index].hyperlink?.[`${r}_${c}`];
+            const link = ctx.sheets[index].hyperlink?.[`${r}_${c}`];
             if (link) {
                 hyperLinkList[`${r}_${c}`] = link;
-                delete ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].hyperlink?.[`${r}_${c}`];
+                delete ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].hyperlink?.[`${r}_${c}`];
             }
         }
     }
@@ -421,7 +421,7 @@ export function onCellsMoveEnd(
             }
             d[r + row_s][c + col_s] = value;
             if (hyperLinkList?.[`${r + last.row[0]}_${c + last.column[0]}`]) {
-                ctx.luckysheetfile[index].hyperlink![`${r + row_s}_${c + col_s}`] = hyperLinkList?.[
+                ctx.sheets[index].hyperlink![`${r + row_s}_${c + col_s}`] = hyperLinkList?.[
                     `${r + last.row[0]}_${c + last.column[0]}`
                 ] as {
                     linkType: string;
@@ -432,8 +432,7 @@ export function onCellsMoveEnd(
     }
 
     // Conditional format
-    const cdformat =
-        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].luckysheet_conditionformat_save ?? [];
+    const cdformat = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].luckysheet_conditionformat_save ?? [];
     if (cdformat != null && cdformat.length > 0) {
         for (let i = 0; i < cdformat.length; i += 1) {
             const cdformat_cellrange = cdformat[i].cellrange;
@@ -476,7 +475,7 @@ export function onCellsMoveEnd(
     ctx.luckysheet_select_save = normalizeSelection(ctx, [last]);
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex != null) {
-        ctx.luckysheetfile[sheetIndex].config = cloneDeep(cfg);
+        ctx.sheets[sheetIndex].config = cloneDeep(cfg);
     }
 
     // const allParam = {

@@ -69,7 +69,7 @@ export function FxEditor() {
         } else {
             refs.fxInput.current!.innerHTML = '';
         }
-    }, [context.luckysheetfile, context.currentSheetId, context.luckysheet_select_save]);
+    }, [context.sheets, context.currentSheetId, context.luckysheet_select_save]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: callback only refreshed when sheet/selection-shape changes — derived helpers (allowEdit, etc.) are read fresh from `context`
     const onFocus = useCallback(() => {
@@ -94,7 +94,7 @@ export function FxEditor() {
     }, [
         context.config,
         context.luckysheet_select_save,
-        context.luckysheetfile,
+        context.sheets,
         context.currentSheetId,
         refs.globalCache,
         setContext,
@@ -209,7 +209,7 @@ export function FxEditor() {
             return false;
         }
         return true;
-    }, [context.config, context.luckysheet_select_save, context.luckysheetfile, context.currentSheetId, isHidenRC]);
+    }, [context.config, context.luckysheet_select_save, context.sheets, context.currentSheetId, isHidenRC]);
 
     return (
         <aside>

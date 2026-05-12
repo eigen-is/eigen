@@ -40,7 +40,7 @@ export function getCellRowColumn(
 export function getCellHyperlink(ctx: Context, r: number, c: number) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex != null) {
-        return ctx.luckysheetfile[sheetIndex].hyperlink?.[`${r}_${c}`];
+        return ctx.sheets[sheetIndex].hyperlink?.[`${r}_${c}`];
     }
     return undefined;
 }
@@ -58,7 +58,7 @@ export function saveHyperlink(
     if (sheetIndex != null && flowdata != null && linkType && linkAddress) {
         let cell = flowdata[r][c];
         if (cell == null) cell = {};
-        set(ctx.luckysheetfile[sheetIndex], ['hyperlink', `${r}_${c}`], {
+        set(ctx.sheets[sheetIndex], ['hyperlink', `${r}_${c}`], {
             linkType,
             linkAddress,
         });
@@ -78,8 +78,8 @@ export function removeHyperlink(ctx: Context, r: number, c: number) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && sheetIndex != null) {
-        const hyperlink = omit(ctx.luckysheetfile[sheetIndex].hyperlink, `${r}_${c}`);
-        set(ctx.luckysheetfile[sheetIndex], 'hyperlink', hyperlink);
+        const hyperlink = omit(ctx.sheets[sheetIndex].hyperlink, `${r}_${c}`);
+        set(ctx.sheets[sheetIndex], 'hyperlink', hyperlink);
         const cell = flowdata[r][c];
         if (cell != null) {
             flowdata[r][c] = { v: cell.v, m: cell.m };
@@ -136,7 +136,7 @@ export function goToLink(
 ) {
     const currSheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (currSheetIndex == null) return;
-    if (ctx.luckysheetfile[currSheetIndex].hyperlink?.[`${r}_${c}`] == null) {
+    if (ctx.sheets[currSheetIndex].hyperlink?.[`${r}_${c}`] == null) {
         return;
     }
     if (linkType === 'webpage') {
@@ -146,7 +146,7 @@ export function goToLink(
         window.open(linkAddress);
     } else if (linkType === 'sheet') {
         let sheetId: string | undefined;
-        ctx.luckysheetfile.forEach((f) => {
+        ctx.sheets.forEach((f) => {
             if (linkAddress === f.name) {
                 sheetId = f.id;
             }

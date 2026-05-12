@@ -22,7 +22,7 @@ export function DropDownList() {
         if (r == null || c == null) return null;
         const sheetIndex = getSheetIndex(context, context.currentSheetId);
         if (sheetIndex == null || sheetIndex < 0) return null;
-        const dv = context.luckysheetfile[sheetIndex]?.dataVerification?.[`${r}_${c}`];
+        const dv = context.sheets[sheetIndex]?.dataVerification?.[`${r}_${c}`];
         if (!dv) return null;
         const list = getDropdownList(context, dv.value1);
         const isMul = dv.type2 === 'true';

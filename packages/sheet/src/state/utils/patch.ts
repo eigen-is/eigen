@@ -123,7 +123,7 @@ function additionalCellOps(
 }
 
 export function filterPatch(patches: Patch[]) {
-    return patches.filter((p) => p.path[0] === 'luckysheetfile' && p.path[2] !== 'luckysheet_select_save');
+    return patches.filter((p) => p.path[0] === 'sheets' && p.path[2] !== 'luckysheet_select_save');
 }
 
 export function extractFormulaCellOps(ops: Op[]) {
@@ -159,13 +159,13 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
             value: p.value,
             path: p.path,
         };
-        if (p.path[0] === 'luckysheetfile' && isNumber(p.path[1])) {
-            const id = ctx.luckysheetfile[p.path[1]].id!;
+        if (p.path[0] === 'sheets' && isNumber(p.path[1])) {
+            const id = ctx.sheets[p.path[1]].id!;
             op.id = id;
             op.path = p.path.slice(2);
             if (isEqual(op.path, ['calcChain', 'length'])) {
                 op.path = ['calcChain'];
-                op.value = ctx.luckysheetfile[p.path[1]].calcChain;
+                op.value = ctx.sheets[p.path[1]].calcChain;
             }
         }
         return op;
@@ -177,7 +177,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
                 id: p!.id!,
                 op: 'replace',
                 path: ['hyperlink', `${p.path[1]}_${p.path![2]}`],
-                value: ctx.luckysheetfile[index].hyperlink![`${p.value!.hl!.r!}_${p.value!.hl.c!}`],
+                value: ctx.sheets[index].hyperlink![`${p.value!.hl!.r!}_${p.value!.hl.c!}`],
             });
         }
     });
@@ -260,8 +260,8 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
                 path: [],
                 value: options.addSheet,
             });
-            if (index !== ctx.luckysheetfile.length) {
-                const sheetsRight = ctx.luckysheetfile.filter((sheet) => (sheet?.order as number) >= (order as number));
+            if (index !== ctx.sheets.length) {
+                const sheetsRight = ctx.sheets.filter((sheet) => (sheet?.order as number) >= (order as number));
                 sheetsRight.forEach((sheet) => {
                     ops.push({
                         id: sheet.id,
@@ -300,7 +300,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
                 },
             ];
             const order = options.deletedSheet?.value?.order as number;
-            const sheetsRight = ctx.luckysheetfile.filter(
+            const sheetsRight = ctx.sheets.filter(
                 (sheet) => (sheet?.order as number) >= (order as number) && sheet.id !== options.deleteSheetOp?.id,
             );
             sheetsRight.forEach((sheet) => {
@@ -322,8 +322,8 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
                 },
             ];
             const order = options.deletedSheet?.value?.order as number;
-            if (options.deletedSheet?.order !== ctx.luckysheetfile.length) {
-                const sheetsRight = ctx.luckysheetfile.filter((sheet) => (sheet?.order as number) >= (order as number));
+            if (options.deletedSheet?.order !== ctx.sheets.length) {
+                const sheetsRight = ctx.sheets.filter((sheet) => (sheet?.order as number) >= (order as number));
                 sheetsRight.forEach((sheet) => {
                     ops.push({
                         id: sheet.id,
@@ -339,8 +339,8 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
 }
 
 export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
-    const [pure, specialOps] = opToPatchOnSheets(ctx.luckysheetfile, ops);
-    const patches: Patch[] = pure.map((p) => ({ ...p, path: ['luckysheetfile', ...p.path] }));
+    const [pure, specialOps] = opToPatchOnSheets(ctx.sheets, ops);
+    const patches: Patch[] = pure.map((p) => ({ ...p, path: ['sheets', ...p.path] }));
     for (const op of ops) {
         if (op.id && op.path[0] === 'images' && op.id === ctx.currentSheetId) {
             patches.push({

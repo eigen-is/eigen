@@ -27,11 +27,11 @@ describe('sheet/core/api/rowcol', () => {
         ].forEach((item) => {
             const ctx = getContext();
             freeze(ctx, item.t as 'both' | 'row' | 'column', { row: 2, column: 2 }, { id: 'id_2' });
-            expect(ctx.luckysheetfile[1]?.frozen?.range).toEqual({
+            expect(ctx.sheets[1]?.frozen?.range).toEqual({
                 column_focus: 2,
                 row_focus: 2,
             });
-            expect(ctx.luckysheetfile[1]?.frozen?.type).toBe(item.rs as 'both' | 'row' | 'column');
+            expect(ctx.sheets[1]?.frozen?.type).toBe(item.rs as 'both' | 'row' | 'column');
         });
     });
 
@@ -48,15 +48,15 @@ describe('sheet/core/api/rowcol', () => {
         ].forEach((k) => {
             const ctx = getContext();
             if (k.t === 'row') {
-                if (ctx.luckysheetfile[0]?.data?.[k.i]) {
-                    ctx.luckysheetfile[0].data[k.i] = [cellTmpl, null, cellTmpl, null];
+                if (ctx.sheets[0]?.data?.[k.i]) {
+                    ctx.sheets[0].data[k.i] = [cellTmpl, null, cellTmpl, null];
                 }
             } else {
-                if (ctx.luckysheetfile[0]?.data?.[0]?.[k.i]) {
-                    ctx.luckysheetfile[0].data[0][k.i] = cellTmpl;
+                if (ctx.sheets[0]?.data?.[0]?.[k.i]) {
+                    ctx.sheets[0].data[0][k.i] = cellTmpl;
                 }
-                if (ctx.luckysheetfile[0]?.data?.[2]?.[k.i]) {
-                    ctx.luckysheetfile[0].data[2][k.i] = cellTmpl;
+                if (ctx.sheets[0]?.data?.[2]?.[k.i]) {
+                    ctx.sheets[0].data[2][k.i] = cellTmpl;
                 }
             }
             ctx.defaultCell = { v: 'inserted' };
@@ -69,8 +69,8 @@ describe('sheet/core/api/rowcol', () => {
                     }
                     const receivedValue =
                         k.t === 'row'
-                            ? ctx.luckysheetfile[0]?.data?.[k.i + i + l]?.[j]
-                            : ctx.luckysheetfile[0]?.data?.[j]?.[k.i + i + l];
+                            ? ctx.sheets[0]?.data?.[k.i + i + l]?.[j]
+                            : ctx.sheets[0]?.data?.[j]?.[k.i + i + l];
                     expect(receivedValue).toEqual([0, 2].includes(j) ? emptyTmpl : null);
                 }
             }
@@ -101,8 +101,8 @@ describe('sheet/core/api/rowcol', () => {
             { type: 'row', start: 1, end: 3, rawData: rawDataSecond },
             { type: 'column', start: 1, end: 1, rawData: rawDataSecond },
         ].forEach((k) => {
-            if (ctx.luckysheetfile[0]) {
-                ctx.luckysheetfile[0].data = k.rawData();
+            if (ctx.sheets[0]) {
+                ctx.sheets[0].data = k.rawData();
             }
             const slen = k.end - k.start + 1;
             deleteRowOrColumn(ctx, k.type as 'row' | 'column', k.start, k.end);
@@ -124,7 +124,7 @@ describe('sheet/core/api/rowcol', () => {
                             return null;
                         };
                     }
-                    expect(ctx.luckysheetfile[0]?.data?.[i]?.[j]).toEqual(expectedValue());
+                    expect(ctx.sheets[0]?.data?.[i]?.[j]).toEqual(expectedValue());
                 });
             });
         });

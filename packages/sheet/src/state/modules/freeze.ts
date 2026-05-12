@@ -20,7 +20,7 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
     // get frozen type
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return;
-    const file = ctx.luckysheetfile[idx];
+    const file = ctx.sheets[idx];
     const { frozen } = file;
 
     if (frozen == null) {
@@ -170,7 +170,7 @@ export function getFrozenHandleTop(ctx: Context) {
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     if (idx == null) return ctx.scrollTop;
 
-    const sheet = ctx.luckysheetfile[idx];
+    const sheet = ctx.sheets[idx];
     if (
         sheet?.frozen?.type === 'row' ||
         sheet?.frozen?.type === 'rangeRow' ||
@@ -186,7 +186,7 @@ export function getFrozenHandleLeft(ctx: Context) {
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     if (idx == null) return ctx.scrollLeft;
 
-    const sheet = ctx.luckysheetfile[idx];
+    const sheet = ctx.sheets[idx];
     if (
         sheet?.frozen?.type === 'column' ||
         sheet?.frozen?.type === 'rangeColumn' ||

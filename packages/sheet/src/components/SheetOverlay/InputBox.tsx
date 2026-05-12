@@ -46,7 +46,7 @@ export const InputBox: React.FC = () => {
             return getStyleByCell(context, flowdata, firstSelection.row_focus!, firstSelection.column_focus!);
         }
         return {};
-    }, [context.luckysheetfile, context.currentSheetId, context.luckysheetCellUpdate, firstSelection]);
+    }, [context.sheets, context.currentSheetId, context.luckysheetCellUpdate, firstSelection]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: cell-edit sync — collaborative-update guard relies on prev refs, not React deps; firing on every refs.* change would clobber the editor
     useLayoutEffect(() => {
@@ -94,7 +94,7 @@ export const InputBox: React.FC = () => {
             }
             delete refs.globalCache.doNotFocus;
         }
-    }, [context.luckysheetCellUpdate, context.luckysheetfile, context.currentSheetId, firstSelection]);
+    }, [context.luckysheetCellUpdate, context.sheets, context.currentSheetId, firstSelection]);
 
     useEffect(() => {
         if (context.luckysheetCellUpdate.length === 0) {

@@ -256,5 +256,5 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
 
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     if (idx == null) return;
-    ctx.luckysheetfile[idx].config = ctx.config;
+    ctx.sheets[idx].config = ctx.config;
 }

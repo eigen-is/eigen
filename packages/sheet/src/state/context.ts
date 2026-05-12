@@ -39,7 +39,7 @@ type RefValues = {
 };
 
 export type Context = {
-    luckysheetfile: Sheet[];
+    sheets: Sheet[];
     defaultcolumnNum: number;
     defaultrowNum: number;
     addDefaultRows: number;
@@ -214,7 +214,7 @@ export type Context = {
 
 export function defaultContext(refs: RefValues): Context {
     return {
-        luckysheetfile: [],
+        sheets: [],
         defaultcolumnNum: 60,
         defaultrowNum: 84,
         addDefaultRows: 50,
@@ -402,7 +402,7 @@ export function getFlowdata(ctx?: Context, id?: string | null) {
     if (isNil(i)) {
         return null;
     }
-    return ctx.luckysheetfile?.[i]?.data;
+    return ctx.sheets?.[i]?.data;
 }
 
 function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
@@ -503,13 +503,11 @@ export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {
 
 export function initSheetIndex(ctx: Context) {
     // get current sheet
-    const shownSheets = ctx.luckysheetfile.filter(
-        (singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1,
-    );
+    const shownSheets = ctx.sheets.filter((singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1);
     ctx.currentSheetId = sortBy(shownSheets, (sheet) => sheet.order)[0].id as string;
-    for (let i = 0; i < ctx.luckysheetfile.length; i += 1) {
-        if (ctx.luckysheetfile[i].status === 1 && ctx.luckysheetfile[i].hide !== 1) {
-            ctx.currentSheetId = ctx.luckysheetfile[i].id!;
+    for (let i = 0; i < ctx.sheets.length; i += 1) {
+        if (ctx.sheets[i].status === 1 && ctx.sheets[i].hide !== 1) {
+            ctx.currentSheetId = ctx.sheets[i].id!;
             break;
         }
     }

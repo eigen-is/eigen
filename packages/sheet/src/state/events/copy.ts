@@ -48,8 +48,7 @@ export function handleCopy(ctx: Context): boolean {
     }
 
     // warn when multiple selections have conditional formatting
-    const cdformat =
-        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].luckysheet_conditionformat_save;
+    const cdformat = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].luckysheet_conditionformat_save;
     if (
         !isNil(ctx.luckysheet_select_save) &&
         ctx.luckysheet_select_save.length > 1 &&

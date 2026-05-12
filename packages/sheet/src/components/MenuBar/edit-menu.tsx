@@ -131,7 +131,7 @@ export function EditMenu() {
                             setContext(
                                 (draftCtx) => {
                                     const index = getSheetIndex(draftCtx, context.currentSheetId) as number;
-                                    if ((draftCtx.luckysheetfile[index].data?.length ?? 0) <= 1) {
+                                    if ((draftCtx.sheets[index].data?.length ?? 0) <= 1) {
                                         showAlert(rightclick.cannotDeleteAllRow, 'ok');
                                         return;
                                     }
@@ -162,7 +162,7 @@ export function EditMenu() {
                             setContext(
                                 (draftCtx) => {
                                     const index = getSheetIndex(draftCtx, context.currentSheetId) as number;
-                                    if ((draftCtx.luckysheetfile[index].data?.[0]?.length ?? 0) <= 1) {
+                                    if ((draftCtx.sheets[index].data?.[0]?.length ?? 0) <= 1) {
                                         showAlert(rightclick.cannotDeleteAllColumn, 'ok');
                                         return;
                                     }

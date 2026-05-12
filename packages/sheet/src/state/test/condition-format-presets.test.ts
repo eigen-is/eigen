@@ -21,7 +21,7 @@ describe('applyColorScalePreset', () => {
     it("appends a colorGradation rule with the preset's format array", () => {
         const ctx = contextFactory() as Context;
         applyColorScalePreset(ctx, 'colorGradation_1');
-        const rules = ctx.luckysheetfile[0].luckysheet_conditionformat_save!;
+        const rules = ctx.sheets[0].luckysheet_conditionformat_save!;
         expect(rules).toHaveLength(1);
         const rule = rules[0];
         if (rule.type !== 'colorGradation') throw new Error(`expected colorGradation, got ${rule.type}`);
@@ -31,7 +31,7 @@ describe('applyColorScalePreset', () => {
     it('ignores unknown preset keys', () => {
         const ctx = contextFactory() as Context;
         applyColorScalePreset(ctx, 'nonsense_key');
-        expect(ctx.luckysheetfile[0].luckysheet_conditionformat_save ?? []).toHaveLength(0);
+        expect(ctx.sheets[0].luckysheet_conditionformat_save ?? []).toHaveLength(0);
     });
 });
 
@@ -39,7 +39,7 @@ describe('applyDataBarPreset', () => {
     it("appends a dataBar rule with the preset's format array", () => {
         const ctx = contextFactory() as Context;
         applyDataBarPreset(ctx, 'solidColorDataBar_1');
-        const rules = ctx.luckysheetfile[0].luckysheet_conditionformat_save!;
+        const rules = ctx.sheets[0].luckysheet_conditionformat_save!;
         expect(rules).toHaveLength(1);
         const rule = rules[0];
         if (rule.type !== 'dataBar') throw new Error(`expected dataBar, got ${rule.type}`);
@@ -49,7 +49,7 @@ describe('applyDataBarPreset', () => {
     it('ignores unknown preset keys', () => {
         const ctx = contextFactory() as Context;
         applyDataBarPreset(ctx, 'nonsense_key');
-        expect(ctx.luckysheetfile[0].luckysheet_conditionformat_save ?? []).toHaveLength(0);
+        expect(ctx.sheets[0].luckysheet_conditionformat_save ?? []).toHaveLength(0);
     });
 });
 
@@ -58,6 +58,6 @@ describe('clearSheetRules', () => {
         const ctx = contextFactory() as Context;
         applyColorScalePreset(ctx, 'colorGradation_1');
         clearSheetRules(ctx);
-        expect(ctx.luckysheetfile[0].luckysheet_conditionformat_save).toHaveLength(0);
+        expect(ctx.sheets[0].luckysheet_conditionformat_save).toHaveLength(0);
     });
 });

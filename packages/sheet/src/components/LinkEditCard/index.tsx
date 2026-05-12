@@ -257,9 +257,9 @@ export function LinkEditCard({
                     onValueChange={(value) => {
                         if (value === 'sheet') {
                             if (!linkText) {
-                                setLinkText(context.luckysheetfile[0].name);
+                                setLinkText(context.sheets[0].name);
                             }
-                            setLinkAddress(context.luckysheetfile[0].name);
+                            setLinkAddress(context.sheets[0].name);
                         } else {
                             setLinkAddress('');
                         }
@@ -325,7 +325,7 @@ export function LinkEditCard({
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {context.luckysheetfile.map((sheet) => (
+                                {context.sheets.map((sheet) => (
                                     <SelectItem key={sheet.id} value={sheet.name}>
                                         {sheet.name}
                                     </SelectItem>

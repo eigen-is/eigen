@@ -89,8 +89,8 @@ export function escapeHTMLTag(str: string) {
 }
 
 export function getSheetIndex(ctx: Context, id: string) {
-    for (let i = 0; i < ctx.luckysheetfile.length; i += 1) {
-        if (ctx.luckysheetfile[i]?.id === id) {
+    for (let i = 0; i < ctx.sheets.length; i += 1) {
+        if (ctx.sheets[i]?.id === id) {
             return i;
         }
     }
@@ -98,9 +98,9 @@ export function getSheetIndex(ctx: Context, id: string) {
 }
 
 export function getSheetIdByName(ctx: Context, name: string) {
-    for (let i = 0; i < ctx.luckysheetfile.length; i += 1) {
-        if (ctx.luckysheetfile[i].name === name) {
-            return ctx.luckysheetfile[i].id;
+    for (let i = 0; i < ctx.sheets.length; i += 1) {
+        if (ctx.sheets[i].name === name) {
+            return ctx.sheets[i].id;
         }
     }
     return null;
@@ -114,7 +114,7 @@ export function getSheetByIndex(ctx: Context, id: string) {
     if (isNil(i)) {
         return null;
     }
-    return ctx.luckysheetfile[i];
+    return ctx.sheets[i];
 }
 
 // get the current date and time

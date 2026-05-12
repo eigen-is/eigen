@@ -46,7 +46,7 @@ function shiftStateOnlyFieldsForInsert(
     const id = op.id || ctx.currentSheetId;
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
-    const file = ctx.luckysheetfile[curOrder];
+    const file = ctx.sheets[curOrder];
     if (!file) return;
 
     // calcChain entries are sheet-local; cross-sheet formula text is rewritten by the engine.
@@ -302,7 +302,7 @@ function shiftStateOnlyFieldsForDelete(
     const id = op.id || ctx.currentSheetId;
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
-    const file = ctx.luckysheetfile[curOrder];
+    const file = ctx.sheets[curOrder];
     if (!file) return;
 
     const slen = end - start + 1;
@@ -546,7 +546,7 @@ function adjustSelectionForInsert(
     const id = op.id || ctx.currentSheetId;
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
-    const file = ctx.luckysheetfile[curOrder];
+    const file = ctx.sheets[curOrder];
     if (!file) return;
     const d = file.data;
     if (!d) return;
@@ -590,19 +590,19 @@ export function insertRowCol(
 
     const { type, index, count, direction } = op;
 
-    // Per-sheet write-back, not `ctx.luckysheetfile = ...`: a wholesale
+    // Per-sheet write-back, not `ctx.sheets = ...`: a wholesale
     // reassignment makes immer emit one synthetic root-level replace patch
     // carrying the whole workbook, which is then shipped over collab on every
     // edit. See packages/sheet/src/state/test/modules/rowcol-patches.test.ts.
-    const insertedSheets = applySheetsInsertRowCol(ctx.luckysheetfile, { ...op, id });
+    const insertedSheets = applySheetsInsertRowCol(ctx.sheets, { ...op, id });
     for (let i = 0; i < insertedSheets.length; i += 1) {
-        ctx.luckysheetfile[i] = insertedSheets[i];
+        ctx.sheets[i] = insertedSheets[i];
     }
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
 
-    const file = ctx.luckysheetfile[curOrder];
+    const file = ctx.sheets[curOrder];
     if (!file) return;
 
     const cfg = file.config || {};
@@ -884,7 +884,7 @@ export function insertRowCol(
 
     if (id === ctx.currentSheetId) {
         const i = getSheetIndex(ctx, id);
-        if (typeof i === 'number') ctx.config = ctx.luckysheetfile[i].config!;
+        if (typeof i === 'number') ctx.config = ctx.sheets[i].config!;
     }
     ctx.formulaCache.formulaCellInfoMap = null;
 }
@@ -905,15 +905,15 @@ export function deleteRowCol(
     const slen = end - start + 1;
 
     // See insertRowCol above for why this isn't a wholesale reassignment.
-    const deletedSheets = applySheetsDeleteRowCol(ctx.luckysheetfile, { ...op, id });
+    const deletedSheets = applySheetsDeleteRowCol(ctx.sheets, { ...op, id });
     for (let i = 0; i < deletedSheets.length; i += 1) {
-        ctx.luckysheetfile[i] = deletedSheets[i];
+        ctx.sheets[i] = deletedSheets[i];
     }
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
 
-    const file = ctx.luckysheetfile[curOrder];
+    const file = ctx.sheets[curOrder];
     if (!file) return;
 
     const cfg = file.config || {};
@@ -1133,7 +1133,7 @@ export function deleteRowCol(
 
     if (id === ctx.currentSheetId) {
         const i = getSheetIndex(ctx, id);
-        if (typeof i === 'number') ctx.config = ctx.luckysheetfile[i].config!;
+        if (typeof i === 'number') ctx.config = ctx.sheets[i].config!;
     }
     ctx.formulaCache.formulaCellInfoMap = null;
 }
@@ -1195,7 +1195,7 @@ export function hideSelected(ctx: Context, type: string) {
             Store.jfredo.push(redo);
         } */
         ctx.config.rowhidden = rowhidden;
-        const rowLen = ctx.luckysheetfile[index].data!.length;
+        const rowLen = ctx.sheets[index].data!.length;
         const isEndRow =
             rowLen - 1 === rowhiddenNumber ||
             Object.keys(rowhidden).findIndex((o) => parseInt(o, 10) - 1 === rowhiddenNumber) >= 0;
@@ -1216,7 +1216,7 @@ export function hideSelected(ctx: Context, type: string) {
             colhidden[c] = 0;
         }
         ctx.config.colhidden = colhidden;
-        const columnLen = ctx.luckysheetfile[index].data![0].length;
+        const columnLen = ctx.sheets[index].data![0].length;
         // Check if the column to hide is the last column
         const isEndColumn =
             columnLen - 1 === colhiddenNumber ||
@@ -1229,7 +1229,7 @@ export function hideSelected(ctx: Context, type: string) {
             ctx.luckysheet_select_save[0].column[1] += 1;
         }
     }
-    ctx.luckysheetfile[index].config = ctx.config;
+    ctx.sheets[index].config = ctx.config;
     return '';
 }
 
@@ -1256,7 +1256,7 @@ export function showSelected(ctx: Context, type: string) {
         }
         ctx.config.colhidden = colhidden;
     }
-    ctx.luckysheetfile[index].config = ctx.config;
+    ctx.sheets[index].config = ctx.config;
     return '';
 }
 

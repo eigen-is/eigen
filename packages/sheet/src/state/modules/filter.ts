@@ -44,7 +44,7 @@ export function labelFilterOptionState(
     if (saveData) {
         const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
         if (sheetIndex == null) return;
-        const file = ctx.luckysheetfile[sheetIndex];
+        const file = ctx.sheets[sheetIndex];
 
         if (file.filter == null) {
             file.filter = {};
@@ -158,7 +158,7 @@ export function createFilterOptions(
     }
 
     if (saveData) {
-        const file = ctx.luckysheetfile[sheetIndex];
+        const file = ctx.sheets[sheetIndex];
         file.filter_select = luckysheet_filter_save;
     }
     ctx.filterOptions = options;
@@ -175,9 +175,9 @@ export function clearFilter(ctx: Context) {
     ctx.filterContextMenu = undefined;
     ctx.filter = {};
     if (sheetIndex != null) {
-        ctx.luckysheetfile[sheetIndex].filter = undefined;
-        ctx.luckysheetfile[sheetIndex].filter_select = undefined;
-        ctx.luckysheetfile[sheetIndex].config = cloneDeep(ctx.config);
+        ctx.sheets[sheetIndex].filter = undefined;
+        ctx.sheets[sheetIndex].filter_select = undefined;
+        ctx.sheets[sheetIndex].config = cloneDeep(ctx.config);
     }
 }
 
@@ -191,7 +191,7 @@ export function createFilter(ctx: Context) {
     }
 
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex == null || ctx.luckysheetfile[sheetIndex].isPivotTable) {
+    if (sheetIndex == null || ctx.sheets[sheetIndex].isPivotTable) {
         return;
     }
 
@@ -514,5 +514,5 @@ export function saveFilter(
     if (sheetIndex == null) {
         return;
     }
-    ctx.luckysheetfile[sheetIndex].config = cfg;
+    ctx.sheets[sheetIndex].config = cfg;
 }

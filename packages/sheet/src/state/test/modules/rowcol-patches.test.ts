@@ -1,6 +1,6 @@
-// Regression: state row/col reducers must mutate ctx.luckysheetfile per-sheet,
+// Regression: state row/col reducers must mutate ctx.sheets per-sheet,
 // never reassign the whole array. Wholesale reassignment makes immer emit a
-// synthetic { op: 'replace', path: ['luckysheetfile'], value: [...] } patch
+// synthetic { op: 'replace', path: ['sheets'], value: [...] } patch
 // carrying the entire post-mutation Sheet[]. That patch:
 //   - has no sheet id, so opToPatchOnSheets can't map it to a Sheet[]-rooted
 //     index and used to throw immer error 14 in replaySheetsOps;
@@ -9,7 +9,7 @@
 //     already encodes the change.
 // We now drop the synthetic patch defensively in opToPatchOnSheets, but the
 // fix at the source is "don't emit it in the first place." This test fails
-// the moment someone reintroduces `ctx.luckysheetfile = ...`.
+// the moment someone reintroduces `ctx.sheets = ...`.
 
 import { describe, expect, test } from 'bun:test';
 import { enablePatches, type Patch, produceWithPatches } from 'immer';
@@ -19,8 +19,8 @@ import { contextFactory } from '../factories/context';
 
 enablePatches();
 
-function isWholesaleLuckysheetfilePatch(p: Patch): boolean {
-    return p.path.length === 1 && p.path[0] === 'luckysheetfile';
+function isWholesaleSheetsPatch(p: Patch): boolean {
+    return p.path.length === 1 && p.path[0] === 'sheets';
 }
 
 function patchesFor(recipe: (ctx: Context) => void): Patch[] {
@@ -29,20 +29,20 @@ function patchesFor(recipe: (ctx: Context) => void): Patch[] {
     return patches;
 }
 
-describe('row/col reducers emit per-sheet patches, not wholesale luckysheetfile replace', () => {
-    test('insertRowCol does not emit a wholesale ["luckysheetfile"] replace', () => {
+describe('row/col reducers emit per-sheet patches, not wholesale sheets replace', () => {
+    test('insertRowCol does not emit a wholesale ["sheets"] replace', () => {
         const patches = patchesFor((ctx) => {
             insertRowCol(ctx, { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' }, false);
         });
-        const wholesale = patches.filter(isWholesaleLuckysheetfilePatch);
+        const wholesale = patches.filter(isWholesaleSheetsPatch);
         expect(wholesale).toEqual([]);
     });
 
-    test('deleteRowCol does not emit a wholesale ["luckysheetfile"] replace', () => {
+    test('deleteRowCol does not emit a wholesale ["sheets"] replace', () => {
         const patches = patchesFor((ctx) => {
             deleteRowCol(ctx, { type: 'row', start: 0, end: 0, id: 'id_1' });
         });
-        const wholesale = patches.filter(isWholesaleLuckysheetfilePatch);
+        const wholesale = patches.filter(isWholesaleSheetsPatch);
         expect(wholesale).toEqual([]);
     });
 
@@ -53,7 +53,7 @@ describe('row/col reducers emit per-sheet patches, not wholesale luckysheetfile 
         });
         const sheetIndices = new Set<number>();
         for (const p of patches) {
-            if (p.path[0] === 'luckysheetfile' && typeof p.path[1] === 'number') {
+            if (p.path[0] === 'sheets' && typeof p.path[1] === 'number') {
                 sheetIndices.add(p.path[1]);
             }
         }

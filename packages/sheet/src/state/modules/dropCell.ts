@@ -2103,7 +2103,7 @@ export function updateDropCell(ctx: Context) {
 
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    const file = ctx.luckysheetfile[index];
+    const file = ctx.sheets[index];
     const hiddenRows = new Set(Object.keys(file.config?.rowhidden || {}));
     const hiddenCols = new Set(Object.keys(file.config?.colhidden || {}));
 

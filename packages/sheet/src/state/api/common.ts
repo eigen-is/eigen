@@ -17,7 +17,7 @@ export function getSheet(ctx: Context, options: CommonOptions = {}) {
         throw sheetNotFound();
     }
 
-    const sheet = ctx.luckysheetfile[index];
+    const sheet = ctx.sheets[index];
 
     if (sheet == null) {
         throw sheetNotFound();

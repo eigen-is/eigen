@@ -486,7 +486,7 @@ export function handleCellAreaDoubleClick(
 
     // Cancel double-click for checkbox cells -- do not allow editing
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const { dataVerification } = ctx.luckysheetfile[index];
+    const { dataVerification } = ctx.sheets[index];
 
     if (dataVerification) {
         const item = dataVerification[`${row_index}_${col_index}`];

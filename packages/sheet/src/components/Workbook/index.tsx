@@ -80,7 +80,7 @@ function dataToCelldata(data: CellMatrix) {
 }
 
 function reduceUndoList(ctx: Context, ctxBefore: Context, globalCache: React.MutableRefObject<GlobalCache>) {
-    const sheetsId = ctx.luckysheetfile.map((sheet) => sheet.id);
+    const sheetsId = ctx.sheets.map((sheet) => sheet.id);
     const sheetDeletedByMe = globalCache.current.undoList
         .filter((undo) => undo.options?.deleteSheetOp)
         .map((item) => item.options?.deleteSheetOp?.id);
@@ -91,9 +91,9 @@ function reduceUndoList(ctx: Context, ctxBefore: Context, globalCache: React.Mut
             sheetsId.indexOf(undo.options?.id) !== -1 ||
             sheetDeletedByMe.indexOf(undo.options?.id) !== -1,
     );
-    if (ctxBefore.luckysheetfile.length > ctx.luckysheetfile.length) {
-        const sheetDeleted = ctxBefore.luckysheetfile
-            .filter((oneSheet) => ctx.luckysheetfile.map((item) => item.id).indexOf(oneSheet.id) === -1)
+    if (ctxBefore.sheets.length > ctx.sheets.length) {
+        const sheetDeleted = ctxBefore.sheets
+            .filter((oneSheet) => ctx.sheets.map((item) => item.id).indexOf(oneSheet.id) === -1)
             .map((item) => getSheetIndex(ctxBefore, item.id as string));
         const deletedIndex = sheetDeleted[0];
         globalCache.current.undoList = globalCache.current.undoList.map((oneStep) => {
@@ -227,15 +227,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         if (filteredInversePatches.length > 0) {
                             options.id = ctx_.currentSheetId;
                             if (options.deleteSheetOp) {
-                                const target = ctx_.luckysheetfile.filter(
-                                    (sheet) => sheet.id === options.deleteSheetOp?.id,
-                                );
+                                const target = ctx_.sheets.filter((sheet) => sheet.id === options.deleteSheetOp?.id);
                                 if (target) {
                                     const index = getSheetIndex(ctx_, options.deleteSheetOp.id as string) as number;
                                     options.deletedSheet = {
                                         id: options.deleteSheetOp.id as string,
                                         index: index as number,
-                                        value: cloneDeep(ctx_.luckysheetfile[index]),
+                                        value: cloneDeep(ctx_.sheets[index]),
                                     };
                                     options.deletedSheet!.value!.celldata = dataToCelldata(
                                         options.deletedSheet!.value!.data as CellMatrix,
@@ -245,14 +243,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     filteredInversePatches = [
                                         {
                                             op: 'add',
-                                            path: ['luckysheetfile', 0],
+                                            path: ['sheets', 0],
                                             value: options.deletedSheet.value,
                                         },
                                     ];
                                 }
                             } else if (options.addSheetOp) {
                                 options.addSheet = {};
-                                options.addSheet!.id = result.luckysheetfile[result.luckysheetfile.length - 1].id;
+                                options.addSheet!.id = result.sheets[result.sheets.length - 1].id;
                             }
                             globalCache.current.undoList.push({
                                 patches: filteredPatches,
@@ -263,7 +261,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             emitOp(result, filteredPatches, options);
                         }
                     } else {
-                        if (patches?.[0]?.value?.length < ctx_?.luckysheetfile?.length) {
+                        if (patches?.[0]?.value?.length < ctx_?.sheets?.length) {
                             reduceUndoList(result, ctx_, globalCache);
                         }
                     }
@@ -278,9 +276,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             if (history) {
                 setContext((ctx_) => {
                     if (history.options?.deleteSheetOp) {
-                        history.inversePatches[0].path[1] = ctx_.luckysheetfile.length;
+                        history.inversePatches[0].path[1] = ctx_.sheets.length;
                         const order = history.options.deletedSheet?.value?.order as number;
-                        const sheetsRight = ctx_.luckysheetfile.filter(
+                        const sheetsRight = ctx_.sheets.filter(
                             (sheet) =>
                                 (sheet?.order as number) >= (order as number) &&
                                 sheet.id !== history?.options?.deleteSheetOp?.id,
@@ -288,7 +286,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         for (const sheet of sheetsRight) {
                             history.inversePatches.push({
                                 op: 'replace',
-                                path: ['luckysheetfile', getSheetIndex(ctx_, sheet.id as string) as number, 'order'],
+                                path: ['sheets', getSheetIndex(ctx_, sheet.id as string) as number, 'order'],
                                 value: (sheet?.order as number) + 1,
                             } as Patch);
                         }
@@ -297,7 +295,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const si = getSheetIndex(newContext, newContext.currentSheetId);
                     if (si != null) {
                         newContext = produce(newContext, (draft) => {
-                            draft.insertedImgs = draft.luckysheetfile[si].images;
+                            draft.insertedImgs = draft.sheets[si].images;
                         });
                     }
                     globalCache.current.redoList.push(history);
@@ -310,7 +308,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         inversedOptions!.addSheet = {
                             id: history.options.addSheet!.id as string,
                             index: index as number,
-                            value: cloneDeep(ctx_.luckysheetfile[index]),
+                            value: cloneDeep(ctx_.sheets[index]),
                         };
                         inversedOptions!.addSheet!.value!.celldata = dataToCelldata(
                             inversedOptions!.addSheet!.value?.data as CellMatrix,
@@ -338,7 +336,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const si = getSheetIndex(newContext, newContext.currentSheetId);
                     if (si != null) {
                         newContext = produce(newContext, (draft) => {
-                            draft.insertedImgs = draft.luckysheetfile[si].images;
+                            draft.insertedImgs = draft.sheets[si].images;
                         });
                     }
                     globalCache.current.undoList.push(history);
@@ -375,24 +373,24 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         useEffect(() => {
-            if (context.luckysheetfile.length > 0) {
-                onChange?.(context.luckysheetfile);
+            if (context.sheets.length > 0) {
+                onChange?.(context.sheets);
             }
-        }, [context.luckysheetfile, onChange]);
+        }, [context.sheets, onChange]);
 
-        // biome-ignore lint/correctness/useExhaustiveDependencies: context.currentSheetId + context.luckysheetfile.length are intentional re-trigger deps — body reads via draftCtx, but we want this effect to re-sync settings whenever the user switches sheets or sheets are added/removed
+        // biome-ignore lint/correctness/useExhaustiveDependencies: context.currentSheetId + context.sheets.length are intentional re-trigger deps — body reads via draftCtx, but we want this effect to re-sync settings whenever the user switches sheets or sheets are added/removed
         useEffect(() => {
             setContextWithProduce(
                 (draftCtx) => {
                     draftCtx.defaultcolumnNum = mergedSettings.column;
                     draftCtx.defaultrowNum = mergedSettings.row;
                     draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
-                    if (draftCtx.luckysheetfile.length === 0) {
-                        draftCtx.luckysheetfile = cloneDeep(originalData);
-                        ensureSheetIndex(draftCtx.luckysheetfile, mergedSettings.generateSheetId);
-                        for (const newDatum of draftCtx.luckysheetfile) {
+                    if (draftCtx.sheets.length === 0) {
+                        draftCtx.sheets = cloneDeep(originalData);
+                        ensureSheetIndex(draftCtx.sheets, mergedSettings.generateSheetId);
+                        for (const newDatum of draftCtx.sheets) {
                             const index = getSheetIndex(draftCtx, newDatum.id!) as number;
-                            const sheet = draftCtx.luckysheetfile[index];
+                            const sheet = draftCtx.sheets[index];
                             if (!sheet.data || sheet.data.length === 0) {
                                 api.initSheetData(draftCtx, index, sheet);
                             }
@@ -414,14 +412,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
                     let sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
                     if (sheetIdx == null) {
-                        if ((draftCtx.luckysheetfile?.length ?? 0) > 0) {
+                        if ((draftCtx.sheets?.length ?? 0) > 0) {
                             sheetIdx = 0;
-                            draftCtx.currentSheetId = draftCtx.luckysheetfile[0].id!;
+                            draftCtx.currentSheetId = draftCtx.sheets[0].id!;
                         }
                     }
                     if (sheetIdx == null) return;
 
-                    const sheet = draftCtx.luckysheetfile?.[sheetIdx];
+                    const sheet = draftCtx.sheets?.[sheetIdx];
                     if (!sheet) return;
 
                     let { data } = sheet;
@@ -494,7 +492,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             );
         }, [
             context.currentSheetId,
-            context.luckysheetfile.length,
+            context.sheets.length,
             originalData,
             mergedSettings.defaultRowHeight,
             mergedSettings.defaultColWidth,
@@ -623,16 +621,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const maxRow = trList.length + context.luckysheet_select_save![0].row[0];
                     const rowToBeAdded =
                         maxRow -
-                        context.luckysheetfile[getSheetIndex(context, context!.currentSheetId! as string) as number]
-                            .data!.length;
+                        context.sheets[getSheetIndex(context, context!.currentSheetId! as string) as number].data!
+                            .length;
                     const range = context.luckysheet_select_save;
                     if (rowToBeAdded > 0) {
                         const insertRowColOp: SetContextOptions['insertRowColOp'] = {
                             type: 'row',
                             index:
-                                context.luckysheetfile[
-                                    getSheetIndex(context, context!.currentSheetId! as string) as number
-                                ].data!.length - 1,
+                                context.sheets[getSheetIndex(context, context!.currentSheetId! as string) as number]
+                                    .data!.length - 1,
                             count: rowToBeAdded,
                             direction: 'rightbottom',
                             id: context.currentSheetId,
@@ -691,7 +688,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         if (i == null) {
             return null;
         }
-        const sheet = context.luckysheetfile?.[i];
+        const sheet = context.sheets?.[i];
         if (!sheet) {
             return null;
         }

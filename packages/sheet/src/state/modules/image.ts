@@ -12,7 +12,7 @@ function generateImageId() {
 export function saveImage(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    const file = ctx.luckysheetfile[index];
+    const file = ctx.sheets[index];
 
     file.images = ctx.insertedImgs;
 }

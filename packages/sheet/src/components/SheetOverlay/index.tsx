@@ -269,8 +269,7 @@ export const SheetOverlay: React.FC = () => {
         const insertRowColOp: SetContextOptions['insertRowColOp'] = {
             type: 'row',
             index:
-                context.luckysheetfile[getSheetIndex(context, context!.currentSheetId! as string) as number].data!
-                    .length - 1,
+                context.sheets[getSheetIndex(context, context!.currentSheetId! as string) as number].data!.length - 1,
             count: value,
             direction: 'rightbottom',
             id: context.currentSheetId,
@@ -292,7 +291,7 @@ export const SheetOverlay: React.FC = () => {
             const sheetIndex = getSheetIndex(draftCtx, draftCtx.currentSheetId);
             if (sheetIndex == null) return;
 
-            const currentSheet = draftCtx.luckysheetfile[sheetIndex];
+            const currentSheet = draftCtx.sheets[sheetIndex];
 
             // Only reset selection if there's no existing selection
             if (!currentSheet.luckysheet_select_save?.length) {
@@ -375,7 +374,7 @@ export const SheetOverlay: React.FC = () => {
             if (sheetIndex === undefined || sheetIndex === null) return '';
             const rowFocus = selection.row_focus ?? 0;
             const columnFocus = selection.column_focus ?? 0;
-            const cellVal = context.luckysheetfile[sheetIndex]?.data?.[rowFocus]?.[columnFocus]?.m || '';
+            const cellVal = context.sheets[sheetIndex]?.data?.[rowFocus]?.[columnFocus]?.m || '';
             return cellVal;
         }
         return '';

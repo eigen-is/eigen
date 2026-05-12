@@ -12,7 +12,7 @@ import { setFormulaCellInfo } from './formulaHelper';
 function storeSheetParam(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    const file = ctx.luckysheetfile[index];
+    const file = ctx.sheets[index];
     file.config = ctx.config;
     file.luckysheet_select_save = ctx.luckysheet_select_save;
     file.luckysheet_selection_range = ctx.luckysheet_selection_range;
@@ -22,7 +22,7 @@ export function storeSheetParamALL(ctx: Context) {
     storeSheetParam(ctx);
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    ctx.luckysheetfile[index].config = ctx.config;
+    ctx.sheets[index].config = ctx.config;
 }
 
 export function changeSheet(
@@ -38,7 +38,7 @@ export function changeSheet(
 
     const idx = getSheetIndex(ctx, id);
     if (idx == null) return;
-    const file = ctx.luckysheetfile[idx];
+    const file = ctx.sheets[idx];
 
     if (ctx.hooks.beforeActivateSheet?.(id) === false) {
         return;
@@ -67,12 +67,12 @@ export function addSheet(
     if (ctx.allowEdit === false) {
         return;
     }
-    const order = ctx.luckysheetfile.length;
+    const order = ctx.sheets.length;
     const id = newSheetID ?? (settings?.generateSheetId() as string);
-    const sheetname = sheetName || generateRandomSheetName(ctx.luckysheetfile, isPivotTable, ctx);
+    const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable, ctx);
     if (!isNil(sheetData)) {
         delete sheetData.data;
-        ctx.luckysheetfile.forEach((sheet) => {
+        ctx.sheets.forEach((sheet) => {
             sheet.order = (sheet.order as number) < sheetData.order! ? sheet.order : (sheet.order as number) + 1;
         });
     }
@@ -95,7 +95,7 @@ export function addSheet(
         return;
     }
 
-    ctx.luckysheetfile.push(sheetconfig);
+    ctx.sheets.push(sheetconfig);
 
     if (!newSheetID) {
         changeSheet(ctx, id, isPivotTable, true);
@@ -123,17 +123,17 @@ export function deleteSheet(ctx: Context, id: string) {
         return;
     }
 
-    ctx.luckysheetfile = ctx.luckysheetfile.map((sheet) => {
+    ctx.sheets = ctx.sheets.map((sheet) => {
         sheet.order =
-            (sheet.order as number) < (ctx.luckysheetfile[arrIndex].order as number)
+            (sheet.order as number) < (ctx.sheets[arrIndex].order as number)
                 ? sheet.order
                 : (sheet.order as number) - 1;
         return sheet;
     });
 
-    ctx.luckysheetfile.splice(arrIndex, 1);
+    ctx.sheets.splice(arrIndex, 1);
     if (id === ctx.currentSheetId) {
-        const shownSheets = cloneDeep(ctx.luckysheetfile).filter(
+        const shownSheets = cloneDeep(ctx.sheets).filter(
             (singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1,
         );
         const orderSheets = sortBy(shownSheets, (sheet) => sheet.order);
@@ -170,22 +170,22 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
                 }
             }
             newDatum.data = expandedData;
-            if (ctx.luckysheetfile[index] == null) {
-                ctx.luckysheetfile.push(newDatum);
+            if (ctx.sheets[index] == null) {
+                ctx.sheets.push(newDatum);
             } else {
-                ctx.luckysheetfile[index] = newDatum;
+                ctx.sheets[index] = newDatum;
             }
         } else if (newDatum.celldata != null) {
             initSheetData(ctx, index, newDatum);
             const _index = getSheetIndex(ctx, newDatum.id!) as number;
             newDatum.celldata?.forEach((d) => {
-                setFormulaCellInfo(ctx, { r: d.r, c: d.c, id: newDatum.id! }, ctx.luckysheetfile[_index].data);
+                setFormulaCellInfo(ctx, { r: d.r, c: d.c, id: newDatum.id! }, ctx.sheets[_index].data);
             });
         }
     });
     const currentIdx = getSheetIndex(ctx, ctx.currentSheetId);
     if (currentIdx != null) {
-        ctx.config = ctx.luckysheetfile[currentIdx].config ?? {};
+        ctx.config = ctx.sheets[currentIdx].config ?? {};
     }
 }
 
@@ -193,7 +193,7 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (ctx.allowEdit === false) {
         if (index == null) return;
-        editable.innerText = ctx.luckysheetfile[index].name;
+        editable.innerText = ctx.sheets[index].name;
         return;
     }
     const { sheetconfig } = locale(ctx);
@@ -221,14 +221,14 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
 
     if (index == null) return;
 
-    for (let i = 0; i < ctx.luckysheetfile.length; i += 1) {
-        if (index !== i && ctx.luckysheetfile[i].name === txt) {
+    for (let i = 0; i < ctx.sheets.length; i += 1) {
+        if (index !== i && ctx.sheets[i].name === txt) {
             editable.innerText = oldtxt;
             return;
         }
     }
 
-    ctx.luckysheetfile[index].name = txt;
+    ctx.sheets[index].name = txt;
 
     if (ctx.hooks.afterUpdateSheetName) {
         setTimeout(() => {

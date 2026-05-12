@@ -29,7 +29,7 @@ export const RowHeader: React.FC = () => {
         { row: number; row_pre: number; r1: number; r2: number }[]
     >([]);
     const sheetIndex = getSheetIndex(context, context.currentSheetId);
-    const sheet = sheetIndex == null ? null : context.luckysheetfile[sheetIndex];
+    const sheet = sheetIndex == null ? null : context.sheets[sheetIndex];
     const freezeHandleTop = useMemo(() => {
         if (
             sheet?.frozen?.type === 'row' ||

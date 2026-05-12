@@ -40,13 +40,13 @@ export function setSheetName(ctx: Context, name: string, options: CommonOptions 
 }
 
 export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {
-    ctx.luckysheetfile?.forEach((sheet) => {
+    ctx.sheets?.forEach((sheet) => {
         if (sheet.id! in orderList) {
             sheet.order = orderList[sheet.id!];
         }
     });
     // re-order starting from 0
-    sortBy(ctx.luckysheetfile, ['order']).forEach((sheet, i) => {
+    sortBy(ctx.sheets, ['order']).forEach((sheet, i) => {
         sheet.order = i;
     });
 }

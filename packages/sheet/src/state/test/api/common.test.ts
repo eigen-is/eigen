@@ -20,7 +20,7 @@ describe('sheet/core/api/common', () => {
     };
     const getContext = () =>
         contextFactory({
-            luckysheetfile: [
+            sheets: [
                 {
                     id: 'id_1',
                     name: 'sheet1',

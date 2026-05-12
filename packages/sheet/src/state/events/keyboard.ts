@@ -89,7 +89,7 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     if (isNil(idx)) return;
 
-    const file = ctx.luckysheetfile[idx];
+    const file = ctx.sheets[idx];
     if (!file?.row || !file.column) return;
     const maxRow = file.row;
     const maxCol = file.column;
@@ -460,7 +460,7 @@ export function handleGlobalKeyDown(
         e.preventDefault();
     } else if (kstr === 'F4' && ctx.luckysheetCellUpdate.length > 0) {
         // F4 should cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1).
-        // Tracked as feature work in docs/TODO-FORTUNE-SHEETS.md; for now just suppress
+        // Tracked as feature work in docs/TODO-SHEETS.md; for now just suppress
         // the browser default so the address-bar dropdown doesn't open mid-edit.
         e.preventDefault();
     } else if (kstr === 'Escape' && ctx.luckysheetCellUpdate.length > 0) {
