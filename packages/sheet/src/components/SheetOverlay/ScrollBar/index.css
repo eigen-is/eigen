@@ -1,7 +1,7 @@
 .luckysheet-scrollbar-ltr {
     position: absolute;
     overflow: hidden;
-    z-index: 1003;
+    z-index: 30;
 }
 
 .luckysheet-scrollbar-ltr div {

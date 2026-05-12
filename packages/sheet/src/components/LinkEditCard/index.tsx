@@ -21,7 +21,7 @@ import {
 } from '../../state';
 
 const modalBase =
-    'absolute overflow-hidden bg-popover z-[300] rounded-md border border-border shadow-md px-5 pt-1.5 pb-2.5';
+    'absolute overflow-hidden bg-popover z-30 rounded-md border border-border shadow-md px-5 pt-1.5 pb-2.5';
 const titleClass = 'inline-block h-4 w-[74px] py-[7px] mr-1.5 text-xs leading-4 text-foreground';
 const inputWidth = 'w-[232px] h-[26px] text-xs';
 

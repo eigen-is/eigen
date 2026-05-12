@@ -749,7 +749,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     e.preventDefault();
                                     e.stopPropagation();
                                 }}
-                                className="absolute top-0 left-0 z-[1003] h-full w-full"
+                                className="absolute top-0 left-0 z-30 h-full w-full"
                             />
                         )}
                         <div className="flex justify-end items-center leading-[0] h-0">
