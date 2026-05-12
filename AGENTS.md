@@ -25,7 +25,7 @@ apps/
   chat/         # Real-time chat (MUD-inspired)
   stickies/     # Kanban board (Yjs)
   slides/       # Presentations (Yjs)
-  sheets/       # Spreadsheets (fortune-sheet + Yjs)
+  sheets/       # Spreadsheets (sheet engine + Yjs)
   space/        # Team workspace
   admin/        # Org/team admin + first-run setup wizard
   index/        # Landing page
@@ -33,7 +33,7 @@ apps/
 packages/
   lib/          # @workspace/lib — shared types, hooks, API client, SSE handlers, validation
   ui/           # @workspace/ui — shared shadcn components, layout system
-  fortune-sheet/ # Forked spreadsheet UI
+  sheet/         # Spreadsheet engine + UI (forked from fortune-sheet/luckysheet)
 
 data/           # Runtime storage (databases, user files)
 docs/           # Architecture documentation
@@ -68,11 +68,11 @@ bun run check          # lint + typecheck + test
   more apps need it, it belongs in `packages/`. Never put `useQuery`, `useMutation`, error toasts, or `try/catch` +
   `toast.error()` in app components — all error handling lives in hooks using `onMutationError`.
   See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
-- **Package dependency direction is one-way: `fortune-sheet → lib`, never the reverse.** `packages/lib` is shared
-  FE+BE; `packages/fortune-sheet` has React peer dependencies and DOM-coupled modules. If lib imported fortune-sheet,
+- **Package dependency direction is one-way: `sheet → lib`, never the reverse.** `packages/lib` is shared
+  FE+BE; `packages/sheet` has React peer dependencies and DOM-coupled modules. If lib imported sheet,
   the BE would transitively pull React in at module-eval time. Shared sheet types (`Cell`, `Sheet`, `Op`,
   `CellMatrix`, `Range`, `SingleRange`, `ConditionalFormatRule`, …) live in `packages/lib/src/sheets/types.ts`;
-  fortune-sheet's `engine/types.ts` and `state/types.ts` re-export them. Sheet utilities that need to be importable
+  the sheet package's `engine/types.ts` and `state/types.ts` re-export them. Sheet utilities that need to be importable
   by both FE and BE (e.g. `opToPatchOnSheets`) live in `packages/lib/src/sheets/`
 - **Don't break the type chain** — types flow from Elysia route handlers → Eden Treaty → hooks → components
   automatically. No `as any`, no `as Type` casts. Fix types at the source (add return type annotations to backend

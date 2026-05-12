@@ -1,7 +1,7 @@
-import type { Op, Sheet, WorkbookInstance } from '@workspace/fortune-sheet';
-import { replaySheetsOps } from '@workspace/fortune-sheet/engine';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { restoreYjsDoc } from '@workspace/lib/collab';
+import type { Op, Sheet, WorkbookInstance } from '@workspace/sheet';
+import { replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';

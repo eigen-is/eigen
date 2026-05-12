@@ -1,3 +1,6 @@
+import { escapeHtml } from '@workspace/lib/html';
+import type { BorderInfo, Cell, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     type CellFormatStyle,
     type CellResolver,
@@ -8,10 +11,7 @@ import {
     evaluateConditionalFormat,
     FormulaEngine,
     functionCopy,
-} from '@workspace/fortune-sheet/engine';
-import { escapeHtml } from '@workspace/lib/html';
-import type { BorderInfo, Cell, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
-import type { DrivePath } from '@workspace/lib/types/drive';
+} from '@workspace/sheet/engine';
 import DOMPurify from 'isomorphic-dompurify';
 import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
@@ -243,7 +243,7 @@ function getCellDisplay(v: Cell | null): string {
 }
 
 // Mirrors the dataBar geometry + colors from the canvas painter
-// (packages/fortune-sheet/src/state/canvas.ts ~line 1660). For a "minus" entry the bar fills
+// (packages/sheet/src/state/canvas.ts ~line 1660). For a "minus" entry the bar fills
 // the negative half (left of the zero line); for "plus" it fills the positive half.
 // Colors match canvas exactly: positive bars use `format` (user-configurable), negative
 // bars use a hardcoded red — that's a long-standing canvas behavior, intentionally

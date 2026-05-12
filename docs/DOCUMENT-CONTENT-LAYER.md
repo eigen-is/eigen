@@ -39,10 +39,10 @@ the array and observe it for remote ops; on `beforeunload` they flush a fresh sn
 the ops array (see `apps/sheets/src/components/sheets/hooks/use-sheet.ts`).
 
 `readSheetsContent` parses the snapshot then replays pending op batches via
-`replaySheetsOps()` (re-exported from `@workspace/fortune-sheet/engine`) — single source of
+`replaySheetsOps()` (re-exported from `@workspace/sheet/engine`) — single source of
 truth, also used by the FE on initial load. The replay path uses `opToPatchOnSheets()`
 (`packages/lib/src/sheets/yjs-ops.ts`), kept in `@workspace/lib` so server-side replay doesn't
-pull in fortune-sheet's DOM-coupled state barrel.
+pull in the sheet package's DOM-coupled state barrel.
 
 ## Writers are unsafe against live editors
 
@@ -100,7 +100,7 @@ Export has no equivalent dispatcher today — each format calls the reader direc
 
 ## See also
 
-- [SHEETS.md](SHEETS.md) — fortune-sheet snapshot + ops invariants, headless formula engine
+- [SHEETS.md](SHEETS.md) — sheet snapshot + ops invariants, headless formula engine
 - [EXPORT.md](EXPORT.md) — eigen → docx/xlsx/pdf pipeline that consumes the readers
 - [STORAGE.md](STORAGE.md) — Mount, `data.db` layout, `loadYjsState()`
 - `packages/lib/src/sheets/yjs-ops.ts` — `opToPatchOnSheets` helper

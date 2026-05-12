@@ -1,4 +1,4 @@
-import type { Cell } from '@workspace/fortune-sheet';
+import type { Cell } from '@workspace/sheet';
 import { useMemo } from 'react';
 
 type ActiveComments = {

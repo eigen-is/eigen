@@ -1,4 +1,3 @@
-import { Workbook, type WorkbookInstance } from '@workspace/fortune-sheet';
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
@@ -6,6 +5,7 @@ import { EIGEN_STICKIES_COLORS, EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/
 import { useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { Workbook, type WorkbookInstance } from '@workspace/sheet';
 import { CommentDialog, CommentPanel, CreateCommentDialog, LoadingState, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
@@ -52,7 +52,7 @@ export function SheetEditor({
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [commentCellRef, setCommentCellRef] = useState<{ r: number; c: number } | null>(null);
     const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(initialChatName ?? null);
-    const [flowdata, setFlowdata] = useState<(import('@workspace/fortune-sheet').Cell | null)[][] | undefined>();
+    const [flowdata, setFlowdata] = useState<(import('@workspace/sheet').Cell | null)[][] | undefined>();
     const activeComments = useActiveComments(flowdata);
     const { data: allComments = [] } = useComments(ownerId, path.mountId, path.id);
     const resolveComment = useResolveComment(ownerId, path.mountId, path.id);

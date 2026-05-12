@@ -34,7 +34,7 @@ findings:
 
 5. **Fortune-sheet has its own internal clipboard.** It uses `luckysheet_copy_save` in the context object for
    internal copy/paste (which preserves formulas, formatting, merge info). This is separate from the system
-   clipboard. The eigen clipboard integration sits on top, not inside fortune-sheet.
+   clipboard. The eigen clipboard integration sits on top, not inside sheet.
 
 6. **Tiptap already supports table nodes.** The Docs editor has `@tiptap/extension-table` configured with
    `resizable: true`. Pasting an HTML table from Sheets into Docs via the standard Tiptap paste path will
@@ -54,8 +54,8 @@ findings:
 
 ### Where the Research Has Blind Spots or Oversells
 
-1. **Sheets-to-Docs table paste is not as clean as implied.** The research assumes fortune-sheet's HTML table
-   output will paste cleanly into Tiptap. In reality, fortune-sheet generates a `<table data-type="fortune-copy-action-table">` with inline styles for dimensions. Tiptap's table extension will parse this, but cell
+1. **Sheets-to-Docs table paste is not as clean as implied.** The research assumes sheet's HTML table
+   output will paste cleanly into Tiptap. In reality, sheet generates a `<table data-type="fortune-copy-action-table">` with inline styles for dimensions. Tiptap's table extension will parse this, but cell
    widths expressed in pixels may not respect Tiptap's resizable column model. Styling (background colors,
    borders, font formatting) will be partially preserved through `transformPastedHTML`, but formula content
    will be flattened to display values. This is acceptable for Phase 2 but should be documented as lossy.
@@ -66,9 +66,9 @@ findings:
    later, it can be added as a concern of individual converters.
 
 3. **Undo after cross-app paste is trickier than stated.** The research correctly notes that Tiptap uses
-   `editor.chain()...run()` for atomic undo. But for Sheets, fortune-sheet's undo stack is managed internally
+   `editor.chain()...run()` for atomic undo. But for Sheets, sheet's undo stack is managed internally
    through `setContextWithProduce`. Pasting eigen data into Sheets currently creates a synthetic paste event
-   that goes through fortune-sheet's paste handler -- the undo behavior depends on whether that handler wraps
+   that goes through sheet's paste handler -- the undo behavior depends on whether that handler wraps
    the operation in a single context update. This needs verification during implementation, not design.
 
 4. **The `cells` content type proposes including the full `CellMatrix`.** Fortune-sheet's Cell type contains
@@ -98,7 +98,7 @@ findings:
 9. **Concurrent paste in collaborative editing.** Two users pasting simultaneously into the same Yjs document
    is handled by Yjs's CRDT merge -- each paste creates a Yjs transaction, and Yjs resolves conflicts at the
    character/node level. This is not a clipboard concern; it is a Yjs concern, and it already works for
-   regular typing. For fortune-sheet (which is also Yjs-backed), the same applies.
+   regular typing. For sheet (which is also Yjs-backed), the same applies.
 
 ---
 
@@ -169,11 +169,11 @@ type EigenClipboardRichText = {
 
 type EigenClipboardCells = {
     kind: 'cells';
-    cells: unknown[][]; // fortune-sheet cell data (display values + formatting, not internal state)
+    cells: unknown[][]; // sheet cell data (display values + formatting, not internal state)
     rows: Array<{ index: number; height: number }>;
     cols: Array<{ index: number; width: number }>;
     merges: Array<{ r: number; c: number; rs: number; cs: number }>;
-    html: string; // the fortune-sheet HTML table
+    html: string; // the sheet HTML table
     tsv: string;
 }
 
@@ -335,10 +335,10 @@ Expose as a singleton via a React context or module-level instance. The bus is i
 - Paste handler: Prefer `slideobjects` content for lossless paste. Accept `richtext` to create a text box.
   Accept `image` for image objects.
 
-**Sheets** (`packages/fortune-sheet/src/components/Workbook/index.tsx`):
-- Copy handler: Wrap the existing fortune-sheet HTML table and plain text in `EigenClipboardCells`. Include
+**Sheets** (`packages/sheet/src/components/Workbook/index.tsx`):
+- Copy handler: Wrap the existing sheet HTML table and plain text in `EigenClipboardCells`. Include
   cell data for the selected range (display values + formatting, extracted from the sheet context).
-- Paste handler: Prefer `cells` content for lossless paste (feed back into fortune-sheet's paste handler).
+- Paste handler: Prefer `cells` content for lossless paste (feed back into sheet's paste handler).
   Accept `richtext` to extract text into cells.
 
 **File changes summary for Phase 1:**
@@ -351,7 +351,7 @@ Expose as a singleton via a React context or module-level instance. The bus is i
 | `packages/lib/src/core/clipboard/index.ts` | Re-export new functions and bus |
 | `apps/docs/src/components/docs/editor.tsx` | Migrate copy/paste to v2 |
 | `apps/slides/src/components/slides/editor.tsx` | Migrate copy/paste to v2 |
-| `packages/fortune-sheet/src/components/Workbook/index.tsx` | Migrate copy/paste to v2 |
+| `packages/sheet/src/components/Workbook/index.tsx` | Migrate copy/paste to v2 |
 
 ---
 

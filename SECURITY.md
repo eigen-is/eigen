@@ -23,7 +23,7 @@ In scope:
 - The Eigen server (`apps/api/`) and any of its endpoints
 - The shipped frontend apps (`apps/*`)
 - The default Docker deployment (`docker/`, `docker-compose.yml`, `Caddyfile`)
-- Shared packages (`packages/lib`, `packages/ui`, `packages/fortune-sheet`)
+- Shared packages (`packages/lib`, `packages/ui`, `packages/sheet`)
 
 Out of scope:
 

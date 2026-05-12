@@ -194,7 +194,7 @@ Eigensheets import XLSX via the same shape, reversed:
 
 ```
 apps/api/src/lib/import/sheets/
-  from-xlsx.ts   # Buffer → Sheet[] (ExcelJS Workbook → fortune-sheet cells)
+  from-xlsx.ts   # Buffer → Sheet[] (ExcelJS Workbook → sheet cells)
   writer.ts      # Sheet[] → Yjs snapshot (JSON in state map)
 ```
 

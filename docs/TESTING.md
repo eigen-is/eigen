@@ -10,7 +10,7 @@
 bun run check              # lint + typecheck + test (all workspaces)
 bun run test               # tests only (all workspaces)
 bun run test:api           # API tests only
-bun run test:fortune-sheet # fortune-sheet unit tests only
+bun run test:sheet         # sheet package unit tests only
 bun run typecheck          # typecheck only
 bun run lint               # lint + format check (biome)
 ```

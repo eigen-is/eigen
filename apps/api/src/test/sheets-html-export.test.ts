@@ -3,7 +3,7 @@ import type { Cell, ConditionalFormatRule, Sheet } from '@workspace/lib/sheets';
 import { renderSheetsHtml } from '../lib/export/sheets/html';
 
 // Build a Sheet with both `data` (matrix form, required by the CF engine) and `celldata`
-// (sparse form, what the renderer iterates). The fortune-sheet Workbook keeps both
+// (sparse form, what the renderer iterates). The sheet Workbook keeps both
 // projections in sync via its dataToCelldata/celldataToData transforms, so snapshots
 // flushed by the FE editor carry both.
 function makeSheet(cells: { r: number; c: number; v: Cell }[], rules?: ConditionalFormatRule[]): Sheet {

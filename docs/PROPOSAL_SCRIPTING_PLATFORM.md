@@ -1288,7 +1288,7 @@ packages/lib/src/types/
 
 packages/lib/src/sheets/
   yjs-ops.ts            # Pure ops module — applyOpsToSheets(), pushOpsToYDoc(), readSheetsFromYDoc()
-                        # Used by both fortune-sheet client AND backend sheets-writer
+                        # Used by both sheet client AND backend sheets-writer
 
 packages/lib/src/core/scripts/
   hooks/
@@ -1462,9 +1462,9 @@ type SheetData = {
 type CellData = {
     row: number;
     col: number;
-    value: unknown;                   // Computed value (fortune-sheet `v`)
-    formula?: string;                 // Formula (fortune-sheet `f`)
-    display?: string;                 // Formatted display (fortune-sheet `m`)
+    value: unknown;                   // Computed value (sheet `v`)
+    formula?: string;                 // Formula (sheet `f`)
+    display?: string;                 // Formatted display (sheet `m`)
     type?: 'number' | 'string' | 'boolean' | 'date' | 'error';
 };
 
@@ -1504,7 +1504,7 @@ async function readSheetContent(
 ): Promise<SheetContent> {
     // 1. getSharedDrive(ownerId, user) → mount.openDatabase + loadYjsState
     // 2. readSheetsFromYDoc(ydoc) — uses the shared Yjs ops module (see below)
-    // 3. Map fortune-sheet Sheet[] → SheetContent.sheets[].cells (sparse, non-empty only)
+    // 3. Map sheet Sheet[] → SheetContent.sheets[].cells (sparse, non-empty only)
     // 4. Optionally recalculate formulas via headless FormulaEngine (in place — see SHEETS.md)
 }
 
@@ -1523,7 +1523,7 @@ caller passes the author's `User` object, fetched via the auth layer at trigger 
 reader and writer always has a `User` in scope; there is no "headless" code path with a different ACL.
 
 **Sheets formula recalculation**: tracked in [SHEETS.md](SHEETS.md). The headless `FormulaEngine` exists in
-`packages/fortune-sheet/src/engine/` with `numfmt` integrated. Wiring `engine.recalculateAll()` into
+`packages/sheet/src/engine/` with `numfmt` integrated. Wiring `engine.recalculateAll()` into
 `readSheetContent()` is a separate task that benefits all consumers automatically.
 
 **Sheets A1 notation**: parsed by `a1-notation.ts` with a real lexer (not a regex). Handles sheet names with
@@ -1541,7 +1541,7 @@ Y.Array; remote clients observe the array and replay ops via `workbookRef.curren
 
 Backend writes from the script SDK must use the **same ops mechanism**, not a snapshot-replace. Otherwise:
 - Concurrent live edits get clobbered (snapshot is a single Y.Map.set, last-write-wins)
-- The fortune-sheet client's pending ops are wiped server-side
+- The sheet client's pending ops are wiped server-side
 - Live observers don't see the script's edit as a discrete change
 
 The fix is a shared module used by both sides:
@@ -1550,8 +1550,8 @@ The fix is a shared module used by both sides:
 // packages/lib/src/sheets/yjs-ops.ts
 
 import * as Y from 'yjs';
-import { applyOpsToSheets } from '@workspace/fortune-sheet/state';  // pure function, extracted from Workbook
-import type { Op, Sheet } from '@workspace/fortune-sheet';
+import { applyOpsToSheets } from '@workspace/sheet/state';  // pure function, extracted from Workbook
+import type { Op, Sheet } from '@workspace/sheet';
 
 // Read the current Sheet[] state from a Y.Doc by replaying snapshot + pending ops
 export function readSheetsFromYDoc(doc: Y.Doc): Sheet[] {
@@ -1569,7 +1569,7 @@ export function pushOpsToYDoc(doc: Y.Doc, ops: Op[]): void {
     doc.transact(() => doc.getArray('ops').push([ops]));
 }
 
-// High-level builders for SDK writes — produce ops in fortune-sheet's native shape
+// High-level builders for SDK writes — produce ops in sheet's native shape
 export function buildSetCellValueOp(
     sheetIndex: number, row: number, col: number, value: unknown
 ): Op[] { /* … */ }
@@ -1579,8 +1579,8 @@ export function buildSetCellRangeOp(
 ): Op[] { /* … */ }
 ```
 
-`applyOpsToSheets()` is extracted from fortune-sheet's existing op-application logic
-(currently embedded in `WorkbookInstance.applyOp` in `packages/fortune-sheet/src/components/Workbook/api.ts`)
+`applyOpsToSheets()` is extracted from sheet's existing op-application logic
+(currently embedded in `WorkbookInstance.applyOp` in `packages/sheet/src/components/Workbook/api.ts`)
 into a pure function that takes `Sheet[]` and returns `Sheet[]`. The Workbook component continues to use it,
 but now the backend writer can call the same logic.
 
@@ -1607,7 +1607,7 @@ export async function setCellValue(
 ```
 
 This means:
-- **Live editors see the script's edit just like another user's edit** — the Y.Array observer fires, fortune-sheet
+- **Live editors see the script's edit just like another user's edit** — the Y.Array observer fires, sheet
   applies the op, the cell updates in real time
 - **Concurrent edits merge cleanly** — Yjs Array.push is a CRDT operation
 - **No snapshot clobbering** — the script never touches `state.snapshot`. Snapshot consolidation continues to

@@ -355,7 +355,7 @@ describe('document/sheets — patch op replay', () => {
 
     test('reads doc with snapshot + wholesale luckysheetfile replace + insertRowCol → no crash, row inserted', async () => {
         // Real op shape from the Annual Calendar regression: when
-        // fortune-sheet's reducer reassigns ctx.luckysheetfile during a row/col
+        // the sheet reducer reassigns ctx.luckysheetfile during a row/col
         // mutation, immer emits a synthetic replace patch with no sheet id and
         // path ['luckysheetfile']. Applying that patch on Sheet[] root throws
         // immer error 14. opToPatchOnSheets drops it; the paired insertRowCol
