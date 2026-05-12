@@ -1399,7 +1399,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
     if (!allowEdit) return;
 
     if (selectionCache.isPasteAction) {
-        ctx.luckysheetCellUpdate = [];
+        ctx.editingCellPosition = [];
         // $("#luckysheet-rich-text-editor").blur();
         selectionCache.isPasteAction = false;
 
@@ -1824,7 +1824,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 }
             }
         }
-    } else if (ctx.luckysheetCellUpdate.length > 0) {
+    } else if (ctx.editingCellPosition.length > 0) {
         // prevent default paste behaviour
         e.preventDefault();
 

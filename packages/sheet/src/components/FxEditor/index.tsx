@@ -86,7 +86,7 @@ export function FxEditor() {
                 const last = draftCtx.luckysheet_select_save![draftCtx.luckysheet_select_save!.length - 1];
 
                 if (last.row_focus == null || last.column_focus == null) return;
-                draftCtx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
+                draftCtx.editingCellPosition = [last.row_focus, last.column_focus];
                 refs.globalCache.doNotFocus = true;
                 // formula.rangeResizeTo = $("#luckysheet-functionbox-cell");
             });
@@ -117,14 +117,14 @@ export function FxEditor() {
             if (formulaAutocomplete.handleKeyDown(e)) return;
 
             setContext((draftCtx) => {
-                if (context.luckysheetCellUpdate.length > 0) {
+                if (context.editingCellPosition.length > 0) {
                     switch (key) {
                         case 'Enter': {
-                            const lastCellUpdate = [...draftCtx.luckysheetCellUpdate];
+                            const lastCellUpdate = [...draftCtx.editingCellPosition];
                             updateCell(
                                 draftCtx,
-                                draftCtx.luckysheetCellUpdate[0],
-                                draftCtx.luckysheetCellUpdate[1],
+                                draftCtx.editingCellPosition[0],
+                                draftCtx.editingCellPosition[1],
                                 refs.fxInput.current!,
                             );
                             draftCtx.luckysheet_select_save = [
@@ -163,7 +163,7 @@ export function FxEditor() {
         },
         [
             context.allowEdit,
-            context.luckysheetCellUpdate.length,
+            context.editingCellPosition.length,
             formulaAutocomplete.handleKeyDown,
             refs.fxInput,
             setContext,

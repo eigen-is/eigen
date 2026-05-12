@@ -118,7 +118,7 @@ export class Canvas {
 
     public drawRowHeader(scrollHeight: number, drawHeight?: number, offsetTop?: number) {
         if (drawHeight == null) {
-            [, drawHeight] = this.sheetCtx.luckysheetTableContentHW;
+            [, drawHeight] = this.sheetCtx.tableContentSize;
         }
 
         if (offsetTop == null) {
@@ -256,7 +256,7 @@ export class Canvas {
 
     public drawColumnHeader(scrollWidth: number, drawWidth?: number, offsetLeft?: number) {
         if (drawWidth === undefined) {
-            [drawWidth] = this.sheetCtx.luckysheetTableContentHW;
+            [drawWidth] = this.sheetCtx.tableContentSize;
         }
 
         if (offsetLeft === undefined) {
@@ -418,10 +418,10 @@ export class Canvas {
 
         // Handle undefined parameters
         if (drawWidth === undefined) {
-            [drawWidth] = this.sheetCtx.luckysheetTableContentHW;
+            [drawWidth] = this.sheetCtx.tableContentSize;
         }
         if (drawHeight === undefined) {
-            [, drawHeight] = this.sheetCtx.luckysheetTableContentHW;
+            [, drawHeight] = this.sheetCtx.tableContentSize;
         }
 
         if (offsetLeft === undefined) {
@@ -444,12 +444,7 @@ export class Canvas {
         renderCtx.save();
         renderCtx.scale(this.sheetCtx.devicePixelRatio, this.sheetCtx.devicePixelRatio);
         if (clear) {
-            renderCtx.clearRect(
-                0,
-                0,
-                this.sheetCtx.luckysheetTableContentHW[0],
-                this.sheetCtx.luckysheetTableContentHW[1],
-            );
+            renderCtx.clearRect(0, 0, this.sheetCtx.tableContentSize[0], this.sheetCtx.tableContentSize[1]);
         }
 
         // Table render area: start/end row/column indices
@@ -520,7 +515,7 @@ export class Canvas {
         const borderOffset: Record<string, { startY: number; startX: number; endY: number; endX: number }> = {};
 
         const bodrder05 = 0.5; // Default 0.5
-        const drawGridLines = !this.sheetCtx.luckysheetcurrentisPivotTable && this.sheetCtx.showGridLines;
+        const drawGridLines = !this.sheetCtx.currentSheetIsPivot && this.sheetCtx.showGridLines;
 
         this.sheetCtx.hooks.beforeRenderCellArea?.(flowdata, renderCtx);
 

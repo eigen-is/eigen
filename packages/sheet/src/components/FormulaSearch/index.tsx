@@ -70,7 +70,7 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
         ].n.toUpperCase()}</span><span dir="auto" class="luckysheet-formula-text-color">(</span>`;
         setContext((ctx) => {
             if (cellInput.current != null) {
-                ctx.luckysheetCellUpdate = [row_index, col_index];
+                ctx.editingCellPosition = [row_index, col_index];
                 globalCache.doNotUpdateCell = true;
                 cellInput.current.innerHTML = formulaTxt;
                 const spans = cellInput.current.childNodes;

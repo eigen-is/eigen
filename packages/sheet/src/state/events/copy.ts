@@ -11,7 +11,7 @@ export function handleCopy(ctx: Context): boolean {
     // }
 
     // // if format-painter is active during copy, cancel it
-    if (ctx.luckysheetPaintModelOn) {
+    if (ctx.formatPainterOn) {
         cancelPaintModel(ctx);
     }
 

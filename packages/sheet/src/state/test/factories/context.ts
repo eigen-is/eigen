@@ -48,7 +48,7 @@ export function contextFactory({ ...params }: Partial<Context> = {}): Partial<Co
                 order: 1,
             },
         ],
-        luckysheetCellUpdate: [0, 0],
+        editingCellPosition: [0, 0],
         visibledatarow: [20, 40, 60, 80, 100],
         visibledatacolumn: [74, 148, 222, 296, 370],
         scrollLeft: 0,
