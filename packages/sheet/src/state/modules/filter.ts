@@ -159,7 +159,7 @@ export function createFilterOptions(
 
     if (saveData) {
         const file = ctx.sheets[sheetIndex];
-        file.filter_select = activeFilterRange;
+        file.filterRange = activeFilterRange;
     }
     ctx.filterOptions = options;
 }
@@ -176,7 +176,7 @@ export function clearFilter(ctx: Context) {
     ctx.filter = {};
     if (sheetIndex != null) {
         ctx.sheets[sheetIndex].filter = undefined;
-        ctx.sheets[sheetIndex].filter_select = undefined;
+        ctx.sheets[sheetIndex].filterRange = undefined;
         ctx.sheets[sheetIndex].config = cloneDeep(ctx.config);
     }
 }
