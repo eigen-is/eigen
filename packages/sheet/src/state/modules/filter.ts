@@ -105,7 +105,7 @@ export function orderbydatafiler(
 // Create filter options
 export function createFilterOptions(
     ctx: Context,
-    luckysheet_filter_save:
+    activeFilterRange:
         | {
               row: number[];
               column: number[];
@@ -119,15 +119,15 @@ export function createFilterOptions(
     if (sheetId != null && sheetId !== ctx.currentSheetId) return;
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) return;
-    if (luckysheet_filter_save == null || size(luckysheet_filter_save) === 0) {
+    if (activeFilterRange == null || size(activeFilterRange) === 0) {
         delete ctx.filterOptions;
         return;
     }
 
-    const r1 = luckysheet_filter_save.row[0];
-    const r2 = luckysheet_filter_save.row[1];
-    const c1 = luckysheet_filter_save.column[0];
-    const c2 = luckysheet_filter_save.column[1];
+    const r1 = activeFilterRange.row[0];
+    const r2 = activeFilterRange.row[1];
+    const c1 = activeFilterRange.column[0];
+    const c2 = activeFilterRange.column[1];
 
     const row = ctx.visibledatarow[r2] ?? 0;
     const row_pre = r1 - 1 === -1 ? 0 : (ctx.visibledatarow[r1 - 1] ?? 0);
@@ -159,7 +159,7 @@ export function createFilterOptions(
 
     if (saveData) {
         const file = ctx.sheets[sheetIndex];
-        file.filter_select = luckysheet_filter_save;
+        file.filter_select = activeFilterRange;
     }
     ctx.filterOptions = options;
 }
@@ -170,7 +170,7 @@ export function clearFilter(ctx: Context) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const hiddenRows = reduce(ctx.filter, (pre, curr) => Object.assign(pre, curr?.rowhidden || {}), {});
     ctx.config.rowhidden = omit(ctx.config.rowhidden, Object.keys(hiddenRows));
-    ctx.luckysheet_filter_save = undefined;
+    ctx.activeFilterRange = undefined;
     ctx.filterOptions = undefined;
     ctx.filterContextMenu = undefined;
     ctx.filter = {};
@@ -185,7 +185,7 @@ export function createFilter(ctx: Context) {
     if (size(ctx.luckysheet_select_save) > 1) {
         return;
     }
-    if (size(ctx.luckysheet_filter_save) > 0) {
+    if (size(ctx.activeFilterRange) > 0) {
         clearFilter(ctx);
         return;
     }
@@ -224,14 +224,14 @@ export function createFilter(ctx: Context) {
         filterSave = normalizeSelection(ctx, [{ row: [curR, curR], column: [st_c ?? 0, ed_c] }]);
         ctx.luckysheet_select_save = filterSave;
 
-        ctx.luckysheet_shiftpositon = cloneDeep(last);
+        ctx.shiftAnchor = cloneDeep(last);
     } else if (last.row[1] - last.row[0] < 2) {
-        ctx.luckysheet_shiftpositon = cloneDeep(last);
+        ctx.shiftAnchor = cloneDeep(last);
     }
 
-    ctx.luckysheet_filter_save = cloneDeep(filterSave?.[0] || ctx.luckysheet_select_save?.[0]);
+    ctx.activeFilterRange = cloneDeep(filterSave?.[0] || ctx.luckysheet_select_save?.[0]);
 
-    createFilterOptions(ctx, ctx.luckysheet_filter_save, undefined, true);
+    createFilterOptions(ctx, ctx.activeFilterRange, undefined, true);
 }
 
 export type FilterDate = {

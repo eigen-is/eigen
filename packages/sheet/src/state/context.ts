@@ -134,7 +134,7 @@ export type Context = {
     functionCandidates: FunctionCandidate[];
     functionHint: string | null | undefined;
 
-    luckysheet_copy_save?: {
+    copyState?: {
         dataSheetId: string;
         copyRange: { row: number[]; column: number[] }[];
         RowlChange: boolean;
@@ -144,11 +144,11 @@ export type Context = {
 
     filterchage: boolean; // filter
     filterOptions?: FilterOptions;
-    luckysheet_filter_save?: { row: number[]; column: number[] } | undefined;
+    activeFilterRange?: { row: number[]; column: number[] } | undefined;
     filter: Record<string, FilterEntry>;
 
     sheetTabDragging: boolean;
-    luckysheet_sheet_move_data: unknown[];
+    sheetTabDragData: unknown[];
     scrolling: boolean;
 
     luckysheetcurrentisPivotTable: boolean;
@@ -165,15 +165,15 @@ export type Context = {
     luckysheetCellUpdate: number[];
 
     shiftKeyDown: boolean;
-    luckysheet_shiftpositon: Selection | undefined;
+    shiftAnchor: Selection | undefined;
 
     iscopyself: boolean;
 
     orderbyindex: number; // sort index
 
     modalDragging: boolean; // modal drag
-    luckysheet_model_xy: number[];
-    luckysheet_model_move_obj: unknown;
+    modalDragXY: number[];
+    modalDragTarget: unknown;
 
     cellSelectMoving: boolean; // selection drag-replace
     cellSelectMoveIndex: number[];
@@ -320,14 +320,14 @@ export function defaultContext(refs: RefValues): Context {
         functionCandidates: [],
         functionHint: null,
 
-        luckysheet_copy_save: undefined, // copy/paste
+        copyState: undefined, // copy/paste
         pasteIsCut: false,
 
         filterchage: true, // filter
         filter: {},
 
         sheetTabDragging: false,
-        luckysheet_sheet_move_data: [],
+        sheetTabDragData: [],
         scrolling: false,
 
         luckysheetcurrentisPivotTable: false,
@@ -344,7 +344,7 @@ export function defaultContext(refs: RefValues): Context {
         luckysheetCellUpdate: [],
 
         shiftKeyDown: false,
-        luckysheet_shiftpositon: undefined,
+        shiftAnchor: undefined,
 
         iscopyself: true,
         activeImg: undefined,
@@ -352,8 +352,8 @@ export function defaultContext(refs: RefValues): Context {
         orderbyindex: 0, // sort index
 
         modalDragging: false, // modal drag
-        luckysheet_model_xy: [0, 0],
-        luckysheet_model_move_obj: null,
+        modalDragXY: [0, 0],
+        modalDragTarget: null,
 
         cellSelectMoving: false, // selection drag-replace
         cellSelectMoveIndex: [],

@@ -235,7 +235,7 @@ export function selectTitlesRange(map: Record<string, number>) {
     return rangeArr;
 }
 
-export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['luckysheet_copy_save']) {
+export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyState']) {
     // if (!checkProtectionLockedRangeList(ctx.luckysheet_select_save, ctx.currentSheetId)) {
     //   return;
     // }
@@ -1729,7 +1729,7 @@ export function copy(ctx: Context) {
     }
 
     // Save copy data within luckysheet
-    ctx.luckysheet_copy_save = {
+    ctx.copyState = {
         dataSheetId: ctx.currentSheetId,
         copyRange,
         RowlChange,

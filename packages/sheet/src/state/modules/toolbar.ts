@@ -726,18 +726,18 @@ export function autoSelectionFormula(
 
 export function cancelPaintModel(ctx: Context) {
     // $("#luckysheet-sheettable_0").removeClass("luckysheetPaintCursor");
-    if (ctx.luckysheet_copy_save === null) return;
-    if (ctx.luckysheet_copy_save?.dataSheetId === ctx.currentSheetId) {
+    if (ctx.copyState === null) return;
+    if (ctx.copyState?.dataSheetId === ctx.currentSheetId) {
         ctx.luckysheet_selection_range = [];
     } else {
-        if (!ctx.luckysheet_copy_save) return;
-        const index = getSheetIndex(ctx, ctx.luckysheet_copy_save.dataSheetId);
+        if (!ctx.copyState) return;
+        const index = getSheetIndex(ctx, ctx.copyState.dataSheetId);
         if (!index) return;
-        // ctx.sheets[getSheetIndex(ctx.luckysheet_copy_save["dataSheetIndex"])].luckysheet_selection_range = [];
+        // ctx.sheets[getSheetIndex(ctx.copyState["dataSheetIndex"])].luckysheet_selection_range = [];
         ctx.sheets[index].luckysheet_selection_range = [];
     }
 
-    ctx.luckysheet_copy_save = {
+    ctx.copyState = {
         dataSheetId: '',
         copyRange: [{ row: [0], column: [0] }],
         RowlChange: false,
@@ -1032,7 +1032,7 @@ export function handleFormatPainter(ctx: Context) {
             }
         }
     }
-    ctx.luckysheet_copy_save = {
+    ctx.copyState = {
         dataSheetId: ctx.currentSheetId,
         copyRange: [
             {

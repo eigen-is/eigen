@@ -21,7 +21,7 @@ export function DataMenu() {
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
-    const filterActive = size(context.luckysheet_filter_save) > 0;
+    const filterActive = size(context.activeFilterRange) > 0;
 
     return (
         <>
