@@ -1301,7 +1301,7 @@ export function getdatabyselection(ctx: Context, range: Selection | undefined, s
     return data;
 }
 
-export function luckysheetUpdateCell(ctx: Context, row_index: number, col_index: number) {
+export function setEditingCell(ctx: Context, row_index: number, col_index: number) {
     ctx.editingCellPosition = [row_index, col_index];
 }
 
