@@ -49,11 +49,11 @@ export const SheetTab: React.FC = () => {
             setTimeout(() => {
                 setContext(
                     (draftCtx) => {
-                        if (draftCtx.luckysheetCellUpdate.length > 0) {
+                        if (draftCtx.editingCellPosition.length > 0) {
                             updateCell(
                                 draftCtx,
-                                draftCtx.luckysheetCellUpdate[0],
-                                draftCtx.luckysheetCellUpdate[1],
+                                draftCtx.editingCellPosition[0],
+                                draftCtx.editingCellPosition[1],
                                 refs.cellInput.current!,
                             );
                         }

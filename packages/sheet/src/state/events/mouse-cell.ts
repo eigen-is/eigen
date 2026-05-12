@@ -116,7 +116,7 @@ export function handleCellAreaMouseDown(
     ctx.scrolling = true;
 
     // Formula-related
-    if (ctx.luckysheetCellUpdate.length > 0) {
+    if (ctx.editingCellPosition.length > 0) {
         if (
             ctx.formulaCache.rangestart ||
             ctx.formulaCache.rangedrag_column_start ||
@@ -316,7 +316,7 @@ export function handleCellAreaMouseDown(
             e.preventDefault();
             return; // skip ctx.luckysheet_select_save to prevent clearing cellInput
         }
-        updateCell(ctx, ctx.luckysheetCellUpdate[0], ctx.luckysheetCellUpdate[1], cellInput, undefined, canvas);
+        updateCell(ctx, ctx.editingCellPosition[0], ctx.editingCellPosition[1], cellInput, undefined, canvas);
         ctx.selectionActive = true;
     }
     if (checkProtectionSelectLockedOrUnLockedCells(ctx, row_index, col_index, ctx.currentSheetId)) {
@@ -458,7 +458,7 @@ export function handleCellAreaDoubleClick(
     if (!flowdata) return;
 
     if (
-        (ctx.luckysheetCellUpdate.length > 0 && ctx.formulaCache.rangestart) ||
+        (ctx.editingCellPosition.length > 0 && ctx.formulaCache.rangestart) ||
         ctx.formulaCache.rangedrag_column_start ||
         ctx.formulaCache.rangedrag_row_start ||
         israngeseleciton(ctx)

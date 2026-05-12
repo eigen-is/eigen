@@ -201,10 +201,10 @@ export function updateFormat(
     if (!allowEdit) return;
 
     if (attr in inlineStyleAffectAttribute) {
-        if (ctx.luckysheetCellUpdate.length > 0) {
+        if (ctx.editingCellPosition.length > 0) {
             const value = $input.innerText;
             if (value.substring(0, 1) !== '=') {
-                const cell = d[ctx.luckysheetCellUpdate[0]][ctx.luckysheetCellUpdate[1]];
+                const cell = d[ctx.editingCellPosition[0]][ctx.editingCellPosition[1]];
                 if (cell) {
                     updateInlineStringFormat(ctx, cell, attr, foucsStatus, $input);
                 }
@@ -330,7 +330,7 @@ function activeFormulaInput(
         isnull = false;
     }
 
-    ctx.luckysheetCellUpdate = [row_index, col_index];
+    ctx.editingCellPosition = [row_index, col_index];
     cache.doNotUpdateCell = true;
     if (isnull) {
         const formulaTxt = `<span dir="auto" class="luckysheet-formula-text-color">=</span><span dir="auto" class="luckysheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="luckysheet-formula-text-color">(</span><span dir="auto" class="luckysheet-formula-text-color">)</span>`;
@@ -744,7 +744,7 @@ export function cancelPaintModel(ctx: Context) {
         HasMC: false,
     };
 
-    ctx.luckysheetPaintModelOn = false;
+    ctx.formatPainterOn = false;
     // $("#luckysheetpopover").fadeOut(200,function(){
     //     $("#luckysheetpopover").remove();
 }
@@ -1044,8 +1044,8 @@ export function handleFormatPainter(ctx: Context) {
         HasMC,
     };
 
-    ctx.luckysheetPaintModelOn = true;
-    ctx.luckysheetPaintSingle = true;
+    ctx.formatPainterOn = true;
+    ctx.formatPainterOnce = true;
 }
 
 // 2022-10-10 Replaced the forEach loop in handleClearFormat with an every loop that can break early, to prevent a selection from being processed multiple times

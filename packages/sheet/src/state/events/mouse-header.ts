@@ -66,7 +66,7 @@ export function handleRowHeaderMouseDown(
     ctx.scrolling = true;
 
     // Formula-related
-    if (!isEmpty(ctx.luckysheetCellUpdate)) {
+    if (!isEmpty(ctx.editingCellPosition)) {
         if (
             ctx.formulaCache.rangestart ||
             ctx.formulaCache.rangedrag_column_start ||
@@ -250,7 +250,7 @@ export function handleRowHeaderMouseDown(
             return;
         }
 
-        updateCell(ctx, ctx.luckysheetCellUpdate[0], ctx.luckysheetCellUpdate[1], cellInput);
+        updateCell(ctx, ctx.editingCellPosition[0], ctx.editingCellPosition[1], cellInput);
         ctx.rowsSelected = true;
     } else {
         ctx.rowsSelected = true;
@@ -393,7 +393,7 @@ export function handleColumnHeaderMouseDown(
     ctx.scrolling = true;
 
     // Formula-related
-    if (!isEmpty(ctx.luckysheetCellUpdate)) {
+    if (!isEmpty(ctx.editingCellPosition)) {
         if (
             ctx.formulaCache.rangestart ||
             ctx.formulaCache.rangedrag_column_start ||
@@ -574,7 +574,7 @@ export function handleColumnHeaderMouseDown(
 
             return;
         }
-        updateCell(ctx, ctx.luckysheetCellUpdate[0], ctx.luckysheetCellUpdate[1], cellInput);
+        updateCell(ctx, ctx.editingCellPosition[0], ctx.editingCellPosition[1], cellInput);
         ctx.colsSelected = true;
     } else {
         ctx.colsSelected = true;

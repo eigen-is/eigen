@@ -339,7 +339,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         }
     }
 
-    // if (!server.allowUpdate && !luckysheetConfigsetting.pointEdit) {
+    // if (!server.allowUpdate && !configSettings.pointEdit) {
     //   if (
     //     !isNil(cell.ct) &&
     //     /^(w|W)((0?)|(0\.0+))$/.test(cell.ct.fa) === false &&
@@ -347,10 +347,10 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     //     !isNil(cell.v) &&
     //     parseInt(cell.v, 10).toString().length > 4
     //   ) {
-    //     const autoFormatw = luckysheetConfigsetting.autoFormatw
+    //     const autoFormatw = configSettings.autoFormatw
     //       .toString()
     //       .toUpperCase();
-    //     const { accuracy } = luckysheetConfigsetting;
+    //     const { accuracy } = configSettings;
 
     //     const sfmt = setAccuracy(autoFormatw, accuracy);
 
@@ -612,7 +612,7 @@ export function cancelFunctionrangeSelected(ctx: Context) {
 export function cancelNormalSelected(ctx: Context) {
     cancelFunctionrangeSelected(ctx);
 
-    ctx.luckysheetCellUpdate = [];
+    ctx.editingCellPosition = [];
     ctx.formulaRangeHighlight = [];
     ctx.functionHint = null;
     // $("#fortune-formula-functionrange .fortune-formula-functionrange-highlight").remove();
@@ -1041,7 +1041,7 @@ export function getRangeByTxt(ctx: Context, txt: string) {
 export function isAllSelectedCellsInStatus(ctx: Context, attr: StyleAttr, status: unknown) {
     const cssField = cssDomKeyForAttr[attr];
 
-    if (!isEmpty(ctx.luckysheetCellUpdate)) {
+    if (!isEmpty(ctx.editingCellPosition)) {
         const w = window.getSelection();
         if (!w) return false;
         if (w.rangeCount === 0) return false;
@@ -1302,7 +1302,7 @@ export function getdatabyselection(ctx: Context, range: Selection | undefined, s
 }
 
 export function luckysheetUpdateCell(ctx: Context, row_index: number, col_index: number) {
-    ctx.luckysheetCellUpdate = [row_index, col_index];
+    ctx.editingCellPosition = [row_index, col_index];
 }
 
 export function getDataBySelectionNoCopy(ctx: Context, range: Selection) {

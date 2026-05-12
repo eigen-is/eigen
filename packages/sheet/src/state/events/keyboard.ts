@@ -24,10 +24,10 @@ export function handleGlobalEnter(
     e: KeyboardEvent,
     canvas?: CanvasRenderingContext2D,
 ) {
-    if ((e.altKey || e.metaKey) && ctx.luckysheetCellUpdate.length > 0) {
+    if ((e.altKey || e.metaKey) && ctx.editingCellPosition.length > 0) {
         e.preventDefault();
-    } else if (ctx.luckysheetCellUpdate.length > 0) {
-        const [r, c] = ctx.luckysheetCellUpdate;
+    } else if (ctx.editingCellPosition.length > 0) {
+        const [r, c] = ctx.editingCellPosition;
         updateCell(ctx, r, c, cellInput, undefined, canvas);
         ctx.luckysheet_select_save = [
             {
@@ -42,7 +42,7 @@ export function handleGlobalEnter(
     } else if ((ctx.luckysheet_select_save?.length ?? 0) > 0) {
         const last = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];
         if (last.row_focus == null || last.column_focus == null) return;
-        ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
+        ctx.editingCellPosition = [last.row_focus, last.column_focus];
         e.preventDefault();
     }
 }
@@ -84,7 +84,7 @@ function moveToEdge(
 }
 
 function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed: boolean) {
-    if (ctx.luckysheetCellUpdate.length > 0) return;
+    if (ctx.editingCellPosition.length > 0) return;
 
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     if (isNil(idx)) return;
@@ -183,7 +183,7 @@ export function handleWithCtrlOrMetaKey(
             const row_index = last.row_focus;
             const col_index = last.column_focus;
             updateCell(ctx, row_index, col_index, cellInput);
-            ctx.luckysheetCellUpdate = [row_index, col_index];
+            ctx.editingCellPosition = [row_index, col_index];
 
             cache.ignoreWriteCell = true;
             cellInput.innerText = getNowDateTime(2);
@@ -319,7 +319,7 @@ export function handleWithCtrlOrMetaKey(
 }
 
 function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
-    if (ctx.luckysheetCellUpdate.length > 0) return;
+    if (ctx.editingCellPosition.length > 0) return;
 
     ctx.shiftAnchor = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
     ctx.shiftKeyDown = true;
@@ -346,7 +346,7 @@ function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
 }
 
 export function handleArrowKey(ctx: Context, e: KeyboardEvent) {
-    if (ctx.luckysheetCellUpdate.length > 0 || ctx.cellSelectMoving || ctx.cellSelectExtending) {
+    if (ctx.editingCellPosition.length > 0 || ctx.cellSelectMoving || ctx.cellSelectExtending) {
         return;
     }
 
@@ -393,7 +393,7 @@ export function handleGlobalKeyDown(
     const allowEdit = isAllowEdit(ctx);
 
     if (
-        ctx.luckysheetCellUpdate.length > 0 &&
+        ctx.editingCellPosition.length > 0 &&
         kstr !== 'Enter' &&
         kstr !== 'Tab' &&
         kstr !== 'ArrowUp' &&
@@ -433,7 +433,7 @@ export function handleGlobalKeyDown(
         if (!allowEdit) return;
         handleGlobalEnter(ctx, cellInput, e, canvas);
     } else if (kstr === 'Tab') {
-        if (ctx.luckysheetCellUpdate.length > 0) {
+        if (ctx.editingCellPosition.length > 0) {
             return;
         }
 
@@ -445,21 +445,21 @@ export function handleGlobalKeyDown(
         e.preventDefault();
     } else if (kstr === 'F2') {
         if (!allowEdit) return;
-        if (ctx.luckysheetCellUpdate.length > 0) {
+        if (ctx.editingCellPosition.length > 0) {
             return;
         }
 
         const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
         if (!last || last.row_focus == null || last.column_focus == null) return;
 
-        ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
+        ctx.editingCellPosition = [last.row_focus, last.column_focus];
         e.preventDefault();
-    } else if (kstr === 'F4' && ctx.luckysheetCellUpdate.length > 0) {
+    } else if (kstr === 'F4' && ctx.editingCellPosition.length > 0) {
         // F4 should cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1).
         // Tracked as feature work in docs/TODO-SHEETS.md; for now just suppress
         // the browser default so the address-bar dropdown doesn't open mid-edit.
         e.preventDefault();
-    } else if (kstr === 'Escape' && ctx.luckysheetCellUpdate.length > 0) {
+    } else if (kstr === 'Escape' && ctx.editingCellPosition.length > 0) {
         cancelNormalSelected(ctx);
         moveHighlightCell(ctx, 'down', 0, 'rangeOfSelect');
         e.preventDefault();
@@ -511,7 +511,7 @@ export function handleGlobalKeyDown(
             // Activate the input box and forward the keypress to it.
             const last = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];
             if (last.row_focus == null || last.column_focus == null) return;
-            ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
+            ctx.editingCellPosition = [last.row_focus, last.column_focus];
             cache.overwriteCell = true;
 
             handleFormulaInput(ctx, fxInput, cellInput, kcode);

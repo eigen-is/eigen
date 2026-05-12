@@ -46,7 +46,7 @@ export function handleColSizeHandleMouseDown(
 ) {
     cancelActiveImgItem(ctx, globalCache);
 
-    ctx.luckysheetCellUpdate = [];
+    ctx.editingCellPosition = [];
 
     const { scrollLeft } = ctx;
     const { scrollTop } = ctx;
@@ -92,7 +92,7 @@ export function handleRowSizeHandleMouseDown(
         israngeseleciton(ctx)
     )
         return;
-    ctx.luckysheetCellUpdate = [];
+    ctx.editingCellPosition = [];
 
     const { scrollLeft } = ctx;
     const { scrollTop } = ctx;
@@ -131,7 +131,7 @@ export function handleColFreezeHandleMouseDown(
 ) {
     cancelActiveImgItem(ctx, globalCache);
 
-    ctx.luckysheetCellUpdate = [];
+    ctx.editingCellPosition = [];
 
     const { scrollLeft } = ctx;
     const { scrollTop } = ctx;
@@ -175,7 +175,7 @@ export function handleRowFreezeHandleMouseDown(
 ) {
     cancelActiveImgItem(ctx, globalCache);
 
-    ctx.luckysheetCellUpdate = [];
+    ctx.editingCellPosition = [];
 
     const { scrollLeft } = ctx;
     const { scrollTop } = ctx;

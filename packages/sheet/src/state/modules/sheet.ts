@@ -47,7 +47,7 @@ export function changeSheet(
     storeSheetParamALL(ctx);
 
     ctx.currentSheetId = id;
-    ctx.luckysheetcurrentisPivotTable = !!file.isPivotTable;
+    ctx.currentSheetIsPivot = !!file.isPivotTable;
 
     if (ctx.hooks.afterActivateSheet) {
         setTimeout(() => {

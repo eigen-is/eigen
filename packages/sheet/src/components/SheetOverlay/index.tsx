@@ -405,8 +405,8 @@ export const SheetOverlay: React.FC = () => {
             onTouchEnd={onTouchEnd}
             tabIndex={-1}
             style={{
-                width: context.luckysheetTableContentHW[0],
-                height: context.luckysheetTableContentHW[1],
+                width: context.tableContentSize[0],
+                height: context.tableContentSize[1],
             }}
         >
             <div className="fortune-col-header-wrap">

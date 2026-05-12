@@ -30,7 +30,7 @@ export const InputBox: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const inputRef = useRef<HTMLDivElement>(null);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
-    const prevCellUpdate = usePrevious<unknown[]>(context.luckysheetCellUpdate);
+    const prevCellUpdate = usePrevious<unknown[]>(context.editingCellPosition);
     const prevSheetId = usePrevious<string>(context.currentSheetId);
     const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
     const firstSelection = context.luckysheet_select_save?.[0];
@@ -40,13 +40,13 @@ export const InputBox: React.FC = () => {
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: cell-style memo keyed on sheet/file/cellUpdate; reads helpers off `context` directly
     const inputBoxStyle = useMemo(() => {
-        if (firstSelection && context.luckysheetCellUpdate.length > 0) {
+        if (firstSelection && context.editingCellPosition.length > 0) {
             const flowdata = getFlowdata(context);
             if (!flowdata) return {};
             return getStyleByCell(context, flowdata, firstSelection.row_focus!, firstSelection.column_focus!);
         }
         return {};
-    }, [context.sheets, context.currentSheetId, context.luckysheetCellUpdate, firstSelection]);
+    }, [context.sheets, context.currentSheetId, context.editingCellPosition, firstSelection]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: cell-edit sync — collaborative-update guard relies on prev refs, not React deps; firing on every refs.* change would clobber the editor
     useLayoutEffect(() => {
@@ -59,12 +59,12 @@ export const InputBox: React.FC = () => {
                 }
             });
         }
-        if (firstSelection && context.luckysheetCellUpdate.length > 0) {
+        if (firstSelection && context.editingCellPosition.length > 0) {
             if (refs.globalCache.doNotUpdateCell) {
                 delete refs.globalCache.doNotUpdateCell;
                 return;
             }
-            if (isEqual(prevCellUpdate, context.luckysheetCellUpdate) && prevSheetId === context.currentSheetId) {
+            if (isEqual(prevCellUpdate, context.editingCellPosition) && prevSheetId === context.currentSheetId) {
                 // data change by a collaborative update should not trigger this effect
                 return;
             }
@@ -94,15 +94,15 @@ export const InputBox: React.FC = () => {
             }
             delete refs.globalCache.doNotFocus;
         }
-    }, [context.luckysheetCellUpdate, context.sheets, context.currentSheetId, firstSelection]);
+    }, [context.editingCellPosition, context.sheets, context.currentSheetId, firstSelection]);
 
     useEffect(() => {
-        if (context.luckysheetCellUpdate.length === 0) {
+        if (context.editingCellPosition.length === 0) {
             if (inputRef.current) {
                 inputRef.current.innerHTML = '';
             }
         }
-    }, [context.luckysheetCellUpdate]);
+    }, [context.editingCellPosition]);
 
     // Disallow editing when the selected row/column is hidden
     // biome-ignore lint/correctness/useExhaustiveDependencies: only re-checks hidden-row/col status when selection changes
@@ -119,7 +119,7 @@ export const InputBox: React.FC = () => {
             preText.current = inputRef.current!.innerText;
 
             // Alt/Meta+Enter inserts a newline regardless of suggest visibility (originally `enterKeyControll`).
-            if (e.key === 'Enter' && (e.altKey || e.metaKey) && context.luckysheetCellUpdate.length > 0) {
+            if (e.key === 'Enter' && (e.altKey || e.metaKey) && context.editingCellPosition.length > 0) {
                 document.execCommand('insertHTML', false, '\n '); // Trailing space forces a line break; removed by the subsequent delete
                 document.execCommand('delete', false);
                 e.stopPropagation();
@@ -128,20 +128,20 @@ export const InputBox: React.FC = () => {
 
             if (formulaAutocomplete.handleKeyDown(e)) return;
 
-            if (e.key === 'Escape' && context.luckysheetCellUpdate.length > 0) {
+            if (e.key === 'Escape' && context.editingCellPosition.length > 0) {
                 setContext((draftCtx) => {
                     cancelNormalSelected(draftCtx);
                     moveHighlightCell(draftCtx, 'down', 0, 'rangeOfSelect');
                 });
                 e.preventDefault();
             } else if (
-                context.luckysheetCellUpdate.length > 0 &&
+                context.editingCellPosition.length > 0 &&
                 (e.key === 'Tab' || e.key === 'F4' || e.key === 'ArrowUp' || e.key === 'ArrowDown')
             ) {
                 e.preventDefault();
             }
         },
-        [context.luckysheetCellUpdate.length, formulaAutocomplete.handleKeyDown, setContext],
+        [context.editingCellPosition.length, formulaAutocomplete.handleKeyDown, setContext],
     );
 
     const onChange = useCallback(
@@ -187,11 +187,11 @@ export const InputBox: React.FC = () => {
 
     const onPaste = useCallback(
         (e: React.ClipboardEvent<HTMLDivElement>) => {
-            if (context.luckysheetCellUpdate.length === 0) {
+            if (context.editingCellPosition.length === 0) {
                 e.preventDefault();
             }
         },
-        [context.luckysheetCellUpdate],
+        [context.editingCellPosition],
     );
 
     const cfg = context.config || {};
@@ -208,7 +208,7 @@ export const InputBox: React.FC = () => {
                     ? {
                           left: firstSelection.left,
                           top: firstSelection.top,
-                          zIndex: context.luckysheetCellUpdate.length === 0 ? -1 : 19,
+                          zIndex: context.editingCellPosition.length === 0 ? -1 : 19,
                           display: 'block',
                       }
                     : { left: -10000, top: -10000, display: 'block' }

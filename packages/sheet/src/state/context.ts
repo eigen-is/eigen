@@ -104,7 +104,7 @@ export type Context = {
     cellMainSrollBarSize: number;
     sheetBarHeight: number;
     statisticBarHeight: number;
-    luckysheetTableContentHW: number[];
+    tableContentSize: number[];
 
     defaultcollen: number;
     defaultrowlen: number;
@@ -151,7 +151,7 @@ export type Context = {
     sheetTabDragData: unknown[];
     scrolling: boolean;
 
-    luckysheetcurrentisPivotTable: boolean;
+    currentSheetIsPivot: boolean;
 
     rowsSelected: boolean; // row/column header related parameters
     colsSelected: boolean;
@@ -162,7 +162,7 @@ export type Context = {
     colsFreezeDragging: boolean;
     rowsFreezeDragging: boolean;
 
-    luckysheetCellUpdate: number[];
+    editingCellPosition: number[];
 
     shiftKeyDown: boolean;
     shiftAnchor: Selection | undefined;
@@ -189,8 +189,8 @@ export type Context = {
     fontList: unknown[];
     defaultFontSize: number;
 
-    luckysheetPaintModelOn: boolean;
-    luckysheetPaintSingle: boolean;
+    formatPainterOn: boolean;
+    formatPainterOnce: boolean;
 
     // default cell
     defaultCell: Cell;
@@ -302,7 +302,7 @@ export function defaultContext(refs: RefValues): Context {
         cellMainSrollBarSize: 12,
         sheetBarHeight: 31,
         statisticBarHeight: 23,
-        luckysheetTableContentHW: [0, 0],
+        tableContentSize: [0, 0],
 
         defaultcollen: 73,
         defaultrowlen: 19,
@@ -330,7 +330,7 @@ export function defaultContext(refs: RefValues): Context {
         sheetTabDragData: [],
         scrolling: false,
 
-        luckysheetcurrentisPivotTable: false,
+        currentSheetIsPivot: false,
 
         rowsSelected: false, // row/column header related parameters
         colsSelected: false,
@@ -341,7 +341,7 @@ export function defaultContext(refs: RefValues): Context {
         colsFreezeDragging: false,
         rowsFreezeDragging: false,
 
-        luckysheetCellUpdate: [],
+        editingCellPosition: [],
 
         shiftKeyDown: false,
         shiftAnchor: undefined,
@@ -369,8 +369,8 @@ export function defaultContext(refs: RefValues): Context {
         fontList: [],
         defaultFontSize: 10,
 
-        luckysheetPaintModelOn: false,
-        luckysheetPaintSingle: false,
+        formatPainterOn: false,
+        formatPainterOnce: false,
 
         sheetFocused: true,
 
@@ -522,13 +522,13 @@ export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {
 }
 
 export function updateContextWithCanvas(ctx: Context, canvas: HTMLCanvasElement, placeholder: HTMLDivElement) {
-    ctx.luckysheetTableContentHW = [placeholder.clientWidth, placeholder.clientHeight];
+    ctx.tableContentSize = [placeholder.clientWidth, placeholder.clientHeight];
     ctx.cellmainHeight = placeholder.clientHeight - ctx.columnHeaderHeight;
     ctx.cellmainWidth = placeholder.clientWidth - ctx.rowHeaderWidth;
 
-    canvas.style.width = `${ctx.luckysheetTableContentHW[0]}px`;
-    canvas.style.height = `${ctx.luckysheetTableContentHW[1]}px`;
+    canvas.style.width = `${ctx.tableContentSize[0]}px`;
+    canvas.style.height = `${ctx.tableContentSize[1]}px`;
 
-    canvas.width = Math.ceil(ctx.luckysheetTableContentHW[0] * ctx.devicePixelRatio);
-    canvas.height = Math.ceil(ctx.luckysheetTableContentHW[1] * ctx.devicePixelRatio);
+    canvas.width = Math.ceil(ctx.tableContentSize[0] * ctx.devicePixelRatio);
+    canvas.height = Math.ceil(ctx.tableContentSize[1] * ctx.devicePixelRatio);
 }

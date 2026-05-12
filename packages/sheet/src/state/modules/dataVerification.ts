@@ -41,7 +41,7 @@ export function dataRangeSelection(ctx: Context, rangT: string, type: string, va
         const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
         const row_index = last.row_focus as number;
         const col_index = last.column_focus as number;
-        ctx.luckysheetCellUpdate = [row_index, col_index];
+        ctx.editingCellPosition = [row_index, col_index];
 
         const range = getRangeByTxt(ctx, rangT);
         const r = range[0]?.row;
@@ -60,7 +60,7 @@ export function dataRangeSelection(ctx: Context, rangT: string, type: string, va
             width: col - col_pre - 1,
         };
     } else {
-        ctx.luckysheetCellUpdate = [0, 0];
+        ctx.editingCellPosition = [0, 0];
     }
 }
 
