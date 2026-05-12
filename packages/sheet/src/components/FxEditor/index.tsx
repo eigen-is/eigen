@@ -113,7 +113,7 @@ export function FxEditor() {
                 if (context.editingCellPosition.length > 0) {
                     switch (key) {
                         case 'Enter': {
-                            const lastCellUpdate = [...draftCtx.editingCellPosition];
+                            const lastEditingCellPosition = [...draftCtx.editingCellPosition];
                             updateCell(
                                 draftCtx,
                                 draftCtx.editingCellPosition[0],
@@ -122,10 +122,10 @@ export function FxEditor() {
                             );
                             draftCtx.selections = [
                                 {
-                                    row: [lastCellUpdate[0], lastCellUpdate[0]],
-                                    column: [lastCellUpdate[1], lastCellUpdate[1]],
-                                    row_focus: lastCellUpdate[0],
-                                    column_focus: lastCellUpdate[1],
+                                    row: [lastEditingCellPosition[0], lastEditingCellPosition[0]],
+                                    column: [lastEditingCellPosition[1], lastEditingCellPosition[1]],
+                                    row_focus: lastEditingCellPosition[0],
+                                    column_focus: lastEditingCellPosition[1],
                                 },
                             ];
                             moveHighlightCell(draftCtx, 'down', 1, 'rangeOfSelect');

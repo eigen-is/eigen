@@ -30,7 +30,7 @@ export const InputBox: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const inputRef = useRef<HTMLDivElement>(null);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
-    const prevCellUpdate = usePrevious<unknown[]>(context.editingCellPosition);
+    const prevEditingCellPosition = usePrevious<unknown[]>(context.editingCellPosition);
     const prevSheetId = usePrevious<string>(context.currentSheetId);
     const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
     const firstSelection = context.selections?.[0];
@@ -64,7 +64,10 @@ export const InputBox: React.FC = () => {
                 delete refs.globalCache.doNotUpdateCell;
                 return;
             }
-            if (isEqual(prevCellUpdate, context.editingCellPosition) && prevSheetId === context.currentSheetId) {
+            if (
+                isEqual(prevEditingCellPosition, context.editingCellPosition) &&
+                prevSheetId === context.currentSheetId
+            ) {
                 // data change by a collaborative update should not trigger this effect
                 return;
             }

@@ -105,23 +105,23 @@ export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
 }
 
 export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) {
-    const select_save = ctx.selections;
-    if (!select_save) return;
+    const selections = ctx.selections;
+    if (!selections) return;
 
     let row: number | undefined;
-    const { row_focus } = select_save[0];
-    if (row_focus === select_save[0].row[0]) {
-        [, row] = select_save[0].row;
-    } else if (row_focus === select_save[0].row[1]) {
-        [row] = select_save[0].row;
+    const { row_focus } = selections[0];
+    if (row_focus === selections[0].row[0]) {
+        [, row] = selections[0].row;
+    } else if (row_focus === selections[0].row[1]) {
+        [row] = selections[0].row;
     }
 
     let column: number | undefined;
-    const { column_focus } = select_save[0];
-    if (column_focus === select_save[0].column[0]) {
-        [, column] = select_save[0].column;
-    } else if (column_focus === select_save[0].column[1]) {
-        [column] = select_save[0].column;
+    const { column_focus } = selections[0];
+    if (column_focus === selections[0].column[0]) {
+        [, column] = selections[0].column;
+    } else if (column_focus === selections[0].column[1]) {
+        [column] = selections[0].column;
     }
 
     const verticalData = freeze?.vertical?.freezenverticaldata;
