@@ -12,7 +12,7 @@ import type { Context } from '../context';
 import type { FilterEntry, FormulaCell, Sheet, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
-type FilterObj = { filter_select: SingleRange | null; filter: Record<string, FilterEntry> | null };
+type FilterObj = { filterRange: SingleRange | null; filter: Record<string, FilterEntry> | null };
 
 const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet) => {
     Object.entries(merge_new).forEach(([, v]) => {
@@ -68,16 +68,16 @@ function shiftStateOnlyFieldsForInsert(
 
     // Filter config update
     const cfg = file.config || {};
-    const { filter_select } = file;
+    const { filterRange } = file;
     const { filter } = file;
     let newFilterObj: FilterObj | null = null;
-    if (!isEmpty(filter_select) && filter_select != null) {
-        newFilterObj = { filter_select: null, filter: null };
+    if (!isEmpty(filterRange) && filterRange != null) {
+        newFilterObj = { filterRange: null, filter: null };
 
-        let f_r1 = filter_select.row[0];
-        let f_r2 = filter_select.row[1];
-        let f_c1 = filter_select.column[0];
-        let f_c2 = filter_select.column[1];
+        let f_r1 = filterRange.row[0];
+        let f_r2 = filterRange.row[1];
+        let f_c1 = filterRange.column[0];
+        let f_c2 = filterRange.column[1];
 
         if (type === 'row') {
             if (f_r1 < index) {
@@ -164,7 +164,7 @@ function shiftStateOnlyFieldsForInsert(
             }
         }
 
-        newFilterObj.filter_select = { row: [f_r1, f_r2], column: [f_c1, f_c2] };
+        newFilterObj.filterRange = { row: [f_r1, f_r2], column: [f_c1, f_c2] };
     }
 
     if (newFilterObj != null && newFilterObj.filter != null) {
@@ -182,7 +182,7 @@ function shiftStateOnlyFieldsForInsert(
 
     if (newFilterObj != null) {
         file.filter = newFilterObj.filter ?? undefined;
-        file.filter_select = newFilterObj.filter_select ?? undefined;
+        file.filterRange = newFilterObj.filterRange ?? undefined;
     }
 
     // Freeze config update
@@ -331,23 +331,23 @@ function shiftStateOnlyFieldsForDelete(
 
     // Filter config update
     const cfg = file.config || {};
-    const { filter_select } = file;
+    const { filterRange } = file;
     const { filter } = file;
     let newFilterObj: FilterObj | null = null;
-    if (!isEmpty(filter_select) && filter_select != null) {
-        newFilterObj = { filter_select: null, filter: null };
+    if (!isEmpty(filterRange) && filterRange != null) {
+        newFilterObj = { filterRange: null, filter: null };
 
-        let f_r1 = filter_select.row[0];
-        let f_r2 = filter_select.row[1];
-        let f_c1 = filter_select.column[0];
-        let f_c2 = filter_select.column[1];
+        let f_r1 = filterRange.row[0];
+        let f_r2 = filterRange.row[1];
+        let f_c1 = filterRange.column[0];
+        let f_c2 = filterRange.column[1];
 
         if (type === 'row') {
             if (f_r1 > end) {
                 f_r1 -= slen;
                 f_r2 -= slen;
 
-                newFilterObj.filter_select = {
+                newFilterObj.filterRange = {
                     row: [f_r1, f_r2],
                     column: [f_c1, f_c2],
                 };
@@ -359,13 +359,13 @@ function shiftStateOnlyFieldsForDelete(
                     f_r2 -= slen;
                 }
 
-                newFilterObj.filter_select = {
+                newFilterObj.filterRange = {
                     row: [f_r1, f_r2],
                     column: [f_c1, f_c2],
                 };
             }
 
-            if (newFilterObj.filter_select != null && filter != null) {
+            if (newFilterObj.filterRange != null && filter != null) {
                 forEach(filter, (_v, k) => {
                     const f_rowhidden = filter[k].rowhidden;
                     const f_rowhidden_new: Record<string, number> = {};
@@ -396,7 +396,7 @@ function shiftStateOnlyFieldsForDelete(
                 f_c1 -= slen;
                 f_c2 -= slen;
 
-                newFilterObj.filter_select = {
+                newFilterObj.filterRange = {
                     row: [f_r1, f_r2],
                     column: [f_c1, f_c2],
                 };
@@ -408,7 +408,7 @@ function shiftStateOnlyFieldsForDelete(
                     f_c2 -= slen;
                 }
 
-                newFilterObj.filter_select = {
+                newFilterObj.filterRange = {
                     row: [f_r1, f_r2],
                     column: [f_c1, f_c2],
                 };
@@ -417,14 +417,14 @@ function shiftStateOnlyFieldsForDelete(
                     f_c1 = start;
                     f_c2 -= slen;
 
-                    newFilterObj.filter_select = {
+                    newFilterObj.filterRange = {
                         row: [f_r1, f_r2],
                         column: [f_c1, f_c2],
                     };
                 }
             }
 
-            if (newFilterObj.filter_select != null && filter != null) {
+            if (newFilterObj.filterRange != null && filter != null) {
                 forEach(filter, (_v, k) => {
                     let f_cindex = filter[k].cindex;
 
@@ -467,7 +467,7 @@ function shiftStateOnlyFieldsForDelete(
 
     if (newFilterObj != null) {
         file.filter = newFilterObj.filter ?? undefined;
-        file.filter_select = newFilterObj.filter_select ?? undefined;
+        file.filterRange = newFilterObj.filterRange ?? undefined;
     }
 
     // Freeze config update

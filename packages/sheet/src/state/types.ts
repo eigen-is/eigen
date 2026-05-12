@@ -167,7 +167,7 @@ export type Sheet = Omit<LibSheet, 'config'> & {
     pivotTable?: unknown;
     isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
-    filter_select?: SingleRange;
+    filterRange?: SingleRange;
     alternateFormatRules?: AlternateFormatEntry[];
     dataVerification?: Record<string, DataVerificationRule>;
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
