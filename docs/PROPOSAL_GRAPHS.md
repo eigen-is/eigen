@@ -32,7 +32,7 @@ fit**. Here is why:
   partial overrides. Getting individual axis label truncation or responsive tick counts requires reaching into
   undocumented slots.
 - Nivo's `Responsive*` variants use a `ResizeObserver` wrapper that fights with our own container sizing in Tiptap node
-  views and fortune-sheet overlays, where the chart dimensions are known and passed explicitly.
+  views and sheet overlays, where the chart dimensions are known and passed explicitly.
 
 **For Recharts:**
 
@@ -89,12 +89,12 @@ sources, populated on every successful fetch.
 **Resized source range.** If a user inserts rows within the chart's range (e.g., `A1:D10` becomes `A1:D11`), the
 chart's range reference does NOT auto-adjust (unlike formulas). This is intentional and matches Google Sheets behavior
 for chart ranges. The user must manually update the range. The research proposes auto-adjusting ranges -- I recommend
-against this for Phase 1-4 because it requires hooking into fortune-sheet's row/column insert logic, which is fragile.
+against this for Phase 1-4 because it requires hooking into sheet's row/column insert logic, which is fragile.
 
 **Formula errors in cells.** `getCellValue` returns the cell's `v` field. For formula errors, `v` may be `undefined`
 or contain an error string. The data extraction must check `cell.v` type and treat non-numeric values as null.
 
-### Fortune-Sheet Data Access Reliability
+### Sheet Data Access Reliability
 
 The research correctly identifies `WorkbookInstance` as the API surface. After reading the implementation:
 
@@ -104,7 +104,7 @@ The research correctly identifies `WorkbookInstance` as the API surface. After r
   strings (concatenates `ct.s` segments). For charts, we should read `cell.v` directly from the `getCellsByRange`
   result rather than calling `getCellValue` per cell, avoiding these special cases.
 - The `chart_selection: any` in Context is dead code (initialized to `{}`). The research correctly says to ignore it.
-- **Key risk**: fortune-sheet's `context` is managed by immer. Reading from it during render is fine, but we must
+- **Key risk**: sheet's `context` is managed by immer. Reading from it during render is fine, but we must
   not hold stale references across renders. The debounced data extraction must read fresh data on each tick.
 
 ### ChartDefinition Simplification
@@ -421,7 +421,7 @@ Horizontal bar charts are a `layout="vertical"` prop on `<BarChart>` in Recharts
 |------|----------|------------|
 | Recharts animation stacking on rapid updates | Medium | Debounce data extraction at 200ms. Disable animation below 200ms update interval. |
 | Fortune-sheet API instability | Medium | Access data only via `getCellsByRange`. Write integration tests that exercise the extraction path. |
-| Chart overlay z-index conflicts with fortune-sheet UI | Low | Use z-index 250 (between inactive images at 200 and active images at 300). |
+| Chart overlay z-index conflicts with sheet UI | Low | Use z-index 250 (between inactive images at 200 and active images at 300). |
 | Large chart definitions bloating Yjs documents | Low | JSON stringified definitions are typically 500-2000 bytes. Negligible compared to cell data. |
 | Recharts bundle size impacting non-chart apps | Low | Charts are in `packages/ui` but tree-shaking ensures only apps that import chart components pay the cost. |
 | Cross-app live linking complexity (Phase 5) | High | Defer entirely until charts are stable in single-app mode. Ship inline-data-only for Phases 1-4. |

@@ -82,8 +82,8 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
                             { name: 'tiptap', test: /node_modules[\\/](?:@tiptap[\\/]|prosemirror-)/, priority: 3 },
                             { name: 'codemirror', test: /node_modules[\\/](?:@codemirror|@lezer)[\\/]/, priority: 2 },
                             {
-                                name: 'fortune-sheet',
-                                test: /(?:packages|node_modules[\\/]@workspace)[\\/]fortune-sheet[\\/]/,
+                                name: 'sheet',
+                                test: /(?:packages|node_modules[\\/]@workspace)[\\/]sheet[\\/]/,
                                 priority: 1,
                             },
                         ],

@@ -1,6 +1,6 @@
-// Canonical sheet data shapes shared between the fortune-sheet engine, the editor's
-// state layer, and the apps/api backend. Lives here (not in fortune-sheet) because
-// fortune-sheet depends on @workspace/lib, not the other way around — keeping these
+// Canonical sheet data shapes shared between the sheet engine, the editor's
+// state layer, and the apps/api backend. Lives here (not in the sheet package)
+// because sheet depends on @workspace/lib, not the other way around — keeping these
 // in lib avoids a workspace cycle and lets the backend import them without pulling
 // in React.
 
@@ -55,7 +55,7 @@ export type CellWithRowAndCol = {
 };
 
 // Sheet operation produced by the editor's state layer (immer patch-to-op step)
-// and consumed by both fortune-sheet's runtime and the apps/api document reader.
+// and consumed by both the sheet runtime and the apps/api document reader.
 // Lives in lib so the BE can replay ops without pulling in the state barrel.
 // `value` stays `any` because the legacy state/ utils (patch.ts, Workbook/api.ts)
 // pass it as Cell, Sheet, RowColOp, calcChain, … without a discriminator; tightening

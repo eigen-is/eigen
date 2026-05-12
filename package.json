@@ -26,7 +26,7 @@
     "typecheck": "bun run --sequential --workspaces typecheck",
     "test": "bun --filter '*' test",
     "test:api": "bun --filter '@apps/api' test",
-    "test:fortune-sheet": "bun --filter '@workspace/fortune-sheet' test",
+    "test:sheet": "bun --filter '@workspace/sheet' test",
     "check": "bun run lint && bun run typecheck && bun scripts/check-home-imports.ts && bun run test"
   },
   "workspaces": [

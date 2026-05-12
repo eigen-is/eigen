@@ -170,9 +170,9 @@ Clicking a comment card navigates to the slide containing the commented object a
 
 ### Anchoring
 
-Sheets anchor comments to **cells** via `commentChatNames?: string[]` on the fortune-sheet `Cell` type.
-The fortune-sheet built-in comment system (`ps` field, `NotationBoxes`, comment module, mouse handlers)
-has been fully removed and replaced with the shared Eigen comment infrastructure.
+Sheets anchor comments to **cells** via `commentChatNames?: string[]` on the sheet `Cell` type.
+The upstream built-in comment system (`ps` field, `NotationBoxes`, comment module, mouse handlers)
+was fully removed and replaced with the shared Eigen comment infrastructure.
 
 ### Active Comments
 
@@ -182,12 +182,12 @@ for cells with `commentChatNames`, returning `{ ids, anchorTexts }`. Anchor text
 
 ### Visual Indicator
 
-The fortune-sheet canvas draws a red triangle (`#FC6666`) in the top-right corner of any cell with
+The sheet canvas draws a red triangle (`#FC6666`) in the top-right corner of any cell with
 `commentChatNames.length > 0`. This is built into the canvas rendering layer.
 
 ### Context Menu
 
-Fortune-sheet's cell context menu has a `"comment"` item rendered via hooks:
+The sheet's cell context menu has a `"comment"` item rendered via hooks:
 - No comment: "Add comment" (calls `hooks.onAddComment`)
 - Has comment: "View comment" / "Delete comment" (calls `hooks.onViewComment` / `hooks.onDeleteComment`)
 

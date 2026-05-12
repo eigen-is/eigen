@@ -58,6 +58,6 @@ await writeEigenClipboardAsync(data, "plain text fallback");
 const eigenData = readEigenClipboard(e.clipboardData);
 ```
 
-Used by: eigendoc editor, eigenslides editor, eigensheets (fortune-sheet).
+Used by: eigendoc editor, eigenslides editor, eigensheets (sheet).
 
 **Files**: `packages/lib/src/core/clipboard/`

@@ -41,7 +41,7 @@ Every app needs work:
 - **Mail**: threading, search, filters, attachment handling
 - **Drive**: bulk operations, drag-and-drop improvements
 - **Docs**: import from DOCX/Markdown, more export polish
-- **Sheets**: import, export, the forked fortune-sheet engine cleanup
+- **Sheets**: import, export, sheet engine cleanup (forked from fortune-sheet)
 - **Slides**: import, export to PPTX, more object types
 - **Stickies**: labels, filters, archiving, assigning cards to people
 - **Calendar**: recurring event edge cases, CalDAV compliance

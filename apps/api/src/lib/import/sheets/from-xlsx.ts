@@ -1,6 +1,7 @@
 /// <reference path="../modules.d.ts" />
-import { parseA1Range } from '@workspace/fortune-sheet/engine';
+
 import type { BorderSide, CellBorderInfo, Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
+import { parseA1Range } from '@workspace/sheet/engine';
 import type { Alignment, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).

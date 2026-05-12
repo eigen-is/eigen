@@ -24,7 +24,7 @@ describe('opToPatchOnSheets', () => {
 
     test('op with no id → dropped (no Sheet[]-rooted mapping)', () => {
         // The wholesale ['luckysheetfile'] replace patch that immer emits when
-        // fortune-sheet's reducer reassigns ctx.luckysheetfile (row/col ops)
+        // the sheet reducer reassigns ctx.luckysheetfile (row/col ops)
         // would otherwise produce a Sheet[]-rooted patch with a non-numeric
         // key, throwing immer error 14 in applyPatches.
         const ops: Op[] = [

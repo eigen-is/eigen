@@ -1,13 +1,13 @@
 # Sheets App
 
-> **TLDR**: Collaborative spreadsheet using a fully forked fortune-sheet (`packages/fortune-sheet`, published as
-> `@workspace/fortune-sheet`) + Yjs. Op-based sync: each edit produces a small op pushed to Y.Array; remote clients
+> **TLDR**: Collaborative spreadsheet using an in-tree sheet engine (`packages/sheet`, published as
+> `@workspace/sheet`; forked from fortune-sheet/luckysheet) + Yjs. Op-based sync: each edit produces a small op pushed to Y.Array; remote clients
 > apply via `applyOp()`. Stored as `.eigensheets` Drive folders.
 
 ## Architecture
 
 ```
-packages/fortune-sheet/     # Forked React UI + core engine + formula parser (full source control)
+packages/sheet/     # Forked React UI + core engine + formula parser (full source control)
 ├── components/MenuBar/         # Google-Sheets-style menu bar (Edit/View/Insert/Format/Data + CustomBorder)
 apps/sheets/src/components/sheets/
 ├── hooks/use-sheet.ts          # Yjs integration (op-based sync)
@@ -30,12 +30,12 @@ merge cleanly.
 
 **Snapshot**: Saved on `beforeunload` (flushes latest data to `state.snapshot` and clears the ops array). New joiners
 load from the snapshot, then replay any pending ops that arrived during initial sync via the shared
-`replaySheetsOps(sheets, opBatches)` from `@workspace/fortune-sheet/engine` — the same function the BE document
+`replaySheetsOps(sheets, opBatches)` from `@workspace/sheet/engine` — the same function the BE document
 reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" means.
 
 ## Mount-time Bootstrap
 
-On first mount, the Workbook (`packages/fortune-sheet/src/components/Workbook/index.tsx`) reconciles the
+On first mount, the Workbook (`packages/sheet/src/components/Workbook/index.tsx`) reconciles the
 incoming `Sheet[]` before rendering:
 
 1. **Materialize `data`** — expand sparse `celldata` into a 2D `data` matrix.
@@ -55,9 +55,9 @@ Workbook handles the rest. Two invariants importers still must uphold:
 
 ## Comments
 
-Comments anchor to cells via `commentChatNames?: string[]` on the `Cell` type. The fortune-sheet built-in
-comment system (ps field, NotationBoxes, comment module) has been fully removed and replaced with the shared
-Eigen comment infrastructure.
+Comments anchor to cells via `commentChatNames?: string[]` on the `Cell` type. The upstream fortune-sheet
+built-in comment system (ps field, NotationBoxes, comment module) was fully removed and replaced with the
+shared Eigen comment infrastructure.
 
 - **Canvas indicator**: red triangle (top-right) drawn when `cell.commentChatNames?.length > 0`
 - **Context menu**: "Add comment" (no comment) or "View comment" / "Delete comment" (has comment), wired via
@@ -69,7 +69,7 @@ See [COMMENTS.md](COMMENTS.md) for the full shared comment architecture.
 
 ## Headless Formula Engine
 
-A DOM-free formula engine lives in `packages/fortune-sheet/src/engine/`. It evaluates formulas using a
+A DOM-free formula engine lives in `packages/sheet/src/engine/`. It evaluates formulas using a
 `CellResolver` interface — the same engine powers both the UI (resolver reads from Context) and server-side
 evaluation (resolver reads from Yjs snapshot).
 
@@ -126,7 +126,7 @@ returns a `ComputeMap` of `"r_c" → { textColor?, cellColor?, dataBar? }` style
 canvas painter uses on the client.
 
 ```ts
-import { evaluateConditionalFormat } from '@workspace/fortune-sheet/engine';
+import { evaluateConditionalFormat } from '@workspace/sheet/engine';
 
 const styles = evaluateConditionalFormat(
     sheet.luckysheet_conditionformat_save,
@@ -159,15 +159,15 @@ threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produ
 `evaluateFormula` callback. Cell values come from the saved snapshot's `cell.v` — formulas inside
 the sheet aren't recomputed; only the CF rule's own formula is evaluated against existing values.
 
-The engine is exposed as a `@workspace/fortune-sheet/engine` subpath export. Server-side
+The engine is exposed as a `@workspace/sheet/engine` subpath export. Server-side
 consumers (`apps/api`) import only from this subpath, which restricts type-checking to the pure
 DOM-free subset that satisfies stricter compiler options (`verbatimModuleSyntax`,
 `noUnusedParameters`).
 
 ### Constraints
 
-- **Parser origin**: fortune-sheet's parser is derived from hot-formula-parser (Handsontable's older
-  parser); `@formulajs/formulajs` covers ~200 functions, not Excel's full ~400.
+- **Parser origin**: the parser is derived from hot-formula-parser (Handsontable's older parser, inherited
+  via the upstream fortune-sheet fork); `@formulajs/formulajs` covers ~200 functions, not Excel's full ~400.
 - **Volatile functions** (`RAND`, `NOW`, `TODAY`) return new values on each server evaluation — correct
   behavior, but differs from the cached snapshot.
 - **Circular references** are detected by `detectCycle()` in `engine/dependency-graph.ts`.
@@ -176,14 +176,14 @@ DOM-free subset that satisfies stricter compiler options (`verbatimModuleSyntax`
 
 ### Not in scope
 
-Replacing fortune-sheet, adding formula functions beyond formulajs, server-side UI rendering, real-time
+Replacing the sheet engine, adding formula functions beyond formulajs, server-side UI rendering, real-time
 formula recalc push (formulas are evaluated on read, not on write).
 
-## Fortune-Sheet Integration
+## Upstream Origin
 
-The entire fortune-sheet library (UI components, state runtime, formula parser, engine) is forked into
-`packages/fortune-sheet/`. There is no external `@fortune-sheet/core` dependency — everything lives
+The entire fortune-sheet + luckysheet upstream library (UI components, state runtime, formula parser, engine)
+was forked into `packages/sheet/`. There is no external `@fortune-sheet/core` dependency — everything lives
 in-repo under full source control.
 
-See [TODO-FORTUNE-SHEETS.md](TODO-FORTUNE-SHEETS.md) for all outstanding cleanup work (biome coverage,
+See [TODO-SHEETS.md](TODO-SHEETS.md) for all outstanding cleanup work (biome coverage,
 lodash removal, CSS migration, shadcn adoption, typing debt).

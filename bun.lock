@@ -52,7 +52,6 @@
     },
     "apps/api": {
       "name": "@apps/api",
-      "version": "1.0.50",
       "dependencies": {
         "@better-auth/api-key": "^1.5.6",
         "@better-auth/core": "1.5.6",
@@ -78,7 +77,7 @@
         "@turbodocx/html-to-docx": "^1.20.1",
         "@types/nodemailer": "^6.4.23",
         "@types/uuid": "^11.0.0",
-        "@workspace/fortune-sheet": "workspace:*",
+        "@workspace/sheet": "workspace:*",
         "better-auth": "^1.5.6",
         "docx": "^9.6.1",
         "drizzle-kit": "^0.31.10",
@@ -240,8 +239,8 @@
       "version": "0.0.0",
       "dependencies": {
         "@tanstack/react-hotkeys": "^0.1.1",
-        "@workspace/fortune-sheet": "workspace:*",
         "@workspace/lib": "workspace:*",
+        "@workspace/sheet": "workspace:*",
         "@workspace/ui": "workspace:*",
         "y-websocket": "^3.0.0",
         "yjs": "^13.6.27",
@@ -286,30 +285,6 @@
         "yjs": "^13.6.27",
       },
     },
-    "packages/fortune-sheet": {
-      "name": "@workspace/fortune-sheet",
-      "version": "1.0.0",
-      "dependencies": {
-        "@formulajs/formulajs": "^2.9.3",
-        "@workspace/lib": "workspace:*",
-        "@workspace/ui": "workspace:*",
-        "dayjs": "^1.11.0",
-        "es-toolkit": "^1.46.0",
-        "immer": "^9.0.12",
-        "numeral": "^2.0.6",
-        "numfmt": "^3.2.6",
-        "tiny-emitter": "^2.1.0",
-        "uuid": "^9.0.0",
-      },
-      "devDependencies": {
-        "@types/numeral": "^2.0.5",
-        "@types/uuid": "^9.0.0",
-      },
-      "peerDependencies": {
-        "react": ">= 18.2",
-        "react-dom": ">= 18.2",
-      },
-    },
     "packages/lib": {
       "name": "@workspace/lib",
       "version": "0.0.0",
@@ -334,6 +309,30 @@
         "@tiptap/extension-text-style": "^3.21.0",
         "@tiptap/extension-typography": "^3.21.0",
         "@tiptap/starter-kit": "^3.21.0",
+      },
+    },
+    "packages/sheet": {
+      "name": "@workspace/sheet",
+      "version": "1.0.0",
+      "dependencies": {
+        "@formulajs/formulajs": "^2.9.3",
+        "@workspace/lib": "workspace:*",
+        "@workspace/ui": "workspace:*",
+        "dayjs": "^1.11.0",
+        "es-toolkit": "^1.46.0",
+        "immer": "^9.0.12",
+        "numeral": "^2.0.6",
+        "numfmt": "^3.2.6",
+        "tiny-emitter": "^2.1.0",
+        "uuid": "^9.0.0",
+      },
+      "devDependencies": {
+        "@types/numeral": "^2.0.5",
+        "@types/uuid": "^9.0.0",
+      },
+      "peerDependencies": {
+        "react": ">= 18.2",
+        "react-dom": ">= 18.2",
       },
     },
     "packages/ui": {
@@ -1189,9 +1188,9 @@
 
     "@vitejs/plugin-react": ["@vitejs/plugin-react@5.2.0", "", { "dependencies": { "@babel/core": "^7.29.0", "@babel/plugin-transform-react-jsx-self": "^7.27.1", "@babel/plugin-transform-react-jsx-source": "^7.27.1", "@rolldown/pluginutils": "1.0.0-rc.3", "@types/babel__core": "^7.20.5", "react-refresh": "^0.18.0" }, "peerDependencies": { "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" } }, "sha512-YmKkfhOAi3wsB1PhJq5Scj3GXMn3WvtQ/JC0xoopuHoXSdmtdStOpFrYaT1kie2YgFBcIe64ROzMYRjCrYOdYw=="],
 
-    "@workspace/fortune-sheet": ["@workspace/fortune-sheet@workspace:packages/fortune-sheet"],
-
     "@workspace/lib": ["@workspace/lib@workspace:packages/lib"],
+
+    "@workspace/sheet": ["@workspace/sheet@workspace:packages/sheet"],
 
     "@workspace/ui": ["@workspace/ui@workspace:packages/ui"],
 
@@ -2309,9 +2308,9 @@
 
     "@types/ws/@types/node": ["@types/node@20.19.35", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-Uarfe6J91b9HAUXxjvSOdiO2UPOKLm07Q1oh0JHxoZ1y8HoqxDAu3gVrsrOHeiio0kSsoVBt4wFrKOm0dKxVPQ=="],
 
-    "@workspace/fortune-sheet/@types/uuid": ["@types/uuid@9.0.8", "", {}, "sha512-jg+97EGIcY9AGHJJRaaPVgetKDsrTgbRjQ5Msgjh/DQKEFl0DtyRr/VCOyD1T2R1MNeWPK/u7JoGhlDZnKBAfA=="],
+    "@workspace/sheet/@types/uuid": ["@types/uuid@9.0.8", "", {}, "sha512-jg+97EGIcY9AGHJJRaaPVgetKDsrTgbRjQ5Msgjh/DQKEFl0DtyRr/VCOyD1T2R1MNeWPK/u7JoGhlDZnKBAfA=="],
 
-    "@workspace/fortune-sheet/uuid": ["uuid@9.0.1", "", { "bin": { "uuid": "dist/bin/uuid" } }, "sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA=="],
+    "@workspace/sheet/uuid": ["uuid@9.0.1", "", { "bin": { "uuid": "dist/bin/uuid" } }, "sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA=="],
 
     "anymatch/picomatch": ["picomatch@2.3.1", "", {}, "sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA=="],
 

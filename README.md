@@ -50,7 +50,7 @@ Eigen ships as a monorepo with a single API server and a set of tightly integrat
   WebDAV client.
 - **Docs** — Collaborative document editor built on Tiptap and Yjs. Multiple users edit the same document in
   real time. Export to DOCX, PDF, and HTML. Embedded comment threads with @mentions.
-- **Sheets** — Collaborative spreadsheets using a fully forked fortune-sheet engine with Yjs-based op-level sync.
+- **Sheets** — Collaborative spreadsheets using an in-tree sheet engine (forked from fortune-sheet/luckysheet) with Yjs-based op-level sync.
   Concurrent edits on different cells merge cleanly.
 - **Slides** — Collaborative presentations with a pixel-based canvas (1920×1080), resolution-independent rendering,
   drag-and-drop objects, background images, and a presentation mode.
@@ -170,7 +170,7 @@ apps/
 packages/
   lib/          # Shared types, hooks, API client, validation
   ui/           # Shared components and layout system
-  fortune-sheet/  # Forked spreadsheet engine
+  sheet/        # Spreadsheet engine + UI (forked from fortune-sheet/luckysheet)
 
 data/           # Runtime storage (gitignored)
 docs/           # Architecture documentation

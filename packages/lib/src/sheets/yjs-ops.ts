@@ -1,6 +1,6 @@
-// Pure patch-conversion helper. Lives here (not in fortune-sheet) so the apps/api
-// document reader can replay sheet ops without pulling in fortune-sheet's state
-// barrel, which transitively reaches into DOM-coupled formula UI code.
+// Pure patch-conversion helper. Lives here (not in the sheet package) so the apps/api
+// document reader can replay sheet ops without pulling in the sheet state barrel,
+// which transitively reaches into DOM-coupled formula UI code.
 
 import { partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
@@ -14,7 +14,7 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
     const patches: Patch[] = [];
     for (const op of normalOps) {
         // Without a sheet id we cannot derive a Sheet[]-rooted path. These ops
-        // appear when fortune-sheet's reducer reassigns ctx.luckysheetfile
+        // appear when the sheet reducer reassigns ctx.luckysheetfile
         // wholesale (e.g. row/col mutations) — immer emits a synthetic
         // ['luckysheetfile'] replace patch as a side effect. The paired
         // insertRowCol/deleteRowCol special op already carries the semantics,

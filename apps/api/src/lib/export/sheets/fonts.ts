@@ -1,7 +1,7 @@
-// Bundled font families exposed in the sheets app. Indices match fortune-sheet's
-// locale `fontarray`, so any cell stored with a numeric `ff` resolves through this
-// array. Strings (post-xlsx-import or user-entered) are used as-is and only fall
-// back to the bundled list when the numeric form is encountered.
+// Bundled font families exposed in the sheets app. Indices match the sheet
+// package's locale `fontarray`, so any cell stored with a numeric `ff` resolves
+// through this array. Strings (post-xlsx-import or user-entered) are used as-is
+// and only fall back to the bundled list when the numeric form is encountered.
 export const FONT_ARRAY = ['Inter', 'Source Serif 4', 'JetBrains Mono', 'Excalifont'];
 
 export function resolveFontFamily(ff: number | string | undefined): string | undefined {
