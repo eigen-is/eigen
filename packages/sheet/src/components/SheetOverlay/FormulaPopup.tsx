@@ -10,8 +10,7 @@ type FormulaPopupProps = {
 
 // Shared wrapper for the formula autocomplete (FormulaSearch) and function-signature hint
 // (FormulaHint) popups. Anchors a Radix Popover to the cell/formula-bar input via a fixed-position
-// virtual element, so the popup escapes the editor's z-index stacking context (z-19) and the
-// scrollbar siblings (z-1003).
+// virtual element so the popup portals to body and lands above the canvas-internal overlays.
 export function FormulaPopup({ anchorRef, open, children }: FormulaPopupProps) {
     const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
 
@@ -54,7 +53,6 @@ export function FormulaPopup({ anchorRef, open, children }: FormulaPopupProps) {
                 align="start"
                 sideOffset={4}
                 className="luckysheet-mousedown-cancel w-80 max-h-[300px] overflow-y-auto p-0"
-                style={{ zIndex: 1010 }}
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >

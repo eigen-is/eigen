@@ -243,7 +243,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                     return (
                         <M.Sub key={name}>
                             <M.SubTrigger>{sheetconfig.changeColor}</M.SubTrigger>
-                            <M.SubContent style={{ zIndex: 1010 }}>
+                            <M.SubContent>
                                 {context.allowEdit && <ChangeColor triggerParentUpdate={() => {}} />}
                             </M.SubContent>
                         </M.Sub>
@@ -365,7 +365,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                             <ChevronDown width={12} height={12} style={{ color: svgColor }} aria-hidden="true" />
                         </span>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent side="top" align="start" collisionPadding={8} style={{ zIndex: 1010 }}>
+                    <DropdownMenuContent side="top" align="start" collisionPadding={8}>
                         {renderMenuItems(dropdownMenuItems)}
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -381,9 +381,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             <ContextMenuTrigger asChild onContextMenu={selectSheet}>
                 {tabDiv}
             </ContextMenuTrigger>
-            <ContextMenuContent collisionPadding={8} style={{ zIndex: 1010 }}>
-                {renderMenuItems(contextMenuItems)}
-            </ContextMenuContent>
+            <ContextMenuContent collisionPadding={8}>{renderMenuItems(contextMenuItems)}</ContextMenuContent>
         </ContextMenu>
     );
 };
