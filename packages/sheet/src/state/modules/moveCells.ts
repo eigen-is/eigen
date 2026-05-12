@@ -473,19 +473,5 @@ export function onCellsMoveEnd(
         ctx.sheets[sheetIndex].config = cloneDeep(cfg);
     }
 
-    // const allParam = {
-    //   cfg,
-    //   RowlChange,
-    //   cdformat,
-    // };
-
     jfrefreshgrid(ctx, d, range);
-
-    // selectHightlightShow();
-
-    // $("#luckysheet-sheettable").css("cursor", "default");
-    // clearTimeout(ctx.countfuncTimeout);
-    // ctx.countfuncTimeout = setTimeout(function () {
-    //   countfunc();
-    // }, 500);
 }

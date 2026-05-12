@@ -604,9 +604,6 @@ export function cancelFunctionrangeSelected(ctx: Context) {
     if (ctx.formulaCache.selectingRangeIndex === -1) {
         ctx.formulaRangeSelect = undefined;
     }
-    // $("#luckysheet-row-count-show, #luckysheet-column-count-show").hide();
-    // // $("#luckysheet-cols-h-selected, #luckysheet-rows-h-selected").hide();
-    // $("#luckysheet-formula-search-c, #luckysheet-formula-help-c").hide();
 }
 
 export function cancelNormalSelected(ctx: Context) {
@@ -615,10 +612,6 @@ export function cancelNormalSelected(ctx: Context) {
     ctx.editingCellPosition = [];
     ctx.formulaRangeHighlight = [];
     ctx.functionHint = null;
-    // $("#fortune-formula-functionrange .fortune-formula-functionrange-highlight").remove();
-    // $("#luckysheet-input-box").removeAttr("style");
-    // $("#luckysheet-input-box-index").hide();
-    // $("#luckysheet-wa-functionbox-cancel, #luckysheet-wa-functionbox-confirm").removeClass("luckysheet-wa-calculate-active");
 
     ctx.formulaCache.rangestart = false;
     ctx.formulaCache.rangedrag_column_start = false;
@@ -756,9 +749,7 @@ export function updateCell(
         }
     }
 
-    // TODO window.luckysheet_getcelldata_cache = null;
-
-    const d = flowdata; // TODO const d = editor.deepCopyFlowData(flowdata);
+    const d = flowdata;
     if (isPlainObject(curv)) {
         if (!isCurInline) {
             if (isFormula(value)) {
@@ -817,12 +808,6 @@ export function updateCell(
 
             if (isFormula(valueFunction)) {
                 const v = execfunction(ctx, valueFunction, r, c, undefined, undefined, true);
-                // value = {
-                //     "v": v[1],
-                //     "f": v[2]
-                // };
-
-                // update attribute v
                 [, value.v, value.f] = v;
             } else {
                 const v = curv;
@@ -836,37 +821,15 @@ export function updateCell(
         }
     }
 
-    // value maybe an object
     setCellValue(ctx, r, c, d, value);
     cancelNormalSelected(ctx);
-
-    /*
-    let RowlChange = false;
-    const cfg =
-      ctx.sheets?.[getSheetIndex(ctx, ctx.currentSheetId)]?.config ||
-      {};
-    if (!cfg.rowlen) {
-      cfg.rowlen = {};
-    }
-    */
 
     if ((curv?.tb === '2' && curv.v) || isInlineStringCell(d[r][c])) {
         // Word wrap
         const { defaultrowlen } = ctx;
 
-        // const canvas = $("#luckysheetTableContent").get(0).getContext("2d");
-        // offlinecanvas.textBaseline = 'top'; //textBaseline calculated from top
-
-        // let fontset = luckysheetfontformat(d[r][c]);
-        // offlinecanvas.font = fontset;
-
         const cfg = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId as string) as number].config || {};
         if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
-            // let currentRowLen = defaultrowlen;
-            // if(!isNil(cfg["rowlen"][r])){
-            //     currentRowLen = cfg["rowlen"][r];
-            // }
-
             const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
 
             const textInfo = canvas

@@ -160,12 +160,6 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
     ctx.sheets[getSheetIndex(ctx, source.sheetId)!].conditionalFormatRules = source.curCdformat;
     ctx.sheets[getSheetIndex(ctx, target.sheetId)!].conditionalFormatRules = target.curCdformat;
 
-    // data validation
-    // if (ctx.currentSheetId === source.sheetId) {
-    //   dataVerificationCtrl.dataVerification = source.curDataVerification;
-    // } else if (ctx.currentSheetId === target.sheetId) {
-    //   dataVerificationCtrl.dataVerification = target.curDataVerification;
-    // }
     ctx.sheets[getSheetIndex(ctx, source.sheetId)!].dataVerification = source.curDataVerification;
     ctx.sheets[getSheetIndex(ctx, target.sheetId)!].dataVerification = target.curDataVerification;
 
@@ -173,57 +167,7 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
     execFunctionGroup(ctx, null, null, null, null, target.curData);
     ctx.formulaCache.execFunctionGlobalData = null;
 
-    // const index = getSheetIndex(ctx, ctx.currentSheetId);
-    // const file = ctx.sheets[index];
-    // file.scrollTop = $("#luckysheet-cell-main").scrollTop();
-    // file.scrollLeft = $("#luckysheet-cell-main").scrollLeft();
-
-    // showSheet();
-
-    // refreshCanvasTimeOut = setTimeout(function () {
-    //   luckysheetrefreshgrid();
-    // }, 1);
-
     storeSheetParamALL(ctx);
-
-    // saveparam
-    // // source sheet
-    // server.saveParam("all", source["sheetId"], source["curConfig"], {
-    //   k: "config",
-    // });
-    // // destination sheet
-    // server.saveParam("all", target["sheetId"], target["curConfig"], {
-    //   k: "config",
-    // });
-
-    // // source sheet
-    // server.historyParam(source["curData"], source["sheetId"], {
-    //   row: source["range"]["row"],
-    //   column: source["range"]["column"],
-    // });
-    // // destination sheet
-    // server.historyParam(target["curData"], target["sheetId"], {
-    //   row: target["range"]["row"],
-    //   column: target["range"]["column"],
-    // });
-
-    // // source sheet
-    // server.saveParam("all", source["sheetId"], source["curCdformat"], {
-    //   k: "conditionalFormatRules",
-    // });
-    // // destination sheet
-    // server.saveParam("all", target["sheetId"], target["curCdformat"], {
-    //   k: "conditionalFormatRules",
-    // });
-
-    // // source sheet
-    // server.saveParam("all", source["sheetId"], source["curDataVerification"], {
-    //   k: "dataVerification",
-    // });
-    // // destination sheet
-    // server.saveParam("all", target["sheetId"], target["curDataVerification"], {
-    //   k: "dataVerification",
-    // });
 }
 
 // Per-cell border map produced by the HTML paste path before being attached to
@@ -1398,7 +1342,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
     if (selectionCache.isPasteAction) {
         ctx.editingCellPosition = [];
-        // $("#luckysheet-rich-text-editor").blur();
         selectionCache.isPasteAction = false;
 
         const { clipboardData } = e;
@@ -1484,16 +1427,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                     if (isNil(v)) {
                         v = '';
                     }
-                    if (isInlineStr) {
-                        // const cpData = $(cpDataArr[r - copy_r1][c - copy_c1])
-                        //   .text()
-                        //   .replace(/\s|\n/g, " ");
-                        // const ctx.alue = v.replace(/\n/g, "").replace(/\s/g, " ");
-                        // if (cpData !== ctx.alue) {
-                        //   isEqual = false;
-                        //   break;
-                        // }
-                    } else {
+                    if (!isInlineStr) {
                         if (trim(cpDataArr[r - copy_r1][c - copy_c1]) !== trim(String(v))) {
                             isEqual = false;
                             break;
@@ -1805,7 +1739,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                 ctx.formulaRangeSelections = [];
                 pasteHandler(ctx, data, borderInfo);
-                // $("#fortune-copy-content").empty();
                 ele.remove();
             }
             // the copied content is an image

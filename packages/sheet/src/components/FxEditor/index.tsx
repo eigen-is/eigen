@@ -88,7 +88,6 @@ export function FxEditor() {
                 if (last.row_focus == null || last.column_focus == null) return;
                 draftCtx.editingCellPosition = [last.row_focus, last.column_focus];
                 refs.globalCache.doNotFocus = true;
-                // formula.rangeResizeTo = $("#luckysheet-functionbox-cell");
             });
         }
     }, [context.config, context.selections, context.sheets, context.currentSheetId, refs.globalCache, setContext]);

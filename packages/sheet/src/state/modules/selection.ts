@@ -897,15 +897,6 @@ export function moveHighlightCell(
             moveXY: { x: moveX, y: moveY },
         };
 
-        // $("#fortune-formula-functionrange-select")
-        //   .css({
-        //     left: col_pre,
-        //     width: col - col_pre - 1,
-        //     top: row_pre,
-        //     height: row - row_pre - 1,
-        //   })
-        //   .show();
-
         // formula.rangeSetValue({
         //   row: [row_index, row_index_ed],
         //   column: [col_index, col_index_ed],
@@ -1609,24 +1600,6 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 if (isNil(c_value)) {
                     c_value = getCellValue(r, c, d);
                 }
-                // if (
-                //   isNil(c_value) &&
-                //   d[r][c] &&
-                //   d[r][c].ct &&
-                //   d[r][c].ct.t === "inlineStr"
-                // ) {
-                //   c_value = d[r][c].ct.s
-                //     .map((val) => {
-                //       const font = $("<font></font>");
-                //       val.fs && font.css("font-size", val.fs);
-                //       val.bl && font.css("font-weight", val.border);
-                //       val.it && font.css("font-style", val.italic);
-                //       val.cl === 1 && font.css("text-decoration", "underline");
-                //       font.text(val.v);
-                //       return font[0].outerHTML;
-                //     })
-                //     .join("");
-                // }
 
                 if (isNil(c_value)) {
                     c_value = '';
@@ -1795,11 +1768,6 @@ export function deleteSelectedCellText(ctx: Context): string {
                 }
             }
         }
-        // jfrefreshgrid(d, ctx.selections);
-
-        // // Clear the content of the editor box
-        // // Note: the functionInputHanddler method copies this element's content to #luckysheet-functionbox-cell
-        // $("#luckysheet-rich-text-editor").html("");
     }
     return 'success';
 }
@@ -1834,15 +1802,9 @@ export function selectIsOverlap(ctx: Context, range?: Range | SheetType['selecti
 }
 
 export function selectAll(ctx: Context) {
-    // Select all cells in the sheet
-    // if (!checkProtectionAllSelected(ctx.currentSheetId)) {
-    //   return;
-    // }
-
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    // $("#luckysheet-wa-functionbox-confirm").click();
     ctx.selectionActive = false;
 
     ctx.selections = [
