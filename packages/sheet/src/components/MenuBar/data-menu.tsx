@@ -21,7 +21,7 @@ export function DataMenu() {
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
-    const filterActive = size(context.activeFilterRange) > 0;
+    const filterActive = size(context.filterRange) > 0;
 
     return (
         <>

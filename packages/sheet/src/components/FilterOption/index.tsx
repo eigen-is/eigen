@@ -18,9 +18,9 @@ export function FilterOptions() {
         setContext((draftCtx) => {
             const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
             if (sheetIdx == null) return;
-            draftCtx.activeFilterRange = draftCtx.sheets[sheetIdx].filterRange;
+            draftCtx.filterRange = draftCtx.sheets[sheetIdx].filterRange;
             draftCtx.filter = draftCtx.sheets[sheetIdx].filter || {};
-            createFilterOptions(draftCtx, draftCtx.activeFilterRange, undefined);
+            createFilterOptions(draftCtx, draftCtx.filterRange, undefined);
         });
     }, [visibledatarow, visibledatacolumn, setContext, currentSheetId, filterRange]);
 

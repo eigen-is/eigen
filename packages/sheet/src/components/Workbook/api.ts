@@ -73,7 +73,7 @@ export function generateAPIs(
                             patches.length = 0;
                         }
                     }
-                    if (ops[0]?.path?.[0] === 'filterRange') ctx_.activeFilterRange = ops[0].value;
+                    if (ops[0]?.path?.[0] === 'filterRange') ctx_.filterRange = ops[0].value;
                     else if (ops[0]?.path?.[0] === 'hide') {
                         // Hide sheet
                         if (ctx_.currentSheetId === ops[0].id) {
@@ -86,7 +86,7 @@ export function generateAPIs(
                             }
                         }
                     }
-                    createFilterOptions(ctx_, ctx_.activeFilterRange, ops[0]?.id);
+                    createFilterOptions(ctx_, ctx_.filterRange, ops[0]?.id);
                     if (patches.length === 0) return;
                     try {
                         applyPatches(ctx_, patches);
