@@ -1504,7 +1504,7 @@ async function readSheetContent(
 ): Promise<SheetContent> {
     // 1. getSharedDrive(ownerId, user) → mount.openDatabase + loadYjsState
     // 2. readSheetsFromYDoc(ydoc) — uses the shared Yjs ops module (see below)
-    // 3. Map sheet Sheet[] → SheetContent.sheets[].cells (sparse, non-empty only)
+    // 3. Map Sheet[] → SheetContent.sheets[].cells (sparse, non-empty only)
     // 4. Optionally recalculate formulas via headless FormulaEngine (in place — see SHEETS.md)
 }
 

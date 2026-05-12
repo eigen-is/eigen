@@ -198,7 +198,7 @@ Pure React UI — no overlays. Google-Sheets-style menu bar (Edit / View / Inser
 - shadcn `Popover` for `CustomBorder` (border style picker)
 - Tailwind styling
 - `luckysheet-mousedown-cancel` must be on any `DropdownMenuSubContent` rendered inside
-  `cellArea` (see [`docs/TODO-FORTUNE-SHEETS.md` § Floating UI inside `cellArea`](../../docs/TODO-FORTUNE-SHEETS.md#floating-ui-inside-cellarea))
+  `cellArea` (see [`docs/TODO-SHEETS.md` § Floating UI inside `cellArea`](../../docs/TODO-SHEETS.md#floating-ui-inside-cellarea))
 
 ### 13. Sheet Tabs (React)
 
