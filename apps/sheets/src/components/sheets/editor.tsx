@@ -173,7 +173,7 @@ export function SheetEditor({
                     accept="image/*"
                 />
             )}
-            <div className="flex flex-col h-full w-full relative">
+            <div className="flex h-full w-full overflow-hidden">
                 <div className="flex-1 overflow-hidden">
                     <Workbook
                         key={snapshotVersion}
@@ -257,19 +257,17 @@ export function SheetEditor({
                     />
                 </div>
                 {commentPanelOpen && (
-                    <div className="absolute top-12 bottom-0 right-0" style={{ zIndex: 1005 }}>
-                        <CommentPanel
-                            ownerId={ownerId}
-                            mountId={path.mountId}
-                            containerId={path.id}
-                            currentUserEmail={auth.user!.email}
-                            activeCommentIds={activeComments.ids}
-                            anchorTexts={activeComments.anchorTexts}
-                            onClose={() => setCommentPanelOpen(false)}
-                            onCommentClick={(chatName) => setViewCommentChatName(chatName)}
-                            onCommentContextMenu={commentContextMenu.handleContextMenu}
-                        />
-                    </div>
+                    <CommentPanel
+                        ownerId={ownerId}
+                        mountId={path.mountId}
+                        containerId={path.id}
+                        currentUserEmail={auth.user!.email}
+                        activeCommentIds={activeComments.ids}
+                        anchorTexts={activeComments.anchorTexts}
+                        onClose={() => setCommentPanelOpen(false)}
+                        onCommentClick={(chatName) => setViewCommentChatName(chatName)}
+                        onCommentContextMenu={commentContextMenu.handleContextMenu}
+                    />
                 )}
             </div>
 
