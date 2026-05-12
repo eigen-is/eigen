@@ -11,7 +11,7 @@ export function FilterOptions() {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const { filterOptions, currentSheetId, filter, visibledatarow, visibledatacolumn } = context;
     const sheetIndex = getSheetIndex(context, context.currentSheetId);
-    const { filterRange, frozen } = context.sheets[sheetIndex!];
+    const { filterRange: sheetFilterRange, frozen } = context.sheets[sheetIndex!];
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional triggers — body reads `draftCtx` so biome can't see the connection
     useEffect(() => {
@@ -22,7 +22,7 @@ export function FilterOptions() {
             draftCtx.filter = draftCtx.sheets[sheetIdx].filter || {};
             createFilterOptions(draftCtx, draftCtx.filterRange, undefined);
         });
-    }, [visibledatarow, visibledatacolumn, setContext, currentSheetId, filterRange]);
+    }, [visibledatarow, visibledatacolumn, setContext, currentSheetId, sheetFilterRange]);
 
     const showFilterContextMenu = useCallback(
         (
