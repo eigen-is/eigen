@@ -112,7 +112,7 @@ export const SheetTab: React.FC = () => {
                                                     draftCtx.sheetScrollRecord[draftCtx.currentSheetId] = {
                                                         scrollLeft: draftCtx.scrollLeft,
                                                         scrollTop: draftCtx.scrollTop,
-                                                        luckysheet_select_status: draftCtx.luckysheet_select_status,
+                                                        selectionActive: draftCtx.selectionActive,
                                                         luckysheet_select_save: draftCtx.luckysheet_select_save,
                                                         luckysheet_selection_range: draftCtx.luckysheet_selection_range,
                                                     };

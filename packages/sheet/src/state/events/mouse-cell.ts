@@ -113,7 +113,7 @@ export function handleCellAreaMouseDown(
         if (isInSelection) return;
     }
 
-    ctx.luckysheet_scroll_status = true;
+    ctx.scrolling = true;
 
     // Formula-related
     if (ctx.luckysheetCellUpdate.length > 0) {
@@ -317,13 +317,13 @@ export function handleCellAreaMouseDown(
             return; // skip ctx.luckysheet_select_save to prevent clearing cellInput
         }
         updateCell(ctx, ctx.luckysheetCellUpdate[0], ctx.luckysheetCellUpdate[1], cellInput, undefined, canvas);
-        ctx.luckysheet_select_status = true;
+        ctx.selectionActive = true;
     }
     if (checkProtectionSelectLockedOrUnLockedCells(ctx, row_index, col_index, ctx.currentSheetId)) {
-        ctx.luckysheet_select_status = true;
+        ctx.selectionActive = true;
     }
 
-    if (ctx.luckysheet_select_status) {
+    if (ctx.selectionActive) {
         if (e.shiftKey) {
             // Shift+click: select range
             const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]; // last selection

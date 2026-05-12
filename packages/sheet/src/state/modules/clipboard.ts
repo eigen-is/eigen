@@ -3,7 +3,7 @@ import { handleCopy } from '../events/copy';
 
 export function handleCut(ctx: Context) {
     if (handleCopy(ctx)) {
-        ctx.luckysheet_paste_iscut = true;
+        ctx.pasteIsCut = true;
     }
 }
 

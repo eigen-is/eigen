@@ -53,7 +53,7 @@ export function contextFactory({ ...params }: Partial<Context> = {}): Partial<Co
         visibledatacolumn: [74, 148, 222, 296, 370],
         scrollLeft: 0,
         scrollTop: 0,
-        luckysheet_shiftkeydown: false,
+        shiftKeyDown: false,
         groupValuesRefreshData: [],
         formulaCache: new FormulaCache(),
         defaultCell: {},

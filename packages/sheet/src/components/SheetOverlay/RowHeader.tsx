@@ -46,7 +46,7 @@ export const RowHeader: React.FC = () => {
 
     const onMouseMove = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            if (context.luckysheet_rows_change_size) {
+            if (context.rowsResizing) {
                 return;
             }
             const mouseY = e.pageY - containerRef.current!.getBoundingClientRect().top - window.scrollY;
@@ -61,7 +61,7 @@ export const RowHeader: React.FC = () => {
             }
         },
         [
-            context.luckysheet_rows_change_size,
+            context.rowsResizing,
             context.visibledatarow,
             hoverLocation.row,
             hoverLocation.row_pre,
@@ -88,11 +88,11 @@ export const RowHeader: React.FC = () => {
     );
 
     const onMouseLeave = useCallback(() => {
-        if (context.luckysheet_rows_change_size) {
+        if (context.rowsResizing) {
             return;
         }
         setHoverLocation({ row: -1, row_pre: -1, row_index: -1 });
-    }, [context.luckysheet_rows_change_size]);
+    }, [context.rowsResizing]);
 
     const onRowSizeHandleMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
@@ -212,10 +212,10 @@ export const RowHeader: React.FC = () => {
                 onMouseDown={onRowSizeHandleMouseDown}
                 style={{
                     top: hoverLocation.row - 3 + (hoverInFreeze ? context.scrollTop : 0),
-                    opacity: context.luckysheet_rows_change_size ? 1 : 0,
+                    opacity: context.rowsResizing ? 1 : 0,
                 }}
             />
-            {!context.luckysheet_rows_change_size && hoverLocation.row_index >= 0 ? (
+            {!context.rowsResizing && hoverLocation.row_index >= 0 ? (
                 <div
                     className="fortune-row-header-hover"
                     style={Object.assign(

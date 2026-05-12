@@ -117,13 +117,13 @@ export type Context = {
         {
             scrollLeft: number;
             scrollTop: number;
-            luckysheet_select_status: boolean;
+            selectionActive: boolean;
             luckysheet_select_save: Sheet['luckysheet_select_save'];
             luckysheet_selection_range: Sheet['luckysheet_selection_range'];
         }
     >;
 
-    luckysheet_select_status: boolean;
+    selectionActive: boolean;
     luckysheet_select_save: Sheet['luckysheet_select_save'];
     luckysheet_selection_range: Sheet['luckysheet_selection_range'];
     formulaRangeHighlight: ({
@@ -140,46 +140,46 @@ export type Context = {
         RowlChange: boolean;
         HasMC: boolean;
     }; // copy/paste
-    luckysheet_paste_iscut: boolean;
+    pasteIsCut: boolean;
 
     filterchage: boolean; // filter
     filterOptions?: FilterOptions;
     luckysheet_filter_save?: { row: number[]; column: number[] } | undefined;
     filter: Record<string, FilterEntry>;
 
-    luckysheet_sheet_move_status: boolean;
+    sheetTabDragging: boolean;
     luckysheet_sheet_move_data: unknown[];
-    luckysheet_scroll_status: boolean;
+    scrolling: boolean;
 
     luckysheetcurrentisPivotTable: boolean;
 
-    luckysheet_rows_selected_status: boolean; // row/column header related parameters
-    luckysheet_cols_selected_status: boolean;
-    luckysheet_rows_change_size: boolean;
-    luckysheet_rows_change_size_start: number[];
-    luckysheet_cols_change_size: boolean;
-    luckysheet_cols_change_size_start: number[];
-    luckysheet_cols_freeze_drag: boolean;
-    luckysheet_rows_freeze_drag: boolean;
+    rowsSelected: boolean; // row/column header related parameters
+    colsSelected: boolean;
+    rowsResizing: boolean;
+    rowsResizeStart: number[];
+    colsResizing: boolean;
+    colsResizeStart: number[];
+    colsFreezeDragging: boolean;
+    rowsFreezeDragging: boolean;
 
     luckysheetCellUpdate: number[];
 
-    luckysheet_shiftkeydown: boolean;
+    shiftKeyDown: boolean;
     luckysheet_shiftpositon: Selection | undefined;
 
     iscopyself: boolean;
 
     orderbyindex: number; // sort index
 
-    luckysheet_model_move_state: boolean; // modal drag
+    modalDragging: boolean; // modal drag
     luckysheet_model_xy: number[];
     luckysheet_model_move_obj: unknown;
 
-    luckysheet_cell_selected_move: boolean; // selection drag-replace
-    luckysheet_cell_selected_move_index: number[];
+    cellSelectMoving: boolean; // selection drag-replace
+    cellSelectMoveIndex: number[];
 
-    luckysheet_cell_selected_extend: boolean; // selection fill-down
-    luckysheet_cell_selected_extend_index: number[];
+    cellSelectExtending: boolean; // selection fill-down
+    cellSelectExtendIndex: number[];
 
     chart_selection: unknown;
 
@@ -312,7 +312,7 @@ export function defaultContext(refs: RefValues): Context {
 
         sheetScrollRecord: {},
 
-        luckysheet_select_status: false,
+        selectionActive: false,
         luckysheet_select_save: undefined,
         luckysheet_selection_range: [],
         formulaRangeHighlight: [],
@@ -321,29 +321,29 @@ export function defaultContext(refs: RefValues): Context {
         functionHint: null,
 
         luckysheet_copy_save: undefined, // copy/paste
-        luckysheet_paste_iscut: false,
+        pasteIsCut: false,
 
         filterchage: true, // filter
         filter: {},
 
-        luckysheet_sheet_move_status: false,
+        sheetTabDragging: false,
         luckysheet_sheet_move_data: [],
-        luckysheet_scroll_status: false,
+        scrolling: false,
 
         luckysheetcurrentisPivotTable: false,
 
-        luckysheet_rows_selected_status: false, // row/column header related parameters
-        luckysheet_cols_selected_status: false,
-        luckysheet_rows_change_size: false,
-        luckysheet_rows_change_size_start: [],
-        luckysheet_cols_change_size: false,
-        luckysheet_cols_change_size_start: [],
-        luckysheet_cols_freeze_drag: false,
-        luckysheet_rows_freeze_drag: false,
+        rowsSelected: false, // row/column header related parameters
+        colsSelected: false,
+        rowsResizing: false,
+        rowsResizeStart: [],
+        colsResizing: false,
+        colsResizeStart: [],
+        colsFreezeDragging: false,
+        rowsFreezeDragging: false,
 
         luckysheetCellUpdate: [],
 
-        luckysheet_shiftkeydown: false,
+        shiftKeyDown: false,
         luckysheet_shiftpositon: undefined,
 
         iscopyself: true,
@@ -351,15 +351,15 @@ export function defaultContext(refs: RefValues): Context {
 
         orderbyindex: 0, // sort index
 
-        luckysheet_model_move_state: false, // modal drag
+        modalDragging: false, // modal drag
         luckysheet_model_xy: [0, 0],
         luckysheet_model_move_obj: null,
 
-        luckysheet_cell_selected_move: false, // selection drag-replace
-        luckysheet_cell_selected_move_index: [],
+        cellSelectMoving: false, // selection drag-replace
+        cellSelectMoveIndex: [],
 
-        luckysheet_cell_selected_extend: false, // selection fill-down
-        luckysheet_cell_selected_extend_index: [],
+        cellSelectExtending: false, // selection fill-down
+        cellSelectExtendIndex: [],
 
         chart_selection: {},
 

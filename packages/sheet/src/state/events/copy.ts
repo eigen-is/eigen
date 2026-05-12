@@ -122,6 +122,6 @@ export function handleCopy(ctx: Context): boolean {
 
     copy(ctx);
 
-    ctx.luckysheet_paste_iscut = false;
+    ctx.pasteIsCut = false;
     return true;
 }

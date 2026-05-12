@@ -60,8 +60,8 @@ export function handleColSizeHandleMouseDown(
     const col = col_location[1];
     const col_index = col_location[2];
 
-    ctx.luckysheet_cols_change_size = true;
-    ctx.luckysheet_scroll_status = true;
+    ctx.colsResizing = true;
+    ctx.scrolling = true;
     const changeSizeLine = workbookContainer.querySelector('.fortune-change-size-line');
     if (changeSizeLine) {
         const ele = changeSizeLine as HTMLDivElement;
@@ -71,7 +71,7 @@ export function handleColSizeHandleMouseDown(
         ele.style.left = `${col - 3}px`;
         ele.style.width = '1px';
     }
-    ctx.luckysheet_cols_change_size_start = [_x, col_index];
+    ctx.colsResizeStart = [_x, col_index];
     e.stopPropagation();
 }
 
@@ -106,8 +106,8 @@ export function handleRowSizeHandleMouseDown(
     const row = row_location[1];
     const row_index = row_location[2];
 
-    ctx.luckysheet_rows_change_size = true;
-    ctx.luckysheet_scroll_status = true;
+    ctx.rowsResizing = true;
+    ctx.scrolling = true;
     const changeSizeLine = workbookContainer.querySelector('.fortune-change-size-line');
     if (changeSizeLine) {
         const ele = changeSizeLine as HTMLDivElement;
@@ -117,7 +117,7 @@ export function handleRowSizeHandleMouseDown(
         ele.style.left = '0';
         ele.style.height = '1px';
     }
-    ctx.luckysheet_rows_change_size_start = [_y, row_index];
+    ctx.rowsResizeStart = [_y, row_index];
     e.stopPropagation();
 }
 
@@ -141,8 +141,8 @@ export function handleColFreezeHandleMouseDown(
     const col_location = colLocation(x, ctx.visibledatacolumn);
     const col = col_location[1];
 
-    ctx.luckysheet_cols_freeze_drag = true;
-    ctx.luckysheet_scroll_status = true;
+    ctx.colsFreezeDragging = true;
+    ctx.scrolling = true;
     const freezeDragLine = workbookContainer.querySelector('.fortune-freeze-drag-line');
     if (freezeDragLine) {
         const ele = freezeDragLine as HTMLDivElement;
@@ -185,8 +185,8 @@ export function handleRowFreezeHandleMouseDown(
     const row_location = rowLocation(y, ctx.visibledatarow);
     const row = row_location[1];
 
-    ctx.luckysheet_rows_freeze_drag = true;
-    ctx.luckysheet_scroll_status = true;
+    ctx.rowsFreezeDragging = true;
+    ctx.scrolling = true;
     const freezeDragLine = workbookContainer.querySelector('.fortune-freeze-drag-line');
     if (freezeDragLine) {
         const ele = freezeDragLine as HTMLDivElement;

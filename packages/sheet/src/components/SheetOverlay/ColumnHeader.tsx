@@ -53,7 +53,7 @@ export const ColumnHeader: React.FC = () => {
 
     const onMouseMove = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            if (context.luckysheet_cols_change_size) {
+            if (context.colsResizing) {
                 return;
             }
             const mouseX = e.pageX - containerRef.current!.getBoundingClientRect().left - window.scrollX;
@@ -98,11 +98,11 @@ export const ColumnHeader: React.FC = () => {
     );
 
     const onMouseLeave = useCallback(() => {
-        if (context.luckysheet_cols_change_size) {
+        if (context.colsResizing) {
             return;
         }
         setHoverLocation({ col: -1, col_pre: -1, col_index: -1 });
-    }, [context.luckysheet_cols_change_size]);
+    }, [context.colsResizing]);
 
     const onColSizeHandleMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
@@ -236,10 +236,10 @@ export const ColumnHeader: React.FC = () => {
                 onDoubleClick={onColSizeHandleDoubleClick}
                 style={{
                     left: hoverLocation.col - 5 + (hoverInFreeze ? context.scrollLeft : 0),
-                    opacity: context.luckysheet_cols_change_size ? 1 : 0,
+                    opacity: context.colsResizing ? 1 : 0,
                 }}
             />
-            {!context.luckysheet_cols_change_size && hoverLocation.col_index >= 0 ? (
+            {!context.colsResizing && hoverLocation.col_index >= 0 ? (
                 <div
                     className="fortune-col-header-hover"
                     style={Object.assign(
