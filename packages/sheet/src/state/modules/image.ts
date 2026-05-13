@@ -23,6 +23,24 @@ export function removeActiveImage(ctx: Context) {
     saveImage(ctx);
 }
 
+export function replaceImageMediaName(ctx: Context, oldName: string, newName: string) {
+    if (!ctx.insertedImgs) return;
+    let changed = false;
+    ctx.insertedImgs = ctx.insertedImgs.map((img) => {
+        if (img.mediaName !== oldName) return img;
+        changed = true;
+        return { ...img, mediaName: newName };
+    });
+    if (changed) saveImage(ctx);
+}
+
+export function removeImageByMediaName(ctx: Context, name: string) {
+    if (!ctx.insertedImgs) return;
+    const before = ctx.insertedImgs.length;
+    ctx.insertedImgs = ctx.insertedImgs.filter((img) => img.mediaName !== name);
+    if (ctx.insertedImgs.length !== before) saveImage(ctx);
+}
+
 export function insertImage(ctx: Context, mediaName: string, width: number, height: number) {
     const last = ctx.selections?.[ctx.selections.length - 1];
     let rowIndex = last?.row_focus;
