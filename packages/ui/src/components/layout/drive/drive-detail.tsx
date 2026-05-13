@@ -203,7 +203,17 @@ export function DriveDetail({ path, onShareClick, onItemOpen }: DriveDetailProps
                                     </TableRow>
                                 )}
                                 {Object.entries(path.details)
-                                    .filter(([key]) => !['width', 'height', 'duration', 'pageCount'].includes(key))
+                                    .filter(
+                                        ([key]) =>
+                                            ![
+                                                'width',
+                                                'height',
+                                                'duration',
+                                                'pageCount',
+                                                'webdavProps',
+                                                'originalName',
+                                            ].includes(key),
+                                    )
                                     .map(([key, value]) => (
                                         <TableRow key={key}>
                                             <TableCell className="font-medium px-0 w-20 capitalize">{key}</TableCell>
