@@ -115,6 +115,7 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
                                 }}
                                 onLoad={handleImageLoad}
                                 draggable={false}
+                                decoding="async"
                             />
                         )}
                     </ImageResizeHandles>

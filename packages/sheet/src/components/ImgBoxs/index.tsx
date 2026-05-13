@@ -131,7 +131,7 @@ function InactiveImage({ img }: { img: Image }) {
             onClick={handleClick}
             tabIndex={0}
         >
-            <img src={url} alt="" style={{ width: w, height: h }} />
+            <img src={url} alt="" style={{ width: w, height: h }} decoding="async" />
         </div>
     );
 }

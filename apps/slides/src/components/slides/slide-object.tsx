@@ -117,6 +117,7 @@ export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
                         className="w-full h-full"
                         style={{ objectFit: obj.objectFit }}
                         draggable={false}
+                        decoding="async"
                         alt=""
                     />
                 ))}
@@ -275,6 +276,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                         className="w-full h-full select-none pointer-events-none"
                         style={{ objectFit: obj.objectFit }}
                         draggable={false}
+                        decoding="async"
                         alt=""
                     />
                 ))}
