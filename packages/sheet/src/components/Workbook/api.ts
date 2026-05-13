@@ -11,7 +11,6 @@ import {
     createFilterOptions,
     deleteRowCol,
     deleteSheet,
-    getAllImages,
     getFlowdata,
     getSheetIndex,
     insertImage,
@@ -274,8 +273,6 @@ export function generateAPIs(
         handleRedo,
 
         getFlowdata: (id?: string | null) => getFlowdata(context, id),
-
-        getAllImages: () => getAllImages(context),
 
         calculateFormula: (id?: string, range?: SingleRange) => {
             setContext((draftCtx) => {
