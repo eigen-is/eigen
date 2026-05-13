@@ -1,7 +1,7 @@
 import { isLightColor } from '@workspace/lib/constants';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import { useMediaResolver } from '@workspace/lib/drive';
+import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
 import {
     ContextMenu,
@@ -14,6 +14,7 @@ import {
     ContextMenuTrigger,
 } from '@workspace/ui/components/context-menu';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
+import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
 import {
     ArrowDownToLine,
     ArrowUpToLine,
@@ -95,6 +96,7 @@ function buildTextHtml(obj: SlideObject & { type: 'text' }): string {
 export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
     const { resolveMediaUrl } = useMediaResolver();
     const vAlign = obj.type === 'text' ? obj.verticalAlign || 'top' : undefined;
+    const imageUrl = obj.type === 'image' ? resolveMediaUrl(obj.mediaName) : null;
     return (
         <div className="absolute" style={getObjectPositionStyle(obj)}>
             {obj.type === 'text' && (
@@ -106,15 +108,18 @@ export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
                     />
                 </div>
             )}
-            {obj.type === 'image' && (
-                <img
-                    src={resolveMediaUrl(obj.mediaName) || ''}
-                    className="w-full h-full"
-                    style={{ objectFit: obj.objectFit }}
-                    draggable={false}
-                    alt=""
-                />
-            )}
+            {obj.type === 'image' &&
+                (!imageUrl && isPendingMediaName(obj.mediaName) ? (
+                    <ImagePlaceholder />
+                ) : (
+                    <img
+                        src={imageUrl || ''}
+                        className="w-full h-full"
+                        style={{ objectFit: obj.objectFit }}
+                        draggable={false}
+                        alt=""
+                    />
+                ))}
         </div>
     );
 }
@@ -219,6 +224,7 @@ export const SlideObjectView = memo(function SlideObjectView({
 
     const textStyle = obj.type === 'text' ? getTextStyle(obj) : undefined;
     const verticalAlign = obj.type === 'text' ? obj.verticalAlign || 'top' : undefined;
+    const imageUrl = obj.type === 'image' ? resolveMediaUrl(obj.mediaName) : null;
 
     const objectDiv = (
         <div
@@ -260,15 +266,18 @@ export const SlideObjectView = memo(function SlideObjectView({
                 </div>
             )}
 
-            {obj.type === 'image' && (
-                <img
-                    src={resolveMediaUrl(obj.mediaName) || ''}
-                    className="w-full h-full select-none pointer-events-none"
-                    style={{ objectFit: obj.objectFit }}
-                    draggable={false}
-                    alt=""
-                />
-            )}
+            {obj.type === 'image' &&
+                (!imageUrl && isPendingMediaName(obj.mediaName) ? (
+                    <ImagePlaceholder />
+                ) : (
+                    <img
+                        src={imageUrl || ''}
+                        className="w-full h-full select-none pointer-events-none"
+                        style={{ objectFit: obj.objectFit }}
+                        draggable={false}
+                        alt=""
+                    />
+                ))}
 
             {selected &&
                 editable &&

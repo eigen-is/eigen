@@ -11,7 +11,13 @@ import {
 } from '@workspace/lib/clipboard';
 import { restoreYjsDoc } from '@workspace/lib/collab';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
-import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import {
+    isPendingMediaName,
+    MediaResolverProvider,
+    useCopyToMediaFolder,
+    useMediaResolver,
+    useUploadFile,
+} from '@workspace/lib/drive';
 import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
@@ -21,7 +27,7 @@ import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
 import { useSlideDnd } from './hooks/use-slide-dnd';
@@ -147,7 +153,7 @@ function SlideEditorInner({
     } = useDeck(ownerId, path.mountId, path.id);
 
     const { isMobile } = useLayout();
-    const { resolveMediaUrl, resolveMediaPath } = useMediaResolver();
+    const { resolveMediaUrl, resolveMediaPath, startUpload } = useMediaResolver();
     const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({ yjsDoc });
 
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
@@ -285,15 +291,17 @@ function SlideEditorInner({
     const handleImageFile = useCallback(
         async (file: File) => {
             if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
-            const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file }).catch(() => null);
-            if (result) {
-                addObject(activeSlideId, {
-                    ...DEFAULT_IMAGE_OBJECT,
-                    mediaName: result.name,
-                } as Omit<SlideObject, 'id' | 'slideId'>);
-            }
+            const { pendingName, promise } = startUpload(file);
+            const objId = addObject(activeSlideId, {
+                ...DEFAULT_IMAGE_OBJECT,
+                mediaName: pendingName,
+            } as Omit<SlideObject, 'id' | 'slideId'>);
+            if (!objId) return;
+            const result = await promise;
+            if (result) updateObject(objId, { mediaName: result.name });
+            else deleteObject(objId);
         },
-        [activeSlideId, mediaFolderId, uploadFile, addObject],
+        [activeSlideId, mediaFolderId, startUpload, addObject, updateObject, deleteObject],
     );
 
     const handleImageFromDevice = useCallback(
@@ -457,6 +465,29 @@ function SlideEditorInner({
         ownerId,
         path.mountId,
     ]);
+
+    // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
+    const deckRef = useRef(deck);
+    deckRef.current = deck;
+    useEffect(() => {
+        if (!isSynced) return;
+        const snapshot: string[] = [];
+        for (const obj of Object.values(deckRef.current.objects)) {
+            if (obj.type === 'image' && isPendingMediaName(obj.mediaName)) {
+                snapshot.push(obj.id);
+            }
+        }
+        if (snapshot.length === 0) return;
+        const timer = setTimeout(() => {
+            for (const objId of snapshot) {
+                const obj = deckRef.current.objects[objId];
+                if (obj?.type === 'image' && isPendingMediaName(obj.mediaName)) {
+                    deleteObject(objId);
+                }
+            }
+        }, 60_000);
+        return () => clearTimeout(timer);
+    }, [isSynced, deleteObject]);
 
     const handleAddText = useCallback(() => {
         if (!activeSlideId) return;
