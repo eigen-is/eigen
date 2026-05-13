@@ -81,8 +81,18 @@ export function MediaResolverProvider({
 
             const promise = uploadFile
                 .mutateAsync({ parentId: mediaFolderId, file })
-                .then((result) => {
-                    settle();
+                .then(async (result) => {
+                    // Preload the server URL so the caller's mediaName-rewrite renders
+                    // with an already-decoded <img>, no blank gap. Defer settle to a
+                    // macrotask so the rewrite render runs before the blob URL is revoked.
+                    const url = getDrivePreviewUrl(ownerId, mountId, result.id);
+                    await new Promise<void>((resolve) => {
+                        const probe = new Image();
+                        probe.onload = () => resolve();
+                        probe.onerror = () => resolve();
+                        probe.src = url;
+                    });
+                    setTimeout(settle, 0);
                     return result;
                 })
                 .catch(() => {
