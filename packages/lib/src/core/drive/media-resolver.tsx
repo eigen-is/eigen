@@ -9,12 +9,6 @@ export function isPendingMediaName(name: string): boolean {
     return name.startsWith(PENDING_PREFIX);
 }
 
-type PendingUpload = {
-    pendingName: string;
-    file: File;
-    blobUrl: string;
-};
-
 type MediaResolverValue = {
     resolveMediaUrl: (name: string) => string | null;
     resolveMediaPath: (name: string) => DrivePath | undefined;
@@ -28,7 +22,9 @@ const MediaResolverContext = createContext<MediaResolverValue>({
     resolveMediaPath: () => undefined,
     resolveChatId: () => null,
     mediaFolderId: null,
-    startUpload: () => ({ pendingName: '', promise: Promise.resolve(null) }),
+    startUpload: () => {
+        throw new Error('startUpload called outside MediaResolverProvider');
+    },
 });
 
 export function useMediaResolver() {
@@ -51,28 +47,27 @@ export function MediaResolverProvider({
     const media = useFolderLookup(ownerId, mountId, mediaFolderId);
     const chat = useFolderLookup(ownerId, mountId, chatFolderId);
     const uploadFile = useUploadFile(ownerId, mountId);
-    const [pending, setPending] = useState<Map<string, PendingUpload>>(() => new Map());
+    const [pending, setPending] = useState<Map<string, string>>(() => new Map());
     const pendingRef = useRef(pending);
     pendingRef.current = pending;
 
     // Unmount cleanup can't read latest state via closure — capture via ref instead.
     useEffect(() => {
         return () => {
-            for (const entry of pendingRef.current.values()) {
-                URL.revokeObjectURL(entry.blobUrl);
+            for (const blobUrl of pendingRef.current.values()) {
+                URL.revokeObjectURL(blobUrl);
             }
         };
     }, []);
 
     const startUpload = useCallback(
         (file: File) => {
+            if (!mediaFolderId) {
+                return { pendingName: '', promise: Promise.resolve(null) };
+            }
             const pendingName = `${PENDING_PREFIX}${crypto.randomUUID()}`;
             const blobUrl = URL.createObjectURL(file);
-            setPending((prev) => {
-                const next = new Map(prev);
-                next.set(pendingName, { pendingName, file, blobUrl });
-                return next;
-            });
+            setPending((prev) => new Map(prev).set(pendingName, blobUrl));
 
             const settle = () => {
                 URL.revokeObjectURL(blobUrl);
@@ -85,7 +80,7 @@ export function MediaResolverProvider({
             };
 
             const promise = uploadFile
-                .mutateAsync({ parentId: mediaFolderId ?? '', file })
+                .mutateAsync({ parentId: mediaFolderId, file })
                 .then((result) => {
                     settle();
                     return result;
@@ -104,7 +99,7 @@ export function MediaResolverProvider({
         () => ({
             resolveMediaUrl: (name: string) => {
                 if (name.startsWith(PENDING_PREFIX)) {
-                    return pending.get(name)?.blobUrl ?? null;
+                    return pending.get(name) ?? null;
                 }
                 const file = media.findByName(name);
                 return file ? getDrivePreviewUrl(ownerId, mountId, file.id) : null;
