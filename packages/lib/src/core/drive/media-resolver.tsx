@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import type { DrivePath } from '../../types/drive';
 import { getDrivePreviewUrl } from '../api';
 import { useFolderLookup, useUploadFile } from './hooks/use-drive';
@@ -47,14 +47,15 @@ export function MediaResolverProvider({
     const media = useFolderLookup(ownerId, mountId, mediaFolderId);
     const chat = useFolderLookup(ownerId, mountId, chatFolderId);
     const uploadFile = useUploadFile(ownerId, mountId);
-    const [pending, setPending] = useState<Map<string, string>>(() => new Map());
-    const pendingRef = useRef(pending);
-    pendingRef.current = pending;
+    // Pending uploads live in a ref, not state: consumers only need the latest URL
+    // when they re-render for their own reasons (mediaName changes in Yjs). Keeping
+    // the context value stable avoids re-rendering every image renderer on each upload.
+    const pendingRef = useRef(new Map<string, string>());
 
-    // Unmount cleanup can't read latest state via closure — capture via ref instead.
     useEffect(() => {
+        const pending = pendingRef.current;
         return () => {
-            for (const blobUrl of pendingRef.current.values()) {
+            for (const blobUrl of pending.values()) {
                 URL.revokeObjectURL(blobUrl);
             }
         };
@@ -67,31 +68,22 @@ export function MediaResolverProvider({
             }
             const pendingName = `${PENDING_PREFIX}${crypto.randomUUID()}`;
             const blobUrl = URL.createObjectURL(file);
-            setPending((prev) => new Map(prev).set(pendingName, blobUrl));
+            pendingRef.current.set(pendingName, blobUrl);
 
             const settle = () => {
                 URL.revokeObjectURL(blobUrl);
-                setPending((prev) => {
-                    if (!prev.has(pendingName)) return prev;
-                    const next = new Map(prev);
-                    next.delete(pendingName);
-                    return next;
-                });
+                pendingRef.current.delete(pendingName);
             };
 
             const promise = uploadFile
                 .mutateAsync({ parentId: mediaFolderId, file })
                 .then(async (result) => {
-                    // Preload the server URL so the caller's mediaName-rewrite renders
-                    // with an already-decoded <img>, no blank gap. Defer settle to a
-                    // macrotask so the rewrite render runs before the blob URL is revoked.
-                    const url = getDrivePreviewUrl(ownerId, mountId, result.id);
-                    await new Promise<void>((resolve) => {
-                        const probe = new Image();
-                        probe.onload = () => resolve();
-                        probe.onerror = () => resolve();
-                        probe.src = url;
-                    });
+                    // Preload so the renderer's <img src=serverUrl> swap is instant.
+                    // Defer settle to a macrotask so the caller's mediaName rewrite
+                    // renders before the blob URL gets revoked.
+                    const probe = new Image();
+                    probe.src = getDrivePreviewUrl(ownerId, mountId, result.id);
+                    await probe.decode().catch(() => {});
                     setTimeout(settle, 0);
                     return result;
                 })
@@ -102,24 +94,29 @@ export function MediaResolverProvider({
 
             return { pendingName, promise };
         },
-        [mediaFolderId, uploadFile],
+        [mediaFolderId, ownerId, mountId, uploadFile],
+    );
+
+    const resolveMediaUrl = useCallback(
+        (name: string): string | null => {
+            if (name.startsWith(PENDING_PREFIX)) {
+                return pendingRef.current.get(name) ?? null;
+            }
+            const file = media.findByName(name);
+            return file ? getDrivePreviewUrl(ownerId, mountId, file.id) : null;
+        },
+        [media, ownerId, mountId],
     );
 
     const value = useMemo<MediaResolverValue>(
         () => ({
-            resolveMediaUrl: (name: string) => {
-                if (name.startsWith(PENDING_PREFIX)) {
-                    return pending.get(name) ?? null;
-                }
-                const file = media.findByName(name);
-                return file ? getDrivePreviewUrl(ownerId, mountId, file.id) : null;
-            },
+            resolveMediaUrl,
             resolveMediaPath: (name: string) => media.findByName(name),
             resolveChatId: (name: string) => chat.findByName(name)?.id ?? null,
             mediaFolderId,
             startUpload,
         }),
-        [media, chat, ownerId, mountId, mediaFolderId, pending, startUpload],
+        [resolveMediaUrl, media, chat, mediaFolderId, startUpload],
     );
 
     return <MediaResolverContext value={value}>{children}</MediaResolverContext>;
