@@ -11,7 +11,13 @@ import { useComments, useResolveComment, useUpdateCommentColor } from '@workspac
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
-import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import {
+    isPendingMediaName,
+    MediaResolverProvider,
+    useCopyToMediaFolder,
+    useMediaResolver,
+    useUploadFile,
+} from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -48,6 +54,32 @@ function findCommentMarkPositions(doc: Node, chatName: string): { pos: number; e
         }
     });
     return positions;
+}
+
+function swapFigureMediaName(editor: Editor, pendingName: string, newName: string | null) {
+    const positions: number[] = [];
+    editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'figure' && node.attrs.mediaName === pendingName) {
+            positions.push(pos);
+        }
+        return true;
+    });
+    if (positions.length === 0) return;
+    editor.commands.command(({ tr, dispatch }) => {
+        // Iterate in reverse so earlier positions stay valid after later deletes
+        for (let i = positions.length - 1; i >= 0; i--) {
+            const pos = positions[i];
+            const node = tr.doc.nodeAt(pos);
+            if (!node) continue;
+            if (newName === null) {
+                tr.delete(pos, pos + node.nodeSize);
+            } else {
+                tr.setNodeAttribute(pos, 'mediaName', newName);
+            }
+        }
+        if (dispatch) dispatch(tr);
+        return true;
+    });
 }
 
 const lowlight = createLowlight(common);
@@ -186,7 +218,7 @@ const TiptapEditor = ({
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
     const copyToMediaFolder = useCopyToMediaFolder(path.ownerId, path.mountId);
-    const { resolveMediaPath } = useMediaResolver();
+    const { resolveMediaPath, startUpload } = useMediaResolver();
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(initialChatName ?? null);
@@ -386,19 +418,23 @@ const TiptapEditor = ({
     });
 
     const handleImageUpload = async (file: File) => {
-        if (!mediaFolderIdRef.current || !file.type.startsWith('image/')) return;
-        const result = await uploadFile.mutateAsync({ parentId: mediaFolderIdRef.current, file });
-        if (result && editorRef.current) {
-            editorRef.current.chain().focus().setFigure({ mediaName: result.name }).run();
+        if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
+        const { pendingName, promise } = startUpload(file);
+        editorRef.current.chain().focus().setFigure({ mediaName: pendingName }).run();
+        const result = await promise;
+        if (editorRef.current) {
+            swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
         }
     };
 
     const handleReplaceImage = async (file: File) => {
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
-        const result = await uploadFile.mutateAsync({ parentId: mediaFolderIdRef.current, file });
-        if (result) {
-            editorRef.current.chain().focus().updateAttributes('figure', { mediaName: result.name, width: null }).run();
-        }
+        const { pendingName, promise } = startUpload(file);
+        // Reset width so the new image's aspect ratio is recomputed on load
+        editorRef.current.chain().focus().updateAttributes('figure', { mediaName: pendingName, width: null }).run();
+        const result = await promise;
+        if (!editorRef.current) return;
+        swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
     };
 
     const handleImagePickFromDrive = async (paths: DrivePath[]) => {
@@ -555,6 +591,29 @@ const TiptapEditor = ({
         return () => {
             editor.off('selectionUpdate', onUpdate);
         };
+    }, [editor]);
+
+    // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
+    useEffect(() => {
+        if (!editor) return;
+        const snapshot: string[] = [];
+        editor.state.doc.descendants((node) => {
+            if (
+                node.type.name === 'figure' &&
+                typeof node.attrs.mediaName === 'string' &&
+                isPendingMediaName(node.attrs.mediaName)
+            ) {
+                snapshot.push(node.attrs.mediaName);
+            }
+            return true;
+        });
+        if (snapshot.length === 0) return;
+        const timer = setTimeout(() => {
+            for (const pendingName of snapshot) {
+                swapFigureMediaName(editor, pendingName, null);
+            }
+        }, 60_000);
+        return () => clearTimeout(timer);
     }, [editor]);
 
     const isWide = !useMediaQuery('(max-width: 1200px)');

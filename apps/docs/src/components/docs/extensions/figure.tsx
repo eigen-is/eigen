@@ -2,7 +2,8 @@ import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { FigureNode } from '@workspace/lib/docs/eigendoc';
-import { useMediaResolver } from '@workspace/lib/drive';
+import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
+import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
 import { ImageResizeHandles } from '@workspace/ui/components/layout/media/image-resize-handles';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useRef, useState } from 'react';
@@ -18,7 +19,9 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
     const width = node.attrs.width;
     const alignment = node.attrs.alignment || 'center';
     const caption = node.attrs.caption || '';
-    const src = resolveMediaUrl(node.attrs.mediaName) || node.attrs.src || '';
+    const mediaName: string = node.attrs.mediaName ?? '';
+    const src = resolveMediaUrl(mediaName) || node.attrs.src || '';
+    const showPlaceholder = !src && isPendingMediaName(mediaName);
     const alt = node.attrs.alt || '';
     const isEditable = editor.isEditable;
     const layout = (node.attrs.layout || 'block') as FigureLayout;
@@ -96,18 +99,24 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
                         selected={selected}
                         editable={isEditable}
                     >
-                        <img
-                            ref={imageRef}
-                            src={src}
-                            alt={alt}
-                            className={cn('max-w-full block', selected && 'ring-2 ring-ring rounded-sm')}
-                            style={{
-                                width: width ? `${width}px` : undefined,
-                                aspectRatio: aspectRatio ?? undefined,
-                            }}
-                            onLoad={handleImageLoad}
-                            draggable={false}
-                        />
+                        {showPlaceholder ? (
+                            <div style={{ width: width ? `${width}px` : '400px', aspectRatio: '16 / 10' }}>
+                                <ImagePlaceholder />
+                            </div>
+                        ) : (
+                            <img
+                                ref={imageRef}
+                                src={src}
+                                alt={alt}
+                                className={cn('max-w-full block', selected && 'ring-2 ring-ring rounded-sm')}
+                                style={{
+                                    width: width ? `${width}px` : undefined,
+                                    aspectRatio: aspectRatio ?? undefined,
+                                }}
+                                onLoad={handleImageLoad}
+                                draggable={false}
+                            />
+                        )}
                     </ImageResizeHandles>
                     {caption && <figcaption>{caption}</figcaption>}
                 </div>
