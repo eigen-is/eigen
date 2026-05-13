@@ -103,12 +103,14 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
 
     // acceptShiftEnter matches historic behaviour where shift+Enter also committed the
     // @-mention; the slash suggests below intentionally let shift+Enter through as a newline.
+    // passthroughWhenEmpty lets `@foo` with no matches keep its text and send normally on
+    // Enter, rather than being silently stripped by a commit on an empty list.
     const atSuggest = useSuggestions({
         visible: suggestOpen,
         onSelect: handlePlayerSelect,
         onEscape: closeSuggest,
-        onCommitEmpty: closeSuggest,
         acceptShiftEnter: true,
+        passthroughWhenEmpty: true,
     });
 
     // ── Slash command suggest ───────────────────────────────────────────
