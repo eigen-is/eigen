@@ -30,6 +30,7 @@ function ActiveImage({ img }: { img: Image }) {
     const url = useResolvedImageUrl(img.mediaName);
     const w = img.width;
     const h = img.height;
+    const showPlaceholder = !url && isPendingMediaName(img.mediaName);
 
     return (
         <div
@@ -58,7 +59,9 @@ function ActiveImage({ img }: { img: Image }) {
                     onImageMoveStart(context, refs.globalCache, e.nativeEvent);
                     e.stopPropagation();
                 }}
-            />
+            >
+                {showPlaceholder && <ImagePlaceholder />}
+            </div>
             {HANDLE_POSITIONS.map(({ key, className }) => (
                 <div
                     key={key}
