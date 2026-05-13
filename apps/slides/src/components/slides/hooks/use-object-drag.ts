@@ -139,8 +139,20 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                     fromCenter || keepAspect
                         ? { x, y, w, h, lines: [] as SnapLine[] }
                         : snapRect({ x, y, w, h }, snapsRef.current.vSnaps, snapsRef.current.hSnaps, s.mode);
-                setActiveSnapLines(snapped.lines);
+
+                // Mousemove fires ~60Hz; bail out when the snapped rect is identical to skip downstream re-renders.
+                const prev = lastSnappedRef.current;
+                if (
+                    prev &&
+                    prev.x === snapped.x &&
+                    prev.y === snapped.y &&
+                    prev.w === snapped.w &&
+                    prev.h === snapped.h
+                ) {
+                    return;
+                }
                 lastSnappedRef.current = { x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h };
+                setActiveSnapLines(snapped.lines);
                 setDragPreviews([{ objId: s.objId, x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h }]);
             };
 
@@ -220,8 +232,10 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 const snapDx = snapped.x - g.bounds.x;
                 const snapDy = snapped.y - g.bounds.y;
 
-                setActiveSnapLines(snapped.lines);
+                const prev = lastGroupDeltaRef.current;
+                if (prev && prev.dx === snapDx && prev.dy === snapDy) return;
                 lastGroupDeltaRef.current = { dx: snapDx, dy: snapDy };
+                setActiveSnapLines(snapped.lines);
                 setDragPreviews(
                     g.objects.map((o) => ({
                         objId: o.id,
