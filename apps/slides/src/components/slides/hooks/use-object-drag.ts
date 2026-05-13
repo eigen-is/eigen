@@ -95,13 +95,22 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 startObjH: objH,
             };
             groupStateRef.current = null;
+            const cursor = {
+                clientX: e.clientX,
+                clientY: e.clientY,
+                altKey: e.altKey,
+                shiftKey: e.shiftKey,
+            };
 
-            const handleMouseMove = (me: MouseEvent) => {
+            const update = () => {
                 const s = stateRef.current;
                 if (!s.objId || !s.mode) return;
                 const canvas = getCanvasSize();
-                const dx = ((me.clientX - s.startX) / canvas.w) * SLIDE_BASE_WIDTH;
-                const dy = ((me.clientY - s.startY) / canvas.h) * SLIDE_BASE_HEIGHT;
+                const dx = ((cursor.clientX - s.startX) / canvas.w) * SLIDE_BASE_WIDTH;
+                const dy = ((cursor.clientY - s.startY) / canvas.h) * SLIDE_BASE_HEIGHT;
+                const isResize = s.mode !== 'move';
+                const fromCenter = cursor.altKey && isResize;
+                const keepAspect = cursor.shiftKey && isResize;
 
                 let x = s.startObjX;
                 let y = s.startObjY;
@@ -112,31 +121,63 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                     x = s.startObjX + dx;
                     y = s.startObjY + dy;
                 } else {
-                    const resized = applyResize(s.mode, dx, dy, s.startObjX, s.startObjY, s.startObjW, s.startObjH);
+                    const resized = applyResize(
+                        s.mode,
+                        dx,
+                        dy,
+                        { x: s.startObjX, y: s.startObjY, w: s.startObjW, h: s.startObjH },
+                        { fromCenter, keepAspect },
+                    );
                     x = resized.x;
                     y = resized.y;
                     w = resized.w;
                     h = resized.h;
                 }
 
-                const snapped = snapRect({ x, y, w, h }, snapsRef.current.vSnaps, snapsRef.current.hSnaps, s.mode);
+                // Snapping per-edge would break the center mirror / aspect lock, so skip it while modifiers are held.
+                const snapped =
+                    fromCenter || keepAspect
+                        ? { x, y, w, h, lines: [] as SnapLine[] }
+                        : snapRect({ x, y, w, h }, snapsRef.current.vSnaps, snapsRef.current.hSnaps, s.mode);
                 setActiveSnapLines(snapped.lines);
                 lastSnappedRef.current = { x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h };
                 setDragPreviews([{ objId: s.objId, x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h }]);
             };
 
-            const handleMouseUp = () => {
+            const handleMouseMove = (me: MouseEvent) => {
+                cursor.clientX = me.clientX;
+                cursor.clientY = me.clientY;
+                cursor.altKey = me.altKey;
+                cursor.shiftKey = me.shiftKey;
+                update();
+            };
+
+            const handleKey = (ke: KeyboardEvent) => {
+                if (ke.key !== 'Alt' && ke.key !== 'Shift') return;
+                cursor.altKey = ke.altKey;
+                cursor.shiftKey = ke.shiftKey;
+                update();
+            };
+
+            const endDrag = () => {
                 const s = stateRef.current;
                 if (s.objId && lastSnappedRef.current) {
                     onUpdate(s.objId, lastSnappedRef.current);
                 }
                 cleanup();
                 document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
+                document.removeEventListener('mouseup', endDrag);
+                document.removeEventListener('keydown', handleKey);
+                document.removeEventListener('keyup', handleKey);
+                window.removeEventListener('blur', endDrag);
             };
 
             document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('keydown', handleKey);
+            document.addEventListener('keyup', handleKey);
+            // Commit and tear down on focus loss (alt-tab, devtools opening) — browsers can drop mouseup.
+            window.addEventListener('blur', endDrag);
         },
         [getCanvasSize, onUpdate],
     );
@@ -234,25 +275,52 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
 
 const MIN_SIZE = 30;
 
-function applyResize(mode: DragMode, dx: number, dy: number, ox: number, oy: number, ow: number, oh: number) {
-    let x = ox,
-        y = oy,
-        w = ow,
-        h = oh;
+function applyResize(
+    mode: DragMode,
+    dx: number,
+    dy: number,
+    { x: ox, y: oy, w: ow, h: oh }: { x: number; y: number; w: number; h: number },
+    { fromCenter, keepAspect }: { fromCenter: boolean; keepAspect: boolean },
+) {
+    const xDir = mode?.includes('e') ? 1 : mode?.includes('w') ? -1 : 0;
+    const yDir = mode?.includes('s') ? 1 : mode?.includes('n') ? -1 : 0;
+    // Aspect lock only applies to corners — on edges only one axis is intentional.
+    const aspectLocked = keepAspect && xDir !== 0 && yDir !== 0 && ow > 0 && oh > 0;
 
-    if (mode?.includes('e')) {
-        w = Math.max(MIN_SIZE, ow + dx);
+    let dw = xDir * dx;
+    let dh = yDir * dy;
+
+    if (aspectLocked) {
+        const aspect = ow / oh;
+        if (Math.abs(dw / ow) >= Math.abs(dh / oh)) {
+            dh = dw / aspect;
+        } else {
+            dw = dh * aspect;
+        }
     }
-    if (mode?.includes('w')) {
-        w = Math.max(MIN_SIZE, ow - dx);
-        x = ox + ow - w;
+
+    const sizeFactor = fromCenter ? 2 : 1;
+    let w = ow + sizeFactor * dw;
+    let h = oh + sizeFactor * dh;
+
+    if (aspectLocked) {
+        // Clamp both dimensions through a single scale so the ratio survives the MIN_SIZE floor.
+        const scale = Math.max(w / ow, MIN_SIZE / ow, MIN_SIZE / oh);
+        w = ow * scale;
+        h = oh * scale;
+    } else {
+        w = Math.max(MIN_SIZE, w);
+        h = Math.max(MIN_SIZE, h);
     }
-    if (mode?.includes('s')) {
-        h = Math.max(MIN_SIZE, oh + dy);
-    }
-    if (mode?.includes('n')) {
-        h = Math.max(MIN_SIZE, oh - dy);
-        y = oy + oh - h;
+
+    let x: number;
+    let y: number;
+    if (fromCenter) {
+        x = ox + (ow - w) / 2;
+        y = oy + (oh - h) / 2;
+    } else {
+        x = xDir === -1 ? ox + ow - w : ox;
+        y = yDir === -1 ? oy + oh - h : oy;
     }
 
     return { x, y, w, h };
