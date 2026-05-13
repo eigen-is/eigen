@@ -1,4 +1,3 @@
-import { isPendingMediaName } from '@workspace/lib/drive';
 import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useContext, useMemo } from 'react';
@@ -30,7 +29,7 @@ function ActiveImage({ img }: { img: Image }) {
     const url = useResolvedImageUrl(img.mediaName);
     const w = img.width;
     const h = img.height;
-    const showPlaceholder = !url && isPendingMediaName(img.mediaName);
+    const showPlaceholder = !url && img.mediaName.startsWith('pending:');
 
     return (
         <div
@@ -97,7 +96,7 @@ function InactiveImage({ img }: { img: Image }) {
     );
 
     if (!url) {
-        if (isPendingMediaName(img.mediaName)) {
+        if (img.mediaName.startsWith('pending:')) {
             return (
                 <div
                     id={img.id}
