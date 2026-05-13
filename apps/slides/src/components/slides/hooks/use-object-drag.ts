@@ -296,8 +296,10 @@ function applyResize(
     { x: ox, y: oy, w: ow, h: oh }: { x: number; y: number; w: number; h: number },
     { fromCenter, keepAspect }: { fromCenter: boolean; keepAspect: boolean },
 ) {
-    const xDir = mode?.includes('e') ? 1 : mode?.includes('w') ? -1 : 0;
-    const yDir = mode?.includes('s') ? 1 : mode?.includes('n') ? -1 : 0;
+    // Strip the 'resize-' prefix first — 'resize' itself contains 'e' and 's', poisoning the substring check.
+    const dir = mode?.split('-')[1] ?? '';
+    const xDir = dir.includes('e') ? 1 : dir.includes('w') ? -1 : 0;
+    const yDir = dir.includes('s') ? 1 : dir.includes('n') ? -1 : 0;
     // Aspect lock only applies to corners — on edges only one axis is intentional.
     const aspectLocked = keepAspect && xDir !== 0 && yDir !== 0 && ow > 0 && oh > 0;
 
