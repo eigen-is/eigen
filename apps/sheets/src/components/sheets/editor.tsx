@@ -102,7 +102,8 @@ export function SheetEditor({
         const workbook = workbookRef.current;
         if (!workbook) return;
         const snapshot = workbook
-            .getAllImages()
+            .getAllSheets()
+            .flatMap((sheet) => sheet.images ?? [])
             .filter((img) => isPendingMediaName(img.mediaName))
             .map((img) => img.mediaName);
         if (snapshot.length === 0) return;
