@@ -2,14 +2,14 @@ import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
 import { EIGEN_STICKIES_COLORS, EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
-import { useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { isPendingMediaName, useCopyToMediaFolder, useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
 import { CommentDialog, CommentPanel, CreateCommentDialog, LoadingState, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { useSheet } from './hooks/use-sheet';
 import { ToolbarLeftItems, ToolbarRightItems } from './toolbar';
@@ -44,9 +44,8 @@ export function SheetEditor({
     );
 
     const auth = useAuth();
-    const uploadFile = useUploadFile(ownerId, path.mountId);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
-    const { resolveMediaUrl } = useMediaResolver();
+    const { resolveMediaUrl, startUpload } = useMediaResolver();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
@@ -75,19 +74,45 @@ export function SheetEditor({
     const handleImageFile = useCallback(
         async (file: File) => {
             if (!mediaFolderId || !file.type.startsWith('image/')) return;
-            const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file }).catch(() => null);
-            if (!result) return;
+            const { pendingName, promise } = startUpload(file);
+
+            // Read natural dimensions so the workbook can size the inserted image correctly.
             const objectUrl = URL.createObjectURL(file);
             const img = new window.Image();
             img.onload = () => {
-                workbookRef.current?.insertImage(result.name, img.naturalWidth, img.naturalHeight);
+                workbookRef.current?.insertImage(pendingName, img.naturalWidth, img.naturalHeight);
                 URL.revokeObjectURL(objectUrl);
             };
-            img.onerror = () => URL.revokeObjectURL(objectUrl);
+            img.onerror = () => {
+                workbookRef.current?.insertImage(pendingName, 200, 200);
+                URL.revokeObjectURL(objectUrl);
+            };
             img.src = objectUrl;
+
+            const result = await promise;
+            if (result) workbookRef.current?.replaceImageMediaName(pendingName, result.name);
+            else workbookRef.current?.removeImageByMediaName(pendingName);
         },
-        [mediaFolderId, uploadFile],
+        [mediaFolderId, startUpload],
     );
+
+    // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
+    useEffect(() => {
+        if (!synced) return;
+        const workbook = workbookRef.current;
+        if (!workbook) return;
+        const snapshot = workbook
+            .getAllImages()
+            .filter((img) => isPendingMediaName(img.mediaName))
+            .map((img) => img.mediaName);
+        if (snapshot.length === 0) return;
+        const timer = setTimeout(() => {
+            for (const mediaName of snapshot) {
+                workbookRef.current?.removeImageByMediaName(mediaName);
+            }
+        }, 60_000);
+        return () => clearTimeout(timer);
+    }, [synced]);
 
     const handleImageFromDevice = useCallback(
         (files: File[]) => {

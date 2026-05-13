@@ -1,3 +1,5 @@
+import { isPendingMediaName } from '@workspace/lib/drive';
+import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
@@ -91,7 +93,26 @@ function InactiveImage({ img }: { img: Image }) {
         [setContext, img.id],
     );
 
-    if (!url) return null;
+    if (!url) {
+        if (isPendingMediaName(img.mediaName)) {
+            return (
+                <div
+                    id={img.id}
+                    className="absolute overflow-hidden"
+                    style={{
+                        width: w,
+                        height: h,
+                        left: img.left,
+                        top: img.top,
+                        zIndex: 19,
+                    }}
+                >
+                    <ImagePlaceholder />
+                </div>
+            );
+        }
+        return null;
+    }
 
     return (
         <div

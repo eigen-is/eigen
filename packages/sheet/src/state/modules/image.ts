@@ -1,6 +1,6 @@
 import { find, set } from 'es-toolkit/compat';
 import { type Context, getFlowdata } from '../context';
-import type { GlobalCache } from '../types';
+import type { GlobalCache, Image } from '../types';
 import { getSheetIndex } from '../utils';
 import { mergeBorder } from '.';
 
@@ -39,6 +39,14 @@ export function removeImageByMediaName(ctx: Context, name: string) {
     const before = ctx.insertedImgs.length;
     ctx.insertedImgs = ctx.insertedImgs.filter((img) => img.mediaName !== name);
     if (ctx.insertedImgs.length !== before) saveImage(ctx);
+}
+
+export function getAllImages(ctx: Context): Image[] {
+    const result: Image[] = [];
+    for (const sheet of ctx.sheets) {
+        if (sheet.images) result.push(...sheet.images);
+    }
+    return result;
 }
 
 export function insertImage(ctx: Context, mediaName: string, width: number, height: number) {
