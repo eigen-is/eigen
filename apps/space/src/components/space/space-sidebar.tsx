@@ -35,13 +35,6 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     params={{}}
                 />
                 <SidebarItem
-                    icon={<Mail className="h-4 w-4" />}
-                    label="Email"
-                    condensed={condensed}
-                    to="/email"
-                    params={{}}
-                />
-                <SidebarItem
                     icon={<MonitorSmartphone className="h-4 w-4" />}
                     label="Integrations"
                     condensed={condensed}
@@ -65,6 +58,18 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     label="Two factor authentication"
                     condensed={condensed}
                     to="/security/2fa"
+                    params={{}}
+                />
+            </SidebarSection>
+
+            <Separator />
+
+            <SidebarSection condensed={condensed} title={condensed ? undefined : 'App settings'}>
+                <SidebarItem
+                    icon={<Mail className="h-4 w-4" />}
+                    label="Mail"
+                    condensed={condensed}
+                    to="/email"
                     params={{}}
                 />
             </SidebarSection>
