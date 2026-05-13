@@ -65,5 +65,9 @@ chown -R 1000:1000 data
 echo "Rebuilding containers..."
 docker compose --env-file .env.production up -d --build
 
+echo "Pruning unused Docker build cache and images..."
+docker builder prune -f --filter "until=168h"
+docker image prune -f
+
 echo "Done. Status:"
 docker compose --env-file .env.production ps
