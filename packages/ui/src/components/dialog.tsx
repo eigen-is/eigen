@@ -148,7 +148,9 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
     return (
         <DialogPrimitive.Title
             data-slot="dialog-title"
-            className={cn('text-lg leading-none font-semibold', className)}
+            // pr-8 reserves space for the absolute-positioned close button so long titles
+            // wrap above it instead of running underneath.
+            className={cn('text-lg leading-none font-semibold pr-8', className)}
             {...props}
         />
     );
