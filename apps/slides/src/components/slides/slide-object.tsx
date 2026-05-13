@@ -29,7 +29,14 @@ import {
     Trash2,
 } from 'lucide-react';
 import { memo } from 'react';
-import { BORDER_RADIUS_ROUND, pxToPercent, SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from './types';
+import {
+    BORDER_RADIUS_ROUND,
+    type ImageObject,
+    pxToPercent,
+    SLIDE_BASE_HEIGHT,
+    SLIDE_BASE_WIDTH,
+    type SlideObject,
+} from './types';
 
 function pxToPercentHeight(val: number): string {
     return `${(val / SLIDE_BASE_HEIGHT) * 100}cqh`;
@@ -93,6 +100,20 @@ function buildTextHtml(obj: SlideObject & { type: 'text' }): string {
     return `<span style="background-color:${escapeHtml(obj.highlightColor)};box-decoration-break:clone;-webkit-box-decoration-break:clone">${text}</span>`;
 }
 
+function SlideImage({ obj, url, className }: { obj: ImageObject; url: string | null; className: string }) {
+    if (!url && isPendingMediaName(obj.mediaName)) return <ImagePlaceholder />;
+    return (
+        <img
+            src={url || ''}
+            className={className}
+            style={{ objectFit: obj.objectFit }}
+            draggable={false}
+            decoding="async"
+            alt=""
+        />
+    );
+}
+
 export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
     const { resolveMediaUrl } = useMediaResolver();
     const vAlign = obj.type === 'text' ? obj.verticalAlign || 'top' : undefined;
@@ -108,19 +129,7 @@ export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
                     />
                 </div>
             )}
-            {obj.type === 'image' &&
-                (!imageUrl && isPendingMediaName(obj.mediaName) ? (
-                    <ImagePlaceholder />
-                ) : (
-                    <img
-                        src={imageUrl || ''}
-                        className="w-full h-full"
-                        style={{ objectFit: obj.objectFit }}
-                        draggable={false}
-                        decoding="async"
-                        alt=""
-                    />
-                ))}
+            {obj.type === 'image' && <SlideImage obj={obj} url={imageUrl} className="w-full h-full" />}
         </div>
     );
 }
@@ -267,19 +276,9 @@ export const SlideObjectView = memo(function SlideObjectView({
                 </div>
             )}
 
-            {obj.type === 'image' &&
-                (!imageUrl && isPendingMediaName(obj.mediaName) ? (
-                    <ImagePlaceholder />
-                ) : (
-                    <img
-                        src={imageUrl || ''}
-                        className="w-full h-full select-none pointer-events-none"
-                        style={{ objectFit: obj.objectFit }}
-                        draggable={false}
-                        decoding="async"
-                        alt=""
-                    />
-                ))}
+            {obj.type === 'image' && (
+                <SlideImage obj={obj} url={imageUrl} className="w-full h-full select-none pointer-events-none" />
+            )}
 
             {selected &&
                 editable &&
