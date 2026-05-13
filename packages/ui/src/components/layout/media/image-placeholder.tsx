@@ -1,5 +1,5 @@
 import { cn } from '@workspace/ui/lib/utils';
-import { Loader2 } from 'lucide-react';
+import { EigenLoader } from '../braket/eigen-loader';
 
 type ImagePlaceholderProps = {
     className?: string;
@@ -7,13 +7,8 @@ type ImagePlaceholderProps = {
 
 export function ImagePlaceholder({ className }: ImagePlaceholderProps) {
     return (
-        <div
-            className={cn(
-                'flex items-center justify-center w-full h-full bg-muted text-muted-foreground rounded-sm',
-                className,
-            )}
-        >
-            <Loader2 className="h-6 w-6 animate-spin" />
+        <div className={cn('flex items-center justify-center w-full h-full bg-muted rounded-sm text-2xl', className)}>
+            <EigenLoader />
         </div>
     );
 }
