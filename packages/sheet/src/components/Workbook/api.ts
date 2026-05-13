@@ -19,6 +19,8 @@ import {
     opToPatch,
     type Presence,
     type Range,
+    removeImageByMediaName,
+    replaceImageMediaName,
     type Selection,
     type Settings,
     type Sheet,
@@ -261,6 +263,11 @@ export function generateAPIs(
 
         insertImage: (mediaName: string, width: number, height: number) =>
             setContext((draftCtx) => insertImage(draftCtx, mediaName, width, height)),
+
+        replaceImageMediaName: (oldName: string, newName: string) =>
+            setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName)),
+
+        removeImageByMediaName: (name: string) => setContext((draftCtx) => removeImageByMediaName(draftCtx, name)),
 
         handleUndo,
         handleRedo,
