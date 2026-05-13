@@ -101,11 +101,12 @@ export function SheetEditor({
         if (!synced) return;
         const workbook = workbookRef.current;
         if (!workbook) return;
-        const snapshot = workbook
-            .getAllSheets()
-            .flatMap((sheet) => sheet.images ?? [])
-            .filter((img) => isPendingMediaName(img.mediaName))
-            .map((img) => img.mediaName);
+        const snapshot: string[] = [];
+        for (const sheet of workbook.getAllSheets()) {
+            for (const img of sheet.images ?? []) {
+                if (isPendingMediaName(img.mediaName)) snapshot.push(img.mediaName);
+            }
+        }
         if (snapshot.length === 0) return;
         const timer = setTimeout(() => {
             for (const mediaName of snapshot) {
