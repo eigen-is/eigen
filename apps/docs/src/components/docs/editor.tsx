@@ -10,7 +10,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -83,7 +83,6 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
 }
 
 const lowlight = createLowlight(common);
-const A4_WIDTH_PX = 794; // 210mm at 96dpi
 
 export const CollaborativeEditor = ({
     path,

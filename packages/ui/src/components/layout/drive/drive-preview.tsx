@@ -1,6 +1,8 @@
 import { getDriveThumbnailUrl } from '@workspace/lib/api';
 import { getTextPreviewMode } from '@workspace/lib/constants';
+import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
 import { useTextPreview } from '@workspace/lib/drive';
+import { SLIDE_BASE_WIDTH } from '@workspace/lib/slides';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -74,29 +76,40 @@ function IconFallback({ icon: Icon, color }: { icon: LucideIcon; color: string }
     );
 }
 
-// Content (eigendoc page, slide, sheet) has its own intrinsic width — scale
-// to fit the panel width via ResizeObserver and transform: scale.
+// Scale a server-rendered HTML preview down to fit the thumbnail panel.
+// Eigendoc and eigenslides have a known intrinsic width (A4, 16:9 base) — we
+// render at that width and scale by containerW / intrinsicWidth. Other modes
+// (sheets, code, text) reflow to the container so we measure scrollWidth.
 function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }) {
     const { data } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, true);
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
 
+    const intrinsicWidth =
+        data?.mode === 'eigendoc' ? A4_WIDTH_PX : data?.mode === 'eigenslides' ? SLIDE_BASE_WIDTH : null;
+
     useEffect(() => {
         const container = containerRef.current;
-        const content = contentRef.current;
-        if (!container || !content) return;
+        if (!container) return;
         const measure = () => {
             const containerW = container.clientWidth;
+            if (containerW <= 0) return;
+            if (intrinsicWidth) {
+                setScale(containerW / intrinsicWidth);
+                return;
+            }
+            const content = contentRef.current;
+            if (!content) return;
             const contentW = content.scrollWidth;
-            if (containerW > 0 && contentW > 0) setScale(containerW / contentW);
+            if (contentW > 0) setScale(containerW / contentW);
         };
         const obs = new ResizeObserver(measure);
         obs.observe(container);
-        obs.observe(content);
+        if (!intrinsicWidth && contentRef.current) obs.observe(contentRef.current);
         measure();
         return () => obs.disconnect();
-    }, [data?.body]);
+    }, [data?.body, intrinsicWidth]);
 
     if (!data?.body) return null;
 
@@ -117,7 +130,11 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
             <div
                 ref={contentRef}
                 className={wrapperClass}
-                style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+                style={{
+                    transform: `scale(${scale})`,
+                    transformOrigin: 'top left',
+                    ...(intrinsicWidth ? { width: `${intrinsicWidth}px` } : null),
+                }}
                 dangerouslySetInnerHTML={{ __html: data.body }}
             />
             <div
