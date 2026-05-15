@@ -120,33 +120,25 @@ export function AdminSidebar({
                 </SidebarSection>
 
                 <Separator className="my-2" />
-                <div className="px-3 py-2">
-                    <div className={`flex items-center mb-2 ${condensed ? 'justify-center' : 'justify-between'}`}>
-                        {!condensed && (
-                            <h3 className="text-sm font-semibold text-foreground px-3 select-none">Teams</h3>
-                        )}
-                        <div className="flex items-center gap-1">
-                            <TooltipButton icon={Plus} tooltipText="Create Team" onClick={() => setShowCreate(true)} />
-                        </div>
-                    </div>
-                    {teams.length > 0 && (
-                        <div className="space-y-1">
-                            {[...teams]
-                                .sort((a, b) => a.name.localeCompare(b.name))
-                                .map((team) => (
-                                    <DroppableSidebarItem
-                                        key={team.id}
-                                        icon={<UserAvatar userId={teamOwnerId(team.id)} />}
-                                        label={team.name}
-                                        to={`/teams?teamId=${team.id}`}
-                                        condensed={condensed}
-                                        acceptTypes={['member']}
-                                        onDrop={(data) => onAddMembersToTeam?.(data.ids, team.id)}
-                                    />
-                                ))}
-                        </div>
-                    )}
-                </div>
+                <SidebarSection
+                    condensed={condensed}
+                    title="Teams"
+                    action={<TooltipButton icon={Plus} tooltipText="Create Team" onClick={() => setShowCreate(true)} />}
+                >
+                    {[...teams]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((team) => (
+                            <DroppableSidebarItem
+                                key={team.id}
+                                icon={<UserAvatar userId={teamOwnerId(team.id)} />}
+                                label={team.name}
+                                to={`/teams?teamId=${team.id}`}
+                                condensed={condensed}
+                                acceptTypes={['member']}
+                                onDrop={(data) => onAddMembersToTeam?.(data.ids, team.id)}
+                            />
+                        ))}
+                </SidebarSection>
             </div>
 
             <Dialog open={showCreate} onOpenChange={setShowCreate}>
