@@ -1,233 +1,177 @@
-import { getDriveDownloadUrl, getDriveThumbnailUrl } from '@workspace/lib/api';
-import { type DrivePath, isInlineEditable } from '@workspace/lib/types/drive';
+import { formatDate } from '@workspace/lib/date';
+import { type DrivePath, isDocumentType, isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
 import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
 import { DriveAccessList } from '@workspace/ui/components/layout/drive';
-import { Table, TableBody, TableCell, TableRow } from '@workspace/ui/components/table';
 import { formatFileSize } from '@workspace/ui/lib/formatFileSize';
-import { ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X } from 'lucide-react';
+import { Download, MoreVertical, UserRoundPlus, X } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useLayout } from '../app/layout-context.tsx';
-import { LoadingState } from '../app/loading-state';
+import { useOptionalPreview } from '../preview-provider/preview-provider';
+import { DriveItemMenuItems } from './drive-item-menu';
+import { DrivePreview } from './drive-preview';
+import { getFilePresentation } from './file-presentation';
 
 type DriveDetailToolbarProps = {
-    path: DrivePath;
     onClose?: () => void;
-    onDelete?: (path: DrivePath) => void;
-    onShareClick?: (path: DrivePath) => void;
-    onDownload?: (path: DrivePath) => void;
-    onItemOpen?: (path: DrivePath) => void;
-    onRename?: (path: DrivePath) => void;
-    allowDelete?: boolean;
 };
 
-export function DriveDetailToolbar({
-    path,
-    onClose,
-    onDelete,
-    onShareClick,
-    onDownload,
-    onItemOpen,
-    onRename,
-    allowDelete,
-}: DriveDetailToolbarProps) {
+export function DriveDetailToolbar({ onClose }: DriveDetailToolbarProps) {
     const { isMobile } = useLayout();
 
     return (
-        <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-1">
-                {!isMobile && onClose && <TooltipButton onClick={onClose} tooltipText="Close" icon={X} />}
-            </div>
-            <div className="flex items-center gap-1">
-                {onDelete && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={() => onDelete(path)} />}
-                <div className="h-6 w-[1px] bg-border mx-1" />
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                            <MoreVertical className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                        <DropdownMenuItem onClick={() => onItemOpen?.(path)} className="flex items-center">
-                            <ArrowRight className="h-4 w-4 mr-2" />
-                            Open
-                        </DropdownMenuItem>
-                        {path.type === 'file' && (
-                            <DropdownMenuItem onClick={() => onDownload?.(path)} className="flex items-center">
-                                <Download className="h-4 w-4 mr-2" />
-                                Download
-                            </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => onShareClick?.(path)} className="flex items-center">
-                            <UserRoundPlus className="h-4 w-4 mr-2" />
-                            Share
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onRename?.(path)} className="flex items-center">
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        {allowDelete && (
-                            <DropdownMenuItem onClick={() => onDelete?.(path)} className="flex items-center">
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                            </DropdownMenuItem>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
+        <div className="flex items-center w-full">
+            {!isMobile && onClose && <TooltipButton onClick={onClose} tooltipText="Close" icon={X} />}
         </div>
     );
 }
 
 type DriveDetailProps = {
     path: DrivePath | null;
-    onDelete?: (path: DrivePath) => void;
+    onDelete?: (items: DrivePath[]) => void;
     onShareClick?: (path: DrivePath) => void;
     onDownload?: (path: DrivePath) => void;
     onItemOpen?: (path: DrivePath) => void;
     onRename?: (path: DrivePath) => void;
+    onQuickLook?: (path: DrivePath) => void;
+    onConvert?: (path: DrivePath, target: 'eigensheets' | 'eigendoc') => void;
+    onExport?: (path: DrivePath, format: string) => void;
+    onEmailCollaborators?: (path: DrivePath) => void;
     allowDelete?: boolean;
 };
 
-export function DriveDetail({ path, onShareClick, onItemOpen }: DriveDetailProps) {
-    if (!path) {
-        return <LoadingState />;
-    }
+export function DriveDetail({
+    path,
+    onDelete,
+    onShareClick,
+    onDownload,
+    onItemOpen,
+    onRename,
+    onQuickLook,
+    onConvert,
+    onExport,
+    onEmailCollaborators,
+    allowDelete,
+}: DriveDetailProps) {
+    const preview = useOptionalPreview();
 
-    const fullPath = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
-    const thumbnailPath = getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail || '');
+    if (!path) return null;
+
+    // App/chat files open in their native app; media + others go through the
+    // read-only preview lightbox.
+    const onHeroClick = () => {
+        if (isDocumentType(path.type)) {
+            onItemOpen?.(path);
+        } else {
+            preview?.openPreview(path, []);
+        }
+    };
+
+    const canOpen = !!onItemOpen && isOpenable(path);
+    const canDownload = !!onDownload && path.type === 'file';
 
     return (
         <div className="flex flex-col h-full bg-background">
             <div className="p-4 flex-1 overflow-auto">
-                <h2 className="text-xl font-medium mb-2 flex items-center">
-                    <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>
-                    {onItemOpen && path && (path.type !== 'file' || isInlineEditable(path.mimeType, path.name)) && (
-                        <TooltipButton
-                            onClick={() => onItemOpen(path)}
-                            tooltipText="Open"
-                            icon={ArrowRight}
-                            className="shrink-0 h-7 w-7"
-                        />
+                <DrivePreview path={path} onActivate={onHeroClick} className="mb-4" />
+                <h2 className="text-xl font-medium truncate overflow-hidden mb-3">{stripEigenExtension(path.name)}</h2>
+                <div className="flex items-center gap-2 mb-4">
+                    {canOpen && (
+                        <Button
+                            size="sm"
+                            onClick={() => onItemOpen?.(path)}
+                            className="flex-1 h-8 bg-app text-white hover:bg-app hover:opacity-90"
+                        >
+                            Open
+                        </Button>
                     )}
-                </h2>
-                <Table className="text-sm text-muted-foreground mb-4">
-                    <TableBody>
-                        <TableRow>
-                            <TableCell className="font-medium px-0 w-20">Mime</TableCell>
-                            <TableCell className="px truncate">{path.mimeType}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                            <TableCell className="font-medium px-0">Size</TableCell>
-                            <TableCell className="px">{formatFileSize(path.size)}</TableCell>
-                        </TableRow>
-                        {path.createdAt && (
-                            <TableRow>
-                                <TableCell className="font-medium px-0">Created</TableCell>
-                                <TableCell className="px">{new Date(path.createdAt).toLocaleDateString()}</TableCell>
-                            </TableRow>
+                    <div className="flex items-center gap-2 ml-auto">
+                        {canDownload && (
+                            <TooltipButton
+                                variant="outline"
+                                icon={Download}
+                                tooltipText="Download"
+                                onClick={() => onDownload?.(path)}
+                            />
                         )}
-                    </TableBody>
-                </Table>
-                {path.thumbnail && (
-                    <div>
-                        <img
-                            src={thumbnailPath}
-                            alt={`Thumbnail for ${path.name}`}
-                            className="max-w-full max-h-[25vh] object-contain"
-                            style={
-                                path.details?.width && path.details?.height
-                                    ? { aspectRatio: path.details.width / path.details.height }
-                                    : undefined
-                            }
-                        />
+                        {onShareClick && (
+                            <TooltipButton
+                                variant="outline"
+                                icon={UserRoundPlus}
+                                tooltipText="Share"
+                                onClick={() => onShareClick(path)}
+                            />
+                        )}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8" aria-label="More actions">
+                                    <MoreVertical className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-48">
+                                <DriveItemMenuItems
+                                    item={path}
+                                    onItemOpen={onItemOpen}
+                                    onQuickLook={onQuickLook}
+                                    onDownload={onDownload}
+                                    onConvert={onConvert}
+                                    onExport={onExport}
+                                    onRename={onRename}
+                                    onShareClick={onShareClick}
+                                    onEmailCollaborators={onEmailCollaborators}
+                                    onDelete={onDelete}
+                                    allowDelete={allowDelete}
+                                />
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
-                )}
-                {(path.mimeType === 'video/mp4' || path.mimeType === 'video/mpeg') && (
-                    <div>
-                        <video
-                            src={fullPath}
-                            className="w-full max-h-[25%] object-contain"
-                            autoPlay={false}
-                            controls
-                            style={
-                                path.details?.width && path.details?.height
-                                    ? { aspectRatio: path.details.width / path.details.height }
-                                    : undefined
-                            }
-                        />
-                    </div>
-                )}
-                {(path.mimeType === 'audio/mpeg' ||
-                    path.mimeType === 'audio/wav' ||
-                    path.mimeType === 'audio/ogg' ||
-                    path.mimeType === 'audio/vorbis' ||
-                    path.mimeType === 'audio/mp4') && (
-                    <div>
-                        <audio src={fullPath} className="w-full" autoPlay={false} controls />
-                    </div>
-                )}
-
-                {path.details &&
-                    (path.details.width || path.details.height || path.details.duration || path.details.pageCount) && (
-                        <Table className="mt-4">
-                            <TableBody>
-                                {path.details.width && path.details.height && (
-                                    <TableRow>
-                                        <TableCell className="font-medium px-0 w-20">Dimensions</TableCell>
-                                        <TableCell className="px">
-                                            {path.details.width} × {path.details.height}
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                                {path.details.duration && (
-                                    <TableRow>
-                                        <TableCell className="font-medium px-0 w-20">Duration</TableCell>
-                                        <TableCell className="px">
-                                            {Math.floor(path.details.duration / 60)}:
-                                            {String(Math.floor(path.details.duration % 60)).padStart(2, '0')}
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                                {path.details.pageCount && (
-                                    <TableRow>
-                                        <TableCell className="font-medium px-0 w-20">Pages</TableCell>
-                                        <TableCell className="px">{path.details.pageCount}</TableCell>
-                                    </TableRow>
-                                )}
-                                {Object.entries(path.details)
-                                    .filter(
-                                        ([key]) =>
-                                            ![
-                                                'width',
-                                                'height',
-                                                'duration',
-                                                'pageCount',
-                                                'webdavProps',
-                                                'originalName',
-                                            ].includes(key),
-                                    )
-                                    .map(([key, value]) => (
-                                        <TableRow key={key}>
-                                            <TableCell className="font-medium px-0 w-20 capitalize">{key}</TableCell>
-                                            <TableCell className="px truncate">{String(value)}</TableCell>
-                                        </TableRow>
-                                    ))}
-                            </TableBody>
-                        </Table>
-                    )}
-
-                <div className="mt-4">
-                    <DriveAccessList path={path} onShareClick={onShareClick} />
                 </div>
+                <DetailsSection path={path} />
+                <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
+                <DriveAccessList path={path} onShareClick={onShareClick} />
             </div>
+        </div>
+    );
+}
+
+const EXTRA_DETAIL_HIDDEN_KEYS = new Set(['width', 'height', 'duration', 'pageCount', 'webdavProps', 'originalName']);
+
+function DetailsSection({ path }: { path: DrivePath }) {
+    const presentation = getFilePresentation(path.mimeType, path.type);
+    const details = path.details;
+    const extraEntries = details ? Object.entries(details).filter(([key]) => !EXTRA_DETAIL_HIDDEN_KEYS.has(key)) : [];
+
+    return (
+        <>
+            <h3 className="eigen-section-label mt-2 mb-2">Details</h3>
+            <dl className="text-sm space-y-1.5">
+                <Row label="Type" value={presentation.label} />
+                <Row label="Size" value={formatFileSize(path.size)} />
+                {path.createdAt && <Row label="Created" value={formatDate(path.createdAt)} />}
+                {details?.width && details?.height && (
+                    <Row label="Dimensions" value={`${details.width} × ${details.height}`} />
+                )}
+                {details?.duration && (
+                    <Row
+                        label="Duration"
+                        value={`${Math.floor(details.duration / 60)}:${String(Math.floor(details.duration % 60)).padStart(2, '0')}`}
+                    />
+                )}
+                {details?.pageCount && <Row label="Pages" value={details.pageCount} />}
+                {extraEntries.map(([key, value]) => (
+                    <Row key={key} label={<span className="capitalize">{key}</span>} value={String(value)} />
+                ))}
+            </dl>
+        </>
+    );
+}
+
+function Row({ label, value }: { label: ReactNode; value: ReactNode }) {
+    return (
+        <div className="flex justify-between items-baseline gap-4">
+            <dt className="text-muted-foreground shrink-0">{label}</dt>
+            <dd className="text-right truncate min-w-0">{value}</dd>
         </div>
     );
 }

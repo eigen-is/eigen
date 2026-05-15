@@ -200,12 +200,12 @@ export function FileMenu({
                     )}
                     {children}
 
-                    {/* Section 5: Move to bin */}
+                    {/* Section 5: Move to trash */}
                     {canWrite && (
                         <>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
-                                <Trash2 className="h-4 w-4 mr-2" /> Move to bin
+                                <Trash2 className="h-4 w-4 mr-2" /> Move to trash
                             </DropdownMenuItem>
                         </>
                     )}

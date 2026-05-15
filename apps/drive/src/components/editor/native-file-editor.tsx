@@ -58,11 +58,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     }
 
     const detailColumn = !isMobile && (
-        <Column
-            id="detail"
-            width="400px"
-            toolbar={<DriveDetailToolbar path={path} onDownload={handleDownload} allowDelete={false} />}
-        >
+        <Column id="detail" width="400px" toolbar={<DriveDetailToolbar />}>
             <DriveDetail path={path} onDownload={handleDownload} />
         </Column>
     );

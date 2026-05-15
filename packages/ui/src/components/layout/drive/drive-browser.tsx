@@ -15,7 +15,7 @@ import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
 import { DriveTable, defaultDriveSort } from './drive-table';
-import { getFileIcon } from './file-icon-helper';
+import { getFileIcon } from './file-presentation';
 
 function matchesMimeFilter(mimeType: string, filters: string[]): boolean {
     return filters.some((filter) => {

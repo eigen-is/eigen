@@ -40,13 +40,99 @@ export type DriveVisibility = 'private' | 'public-read' | 'public-write';
 export const EIGEN_DOC_TYPES = ['doc', 'stickies', 'slides', 'sheets', 'chat'] as const;
 export type EigenDocType = (typeof EIGEN_DOC_TYPES)[number];
 
-export const DRIVE_EXTENSIONS: Record<EigenDocType, string> = {
-    doc: '.eigendoc',
-    stickies: '.eigenstickies',
-    slides: '.eigenslides',
-    sheets: '.eigensheets',
-    chat: '.eigenchat',
+// `mime` is the real mime (`application/eigendoc`); `urlSlug` is the route-safe
+// form (`application-eigendoc`) used by `/drive/.../mime/:slug` — the server
+// route reverses dash→slash at handler time.
+export type EigenDocTypeInfo = {
+    type: EigenDocType;
+    mime: string;
+    urlSlug: string;
+    extension: string;
+    label: string;
+    labelPlural: string;
+    colorVar: string;
+    softColorVar: string;
+    appName: string;
 };
+
+export const EIGEN_DOC_TYPE_INFO = {
+    doc: {
+        type: DRIVE_TYPE_DOC,
+        mime: DRIVE_MIME_DOC,
+        urlSlug: 'application-eigendoc',
+        extension: '.eigendoc',
+        label: 'Doc',
+        labelPlural: 'Docs',
+        colorVar: '--app-docs-color',
+        softColorVar: '--app-docs-color-soft',
+        appName: 'docs',
+    },
+    stickies: {
+        type: DRIVE_TYPE_STICKIES,
+        mime: DRIVE_MIME_STICKIES,
+        urlSlug: 'application-eigenstickies',
+        extension: '.eigenstickies',
+        label: 'Stickies',
+        labelPlural: 'Stickies',
+        colorVar: '--app-stickies-color',
+        softColorVar: '--app-stickies-color-soft',
+        appName: 'stickies',
+    },
+    slides: {
+        type: DRIVE_TYPE_SLIDES,
+        mime: DRIVE_MIME_SLIDES,
+        urlSlug: 'application-eigenslides',
+        extension: '.eigenslides',
+        label: 'Slide',
+        labelPlural: 'Slides',
+        colorVar: '--app-slides-color',
+        softColorVar: '--app-slides-color-soft',
+        appName: 'slides',
+    },
+    sheets: {
+        type: DRIVE_TYPE_SHEETS,
+        mime: DRIVE_MIME_SHEETS,
+        urlSlug: 'application-eigensheets',
+        extension: '.eigensheets',
+        label: 'Sheet',
+        labelPlural: 'Sheets',
+        colorVar: '--app-sheets-color',
+        softColorVar: '--app-sheets-color-soft',
+        appName: 'sheets',
+    },
+    chat: {
+        type: DRIVE_TYPE_CHAT,
+        mime: DRIVE_MIME_CHAT,
+        urlSlug: 'application-eigenchat',
+        extension: '.eigenchat',
+        label: 'Chat',
+        labelPlural: 'Chats',
+        colorVar: '--app-chat-color',
+        softColorVar: '--app-chat-color-soft',
+        appName: 'chat',
+    },
+} as const satisfies Record<EigenDocType, EigenDocTypeInfo>;
+
+export const DRIVE_EXTENSIONS = {
+    doc: EIGEN_DOC_TYPE_INFO.doc.extension,
+    stickies: EIGEN_DOC_TYPE_INFO.stickies.extension,
+    slides: EIGEN_DOC_TYPE_INFO.slides.extension,
+    sheets: EIGEN_DOC_TYPE_INFO.sheets.extension,
+    chat: EIGEN_DOC_TYPE_INFO.chat.extension,
+} as const satisfies Record<EigenDocType, string>;
+
+export function getEigenDocInfoByType(type: DrivePathType): EigenDocTypeInfo | undefined {
+    return EIGEN_DOC_TYPES.includes(type as EigenDocType) ? EIGEN_DOC_TYPE_INFO[type as EigenDocType] : undefined;
+}
+
+// Accepts both real mime (`application/eigendoc`) and route-safe url-slug
+// (`application-eigendoc`), since both forms travel through the app.
+export function getEigenDocInfoByMime(mimeOrSlug: string): EigenDocTypeInfo | undefined {
+    for (const info of Object.values(EIGEN_DOC_TYPE_INFO)) {
+        if (info.mime === mimeOrSlug || info.urlSlug === mimeOrSlug) return info;
+    }
+    return undefined;
+}
 
 export function stripEigenExtension(name: string): string {
     for (const ext of Object.values(DRIVE_EXTENSIONS)) {
@@ -188,6 +274,13 @@ export function isInlineEditable(mimeType: string, name: string): boolean {
     const dot = name.lastIndexOf('.');
     if (dot === -1) return false;
     return INLINE_EDITABLE_EXTENSIONS.has(name.slice(dot).toLowerCase());
+}
+
+// True when the item has a meaningful "Open" action: folders, eigen documents
+// (their own app), chats, and inline-editable text files. Regular binary files
+// (images, PDFs, archives) use the preview lightbox instead, not Open.
+export function isOpenable(path: { type: DrivePathType; mimeType: string; name: string }): boolean {
+    return path.type !== 'file' || isInlineEditable(path.mimeType, path.name);
 }
 
 export type ImageDimensions = {

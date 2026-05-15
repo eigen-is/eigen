@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, Download, ExternalLink, FolderDown, Loader2,
 import { useEffect, useRef, useState } from 'react';
 import type { DownloadMode, PreviewMode } from '../preview-provider/preview-provider';
 import { DriveLocationPicker } from './drive-location-picker';
-import { getFileIcon } from './file-icon-helper';
+import { getFileIcon } from './file-presentation';
 
 type FilePreviewProps = {
     previewMode: PreviewMode;

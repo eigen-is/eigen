@@ -1,45 +1,17 @@
-import { getDriveShareUrl } from '@workspace/lib/api';
-import { copyToClipboard } from '@workspace/lib/clipboard';
 import { formatDateTime } from '@workspace/lib/date';
-import {
-    DEFAULT_MOUNT_ID,
-    type DrivePath,
-    isFolderType,
-    isInlineEditable,
-    stripEigenExtension,
-} from '@workspace/lib/types';
-import {
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-} from '@workspace/ui/components/dropdown-menu';
+import { DEFAULT_MOUNT_ID, type DrivePath, isFolderType, stripEigenExtension } from '@workspace/lib/types';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import {
-    ArrowRight,
-    ChevronLeft,
-    Download,
-    ExternalLink,
-    Eye,
-    FileDown,
-    FileText,
-    Link,
-    Mail,
-    Pencil,
-    Sheet,
-    Trash2,
-    UserRoundPlus,
-} from 'lucide-react';
+import { ChevronLeft, MoreVertical, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../../hooks/use-list-drag';
 import { useListSelection } from '../../../hooks/use-list-selection';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
-import { formatDownloadLabel } from '../toolbar/file-menu';
 import { UnreadDot } from '../unread-dot';
 import { UserAvatar } from '../user-avatar';
+import { DriveItemMenuItems } from './drive-item-menu';
 import { DriveShareSummary } from './drive-share-summary';
 
 export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
@@ -191,6 +163,14 @@ export function DriveTable({
         contextMenu.handleContextMenu(e, item);
     };
 
+    const openContextMenuFromButton = (button: HTMLElement, item: DrivePath) => {
+        if (!selection.isSelected(item.id)) {
+            selection.select(item.id);
+        }
+        const rect = button.getBoundingClientRect();
+        contextMenu.openAt(item, rect.right, rect.bottom);
+    };
+
     const contextItems = contextMenu.item
         ? selection.selectedCount > 1
             ? selection.selectedItems
@@ -206,12 +186,12 @@ export function DriveTable({
 
     const gridCols =
         hideModified && hideOwner
-            ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_10%]'
+            ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_10%_40px]'
             : hideModified
-              ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%]'
+              ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%_40px]'
               : hideOwner
-                ? 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_10%_15%]'
-                : 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%]';
+                ? 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_10%_15%_40px]'
+                : 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%_40px]';
 
     return (
         <div
@@ -236,6 +216,7 @@ export function DriveTable({
                             Modified
                         </div>
                     )}
+                    <div className="hidden @[800px]:block" />
                 </div>
             )}
 
@@ -264,6 +245,7 @@ export function DriveTable({
                     {!hideOwner && <div className="hidden @[800px]:block px-2 py-1.5" />}
                     <div className="hidden @[800px]:block px-2 py-1.5" />
                     {!hideModified && <div className="hidden @[600px]:block pl-2 pr-4 py-1.5 text-right">-</div>}
+                    <div className="hidden @[800px]:block" />
                 </div>
             )}
 
@@ -367,213 +349,52 @@ export function DriveTable({
                                 {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
                             </div>
                         )}
+                        <div className="hidden @[800px]:flex items-center justify-center py-1.5">
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    openContextMenuFromButton(e.currentTarget, item);
+                                }}
+                                className="h-7 w-7 rounded hover:bg-accent flex items-center justify-center text-muted-foreground"
+                                aria-label="More actions"
+                            >
+                                <MoreVertical className="h-4 w-4" />
+                            </button>
+                        </div>
                     </div>
                 );
             })}
 
             <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
-                {/* Section 1: Open actions */}
-                {isSingleSelect &&
-                    contextMenu.item &&
-                    (contextMenu.item.type !== 'file' ||
-                        isInlineEditable(contextMenu.item.mimeType, contextMenu.item.name)) &&
-                    onItemOpen && (
-                        <DropdownMenuItem
-                            onClick={() => {
-                                onItemOpen?.(contextMenu.item!);
-                                contextMenu.close();
-                            }}
-                            className="flex items-center"
-                        >
-                            <ArrowRight className="h-4 w-4 mr-2" />
-                            Open
-                        </DropdownMenuItem>
-                    )}
-                {isSingleSelect && contextMenuItemHref && (
+                {isSingleSelect && contextMenu.item && (
+                    <DriveItemMenuItems
+                        item={contextMenu.item}
+                        href={contextMenuItemHref}
+                        onClose={contextMenu.close}
+                        onItemOpen={onItemOpen}
+                        onQuickLook={onQuickLook}
+                        onDownload={onDownload}
+                        onConvert={onConvert}
+                        onExport={onExport}
+                        onRename={onRename}
+                        onShareClick={onShareClick}
+                        onEmailCollaborators={onEmailCollaborators}
+                        onDelete={onDelete}
+                        allowDelete={allowDelete}
+                    />
+                )}
+                {!isSingleSelect && allowDelete && contextItems.length > 0 && (
                     <DropdownMenuItem
                         onClick={() => {
-                            window.open(contextMenuItemHref, '_blank');
+                            onDelete?.(contextItems);
                             contextMenu.close();
                         }}
                         className="flex items-center"
                     >
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Open in new tab
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Move {contextItems.length} items to trash
                     </DropdownMenuItem>
-                )}
-                {isSingleSelect && onQuickLook && contextMenu.item && !isFolderType(contextMenu.item.type) && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onQuickLook?.(contextMenu.item!);
-                            contextMenu.close();
-                        }}
-                        className="flex items-center"
-                    >
-                        <Eye className="h-4 w-4 mr-2" />
-                        Quick preview
-                    </DropdownMenuItem>
-                )}
-
-                {/* Section 2: Download, Convert, Export, Rename */}
-                {isSingleSelect &&
-                    ((onDownload && contextMenu.item?.type === 'file') ||
-                        (onConvert &&
-                            contextMenu.item?.type === 'file' &&
-                            (contextMenu.item.name.toLowerCase().endsWith('.xlsx') ||
-                                contextMenu.item.name.toLowerCase().endsWith('.docx'))) ||
-                        ((contextMenu.item?.type === 'doc' ||
-                            contextMenu.item?.type === 'slides' ||
-                            contextMenu.item?.type === 'sheets') &&
-                            onExport) ||
-                        onRename) && <DropdownMenuSeparator />}
-                {isSingleSelect && onDownload && contextMenu.item?.type === 'file' && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onDownload?.(contextMenu.item!);
-                            contextMenu.close();
-                        }}
-                        className="flex items-center"
-                    >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                    </DropdownMenuItem>
-                )}
-                {isSingleSelect &&
-                    onConvert &&
-                    contextMenu.item?.type === 'file' &&
-                    contextMenu.item.name.toLowerCase().endsWith('.xlsx') && (
-                        <DropdownMenuItem
-                            onClick={() => {
-                                onConvert(contextMenu.item!, 'eigensheets');
-                                contextMenu.close();
-                            }}
-                            className="flex items-center"
-                        >
-                            <Sheet className="h-4 w-4 mr-2" />
-                            Convert to Sheet
-                        </DropdownMenuItem>
-                    )}
-                {isSingleSelect &&
-                    onConvert &&
-                    contextMenu.item?.type === 'file' &&
-                    contextMenu.item.name.toLowerCase().endsWith('.docx') && (
-                        <DropdownMenuItem
-                            onClick={() => {
-                                onConvert(contextMenu.item!, 'eigendoc');
-                                contextMenu.close();
-                            }}
-                            className="flex items-center"
-                        >
-                            <FileText className="h-4 w-4 mr-2" />
-                            Convert to Document
-                        </DropdownMenuItem>
-                    )}
-                {isSingleSelect &&
-                    (contextMenu.item?.type === 'doc' ||
-                        contextMenu.item?.type === 'slides' ||
-                        contextMenu.item?.type === 'sheets') &&
-                    onExport && (
-                        <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
-                                <FileDown className="h-4 w-4 mr-2" />
-                                Download
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent>
-                                {(contextMenu.item?.type === 'doc'
-                                    ? ['docx', 'pdf', 'html']
-                                    : contextMenu.item?.type === 'sheets'
-                                      ? ['xlsx', 'pdf', 'html']
-                                      : ['pdf', 'html']
-                                ).map((format) => (
-                                    <DropdownMenuItem
-                                        key={format}
-                                        onClick={() => {
-                                            onExport(contextMenu.item!, format);
-                                            contextMenu.close();
-                                        }}
-                                    >
-                                        {formatDownloadLabel(format)}
-                                    </DropdownMenuItem>
-                                ))}
-                            </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                    )}
-                {isSingleSelect && onRename && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onRename?.(contextMenu.item!);
-                            contextMenu.close();
-                        }}
-                        className="flex items-center"
-                    >
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Rename
-                    </DropdownMenuItem>
-                )}
-
-                {/* Section 3: Share */}
-                {isSingleSelect && onShareClick && (
-                    <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
-                                <UserRoundPlus className="h-4 w-4 mr-2" />
-                                Share
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent>
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        onShareClick(contextMenu.item!);
-                                        contextMenu.close();
-                                    }}
-                                >
-                                    <UserRoundPlus className="h-4 w-4 mr-2" />
-                                    Share
-                                </DropdownMenuItem>
-                                {onEmailCollaborators &&
-                                    (contextMenu.item?.acl?.length || contextMenu.item?.visibility !== 'private') && (
-                                        <DropdownMenuItem
-                                            onClick={() => {
-                                                onEmailCollaborators(contextMenu.item!);
-                                                contextMenu.close();
-                                            }}
-                                        >
-                                            <Mail className="h-4 w-4 mr-2" />
-                                            Email collaborators
-                                        </DropdownMenuItem>
-                                    )}
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        copyToClipboard(
-                                            getDriveShareUrl(contextMenu.item!),
-                                            'Link copied to clipboard',
-                                        );
-                                        contextMenu.close();
-                                    }}
-                                >
-                                    <Link className="h-4 w-4 mr-2" />
-                                    Copy link
-                                </DropdownMenuItem>
-                            </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                    </>
-                )}
-
-                {/* Section 4: Move to bin */}
-                {allowDelete && contextItems.length > 0 && (
-                    <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onClick={() => {
-                                onDelete?.(contextItems);
-                                contextMenu.close();
-                            }}
-                            className="flex items-center"
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            {isSingleSelect ? 'Move to bin' : `Move ${contextItems.length} items to bin`}
-                        </DropdownMenuItem>
-                    </>
                 )}
             </ContextMenuAnchor>
         </div>

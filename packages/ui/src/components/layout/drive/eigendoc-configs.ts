@@ -1,43 +1,27 @@
-import { DRIVE_TYPE_DOC, DRIVE_TYPE_SHEETS, DRIVE_TYPE_SLIDES, DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
-import { FileText, Presentation, Sheet, SquareKanban } from 'lucide-react';
+import { EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
 import type { EigenDocAppConfig } from './eigendoc-config';
+import { EIGEN_DOC_ICONS } from './file-presentation';
 
-export const DOCS_CONFIG: EigenDocAppConfig = {
-    appName: 'docs',
-    mimeType: 'application-eigendoc',
-    driveType: DRIVE_TYPE_DOC,
-    icon: FileText,
-    newLabel: 'New doc',
-    allLabel: 'All docs',
-    createType: 'doc',
-};
+// Per-app config consumed by the EigenDoc app shell (EigenDocRoot, EigenDocListView,
+// EigenDocSharedView, EigenDocNewButton). Both metadata and icons derive from
+// shared registries so adding a new app type is a single-source edit.
+//
+// `mimeType` is historically the route-safe url-slug (`application-eigendoc`) —
+// the `/drive/.../mime/:slug` route reverses dash→slash server-side.
+function buildConfig(type: EigenDocType): EigenDocAppConfig {
+    const info = EIGEN_DOC_TYPE_INFO[type];
+    return {
+        appName: info.appName,
+        mimeType: info.urlSlug,
+        driveType: info.type,
+        icon: EIGEN_DOC_ICONS[type],
+        newLabel: `New ${info.label.toLowerCase()}`,
+        allLabel: `All ${info.labelPlural.toLowerCase()}`,
+        createType: info.type,
+    };
+}
 
-export const STICKIES_CONFIG: EigenDocAppConfig = {
-    appName: 'stickies',
-    mimeType: 'application-eigenstickies',
-    driveType: DRIVE_TYPE_STICKIES,
-    icon: SquareKanban,
-    newLabel: 'New stickies',
-    allLabel: 'All stickies',
-    createType: 'stickies',
-};
-
-export const SLIDES_CONFIG: EigenDocAppConfig = {
-    appName: 'slides',
-    mimeType: 'application-eigenslides',
-    driveType: DRIVE_TYPE_SLIDES,
-    icon: Presentation,
-    newLabel: 'New slide',
-    allLabel: 'All slides',
-    createType: 'slides',
-};
-
-export const SHEETS_CONFIG: EigenDocAppConfig = {
-    appName: 'sheets',
-    mimeType: 'application-eigensheets',
-    driveType: DRIVE_TYPE_SHEETS,
-    icon: Sheet,
-    newLabel: 'New sheet',
-    allLabel: 'All sheets',
-    createType: 'sheets',
-};
+export const DOCS_CONFIG: EigenDocAppConfig = buildConfig('doc');
+export const STICKIES_CONFIG: EigenDocAppConfig = buildConfig('stickies');
+export const SLIDES_CONFIG: EigenDocAppConfig = buildConfig('slides');
+export const SHEETS_CONFIG: EigenDocAppConfig = buildConfig('sheets');

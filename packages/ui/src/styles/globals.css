@@ -258,6 +258,19 @@
         @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
     }
 
+    /* DrivePreview hero: scaled-down server-rendered HTML preview for an
+       eigendoc/slides/sheet/text file. The component wraps innerHTML in this
+       class; rules below tame the wrapped body. */
+    .drive-preview-hero .slide:not(:first-child) {
+        display: none;
+    }
+    .drive-preview-hero .eigen-prose {
+        padding: 1rem;
+    }
+    .drive-preview-hero .drive-preview-code {
+        padding: 1rem;
+    }
+
     .eigen-list-item {
         @apply bg-background cursor-pointer select-none;
         box-shadow: inset 2px 0 0 0 transparent;

@@ -225,16 +225,24 @@ export function DriveLayout({
         />
     );
 
-    const detailPath = selectedPath || currentPath;
+    // When `pid` is set the user is navigating to a specific file: don't fall
+    // back to `currentPath` (the folder) during the brief refetch frame, or
+    // the panel renders the folder's properties (with its Open button) for
+    // one tick when arrow-keying between files.
+    const detailPath = pid ? selectedPath : selectedPath || currentPath;
 
     const detailProps = {
         path: detailPath,
-        onDelete: allowDelete ? (p: DrivePath) => handleDeletePaths([p]) : undefined,
+        onDelete: allowDelete ? handleDeletePaths : undefined,
         onShareClick: allowShare ? handleShareClick : undefined,
         onDownload: handleDownloadPath,
         onItemOpen: onRowActivate,
         allowDelete,
         onRename: allowRename ? handleRenamePath : undefined,
+        onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
+        onConvert: handleConvertPath,
+        onExport: handleExportPath,
+        onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
     };
 
     const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));
@@ -242,19 +250,7 @@ export function DriveLayout({
     const desktopShowDetail = !!(pidInFolder || (currentPath && currentPath?.type !== 'folder'));
     const showDetail = isMobile ? mobileShowDetail : desktopShowDetail;
 
-    const detailToolbar =
-        showDetail && detailPath ? (
-            <DriveDetailToolbar
-                path={detailPath}
-                onClose={onBackToList}
-                onDelete={allowDelete ? (p: DrivePath) => handleDeletePaths([p]) : undefined}
-                onShareClick={allowShare ? handleShareClick : undefined}
-                onDownload={handleDownloadPath}
-                onItemOpen={onRowActivate}
-                onRename={allowRename ? handleRenamePath : undefined}
-                allowDelete={allowDelete}
-            />
-        ) : null;
+    const detailToolbar = showDetail && detailPath ? <DriveDetailToolbar onClose={onBackToList} /> : null;
 
     return (
         <>
