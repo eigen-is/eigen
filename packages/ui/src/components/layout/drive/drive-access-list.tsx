@@ -2,7 +2,6 @@ import { useDriveAccess } from '@workspace/lib/drive';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
-import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
 import { Lock, Unlock, UserRoundPlus } from 'lucide-react';
 import { CollapsibleUserList } from '../collapsible-user-list';
@@ -42,7 +41,7 @@ export function DriveAccessList({ path, className, onShareClick, scrollable }: D
 
     return (
         <div className={cn('flex flex-col min-h-0', className)}>
-            <div className={cn('border-t py-4', scrollable && 'min-h-0 overflow-y-auto')}>
+            <div className={cn(scrollable && 'min-h-0 overflow-y-auto')}>
                 <CollapsibleUserList
                     title={title}
                     summaryLines={summary ? [summary] : undefined}
@@ -69,9 +68,8 @@ export function DriveAccessList({ path, className, onShareClick, scrollable }: D
                     ))}
                 </CollapsibleUserList>
             </div>
-            <Separator className="shrink-0" />
             <div className="shrink-0 pt-4">
-                <h4 className="text-sm font-medium mb-2">General access</h4>
+                <h3 className="eigen-section-label mb-2">General access</h3>
                 {!isPublic ? (
                     <div className="flex items-center">
                         <AvatarIcon className="w-10 h-10">
