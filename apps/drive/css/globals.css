@@ -1,3 +1,8 @@
+:root {
+    --app-current-color: var(--app-drive-color);
+    --app-current-color-soft: var(--app-drive-color-soft);
+}
+
 .bg-app {
     background-color: var(--app-drive-color);
 }

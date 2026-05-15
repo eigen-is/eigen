@@ -1,3 +1,8 @@
+:root {
+    --app-current-color: var(--app-calendar-color);
+    --app-current-color-soft: var(--app-calendar-color-soft);
+}
+
 .bg-app {
     background-color: var(--app-calendar-color);
 }

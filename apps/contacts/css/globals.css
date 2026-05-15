@@ -1,3 +1,8 @@
+:root {
+    --app-current-color: var(--app-contacts-color);
+    --app-current-color-soft: var(--app-contacts-color-soft);
+}
+
 .bg-app {
     background-color: var(--app-contacts-color);
 }
