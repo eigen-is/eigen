@@ -92,6 +92,19 @@ function isFilterApp(name: string): name is FilterApp {
     return name === 'drive' || name === 'docs' || name === 'slides' || name === 'stickies' || name === 'sheets';
 }
 
+const SHARING_NOUN: Record<Exclude<FilterApp, 'drive'>, string> = {
+    docs: 'Docs',
+    slides: 'Slides',
+    stickies: 'Stickies',
+    sheets: 'Sheets',
+};
+
+function sharingLabel(direction: 'by-me' | 'with-me', currentApp: FilterApp): string {
+    const base = direction === 'by-me' ? 'Shared by me' : 'Shared with me';
+    if (currentApp === 'drive') return base;
+    return `${SHARING_NOUN[currentApp]} ${base.toLowerCase()}`;
+}
+
 function FilterRow({
     entry,
     currentApp,
@@ -191,13 +204,13 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                 <SidebarItem
                     icon={<UsersRound className="h-4 w-4" />}
                     to="/shared/by-me"
-                    label="Shared by me"
+                    label={sharingLabel('by-me', currentApp)}
                     condensed={condensed}
                 />
                 <SidebarItem
                     icon={<Download className="h-4 w-4" />}
                     to="/shared/with-me"
-                    label="Shared with me"
+                    label={sharingLabel('with-me', currentApp)}
                     condensed={condensed}
                 />
             </SidebarSection>
