@@ -86,8 +86,12 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     const contentRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
 
-    const intrinsicWidth =
-        data?.mode === 'eigendoc' ? A4_WIDTH_PX : data?.mode === 'eigenslides' ? SLIDE_BASE_WIDTH : null;
+    // Doc-like modes (eigendoc and markdown) render in an A4 page with 2cm padding so
+    // the thumbnail is a proportional miniature. Slides have their own 16:9 base width.
+    // Sheets / plaintext / code reflow to the container.
+    const isDocLike = data?.mode === 'eigendoc' || data?.mode === 'markdown';
+    const intrinsicWidth = isDocLike ? A4_WIDTH_PX : data?.mode === 'eigenslides' ? SLIDE_BASE_WIDTH : null;
+    const intrinsicPadding = isDocLike ? '2cm' : undefined;
 
     useEffect(() => {
         const container = containerRef.current;
@@ -114,6 +118,9 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     if (!data?.body) return null;
 
     const mode = data.mode;
+    // eigen-prose for rendered prose (eigendoc, markdown). drive-preview-code for raw
+    // <pre><code> blocks — eigen-prose's <pre> rule paints a dark code-block background
+    // that's wrong for a whole-file plaintext/code thumbnail.
     const wrapperClass =
         mode === 'eigendoc'
             ? 'eigen-prose tiptap'
@@ -121,9 +128,9 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
               ? 'drive-preview-slides'
               : mode === 'eigensheets'
                 ? 'eigensheets-preview'
-                : mode === 'code'
-                  ? 'drive-preview-code'
-                  : 'eigen-prose';
+                : mode === 'markdown'
+                  ? 'eigen-prose'
+                  : 'drive-preview-code';
 
     return (
         <div ref={containerRef} className="drive-preview-hero absolute inset-0 bg-background pointer-events-none">
@@ -134,6 +141,7 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                     transform: `scale(${scale})`,
                     transformOrigin: 'top left',
                     ...(intrinsicWidth ? { width: `${intrinsicWidth}px` } : null),
+                    ...(intrinsicPadding ? { padding: intrinsicPadding } : null),
                 }}
                 dangerouslySetInnerHTML={{ __html: data.body }}
             />
