@@ -3,7 +3,6 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useListTrash, useRootFolder } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { Badge } from '@workspace/ui/components/badge';
 import { Separator } from '@workspace/ui/components/separator';
 import {
@@ -43,6 +42,9 @@ type FilterEntry = {
     appHref: () => string;
 };
 
+// Not derived from EIGENDOC_CONFIGS or apps.ts: this list includes Drive-internal rows
+// (All images, All chats — no dedicated app) alongside app-backed rows, and the display
+// order matches the routing matrix in the design spec.
 const FILTER_ENTRIES: ReadonlyArray<FilterEntry> = [
     {
         targetApp: 'drive',
@@ -99,12 +101,6 @@ const SHARING_NOUN: Record<Exclude<FilterApp, 'drive'>, string> = {
     sheets: 'Sheets',
 };
 
-function sharingLabel(direction: 'by-me' | 'with-me', currentApp: FilterApp): string {
-    const base = direction === 'by-me' ? 'Shared by me' : 'Shared with me';
-    if (currentApp === 'drive') return base;
-    return `${SHARING_NOUN[currentApp]} ${base.toLowerCase()}`;
-}
-
 function FilterRow({
     entry,
     currentApp,
@@ -157,17 +153,22 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
     }
 
     const currentApp: FilterApp = isFilterApp(appName) ? appName : 'drive';
-    const userId = user?.id || '';
+    const userId = user!.id;
     const { data: ownRoot } = useRootFolder(userId, DEFAULT_MOUNT_ID);
-    const personalRoot: DrivePath | null = ownRoot || null;
+    const personalRoot = ownRoot ?? null;
 
+    // Empty ownerId short-circuits the hook's enabled guard; only fetch trash count in Drive.
     const { data: trashedItems } = useListTrash(currentApp === 'drive' ? userId : '', DEFAULT_MOUNT_ID);
     const trashCount = trashedItems?.length ?? 0;
 
     const { data: myTeams } = useMyTeams();
 
-    const driveHomePath = personalRoot ? `/fs/${personalRoot.ownerId}/${personalRoot.mountId}/${personalRoot.id}` : '/';
-    const driveHomeHref = personalRoot ? getDriveAppUrl(driveHomePath.slice(1)) : getDriveAppUrl();
+    const driveHomePath = personalRoot ? `fs/${personalRoot.ownerId}/${personalRoot.mountId}/${personalRoot.id}` : '';
+    const driveHomeProps =
+        currentApp === 'drive'
+            ? { to: driveHomePath ? `/${driveHomePath}` : '/' }
+            : { href: getDriveAppUrl(driveHomePath) };
+    const trashProps = currentApp === 'drive' ? { to: '/trash' } : { href: getDriveAppUrl('trash') };
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
@@ -175,21 +176,12 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
             {newButton}
 
             <SidebarSection condensed={condensed}>
-                {currentApp === 'drive' ? (
-                    <SidebarItem
-                        icon={<Home className="h-4 w-4" />}
-                        to={driveHomePath}
-                        label="Drive"
-                        condensed={condensed}
-                    />
-                ) : (
-                    <SidebarItem
-                        icon={<Home className="h-4 w-4" />}
-                        href={driveHomeHref}
-                        label="Drive"
-                        condensed={condensed}
-                    />
-                )}
+                <SidebarItem
+                    icon={<Home className="h-4 w-4" />}
+                    {...driveHomeProps}
+                    label="Drive"
+                    condensed={condensed}
+                />
             </SidebarSection>
 
             <Separator />
@@ -204,35 +196,26 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                 <SidebarItem
                     icon={<UsersRound className="h-4 w-4" />}
                     to="/shared/by-me"
-                    label={sharingLabel('by-me', currentApp)}
+                    label={currentApp === 'drive' ? 'Shared by me' : `${SHARING_NOUN[currentApp]} shared by me`}
                     condensed={condensed}
                 />
                 <SidebarItem
                     icon={<Download className="h-4 w-4" />}
                     to="/shared/with-me"
-                    label={sharingLabel('with-me', currentApp)}
+                    label={currentApp === 'drive' ? 'Shared with me' : `${SHARING_NOUN[currentApp]} shared with me`}
                     condensed={condensed}
                 />
             </SidebarSection>
 
             <Separator />
             <SidebarSection condensed={condensed}>
-                {currentApp === 'drive' ? (
-                    <SidebarItem icon={<Trash2 className="h-4 w-4" />} to="/trash" label="Trash" condensed={condensed}>
-                        {!condensed && trashCount > 0 && (
-                            <Badge variant="secondary" className="ml-auto text-xs">
-                                {trashCount}
-                            </Badge>
-                        )}
-                    </SidebarItem>
-                ) : (
-                    <SidebarItem
-                        icon={<Trash2 className="h-4 w-4" />}
-                        href={getDriveAppUrl('trash')}
-                        label="Trash"
-                        condensed={condensed}
-                    />
-                )}
+                <SidebarItem icon={<Trash2 className="h-4 w-4" />} {...trashProps} label="Trash" condensed={condensed}>
+                    {currentApp === 'drive' && !condensed && trashCount > 0 && (
+                        <Badge variant="secondary" className="ml-auto text-xs">
+                            {trashCount}
+                        </Badge>
+                    )}
+                </SidebarItem>
             </SidebarSection>
 
             {myTeams?.some((t) => t.mounts.length > 0) && (
@@ -241,7 +224,7 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Drives'}>
                         {myTeams.flatMap((team) =>
                             team.mounts
-                                .filter((mount) => mount.rootPathId)
+                                .filter((mount) => currentApp !== 'drive' || mount.rootPathId)
                                 .map((mount) => {
                                     const owner = teamOwnerId(team.id);
                                     const to =
