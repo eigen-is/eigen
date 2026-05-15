@@ -2,14 +2,12 @@ import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
-import { Download, Plus, UsersRound } from 'lucide-react';
-import { useState } from 'react';
-import { DriveCreateEigenDoc } from './drive-create-eigendoc';
+import { Download, UsersRound } from 'lucide-react';
 import type { EigenDocAppConfig } from './eigendoc-config';
+import { EigenDocNewButton } from './eigendoc-new-button';
 
 type EigenDocSidebarProps = {
     config: EigenDocAppConfig;
@@ -53,23 +51,12 @@ export function EigenDocSidebar({
     isMobile = false,
     rootPath = null,
 }: EigenDocSidebarProps) {
-    const [createOpen, setCreateOpen] = useState(false);
     const { data: myTeams } = useMyTeams();
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName={config.appName} onClose={onClose} />}
-            <div className="px-3 py-2">
-                <Button
-                    variant="default"
-                    size={condensed ? 'icon' : 'default'}
-                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                    onClick={() => setCreateOpen(true)}
-                >
-                    <Plus className="h-4 w-4" />
-                    {!condensed && <span>{config.newLabel}</span>}
-                </Button>
-            </div>
+            <EigenDocNewButton config={config} rootPath={rootPath} condensed={condensed} />
 
             <SidebarSection condensed={condensed}>
                 <SidebarItem
@@ -114,15 +101,6 @@ export function EigenDocSidebar({
             )}
 
             <StorageUsage className="mt-auto" condensed={condensed} />
-
-            <DriveCreateEigenDoc
-                open={createOpen}
-                onOpenChange={setCreateOpen}
-                type={config.createType}
-                defaultOwnerId={rootPath?.ownerId}
-                defaultFolderId={rootPath?.id}
-                defaultMountId={rootPath?.mountId}
-            />
         </div>
     );
 }
