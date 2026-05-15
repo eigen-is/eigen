@@ -4,8 +4,9 @@ import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
 import type { DriveContextType } from '@workspace/lib/types/drive';
 import { ErrorState, LoadingState } from '@workspace/ui';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
+import { AppSidebar } from '@workspace/ui/components/layout/sidebar/app-sidebar';
 import { createContext } from 'react';
-import { DriveSidebar, GuestDriveSidebar } from '../components/drive/drive-sidebar';
+import { DriveNewMenu } from '../components/drive/drive-new-menu';
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
@@ -38,7 +39,7 @@ function GuestDriveRoot() {
             appName="drive"
             rootRoute={Route}
             sidebar={({ condensed, isMobile, onClose }) => (
-                <GuestDriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
+                <AppSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
             )}
         >
             <DriveContext.Provider value={{ rootPath: null }}>
@@ -75,7 +76,12 @@ function AuthenticatedDriveRoot() {
             appName="drive"
             rootRoute={Route}
             sidebar={({ condensed, isMobile, onClose }) => (
-                <DriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} rootPath={rootPath} />
+                <AppSidebar
+                    condensed={condensed}
+                    isMobile={isMobile}
+                    onClose={onClose}
+                    newButton={<DriveNewMenu rootPath={rootPath} condensed={condensed} />}
+                />
             )}
         >
             <DriveContext.Provider value={{ rootPath }}>
