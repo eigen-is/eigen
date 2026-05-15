@@ -5,8 +5,9 @@ import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveContextType } from '@workspace/lib/types/drive';
 import { createContext } from 'react';
 import { AppShell } from '../app/app-shell';
+import { AppSidebar } from '../sidebar/app-sidebar';
 import type { EigenDocAppConfig } from './eigendoc-config';
-import { EigenDocSidebar, GuestEigenDocSidebar } from './eigendoc-sidebar';
+import { EigenDocNewButton } from './eigendoc-new-button';
 
 export const EigenDocDriveContext = createContext<DriveContextType>({
     rootPath: null,
@@ -44,23 +45,18 @@ export function EigenDocRoot({ config, rootRoute, isFullScreen = false, teamOwne
             sidebarMode={isFullScreen ? 'none' : 'collapsible'}
             sidebar={
                 !isFullScreen
-                    ? ({ condensed, isMobile, onClose }) =>
-                          isGuest ? (
-                              <GuestEigenDocSidebar
-                                  config={config}
-                                  condensed={condensed}
-                                  isMobile={isMobile}
-                                  onClose={onClose}
-                              />
-                          ) : (
-                              <EigenDocSidebar
-                                  config={config}
-                                  condensed={condensed}
-                                  isMobile={isMobile}
-                                  onClose={onClose}
-                                  rootPath={rootPath}
-                              />
-                          )
+                    ? ({ condensed, isMobile, onClose }) => (
+                          <AppSidebar
+                              condensed={condensed}
+                              isMobile={isMobile}
+                              onClose={onClose}
+                              newButton={
+                                  isGuest ? undefined : (
+                                      <EigenDocNewButton config={config} rootPath={rootPath} condensed={condensed} />
+                                  )
+                              }
+                          />
+                      )
                     : undefined
             }
         >
