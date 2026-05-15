@@ -26,6 +26,7 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     condensed={condensed}
                     to="/"
                     params={{}}
+                    exact
                 />
                 <SidebarItem
                     icon={<BookUser className="h-4 w-4" />}

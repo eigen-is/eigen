@@ -116,7 +116,7 @@ function FilterRow({
 }) {
     if (entry.targetApp === currentApp) {
         const to = currentApp === 'drive' ? `/mime/${entry.driveMime}` : '/';
-        return <SidebarItem icon={entry.icon} to={to} label={entry.label} condensed={condensed} />;
+        return <SidebarItem icon={entry.icon} to={to} label={entry.label} condensed={condensed} exact={to === '/'} />;
     }
     return <SidebarItem icon={entry.icon} href={entry.appHref()} label={entry.label} condensed={condensed} />;
 }
