@@ -1,3 +1,8 @@
+:root {
+    --app-current-color: var(--app-admin-color);
+    --app-current-color-soft: var(--app-admin-color-soft);
+}
+
 .bg-app {
     background-color: var(--app-admin-color);
 }

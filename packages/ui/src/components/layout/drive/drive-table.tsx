@@ -222,17 +222,17 @@ export function DriveTable({
         >
             {!hideHeader && (
                 <div className={cn('grid border-b', gridCols)}>
-                    <div className="text-muted-foreground h-10 px-2 flex items-center font-medium">Name</div>
+                    <div className="eigen-section-label h-10 px-2 flex items-center">Name</div>
                     {!hideOwner && (
-                        <div className="text-muted-foreground h-10 px-2 hidden @[800px]:flex items-center justify-center font-medium">
+                        <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center">
                             Owner
                         </div>
                     )}
-                    <div className="text-muted-foreground h-10 px-2 hidden @[800px]:flex items-center justify-center font-medium whitespace-nowrap">
+                    <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center whitespace-nowrap">
                         Shared with
                     </div>
                     {!hideModified && (
-                        <div className="text-muted-foreground h-10 pl-2 pr-4 hidden @[600px]:flex items-center justify-end font-medium">
+                        <div className="eigen-section-label h-10 pl-2 pr-4 hidden @[600px]:flex items-center justify-end">
                             Modified
                         </div>
                     )}

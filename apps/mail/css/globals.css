@@ -1,3 +1,8 @@
+:root {
+    --app-current-color: var(--app-mail-color);
+    --app-current-color-soft: var(--app-mail-color-soft);
+}
+
 .bg-app {
     background-color: var(--app-mail-color);
 }
