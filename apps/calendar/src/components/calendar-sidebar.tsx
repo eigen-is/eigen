@@ -147,84 +147,64 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
             </div>
 
             <div className="overflow-auto flex-1">
-                <SidebarSection condensed={condensed}>
-                    <div className={cn('flex items-center mb-1', condensed ? 'justify-center' : 'justify-between')}>
-                        {!condensed && (
-                            <h3 className="text-sm font-semibold text-foreground px-3 select-none">My Calendars</h3>
-                        )}
-                        <TooltipButton icon={Plus} tooltipText="Add new calendar" onClick={handleCreateCalendar} />
-                    </div>
-
+                <SidebarSection
+                    condensed={condensed}
+                    title="My Calendars"
+                    action={<TooltipButton icon={Plus} tooltipText="Add new calendar" onClick={handleCreateCalendar} />}
+                >
                     {calendarsLoading ? (
                         <EigenLoader />
                     ) : (
-                        <div className="space-y-0.5">
-                            {calendars.map((cal) => (
-                                <div
-                                    key={cal.id}
-                                    className={cn(
-                                        'flex items-center gap-2 px-3 py-1.5 rounded-md group relative',
-                                        !condensed && 'pr-8 hover:bg-accent',
-                                    )}
-                                >
-                                    <CalendarCheckbox
-                                        color={cal.color}
-                                        checked={cal.visible}
-                                        onChange={() => updateCalendar.mutate({ id: cal.id, visible: !cal.visible })}
-                                    />
-                                    {!condensed && (
-                                        <>
-                                            <span className="text-sm truncate flex-1">{cal.name}</span>
-                                            <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
-                                                <TooltipButton
-                                                    icon={Pencil}
-                                                    tooltipText="Edit calendar"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => handleEditCalendar(cal)}
-                                                />
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
+                        calendars.map((cal) => (
+                            <div
+                                key={cal.id}
+                                className={cn(
+                                    'flex items-center gap-2 px-3 py-1.5 rounded-md group relative',
+                                    !condensed && 'pr-8 hover:bg-accent',
+                                )}
+                            >
+                                <CalendarCheckbox
+                                    color={cal.color}
+                                    checked={cal.visible}
+                                    onChange={() => updateCalendar.mutate({ id: cal.id, visible: !cal.visible })}
+                                />
+                                {!condensed && (
+                                    <>
+                                        <span className="text-sm truncate flex-1">{cal.name}</span>
+                                        <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
+                                            <TooltipButton
+                                                icon={Pencil}
+                                                tooltipText="Edit calendar"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleEditCalendar(cal)}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        ))
                     )}
                 </SidebarSection>
 
                 {personalShared.length > 0 && (
                     <>
                         <Separator />
-                        <SidebarSection condensed={condensed}>
-                            <div
-                                className={cn(
-                                    'flex items-center mb-1',
-                                    condensed ? 'justify-center' : 'justify-between',
-                                )}
-                            >
-                                {!condensed && (
-                                    <h3 className="text-sm font-semibold text-foreground px-3 select-none">
-                                        Shared with me
-                                    </h3>
-                                )}
-                            </div>
-
+                        <SidebarSection condensed={condensed} title="Shared with me">
                             {sharedLoading ? (
                                 <EigenLoader />
                             ) : (
-                                <div className="space-y-0.5">
-                                    {personalShared.map((sc) => (
-                                        <SharedCalendarItem
-                                            key={sc.id}
-                                            sc={sc}
-                                            condensed={condensed}
-                                            onToggle={() =>
-                                                updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
-                                            }
-                                            onEdit={() => handleEditSharedCalendar(sc)}
-                                        />
-                                    ))}
-                                </div>
+                                personalShared.map((sc) => (
+                                    <SharedCalendarItem
+                                        key={sc.id}
+                                        sc={sc}
+                                        condensed={condensed}
+                                        onToggle={() =>
+                                            updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
+                                        }
+                                        onEdit={() => handleEditSharedCalendar(sc)}
+                                    />
+                                ))
                             )}
                         </SidebarSection>
                     </>
@@ -233,39 +213,24 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
                 {teamShared.length > 0 && (
                     <>
                         <Separator />
-                        <SidebarSection condensed={condensed}>
-                            <div
-                                className={cn(
-                                    'flex items-center mb-1',
-                                    condensed ? 'justify-center' : 'justify-between',
-                                )}
-                            >
-                                {!condensed && (
-                                    <h3 className="text-sm font-semibold text-foreground px-3 select-none">
-                                        Team Calendars
-                                    </h3>
-                                )}
-                            </div>
-
+                        <SidebarSection condensed={condensed} title="Team Calendars">
                             {sharedLoading ? (
                                 <EigenLoader />
                             ) : (
-                                <div className="space-y-0.5">
-                                    {teamShared.map((sc) => {
-                                        const display = { ...sc, calendarName: getTeamName(sc.ownerUserId) };
-                                        return (
-                                            <SharedCalendarItem
-                                                key={sc.id}
-                                                sc={display}
-                                                condensed={condensed}
-                                                onToggle={() =>
-                                                    updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
-                                                }
-                                                onEdit={() => handleEditSharedCalendar(display)}
-                                            />
-                                        );
-                                    })}
-                                </div>
+                                teamShared.map((sc) => {
+                                    const display = { ...sc, calendarName: getTeamName(sc.ownerUserId) };
+                                    return (
+                                        <SharedCalendarItem
+                                            key={sc.id}
+                                            sc={display}
+                                            condensed={condensed}
+                                            onToggle={() =>
+                                                updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
+                                            }
+                                            onEdit={() => handleEditSharedCalendar(display)}
+                                        />
+                                    );
+                                })
                             )}
                         </SidebarSection>
                     </>
