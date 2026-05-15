@@ -15,6 +15,7 @@ export type SidebarItemProps = {
     condensed?: boolean;
     className?: string;
     children?: ReactNode;
+    exact?: boolean;
 };
 
 export function SidebarItem({
@@ -29,6 +30,7 @@ export function SidebarItem({
     condensed = false,
     className,
     children,
+    exact = false,
 }: SidebarItemProps) {
     const baseStyles = cn(
         'flex items-center rounded-md px-2.5 py-1.5 text-sm font-medium select-none',
@@ -58,7 +60,7 @@ export function SidebarItem({
                 inactiveProps={{
                     className: 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 }}
-                activeOptions={{ exact: false }}
+                activeOptions={{ exact }}
             >
                 {content}
             </Link>
