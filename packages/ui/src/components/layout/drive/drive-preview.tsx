@@ -86,12 +86,16 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     const contentRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
 
-    // Doc-like modes (eigendoc and markdown) render in an A4 page with 2cm padding so
-    // the thumbnail is a proportional miniature. Slides have their own 16:9 base width.
-    // Sheets / plaintext / code reflow to the container.
-    const isDocLike = data?.mode === 'eigendoc' || data?.mode === 'markdown';
-    const intrinsicWidth = isDocLike ? A4_WIDTH_PX : data?.mode === 'eigenslides' ? SLIDE_BASE_WIDTH : null;
-    const intrinsicPadding = isDocLike ? '2cm' : undefined;
+    // Text-based modes (eigendoc, markdown, plaintext, code) all render into an A4 page
+    // with 2cm padding so thumbnails are proportional miniatures. Slides have a 16:9 base
+    // width. Sheets vary in width — fall back to scrollWidth measurement.
+    const intrinsicWidth =
+        data?.mode === 'eigenslides'
+            ? SLIDE_BASE_WIDTH
+            : data?.mode && data.mode !== 'eigensheets'
+              ? A4_WIDTH_PX
+              : null;
+    const intrinsicPadding = intrinsicWidth === A4_WIDTH_PX ? '2cm' : undefined;
 
     useEffect(() => {
         const container = containerRef.current;
