@@ -1,40 +1,26 @@
-import { useMatch, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, useListTrash, usePathInfo } from '@workspace/lib/drive';
+import { DEFAULT_MOUNT_ID, useListTrash } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
-import { Button } from '@workspace/ui/components/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@workspace/ui/components/dropdown-menu';
-import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
-import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
-import { DriveUploadFiles } from '@workspace/ui/components/layout/drive/drive-upload-files';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
 import {
     Download,
     FileText,
-    FolderPlus,
     Home,
     Image,
     MessageSquare,
-    Plus,
     Presentation,
     Sheet,
     SquareKanban,
     Trash2,
-    Upload as UploadIcon,
     UsersRound,
 } from 'lucide-react';
-import { useState } from 'react';
+import { DriveNewMenu } from './drive-new-menu';
 
 type DriveSidebarProps = {
     condensed?: boolean;
@@ -90,107 +76,12 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
     const { data: trashedItems } = useListTrash(currentUserId, DEFAULT_MOUNT_ID);
     const trashCount = trashedItems?.length ?? 0;
 
-    const [createFolderOpen, setCreateFolderOpen] = useState(false);
-    const [createType, setCreateType] = useState<EigenDocType | null>(null);
-    const [uploadOpen, setUploadOpen] = useState(false);
-    const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-    const navigate = useNavigate();
-
-    // Check if we're in a filesystem route and get current path from URL
-    const routeMatch = useMatch({
-        from: '/_auth/fs/$ownerId/$mountId/$pathId',
-        shouldThrow: false,
-    });
-
-    // Extract the parameters if we have a match
-    const currentPathId = routeMatch?.params?.pathId;
-    const currentOwnerId = routeMatch?.params?.ownerId;
-    const currentMountId = routeMatch?.params?.mountId;
-
-    // Get path info for the current path
-    const { data: currentPath } = usePathInfo(
-        currentOwnerId || rootPath?.ownerId || '',
-        currentMountId || rootPath?.mountId || 'default',
-        currentPathId || rootPath?.id || '',
-    );
-
-    // Determine which path to use for operations (current or root)
-    const targetPath = currentPath || rootPath;
-
-    // Fetch teams with their mounts for shared drives section
     const { data: myTeams } = useMyTeams();
-
-    // Handle file input change
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            setUploadFiles(Array.from(e.target.files));
-            setUploadOpen(true);
-        }
-    };
-
-    // Define afterAction callback to refresh the content
-    const handleAfterAction = () => {
-        navigate({
-            to: '/fs/$ownerId/$mountId/$pathId',
-            params: {
-                ownerId: targetPath?.ownerId || '',
-                mountId: targetPath?.mountId || 'default',
-                pathId: targetPath?.id || '',
-            },
-        });
-    };
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
-            {/* Mobile header with close button */}
             {isMobile && <SidebarHeader appName="drive" onClose={onClose} />}
-
-            {/* New button dropdown */}
-            <div className="px-3 py-2">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="default"
-                            size={condensed ? 'icon' : 'default'}
-                            className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                        >
-                            <Plus className="h-4 w-4" />
-                            {!condensed && <span>New</span>}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align={condensed ? 'center' : 'start'}>
-                        <DropdownMenuItem onClick={() => setCreateFolderOpen(true)}>
-                            <FolderPlus className="h-4 w-4 mr-2" />
-                            New folder
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('doc')}>
-                            <FileText className="h-4 w-4 mr-2" />
-                            New doc
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('stickies')}>
-                            <SquareKanban className="h-4 w-4 mr-2" />
-                            New stickies
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('chat')}>
-                            <MessageSquare className="h-4 w-4 mr-2" />
-                            New chat
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('slides')}>
-                            <Presentation className="h-4 w-4 mr-2" />
-                            New slide
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('sheets')}>
-                            <Sheet className="h-4 w-4 mr-2" />
-                            New sheet
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setUploadOpen(true)}>
-                            <UploadIcon className="h-4 w-4 mr-2" />
-                            Upload file
-                            <input type="file" className="hidden" onChange={handleFileChange} />
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
+            <DriveNewMenu rootPath={rootPath} condensed={condensed} />
 
             <SidebarSection condensed={condensed}>
                 <SidebarItem
@@ -286,42 +177,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                 </>
             )}
 
-            {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage className="mt-auto" condensed={condensed} />
-
-            <DriveCreateFolder
-                open={createFolderOpen}
-                onOpenChange={setCreateFolderOpen}
-                defaultOwnerId={targetPath?.ownerId}
-                defaultFolderId={targetPath?.id}
-                defaultMountId={targetPath?.mountId}
-                onAfterCreate={() => handleAfterAction()}
-            />
-
-            {createType && (
-                <DriveCreateEigenDoc
-                    type={createType}
-                    open={true}
-                    onOpenChange={(open) => {
-                        if (!open) setCreateType(null);
-                    }}
-                    defaultOwnerId={targetPath?.ownerId}
-                    defaultFolderId={targetPath?.id}
-                    defaultMountId={targetPath?.mountId}
-                />
-            )}
-
-            {/* File Upload Dialog */}
-            {targetPath && (
-                <DriveUploadFiles
-                    path={targetPath}
-                    open={uploadOpen}
-                    onOpenChange={setUploadOpen}
-                    initialFiles={uploadFiles}
-                    onAfterUpload={() => setUploadFiles([])}
-                    onAfterAction={handleAfterAction}
-                />
-            )}
         </div>
     );
 }
