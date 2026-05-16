@@ -1,11 +1,10 @@
 // Tiny in-process scheduler for periodic background work — wraps setInterval with
 // kick-off-at-startup semantics, error isolation, and central shutdown.
 //
-// Why not Bun.cron: Bun.cron(scriptPath, expr, title) spawns a separate Bun process
-// from a script file, which would mean recreating DB connections and the Home
-// factory just to run a single function. setInterval keeps work in-process where
-// the existing app state already lives. Use Bun.cron when we want a standalone
-// script on a wall-clock schedule (e.g. nightly export to S3).
+// Future: recent Bun added in-process Bun.cron(schedule, handler) that runs the
+// callback inside the current process with shared state — we could switch to it
+// when we want wall-clock schedules (e.g. "every day at 03:00 UTC") instead of
+// the millisecond intervals + kick-at-startup pattern this file gives us.
 
 const timers: Timer[] = [];
 
