@@ -7,3 +7,8 @@ export type CommentCard = {
     creator?: string;
     createdAt?: number;
 };
+
+export type ActiveComments = {
+    ids: Set<string>;
+    anchorTexts: Map<string, string>;
+};

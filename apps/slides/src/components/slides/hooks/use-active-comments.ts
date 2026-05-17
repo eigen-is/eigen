@@ -1,11 +1,7 @@
 import { htmlToPlainText } from '@workspace/lib/html';
+import type { ActiveComments } from '@workspace/lib/types/comments';
 import { useMemo } from 'react';
 import type { DeckData } from '../types';
-
-type ActiveComments = {
-    ids: Set<string>;
-    anchorTexts: Map<string, string>;
-};
 
 const EMPTY: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
 

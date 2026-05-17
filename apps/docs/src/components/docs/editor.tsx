@@ -29,7 +29,7 @@ import {
 import { useMediaQuery } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import type { CommentCard } from '@workspace/lib/types/comments';
+import type { ActiveComments, CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     AddCardDialog,
@@ -157,11 +157,6 @@ export const CollaborativeEditor = ({
             />
         </MediaResolverProvider>
     );
-};
-
-type ActiveComments = {
-    ids: Set<string>;
-    anchorTexts: Map<string, string>;
 };
 
 const EMPTY_ACTIVE: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
