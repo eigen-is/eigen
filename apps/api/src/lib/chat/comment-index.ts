@@ -110,6 +110,16 @@ export async function openCommentIndex(drive: Drive | SharedDrive, containerPath
     return new CommentIndex(managed.db);
 }
 
+export async function tryOpenCommentIndex(
+    drive: Drive | SharedDrive,
+    containerPath: DrivePath,
+): Promise<CommentIndex | null> {
+    const dbPath = await drive.getChildByName(containerPath.mountId, containerPath.id, 'comments.db');
+    if (!dbPath) return null;
+    const managed = await drive.openDatabase(containerPath.mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id);
+    return new CommentIndex(managed.db);
+}
+
 // Convenience: resolves path + opens index. When called with a SharedDrive, getPath enforces
 // read permission; raw Drive callers (own-drive paths) skip the check intentionally.
 export async function getCommentIndex(
