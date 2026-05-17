@@ -15,11 +15,10 @@ export function useActiveComments(deck: DeckData): ActiveComments {
         const anchorTexts = new Map<string, string>();
 
         for (const obj of Object.values(deck.objects)) {
-            if (!obj.commentChatNames?.length) continue;
-            for (const chatName of obj.commentChatNames) {
-                ids.add(chatName);
-                if (!anchorTexts.has(chatName)) {
-                    anchorTexts.set(chatName, obj.type === 'text' ? htmlToPlainText(obj.text).slice(0, 100) : 'Image');
+            for (const cardId of obj.commentCardIds ?? []) {
+                ids.add(cardId);
+                if (!anchorTexts.has(cardId)) {
+                    anchorTexts.set(cardId, obj.type === 'text' ? htmlToPlainText(obj.text).slice(0, 100) : 'Image');
                 }
             }
         }
