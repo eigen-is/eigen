@@ -1,6 +1,3 @@
-import { isLightColor } from '@workspace/lib/constants';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
-import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -11,8 +8,9 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { Check, CircleOff } from 'lucide-react';
-import React, { useCallback, useContext } from 'react';
+import { CommentMenuItems } from '@workspace/ui/components/layout/comments';
+import type React from 'react';
+import { useCallback, useContext } from 'react';
 import { type SetContextOptions, WorkbookContext } from '../../context';
 import { RowColError } from '../../engine';
 import { useAlert } from '../../hooks/useAlert';
@@ -600,120 +598,60 @@ export const ContextMenu: React.FC = () => {
                     if (row_index == null) [row_index] = last.row;
                     if (col_index == null) [col_index] = last.column;
                 }
+                const r = row_index!;
+                const c = col_index!;
                 const fd = getFlowdata(context);
-                const cell = fd?.[row_index]?.[col_index];
+                const cell = fd?.[r]?.[c];
                 const hasComment = (cell?.commentCardIds?.length ?? 0) > 0;
                 const closeMenu = () =>
                     setContext((draftCtx) => {
                         draftCtx.contextMenu = {};
                     });
+                const close = <T extends unknown[]>(fn?: (...args: T) => void) =>
+                    fn
+                        ? (...args: T) => {
+                              closeMenu();
+                              fn(...args);
+                          }
+                        : undefined;
 
-                if (!hasComment && settings.hooks?.onAddComment) {
-                    return (
-                        <DropdownMenuItem
-                            key={name}
-                            onClick={() => {
-                                closeMenu();
-                                settings.hooks!.onAddComment!(row_index!, col_index!);
-                            }}
-                        >
-                            Add comment
-                        </DropdownMenuItem>
-                    );
-                }
-                if (hasComment) {
-                    const info = settings.hooks?.getCommentInfo?.(row_index!, col_index!);
-                    return (
-                        <React.Fragment key={name}>
-                            {settings.hooks?.onViewComment && (
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        closeMenu();
-                                        settings.hooks!.onViewComment!(row_index!, col_index!);
-                                    }}
-                                >
-                                    View comment
-                                </DropdownMenuItem>
-                            )}
-                            {settings.hooks?.onCommentColor && (
-                                <DropdownMenuSub>
-                                    <DropdownMenuSubTrigger className="gap-2">Comment color</DropdownMenuSubTrigger>
-                                    <DropdownMenuSubContent>
-                                        <div className="flex gap-1 p-2">
-                                            <Button
-                                                variant="outline"
-                                                className="h-4 w-4 rounded-full p-0 shadow-none hover:scale-125 transition-transform"
-                                                title="No color"
-                                                onClick={() => {
-                                                    closeMenu();
-                                                    settings.hooks!.onCommentColor!(row_index!, col_index!, null);
-                                                }}
-                                            >
-                                                <CircleOff className="size-2.5 text-muted-foreground" />
-                                            </Button>
-                                            {EIGEN_STICKIES_COLORS[0].map((c) => (
-                                                <Button
-                                                    variant="outline"
-                                                    key={c.value}
-                                                    className="h-4 w-4 rounded-full p-0 border-border/50 shadow-none hover:scale-125 transition-transform"
-                                                    style={{ backgroundColor: c.value }}
-                                                    title={c.label}
-                                                    onClick={() => {
-                                                        closeMenu();
-                                                        settings.hooks!.onCommentColor!(
-                                                            row_index!,
-                                                            col_index!,
-                                                            c.value,
-                                                        );
-                                                    }}
-                                                >
-                                                    {info?.color === c.value && (
-                                                        <Check
-                                                            className="size-2"
-                                                            style={{ color: isLightColor(c.value) ? '#000' : '#fff' }}
-                                                        />
-                                                    )}
-                                                </Button>
-                                            ))}
-                                        </div>
-                                    </DropdownMenuSubContent>
-                                </DropdownMenuSub>
-                            )}
-                            {info?.status === 'open' && settings.hooks?.onCommentResolve && (
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        closeMenu();
-                                        settings.hooks!.onCommentResolve!(row_index!, col_index!);
-                                    }}
-                                >
-                                    Resolve comment
-                                </DropdownMenuItem>
-                            )}
-                            {info?.status === 'resolved' && settings.hooks?.onCommentReopen && (
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        closeMenu();
-                                        settings.hooks!.onCommentReopen!(row_index!, col_index!);
-                                    }}
-                                >
-                                    Reopen comment
-                                </DropdownMenuItem>
-                            )}
-                            {settings.hooks?.onDeleteComment && (
-                                <DropdownMenuItem
-                                    variant="destructive"
-                                    onClick={() => {
-                                        closeMenu();
-                                        settings.hooks!.onDeleteComment!(row_index!, col_index!);
-                                    }}
-                                >
-                                    Delete comment
-                                </DropdownMenuItem>
-                            )}
-                        </React.Fragment>
-                    );
-                }
-                return null;
+                const info = hasComment ? (settings.hooks?.getCommentInfo?.(r, c) ?? null) : null;
+                const item = info ? { card: info.card, entry: info.entry } : null;
+                if (!item && !settings.hooks?.onAddComment) return null;
+                return (
+                    <CommentMenuItems
+                        key={name}
+                        primitives={{
+                            Item: DropdownMenuItem,
+                            Sub: DropdownMenuSub,
+                            SubTrigger: DropdownMenuSubTrigger,
+                            SubContent: DropdownMenuSubContent,
+                        }}
+                        item={item}
+                        onAddComment={close(
+                            settings.hooks?.onAddComment ? () => settings.hooks!.onAddComment!(r, c) : undefined,
+                        )}
+                        onView={close(
+                            settings.hooks?.onViewComment ? () => settings.hooks!.onViewComment!(r, c) : undefined,
+                        )}
+                        onChangeColor={close(
+                            settings.hooks?.onCommentColor
+                                ? (_cardId: string, color: string) => settings.hooks!.onCommentColor!(r, c, color)
+                                : undefined,
+                        )}
+                        onResolve={close(
+                            settings.hooks?.onCommentResolve
+                                ? () => settings.hooks!.onCommentResolve!(r, c)
+                                : undefined,
+                        )}
+                        onReopen={close(
+                            settings.hooks?.onCommentReopen ? () => settings.hooks!.onCommentReopen!(r, c) : undefined,
+                        )}
+                        onDelete={close(
+                            settings.hooks?.onDeleteComment ? () => settings.hooks!.onDeleteComment!(r, c) : undefined,
+                        )}
+                    />
+                );
             }
             return null;
         },

@@ -261,8 +261,7 @@ export function SheetEditor({
                                               );
                                           }
                                       },
-                                      onCommentColor: (r: number, c: number, color: string | null) => {
-                                          if (!color) return;
+                                      onCommentColor: (r: number, c: number, color: string) => {
                                           const fd = workbookRef.current?.getFlowdata();
                                           const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
                                           if (cardId) updateCard(cardId, { color });
@@ -294,7 +293,7 @@ export function SheetEditor({
                                 const indicatorColor = card.color
                                     ? (EIGEN_STICKIES_INDICATOR_MAP.get(card.color) ?? card.color)
                                     : null;
-                                return { color: card.color ?? null, indicatorColor, status: entry?.status ?? 'open' };
+                                return { card, entry, indicatorColor };
                             },
                         }}
                     />

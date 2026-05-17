@@ -13,21 +13,10 @@ import {
     ContextMenuSubTrigger,
     ContextMenuTrigger,
 } from '@workspace/ui/components/context-menu';
+import { CommentMenuItems } from '@workspace/ui/components/layout/comments';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
-import { ColorSwatchRow } from '@workspace/ui/components/layout/notes';
-import {
-    ArrowDownToLine,
-    ArrowUpToLine,
-    Check,
-    ChevronDown,
-    ChevronUp,
-    Copy,
-    MessageSquarePlus,
-    Palette,
-    RotateCcw,
-    Trash2,
-} from 'lucide-react';
+import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2 } from 'lucide-react';
 import { memo } from 'react';
 import {
     BORDER_RADIUS_ROUND,
@@ -338,54 +327,31 @@ export const SlideObjectView = memo(function SlideObjectView({
                 <ContextMenuItem variant="destructive" onClick={() => onDelete?.(obj.id)}>
                     <Trash2 className="h-4 w-4 mr-2" /> Delete
                 </ContextMenuItem>
-                {onAddComment && commentItems && commentItems.length === 0 && (
-                    <>
-                        <ContextMenuSeparator />
-                        <ContextMenuItem onClick={() => onAddComment(obj.id)}>
-                            <MessageSquarePlus className="h-4 w-4 mr-2" /> Add comment
-                        </ContextMenuItem>
-                    </>
-                )}
-                {commentItems &&
-                    commentItems.length === 1 &&
-                    (() => {
-                        const { card, entry } = commentItems[0];
-                        return (
-                            <>
-                                <ContextMenuSeparator />
-                                <ContextMenuItem onClick={() => onCommentClick?.(card.id)}>
-                                    <MessageSquarePlus className="h-4 w-4 mr-2" /> View comment
-                                </ContextMenuItem>
-                                <ContextMenuSub>
-                                    <ContextMenuSubTrigger className="gap-2">
-                                        <Palette className="h-4 w-4 mr-2" /> Comment color
-                                    </ContextMenuSubTrigger>
-                                    <ContextMenuSubContent>
-                                        <ColorSwatchRow
-                                            currentColor={card.color}
-                                            onChangeColor={(color) => onCommentChangeColor?.(card.id, color)}
-                                        />
-                                    </ContextMenuSubContent>
-                                </ContextMenuSub>
-                                {entry && entry.status === 'open' && (
-                                    <ContextMenuItem onClick={() => onCommentResolve?.(entry.chatName)}>
-                                        <Check className="h-4 w-4 mr-2" /> Resolve comment
-                                    </ContextMenuItem>
-                                )}
-                                {entry && entry.status === 'resolved' && (
-                                    <ContextMenuItem onClick={() => onCommentReopen?.(entry.chatName)}>
-                                        <RotateCcw className="h-4 w-4 mr-2" /> Reopen comment
-                                    </ContextMenuItem>
-                                )}
-                                <ContextMenuItem
-                                    variant="destructive"
-                                    onClick={() => onCommentDelete?.(obj.id, card.id)}
-                                >
-                                    <Trash2 className="h-4 w-4 mr-2" /> Delete comment
-                                </ContextMenuItem>
-                            </>
-                        );
-                    })()}
+                {(() => {
+                    const single = commentItems && commentItems.length === 1 ? commentItems[0] : null;
+                    const showAdd = onAddComment && (!commentItems || commentItems.length === 0);
+                    if (!single && !showAdd) return null;
+                    return (
+                        <>
+                            <ContextMenuSeparator />
+                            <CommentMenuItems
+                                primitives={{
+                                    Item: ContextMenuItem,
+                                    Sub: ContextMenuSub,
+                                    SubTrigger: ContextMenuSubTrigger,
+                                    SubContent: ContextMenuSubContent,
+                                }}
+                                item={single}
+                                onAddComment={onAddComment ? () => onAddComment(obj.id) : undefined}
+                                onView={onCommentClick}
+                                onChangeColor={onCommentChangeColor}
+                                onResolve={onCommentResolve}
+                                onReopen={onCommentReopen}
+                                onDelete={onCommentDelete ? (cardId) => onCommentDelete(obj.id, cardId) : undefined}
+                            />
+                        </>
+                    );
+                })()}
             </ContextMenuContent>
         </ContextMenu>
     );

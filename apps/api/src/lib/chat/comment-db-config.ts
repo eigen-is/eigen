@@ -19,7 +19,6 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
                     lastMessageSnippet TEXT,
                     lastActivityAt INTEGER,
                     messageCount INTEGER NOT NULL DEFAULT 0,
-                    color TEXT,
                     createdAt INTEGER NOT NULL DEFAULT (unixepoch())
                 );
 

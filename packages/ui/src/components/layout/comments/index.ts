@@ -1,4 +1,5 @@
 export { CommentContextMenu } from './comment-context-menu';
 export { useCreatedByMeta } from './comment-dialog-meta';
+export { CommentMenuItems } from './comment-menu-items';
 export { CommentPanel } from './comment-panel';
 export { CommentThread } from './comment-thread';
