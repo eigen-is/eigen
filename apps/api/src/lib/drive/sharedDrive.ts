@@ -201,9 +201,15 @@ export default class SharedDrive {
         );
     }
 
-    public async create(mountId: string, parentId: string, name: string, type: EigenDocType): Promise<DrivePath> {
+    public async create(
+        mountId: string,
+        parentId: string,
+        name: string,
+        type: EigenDocType,
+        createdBy?: string,
+    ): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.create(mountId, parentId, name, type),
+            this.sharedDrive.create(mountId, parentId, name, type, createdBy),
         );
     }
 

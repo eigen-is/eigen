@@ -183,7 +183,13 @@ export default class Drive {
         return folder;
     }
 
-    async create(mountId: string, parentId: string, name: string, type: EigenDocType): Promise<DrivePath> {
+    async create(
+        mountId: string,
+        parentId: string,
+        name: string,
+        type: EigenDocType,
+        createdBy?: string,
+    ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new ApiError(403, 'No write permission');
@@ -193,6 +199,9 @@ export default class Drive {
         const pathId = await mount.createFolder(parentId, safeName, type);
         if (type === DRIVE_TYPE_CHAT) {
             await ChatRoom.create(this, mountId, pathId);
+            if (createdBy) {
+                await this.seedCommentRow(mountId, pathId, parentId, createdBy);
+            }
         } else {
             await CollabDocument.create(this, mountId, pathId);
         }
@@ -200,6 +209,15 @@ export default class Drive {
         if (!created) throw new ApiError(500, `Failed to create ${type}`);
         this.emit(SSEventType.DRIVE_FILE_CREATED, created);
         return created;
+    }
+
+    private async seedCommentRow(
+        _mountId: string,
+        _chatPathId: string,
+        _parentId: string,
+        _createdBy: string,
+    ): Promise<void> {
+        // Implementation lands in Task 2.2
     }
 
     async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
