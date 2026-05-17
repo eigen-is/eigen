@@ -307,9 +307,11 @@ export class ChatRoom {
         });
     }
 
-    async editMessage(messageId: string, content: string, userId: string): Promise<ChatMessage | null> {
+    async editMessage(messageId: string, content: string, userId: string): Promise<ChatMessage> {
         const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
-        if (!existing || existing.authorId !== userId) return null;
+        if (!existing || existing.authorId !== userId) {
+            throw new ApiError(404, 'Message not found or not owned');
+        }
 
         const now = new Date();
         await this.db.update(schema.messages).set({ content, editedAt: now }).where(eq(schema.messages.id, messageId));
@@ -336,9 +338,11 @@ export class ChatRoom {
         return updated;
     }
 
-    async deleteMessage(messageId: string, userId: string): Promise<boolean> {
+    async deleteMessage(messageId: string, userId: string): Promise<void> {
         const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
-        if (!existing || existing.authorId !== userId) return false;
+        if (!existing || existing.authorId !== userId) {
+            throw new ApiError(404, 'Message not found or not owned');
+        }
 
         const now = new Date();
         await this.db
@@ -370,8 +374,6 @@ export class ChatRoom {
                 await index.decrementCount(this.path.name);
             });
         }
-
-        return true;
     }
 
     async markRead(userId: string, messageId: string): Promise<void> {
