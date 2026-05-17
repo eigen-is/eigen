@@ -44,7 +44,7 @@ export function StickyCard({ card, canWrite = true, onOpen, onContextMenu }: Car
             }}
             onClick={handleClick}
             onContextMenu={onContextMenu ? (e) => onContextMenu(e, card) : undefined}
-            className={`mb-2 ${canWrite ? 'cursor-grab touch-none' : 'cursor-pointer'} ${isDragging ? 'opacity-50' : ''}`}
+            className={`mb-2 min-h-20 ${canWrite ? 'cursor-grab touch-none' : 'cursor-pointer'} ${isDragging ? 'opacity-50' : ''}`}
             style={{
                 transform: CSS.Transform.toString(transform) || undefined,
                 transition,
