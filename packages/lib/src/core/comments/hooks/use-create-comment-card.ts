@@ -33,6 +33,9 @@ export function useCreateCommentCard(
     const createChatRef = useRef(createChat);
     createChatRef.current = createChat;
 
+    // anchorInTransact runs INSIDE doc.transact() so the new card + the host anchor land in
+    // one Yjs transaction = one undo step. The callback must be synchronous (no awaits, no
+    // setTimeout) — anything outside the synchronous frame escapes the transaction.
     return useCallback(
         async (
             input: CreateCommentCardInput = {},

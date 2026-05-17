@@ -81,7 +81,6 @@ export class CommentIndex {
             .all();
         const mentions = await this.db.select().from(commentSchema.commentMentions).all();
 
-        // Group mention emails by chatName
         const mentionsByChat = new Map<string, string[]>();
         for (const m of mentions) {
             const list = mentionsByChat.get(m.chatName);
