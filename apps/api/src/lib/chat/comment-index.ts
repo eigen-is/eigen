@@ -14,8 +14,23 @@ export class CommentIndex {
         this.db = db;
     }
 
-    async ensureComment(chatName: string): Promise<void> {
-        await this.db.insert(commentSchema.comments).values({ chatName, createdAt: new Date() }).onConflictDoNothing();
+    async ensureComment(chatName: string, seed?: { createdBy?: string | null; createdAt?: Date }): Promise<void> {
+        const values: typeof commentSchema.comments.$inferInsert = {
+            chatName,
+            createdAt: seed?.createdAt ?? new Date(),
+            createdBy: seed?.createdBy ?? null,
+        };
+
+        await this.db
+            .insert(commentSchema.comments)
+            .values(values)
+            .onConflictDoUpdate({
+                target: commentSchema.comments.chatName,
+                // COALESCE: only fill createdBy when currently NULL; never overwrite a real value.
+                set: {
+                    createdBy: sql`COALESCE(${commentSchema.comments.createdBy}, EXCLUDED.createdBy)`,
+                },
+            });
     }
 
     async updateActivity(chatName: string, authorEmail: string, snippet: string, incrementCount = true): Promise<void> {
