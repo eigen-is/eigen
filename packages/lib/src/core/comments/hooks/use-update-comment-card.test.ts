@@ -24,16 +24,13 @@ describe('applyCardPatch', () => {
         expect(y.get('description')).toBe('desc');
     });
 
-    test('color: string sets, null deletes, undefined leaves untouched', () => {
+    test('color: string sets; undefined leaves untouched', () => {
         const doc = seed();
         applyCardPatch(doc, 'comments', 'c1', { color: '#00ff00' });
         expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.get('color')).toBe('#00ff00');
 
-        applyCardPatch(doc, 'comments', 'c1', { color: null });
-        expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.has('color')).toBe(false);
-
         applyCardPatch(doc, 'comments', 'c1', { title: 'x' });
-        expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.has('color')).toBe(false);
+        expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.get('color')).toBe('#00ff00');
     });
 
     test('no-op when cardId is missing', () => {

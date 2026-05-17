@@ -262,6 +262,7 @@ export function SheetEditor({
                                           }
                                       },
                                       onCommentColor: (r: number, c: number, color: string | null) => {
+                                          if (!color) return;
                                           const fd = workbookRef.current?.getFlowdata();
                                           const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
                                           if (cardId) updateCard(cardId, { color });

@@ -8,7 +8,7 @@ export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | 
 type CommentContextMenuProps = {
     contextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
     onOpen: (cardId: string) => void;
-    onUpdateCard: (cardId: string, patch: { color: string | null }) => void;
+    onUpdateCard: (cardId: string, patch: { color: string }) => void;
     onResolve: (chatName: string, status: 'open' | 'resolved') => void;
     onDelete: (cardId: string) => void;
 };
@@ -30,7 +30,7 @@ export function CommentContextMenu({
                     contextMenu.close();
                 }}
                 onChangeColor={(color) => {
-                    if (contextMenu.item) onUpdateCard(contextMenu.item.card.id, { color: color || null });
+                    if (contextMenu.item) onUpdateCard(contextMenu.item.card.id, { color });
                     contextMenu.close();
                 }}
                 onResolve={() => {

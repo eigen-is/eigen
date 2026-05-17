@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type * as Y from 'yjs';
 
-export type CommentCardPatch = { title?: string; description?: string; color?: string | null };
+export type CommentCardPatch = { title?: string; description?: string; color?: string };
 
 export function applyCardPatch(doc: Y.Doc, mapName: string, cardId: string, patch: CommentCardPatch): void {
     const card = doc.getMap<Y.Map<unknown>>(mapName).get(cardId);
@@ -9,10 +9,7 @@ export function applyCardPatch(doc: Y.Doc, mapName: string, cardId: string, patc
     doc.transact(() => {
         if (patch.title !== undefined) card.set('title', patch.title);
         if (patch.description !== undefined) card.set('description', patch.description);
-        if (patch.color !== undefined) {
-            if (patch.color === null) card.delete('color');
-            else card.set('color', patch.color);
-        }
+        if (patch.color !== undefined) card.set('color', patch.color);
     });
 }
 

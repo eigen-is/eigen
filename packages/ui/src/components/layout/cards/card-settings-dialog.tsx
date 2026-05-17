@@ -12,17 +12,17 @@ type CardSettingsDialogProps = {
     onOpenChange: (open: boolean) => void;
     title: string;
     description: string;
-    color?: string | null;
-    onSave: (patch: { title?: string; description?: string; color?: string | null }) => void;
+    color: string;
+    onSave: (patch: { title?: string; description?: string; color?: string }) => void;
     dialogTitle?: string;
 };
 
 type CardSettingsDialogContentProps = {
     initialTitle: string;
     initialDescription: string;
-    initialColor: string | null | undefined;
+    initialColor: string;
     onOpenChange: (open: boolean) => void;
-    onSave: (patch: { title?: string; description?: string; color?: string | null }) => void;
+    onSave: (patch: { title?: string; description?: string; color?: string }) => void;
     dialogTitle: string;
 };
 
@@ -36,15 +36,15 @@ function CardSettingsDialogContent({
 }: CardSettingsDialogContentProps) {
     const [title, setTitle] = useState(initialTitle);
     const [description, setDescription] = useState(initialDescription);
-    const [color, setColor] = useState<string | null | undefined>(initialColor);
+    const [color, setColor] = useState(initialColor);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim()) return;
-        const patch: { title?: string; description?: string; color?: string | null } = {};
+        const patch: { title?: string; description?: string; color?: string } = {};
         if (title !== initialTitle) patch.title = title;
         if (description !== initialDescription) patch.description = description;
-        if (color !== initialColor) patch.color = color || null;
+        if (color !== initialColor) patch.color = color;
         if (Object.keys(patch).length > 0) onSave(patch);
         onOpenChange(false);
     };
@@ -70,7 +70,13 @@ function CardSettingsDialogContent({
                 </div>
                 <div className="grid gap-2">
                     <Label>Color</Label>
-                    <ColorPicker value={color ?? ''} onChange={setColor} colors={EIGEN_STICKIES_COLORS} columns={8} />
+                    <ColorPicker
+                        value={color}
+                        onChange={setColor}
+                        colors={EIGEN_STICKIES_COLORS}
+                        columns={8}
+                        showReset={false}
+                    />
                 </div>
             </div>
             <DialogFooter>

@@ -1,3 +1,4 @@
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { Check, RotateCcw } from 'lucide-react';
@@ -17,7 +18,7 @@ type CardDialogProps = {
     canWrite?: boolean;
     copyLinkUrl?: string;
     showResolveAction?: boolean;
-    onUpdate?: (patch: { title?: string; description?: string; color?: string | null }) => void;
+    onUpdate?: (patch: { title?: string; description?: string; color?: string }) => void;
     onResolve?: (chatName: string, next: 'open' | 'resolved') => void;
 };
 
@@ -81,7 +82,7 @@ export function CardDialog({
                     onOpenChange={setIsSettingsOpen}
                     title={card.title}
                     description={card.description}
-                    color={card.color ?? null}
+                    color={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
                     onSave={onUpdate}
                 />
             )}

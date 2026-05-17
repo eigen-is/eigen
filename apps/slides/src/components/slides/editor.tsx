@@ -753,9 +753,7 @@ function SlideEditorInner({
                                         onCommentReopen={(chatName) =>
                                             resolveComment.mutate({ chatName, status: 'open' })
                                         }
-                                        onCommentChangeColor={(cardId, color) =>
-                                            updateCard(cardId, { color: color || null })
-                                        }
+                                        onCommentChangeColor={(cardId, color) => updateCard(cardId, { color })}
                                         onCommentDelete={removeCommentFromObject}
                                     />
                                     <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
