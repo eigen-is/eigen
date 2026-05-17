@@ -1,6 +1,7 @@
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useMemo, useRef } from 'react';
 import { useMarqueeSelect } from './hooks/use-marquee-select';
@@ -27,13 +28,14 @@ type SlideCanvasProps = {
     onMoveToBack?: (objId: string) => void;
     canWrite: boolean;
     onAddComment?: (objId: string) => void;
-    onCommentClick?: (chatName: string) => void;
-    allComments?: CommentEntry[];
+    onCommentClick?: (cardId: string) => void;
+    cards?: Record<string, CommentCard>;
+    entries?: CommentEntry[];
 
     onCommentResolve?: (chatName: string) => void;
     onCommentReopen?: (chatName: string) => void;
-    onCommentChangeColor?: (chatName: string, color: string | null) => void;
-    onCommentDelete?: (objId: string, chatName: string) => void;
+    onCommentChangeColor?: (cardId: string, color: string | null) => void;
+    onCommentDelete?: (objId: string, cardId: string) => void;
 };
 
 export function SlideCanvas({
@@ -55,7 +57,8 @@ export function SlideCanvas({
     canWrite,
     onAddComment,
     onCommentClick,
-    allComments,
+    cards,
+    entries,
 
     onCommentResolve,
     onCommentReopen,
@@ -195,10 +198,14 @@ export function SlideCanvas({
                     const displayObj = preview
                         ? { ...obj, x: preview.x, y: preview.y, w: preview.w, h: preview.h }
                         : obj;
-                    const objCommentEntries = (allComments ?? []).filter((c) =>
-                        obj.commentChatNames?.includes(c.chatName),
-                    );
-                    const firstUnresolved = objCommentEntries.find((c) => c.status === 'open');
+                    const commentItems: Array<{ card: CommentCard; entry: CommentEntry | undefined }> = [];
+                    for (const cardId of obj.commentCardIds ?? []) {
+                        const card = cards?.[cardId];
+                        if (!card) continue;
+                        const entry = card.chatName ? entries?.find((e) => e.chatName === card.chatName) : undefined;
+                        commentItems.push({ card, entry });
+                    }
+                    const firstUnresolved = commentItems.find(({ entry }) => entry?.status !== 'resolved');
                     return (
                         <SlideObjectView
                             key={obj.id}
@@ -221,15 +228,11 @@ export function SlideCanvas({
                             onAddComment={onAddComment}
                             onCommentClick={onCommentClick}
                             commentColor={
-                                firstUnresolved?.color ??
+                                firstUnresolved?.card.color ??
                                 (firstUnresolved ? EIGEN_STICKIES_COLORS[0][1].value : undefined)
                             }
-                            firstCommentChatName={firstUnresolved?.chatName}
-                            commentEntries={objCommentEntries.map((c) => ({
-                                chatName: c.chatName,
-                                color: c.color,
-                                status: c.status,
-                            }))}
+                            firstCommentCardId={firstUnresolved?.card.id}
+                            commentItems={commentItems}
                             onCommentResolve={onCommentResolve}
                             onCommentReopen={onCommentReopen}
                             onCommentChangeColor={onCommentChangeColor}
