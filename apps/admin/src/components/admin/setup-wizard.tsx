@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@work
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { EigenLoader } from '@workspace/ui/components/layout/braket/eigen-loader';
+import { CheckCircle2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
@@ -127,16 +128,7 @@ export function SetupWizard() {
             <div className="min-h-screen flex items-center justify-center bg-background p-4">
                 <Card className="w-full max-w-md">
                     <CardHeader className="text-center">
-                        <div className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-                            <svg
-                                className="w-8 h-8 text-green-600"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                        </div>
+                        <CheckCircle2 className="mx-auto h-16 w-16 text-success mb-4" />
                         <CardTitle className="text-2xl">Setup Complete!</CardTitle>
                         <CardDescription>
                             Eigen has been configured successfully. You can now log in with your admin account.
