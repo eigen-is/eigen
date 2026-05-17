@@ -153,7 +153,7 @@ Small divs positioned over filtered column header cells:
 ### 8. Comments
 
 The upstream built-in comment system (NotationBoxes + `state/modules/comment.ts`) was fully
-removed. Comments now anchor to cells via `commentChatNames?: string[]` on `Cell` and use
+removed. Comments now anchor to cells via `commentCardIds?: string[]` on `Cell` and use
 the shared Eigen comment infrastructure — see [`docs/SHEETS.md` § Comments](../../docs/SHEETS.md#comments)
 and [`docs/COMMENTS.md`](../../docs/COMMENTS.md).
 
