@@ -1,4 +1,4 @@
-import { getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
+import type { TextPreviewMode } from '@workspace/lib/constants';
 import { escapeHtml } from '@workspace/lib/html';
 import DOMPurify from 'isomorphic-dompurify';
 
@@ -62,10 +62,6 @@ function getLanguageFromFileName(fileName: string): string | undefined {
     return LANGUAGE_MAP[ext];
 }
 
-export function isTextPreviewSupported(mimeType: string, fileName: string): boolean {
-    return getTextPreviewMode(mimeType, fileName) !== null;
-}
-
 export type TextPreviewResult = {
     body: string;
     mode: TextPreviewMode;
@@ -73,11 +69,9 @@ export type TextPreviewResult = {
 
 export async function generateTextPreview(
     content: string,
-    mimeType: string,
+    mode: TextPreviewMode,
     fileName: string,
 ): Promise<TextPreviewResult> {
-    const mode = getTextPreviewMode(mimeType, fileName)!;
-
     if (mode === 'markdown') {
         const MarkdownIt = (await import('markdown-it')).default;
         const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
