@@ -639,14 +639,8 @@ export const ContextMenu: React.FC = () => {
                                 ? (_cardId: string, color: string) => settings.hooks!.onCommentColor!(r, c, color)
                                 : undefined,
                         )}
-                        onResolve={close(
-                            settings.hooks?.onCommentResolve
-                                ? () => settings.hooks!.onCommentResolve!(r, c)
-                                : undefined,
-                        )}
-                        onReopen={close(
-                            settings.hooks?.onCommentReopen ? () => settings.hooks!.onCommentReopen!(r, c) : undefined,
-                        )}
+                        onResolve={close(settings.hooks?.onCommentResolve)}
+                        onReopen={close(settings.hooks?.onCommentReopen)}
                         onDelete={close(
                             settings.hooks?.onDeleteComment ? () => settings.hooks!.onDeleteComment!(r, c) : undefined,
                         )}
