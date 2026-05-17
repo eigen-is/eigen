@@ -239,21 +239,29 @@ export class Home {
     protected async destruct() {
         this._destructing = true;
 
-        const tasks: [string, Promise<unknown> | undefined][] = [
+        // Subsystems close their own ManagedDatabase. Run those first so the
+        // managedDatabases loop below is a safety net (idempotent close), not a
+        // concurrent second close on the same db.
+        const subsystems: [string, Promise<unknown> | undefined][] = [
             ['drive', this._drive.destruct()],
             ['contacts', this._contacts?.destruct()],
             ['mail', this._mail?.destruct()],
             ['calendar', this._calendar?.destruct()],
             ['notifications', this._notifications?.destruct()],
         ];
-        for (const [key, getter] of this.managedDatabases) {
-            tasks.push([`managed database ${key}`, (async () => (await getter()).close())()]);
+        for (const [i, result] of (await Promise.allSettled(subsystems.map(([, p]) => p))).entries()) {
+            if (result.status === 'rejected') {
+                console.error(`Failed to destruct ${subsystems[i][0]}:`, result.reason);
+            }
         }
 
-        const results = await Promise.allSettled(tasks.map(([, p]) => p));
-        for (const [i, result] of results.entries()) {
+        const dbs = [...this.managedDatabases.entries()].map(([key, getter]): [string, Promise<unknown>] => [
+            key,
+            (async () => (await getter()).close())(),
+        ]);
+        for (const [i, result] of (await Promise.allSettled(dbs.map(([, p]) => p))).entries()) {
             if (result.status === 'rejected') {
-                console.error(`Failed to destruct ${tasks[i][0]}:`, result.reason);
+                console.error(`Failed to close managed database ${dbs[i][0]}:`, result.reason);
             }
         }
 
