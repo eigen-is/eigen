@@ -76,6 +76,7 @@ export function CardDialog({
 
             {onUpdate && canWrite && (
                 <CardSettingsDialog
+                    key={card.id}
                     open={isSettingsOpen}
                     onOpenChange={setIsSettingsOpen}
                     title={card.title}
