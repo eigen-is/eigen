@@ -6,8 +6,8 @@ import { lightenColor } from '@workspace/lib/constants';
 import { CommentMarkSchema } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
-    onCommentClick?: (chatName: string) => void;
-    onCommentContextMenu?: (chatName: string, event: MouseEvent) => void;
+    onCommentClick?: (cardId: string) => void;
+    onCommentContextMenu?: (cardId: string, event: MouseEvent) => void;
     onSelectionContextMenu?: (event: MouseEvent) => void;
     onAddComment?: () => void;
     onToggleCommentPanel?: () => void;
@@ -24,15 +24,15 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
     const decorations: Decoration[] = [];
     state.doc.descendants((node, pos) => {
         for (const mark of node.marks) {
-            if (mark.type.name !== 'comment' || !mark.attrs.chatName) continue;
-            const chatName = mark.attrs.chatName as string;
+            if (mark.type.name !== 'comment' || !mark.attrs['cardId']) continue;
+            const cardId = mark.attrs['cardId'] as string;
             const end = pos + node.nodeSize;
 
-            if (meta.resolvedIds.has(chatName)) {
+            if (meta.resolvedIds.has(cardId)) {
                 // Resolved comments: no decoration, keep default highlight appearance.
                 // Resolved status is visible in the sidebar (checkmark icon + filter).
             } else {
-                const color = meta.colorMap.get(chatName);
+                const color = meta.colorMap.get(cardId);
                 if (color) {
                     decorations.push(
                         Decoration.inline(pos, end, {
@@ -92,9 +92,9 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                     handleClick: onCommentClick
                         ? (_view, _pos, event) => {
                               const el = (event.target as HTMLElement).closest('.comment-highlight');
-                              const chatName = el?.getAttribute('data-chat-name');
-                              if (chatName) {
-                                  onCommentClick(chatName);
+                              const cardId = el?.getAttribute('data-comment-id');
+                              if (cardId) {
+                                  onCommentClick(cardId);
                                   return true;
                               }
                               return false;
@@ -104,10 +104,10 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                         contextmenu: (view, event) => {
                             // Right-click on a comment highlight → comment context menu
                             const el = (event.target as HTMLElement).closest('.comment-highlight');
-                            const chatName = el?.getAttribute('data-chat-name');
-                            if (chatName && onCommentContextMenu) {
+                            const cardId = el?.getAttribute('data-comment-id');
+                            if (cardId && onCommentContextMenu) {
                                 event.preventDefault();
-                                onCommentContextMenu(chatName, event);
+                                onCommentContextMenu(cardId, event);
                                 return true;
                             }
                             // Right-click with text selected → selection context menu
