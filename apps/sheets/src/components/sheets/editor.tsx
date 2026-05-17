@@ -266,20 +266,10 @@ export function SheetEditor({
                                           const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
                                           if (cardId) updateCard(cardId, { color });
                                       },
-                                      onCommentResolve: (r: number, c: number) => {
-                                          const fd = workbookRef.current?.getFlowdata();
-                                          const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
-                                          const card = cardId ? cards[cardId] : undefined;
-                                          if (card?.chatName)
-                                              resolveComment.mutate({ chatName: card.chatName, status: 'resolved' });
-                                      },
-                                      onCommentReopen: (r: number, c: number) => {
-                                          const fd = workbookRef.current?.getFlowdata();
-                                          const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
-                                          const card = cardId ? cards[cardId] : undefined;
-                                          if (card?.chatName)
-                                              resolveComment.mutate({ chatName: card.chatName, status: 'open' });
-                                      },
+                                      onCommentResolve: (chatName: string) =>
+                                          resolveComment.mutate({ chatName, status: 'resolved' }),
+                                      onCommentReopen: (chatName: string) =>
+                                          resolveComment.mutate({ chatName, status: 'open' }),
                                   }
                                 : {}),
                             getCommentInfo: (r: number, c: number) => {
