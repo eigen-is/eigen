@@ -5,11 +5,11 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { Textarea } from '@workspace/ui/components/textarea';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 type AddCardDialogProps = {
-    isOpen: boolean;
-    onClose: () => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
     initialTitle?: string;
     initialDescription?: string;
     initialColor?: string;
@@ -20,9 +20,93 @@ type AddCardDialogProps = {
     submitLabel?: string;
 };
 
+type AddCardDialogContentProps = {
+    initialTitle: string;
+    initialDescription: string;
+    initialColor: string;
+    onOpenChange: (open: boolean) => void;
+    onSave: (data: { title: string; description: string; color?: string }) => void | Promise<void>;
+    titleLabel: string;
+    placeholderTitle: string;
+    placeholderDescription: string;
+    submitLabel: string;
+};
+
+function AddCardDialogContent({
+    initialTitle,
+    initialDescription,
+    initialColor,
+    onOpenChange,
+    onSave,
+    titleLabel,
+    placeholderTitle,
+    placeholderDescription,
+    submitLabel,
+}: AddCardDialogContentProps) {
+    const [title, setTitle] = useState(initialTitle);
+    const [description, setDescription] = useState(initialDescription);
+    const [color, setColor] = useState(initialColor);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!title.trim()) return;
+        setIsSubmitting(true);
+        try {
+            await onSave({ title: title.trim(), description: description.trim(), color: color || undefined });
+            onOpenChange(false);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <DialogHeader>
+                <DialogTitle>{titleLabel}</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                    <Label htmlFor="card-title">Title</Label>
+                    <Input
+                        id="card-title"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder={placeholderTitle}
+                        autoFocus
+                        required
+                    />
+                </div>
+                <div className="grid gap-2">
+                    <Label htmlFor="card-description">Description</Label>
+                    <Textarea
+                        id="card-description"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder={placeholderDescription}
+                        rows={3}
+                    />
+                </div>
+                <div className="grid gap-2">
+                    <Label>Color</Label>
+                    <ColorPicker value={color} onChange={setColor} colors={EIGEN_STICKIES_COLORS} columns={8} />
+                </div>
+            </div>
+            <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={!title.trim() || isSubmitting}>
+                    {isSubmitting ? 'Saving…' : submitLabel}
+                </Button>
+            </DialogFooter>
+        </form>
+    );
+}
+
 export function AddCardDialog({
-    isOpen,
-    onClose,
+    open,
+    onOpenChange,
     initialTitle = '',
     initialDescription = '',
     initialColor = EIGEN_STICKIES_COLORS[0][1].value,
@@ -32,74 +116,22 @@ export function AddCardDialog({
     placeholderDescription = 'Enter description',
     submitLabel = 'Save',
 }: AddCardDialogProps) {
-    const [title, setTitle] = useState(initialTitle);
-    const [description, setDescription] = useState(initialDescription);
-    const [color, setColor] = useState(initialColor);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    useEffect(() => {
-        if (isOpen) {
-            setTitle(initialTitle);
-            setDescription(initialDescription);
-            setColor(initialColor);
-        }
-    }, [isOpen, initialTitle, initialDescription, initialColor]);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!title.trim()) return;
-        setIsSubmitting(true);
-        try {
-            await onSave({ title: title.trim(), description: description.trim(), color: color || undefined });
-            onClose();
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
     return (
-        <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="sm">
-                <form onSubmit={handleSubmit}>
-                    <DialogHeader>
-                        <DialogTitle>{titleLabel}</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="card-title">Title</Label>
-                            <Input
-                                id="card-title"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                placeholder={placeholderTitle}
-                                autoFocus
-                                required
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="card-description">Description</Label>
-                            <Textarea
-                                id="card-description"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                placeholder={placeholderDescription}
-                                rows={3}
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>Color</Label>
-                            <ColorPicker value={color} onChange={setColor} colors={EIGEN_STICKIES_COLORS} columns={8} />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={onClose}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" disabled={!title.trim() || isSubmitting}>
-                            {isSubmitting ? 'Saving…' : submitLabel}
-                        </Button>
-                    </DialogFooter>
-                </form>
+                {open && (
+                    <AddCardDialogContent
+                        initialTitle={initialTitle}
+                        initialDescription={initialDescription}
+                        initialColor={initialColor}
+                        onOpenChange={onOpenChange}
+                        onSave={onSave}
+                        titleLabel={titleLabel}
+                        placeholderTitle={placeholderTitle}
+                        placeholderDescription={placeholderDescription}
+                        submitLabel={submitLabel}
+                    />
+                )}
             </DialogContent>
         </Dialog>
     );
