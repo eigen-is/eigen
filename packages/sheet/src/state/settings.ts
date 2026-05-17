@@ -1,3 +1,5 @@
+import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import { v4 as uuidv4 } from 'uuid';
 import type { Cell, CellMatrix } from '../engine/types';
 import type { Selection, Sheet, SheetConfig } from './types';
@@ -6,6 +8,14 @@ import type { Selection, Sheet, SheetConfig } from './types';
 // raw scalar input from the formula bar / paste path plus the `Cell` object form
 // passed by callers like `api.setCellValue(0, 0, { f: '=SUM(A1:B1)', bg: '#0188fb' })`.
 export type CellValueInput = Cell | string | number | boolean | null | undefined;
+
+// Returned by the `getCommentInfo` hook for menu rendering (card/entry) and
+// canvas rendering (indicatorColor for the cell-corner triangle).
+export type CommentInfo = {
+    card: CommentCard;
+    entry: CommentEntry | undefined;
+    indicatorColor: string | null;
+};
 
 export type Hooks = {
     beforeUpdateCell?: (r: number, c: number, value: CellValueInput) => boolean;
@@ -102,13 +112,10 @@ export type Hooks = {
     onAddComment?: (row: number, column: number) => void;
     onViewComment?: (row: number, column: number) => void;
     onDeleteComment?: (row: number, column: number) => void;
-    onCommentColor?: (row: number, column: number, color: string | null) => void;
+    onCommentColor?: (row: number, column: number, color: string) => void;
     onCommentResolve?: (row: number, column: number) => void;
     onCommentReopen?: (row: number, column: number) => void;
-    getCommentInfo?: (
-        row: number,
-        column: number,
-    ) => { color: string | null; indicatorColor?: string | null; status: 'open' | 'resolved' } | null;
+    getCommentInfo?: (row: number, column: number) => CommentInfo | null;
     onInsertImage?: () => void;
     resolveImageUrl?: (mediaName: string) => string | null;
 };

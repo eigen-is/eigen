@@ -1160,7 +1160,7 @@ export class Canvas {
             renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
-            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.color ?? '#FC6666';
+            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? '#FC6666';
             renderCtx.fill();
             renderCtx.closePath();
         }
@@ -1329,7 +1329,7 @@ export class Canvas {
             renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
-            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.color ?? '#FC6666';
+            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? '#FC6666';
             renderCtx.fill();
             renderCtx.closePath();
         }
