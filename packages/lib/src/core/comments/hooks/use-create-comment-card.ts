@@ -1,3 +1,4 @@
+import { useAuth } from '@workspace/lib/auth';
 import { useCreateChat } from '@workspace/lib/chat';
 import { nanoid } from 'nanoid';
 import { useCallback, useRef } from 'react';
@@ -19,6 +20,8 @@ export function writeCardToDoc(doc: Y.Doc, mapName: string, card: CommentCard): 
     y.set('description', card.description);
     if (card.color) y.set('color', card.color);
     if (card.chatName) y.set('chatName', card.chatName);
+    if (card.creator) y.set('creator', card.creator);
+    if (card.createdAt !== undefined) y.set('createdAt', card.createdAt);
     map.set(card.id, y);
 }
 
@@ -32,6 +35,9 @@ export function useCreateCommentCard(
     const createChat = useCreateChat(ownerId, mountId);
     const createChatRef = useRef(createChat);
     createChatRef.current = createChat;
+    const { user } = useAuth();
+    const userEmailRef = useRef(user?.email);
+    userEmailRef.current = user?.email;
 
     // anchorInTransact runs INSIDE doc.transact() so the new card + the host anchor land in
     // one Yjs transaction = one undo step. The callback must be synchronous (no awaits, no
@@ -52,6 +58,8 @@ export function useCreateCommentCard(
                 description: input.description ?? '',
                 color: input.color,
                 chatName: chatPath.name,
+                creator: userEmailRef.current,
+                createdAt: Date.now(),
             };
             doc.transact(() => {
                 writeCardToDoc(doc, mapName, card);
