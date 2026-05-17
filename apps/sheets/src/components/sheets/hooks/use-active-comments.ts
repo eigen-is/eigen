@@ -30,11 +30,11 @@ export function useActiveComments(flowdata: (Cell | null)[][] | undefined): Acti
             if (!row) continue;
             for (let c = 0; c < row.length; c++) {
                 const cell = row[c];
-                if (!cell?.commentChatNames?.length) continue;
-                for (const chatName of cell.commentChatNames) {
-                    ids.add(chatName);
-                    if (!anchorTexts.has(chatName)) {
-                        anchorTexts.set(chatName, `Cell ${columnToLetter(c)}${r + 1}`);
+                if (!cell?.commentCardIds?.length) continue;
+                for (const cardId of cell.commentCardIds) {
+                    ids.add(cardId);
+                    if (!anchorTexts.has(cardId)) {
+                        anchorTexts.set(cardId, `Cell ${columnToLetter(c)}${r + 1}`);
                     }
                 }
             }
