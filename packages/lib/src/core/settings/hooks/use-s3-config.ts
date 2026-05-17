@@ -1,6 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '@workspace/lib/api';
-import type { S3Config } from '@workspace/lib/types';
+import type { S3Config } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { settingsKeys } from './use-server-settings';

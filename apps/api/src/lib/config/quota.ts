@@ -1,5 +1,5 @@
-import type { MountConfig } from '@workspace/lib/types';
-import { teamOwnerId } from '@workspace/lib/types';
+import type { MountConfig } from '@workspace/lib/types/mount';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { pullTeamQuotaOverrides } from '../home/home-relay';
 import { getServerSettings } from './server-settings';
 

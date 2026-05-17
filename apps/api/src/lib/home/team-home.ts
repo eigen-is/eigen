@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { S3Config } from '@workspace/lib/types';
-import { parseOwnerId } from '@workspace/lib/types';
+import type { S3Config } from '@workspace/lib/types/mount';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
 import { getTeamDataPath } from '../config/paths';

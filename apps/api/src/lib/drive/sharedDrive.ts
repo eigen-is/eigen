@@ -1,6 +1,6 @@
-import type { MountInfo } from '@workspace/lib/types';
-import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
+import type { MountInfo } from '@workspace/lib/types/mount';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { ChatRoom } from '../chat';
 import type CollabDocument from '../collab/collabDocument.ts';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
