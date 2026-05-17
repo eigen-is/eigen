@@ -16,6 +16,7 @@ import {
     user as userScheme,
     verification as verificationScheme,
 } from '../../../auth-schema.ts';
+import { isTest } from '../config/env';
 import { getServerDataPath } from '../config/paths';
 import { getDomain, getOrgName, getServerConfig } from '../config/server-config';
 import { ApiError } from '../core';
@@ -117,6 +118,7 @@ export const auth = betterAuth({
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
+    logger: { disabled: isTest() },
     // Falls back to random UUID before setup is completed — intentional since sessions don't
     // need to persist across restarts during the pre-setup phase.
     secret: getServerConfig()?.secret || crypto.randomUUID(),

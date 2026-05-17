@@ -9,6 +9,7 @@ rmSync(TEST_DATA_ROOT, { recursive: true, force: true });
 
 const TEST_DATA_DIR = join(TEST_DATA_ROOT, `test-${Date.now()}`);
 process.env['EIGEN_DATA_ROOT'] = TEST_DATA_DIR;
+process.env['API_URL'] = 'http://localhost';
 
 mkdirSync(join(TEST_DATA_DIR, 'server'), { recursive: true });
 mkdirSync(join(TEST_DATA_DIR, 'home'), { recursive: true });
