@@ -44,7 +44,7 @@ export function InsertMenu() {
 
     const fd = getFlowdata(context);
     const commentCell = fd?.[commentRow]?.[commentCol];
-    const hasComment = (commentCell?.commentChatNames?.length ?? 0) > 0;
+    const hasComment = (commentCell?.commentCardIds?.length ?? 0) > 0;
 
     return (
         <>
