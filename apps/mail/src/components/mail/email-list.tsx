@@ -1,3 +1,4 @@
+import { formatDateTime } from '@workspace/lib/date';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { EmptyState, LoadingState } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
@@ -114,20 +115,7 @@ export function EmailList({
                     {filteredEmails.length > 0 ? (
                         <div className="divide-y divide-border">
                             {filteredEmails.map((email, index) => {
-                                let formattedDate = '';
-                                if (email.date) {
-                                    const date = new Date(email.date);
-                                    const now = new Date();
-                                    const isToday = date.toDateString() === now.toDateString();
-                                    if (isToday) {
-                                        formattedDate = date.toLocaleTimeString([], {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                        });
-                                    } else {
-                                        formattedDate = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-                                    }
-                                }
+                                const formattedDate = email.date ? formatDateTime(email.date) : '';
 
                                 return (
                                     <div
