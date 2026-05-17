@@ -9,7 +9,7 @@ type BaseObject = {
     borderColor: string;
     borderWidth: number;
     borderRadius: number;
-    commentChatNames: string[];
+    commentCardIds: string[];
 };
 
 export type TextObject = BaseObject & {
