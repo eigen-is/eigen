@@ -1,5 +1,5 @@
-import { useComments } from '@workspace/lib/chat';
 import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import { Check, Circle, MessageSquareOff, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../select';
@@ -11,41 +11,41 @@ import { TooltipButton } from '../toolbar/tooltip-button';
 type StatusFilter = 'open' | 'resolved' | 'all';
 
 type CommentPanelProps = {
-    ownerId: string;
-    mountId: string;
-    containerId: string;
-    currentUserEmail: string;
-    activeCommentIds: Set<string>;
+    cards: Record<string, CommentCard>;
+    entries: CommentEntry[];
+    activeCardIds: Set<string>;
     anchorTexts: Map<string, string>;
+    currentUserEmail: string;
     onClose: () => void;
-    onCommentClick?: (chatName: string) => void;
-    onCommentContextMenu?: (e: React.MouseEvent, comment: CommentEntry) => void;
+    onCommentClick?: (cardId: string) => void;
+    onCommentContextMenu?: (e: React.MouseEvent, card: CommentCard, entry: CommentEntry | undefined) => void;
 };
 
 export function CommentPanel({
-    ownerId,
-    mountId,
-    containerId,
-    currentUserEmail,
-    activeCommentIds,
+    cards,
+    entries,
+    activeCardIds,
     anchorTexts,
+    currentUserEmail,
     onClose,
     onCommentClick,
     onCommentContextMenu,
 }: CommentPanelProps) {
-    const { data: comments = [] } = useComments(ownerId, mountId, containerId);
-
     const [tab, setTab] = useState<'all' | 'mine'>('all');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
 
-    const filtered = useMemo(() => {
-        return comments.filter((c) => {
-            if (!activeCommentIds.has(c.chatName)) return false;
-            if (statusFilter !== 'all' && c.status !== statusFilter) return false;
-            if (tab === 'mine' && !c.mentions.includes(currentUserEmail)) return false;
-            return true;
-        });
-    }, [comments, activeCommentIds, statusFilter, tab, currentUserEmail]);
+    const visible = useMemo(() => {
+        const out: { card: CommentCard; entry: CommentEntry | undefined }[] = [];
+        for (const cardId of activeCardIds) {
+            const card = cards[cardId];
+            if (!card) continue;
+            const entry = card.chatName ? entries.find((e) => e.chatName === card.chatName) : undefined;
+            if (statusFilter !== 'all' && entry?.status !== statusFilter) continue;
+            if (tab === 'mine' && !entry?.mentions.includes(currentUserEmail)) continue;
+            out.push({ card, entry });
+        }
+        return out;
+    }, [cards, entries, activeCardIds, statusFilter, tab, currentUserEmail]);
 
     return (
         <PropertiesPanel>
@@ -78,33 +78,33 @@ export function CommentPanel({
                 </Select>
             </div>
 
-            {filtered.length === 0 ? (
+            {visible.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                     <MessageSquareOff className="h-8 w-8 mb-2 opacity-40" />
                     <p className="text-xs">No comments</p>
                 </div>
             ) : (
                 <div className="p-2 space-y-2">
-                    {filtered.map((comment) => (
+                    {visible.map(({ card, entry }) => (
                         <NoteCard
-                            key={comment.chatName}
-                            title={anchorTexts.get(comment.chatName) || comment.chatName}
+                            key={card.id}
+                            title={anchorTexts.get(card.id) || card.title || 'Comment'}
                             description={
-                                comment.lastAuthorEmail
-                                    ? `Comment by ${comment.lastAuthorEmail.split('@')[0]}`
-                                    : undefined
+                                entry?.lastAuthorEmail ? `Comment by ${entry.lastAuthorEmail.split('@')[0]}` : undefined
                             }
-                            color={comment.color}
-                            replyCount={comment.messageCount > 1 ? comment.messageCount - 1 : undefined}
+                            color={card.color}
+                            replyCount={entry && entry.messageCount > 1 ? entry.messageCount - 1 : undefined}
                             statusIcon={
-                                comment.status === 'resolved' ? (
+                                entry?.status === 'resolved' ? (
                                     <Check className="h-3.5 w-3.5 opacity-50" />
                                 ) : (
                                     <Circle className="h-2.5 w-2.5 fill-current opacity-40" />
                                 )
                             }
-                            onClick={() => onCommentClick?.(comment.chatName)}
-                            onContextMenu={onCommentContextMenu ? (e) => onCommentContextMenu(e, comment) : undefined}
+                            onClick={() => onCommentClick?.(card.id)}
+                            onContextMenu={
+                                onCommentContextMenu ? (e) => onCommentContextMenu(e, card, entry) : undefined
+                            }
                         />
                     ))}
                 </div>
