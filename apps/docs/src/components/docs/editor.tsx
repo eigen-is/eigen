@@ -604,14 +604,19 @@ const TiptapEditor = ({
         updateCommentDecorations(editor, resolved, colorMap);
     }, [editor, cards, allComments, activeComments.ids]);
 
-    // Resolve initialChatName → cardId once cards are loaded
-    const initialOpenAppliedRef = useRef(false);
+    // Resolve initialChatName → cardId once cards are loaded; reset on prop change so a
+    // re-mounted editor with a new ?chat= URL can open the right card again.
+    const initialOpenAppliedRef = useRef<string | undefined>(undefined);
     useEffect(() => {
-        if (!initialChatName || initialOpenAppliedRef.current) return;
+        if (!initialChatName) {
+            initialOpenAppliedRef.current = undefined;
+            return;
+        }
+        if (initialOpenAppliedRef.current === initialChatName) return;
         for (const cardId in cards) {
             if (cards[cardId].chatName === initialChatName) {
                 setOpenCardId(cardId);
-                initialOpenAppliedRef.current = true;
+                initialOpenAppliedRef.current = initialChatName;
                 return;
             }
         }
