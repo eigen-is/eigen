@@ -3,7 +3,7 @@ import { Mark, mergeAttributes } from '@tiptap/core';
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         commentMark: {
-            setComment: (chatName: string) => ReturnType;
+            setComment: (cardId: string) => ReturnType;
             unsetComment: () => ReturnType;
         };
     }
@@ -14,19 +14,19 @@ export const CommentMarkSchema = Mark.create({
 
     addAttributes() {
         return {
-            chatName: {
+            cardId: {
                 default: null,
-                parseHTML: (element: HTMLElement) => element.getAttribute('data-chat-name'),
+                parseHTML: (element: HTMLElement) => element.getAttribute('data-comment-id'),
                 renderHTML: (attributes: Record<string, unknown>) => {
-                    if (!attributes['chatName']) return {};
-                    return { 'data-chat-name': attributes['chatName'] };
+                    if (!attributes['cardId']) return {};
+                    return { 'data-comment-id': attributes['cardId'] };
                 },
             },
         };
     },
 
     parseHTML() {
-        return [{ tag: 'span[data-chat-name]' }];
+        return [{ tag: 'span[data-comment-id]' }];
     },
 
     renderHTML({ HTMLAttributes }) {
@@ -36,9 +36,9 @@ export const CommentMarkSchema = Mark.create({
     addCommands() {
         return {
             setComment:
-                (chatName: string) =>
+                (cardId: string) =>
                 ({ commands }) => {
-                    return commands.setMark(this.name, { chatName });
+                    return commands.setMark(this.name, { cardId });
                 },
             unsetComment:
                 () =>
