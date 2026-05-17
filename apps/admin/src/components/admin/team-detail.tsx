@@ -95,7 +95,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const updateMount = useUpdateTeamMount(team.id);
 
     const defaultCal = calendars.find((c) => c.isDefault);
-    const teamTarget = `team_${team.id}`;
+    const teamTarget = teamOwnerId(team.id);
     const calendarEnabled = settings?.calendar?.enabled !== false;
 
     const calendarPermission = useMemo(() => {

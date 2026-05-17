@@ -1,4 +1,4 @@
-import { parseOwnerId } from '@workspace/lib/types';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { Home } from '../home';
@@ -61,7 +61,7 @@ export async function propagateCalendarShare(
                 await addRegistryEntry(ownerHome.user.id, share.targetId);
             }
         } else if (parsed.type === 'team') {
-            await addRegistryEntry(ownerHome.user.id, `team_${parsed.id}`);
+            await addRegistryEntry(ownerHome.user.id, teamOwnerId(parsed.id));
             const members = await getTeamMembers(parsed.id);
             for (const member of members) {
                 targets.set(member.user.id, member.user.email);

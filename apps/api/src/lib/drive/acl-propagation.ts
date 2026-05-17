@@ -1,4 +1,4 @@
-import { parseOwnerId } from '@workspace/lib/types';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
 import { composeShareEmail } from '../core/mail-composers';
@@ -20,7 +20,7 @@ export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Prom
                 await addRegistryEntry(ownerId, acl.id);
             }
         } else if (parsed.type === 'team') {
-            await addRegistryEntry(ownerId, `team_${parsed.id}`);
+            await addRegistryEntry(ownerId, teamOwnerId(parsed.id));
             const team = await getTeamMembers(parsed.id);
             for (const member of team) {
                 ids.add(member.user.id);
