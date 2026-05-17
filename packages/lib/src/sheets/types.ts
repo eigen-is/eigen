@@ -43,7 +43,7 @@ export type Cell = CellStyle & {
     // Matches Excel/OOXML's textRotation. Undefined or 0 = no rotation.
     rt?: number | 'vertical';
     hl?: { r: number; c: number; id: string };
-    commentChatNames?: string[];
+    commentCardIds?: string[];
 };
 
 export type CellMatrix = (Cell | null)[][];
