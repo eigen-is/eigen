@@ -24,8 +24,8 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
     const decorations: Decoration[] = [];
     state.doc.descendants((node, pos) => {
         for (const mark of node.marks) {
-            if (mark.type.name !== 'comment' || !mark.attrs['cardId']) continue;
-            const cardId = mark.attrs['cardId'] as string;
+            if (mark.type.name !== 'comment' || !mark.attrs.cardId) continue;
+            const cardId = mark.attrs.cardId as string;
             const end = pos + node.nodeSize;
 
             if (meta.resolvedIds.has(cardId)) {
