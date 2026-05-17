@@ -14,14 +14,16 @@ type CardSettingsDialogProps = {
     description: string;
     color?: string | null;
     onSave: (patch: { title?: string; description?: string; color?: string | null }) => void;
+    dialogTitle?: string;
 };
 
-type ContentProps = {
+type CardSettingsDialogContentProps = {
     initialTitle: string;
     initialDescription: string;
     initialColor: string | null | undefined;
     onOpenChange: (open: boolean) => void;
     onSave: (patch: { title?: string; description?: string; color?: string | null }) => void;
+    dialogTitle: string;
 };
 
 function CardSettingsDialogContent({
@@ -30,17 +32,19 @@ function CardSettingsDialogContent({
     initialColor,
     onOpenChange,
     onSave,
-}: ContentProps) {
+    dialogTitle,
+}: CardSettingsDialogContentProps) {
     const [title, setTitle] = useState(initialTitle);
     const [description, setDescription] = useState(initialDescription);
     const [color, setColor] = useState<string | null | undefined>(initialColor);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!title.trim()) return;
         const patch: { title?: string; description?: string; color?: string | null } = {};
         if (title !== initialTitle) patch.title = title;
         if (description !== initialDescription) patch.description = description;
-        if (color !== initialColor) patch.color = color ?? null;
+        if (color !== initialColor) patch.color = color || null;
         if (Object.keys(patch).length > 0) onSave(patch);
         onOpenChange(false);
     };
@@ -48,7 +52,7 @@ function CardSettingsDialogContent({
     return (
         <form onSubmit={handleSubmit}>
             <DialogHeader>
-                <DialogTitle>Edit card</DialogTitle>
+                <DialogTitle>{dialogTitle}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
@@ -66,25 +70,30 @@ function CardSettingsDialogContent({
                 </div>
                 <div className="grid gap-2">
                     <Label>Color</Label>
-                    <ColorPicker
-                        value={color ?? ''}
-                        onChange={(v) => setColor(v)}
-                        colors={EIGEN_STICKIES_COLORS}
-                        columns={8}
-                    />
+                    <ColorPicker value={color ?? ''} onChange={setColor} colors={EIGEN_STICKIES_COLORS} columns={8} />
                 </div>
             </div>
             <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                     Cancel
                 </Button>
-                <Button type="submit">Save</Button>
+                <Button type="submit" disabled={!title.trim()}>
+                    Save
+                </Button>
             </DialogFooter>
         </form>
     );
 }
 
-export function CardSettingsDialog({ open, onOpenChange, title, description, color, onSave }: CardSettingsDialogProps) {
+export function CardSettingsDialog({
+    open,
+    onOpenChange,
+    title,
+    description,
+    color,
+    onSave,
+    dialogTitle = 'Edit card',
+}: CardSettingsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="sm">
@@ -95,6 +104,7 @@ export function CardSettingsDialog({ open, onOpenChange, title, description, col
                         initialColor={color}
                         onOpenChange={onOpenChange}
                         onSave={onSave}
+                        dialogTitle={dialogTitle}
                     />
                 )}
             </DialogContent>
