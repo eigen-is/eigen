@@ -1,8 +1,8 @@
+import { useCreateChat } from '@workspace/lib/chat';
 import { nanoid } from 'nanoid';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import * as Y from 'yjs';
 import type { CommentCard } from '../../../types/comments';
-import { useCreateChat } from '../../chat/hooks/use-chat';
 
 export type CreateCommentCardInput = {
     title?: string;
@@ -31,13 +31,15 @@ export function useCreateCommentCard(
     mapName: 'comments' | 'tasks' = 'comments',
 ) {
     const createChat = useCreateChat(ownerId, mountId);
+    const createChatRef = useRef(createChat);
+    createChatRef.current = createChat;
 
     return useCallback(
         async (input: CreateCommentCardInput = {}): Promise<CommentCard | null> => {
             if (!doc || !chatFolderId) return null;
 
             const fileName = `comment-${Date.now()}-${nanoid(6)}`;
-            const chatPath = await createChat.mutateAsync({ parentId: chatFolderId, fileName });
+            const chatPath = await createChatRef.current.mutateAsync({ parentId: chatFolderId, fileName });
 
             const card: CommentCard = {
                 id: nanoid(10),
@@ -49,6 +51,6 @@ export function useCreateCommentCard(
             writeCardToDoc(doc, mapName, card);
             return card;
         },
-        [createChat, doc, chatFolderId, mapName],
+        [doc, chatFolderId, mapName],
     );
 }
