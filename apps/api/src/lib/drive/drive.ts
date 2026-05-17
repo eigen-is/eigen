@@ -766,7 +766,7 @@ export default class Drive {
                 createAsyncSingleton(async () => {
                     const path = await mount.getActivePath(pathId);
                     if (!isCollabType(path.type)) {
-                        throw new Error('Document not found');
+                        throw new ApiError(404, 'Document not found');
                     }
                     const document = new CollabDocument(this, path);
                     return (await document.init()) as CollabDocument;
