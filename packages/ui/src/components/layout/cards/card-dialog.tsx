@@ -37,11 +37,7 @@ export function CardDialog({
 }: CardDialogProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-    // Why: legacy stickies cards keep creator/createdAt in the Y.Map; new code never writes them.
-    // Prefer Y.Doc when present, otherwise fall back to the comments.db row.
-    const metaEmail = card?.creator ?? entry?.createdBy ?? undefined;
-    const metaDate = card?.createdAt ?? entry?.createdAt ?? 0;
-    const meta = useCreatedByMeta(metaEmail, metaDate);
+    const meta = useCreatedByMeta(card?.creator, card?.createdAt ?? 0);
 
     if (!card) return null;
 
@@ -61,7 +57,7 @@ export function CardDialog({
                 onOpenChange={onOpenChange}
                 title={card.title}
                 description={card.description}
-                meta={metaEmail ? meta : undefined}
+                meta={card.creator ? meta : undefined}
                 color={card.color}
                 canWrite={canWrite}
                 onEdit={onUpdate ? () => setIsSettingsOpen(true) : undefined}
