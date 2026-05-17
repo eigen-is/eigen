@@ -1,25 +1,28 @@
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { Pencil, Plus } from 'lucide-react';
 import { StickyCard } from './card';
-import type { CardItem, ColumnItem } from './types';
+import type { ColumnItem } from './types';
 
 type ColumnProps = {
     column: ColumnItem;
-    cards: CardItem[];
+    cards: CommentCard[];
+    messageCounts: Map<string, number>;
     canWrite?: boolean;
     isDropAnimating?: boolean;
     onAddCard: (columnId: string) => void;
     onEditColumn: (columnId: string) => void;
     onCardOpen?: (cardId: string) => void;
-    onCardContextMenu?: (e: React.MouseEvent, card: CardItem) => void;
+    onCardContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
     isMobile: boolean;
 };
 
 export function Column({
     column,
     cards,
+    messageCounts,
     canWrite = true,
     isDropAnimating,
     onAddCard,
@@ -89,6 +92,7 @@ export function Column({
                                 <StickyCard
                                     key={card.id}
                                     card={card}
+                                    replyCount={card.chatName ? messageCounts.get(card.chatName) : undefined}
                                     canWrite={canWrite}
                                     onOpen={onCardOpen}
                                     onContextMenu={onCardContextMenu}

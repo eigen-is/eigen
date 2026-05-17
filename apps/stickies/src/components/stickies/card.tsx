@@ -1,17 +1,18 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import { NoteCard } from '@workspace/ui';
 import { useRef } from 'react';
-import type { CardItem } from './types';
 
 type CardProps = {
-    card: CardItem;
+    card: CommentCard;
+    replyCount?: number;
     canWrite?: boolean;
     onOpen?: (cardId: string) => void;
-    onContextMenu?: (e: React.MouseEvent, card: CardItem) => void;
+    onContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
 };
 
-export function StickyCard({ card, canWrite = true, onOpen, onContextMenu }: CardProps) {
+export function StickyCard({ card, replyCount, canWrite = true, onOpen, onContextMenu }: CardProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
         data: { type: 'task', task: card },
@@ -37,8 +38,7 @@ export function StickyCard({ card, canWrite = true, onOpen, onContextMenu }: Car
             title={card.title}
             description={card.description}
             color={card.color}
-            replyCount={card.messageCount || undefined}
-            replyLabel={card.messageCount === 1 ? 'message' : 'messages'}
+            replyCount={replyCount}
             onPointerDownCapture={(e: React.PointerEvent) => {
                 pointerStart.current = { x: e.clientX, y: e.clientY };
             }}

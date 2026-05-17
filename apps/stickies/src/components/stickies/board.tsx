@@ -5,6 +5,7 @@ import { getDriveItemUrl } from '@workspace/lib/api';
 import { useComments } from '@workspace/lib/chat';
 import { restoreYjsDoc } from '@workspace/lib/collab';
 import {
+    useCardIdFromChatName,
     useCommentCards,
     useCreateCommentCard,
     useOpenCommentCard,
@@ -12,6 +13,7 @@ import {
 } from '@workspace/lib/comments';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { AddCardDialog, CardDialog, CommentMenuItems, LoadingState, NoteCard } from '@workspace/ui';
 import {
@@ -23,7 +25,7 @@ import {
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import * as Y from 'yjs';
 import { AddColumnDialog } from './add-column-dialog';
 import { Column } from './column';
@@ -31,7 +33,7 @@ import { ColumnSettingsDialog } from './column-settings-dialog';
 import { useBoard } from './hooks/use-board';
 import { useDragAndDrop } from './hooks/use-drag-and-drop';
 import { Toolbar } from './toolbar';
-import type { CardItem, ColumnItem } from './types';
+import type { ColumnItem } from './types';
 
 type StickiesBoardProps = {
     ownerId: string;
@@ -65,7 +67,6 @@ export function StickiesBoard({
 
     const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({ board, yjsDoc });
 
-    // Enrich cards with message counts from comments.db
     const { data: commentList = [] } = useComments(ownerId, path.mountId, path.id);
     const messageCounts = useMemo(() => {
         const map = new Map<string, number>();
@@ -74,15 +75,6 @@ export function StickiesBoard({
         }
         return map;
     }, [commentList]);
-
-    const enrichCard = useCallback(
-        (card: CardItem): CardItem => {
-            if (!card.chatName) return card;
-            const count = messageCounts.get(card.chatName);
-            return count ? { ...card, messageCount: count } : card;
-        },
-        [messageCounts],
-    );
 
     // Shared comment-card hooks for the new dialog path
     const cards = useCommentCards(yjsDoc ?? null, 'tasks');
@@ -120,7 +112,7 @@ export function StickiesBoard({
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
     const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
     const [colorFilter, setColorFilter] = useState<Set<string>>(new Set());
-    const cardContextMenu = useContextMenu<CardItem>();
+    const cardContextMenu = useContextMenu<CommentCard>();
     const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
     const [openCardId, setOpenCardId] = useState<string | null>(null);
 
@@ -128,24 +120,10 @@ export function StickiesBoard({
     const [addOpen, setAddOpen] = useState(false);
     const [addTargetColumn, setAddTargetColumn] = useState<string | null>(null);
 
-    // Track the chatName we've already auto-opened for so a YJS update arriving before the URL
-    // clear navigates can't re-apply the auto-open after the user has closed the dialog.
-    const autoOpenedForRef = useRef<string | undefined>(undefined);
-    useEffect(() => {
-        if (!initialChatName) {
-            autoOpenedForRef.current = undefined;
-            return;
-        }
-        if (!isSynced) return;
-        if (autoOpenedForRef.current === initialChatName) return;
-        autoOpenedForRef.current = initialChatName;
-        const card = Object.values(board.tasks).find((t) => t.chatName === initialChatName);
-        if (card) {
-            setOpenCardId(card.id);
-        } else {
-            onClearInitialChat?.();
-        }
-    }, [initialChatName, board.tasks, isSynced, onClearInitialChat]);
+    useCardIdFromChatName(board.tasks, initialChatName, setOpenCardId, {
+        ready: isSynced,
+        onChatNotFound: onClearInitialChat,
+    });
 
     const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, commentList, openCardId);
 
@@ -227,7 +205,7 @@ export function StickiesBoard({
         if (!dragState.activeId || !dragState.activeType || !dragState.activeItem) return null;
 
         if (dragState.activeType === 'task') {
-            const card = dragState.activeItem as CardItem;
+            const card = dragState.activeItem as CommentCard;
             return (
                 <NoteCard
                     title={card.title}
@@ -240,11 +218,12 @@ export function StickiesBoard({
 
         if (dragState.activeType === 'column') {
             const column = dragState.activeItem as ColumnItem;
-            const columnCards = column.taskIds.map((taskId: string) => enrichCard(board.tasks[taskId]));
+            const columnCards = column.taskIds.map((taskId: string) => board.tasks[taskId]);
             return (
                 <Column
                     column={column}
                     cards={columnCards}
+                    messageCounts={messageCounts}
                     canWrite={canWrite}
                     onAddCard={handleAddCard}
                     onEditColumn={handleEditColumn}
@@ -314,7 +293,7 @@ export function StickiesBoard({
                                         {board.columnOrder.map((columnId) => {
                                             const column = board.columns[columnId];
                                             const columnCards = column.taskIds
-                                                .map((taskId) => enrichCard(board.tasks[taskId]))
+                                                .map((taskId) => board.tasks[taskId])
                                                 .filter(
                                                     (card) =>
                                                         colorFilter.size === 0 || colorFilter.has(card.color || ''),
@@ -324,6 +303,7 @@ export function StickiesBoard({
                                                     key={column.id}
                                                     column={column}
                                                     cards={columnCards}
+                                                    messageCounts={messageCounts}
                                                     canWrite={canWrite}
                                                     onAddCard={handleAddCard}
                                                     onEditColumn={handleEditColumn}
