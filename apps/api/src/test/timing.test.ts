@@ -27,17 +27,23 @@ describe('time()', () => {
         expect(result).toBe('hello');
     });
 
-    test('logs a [timing] line with label and ms', async () => {
+    test('logs a [timing] line for slow operations', async () => {
         await time('test.logs', async () => {
-            await Bun.sleep(5);
+            await Bun.sleep(120);
         });
         expect(logs.length).toBe(1);
         expect(logs[0]).toMatch(/^\[timing\] test\.logs \d+\.\d+ms$/);
     });
 
-    test('logs even if the function throws', async () => {
+    test('does not log for fast operations', async () => {
+        await time('test.fast', () => 42);
+        expect(logs.length).toBe(0);
+    });
+
+    test('logs even if a slow function throws', async () => {
         await expect(
             time('test.throws', async () => {
+                await Bun.sleep(120);
                 throw new Error('boom');
             }),
         ).rejects.toThrow('boom');

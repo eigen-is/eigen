@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
 import { time } from '../../utils/timing';
+import { isTest } from '../config/env';
 
 export type SchemaType = Record<string, unknown>;
 
@@ -89,7 +90,13 @@ export class ManagedDatabase<S extends SchemaType> {
             .sort((a, b) => a.version - b.version);
 
         for (const migration of pending) {
-            console.log(`[${this.config.name}] Migrating v${currentVersion} → v${migration.version}`);
+            if (!isTest()) {
+                const msg =
+                    currentVersion === 0
+                        ? `Init v${migration.version}`
+                        : `Migrating v${currentVersion} → v${migration.version}`;
+                console.log(`[${this.config.name}] ${msg}`);
+            }
             this.rawDb.run('BEGIN');
             try {
                 migration.up(this.rawDb);
