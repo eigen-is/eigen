@@ -191,5 +191,6 @@ export function useSheet(
         handleOp,
         onDataChange,
         handleRestore,
+        docRef,
     };
 }

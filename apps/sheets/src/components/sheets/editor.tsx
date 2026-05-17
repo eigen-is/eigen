@@ -1,12 +1,14 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
-import { EIGEN_STICKIES_COLORS, EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
+import { useComments, useResolveComment } from '@workspace/lib/chat';
+import { useCommentCards, useCreateCommentCard, useUpdateCommentCard } from '@workspace/lib/comments';
+import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import { isPendingMediaName, useCopyToMediaFolder, useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { CommentDialog, CommentPanel, CreateCommentDialog, LoadingState, NoteCardContextMenu } from '@workspace/ui';
+import { AddCardDialog, CardDialog, CommentPanel, LoadingState, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -36,7 +38,7 @@ export function SheetEditor({
     const workbookRef = useRef<WorkbookInstance>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
-    const { initialData, snapshotVersion, synced, handleOp, onDataChange, handleRestore } = useSheet(
+    const { initialData, snapshotVersion, synced, handleOp, onDataChange, handleRestore, docRef } = useSheet(
         ownerId,
         path.mountId,
         path.id,
@@ -47,28 +49,54 @@ export function SheetEditor({
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const { resolveMediaUrl, startUpload } = useMediaResolver();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
-    const [commentDialogOpen, setCommentDialogOpen] = useState(false);
-    const [commentSelectedText, setCommentSelectedText] = useState('');
-    const [commentCellRef, setCommentCellRef] = useState<{ r: number; c: number } | null>(null);
-    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(initialChatName ?? null);
+    const [addOpen, setAddOpen] = useState(false);
+    const [addInitialTitle, setAddInitialTitle] = useState('');
+    const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
+    const [openCardId, setOpenCardId] = useState<string | null>(null);
     const [flowdata, setFlowdata] = useState<(import('@workspace/sheet').Cell | null)[][] | undefined>();
     const activeComments = useActiveComments(flowdata);
     const { data: allComments = [] } = useComments(ownerId, path.mountId, path.id);
     const resolveComment = useResolveComment(ownerId, path.mountId, path.id);
-    const updateColor = useUpdateCommentColor(ownerId, path.mountId, path.id);
-    const commentContextMenu = useContextMenu<CommentEntry>();
+    const cards = useCommentCards(docRef.current, 'comments');
+    const createCard = useCreateCommentCard(ownerId, path.mountId, chatFolderId, docRef.current, 'comments');
+    const updateCard = useUpdateCommentCard(docRef.current, 'comments');
+    const commentContextMenu = useContextMenu<{ card: CommentCard; entry: CommentEntry | undefined }>();
 
     const unresolvedCount = useMemo(() => {
-        return allComments.filter((c) => c.status === 'open' && activeComments.ids.has(c.chatName)).length;
-    }, [allComments, activeComments.ids]);
+        let n = 0;
+        for (const cardId of activeComments.ids) {
+            const card = cards[cardId];
+            if (!card?.chatName) continue;
+            const entry = allComments.find((c) => c.chatName === card.chatName);
+            if (entry?.status === 'open') n++;
+        }
+        return n;
+    }, [cards, allComments, activeComments.ids]);
 
-    const viewCommentEntry = viewCommentChatName ? allComments.find((c) => c.chatName === viewCommentChatName) : null;
+    const openCard = openCardId ? (cards[openCardId] ?? null) : null;
+    const openEntry = openCard?.chatName ? allComments.find((c) => c.chatName === openCard.chatName) : undefined;
+
+    const initialOpenAppliedRef = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        if (!initialChatName) {
+            initialOpenAppliedRef.current = undefined;
+            return;
+        }
+        if (initialOpenAppliedRef.current === initialChatName) return;
+        for (const cardId in cards) {
+            if (cards[cardId].chatName === initialChatName) {
+                setOpenCardId(cardId);
+                initialOpenAppliedRef.current = initialChatName;
+                return;
+            }
+        }
+    }, [cards, initialChatName]);
 
     const addCommentRef = useRef<(r: number, c: number) => void>(null);
     addCommentRef.current = useCallback((r: number, c: number) => {
-        setCommentCellRef({ r, c });
-        setCommentSelectedText(`Cell ${columnToLetter(c)}${r + 1}`);
-        setCommentDialogOpen(true);
+        setAddTargetCell({ r, c });
+        setAddInitialTitle(`Cell ${columnToLetter(c)}${r + 1}`);
+        setAddOpen(true);
     }, []);
 
     const handleImageFile = useCallback(
@@ -143,19 +171,20 @@ export function SheetEditor({
         [mediaFolderId, copyToMediaFolder, resolveMediaUrl],
     );
 
-    const handleCommentCreated = useCallback(
-        (chatName: string) => {
-            if (!commentCellRef || !workbookRef.current) return;
-            const fd = workbookRef.current.getFlowdata();
-            const existing = fd?.[commentCellRef.r]?.[commentCellRef.c]?.commentChatNames ?? [];
-            workbookRef.current.setCellFormat(commentCellRef.r, commentCellRef.c, 'commentChatNames', [
-                ...existing,
-                chatName,
-            ]);
-            updateColor.mutate({ chatName, color: EIGEN_STICKIES_COLORS[0][1].value });
-            setCommentCellRef(null);
+    const handleSaveNew = useCallback(
+        async ({ title, description, color }: { title: string; description: string; color?: string }) => {
+            if (!addTargetCell || !workbookRef.current) return;
+            const cell = addTargetCell;
+            const created = await createCard({ title, description, color }, (card) => {
+                const fd = workbookRef.current?.getFlowdata();
+                const existing = fd?.[cell.r]?.[cell.c]?.commentCardIds ?? [];
+                workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, card.id]);
+            });
+            if (created) setOpenCardId(created.id);
+            setAddTargetCell(null);
+            setAddOpen(false);
         },
-        [commentCellRef, updateColor],
+        [addTargetCell, createCard],
     );
 
     const leftItems = useMemo(
@@ -234,115 +263,130 @@ export function SheetEditor({
                                 : {}),
                             onViewComment: (r: number, c: number) => {
                                 const fd = workbookRef.current?.getFlowdata();
-                                const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                if (chatName) setViewCommentChatName(chatName);
+                                const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                if (cardId) setOpenCardId(cardId);
                             },
                             ...(canWrite
                                 ? {
                                       onDeleteComment: (r: number, c: number) => {
                                           const fd = workbookRef.current?.getFlowdata();
                                           const cell = fd?.[r]?.[c];
-                                          const chatName = cell?.commentChatNames?.[0];
-                                          if (chatName && workbookRef.current) {
+                                          const cardId = cell?.commentCardIds?.[0];
+                                          if (cardId && workbookRef.current) {
                                               workbookRef.current.setCellFormat(
                                                   r,
                                                   c,
-                                                  'commentChatNames',
-                                                  (cell.commentChatNames ?? []).filter((n) => n !== chatName),
+                                                  'commentCardIds',
+                                                  (cell.commentCardIds ?? []).filter((id) => id !== cardId),
                                               );
                                           }
                                       },
                                       onCommentColor: (r: number, c: number, color: string | null) => {
                                           const fd = workbookRef.current?.getFlowdata();
-                                          const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                          if (chatName) updateColor.mutate({ chatName, color });
+                                          const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                          if (cardId) updateCard(cardId, { color });
                                       },
                                       onCommentResolve: (r: number, c: number) => {
                                           const fd = workbookRef.current?.getFlowdata();
-                                          const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                          if (chatName) resolveComment.mutate({ chatName, status: 'resolved' });
+                                          const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                          const card = cardId ? cards[cardId] : undefined;
+                                          if (card?.chatName)
+                                              resolveComment.mutate({ chatName: card.chatName, status: 'resolved' });
                                       },
                                       onCommentReopen: (r: number, c: number) => {
                                           const fd = workbookRef.current?.getFlowdata();
-                                          const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                          if (chatName) resolveComment.mutate({ chatName, status: 'open' });
+                                          const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                          const card = cardId ? cards[cardId] : undefined;
+                                          if (card?.chatName)
+                                              resolveComment.mutate({ chatName: card.chatName, status: 'open' });
                                       },
                                   }
                                 : {}),
                             getCommentInfo: (r: number, c: number) => {
                                 const fd = workbookRef.current?.getFlowdata();
-                                const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                if (!chatName) return null;
-                                const entry = allComments.find((c) => c.chatName === chatName);
-                                if (!entry) return null;
-                                const indicatorColor = entry.color
-                                    ? (EIGEN_STICKIES_INDICATOR_MAP.get(entry.color) ?? entry.color)
+                                const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                const card = cardId ? cards[cardId] : undefined;
+                                if (!card) return null;
+                                const entry = card.chatName
+                                    ? allComments.find((c) => c.chatName === card.chatName)
+                                    : undefined;
+                                const indicatorColor = card.color
+                                    ? (EIGEN_STICKIES_INDICATOR_MAP.get(card.color) ?? card.color)
                                     : null;
-                                return { color: entry.color, indicatorColor, status: entry.status };
+                                return { color: card.color ?? null, indicatorColor, status: entry?.status ?? 'open' };
                             },
                         }}
                     />
                 </div>
                 {commentPanelOpen && (
                     <CommentPanel
-                        ownerId={ownerId}
-                        mountId={path.mountId}
-                        containerId={path.id}
-                        currentUserEmail={auth.user!.email}
-                        activeCommentIds={activeComments.ids}
+                        cards={cards}
+                        entries={allComments}
+                        activeCardIds={activeComments.ids}
                         anchorTexts={activeComments.anchorTexts}
+                        currentUserEmail={auth.user!.email}
                         onClose={() => setCommentPanelOpen(false)}
-                        onCommentClick={(chatName) => setViewCommentChatName(chatName)}
-                        onCommentContextMenu={commentContextMenu.handleContextMenu}
+                        onCommentClick={(cardId) => setOpenCardId(cardId)}
+                        onCommentContextMenu={(e, card, entry) =>
+                            commentContextMenu.handleContextMenu(e, { card, entry })
+                        }
                     />
                 )}
             </div>
 
-            {chatFolderId && (
-                <CreateCommentDialog
-                    open={commentDialogOpen}
-                    onOpenChange={setCommentDialogOpen}
-                    ownerId={ownerId}
-                    mountId={path.mountId}
-                    chatFolderId={chatFolderId}
-                    selectedText={commentSelectedText}
-                    onCommentCreated={handleCommentCreated}
-                />
-            )}
+            <AddCardDialog
+                open={addOpen}
+                onOpenChange={(o) => {
+                    setAddOpen(o);
+                    if (!o) setAddTargetCell(null);
+                }}
+                initialTitle={addInitialTitle}
+                onSave={handleSaveNew}
+                titleLabel="New comment"
+                submitLabel="Add comment"
+            />
 
-            {viewCommentChatName && viewCommentEntry && (
-                <CommentDialog
-                    comment={viewCommentEntry}
-                    title={activeComments.anchorTexts.get(viewCommentChatName) || viewCommentChatName}
-                    ownerId={ownerId}
-                    mountId={path.mountId}
-                    copyLinkUrl={`${getDriveItemUrl(path)}?chat=${encodeURIComponent(viewCommentChatName)}`}
-                    onClose={() => setViewCommentChatName(null)}
-                    onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
-                />
-            )}
+            <CardDialog
+                open={!!openCard}
+                onOpenChange={(o) => {
+                    if (!o) setOpenCardId(null);
+                }}
+                card={openCard}
+                entry={openEntry}
+                ownerId={ownerId}
+                mountId={path.mountId}
+                canWrite={canWrite}
+                copyLinkUrl={
+                    openCard?.chatName
+                        ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
+                        : undefined
+                }
+                showResolveAction
+                onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
+                onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
+            />
 
             <ContextMenuAnchor contextMenu={commentContextMenu}>
                 <NoteCardContextMenu
-                    currentColor={commentContextMenu.item?.color}
-                    status={commentContextMenu.item?.status}
+                    currentColor={commentContextMenu.item?.card.color ?? undefined}
+                    status={commentContextMenu.item?.entry?.status}
                     onEdit={() => {
-                        if (commentContextMenu.item) setViewCommentChatName(commentContextMenu.item.chatName);
+                        if (commentContextMenu.item) setOpenCardId(commentContextMenu.item.card.id);
                         commentContextMenu.close();
                     }}
                     onChangeColor={(color) => {
                         if (commentContextMenu.item)
-                            updateColor.mutate({ chatName: commentContextMenu.item.chatName, color: color || null });
+                            updateCard(commentContextMenu.item.card.id, { color: color || null });
                         commentContextMenu.close();
                     }}
                     onResolve={() => {
-                        if (commentContextMenu.item)
-                            resolveComment.mutate({ chatName: commentContextMenu.item.chatName, status: 'resolved' });
+                        const entry = commentContextMenu.item?.entry;
+                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'resolved' });
                         commentContextMenu.close();
                     }}
                     onReopen={() => {
-                        if (commentContextMenu.item)
-                            resolveComment.mutate({ chatName: commentContextMenu.item.chatName, status: 'open' });
+                        const entry = commentContextMenu.item?.entry;
+                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'open' });
                         commentContextMenu.close();
                     }}
                     onDelete={() => {
@@ -350,7 +394,7 @@ export function SheetEditor({
                             commentContextMenu.close();
                             return;
                         }
-                        const chatName = commentContextMenu.item.chatName;
+                        const cardId = commentContextMenu.item.card.id;
                         const fd = workbookRef.current.getFlowdata();
                         if (fd) {
                             for (let r = 0; r < fd.length; r++) {
@@ -358,12 +402,12 @@ export function SheetEditor({
                                 if (!row) continue;
                                 for (let c = 0; c < row.length; c++) {
                                     const cell = row[c];
-                                    if (cell?.commentChatNames?.includes(chatName)) {
+                                    if (cell?.commentCardIds?.includes(cardId)) {
                                         workbookRef.current.setCellFormat(
                                             r,
                                             c,
-                                            'commentChatNames',
-                                            cell.commentChatNames.filter((n) => n !== chatName),
+                                            'commentCardIds',
+                                            cell.commentCardIds.filter((id) => id !== cardId),
                                         );
                                     }
                                 }
