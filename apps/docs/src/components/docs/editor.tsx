@@ -574,14 +574,12 @@ const TiptapEditor = ({
     );
 
     const unresolvedCount = useMemo(() => {
-        let n = 0;
-        for (const cardId of activeComments.ids) {
-            const card = cards[cardId];
-            if (!card?.chatName) continue;
-            const entry = allComments.find((c) => c.chatName === card.chatName);
-            if (entry?.status === 'open') n++;
+        const activeChatNames = new Set<string>();
+        for (const id of activeComments.ids) {
+            const chatName = cards[id]?.chatName;
+            if (chatName) activeChatNames.add(chatName);
         }
-        return n;
+        return allComments.filter((c) => c.status === 'open' && activeChatNames.has(c.chatName)).length;
     }, [cards, allComments, activeComments.ids]);
 
     const openCard = openCardId ? (cards[openCardId] ?? null) : null;
