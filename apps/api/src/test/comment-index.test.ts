@@ -423,7 +423,7 @@ describe('Comment Index', () => {
         });
     });
 
-    describe('whispers are not indexed', () => {
+    describe('whispers do not affect the comment index', () => {
         let doc3Id: string;
 
         beforeAll(async () => {
@@ -445,6 +445,7 @@ describe('Comment Index', () => {
             );
             const chatFolder = findOrFail(contents, (p: DrivePath) => p.name === 'chat');
 
+            // Chat creation seeds a row in comments.db with createdBy=alice, messageCount=0.
             const chat = await drivePost<DrivePath>(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
@@ -458,7 +459,7 @@ describe('Comment Index', () => {
                 acl: [{ id: BOB_EMAIL, read: true, write: true }],
             });
 
-            // Post a whisper — should NOT create a comment index entry
+            // Post a whisper — should NOT increment the seeded row's messageCount or set lastAuthor.
             await chatPost<ChatMessage>(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
@@ -472,9 +473,14 @@ describe('Comment Index', () => {
             );
         });
 
-        test('whisper does not create comment entry', async () => {
+        test('whisper leaves the seeded row untouched', async () => {
             const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, doc3Id, 'comments');
-            expect(await res.json()).toEqual([]);
+            const comments = await assertJson<CommentEntry[]>(res);
+            expect(comments).toHaveLength(1);
+            expect(comments[0].chatName).toBe('whisper-chat.eigenchat');
+            expect(comments[0].messageCount).toBe(0);
+            expect(comments[0].lastAuthorEmail).toBeNull();
+            expect(comments[0].lastMessageSnippet).toBeNull();
         });
     });
 
