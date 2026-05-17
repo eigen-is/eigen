@@ -1154,7 +1154,7 @@ export class Canvas {
         }
 
         // Comment indicator triangle
-        if (flowdata?.[r]?.[c]?.commentChatNames?.length) {
+        if (flowdata?.[r]?.[c]?.commentCardIds?.length) {
             const commentInfo = this.sheetCtx.hooks.getCommentInfo?.(r, c);
             renderCtx.beginPath();
             renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
@@ -1323,7 +1323,7 @@ export class Canvas {
         }
 
         // Comment indicator triangle
-        if (cell?.commentChatNames?.length) {
+        if (cell?.commentCardIds?.length) {
             const commentInfo = this.sheetCtx.hooks.getCommentInfo?.(r, c);
             renderCtx.beginPath();
             renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);

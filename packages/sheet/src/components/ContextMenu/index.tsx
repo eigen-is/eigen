@@ -602,7 +602,7 @@ export const ContextMenu: React.FC = () => {
                 }
                 const fd = getFlowdata(context);
                 const cell = fd?.[row_index]?.[col_index];
-                const hasComment = (cell?.commentChatNames?.length ?? 0) > 0;
+                const hasComment = (cell?.commentCardIds?.length ?? 0) > 0;
                 const closeMenu = () =>
                     setContext((draftCtx) => {
                         draftCtx.contextMenu = {};
