@@ -238,44 +238,25 @@ export class Home {
 
     protected async destruct() {
         this._destructing = true;
-        try {
-            await this._drive.destruct();
-        } catch (error) {
-            console.error('Failed to destruct drive:', error);
-        }
 
-        try {
-            await this._contacts?.destruct();
-        } catch (error) {
-            console.error('Failed to destruct contacts:', error);
-        }
-
-        try {
-            await this._mail?.destruct();
-        } catch (error) {
-            console.error('Failed to destruct mail:', error);
-        }
-
-        try {
-            await this._calendar?.destruct();
-        } catch (error) {
-            console.error('Failed to destruct calendar:', error);
-        }
-
-        try {
-            await this._notifications?.destruct();
-        } catch (error) {
-            console.error('Failed to destruct notifications:', error);
-        }
-
+        const tasks: [string, Promise<unknown> | undefined][] = [
+            ['drive', this._drive.destruct()],
+            ['contacts', this._contacts?.destruct()],
+            ['mail', this._mail?.destruct()],
+            ['calendar', this._calendar?.destruct()],
+            ['notifications', this._notifications?.destruct()],
+        ];
         for (const [key, getter] of this.managedDatabases) {
-            try {
-                const db = await getter();
-                await db.close();
-            } catch (error) {
-                console.error(`Failed to close managed database ${key}:`, error);
+            tasks.push([`managed database ${key}`, (async () => (await getter()).close())()]);
+        }
+
+        const results = await Promise.allSettled(tasks.map(([, p]) => p));
+        for (const [i, result] of results.entries()) {
+            if (result.status === 'rejected') {
+                console.error(`Failed to destruct ${tasks[i][0]}:`, result.reason);
             }
         }
+
         this.managedDatabases.clear();
     }
 
