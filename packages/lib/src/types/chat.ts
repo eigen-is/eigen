@@ -43,6 +43,7 @@ export type CommentEntry = {
     lastActivityAt: Date | null;
     messageCount: number;
     createdAt: Date;
+    createdBy: string | null;
     color: string | null;
     mentions: string[];
 };
