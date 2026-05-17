@@ -183,6 +183,11 @@ export function StickiesBoard({
         onClearInitialChat?.();
     }, [onClearInitialChat]);
 
+    const handleCardContextOpen = (cardId: string) => {
+        setOpenCardId(cardId);
+        cardContextMenu.close();
+    };
+
     const handleCardContextDelete = (cardId: string) => {
         setDeleteCardId(cardId);
         cardContextMenu.close();
@@ -378,10 +383,7 @@ export function StickiesBoard({
                                     item={
                                         cardContextMenu.item ? { card: cardContextMenu.item, entry: undefined } : null
                                     }
-                                    onOpen={(cardId) => {
-                                        setOpenCardId(cardId);
-                                        cardContextMenu.close();
-                                    }}
+                                    onOpen={handleCardContextOpen}
                                     onChangeColor={handleCardContextColor}
                                     onDelete={handleCardContextDelete}
                                 />
