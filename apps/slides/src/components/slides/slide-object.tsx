@@ -1,5 +1,3 @@
-import { isLightColor } from '@workspace/lib/constants';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
@@ -17,6 +15,7 @@ import {
 } from '@workspace/ui/components/context-menu';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
+import { ColorSwatchRow } from '@workspace/ui/components/layout/notes';
 import {
     ArrowDownToLine,
     ArrowUpToLine,
@@ -362,27 +361,10 @@ export const SlideObjectView = memo(function SlideObjectView({
                                         <Palette className="h-4 w-4 mr-2" /> Comment color
                                     </ContextMenuSubTrigger>
                                     <ContextMenuSubContent>
-                                        <div className="flex gap-1 p-2">
-                                            {EIGEN_STICKIES_COLORS[0].map((c) => (
-                                                <button
-                                                    type="button"
-                                                    key={c.value}
-                                                    className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
-                                                    style={{ backgroundColor: c.value }}
-                                                    title={c.label}
-                                                    onClick={() => onCommentChangeColor?.(card.id, c.value)}
-                                                >
-                                                    {card.color === c.value && (
-                                                        <Check
-                                                            className="h-2 w-2"
-                                                            style={{
-                                                                color: isLightColor(c.value) ? '#000' : '#fff',
-                                                            }}
-                                                        />
-                                                    )}
-                                                </button>
-                                            ))}
-                                        </div>
+                                        <ColorSwatchRow
+                                            currentColor={card.color}
+                                            onChangeColor={(color) => onCommentChangeColor?.(card.id, color)}
+                                        />
                                     </ContextMenuSubContent>
                                 </ContextMenuSub>
                                 {entry && entry.status === 'open' && (
