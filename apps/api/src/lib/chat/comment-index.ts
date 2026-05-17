@@ -66,13 +66,6 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    async updateColor(chatName: string, color: string | null): Promise<void> {
-        await this.db
-            .update(commentSchema.comments)
-            .set({ color })
-            .where(eq(commentSchema.comments.chatName, chatName));
-    }
-
     async decrementCount(chatName: string): Promise<void> {
         await this.db
             .update(commentSchema.comments)

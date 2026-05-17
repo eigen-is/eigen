@@ -138,23 +138,6 @@ export const collabRouter = new Elysia({
         },
     )
 
-    .patch(
-        '/collab/:ownerId/:mountId/:pathId/comments/:chatName/color',
-        async ({ params, body, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
-            const index = await getCommentIndex(drive, params.mountId, params.pathId);
-            await index.updateColor(params.chatName, body.color);
-            return { success: true };
-        },
-        {
-            body: t.Object({ color: t.Union([t.String({ pattern: '^#[0-9a-fA-F]{6}$' }), t.Null()]) }),
-            auth: true,
-        },
-    )
-
     // Bun does not await async open(), so messages and close can fire before setup
     // completes. The `opened` promise gates message/close until open() is done.
     .ws('/ws/collab/:ownerId/:mountId/:pathId', {
