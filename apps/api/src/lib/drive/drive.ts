@@ -27,6 +27,7 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
 import { openCommentIndex } from '../chat/comment-index';
+import { buildCommentIndexUpdatedEvent } from '../chat/sse-events';
 import CollabDocument from '../collab/collabDocument';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { contentDisposition } from '../core/http';
@@ -226,6 +227,7 @@ export default class Drive {
         if (!chatPath) return;
         const index = await openCommentIndex(this, container);
         await index.ensureComment(chatPath.name, { createdBy });
+        this.home.broadcast(buildCommentIndexUpdatedEvent(container.id, this.owner, mountId));
     }
 
     async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
