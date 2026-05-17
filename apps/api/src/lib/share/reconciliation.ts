@@ -1,3 +1,4 @@
+import { teamOwnerId } from '@workspace/lib/types';
 import { getHome } from '../home';
 import { pullCalendarShares, pullPendingInvitations, pullSharedPaths, sendToHome } from '../home/home-relay';
 import type { User } from '../user';
@@ -66,7 +67,7 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
 }
 
 export async function reconcileSharesForNewTeamMember(userId: string, teamId: string): Promise<void> {
-    const teamIdentifier = `team_${teamId}`;
+    const teamIdentifier = teamOwnerId(teamId);
     const fromUserIds = await getEntriesForTarget(teamIdentifier);
     if (fromUserIds.length === 0) return;
 
