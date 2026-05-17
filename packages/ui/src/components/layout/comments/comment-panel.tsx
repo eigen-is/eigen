@@ -40,7 +40,9 @@ export function CommentPanel({
             const card = cards[cardId];
             if (!card) continue;
             const entry = card.chatName ? entries.find((e) => e.chatName === card.chatName) : undefined;
-            if (statusFilter !== 'all' && entry?.status !== statusFilter) continue;
+            // Treat missing entry as "open" so freshly-created cards show up before SSE round-trip.
+            const status = entry?.status ?? 'open';
+            if (statusFilter !== 'all' && status !== statusFilter) continue;
             if (tab === 'mine' && !entry?.mentions.includes(currentUserEmail)) continue;
             out.push({ card, entry });
         }
