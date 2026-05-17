@@ -1,7 +1,14 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment } from '@workspace/lib/chat';
-import { useCommentCards, useCreateCommentCard, useUpdateCommentCard } from '@workspace/lib/comments';
+import {
+    useCardIdFromChatName,
+    useCommentCards,
+    useCreateCommentCard,
+    useOpenCommentCard,
+    useUnresolvedCommentCount,
+    useUpdateCommentCard,
+} from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import { isPendingMediaName, useCopyToMediaFolder, useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -62,33 +69,9 @@ export function SheetEditor({
     const updateCard = useUpdateCommentCard(docRef.current, 'comments');
     const commentContextMenu = useContextMenu<{ card: CommentCard; entry: CommentEntry | undefined }>();
 
-    const unresolvedCount = useMemo(() => {
-        const activeChatNames = new Set<string>();
-        for (const id of activeComments.ids) {
-            const chatName = cards[id]?.chatName;
-            if (chatName) activeChatNames.add(chatName);
-        }
-        return allComments.filter((c) => c.status === 'open' && activeChatNames.has(c.chatName)).length;
-    }, [cards, allComments, activeComments.ids]);
-
-    const openCard = openCardId ? (cards[openCardId] ?? null) : null;
-    const openEntry = openCard?.chatName ? allComments.find((c) => c.chatName === openCard.chatName) : undefined;
-
-    const initialOpenAppliedRef = useRef<string | undefined>(undefined);
-    useEffect(() => {
-        if (!initialChatName) {
-            initialOpenAppliedRef.current = undefined;
-            return;
-        }
-        if (initialOpenAppliedRef.current === initialChatName) return;
-        for (const cardId in cards) {
-            if (cards[cardId].chatName === initialChatName) {
-                setOpenCardId(cardId);
-                initialOpenAppliedRef.current = initialChatName;
-                return;
-            }
-        }
-    }, [cards, initialChatName]);
+    const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeComments.ids);
+    const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, allComments, openCardId);
+    useCardIdFromChatName(cards, initialChatName, setOpenCardId);
 
     const addCommentRef = useRef<(r: number, c: number) => void>(null);
     addCommentRef.current = useCallback((r: number, c: number) => {

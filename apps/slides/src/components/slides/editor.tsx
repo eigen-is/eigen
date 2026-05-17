@@ -10,7 +10,14 @@ import {
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { restoreYjsDoc } from '@workspace/lib/collab';
-import { useCommentCards, useCreateCommentCard, useUpdateCommentCard } from '@workspace/lib/comments';
+import {
+    useCardIdFromChatName,
+    useCommentCards,
+    useCreateCommentCard,
+    useOpenCommentCard,
+    useUnresolvedCommentCount,
+    useUpdateCommentCard,
+} from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -177,33 +184,9 @@ function SlideEditorInner({
     const updateCard = useUpdateCommentCard(yjsDoc, 'comments');
     const commentContextMenu = useContextMenu<{ card: CommentCard; entry: CommentEntry | undefined }>();
 
-    const unresolvedCount = useMemo(() => {
-        const activeChatNames = new Set<string>();
-        for (const id of activeComments.ids) {
-            const chatName = cards[id]?.chatName;
-            if (chatName) activeChatNames.add(chatName);
-        }
-        return allComments.filter((c) => c.status === 'open' && activeChatNames.has(c.chatName)).length;
-    }, [cards, allComments, activeComments.ids]);
-
-    const openCard = openCardId ? (cards[openCardId] ?? null) : null;
-    const openEntry = openCard?.chatName ? allComments.find((c) => c.chatName === openCard.chatName) : undefined;
-
-    const initialOpenAppliedRef = useRef<string | undefined>(undefined);
-    useEffect(() => {
-        if (!initialChatName) {
-            initialOpenAppliedRef.current = undefined;
-            return;
-        }
-        if (initialOpenAppliedRef.current === initialChatName) return;
-        for (const cardId in cards) {
-            if (cards[cardId].chatName === initialChatName) {
-                setOpenCardId(cardId);
-                initialOpenAppliedRef.current = initialChatName;
-                return;
-            }
-        }
-    }, [cards, initialChatName]);
+    const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeComments.ids);
+    const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, allComments, openCardId);
+    useCardIdFromChatName(cards, initialChatName, setOpenCardId);
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);

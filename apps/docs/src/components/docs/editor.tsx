@@ -9,7 +9,14 @@ import { getCollabWebSocketUrl, getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment } from '@workspace/lib/chat';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import { useCommentCards, useCreateCommentCard, useUpdateCommentCard } from '@workspace/lib/comments';
+import {
+    useCardIdFromChatName,
+    useCommentCards,
+    useCreateCommentCard,
+    useOpenCommentCard,
+    useUnresolvedCommentCount,
+    useUpdateCommentCard,
+} from '@workspace/lib/comments';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
@@ -573,17 +580,8 @@ const TiptapEditor = ({
         [editor, pendingMarkRange, createCard],
     );
 
-    const unresolvedCount = useMemo(() => {
-        const activeChatNames = new Set<string>();
-        for (const id of activeComments.ids) {
-            const chatName = cards[id]?.chatName;
-            if (chatName) activeChatNames.add(chatName);
-        }
-        return allComments.filter((c) => c.status === 'open' && activeChatNames.has(c.chatName)).length;
-    }, [cards, allComments, activeComments.ids]);
-
-    const openCard = openCardId ? (cards[openCardId] ?? null) : null;
-    const openEntry = openCard?.chatName ? allComments.find((c) => c.chatName === openCard.chatName) : undefined;
+    const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeComments.ids);
+    const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, allComments, openCardId);
 
     // Sync resolved IDs + colors into the ProseMirror decoration plugin
     useEffect(() => {
@@ -602,23 +600,7 @@ const TiptapEditor = ({
         updateCommentDecorations(editor, resolved, colorMap);
     }, [editor, cards, allComments, activeComments.ids]);
 
-    // Resolve initialChatName → cardId once cards are loaded; reset on prop change so a
-    // re-mounted editor with a new ?chat= URL can open the right card again.
-    const initialOpenAppliedRef = useRef<string | undefined>(undefined);
-    useEffect(() => {
-        if (!initialChatName) {
-            initialOpenAppliedRef.current = undefined;
-            return;
-        }
-        if (initialOpenAppliedRef.current === initialChatName) return;
-        for (const cardId in cards) {
-            if (cards[cardId].chatName === initialChatName) {
-                setOpenCardId(cardId);
-                initialOpenAppliedRef.current = initialChatName;
-                return;
-            }
-        }
-    }, [cards, initialChatName]);
+    useCardIdFromChatName(cards, initialChatName, setOpenCardId);
 
     useEffect(() => {
         if (!editor) return;
