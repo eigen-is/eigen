@@ -1,6 +1,6 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { Check, MessageSquarePlus, Palette, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, MessageSquare, MessageSquarePlus, Palette, RotateCcw, Trash2 } from 'lucide-react';
 import type { ElementType } from 'react';
 import { ColorSwatchRow } from '../notes/color-swatch-row';
 
@@ -51,7 +51,7 @@ export function CommentMenuItems({
         <>
             {onView && (
                 <Item onClick={() => onView(card.id)}>
-                    <MessageSquarePlus className="h-4 w-4 mr-2" /> View comment
+                    <MessageSquare className="h-4 w-4 mr-2" /> View comment
                 </Item>
             )}
             {onChangeColor && (
