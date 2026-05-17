@@ -13,7 +13,13 @@ import {
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { AddCardDialog, CardDialog, LoadingState, NoteCard, NoteCardContextMenu } from '@workspace/ui';
+import { AddCardDialog, CardDialog, CommentMenuItems, LoadingState, NoteCard } from '@workspace/ui';
+import {
+    DropdownMenuItem,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+} from '@workspace/ui/components/dropdown-menu';
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
@@ -177,17 +183,13 @@ export function StickiesBoard({
         onClearInitialChat?.();
     }, [onClearInitialChat]);
 
-    const handleCardContextDelete = () => {
-        if (cardContextMenu.item) setDeleteCardId(cardContextMenu.item.id);
+    const handleCardContextDelete = (cardId: string) => {
+        setDeleteCardId(cardId);
         cardContextMenu.close();
     };
 
-    const handleCardContextColor = (color: string) => {
-        if (!yjsDoc || !cardContextMenu.item) return;
-        yjsDoc.transact(() => {
-            const taskMap = yjsDoc.getMap('tasks').get(cardContextMenu.item!.id) as Y.Map<unknown>;
-            if (taskMap) taskMap.set('color', color);
-        });
+    const handleCardContextColor = (cardId: string, color: string) => {
+        updateCard(cardId, { color });
         cardContextMenu.close();
     };
 
@@ -365,10 +367,19 @@ export function StickiesBoard({
                             )}
 
                             <ContextMenuAnchor contextMenu={cardContextMenu}>
-                                <NoteCardContextMenu
-                                    currentColor={cardContextMenu.item?.color}
-                                    onEdit={() => {
-                                        if (cardContextMenu.item) setOpenCardId(cardContextMenu.item.id);
+                                <CommentMenuItems
+                                    primitives={{
+                                        Item: DropdownMenuItem,
+                                        Sub: DropdownMenuSub,
+                                        SubTrigger: DropdownMenuSubTrigger,
+                                        SubContent: DropdownMenuSubContent,
+                                    }}
+                                    noun="sticky"
+                                    item={
+                                        cardContextMenu.item ? { card: cardContextMenu.item, entry: undefined } : null
+                                    }
+                                    onOpen={(cardId) => {
+                                        setOpenCardId(cardId);
                                         cardContextMenu.close();
                                     }}
                                     onChangeColor={handleCardContextColor}

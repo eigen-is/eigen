@@ -631,7 +631,7 @@ export const ContextMenu: React.FC = () => {
                         onAddComment={close(
                             settings.hooks?.onAddComment ? () => settings.hooks!.onAddComment!(r, c) : undefined,
                         )}
-                        onView={close(
+                        onOpen={close(
                             settings.hooks?.onViewComment ? () => settings.hooks!.onViewComment!(r, c) : undefined,
                         )}
                         onChangeColor={close(
