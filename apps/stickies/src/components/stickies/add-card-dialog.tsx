@@ -1,4 +1,3 @@
-import { useAuth } from '@workspace/lib/auth';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -12,7 +11,7 @@ import type { CardItem } from './types';
 type AddCardDialogProps = {
     isOpen: boolean;
     onClose: () => void;
-    onAddCard: (card: Omit<CardItem, 'id' | 'createdAt' | 'chatName'>) => void | Promise<void>;
+    onAddCard: (card: Pick<CardItem, 'title' | 'description' | 'color'>) => void | Promise<void>;
     columnId: string | null;
 };
 
@@ -21,7 +20,6 @@ export function AddCardDialog({ isOpen, onClose, onAddCard, columnId }: AddCardD
     const [description, setDescription] = useState('');
     const [color, setColor] = useState(EIGEN_STICKIES_COLORS[0][1].value);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const { user } = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -33,7 +31,6 @@ export function AddCardDialog({ isOpen, onClose, onAddCard, columnId }: AddCardD
                 title: title.trim(),
                 description: description.trim(),
                 color: color || undefined,
-                creator: user?.email || '',
             });
         } finally {
             setIsSubmitting(false);
