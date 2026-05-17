@@ -38,23 +38,6 @@ export function useResolveComment(ownerId: string, mountId: string, containerId:
     });
 }
 
-export function useUpdateCommentColor(ownerId: string, mountId: string, containerId: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async ({ chatName, color }: { chatName: string; color: string | null }) => {
-            const response = await collabApi({ ownerId })({ mountId })({ pathId: containerId })
-                .comments({ chatName })
-                .color.patch({ color });
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: commentKeys.container(ownerId, mountId, containerId) });
-        },
-        onError: onMutationError,
-    });
-}
-
 export function invalidateComments(
     queryClient: QueryClient,
     ownerId: string,
