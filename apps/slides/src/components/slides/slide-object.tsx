@@ -3,6 +3,8 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
+import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -160,14 +162,14 @@ type SlideObjectViewProps = {
     onMoveToFront?: (objId: string) => void;
     onMoveToBack?: (objId: string) => void;
     commentColor?: string | null;
-    onCommentClick?: (chatName: string) => void;
-    firstCommentChatName?: string | null;
+    onCommentClick?: (cardId: string) => void;
+    firstCommentCardId?: string | null;
     onAddComment?: (objId: string) => void;
-    commentEntries?: Array<{ chatName: string; color: string | null; status: 'open' | 'resolved' }>;
+    commentItems?: Array<{ card: CommentCard; entry: CommentEntry | undefined }>;
     onCommentResolve?: (chatName: string) => void;
     onCommentReopen?: (chatName: string) => void;
-    onCommentChangeColor?: (chatName: string, color: string | null) => void;
-    onCommentDelete?: (objId: string, chatName: string) => void;
+    onCommentChangeColor?: (cardId: string, color: string | null) => void;
+    onCommentDelete?: (objId: string, cardId: string) => void;
 };
 
 const HANDLE_POSITIONS = [
@@ -200,9 +202,9 @@ export const SlideObjectView = memo(function SlideObjectView({
     onMoveToBack,
     commentColor,
     onCommentClick,
-    firstCommentChatName,
+    firstCommentCardId,
     onAddComment,
-    commentEntries,
+    commentItems,
     onCommentResolve,
     onCommentReopen,
     onCommentChangeColor,
@@ -293,7 +295,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                         }}
                     />
                 ))}
-            {firstCommentChatName && commentColor && (
+            {firstCommentCardId && commentColor && (
                 <div
                     className="absolute top-0 right-0 cursor-pointer z-10"
                     style={{
@@ -304,7 +306,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                     }}
                     onClick={(e) => {
                         e.stopPropagation();
-                        onCommentClick?.(firstCommentChatName);
+                        onCommentClick?.(firstCommentCardId);
                     }}
                     onMouseDown={(e) => e.stopPropagation()}
                 />
@@ -338,7 +340,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                 <ContextMenuItem variant="destructive" onClick={() => onDelete?.(obj.id)}>
                     <Trash2 className="h-4 w-4 mr-2" /> Delete
                 </ContextMenuItem>
-                {onAddComment && commentEntries && commentEntries.length === 0 && (
+                {onAddComment && commentItems && commentItems.length === 0 && (
                     <>
                         <ContextMenuSeparator />
                         <ContextMenuItem onClick={() => onAddComment(obj.id)}>
@@ -346,14 +348,14 @@ export const SlideObjectView = memo(function SlideObjectView({
                         </ContextMenuItem>
                     </>
                 )}
-                {commentEntries &&
-                    commentEntries.length === 1 &&
+                {commentItems &&
+                    commentItems.length === 1 &&
                     (() => {
-                        const entry = commentEntries[0];
+                        const { card, entry } = commentItems[0];
                         return (
                             <>
                                 <ContextMenuSeparator />
-                                <ContextMenuItem onClick={() => onCommentClick?.(entry.chatName)}>
+                                <ContextMenuItem onClick={() => onCommentClick?.(card.id)}>
                                     <MessageSquarePlus className="h-4 w-4 mr-2" /> View comment
                                 </ContextMenuItem>
                                 <ContextMenuSub>
@@ -366,7 +368,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                                                 type="button"
                                                 className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
                                                 title="No color"
-                                                onClick={() => onCommentChangeColor?.(entry.chatName, null)}
+                                                onClick={() => onCommentChangeColor?.(card.id, null)}
                                             >
                                                 <CircleOff className="h-2.5 w-2.5 text-muted-foreground" />
                                             </button>
@@ -377,9 +379,9 @@ export const SlideObjectView = memo(function SlideObjectView({
                                                     className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
                                                     style={{ backgroundColor: c.value }}
                                                     title={c.label}
-                                                    onClick={() => onCommentChangeColor?.(entry.chatName, c.value)}
+                                                    onClick={() => onCommentChangeColor?.(card.id, c.value)}
                                                 >
-                                                    {entry.color === c.value && (
+                                                    {card.color === c.value && (
                                                         <Check
                                                             className="h-2 w-2"
                                                             style={{
@@ -392,18 +394,19 @@ export const SlideObjectView = memo(function SlideObjectView({
                                         </div>
                                     </ContextMenuSubContent>
                                 </ContextMenuSub>
-                                {entry.status === 'open' ? (
+                                {entry && entry.status === 'open' && (
                                     <ContextMenuItem onClick={() => onCommentResolve?.(entry.chatName)}>
                                         <Check className="h-4 w-4 mr-2" /> Resolve comment
                                     </ContextMenuItem>
-                                ) : (
+                                )}
+                                {entry && entry.status === 'resolved' && (
                                     <ContextMenuItem onClick={() => onCommentReopen?.(entry.chatName)}>
                                         <RotateCcw className="h-4 w-4 mr-2" /> Reopen comment
                                     </ContextMenuItem>
                                 )}
                                 <ContextMenuItem
                                     variant="destructive"
-                                    onClick={() => onCommentDelete?.(obj.id, entry.chatName)}
+                                    onClick={() => onCommentDelete?.(obj.id, card.id)}
                                 >
                                     <Trash2 className="h-4 w-4 mr-2" /> Delete comment
                                 </ContextMenuItem>
