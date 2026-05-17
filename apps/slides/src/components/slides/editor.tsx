@@ -615,10 +615,9 @@ function SlideEditorInner({
         async ({ title, description, color }: { title: string; description: string; color?: string }) => {
             if (!addTargetObjId) return;
             const objId = addTargetObjId;
-            const created = await createCard({ title, description, color }, (card) => {
+            await createCard({ title, description, color }, (card) => {
                 addCommentToObject(objId, card.id);
             });
-            if (created) setOpenCardId(created.id);
             setAddTargetObjId(null);
             setAddOpen(false);
         },

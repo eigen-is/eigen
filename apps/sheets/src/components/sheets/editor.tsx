@@ -156,12 +156,11 @@ export function SheetEditor({
         async ({ title, description, color }: { title: string; description: string; color?: string }) => {
             if (!addTargetCell || !workbookRef.current) return;
             const cell = addTargetCell;
-            const created = await createCard({ title, description, color }, (card) => {
+            await createCard({ title, description, color }, (card) => {
                 const fd = workbookRef.current?.getFlowdata();
                 const existing = fd?.[cell.r]?.[cell.c]?.commentCardIds ?? [];
                 workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, card.id]);
             });
-            if (created) setOpenCardId(created.id);
             setAddTargetCell(null);
             setAddOpen(false);
         },

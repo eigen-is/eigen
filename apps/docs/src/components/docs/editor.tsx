@@ -570,10 +570,9 @@ const TiptapEditor = ({
         async ({ title, description, color }: { title: string; description: string; color?: string }) => {
             if (!editor || !pendingMarkRange) return;
             const range = pendingMarkRange;
-            const created = await createCard({ title, description, color }, (card) => {
+            await createCard({ title, description, color }, (card) => {
                 editor.chain().focus().setTextSelection({ from: range.from, to: range.to }).setComment(card.id).run();
             });
-            if (created) setOpenCardId(created.id);
             setPendingMarkRange(null);
             setAddOpen(false);
         },
