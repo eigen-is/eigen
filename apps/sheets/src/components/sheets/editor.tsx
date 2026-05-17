@@ -15,8 +15,8 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { AddCardDialog, CardDialog, CommentPanel, LoadingState, NoteCardContextMenu } from '@workspace/ui';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { AddCardDialog, CardDialog, CommentContextMenu, CommentPanel, LoadingState } from '@workspace/ui';
+import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
@@ -347,57 +347,31 @@ export function SheetEditor({
                 onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
             />
 
-            <ContextMenuAnchor contextMenu={commentContextMenu}>
-                <NoteCardContextMenu
-                    currentColor={commentContextMenu.item?.card.color ?? undefined}
-                    status={commentContextMenu.item?.entry?.status}
-                    onEdit={() => {
-                        if (commentContextMenu.item) setOpenCardId(commentContextMenu.item.card.id);
-                        commentContextMenu.close();
-                    }}
-                    onChangeColor={(color) => {
-                        if (commentContextMenu.item)
-                            updateCard(commentContextMenu.item.card.id, { color: color || null });
-                        commentContextMenu.close();
-                    }}
-                    onResolve={() => {
-                        const entry = commentContextMenu.item?.entry;
-                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'resolved' });
-                        commentContextMenu.close();
-                    }}
-                    onReopen={() => {
-                        const entry = commentContextMenu.item?.entry;
-                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'open' });
-                        commentContextMenu.close();
-                    }}
-                    onDelete={() => {
-                        if (!commentContextMenu.item || !workbookRef.current) {
-                            commentContextMenu.close();
-                            return;
-                        }
-                        const cardId = commentContextMenu.item.card.id;
-                        const fd = workbookRef.current.getFlowdata();
-                        if (fd) {
-                            for (let r = 0; r < fd.length; r++) {
-                                const row = fd[r];
-                                if (!row) continue;
-                                for (let c = 0; c < row.length; c++) {
-                                    const cell = row[c];
-                                    if (cell?.commentCardIds?.includes(cardId)) {
-                                        workbookRef.current.setCellFormat(
-                                            r,
-                                            c,
-                                            'commentCardIds',
-                                            cell.commentCardIds.filter((id) => id !== cardId),
-                                        );
-                                    }
-                                }
+            <CommentContextMenu
+                contextMenu={commentContextMenu}
+                onOpen={setOpenCardId}
+                onUpdateCard={updateCard}
+                onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                onDelete={(cardId) => {
+                    const fd = workbookRef.current?.getFlowdata();
+                    if (!fd) return;
+                    for (let r = 0; r < fd.length; r++) {
+                        const row = fd[r];
+                        if (!row) continue;
+                        for (let c = 0; c < row.length; c++) {
+                            const cell = row[c];
+                            if (cell?.commentCardIds?.includes(cardId)) {
+                                workbookRef.current?.setCellFormat(
+                                    r,
+                                    c,
+                                    'commentCardIds',
+                                    cell.commentCardIds.filter((id) => id !== cardId),
+                                );
                             }
                         }
-                        commentContextMenu.close();
-                    }}
-                />
-            </ContextMenuAnchor>
+                    }
+                }}
+            />
         </>
     );
 }

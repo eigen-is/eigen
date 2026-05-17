@@ -31,7 +31,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { AddCardDialog, CardDialog, Column, CommentPanel, LoadingState, NoteCardContextMenu } from '@workspace/ui';
+import { AddCardDialog, CardDialog, Column, CommentContextMenu, CommentPanel, LoadingState } from '@workspace/ui';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { common, createLowlight } from 'lowlight';
@@ -767,45 +767,21 @@ const TiptapEditor = ({
                 onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
             />
 
-            <ContextMenuAnchor contextMenu={commentContextMenu}>
-                <NoteCardContextMenu
-                    currentColor={commentContextMenu.item?.card.color}
-                    status={commentContextMenu.item?.entry?.status}
-                    onEdit={() => {
-                        if (commentContextMenu.item) setOpenCardId(commentContextMenu.item.card.id);
-                        commentContextMenu.close();
-                    }}
-                    onChangeColor={(color) => {
-                        if (commentContextMenu.item)
-                            updateCard(commentContextMenu.item.card.id, { color: color || null });
-                        commentContextMenu.close();
-                    }}
-                    onResolve={() => {
-                        const entry = commentContextMenu.item?.entry;
-                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'resolved' });
-                        commentContextMenu.close();
-                    }}
-                    onReopen={() => {
-                        const entry = commentContextMenu.item?.entry;
-                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'open' });
-                        commentContextMenu.close();
-                    }}
-                    onDelete={() => {
-                        if (!commentContextMenu.item || !editor) {
-                            commentContextMenu.close();
-                            return;
-                        }
-                        const cardId = commentContextMenu.item.card.id;
-                        const { tr } = editor.state;
-                        const commentType = editor.state.schema.marks.comment;
-                        for (const { pos, end } of findCommentMarkPositions(editor.state.doc, cardId)) {
-                            tr.removeMark(pos, end, commentType);
-                        }
-                        editor.view.dispatch(tr);
-                        commentContextMenu.close();
-                    }}
-                />
-            </ContextMenuAnchor>
+            <CommentContextMenu
+                contextMenu={commentContextMenu}
+                onOpen={setOpenCardId}
+                onUpdateCard={updateCard}
+                onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                onDelete={(cardId) => {
+                    if (!editor) return;
+                    const { tr } = editor.state;
+                    const commentType = editor.state.schema.marks.comment;
+                    for (const { pos, end } of findCommentMarkPositions(editor.state.doc, cardId)) {
+                        tr.removeMark(pos, end, commentType);
+                    }
+                    editor.view.dispatch(tr);
+                }}
+            />
 
             <ContextMenuAnchor contextMenu={selectionContextMenu}>
                 <DropdownMenuItem
