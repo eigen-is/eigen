@@ -43,11 +43,8 @@ export function useCreateCommentCard(
     // one Yjs transaction = one undo step. The callback must be synchronous (no awaits, no
     // setTimeout) — anything outside the synchronous frame escapes the transaction.
     return useCallback(
-        async (
-            input: CreateCommentCardInput = {},
-            anchorInTransact?: (card: CommentCard) => void,
-        ): Promise<CommentCard | null> => {
-            if (!doc || !chatFolderId) return null;
+        async (input: CreateCommentCardInput = {}, anchorInTransact?: (card: CommentCard) => void): Promise<void> => {
+            if (!doc || !chatFolderId) return;
 
             const fileName = `comment-${Date.now()}-${nanoid(6)}`;
             const chatPath = await createChatRef.current.mutateAsync({ parentId: chatFolderId, fileName });
@@ -65,7 +62,6 @@ export function useCreateCommentCard(
                 writeCardToDoc(doc, mapName, card);
                 anchorInTransact?.(card);
             });
-            return card;
         },
         [doc, chatFolderId, mapName],
     );
