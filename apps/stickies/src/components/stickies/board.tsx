@@ -4,19 +4,17 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useComments } from '@workspace/lib/chat';
 import { restoreYjsDoc } from '@workspace/lib/collab';
+import { useCommentCards, useCreateCommentCard, useUpdateCommentCard } from '@workspace/lib/comments';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { LoadingState, NoteCard, NoteCardContextMenu } from '@workspace/ui';
+import { AddCardDialog, CardDialog, LoadingState, NoteCard, NoteCardContextMenu } from '@workspace/ui';
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { AddCardDialog } from './add-card-dialog';
 import { AddColumnDialog } from './add-column-dialog';
-import { CardDialog } from './card-dialog';
-import { CardSettingsDialog } from './card-settings-dialog';
 import { Column } from './column';
 import { ColumnSettingsDialog } from './column-settings-dialog';
 import { useBoard } from './hooks/use-board';
@@ -45,14 +43,10 @@ export function StickiesBoard({
 }: StickiesBoardProps) {
     const {
         board,
-        selectedColumnId,
-        isAddCardDialogOpen,
-        setIsAddCardDialogOpen,
         isAddColumnDialogOpen,
         setIsAddColumnDialogOpen,
-        handleAddCardClick,
-        handleAddCard,
         handleAddColumn,
+        deleteCardFromBoard,
         isSynced,
         yjsDoc,
         undoManager,
@@ -78,6 +72,11 @@ export function StickiesBoard({
         },
         [messageCounts],
     );
+
+    // Shared comment-card hooks for the new dialog path
+    const cards = useCommentCards(yjsDoc ?? null, 'tasks');
+    const createCard = useCreateCommentCard(ownerId, path.mountId, chatFolderId, yjsDoc ?? null, 'tasks');
+    const updateCard = useUpdateCommentCard(yjsDoc ?? null, 'tasks');
 
     useHotkey(
         'Mod+Z',
@@ -111,9 +110,12 @@ export function StickiesBoard({
     const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
     const [colorFilter, setColorFilter] = useState<Set<string>>(new Set());
     const cardContextMenu = useContextMenu<CardItem>();
-    const [editCardId, setEditCardId] = useState<string | null>(null);
     const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
     const [openCardId, setOpenCardId] = useState<string | null>(null);
+
+    // Add-card dialog state
+    const [addOpen, setAddOpen] = useState(false);
+    const [addTargetColumn, setAddTargetColumn] = useState<string | null>(null);
 
     // Track the chatName we've already auto-opened for so a YJS update arriving before the URL
     // clear navigates can't re-apply the auto-open after the user has closed the dialog.
@@ -134,7 +136,29 @@ export function StickiesBoard({
         }
     }, [initialChatName, board.tasks, isSynced, onClearInitialChat]);
 
-    const openCard = openCardId ? (board.tasks[openCardId] ?? null) : null;
+    const openCard = openCardId ? (cards[openCardId] ?? null) : null;
+    const openEntry = openCard?.chatName ? commentList.find((c) => c.chatName === openCard.chatName) : undefined;
+
+    const handleAddCard = (columnId: string) => {
+        setAddTargetColumn(columnId);
+        setAddOpen(true);
+    };
+
+    const onSaveNew = async ({ title, description, color }: { title: string; description: string; color?: string }) => {
+        const card = await createCard({ title, description, color });
+        if (!card || !addTargetColumn) return;
+        yjsDoc?.transact(() => {
+            const columnsMap = yjsDoc.getMap('columns');
+            const col = columnsMap.get(addTargetColumn) as Y.Map<unknown> | undefined;
+            if (!col) return;
+            let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
+            if (!taskIds) {
+                taskIds = new Y.Array<string>();
+                col.set('taskIds', taskIds);
+            }
+            taskIds.push([card.id]);
+        });
+    };
 
     const handleCardOpen = useCallback((cardId: string) => {
         setOpenCardId(cardId);
@@ -144,11 +168,6 @@ export function StickiesBoard({
         setOpenCardId(null);
         onClearInitialChat?.();
     }, [onClearInitialChat]);
-
-    const handleCardContextEdit = () => {
-        if (cardContextMenu.item) setEditCardId(cardContextMenu.item.id);
-        cardContextMenu.close();
-    };
 
     const handleCardContextDelete = () => {
         if (cardContextMenu.item) setDeleteCardId(cardContextMenu.item.id);
@@ -165,20 +184,8 @@ export function StickiesBoard({
     };
 
     const handleDeleteCard = () => {
-        if (!yjsDoc || !deleteCardId) return;
-        yjsDoc.transact(() => {
-            const columnsMap = yjsDoc.getMap('columns');
-            for (const [, col] of columnsMap) {
-                if (!(col instanceof Y.Map)) continue;
-                const taskIds = col.get('taskIds') as Y.Array<string>;
-                const index = (taskIds.toArray() as string[]).indexOf(deleteCardId);
-                if (index !== -1) {
-                    taskIds.delete(index, 1);
-                    break;
-                }
-            }
-            yjsDoc.getMap('tasks').delete(deleteCardId);
-        });
+        if (!deleteCardId) return;
+        deleteCardFromBoard(deleteCardId);
         setDeleteCardId(null);
     };
 
@@ -224,7 +231,7 @@ export function StickiesBoard({
                     column={column}
                     cards={columnCards}
                     canWrite={canWrite}
-                    onAddCard={handleAddCardClick}
+                    onAddCard={handleAddCard}
                     onEditColumn={handleEditColumn}
                     isMobile={isMobile}
                 />
@@ -303,7 +310,7 @@ export function StickiesBoard({
                                                     column={column}
                                                     cards={columnCards}
                                                     canWrite={canWrite}
-                                                    onAddCard={handleAddCardClick}
+                                                    onAddCard={handleAddCard}
                                                     onEditColumn={handleEditColumn}
                                                     onCardOpen={handleCardOpen}
                                                     onCardContextMenu={
@@ -320,10 +327,14 @@ export function StickiesBoard({
                             </DndContext>
 
                             <AddCardDialog
-                                isOpen={isAddCardDialogOpen}
-                                onClose={() => setIsAddCardDialogOpen(false)}
-                                onAddCard={handleAddCard}
-                                columnId={selectedColumnId}
+                                open={addOpen}
+                                onOpenChange={(o) => {
+                                    setAddOpen(o);
+                                    if (!o) setAddTargetColumn(null);
+                                }}
+                                onSave={onSaveNew}
+                                titleLabel="Add Sticky"
+                                submitLabel="Add Sticky"
                             />
 
                             <AddColumnDialog
@@ -348,24 +359,14 @@ export function StickiesBoard({
                             <ContextMenuAnchor contextMenu={cardContextMenu}>
                                 <NoteCardContextMenu
                                     currentColor={cardContextMenu.item?.color}
-                                    onEdit={handleCardContextEdit}
+                                    onEdit={() => {
+                                        if (cardContextMenu.item) setOpenCardId(cardContextMenu.item.id);
+                                        cardContextMenu.close();
+                                    }}
                                     onChangeColor={handleCardContextColor}
                                     onDelete={handleCardContextDelete}
                                 />
                             </ContextMenuAnchor>
-
-                            {editCardId && board.tasks[editCardId] && (
-                                <CardSettingsDialog
-                                    key={editCardId}
-                                    isOpen={!!editCardId}
-                                    onClose={() => setEditCardId(null)}
-                                    cardId={editCardId}
-                                    cardTitle={board.tasks[editCardId].title}
-                                    cardDescription={board.tasks[editCardId].description}
-                                    cardColor={board.tasks[editCardId].color || ''}
-                                    yjsDoc={yjsDoc}
-                                />
-                            )}
 
                             <DeleteDialog
                                 open={!!deleteCardId}
@@ -376,18 +377,22 @@ export function StickiesBoard({
                             />
 
                             <CardDialog
-                                isOpen={!!openCard}
-                                onClose={handleCardClose}
+                                open={!!openCard}
+                                onOpenChange={(o) => {
+                                    if (!o) handleCardClose();
+                                }}
                                 card={openCard}
-                                canWrite={canWrite}
-                                yjsDoc={yjsDoc}
+                                entry={openEntry}
                                 ownerId={ownerId}
                                 mountId={path.mountId}
+                                canWrite={canWrite}
                                 copyLinkUrl={
                                     openCard?.chatName
                                         ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
                                         : undefined
                                 }
+                                showResolveAction={false}
+                                onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
                             />
                         </div>
                     </div>

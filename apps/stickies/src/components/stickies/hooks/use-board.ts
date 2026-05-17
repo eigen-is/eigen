@@ -220,6 +220,25 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         setIsAddColumnDialogOpen(false);
     };
 
+    const deleteCardFromBoard = useCallback((cardId: string) => {
+        if (!docRef.current) return;
+        const doc = docRef.current;
+        doc.transact(() => {
+            const columnsMap = doc.getMap('columns');
+            for (const [, col] of columnsMap) {
+                if (!(col instanceof Y.Map)) continue;
+                const taskIds = col.get('taskIds') as Y.Array<string> | undefined;
+                if (!taskIds) continue;
+                const idx = (taskIds.toArray() as string[]).indexOf(cardId);
+                if (idx !== -1) {
+                    taskIds.delete(idx, 1);
+                    break;
+                }
+            }
+            doc.getMap('tasks').delete(cardId);
+        });
+    }, []);
+
     return {
         board,
         isSynced,
@@ -231,7 +250,9 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         handleAddCardClick,
         handleAddCard,
         handleAddColumn,
+        deleteCardFromBoard,
         yjsDoc: docRef.current,
         undoManager: undoManager.current,
+        docRef,
     };
 };
