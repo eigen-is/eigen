@@ -6,6 +6,12 @@
 
 Findings come from six parallel audit agents. Each finding includes file:line references and a confidence rating. **Verify the current state before acting** — agents can be wrong, the codebase moves quickly, and the `feat/unify-comments-as-cards` branch is in flight.
 
+## Status
+
+**2026-05-17 — Quick wins all landed** (see commit hashes in the table below). Review pass also extended item 8 to `storage-type-picker.tsx` and item 10 to `setup-wizard.tsx`/`server-settings.tsx`, and fixed a real regression introduced by item 12 (`fix(home): two-phase destruct to avoid double-close race`).
+
+Still open: §1 cross-app UI extractions, §3.1–§3.3 hook-layer correctness pass, §4.1 calendar home-relay refactor (the only real architectural debt), §5.2–§5.5 / §5.8–§5.10 type cleanups, §6.1–§6.6 over-engineering judgment calls. The doc is otherwise still authoritative.
+
 ---
 
 ## TL;DR
@@ -47,24 +53,24 @@ The drift clusters in six areas:
 
 ---
 
-## Quick wins (≤ 1 day each)
+## Quick wins (≤ 1 day each) — ✅ all landed 2026-05-17
 
 Sorted by impact-to-effort. Each is mechanical and self-contained.
 
-| #  | Win                                                                                  | Files                       | Effort  |
-|----|--------------------------------------------------------------------------------------|-----------------------------|---------|
-| 1  | `Drive.getCollabDocument` → `throw new ApiError(404, ...)` instead of `Error`       | 1 line (§4.7)               | ~5 min  |
-| 2  | Mail `email-detail.tsx` hand-rolled separator → `<Separator orientation="vertical">` | 1 file (§1.8)               | ~5 min  |
-| 3  | `apps/api/src/routes/drive.ts` inline guards → `requireSelf()`                       | 2 sites (§4.2)              | ~10 min |
-| 4  | Delete `isTextPreviewSupported`; have callers branch on `getTextPreviewMode(...)`   | 1 file (§6.7)               | ~10 min |
-| 5  | `chat.editMessage`/`deleteMessage` → `ApiError` instead of `{success:false}`        | 2 sites (§4.6)              | ~20 min |
-| 6  | Replace inline date formatting in `_auth.waitlist.tsx`; drop `date-fns` dep         | 1 file (§2.2)               | ~20 min |
-| 7  | `email-list.tsx` inline date formatting → `formatDateTime`                          | 1 file (§2.2)               | ~10 min |
-| 8  | Setup-wizard hardcoded green SVG → Lucide `<CheckCircle2 className="text-success">` | 1 file + token (§2.4)       | ~15 min |
-| 9  | `team_${id}` → `teamOwnerId(...)` sweep                                              | 4 sites (§5.6)              | ~30 min |
-| 10 | Type-imports barrel sweep — `@workspace/lib/types/<domain>` direct imports           | 11 sites (§5.7)             | ~30 min |
-| 11 | Lift `ActiveComments` to `packages/lib/src/types/comments.ts`                        | 4 files (§5.1)              | ~20 min |
-| 12 | `Home.destruct` 6× try/catch → `Promise.allSettled([...])`                          | 1 file (§6.4)               | ~20 min |
+| #  | Win                                                                                  | Files                  | Commit     |
+|----|--------------------------------------------------------------------------------------|------------------------|------------|
+| 1  | `Drive.getCollabDocument` → `throw new ApiError(404, ...)` instead of `Error`       | 1 line (§4.7)          | `a1110690` |
+| 2  | Mail `email-detail.tsx` hand-rolled separator → `<Separator orientation="vertical">` | 1 file (§1.8)          | `6b4f755c` |
+| 3  | `apps/api/src/routes/drive.ts` inline guards → `requireSelf()`                       | 2 sites (§4.2)         | `36f362d2` |
+| 4  | Delete `isTextPreviewSupported`; have callers branch on `getTextPreviewMode(...)`   | 1 file (§6.7)          | `5ee0e2a8` |
+| 5  | `chat.editMessage`/`deleteMessage` → `ApiError` instead of `{success:false}`        | 2 sites (§4.6)         | `d7d00bb1` + `772d0101` (tests) |
+| 6  | Replace inline date formatting in `_auth.waitlist.tsx`; drop `date-fns` dep         | 1 file (§2.2)          | `fb407859` |
+| 7  | `email-list.tsx` inline date formatting → `formatDateTime`                          | 1 file (§2.2)          | `f2e58d59` |
+| 8  | Setup-wizard hardcoded green SVG → Lucide `<CheckCircle2 className="text-success">` | 1 file + token (§2.4)  | `db487b33` + `795e7cdb` (extended) |
+| 9  | `team_${id}` → `teamOwnerId(...)` sweep                                              | 4 sites (§5.6)         | `35899611` |
+| 10 | Type-imports barrel sweep — `@workspace/lib/types/<domain>` direct imports           | 11 sites (§5.7)        | `fda35137` + `795e7cdb` (extended) |
+| 11 | Lift `ActiveComments` to `packages/lib/src/types/comments.ts`                        | 4 files (§5.1)         | `40397ec9` |
+| 12 | `Home.destruct` 6× try/catch → `Promise.allSettled([...])`                          | 1 file (§6.4)          | `0ad3304d` + `1d4e2479` (race fix) |
 
 ---
 
