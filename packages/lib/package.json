@@ -28,6 +28,7 @@
     "./chat": "./src/core/chat/index.ts",
     "./clipboard": "./src/core/clipboard/index.ts",
     "./collab": "./src/core/collab/index.ts",
+    "./comments": "./src/core/comments/index.ts",
     "./contacts": "./src/core/contacts/index.ts",
     "./drive": "./src/core/drive/index.ts",
     "./editor": "./src/core/editor/index.ts",
