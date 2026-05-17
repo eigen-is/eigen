@@ -1,12 +1,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { getTextPreviewMode } from '@workspace/lib/constants';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { generateEigendocPreview } from './eigendoc-preview';
 import { isExiftoolCandidate } from './exiftool-preview';
-import { generateTextPreview, isTextPreviewSupported, type TextPreviewResult } from './text-preview';
+import { generateTextPreview, type TextPreviewResult } from './text-preview';
 
 type PreviewResult = { type: 'image'; data: Buffer; contentType: string } | { type: 'redirect'; url: string } | null;
 
@@ -87,8 +88,8 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
 }
 
 async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
-    const mime = drivePath.mimeType || '';
-    if (!isTextPreviewSupported(mime, drivePath.name)) return null;
+    const mode = getTextPreviewMode(drivePath.mimeType || '', drivePath.name);
+    if (mode === null) return null;
 
     const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
 
@@ -108,7 +109,7 @@ async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Promise<T
         return null;
     }
 
-    const result = await generateTextPreview(content, mime, drivePath.name);
+    const result = await generateTextPreview(content, mode, drivePath.name);
 
     // Write to cache
     await Bun.write(cacheFile, JSON.stringify(result));
