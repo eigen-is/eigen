@@ -1,6 +1,7 @@
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
+import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useMemo, useRef } from 'react';
 import { useMarqueeSelect } from './hooks/use-marquee-select';
 import { type DragMode, useObjectDrag } from './hooks/use-object-drag';
@@ -261,7 +262,10 @@ export function SlideCanvas({
                 )}
                 {marquee && (
                     <div
-                        className="absolute pointer-events-none z-50 border border-selection-handle bg-selection-handle/10"
+                        className={cn(
+                            'absolute pointer-events-none z-50 border border-selection-handle bg-selection-handle/10',
+                            marquee.mode === 'intersect' && 'border-dashed',
+                        )}
                         style={{
                             left: `${pxToPercent(marquee.x, 'x')}%`,
                             top: `${pxToPercent(marquee.y, 'y')}%`,

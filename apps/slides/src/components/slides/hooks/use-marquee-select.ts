@@ -1,11 +1,16 @@
 import { useCallback, useRef, useState } from 'react';
 import { SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from '../types';
 
+// Drag direction determines selection mode (AutoCAD/Figma convention):
+// left-to-right = 'contain' (object fully inside marquee), right-to-left = 'intersect' (object overlaps marquee)
+type SelectionMode = 'contain' | 'intersect';
+
 type MarqueeRect = {
     x: number;
     y: number;
     w: number;
     h: number;
+    mode: SelectionMode;
 };
 
 type UseMarqueeSelectProps = {
@@ -55,6 +60,7 @@ export const useMarqueeSelect = ({ objects, canvasRef, onSelect }: UseMarqueeSel
                     y: Math.min(s.y, c.y),
                     w: Math.abs(c.x - s.x),
                     h: Math.abs(c.y - s.y),
+                    mode: me.clientX < start.clientX ? 'intersect' : 'contain',
                 });
             };
 
@@ -62,12 +68,16 @@ export const useMarqueeSelect = ({ objects, canvasRef, onSelect }: UseMarqueeSel
                 const rect = marqueeRef.current;
                 if (rect) {
                     const selected = objectsRef.current
-                        .filter(
-                            (obj) =>
-                                obj.x >= rect.x &&
-                                obj.y >= rect.y &&
-                                obj.x + obj.w <= rect.x + rect.w &&
-                                obj.y + obj.h <= rect.y + rect.h,
+                        .filter((obj) =>
+                            rect.mode === 'intersect'
+                                ? obj.x < rect.x + rect.w &&
+                                  obj.x + obj.w > rect.x &&
+                                  obj.y < rect.y + rect.h &&
+                                  obj.y + obj.h > rect.y
+                                : obj.x >= rect.x &&
+                                  obj.y >= rect.y &&
+                                  obj.x + obj.w <= rect.x + rect.w &&
+                                  obj.y + obj.h <= rect.y + rect.h,
                         )
                         .map((obj) => obj.id);
 
