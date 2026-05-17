@@ -7,9 +7,10 @@ import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl, getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
+import { useComments, useResolveComment } from '@workspace/lib/chat';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
+import { useCommentCards, useCreateCommentCard, useUpdateCommentCard } from '@workspace/lib/comments';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -21,15 +22,9 @@ import {
 import { useMediaQuery } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    Column,
-    CommentDialog,
-    CommentPanel,
-    CreateCommentDialog,
-    LoadingState,
-    NoteCardContextMenu,
-} from '@workspace/ui';
+import { AddCardDialog, CardDialog, Column, CommentPanel, LoadingState, NoteCardContextMenu } from '@workspace/ui';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { common, createLowlight } from 'lowlight';
@@ -44,11 +39,11 @@ import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
 
-function findCommentMarkPositions(doc: Node, chatName: string): { pos: number; end: number }[] {
+function findCommentMarkPositions(doc: Node, cardId: string): { pos: number; end: number }[] {
     const positions: { pos: number; end: number }[] = [];
     doc.descendants((node, pos) => {
         for (const mark of node.marks) {
-            if (mark.type.name === 'comment' && mark.attrs.chatName === chatName) {
+            if (mark.type.name === 'comment' && mark.attrs.cardId === cardId) {
                 positions.push({ pos, end: pos + node.nodeSize });
             }
         }
@@ -167,12 +162,12 @@ function useActiveComments(editor: Editor | null): ActiveComments {
 
                 editor.state.doc.descendants((node, pos) => {
                     for (const mark of node.marks) {
-                        if (mark.type.name === 'comment' && mark.attrs.chatName) {
-                            const chatName = mark.attrs.chatName as string;
-                            ids.add(chatName);
-                            if (!texts.has(chatName)) {
+                        if (mark.type.name === 'comment' && mark.attrs.cardId) {
+                            const cardId = mark.attrs.cardId as string;
+                            ids.add(cardId);
+                            if (!texts.has(cardId)) {
                                 texts.set(
-                                    chatName,
+                                    cardId,
                                     editor.state.doc.textBetween(pos, pos + node.nodeSize, ' ').slice(0, 100),
                                 );
                             }
@@ -218,9 +213,9 @@ const TiptapEditor = ({
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
     const copyToMediaFolder = useCopyToMediaFolder(path.ownerId, path.mountId);
     const { resolveMediaPath, startUpload } = useMediaResolver();
-    const [commentDialogOpen, setCommentDialogOpen] = useState(false);
-    const [commentSelectedText, setCommentSelectedText] = useState('');
-    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(initialChatName ?? null);
+    const [addOpen, setAddOpen] = useState(false);
+    const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
+    const [openCardId, setOpenCardId] = useState<string | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const [docHeight, setDocHeight] = useState(0);
     const needsScale = canvasScale < 1;
@@ -229,6 +224,7 @@ const TiptapEditor = ({
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
     const handleAddCommentRef = useRef<(() => void) | null>(null);
     const allCommentsRef = useRef<CommentEntry[]>([]);
+    const cardsRef = useRef<Record<string, CommentCard>>({});
     const mediaFolderIdRef = useRef(mediaFolderId);
     mediaFolderIdRef.current = mediaFolderId;
 
@@ -257,8 +253,8 @@ const TiptapEditor = ({
         return () => ro.disconnect();
     }, []);
 
-    const handleCommentClick = useCallback((chatName: string) => {
-        setViewCommentChatName(chatName);
+    const handleCommentClick = useCallback((cardId: string) => {
+        setOpenCardId(cardId);
         setCommentPanelOpen(true);
     }, []);
 
@@ -271,10 +267,13 @@ const TiptapEditor = ({
                 TableWidthClamp,
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
-                    onCommentContextMenu: (chatName, event) => {
-                        const comment = allCommentsRef.current.find((c) => c.chatName === chatName);
-                        if (comment)
-                            commentContextMenu.handleContextMenu(event as unknown as React.MouseEvent, comment);
+                    onCommentContextMenu: (cardId, event) => {
+                        const card = cardsRef.current[cardId];
+                        if (!card) return;
+                        const entry = card.chatName
+                            ? allCommentsRef.current.find((c) => c.chatName === card.chatName)
+                            : undefined;
+                        commentContextMenu.handleContextMenu(event as unknown as React.MouseEvent, { card, entry });
                     },
                     onSelectionContextMenu: (event) => {
                         selectionContextMenu.handleContextMenu(event as unknown as React.MouseEvent, true);
@@ -304,9 +303,9 @@ const TiptapEditor = ({
                         label.setAttribute('style', `background-color: ${user.color}`);
                         label.insertBefore(document.createTextNode(user.name), null);
 
-                        cursor.insertBefore(document.createTextNode('\u2060'), null);
+                        cursor.insertBefore(document.createTextNode('⁠'), null);
                         cursor.insertBefore(label, null);
-                        cursor.insertBefore(document.createTextNode('\u2060'), null);
+                        cursor.insertBefore(document.createTextNode('⁠'), null);
 
                         return cursor;
                     },
@@ -537,8 +536,8 @@ const TiptapEditor = ({
         const { from, to } = editor.state.selection;
         const text = editor.state.doc.textBetween(from, to, ' ');
         if (!text.trim()) return;
-        setCommentSelectedText(text);
-        setCommentDialogOpen(true);
+        setPendingMarkRange({ from, to, text });
+        setAddOpen(true);
     };
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
@@ -549,35 +548,74 @@ const TiptapEditor = ({
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
     const activeComments = useActiveComments(editor);
     const resolveComment = useResolveComment(path.ownerId, path.mountId, path.id);
-    const updateColor = useUpdateCommentColor(path.ownerId, path.mountId, path.id);
     const { data: allComments = [] } = useComments(path.ownerId, path.mountId, path.id);
     allCommentsRef.current = allComments;
-    const commentContextMenu = useContextMenu<CommentEntry>();
+
+    const cards = useCommentCards(yDoc, 'comments');
+    cardsRef.current = cards;
+    const createCard = useCreateCommentCard(path.ownerId, path.mountId, chatFolderId, yDoc, 'comments');
+    const updateCard = useUpdateCommentCard(yDoc, 'comments');
+
+    const commentContextMenu = useContextMenu<{ card: CommentCard; entry: CommentEntry | undefined }>();
     const selectionContextMenu = useContextMenu<boolean>();
 
-    const handleCommentCreated = (chatName: string) => {
-        if (!editor) return;
-        editor.chain().focus().setComment(chatName).run();
-        updateColor.mutate({ chatName, color: EIGEN_STICKIES_COLORS[0][1].value });
-    };
+    const handleSaveNew = useCallback(
+        async ({ title, description, color }: { title: string; description: string; color?: string }) => {
+            if (!editor || !pendingMarkRange) return;
+            const range = pendingMarkRange;
+            const created = await createCard({ title, description, color }, (card) => {
+                editor.chain().focus().setTextSelection({ from: range.from, to: range.to }).setComment(card.id).run();
+            });
+            if (created) setOpenCardId(created.id);
+            setPendingMarkRange(null);
+            setAddOpen(false);
+        },
+        [editor, pendingMarkRange, createCard],
+    );
 
     const unresolvedCount = useMemo(() => {
-        return allComments.filter((c) => c.status === 'open' && activeComments.ids.has(c.chatName)).length;
-    }, [allComments, activeComments.ids]);
+        let n = 0;
+        for (const cardId of activeComments.ids) {
+            const card = cards[cardId];
+            if (!card?.chatName) continue;
+            const entry = allComments.find((c) => c.chatName === card.chatName);
+            if (entry?.status === 'open') n++;
+        }
+        return n;
+    }, [cards, allComments, activeComments.ids]);
 
-    const viewCommentEntry = viewCommentChatName ? allComments.find((c) => c.chatName === viewCommentChatName) : null;
+    const openCard = openCardId ? (cards[openCardId] ?? null) : null;
+    const openEntry = openCard?.chatName ? allComments.find((c) => c.chatName === openCard.chatName) : undefined;
 
     // Sync resolved IDs + colors into the ProseMirror decoration plugin
     useEffect(() => {
         if (!editor) return;
         const resolved = new Set<string>();
         const colorMap = new Map<string, string>();
-        for (const c of allComments) {
-            if (c.status === 'resolved') resolved.add(c.chatName);
-            if (c.color) colorMap.set(c.chatName, c.color);
+        for (const cardId of activeComments.ids) {
+            const card = cards[cardId];
+            if (!card) continue;
+            if (card.color) colorMap.set(cardId, card.color);
+            if (card.chatName) {
+                const entry = allComments.find((c) => c.chatName === card.chatName);
+                if (entry?.status === 'resolved') resolved.add(cardId);
+            }
         }
         updateCommentDecorations(editor, resolved, colorMap);
-    }, [editor, allComments]);
+    }, [editor, cards, allComments, activeComments.ids]);
+
+    // Resolve initialChatName → cardId once cards are loaded
+    const initialOpenAppliedRef = useRef(false);
+    useEffect(() => {
+        if (!initialChatName || initialOpenAppliedRef.current) return;
+        for (const cardId in cards) {
+            if (cards[cardId].chatName === initialChatName) {
+                setOpenCardId(cardId);
+                initialOpenAppliedRef.current = true;
+                return;
+            }
+        }
+    }, [cards, initialChatName]);
 
     useEffect(() => {
         if (!editor) return;
@@ -622,8 +660,8 @@ const TiptapEditor = ({
     const activePanel = commentPanelOpen ? 'comments' : sidebarContext;
     const showSidebar = isWide && (activePanel === 'comments' || (access.canWrite && activePanel !== 'document'));
 
-    const handleScrollToComment = (chatName: string) => {
-        const positions = findCommentMarkPositions(editor.state.doc, chatName);
+    const handleScrollToComment = (cardId: string) => {
+        const positions = findCommentMarkPositions(editor.state.doc, cardId);
         if (positions.length > 0) {
             editor.chain().focus().setTextSelection(positions[0].pos).scrollIntoView().run();
         }
@@ -683,18 +721,19 @@ const TiptapEditor = ({
                         >
                             {activePanel === 'comments' ? (
                                 <CommentPanel
-                                    ownerId={path.ownerId}
-                                    mountId={path.mountId}
-                                    containerId={path.id}
-                                    currentUserEmail={auth.user!.email}
-                                    activeCommentIds={activeComments.ids}
+                                    cards={cards}
+                                    entries={allComments}
+                                    activeCardIds={activeComments.ids}
                                     anchorTexts={activeComments.anchorTexts}
+                                    currentUserEmail={auth.user!.email}
                                     onClose={() => setCommentPanelOpen(false)}
-                                    onCommentClick={(chatName) => {
-                                        handleScrollToComment(chatName);
-                                        setViewCommentChatName(chatName);
+                                    onCommentClick={(cardId) => {
+                                        handleScrollToComment(cardId);
+                                        setOpenCardId(cardId);
                                     }}
-                                    onCommentContextMenu={commentContextMenu.handleContextMenu}
+                                    onCommentContextMenu={(e, card, entry) => {
+                                        commentContextMenu.handleContextMenu(e, { card, entry });
+                                    }}
                                 />
                             ) : lastPanelRef.current === 'figure' ? (
                                 <FigurePropertiesPanel
@@ -711,51 +750,59 @@ const TiptapEditor = ({
                 </div>
             </Column>
 
-            {chatFolderId && (
-                <CreateCommentDialog
-                    open={commentDialogOpen}
-                    onOpenChange={setCommentDialogOpen}
-                    ownerId={path.ownerId}
-                    mountId={path.mountId}
-                    chatFolderId={chatFolderId}
-                    selectedText={commentSelectedText}
-                    onCommentCreated={handleCommentCreated}
-                />
-            )}
+            <AddCardDialog
+                open={addOpen}
+                onOpenChange={(o) => {
+                    setAddOpen(o);
+                    if (!o) setPendingMarkRange(null);
+                }}
+                initialTitle={pendingMarkRange ? pendingMarkRange.text.slice(0, 100) : ''}
+                onSave={handleSaveNew}
+                titleLabel="New comment"
+                submitLabel="Add comment"
+            />
 
-            {viewCommentChatName && viewCommentEntry && (
-                <CommentDialog
-                    comment={viewCommentEntry}
-                    title={activeComments.anchorTexts.get(viewCommentChatName) || viewCommentChatName}
-                    ownerId={path.ownerId}
-                    mountId={path.mountId}
-                    copyLinkUrl={`${getDriveItemUrl(path)}?chat=${encodeURIComponent(viewCommentChatName)}`}
-                    onClose={() => setViewCommentChatName(null)}
-                    onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
-                />
-            )}
+            <CardDialog
+                open={!!openCard}
+                onOpenChange={(o) => {
+                    if (!o) setOpenCardId(null);
+                }}
+                card={openCard}
+                entry={openEntry}
+                ownerId={path.ownerId}
+                mountId={path.mountId}
+                canWrite={access.canWrite}
+                copyLinkUrl={
+                    openCard?.chatName
+                        ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
+                        : undefined
+                }
+                showResolveAction
+                onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
+                onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
+            />
 
             <ContextMenuAnchor contextMenu={commentContextMenu}>
                 <NoteCardContextMenu
-                    currentColor={commentContextMenu.item?.color}
-                    status={commentContextMenu.item?.status}
+                    currentColor={commentContextMenu.item?.card.color}
+                    status={commentContextMenu.item?.entry?.status}
                     onEdit={() => {
-                        if (commentContextMenu.item) setViewCommentChatName(commentContextMenu.item.chatName);
+                        if (commentContextMenu.item) setOpenCardId(commentContextMenu.item.card.id);
                         commentContextMenu.close();
                     }}
                     onChangeColor={(color) => {
                         if (commentContextMenu.item)
-                            updateColor.mutate({ chatName: commentContextMenu.item.chatName, color: color || null });
+                            updateCard(commentContextMenu.item.card.id, { color: color || null });
                         commentContextMenu.close();
                     }}
                     onResolve={() => {
-                        if (commentContextMenu.item)
-                            resolveComment.mutate({ chatName: commentContextMenu.item.chatName, status: 'resolved' });
+                        const entry = commentContextMenu.item?.entry;
+                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'resolved' });
                         commentContextMenu.close();
                     }}
                     onReopen={() => {
-                        if (commentContextMenu.item)
-                            resolveComment.mutate({ chatName: commentContextMenu.item.chatName, status: 'open' });
+                        const entry = commentContextMenu.item?.entry;
+                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'open' });
                         commentContextMenu.close();
                     }}
                     onDelete={() => {
@@ -763,10 +810,10 @@ const TiptapEditor = ({
                             commentContextMenu.close();
                             return;
                         }
-                        const targetName = commentContextMenu.item.chatName;
+                        const cardId = commentContextMenu.item.card.id;
                         const { tr } = editor.state;
                         const commentType = editor.state.schema.marks.comment;
-                        for (const { pos, end } of findCommentMarkPositions(editor.state.doc, targetName)) {
+                        for (const { pos, end } of findCommentMarkPositions(editor.state.doc, cardId)) {
                             tr.removeMark(pos, end, commentType);
                         }
                         editor.view.dispatch(tr);
