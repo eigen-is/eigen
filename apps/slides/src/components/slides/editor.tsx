@@ -30,9 +30,9 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { AddCardDialog, CardDialog, CommentPanel, NoteCardContextMenu } from '@workspace/ui';
+import { AddCardDialog, CardDialog, CommentContextMenu, CommentPanel } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -863,44 +863,19 @@ function SlideEditorInner({
                 onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
             />
 
-            <ContextMenuAnchor contextMenu={commentContextMenu}>
-                <NoteCardContextMenu
-                    currentColor={commentContextMenu.item?.card.color ?? undefined}
-                    status={commentContextMenu.item?.entry?.status}
-                    onEdit={() => {
-                        if (commentContextMenu.item) setOpenCardId(commentContextMenu.item.card.id);
-                        commentContextMenu.close();
-                    }}
-                    onChangeColor={(color) => {
-                        if (commentContextMenu.item)
-                            updateCard(commentContextMenu.item.card.id, { color: color || null });
-                        commentContextMenu.close();
-                    }}
-                    onResolve={() => {
-                        const entry = commentContextMenu.item?.entry;
-                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'resolved' });
-                        commentContextMenu.close();
-                    }}
-                    onReopen={() => {
-                        const entry = commentContextMenu.item?.entry;
-                        if (entry) resolveComment.mutate({ chatName: entry.chatName, status: 'open' });
-                        commentContextMenu.close();
-                    }}
-                    onDelete={() => {
-                        if (!commentContextMenu.item) {
-                            commentContextMenu.close();
-                            return;
+            <CommentContextMenu
+                contextMenu={commentContextMenu}
+                onOpen={setOpenCardId}
+                onUpdateCard={updateCard}
+                onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                onDelete={(cardId) => {
+                    for (const obj of Object.values(deck.objects)) {
+                        if (obj.commentCardIds?.includes(cardId)) {
+                            removeCommentFromObject(obj.id, cardId);
                         }
-                        const cardId = commentContextMenu.item.card.id;
-                        for (const obj of Object.values(deck.objects)) {
-                            if (obj.commentCardIds?.includes(cardId)) {
-                                removeCommentFromObject(obj.id, cardId);
-                            }
-                        }
-                        commentContextMenu.close();
-                    }}
-                />
-            </ContextMenuAnchor>
+                    }
+                }}
+            />
         </ColumnLayout>
     );
 }
