@@ -4,7 +4,12 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useComments } from '@workspace/lib/chat';
 import { restoreYjsDoc } from '@workspace/lib/collab';
-import { useCommentCards, useCreateCommentCard, useUpdateCommentCard } from '@workspace/lib/comments';
+import {
+    useCommentCards,
+    useCreateCommentCard,
+    useOpenCommentCard,
+    useUpdateCommentCard,
+} from '@workspace/lib/comments';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -136,8 +141,7 @@ export function StickiesBoard({
         }
     }, [initialChatName, board.tasks, isSynced, onClearInitialChat]);
 
-    const openCard = openCardId ? (cards[openCardId] ?? null) : null;
-    const openEntry = openCard?.chatName ? commentList.find((c) => c.chatName === openCard.chatName) : undefined;
+    const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, commentList, openCardId);
 
     const handleAddCard = (columnId: string) => {
         setAddTargetColumn(columnId);
