@@ -26,7 +26,7 @@ import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
-import { tryOpenCommentIndex } from '../chat/comment-index';
+import { openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { contentDisposition } from '../core/http';
@@ -212,8 +212,8 @@ export default class Drive {
         return created;
     }
 
-    // Best-effort: standalone chats (no container) and legacy containers without comments.db
-    // are silently skipped — tryOpenCommentIndex returns null for both.
+    // Standalone chats (mount-root, no container) are skipped — findContainerPath returns null.
+    // Every real container has a comments.db by construction (CollabDocument.create touches it).
     private async seedCommentRow(
         mountId: string,
         chatPathId: string,
@@ -224,8 +224,7 @@ export default class Drive {
         if (!container) return;
         const chatPath = await this.getPath(mountId, chatPathId);
         if (!chatPath) return;
-        const index = await tryOpenCommentIndex(this, container);
-        if (!index) return;
+        const index = await openCommentIndex(this, container);
         await index.ensureComment(chatPath.name, { createdBy });
     }
 
