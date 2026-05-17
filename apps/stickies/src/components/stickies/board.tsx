@@ -144,21 +144,25 @@ export function StickiesBoard({
         setAddOpen(true);
     };
 
-    const onSaveNew = async ({ title, description, color }: { title: string; description: string; color?: string }) => {
-        const card = await createCard({ title, description, color });
-        if (!card || !addTargetColumn) return;
-        yjsDoc?.transact(() => {
-            const columnsMap = yjsDoc.getMap('columns');
-            const col = columnsMap.get(addTargetColumn) as Y.Map<unknown> | undefined;
-            if (!col) return;
-            let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
-            if (!taskIds) {
-                taskIds = new Y.Array<string>();
-                col.set('taskIds', taskIds);
-            }
-            taskIds.push([card.id]);
-        });
-    };
+    const onSaveNew = useCallback(
+        async ({ title, description, color }: { title: string; description: string; color?: string }) => {
+            if (!yjsDoc || !addTargetColumn) return;
+            const targetColumnId = addTargetColumn;
+            await createCard({ title, description, color }, (card) => {
+                const col = yjsDoc.getMap('columns').get(targetColumnId) as Y.Map<unknown> | undefined;
+                if (!col) return;
+                let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
+                if (!taskIds) {
+                    taskIds = new Y.Array<string>();
+                    col.set('taskIds', taskIds);
+                }
+                taskIds.push([card.id]);
+            });
+            setAddTargetColumn(null);
+            setAddOpen(false);
+        },
+        [yjsDoc, addTargetColumn, createCard],
+    );
 
     const handleCardOpen = useCallback((cardId: string) => {
         setOpenCardId(cardId);

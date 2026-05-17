@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { normalizeBoard } from '../normalize-board';
-import type { BoardData, CardItem, ColumnItem } from '../types';
+import type { BoardData, ColumnItem } from '../types';
 
 const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
 const WELCOME_CARD = {
@@ -19,8 +19,6 @@ const WELCOME_CARD = {
 export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
     const [board, setBoard] = useState<BoardData>({ tasks: {}, columns: {}, columnOrder: [] });
     const [isSynced, setIsSynced] = useState(false);
-    const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
-    const [isAddCardDialogOpen, setIsAddCardDialogOpen] = useState(false);
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
@@ -170,36 +168,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         };
     }, [ownerId, mountId, pathId, user?.email, initializeDefaultBoard]);
 
-    const handleAddCardClick = (columnId: string) => {
-        setSelectedColumnId(columnId);
-        setIsAddCardDialogOpen(true);
-    };
-
-    const handleAddCard = async (cardData: Pick<CardItem, 'title' | 'description' | 'color'>) => {
-        if (!selectedColumnId || !docRef.current) return;
-        const chatName = await createCardChat();
-        const doc = docRef.current;
-        doc.transact(() => {
-            const taskId = `task-${nanoid(10)}`;
-            const tasksMap = doc.getMap('tasks');
-            const columnsMap = doc.getMap('columns');
-            const newTaskMap = new Y.Map();
-            newTaskMap.set('id', taskId);
-            newTaskMap.set('title', cardData.title);
-            newTaskMap.set('description', cardData.description || '');
-            if (cardData.color) newTaskMap.set('color', cardData.color);
-            if (chatName) newTaskMap.set('chatName', chatName);
-            tasksMap.set(taskId, newTaskMap);
-            const columnMapValue = columnsMap.get(selectedColumnId);
-            if (columnMapValue) {
-                const columnMap = columnMapValue as Y.Map<unknown>;
-                const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
-                if (taskIdsArray) taskIdsArray.insert(0, [taskId]);
-            }
-        });
-        setIsAddCardDialogOpen(false);
-    };
-
     const handleAddColumn = (columnData: Omit<ColumnItem, 'id' | 'taskIds' | 'createdAt'>) => {
         if (!docRef.current) return;
         const doc = docRef.current;
@@ -225,9 +193,9 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         const doc = docRef.current;
         doc.transact(() => {
             const columnsMap = doc.getMap('columns');
-            for (const [, col] of columnsMap) {
-                if (!(col instanceof Y.Map)) continue;
-                const taskIds = col.get('taskIds') as Y.Array<string> | undefined;
+            for (const [, columnMapValue] of columnsMap) {
+                const columnMap = columnMapValue as Y.Map<unknown>;
+                const taskIds = columnMap.get('taskIds') as Y.Array<string> | undefined;
                 if (!taskIds) continue;
                 const idx = (taskIds.toArray() as string[]).indexOf(cardId);
                 if (idx !== -1) {
@@ -242,13 +210,8 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     return {
         board,
         isSynced,
-        selectedColumnId,
-        isAddCardDialogOpen,
-        setIsAddCardDialogOpen,
         isAddColumnDialogOpen,
         setIsAddColumnDialogOpen,
-        handleAddCardClick,
-        handleAddCard,
         handleAddColumn,
         deleteCardFromBoard,
         yjsDoc: docRef.current,
