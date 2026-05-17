@@ -65,9 +65,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 throw new ApiError(403, 'No write permission');
             }
             const chat = await drive.getChat(params.mountId, params.chatId);
-            const result = await chat.editMessage(params.messageId, body.content, user.id);
-            if (!result) return { success: false, error: 'Message not found or not owned by user' };
-            return { success: true, message: result };
+            return await chat.editMessage(params.messageId, body.content, user.id);
         },
         {
             body: t.Object({ content: t.String() }),
@@ -83,8 +81,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 throw new ApiError(403, 'No write permission');
             }
             const chat = await drive.getChat(params.mountId, params.chatId);
-            const result = await chat.deleteMessage(params.messageId, user.id);
-            return { success: result };
+            await chat.deleteMessage(params.messageId, user.id);
+            return { success: true };
         },
         { auth: true },
     )
