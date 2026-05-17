@@ -65,8 +65,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                 taskYMap.set('id', taskId);
                 taskYMap.set('title', WELCOME_CARD.title);
                 taskYMap.set('description', WELCOME_CARD.description);
-                taskYMap.set('creator', userEmail);
-                taskYMap.set('createdAt', now);
                 taskYMap.set('color', EIGEN_STICKIES_COLORS[0][1].value);
                 if (chatName) taskYMap.set('chatName', chatName);
                 tasksMap.set(taskId, taskYMap);
@@ -117,14 +115,20 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             };
             for (const [taskId, taskMapValue] of tasksMap) {
                 const taskMap = taskMapValue as Y.Map<unknown>;
+                const title = taskMap.get('title');
+                const description = taskMap.get('description');
+                const color = taskMap.get('color');
+                const chatName = taskMap.get('chatName');
+                const creator = taskMap.get('creator');
+                const createdAt = taskMap.get('createdAt');
                 newState.tasks[taskId] = {
                     id: taskId,
-                    title: (taskMap.get('title') as string) || '',
-                    description: (taskMap.get('description') as string) || '',
-                    color: (taskMap.get('color') as string) || '',
-                    creator: (taskMap.get('creator') as string) || '',
-                    createdAt: (taskMap.get('createdAt') as number) || Date.now(),
-                    chatName: (taskMap.get('chatName') as string | undefined) || undefined,
+                    title: typeof title === 'string' ? title : '',
+                    description: typeof description === 'string' ? description : '',
+                    color: typeof color === 'string' ? color : undefined,
+                    chatName: typeof chatName === 'string' ? chatName : undefined,
+                    creator: typeof creator === 'string' ? creator : undefined,
+                    createdAt: typeof createdAt === 'number' ? createdAt : undefined,
                 };
             }
             for (const [columnId, columnMapValue] of columnsMap) {
@@ -171,13 +175,12 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         setIsAddCardDialogOpen(true);
     };
 
-    const handleAddCard = async (cardData: Omit<CardItem, 'id' | 'createdAt' | 'chatName'>) => {
+    const handleAddCard = async (cardData: Pick<CardItem, 'title' | 'description' | 'color'>) => {
         if (!selectedColumnId || !docRef.current) return;
         const chatName = await createCardChat();
         const doc = docRef.current;
         doc.transact(() => {
             const taskId = `task-${nanoid(10)}`;
-            const now = Date.now();
             const tasksMap = doc.getMap('tasks');
             const columnsMap = doc.getMap('columns');
             const newTaskMap = new Y.Map();
@@ -185,8 +188,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             newTaskMap.set('title', cardData.title);
             newTaskMap.set('description', cardData.description || '');
             if (cardData.color) newTaskMap.set('color', cardData.color);
-            newTaskMap.set('creator', cardData.creator);
-            newTaskMap.set('createdAt', now);
             if (chatName) newTaskMap.set('chatName', chatName);
             tasksMap.set(taskId, newTaskMap);
             const columnMapValue = columnsMap.get(selectedColumnId);
