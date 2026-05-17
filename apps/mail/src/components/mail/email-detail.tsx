@@ -56,7 +56,7 @@ export function EmailDetailToolbar({
                 <TooltipButton icon={Reply} tooltipText="Reply" onClick={() => onReply(email.id)} />
                 <TooltipButton icon={ReplyAll} tooltipText="Reply All" onClick={() => onReplyAll(email.id)} />
                 <TooltipButton icon={Forward} tooltipText="Forward" onClick={() => onForward(email.id)} />
-                <div className="h-6 w-[1px] bg-border mx-1" />
+                <Separator orientation="vertical" className="h-6 mx-1" />
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
