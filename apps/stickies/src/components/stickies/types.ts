@@ -1,11 +1,7 @@
-export type CardItem = {
-    id: string;
-    title: string;
-    description: string;
-    color?: string;
-    creator: string;
-    createdAt: number;
-    chatName?: string;
+import type { CommentCard } from '@workspace/lib/types/comments';
+
+export type CardItem = CommentCard & {
+    // Runtime-enriched from useComments(); not stored in Y.Doc.
     messageCount?: number;
 };
 
