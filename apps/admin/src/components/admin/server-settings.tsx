@@ -4,7 +4,8 @@ import {
     useUpdateServerS3Config,
     useUpdateServerSettings,
 } from '@workspace/lib/settings';
-import { EMPTY_S3, type S3Config } from '@workspace/lib/types';
+import { EMPTY_S3 } from '@workspace/lib/types';
+import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { LoadingState } from '@workspace/ui';
