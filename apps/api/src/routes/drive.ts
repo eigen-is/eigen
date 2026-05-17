@@ -87,7 +87,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId/create/:type',
         async ({ params, body, user }): Promise<DrivePath> => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.create(params.mountId, params.pathId, body.fileName, params.type);
+            return await drive.create(params.mountId, params.pathId, body.fileName, params.type, user.email);
         },
         {
             body: t.Object({ fileName: t.String() }),
