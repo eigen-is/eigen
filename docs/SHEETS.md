@@ -55,11 +55,12 @@ Workbook handles the rest. Two invariants importers still must uphold:
 
 ## Comments
 
-Comments anchor to cells via `commentChatNames?: string[]` on the `Cell` type. The upstream fortune-sheet
+Comments anchor to cells via `commentCardIds?: string[]` on the `Cell` type. The upstream fortune-sheet
 built-in comment system (ps field, NotationBoxes, comment module) was fully removed and replaced with the
-shared Eigen comment infrastructure.
+shared Eigen comment-card infrastructure (see [`docs/COMMENTS.md`](COMMENTS.md)).
 
-- **Canvas indicator**: red triangle (top-right) drawn when `cell.commentChatNames?.length > 0`
+- **Canvas indicator**: triangle (top-right) drawn when `cell.commentCardIds?.length > 0`; color comes
+  from the Y.Doc card via `hooks.getCommentInfo(r, c)`
 - **Context menu**: "Add comment" (no comment) or "View comment" / "Delete comment" (has comment), wired via
   `hooks.onAddComment/onViewComment/onDeleteComment` from settings
 - **Comment panel**: `CommentPanel` sidebar toggled via toolbar button

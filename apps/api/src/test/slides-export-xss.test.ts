@@ -15,7 +15,7 @@ function makeText(overrides: Partial<TextObject>): TextObject {
         borderColor: '',
         borderWidth: 0,
         borderRadius: 0,
-        commentChatNames: [],
+        commentCardIds: [],
         text: '',
         fontFamily: 'Inter',
         fontSize: 24,

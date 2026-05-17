@@ -29,7 +29,7 @@ container rather than the browser viewport. The helpers `pxToPercentHeight(val)`
 `letterSpacing`, `lineHeight`, `highlightColor`, `backgroundColor`
 **Image**: `mediaName` (file name, resolved at render time), `objectFit`
 **Common (BaseObject)**: `x`, `y`, `w`, `h`, `rotation`, `borderColor`, `borderWidth`, `borderRadius`,
-`commentChatNames` (plain string array — chat folder names linking to `.eigenchat` threads)
+`commentCardIds` (plain string array — Y.Map card IDs linking to entries in the `comments` Y.Map)
 
 ### Slide Properties
 

@@ -37,7 +37,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     highlightColor: '',
     backgroundColor: '',
     ...DEFAULT_BORDER,
-    commentChatNames: [],
+    commentCardIds: [],
 };
 
 export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'mediaName'> = {
@@ -49,5 +49,5 @@ export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'mediaNa
     rotation: 0,
     objectFit: 'contain',
     ...DEFAULT_BORDER,
-    commentChatNames: [],
+    commentCardIds: [],
 };

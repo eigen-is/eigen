@@ -37,7 +37,7 @@ const OBJECT_FIELDS = [
     'backgroundColor',
     'mediaName',
     'objectFit',
-    'commentChatNames',
+    'commentCardIds',
 ] as const;
 
 function yMapToSlideObject(yMap: Y.Map<unknown>): SlideObject {
@@ -46,11 +46,11 @@ function yMapToSlideObject(yMap: Y.Map<unknown>): SlideObject {
         const val = yMap.get(field);
         if (val !== undefined) obj[field] = val;
     }
-    const raw = obj['commentChatNames'];
+    const raw = obj['commentCardIds'];
     if (raw && typeof (raw as Y.Array<string>).toArray === 'function') {
-        obj['commentChatNames'] = (raw as Y.Array<string>).toArray();
+        obj['commentCardIds'] = (raw as Y.Array<string>).toArray();
     } else if (!Array.isArray(raw)) {
-        obj['commentChatNames'] = [];
+        obj['commentCardIds'] = [];
     }
     return obj as SlideObject;
 }
