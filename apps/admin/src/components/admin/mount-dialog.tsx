@@ -1,4 +1,4 @@
-import type { S3Config } from '@workspace/lib/types';
+import type { S3Config } from '@workspace/lib/types/mount';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { MountForm, type MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
 

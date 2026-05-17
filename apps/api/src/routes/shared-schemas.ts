@@ -1,5 +1,5 @@
-import type { S3Config } from '@workspace/lib/types';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import type { S3Config } from '@workspace/lib/types/mount';
 import { type Static, t } from 'elysia';
 
 export const attachmentReferenceSchema = t.Object({

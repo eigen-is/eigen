@@ -1,4 +1,4 @@
-import type { S3Config } from '@workspace/lib/types';
+import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';

@@ -1,4 +1,4 @@
-import type { S3Config } from '@workspace/lib/types';
+import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { and, eq, ne, notInArray } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';

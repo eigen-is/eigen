@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { settingsApi } from '@workspace/lib/api';
-import type { S3Config } from '@workspace/lib/types';
+import type { S3Config } from '@workspace/lib/types/mount';
 import { onMutationError } from '../../api-error';
 
 export function useCheckS3Connection() {
