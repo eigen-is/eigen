@@ -91,11 +91,9 @@ export function CommentPanel({
                         <NoteCard
                             key={card.id}
                             title={anchorTexts.get(card.id) || card.title || 'Comment'}
-                            description={
-                                entry?.lastAuthorEmail ? `Comment by ${entry.lastAuthorEmail.split('@')[0]}` : undefined
-                            }
+                            description={card.description}
                             color={card.color}
-                            replyCount={entry && entry.messageCount > 1 ? entry.messageCount - 1 : undefined}
+                            replyCount={entry?.messageCount}
                             statusIcon={
                                 entry?.status === 'resolved' ? (
                                     <Check className="h-3.5 w-3.5 opacity-50" />

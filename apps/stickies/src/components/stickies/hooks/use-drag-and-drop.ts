@@ -1,13 +1,14 @@
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import { useState } from 'react';
 import type * as Y from 'yjs';
 import { normalizeBoard } from '../normalize-board';
-import type { BoardData, CardItem, ColumnItem } from '../types';
+import type { BoardData, ColumnItem } from '../types';
 
 type DragState = {
     activeId: string | null;
     activeType: 'task' | 'column' | null;
-    activeItem: CardItem | ColumnItem | null;
+    activeItem: CommentCard | ColumnItem | null;
 };
 
 type UseDragAndDropProps = {
