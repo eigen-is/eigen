@@ -35,7 +35,7 @@ const OBJECT_FIELDS = [
     'backgroundColor',
     'mediaName',
     'objectFit',
-    'commentChatNames',
+    'commentCardIds',
 ] as const;
 
 function yMapToObject(yMap: Y.Map<unknown>): Record<string, unknown> {
@@ -44,12 +44,12 @@ function yMapToObject(yMap: Y.Map<unknown>): Record<string, unknown> {
         const val = yMap.get(field);
         if (val !== undefined) obj[field] = val;
     }
-    // Ensure commentChatNames is always a string array (may be stored as Y.Array or plain array)
-    const raw = obj.commentChatNames;
+    // Ensure commentCardIds is always a string array (may be stored as Y.Array or plain array)
+    const raw = obj.commentCardIds;
     if (raw && typeof (raw as Y.Array<string>).toArray === 'function') {
-        obj.commentChatNames = (raw as Y.Array<string>).toArray();
+        obj.commentCardIds = (raw as Y.Array<string>).toArray();
     } else if (!Array.isArray(raw)) {
-        obj.commentChatNames = [];
+        obj.commentCardIds = [];
     }
     return obj;
 }
@@ -238,7 +238,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                     for (const [k, v] of Object.entries(srcObj)) {
                         if (k === 'id') objYMap.set('id', newObjId);
                         else if (k === 'slideId') objYMap.set('slideId', newSlideId);
-                        else if (k === 'commentChatNames') continue;
+                        else if (k === 'commentCardIds') continue;
                         else objYMap.set(k, v);
                     }
                     objectsMap.set(newObjId, objYMap);
@@ -482,32 +482,32 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         [deleteObjects],
     );
 
-    const addCommentToObject = useCallback((objId: string, chatName: string) => {
+    const addCommentToObject = useCallback((objId: string, cardId: string) => {
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
             const objectsMap = doc.getMap('objects');
             const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
             if (!objMap) return;
-            const current = (objMap.get('commentChatNames') as string[] | undefined) || [];
+            const current = (objMap.get('commentCardIds') as string[] | undefined) || [];
             const arr = Array.isArray(current) ? [...current] : [];
-            if (!arr.includes(chatName)) {
-                arr.push(chatName);
-                objMap.set('commentChatNames', arr);
+            if (!arr.includes(cardId)) {
+                arr.push(cardId);
+                objMap.set('commentCardIds', arr);
             }
         }, 'comment');
     }, []);
 
-    const removeCommentFromObject = useCallback((objId: string, chatName: string) => {
+    const removeCommentFromObject = useCallback((objId: string, cardId: string) => {
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
             const objectsMap = doc.getMap('objects');
             const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
             if (!objMap) return;
-            const current = (objMap.get('commentChatNames') as string[] | undefined) || [];
-            const arr = Array.isArray(current) ? current.filter((n) => n !== chatName) : [];
-            objMap.set('commentChatNames', arr);
+            const current = (objMap.get('commentCardIds') as string[] | undefined) || [];
+            const arr = Array.isArray(current) ? current.filter((c) => c !== cardId) : [];
+            objMap.set('commentCardIds', arr);
         }, 'comment');
     }, []);
 
