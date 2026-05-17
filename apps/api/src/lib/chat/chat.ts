@@ -142,7 +142,7 @@ export class ChatRoom {
         // Update comment index if this chat is embedded in a container document
         if (this.containerPath && type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
-                await index.ensureComment(this.path.name);
+                await index.ensureComment(this.path.name, { createdBy: authorEmail });
                 await index.updateActivity(this.path.name, authorEmail, content);
                 for (const email of extractMentionedEmails(content)) {
                     await index.addMention(this.path.name, email);
