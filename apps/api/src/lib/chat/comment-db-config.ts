@@ -3,7 +3,7 @@ import * as commentSchema from './comment-schema';
 
 export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
     name: 'comment-index',
-    currentVersion: 1,
+    currentVersion: 2,
     schema: commentSchema,
     migrations: [
         {
@@ -32,6 +32,10 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
                 CREATE INDEX IF NOT EXISTS idx_mentions_email ON comment_mentions(email);
                 CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status);
             `),
+        },
+        {
+            version: 2,
+            up: (db) => db.exec(`ALTER TABLE comments ADD COLUMN createdBy TEXT;`),
         },
     ],
 };
