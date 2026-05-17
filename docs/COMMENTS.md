@@ -14,9 +14,9 @@ Y.Doc (per container)         comments.db (per container)            UI
 comments / tasks Y.Map        chatName (PK), status, resolvedBy,     useCommentCards (Y.Map → state)
   → CommentCard {              resolvedAt, lastAuthorEmail,          useCreateCommentCard (atomic
        id, title, description, lastMessageSnippet, lastActivityAt,    chat-create + Y.Doc write +
-       color?, chatName?       messageCount, createdAt, createdBy,    caller-supplied anchor)
-     }                          mentions[]                           useUpdateCommentCard / useDelete-
-                                                                      CommentCard
+       color?, chatName?,      messageCount, createdAt, createdBy,    caller-supplied anchor)
+       creator?, createdAt?    mentions[]                            useUpdateCommentCard / useDelete-
+     }                                                                CommentCard
 ```
 
 Each container document (eigendoc, eigenstickies, eigenslides, eigensheets) stores `comments.db`
@@ -43,10 +43,15 @@ type CommentCard = {
     description: string;
     color?: string;
     chatName?: string;
-    creator?: string;     // legacy stickies cards only
-    createdAt?: number;   // legacy stickies cards only
+    creator?: string;     // user email at creation time
+    createdAt?: number;   // ms epoch at creation time
 };
 ```
+
+`creator` + `createdAt` live on the Y.Doc so they're collaborative + undoable + survive a Y.Doc
+version revert. The server-side `comments.db` row carries the same metadata as `createdBy` /
+`createdAt` (set by `seedCommentRow` at chat creation) — the two paths are independent stores of
+the same fact.
 
 Cards live in a Y.Map keyed by `id`. The map name is per-app:
 - **Stickies**: `tasks` (unchanged for backwards compatibility)
@@ -136,9 +141,12 @@ y-websocket.
 | Hook / helper             | Description                                                                       |
 |---------------------------|-----------------------------------------------------------------------------------|
 | `useCommentCards(doc, mapName)` | `Record<cardId, CommentCard>` synced to the Y.Map (`comments` or `tasks`)   |
-| `useCreateCommentCard`    | Returns `(input, anchorInTransact?) => Promise<CommentCard \| null>`. Creates the `.eigenchat`, then writes the card + runs the caller's anchor inside one Y.Doc `transact` → single undo step |
+| `useCreateCommentCard`    | Returns `(input, anchorInTransact?) => Promise<void>`. Creates the `.eigenchat`, then writes the card + runs the caller's anchor inside one Y.Doc `transact` → single undo step. The anchor callback receives the new `CommentCard` synchronously inside the transaction |
 | `useUpdateCommentCard`    | `(cardId, patch) => void` — applies a partial patch to the Y.Map card             |
 | `useDeleteCommentCard`    | `(cardId) => void` — removes only the Y.Map entry; preserves `.eigenchat` + row    |
+| `useOpenCommentCard`      | `(cards, entries, openCardId)` → `{ card, entry }` — resolves the open dialog's `chatName` against the server-side entries |
+| `useCardIdFromChatName`   | Resolves a `?chat=<chatName>` URL param to a cardId. Optional `{ ready, onChatNotFound }` lets hosts gate on Yjs sync + clean up the URL when the chat genuinely doesn't exist |
+| `useUnresolvedCommentCount` | `(cards, entries) => number` — count of non-resolved active comments for badges/toolbar UI |
 | `readCards`, `writeCardToDoc`, `applyCardPatch`, `deleteCardFromDoc` | Pure Y.Doc helpers (React-free, unit-tested) |
 
 ## Shared UI components
@@ -146,8 +154,23 @@ y-websocket.
 ### NoteCard (`packages/ui/src/components/layout/notes/`)
 
 Shared card component used across all apps for list-row rendering. Renders a colored card with
-title, description, status icon, and reply count. Also provides `NoteCardContextMenu` and
-`NoteCardDialog` (dialog shell with chat-thread slot).
+title, description, status icon, and reply count. Also provides `NoteCardDialog` (dialog shell
+with chat-thread slot).
+
+### CommentMenuItems (`packages/ui/src/components/layout/comments/comment-menu-items.tsx`)
+
+The single source of truth for the "Add / View / Color / Resolve / Reopen / Delete" menu used
+across all four apps. Renders items inside whichever menu family the host uses by accepting a
+`primitives` slot (`{ Item, Sub, SubTrigger, SubContent }` — either Radix `DropdownMenu*` or
+`ContextMenu*` works). The `noun` prop tunes labels (`"comment"` by default, stickies passes
+`"sticky"`).
+
+### CommentContextMenu (`packages/ui/src/components/layout/comments/comment-context-menu.tsx`)
+
+Convenience wrapper that pairs `<CommentMenuItems>` with the project's singleton
+`useContextMenu` + `ContextMenuAnchor` pattern. Used by docs / slides / sheets editors for the
+floating CommentPanel + mark/cell right-click cases. Stickies and the per-object slides menu
+use `<CommentMenuItems>` directly because their hosting menu differs.
 
 ### CommentPanel (`packages/ui/src/components/layout/comments/comment-panel.tsx`)
 
@@ -221,9 +244,6 @@ Color picker uses `EIGEN_STICKIES_COLORS` via the shared `<ColorPicker>`.
 - Cards are anchored by column membership in `columnsMap.<col>.taskIds`.
 - Delete is a board-level helper `deleteCardFromBoard(cardId)` that walks columns + removes the
   Y.Map entry in one `transact` (single undo step, no orphan column refs).
-- **Backwards compat**: legacy cards may still carry `creator` / `createdAt` fields in their Y.Map
-  entries. The shared `<CardDialog>` reads `card.creator ?? entry.createdBy ?? entry.lastAuthorEmail`
-  and `card.createdAt ?? entry.createdAt ?? 0` so old boards keep showing their original metadata.
 
 ## Active vs orphaned comments
 
@@ -250,8 +270,8 @@ The Y.Doc is the source of truth for which cards are "active":
 | `packages/lib/src/slides/types.ts`                                  | `BaseObject.commentCardIds`                   |
 | `packages/lib/src/sheets/types.ts`                                  | `Cell.commentCardIds`                         |
 | `packages/ui/src/components/layout/cards/`                          | Shared AddCardDialog + CardDialog + CardSettingsDialog |
-| `packages/ui/src/components/layout/comments/`                       | CommentPanel + CommentThread + useCreatedByMeta |
-| `packages/ui/src/components/layout/notes/`                          | NoteCard + NoteCardContextMenu + NoteCardDialog |
+| `packages/ui/src/components/layout/comments/`                       | CommentPanel + CommentThread + CommentMenuItems + CommentContextMenu + useCreatedByMeta |
+| `packages/ui/src/components/layout/notes/`                          | NoteCard + NoteCardDialog                     |
 | `apps/docs/src/components/docs/editor.tsx`                          | Docs editor integration                       |
 | `apps/docs/src/components/docs/extensions/comment-mark.ts`          | ProseMirror plugins (interaction + decorations) |
 | `apps/slides/src/components/slides/editor.tsx`                      | Slides editor integration                     |
