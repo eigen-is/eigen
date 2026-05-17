@@ -26,7 +26,7 @@ function CommentThreadInner({
     const inputRef = useRef<ChatMessageInputHandle>(null);
 
     return (
-        <div className={cn('flex flex-col flex-1 min-h-0 overflow-hidden', className)}>
+        <div className={cn('flex flex-col h-[50vh] overflow-hidden', className)}>
             <ChatMessageList
                 messages={chat.messages}
                 isLoading={chat.isLoading}
