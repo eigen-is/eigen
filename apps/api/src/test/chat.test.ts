@@ -166,10 +166,9 @@ describe('Chat', () => {
                     body: JSON.stringify({ content: 'Hello, edited!' }),
                 },
             );
-            const data = (await res.json()) as { success: boolean; message: ChatMessage };
-            expect(data.success).toBe(true);
-            expect(data.message.content).toBe('Hello, edited!');
-            expect(data.message.editedAt).toBeDefined();
+            const data = (await res.json()) as ChatMessage;
+            expect(data.content).toBe('Hello, edited!');
+            expect(data.editedAt).toBeDefined();
         });
 
         test('delete message (soft delete)', async () => {
@@ -1091,8 +1090,7 @@ describe('Chat', () => {
                     method: 'DELETE',
                 },
             );
-            const delData = (await delRes.json()) as { success: boolean };
-            expect(delData.success).toBe(false);
+            expect(delRes.status).toBe(404);
         });
 
         test('/tell alias with non-email target returns 400', async () => {
