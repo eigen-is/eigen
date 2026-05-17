@@ -38,7 +38,7 @@ export function CardDialog({
 
     // Why: legacy stickies cards keep creator/createdAt in the Y.Map; new code never writes them.
     // Prefer Y.Doc when present, otherwise fall back to the comments.db row.
-    const metaEmail = card?.creator ?? entry?.createdBy ?? entry?.lastAuthorEmail ?? undefined;
+    const metaEmail = card?.creator ?? entry?.createdBy ?? undefined;
     const metaDate = card?.createdAt ?? entry?.createdAt ?? 0;
     const meta = useCreatedByMeta(metaEmail, metaDate);
 

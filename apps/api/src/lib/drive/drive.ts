@@ -212,6 +212,8 @@ export default class Drive {
         return created;
     }
 
+    // Best-effort: standalone chats (no container) and legacy containers without comments.db
+    // are silently skipped — tryOpenCommentIndex returns null for both.
     private async seedCommentRow(
         mountId: string,
         chatPathId: string,

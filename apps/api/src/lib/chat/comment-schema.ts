@@ -12,6 +12,8 @@ export const comments = sqliteTable('comments', {
     messageCount: integer('messageCount').notNull().default(0),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     createdBy: text('createdBy'),
+    // Deprecated: color now lives on the Y.Doc CommentCard. Column kept for legacy v1 rows;
+    // never written by current code. Drop in a future v3 migration if desired.
     color: text('color'),
 });
 

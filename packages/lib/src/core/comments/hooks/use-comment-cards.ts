@@ -4,7 +4,7 @@ import type { CommentCard } from '../../../types/comments';
 
 function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
     const out: Record<string, CommentCard> = {};
-    map.forEach((yCard, id) => {
+    for (const [id, yCard] of map) {
         const title = yCard.get('title');
         const description = yCard.get('description');
         const color = yCard.get('color');
@@ -20,7 +20,7 @@ function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
             creator: typeof creator === 'string' ? creator : undefined,
             createdAt: typeof createdAt === 'number' ? createdAt : undefined,
         };
-    });
+    }
     return out;
 }
 
