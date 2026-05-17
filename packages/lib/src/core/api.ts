@@ -29,7 +29,12 @@ type DriveItemRef = {
 function resolveApiHost(): string {
     const raw = (import.meta.env.VITE_API_HOST as string) || '';
     if (/^https?:\/\//.test(raw)) return raw;
-    if (typeof window === 'undefined') return raw; // SSR / build-time evaluation: no origin to splice in
+    if (typeof window === 'undefined') {
+        // SSR / unit-test evaluation: no window.origin to splice in. Synthesize a valid
+        // absolute URL with protocol so module-load-time consumers (treaty, better-auth's
+        // URL validator) don't reject it. The browser bundle re-resolves at runtime.
+        return `http://localhost${raw.startsWith('/') ? raw : raw ? `/${raw}` : ''}`;
+    }
     return `${window.location.origin}${raw.startsWith('/') ? raw : `/${raw}`}`;
 }
 
