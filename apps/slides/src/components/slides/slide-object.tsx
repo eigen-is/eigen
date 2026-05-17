@@ -343,7 +343,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                                 }}
                                 item={single}
                                 onAddComment={onAddComment ? () => onAddComment(obj.id) : undefined}
-                                onView={onCommentClick}
+                                onOpen={onCommentClick}
                                 onChangeColor={onCommentChangeColor}
                                 onResolve={onCommentResolve}
                                 onReopen={onCommentReopen}

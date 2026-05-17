@@ -1,7 +1,8 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dropdown-menu';
 import { ContextMenuAnchor, type useContextMenu } from '../context-menu';
-import { NoteCardContextMenu } from '../notes/note-card-context-menu';
+import { CommentMenuItems } from './comment-menu-items';
 
 export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | undefined };
 
@@ -20,33 +21,27 @@ export function CommentContextMenu({
     onResolve,
     onDelete,
 }: CommentContextMenuProps) {
+    const close =
+        <Args extends unknown[]>(fn: (...args: Args) => void) =>
+        (...args: Args) => {
+            fn(...args);
+            contextMenu.close();
+        };
     return (
         <ContextMenuAnchor contextMenu={contextMenu}>
-            <NoteCardContextMenu
-                currentColor={contextMenu.item?.card.color}
-                status={contextMenu.item?.entry?.status}
-                onEdit={() => {
-                    if (contextMenu.item) onOpen(contextMenu.item.card.id);
-                    contextMenu.close();
+            <CommentMenuItems
+                primitives={{
+                    Item: DropdownMenuItem,
+                    Sub: DropdownMenuSub,
+                    SubTrigger: DropdownMenuSubTrigger,
+                    SubContent: DropdownMenuSubContent,
                 }}
-                onChangeColor={(color) => {
-                    if (contextMenu.item) onUpdateCard(contextMenu.item.card.id, { color });
-                    contextMenu.close();
-                }}
-                onResolve={() => {
-                    const entry = contextMenu.item?.entry;
-                    if (entry) onResolve(entry.chatName, 'resolved');
-                    contextMenu.close();
-                }}
-                onReopen={() => {
-                    const entry = contextMenu.item?.entry;
-                    if (entry) onResolve(entry.chatName, 'open');
-                    contextMenu.close();
-                }}
-                onDelete={() => {
-                    if (contextMenu.item) onDelete(contextMenu.item.card.id);
-                    contextMenu.close();
-                }}
+                item={contextMenu.item ?? null}
+                onOpen={close(onOpen)}
+                onChangeColor={close((cardId, color) => onUpdateCard(cardId, { color }))}
+                onResolve={close((chatName) => onResolve(chatName, 'resolved'))}
+                onReopen={close((chatName) => onResolve(chatName, 'open'))}
+                onDelete={close(onDelete)}
             />
         </ContextMenuAnchor>
     );

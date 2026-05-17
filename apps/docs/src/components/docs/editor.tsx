@@ -31,11 +31,23 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { AddCardDialog, CardDialog, Column, CommentContextMenu, CommentPanel, LoadingState } from '@workspace/ui';
-import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
+import {
+    AddCardDialog,
+    CardDialog,
+    Column,
+    CommentContextMenu,
+    CommentMenuItems,
+    CommentPanel,
+    LoadingState,
+} from '@workspace/ui';
+import {
+    DropdownMenuItem,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+} from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { common, createLowlight } from 'lowlight';
-import { MessageSquarePlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
@@ -783,15 +795,19 @@ const TiptapEditor = ({
             />
 
             <ContextMenuAnchor contextMenu={selectionContextMenu}>
-                <DropdownMenuItem
-                    className="whitespace-nowrap"
-                    onClick={() => {
+                <CommentMenuItems
+                    primitives={{
+                        Item: DropdownMenuItem,
+                        Sub: DropdownMenuSub,
+                        SubTrigger: DropdownMenuSubTrigger,
+                        SubContent: DropdownMenuSubContent,
+                    }}
+                    item={null}
+                    onAddComment={() => {
                         handleAddCommentRef.current?.();
                         selectionContextMenu.close();
                     }}
-                >
-                    <MessageSquarePlus className="h-4 w-4 mr-2" /> Add comment
-                </DropdownMenuItem>
+                />
             </ContextMenuAnchor>
         </>
     );
