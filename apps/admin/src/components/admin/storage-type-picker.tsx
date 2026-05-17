@@ -5,6 +5,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, CheckCircle2, Loader2, Wifi } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -152,7 +153,10 @@ export function StorageTypePicker({
 
                         {s3CheckResult && (
                             <span
-                                className={`text-sm flex items-center gap-1 ${s3CheckResult.ok ? 'text-green-600' : 'text-destructive'}`}
+                                className={cn(
+                                    'text-sm flex items-center gap-1',
+                                    s3CheckResult.ok ? 'text-success' : 'text-destructive',
+                                )}
                             >
                                 {s3CheckResult.ok ? (
                                     <CheckCircle2 className="h-4 w-4" />
