@@ -1,5 +1,5 @@
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
-import { Check, CircleOff, Palette, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, Palette, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -41,14 +41,6 @@ export function NoteCardContextMenu({
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                         <div className="flex gap-1 p-2">
-                            <button
-                                type="button"
-                                className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
-                                title="No color"
-                                onClick={() => onChangeColor('')}
-                            >
-                                <CircleOff className="h-2.5 w-2.5 text-muted-foreground" />
-                            </button>
                             {EIGEN_STICKIES_COLORS[0].map((c) => (
                                 <button
                                     type="button"

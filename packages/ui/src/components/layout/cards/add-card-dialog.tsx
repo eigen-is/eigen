@@ -13,7 +13,7 @@ type AddCardDialogProps = {
     initialTitle?: string;
     initialDescription?: string;
     initialColor?: string;
-    onSave: (data: { title: string; description: string; color?: string }) => void | Promise<void>;
+    onSave: (data: { title: string; description: string; color: string }) => void | Promise<void>;
     titleLabel?: string;
     placeholderTitle?: string;
     placeholderDescription?: string;
@@ -25,7 +25,7 @@ type AddCardDialogContentProps = {
     initialDescription: string;
     initialColor: string;
     onOpenChange: (open: boolean) => void;
-    onSave: (data: { title: string; description: string; color?: string }) => void | Promise<void>;
+    onSave: (data: { title: string; description: string; color: string }) => void | Promise<void>;
     titleLabel: string;
     placeholderTitle: string;
     placeholderDescription: string;
@@ -53,7 +53,7 @@ function AddCardDialogContent({
         if (!title.trim()) return;
         setIsSubmitting(true);
         try {
-            await onSave({ title: title.trim(), description: description.trim(), color: color || undefined });
+            await onSave({ title: title.trim(), description: description.trim(), color });
             onOpenChange(false);
         } finally {
             setIsSubmitting(false);
@@ -89,7 +89,13 @@ function AddCardDialogContent({
                 </div>
                 <div className="grid gap-2">
                     <Label>Color</Label>
-                    <ColorPicker value={color} onChange={setColor} colors={EIGEN_STICKIES_COLORS} columns={8} />
+                    <ColorPicker
+                        value={color}
+                        onChange={setColor}
+                        colors={EIGEN_STICKIES_COLORS}
+                        columns={8}
+                        showReset={false}
+                    />
                 </div>
             </div>
             <DialogFooter>

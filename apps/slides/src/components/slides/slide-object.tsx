@@ -23,7 +23,6 @@ import {
     Check,
     ChevronDown,
     ChevronUp,
-    CircleOff,
     Copy,
     MessageSquarePlus,
     Palette,
@@ -168,7 +167,7 @@ type SlideObjectViewProps = {
     commentItems?: Array<{ card: CommentCard; entry: CommentEntry | undefined }>;
     onCommentResolve?: (chatName: string) => void;
     onCommentReopen?: (chatName: string) => void;
-    onCommentChangeColor?: (cardId: string, color: string | null) => void;
+    onCommentChangeColor?: (cardId: string, color: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
 };
 
@@ -364,14 +363,6 @@ export const SlideObjectView = memo(function SlideObjectView({
                                     </ContextMenuSubTrigger>
                                     <ContextMenuSubContent>
                                         <div className="flex gap-1 p-2">
-                                            <button
-                                                type="button"
-                                                className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
-                                                title="No color"
-                                                onClick={() => onCommentChangeColor?.(card.id, null)}
-                                            >
-                                                <CircleOff className="h-2.5 w-2.5 text-muted-foreground" />
-                                            </button>
                                             {EIGEN_STICKIES_COLORS[0].map((c) => (
                                                 <button
                                                     type="button"

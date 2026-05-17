@@ -34,7 +34,7 @@ type SlideCanvasProps = {
 
     onCommentResolve?: (chatName: string) => void;
     onCommentReopen?: (chatName: string) => void;
-    onCommentChangeColor?: (cardId: string, color: string | null) => void;
+    onCommentChangeColor?: (cardId: string, color: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
 };
 
