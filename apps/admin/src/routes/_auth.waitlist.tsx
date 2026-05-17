@@ -7,6 +7,7 @@ import {
     useWaitlistEntries,
 } from '@workspace/lib/admin';
 import { useAuth } from '@workspace/lib/auth';
+import { formatDateTime, formatTimeAgo } from '@workspace/lib/date';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { EmptyState, LoadingState } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
@@ -16,7 +17,6 @@ import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
-import { formatDistanceToNow } from 'date-fns';
 import { Check, RefreshCw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -129,7 +129,7 @@ function WaitlistRoute() {
                                         <span className="text-xs text-muted-foreground truncate">{entry.notes}</span>
                                     )}
                                     <span className="text-xs text-muted-foreground">
-                                        {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                                        {formatTimeAgo(entry.createdAt)}
                                     </span>
                                 </button>
                             ))}
@@ -227,11 +227,11 @@ function WaitlistDetail({ entry }: { entry: WaitlistEntry }) {
             <Separator />
 
             <div className="text-sm text-muted-foreground space-y-1">
-                <p>Submitted: {new Date(entry.createdAt).toLocaleString()}</p>
-                {entry.invitedAt && <p>Invited: {new Date(entry.invitedAt).toLocaleString()}</p>}
+                <p>Submitted: {formatDateTime(entry.createdAt)}</p>
+                {entry.invitedAt && <p>Invited: {formatDateTime(entry.invitedAt)}</p>}
                 {entry.inviteExpiresAt && (
                     <p>
-                        Invite expires: {new Date(entry.inviteExpiresAt).toLocaleString()}
+                        Invite expires: {formatDateTime(entry.inviteExpiresAt)}
                         {new Date(entry.inviteExpiresAt) < new Date() && (
                             <Badge variant="destructive" className="ml-2 text-xs">
                                 Expired
@@ -239,7 +239,7 @@ function WaitlistDetail({ entry }: { entry: WaitlistEntry }) {
                         )}
                     </p>
                 )}
-                {entry.registeredAt && <p>Registered: {new Date(entry.registeredAt).toLocaleString()}</p>}
+                {entry.registeredAt && <p>Registered: {formatDateTime(entry.registeredAt)}</p>}
                 {entry.userId && <p>User ID: {entry.userId}</p>}
             </div>
         </div>
