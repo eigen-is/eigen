@@ -50,10 +50,14 @@ describe('getBackgroundStyle', () => {
 });
 
 describe('isSameFill', () => {
-    test('null cases', () => {
+    test('null / undefined cases', () => {
         expect(isSameFill(null, null)).toBe(true);
+        expect(isSameFill(undefined, undefined)).toBe(true);
+        expect(isSameFill(null, undefined)).toBe(true);
+        expect(isSameFill(undefined, null)).toBe(true);
         expect(isSameFill(null, { type: 'solid', color: '#fff' })).toBe(false);
         expect(isSameFill({ type: 'solid', color: '#fff' }, null)).toBe(false);
+        expect(isSameFill(undefined, { type: 'solid', color: '#fff' })).toBe(false);
     });
 
     test('different types → false', () => {
