@@ -3,7 +3,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
+import { EditorShell, LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { useRef, useState } from 'react';
 
@@ -60,7 +60,7 @@ function CardSettingsDialogContent({
                 </div>
                 <div className="grid gap-2">
                     <Label>Description</Label>
-                    <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
+                    <EditorShell>
                         <LightEditor
                             content={initialDescription}
                             onChange={setDescription}
@@ -72,7 +72,7 @@ function CardSettingsDialogContent({
                             containerClassName="relative flex flex-col"
                             className="min-h-[120px]"
                         />
-                    </div>
+                    </EditorShell>
                 </div>
                 <div className="grid gap-2">
                     <Label>Color</Label>
