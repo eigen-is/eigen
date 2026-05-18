@@ -20,17 +20,7 @@ type AddCardDialogProps = {
     submitLabel?: string;
 };
 
-type AddCardDialogContentProps = {
-    initialTitle: string;
-    initialDescription: string;
-    initialColor: string;
-    onOpenChange: (open: boolean) => void;
-    onSave: (data: { title: string; description: string; color: string }) => void | Promise<void>;
-    titleLabel: string;
-    placeholderTitle: string;
-    placeholderDescription: string;
-    submitLabel: string;
-};
+type AddCardDialogContentProps = Required<Omit<AddCardDialogProps, 'open'>>;
 
 function AddCardDialogContent({
     initialTitle,
@@ -79,7 +69,7 @@ function AddCardDialogContent({
                 </div>
                 <div className="grid gap-2">
                     <Label>Description</Label>
-                    <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-1 focus-within:ring-ring">
+                    <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
                         <LightEditor
                             content={initialDescription}
                             onChange={setDescription}
