@@ -2,13 +2,13 @@ import { useYjsUndoState } from '@workspace/lib/collab';
 import { useExportDocument } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CountBadge, Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
+import { Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
 
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
-import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { UndoRedoButtons } from '@workspace/ui/components/layout/toolbar/undo-redo-buttons';
-import { ImagePlus, MessageSquare, Play, Plus, Presentation, Type, UserRoundPlus } from 'lucide-react';
+import { ImagePlus, Play, Plus, Presentation, Type } from 'lucide-react';
 import type * as Y from 'yjs';
 
 type ToolbarProps = {
@@ -76,22 +76,13 @@ export function Toolbar({
                     <TooltipButton icon={Play} tooltipText="Present" onClick={onPresent} />
                 </div>
                 <div className="flex items-center">
-                    {onToggleCommentPanel && (
-                        <div className="relative">
-                            <TooltipButton
-                                icon={MessageSquare}
-                                tooltipText="Comments"
-                                onClick={onToggleCommentPanel}
-                                active={commentPanelOpen}
-                            />
-                            <CountBadge count={unresolvedCommentCount ?? 0} />
-                        </div>
-                    )}
-                    {canWrite ? (
-                        <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
-                    ) : (
-                        <DocumentModeButton canWrite={canWrite} />
-                    )}
+                    <DocumentShareCluster
+                        canWrite={canWrite}
+                        onAccessDialogOpen={onAccessDialogOpen}
+                        onToggleCommentPanel={onToggleCommentPanel}
+                        commentPanelOpen={commentPanelOpen}
+                        unresolvedCommentCount={unresolvedCommentCount}
+                    />
                 </div>
             </SharedToolbar>
             <ExportProgressDialog open={isExporting} />

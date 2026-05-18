@@ -18,10 +18,11 @@ import { Workbook, type WorkbookInstance } from '@workspace/sheet';
 import { AddCardDialog, CardDialog, CommentContextMenu, CommentPanel, LoadingState } from '@workspace/ui';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { useSheet } from './hooks/use-sheet';
-import { ToolbarLeftItems, ToolbarRightItems } from './toolbar';
+import { ToolbarLeftItems } from './toolbar';
 
 type SheetEditorProps = {
     ownerId: string;
@@ -181,7 +182,7 @@ export function SheetEditor({
 
     const rightItems = useMemo(
         () => (
-            <ToolbarRightItems
+            <DocumentShareCluster
                 canWrite={canWrite}
                 onAccessDialogOpen={onAccessDialogOpen}
                 onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}

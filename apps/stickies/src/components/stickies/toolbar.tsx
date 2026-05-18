@@ -12,13 +12,13 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 
-import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Toolbar as ToolbarWrapper } from '@workspace/ui/components/layout/toolbar/toolbar';
 import { UndoRedoButtons } from '@workspace/ui/components/layout/toolbar/undo-redo-buttons';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
-import { Check, Plus, Redo, SquareKanban, Undo, UserRoundPlus } from 'lucide-react';
+import { Check, Plus, Redo, SquareKanban, Undo } from 'lucide-react';
 import type * as Y from 'yjs';
 
 type ToolbarProps = {
@@ -127,11 +127,7 @@ export function Toolbar({
             </div>
 
             <div className="flex items-center gap-1">
-                {canWrite ? (
-                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
-                ) : (
-                    <DocumentModeButton canWrite={canWrite} />
-                )}
+                <DocumentShareCluster canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} />
             </div>
         </ToolbarWrapper>
     );
