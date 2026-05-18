@@ -11,6 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { AlphabeticalList } from '@workspace/ui/components/layout/alphabetical-list';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { LabelAssignSubMenu } from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
@@ -141,19 +142,6 @@ export function ContactsList({
     const isSingleSelect = contextItems.length === 1;
     const hasMe = contextItems.some((c) => c.eigenId === user?.id);
 
-    const groupedContacts = useMemo(() => {
-        const groups: Record<string, Contact[]> = {};
-        for (const contact of searchedContacts) {
-            const firstChar =
-                sortBy === 'firstName'
-                    ? contact.firstName.charAt(0).toUpperCase()
-                    : contact.lastName.charAt(0).toUpperCase();
-            if (!groups[firstChar]) groups[firstChar] = [];
-            groups[firstChar].push(contact);
-        }
-        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-    }, [searchedContacts, sortBy]);
-
     if (error) {
         return <ErrorState message="An error occurred while loading contacts." detail={error.message} />;
     }
@@ -163,57 +151,47 @@ export function ContactsList({
             <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} ref={listRef} onKeyDown={handleKeyDown}>
                 {isLoading ? (
                     <LoadingState />
-                ) : groupedContacts.length === 0 ? (
+                ) : searchedContacts.length === 0 ? (
                     <EmptyState message="No contacts found." />
                 ) : (
-                    <div>
-                        {groupedContacts.map(([letter, contacts]) => (
-                            <div key={letter} className="border-b last:border-b-0">
-                                <div className="flex items-center px-6 py-2 bg-muted/50">
-                                    <h2 className="text-sm font-semibold">{letter}</h2>
-                                </div>
-                                <div>
-                                    {contacts.map((contact) => {
-                                        const flatIndex = searchedContacts.indexOf(contact);
-                                        return (
-                                            <div
-                                                key={contact.id}
-                                                className={cn(
-                                                    'flex items-center gap-3 px-6 py-3 eigen-list-item',
-                                                    (activeContactId === contact.id || selectedIndex === flatIndex) &&
-                                                        'eigen-list-item-active',
-                                                    selection.isSelected(contact.id) && 'eigen-list-item-selected',
-                                                )}
-                                                onClick={(e) => {
-                                                    selection.handleItemClick(contact.id, e);
-                                                    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                                                        onRowClick?.(contact.id);
-                                                    }
-                                                }}
-                                                onContextMenu={(e) => handleContextMenu(e, contact)}
-                                                {...drag.getDragProps(contact)}
-                                            >
-                                                <UserItem
-                                                    name={
-                                                        sortBy === 'firstName'
-                                                            ? `${contact.firstName} ${contact.lastName}`
-                                                            : `${contact.lastName}, ${contact.firstName}`
-                                                    }
-                                                    email={
-                                                        contact.email && contact.email.length > 0
-                                                            ? contact.email[0]
-                                                            : undefined
-                                                    }
-                                                    imageUrl={contact.avatar}
-                                                    className="flex-1"
-                                                />
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                    <AlphabeticalList
+                        items={searchedContacts}
+                        getKey={(c) => c.id}
+                        getGroupKey={(c) =>
+                            sortBy === 'firstName'
+                                ? c.firstName.charAt(0).toUpperCase()
+                                : c.lastName.charAt(0).toUpperCase()
+                        }
+                        renderItem={(contact, flatIndex) => (
+                            <div
+                                className={cn(
+                                    'flex items-center gap-3 px-6 py-3 eigen-list-item',
+                                    (activeContactId === contact.id || selectedIndex === flatIndex) &&
+                                        'eigen-list-item-active',
+                                    selection.isSelected(contact.id) && 'eigen-list-item-selected',
+                                )}
+                                onClick={(e) => {
+                                    selection.handleItemClick(contact.id, e);
+                                    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                                        onRowClick?.(contact.id);
+                                    }
+                                }}
+                                onContextMenu={(e) => handleContextMenu(e, contact)}
+                                {...drag.getDragProps(contact)}
+                            >
+                                <UserItem
+                                    name={
+                                        sortBy === 'firstName'
+                                            ? `${contact.firstName} ${contact.lastName}`
+                                            : `${contact.lastName}, ${contact.firstName}`
+                                    }
+                                    email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}
+                                    imageUrl={contact.avatar}
+                                    className="flex-1"
+                                />
                             </div>
-                        ))}
-                    </div>
+                        )}
+                    />
                 )}
 
                 <ContextMenuAnchor contextMenu={contextMenu} className="min-w-[200px]">
