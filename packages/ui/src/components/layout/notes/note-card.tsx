@@ -1,6 +1,6 @@
 import { isLightColor, lightenColor } from '@workspace/lib/constants';
+import { cn } from '@workspace/ui/lib/utils';
 import type { HTMLAttributes, ReactNode } from 'react';
-import { cn } from '../../../lib/utils';
 import { Card, CardContent } from '../../card';
 import { LightEditor } from '../editor/light-editor';
 
