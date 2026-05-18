@@ -8,27 +8,21 @@ import { LightEditorToolbar } from './light-editor-toolbar';
 
 type LightEditorProps = {
     content: string;
-    // Required when `editable` is true (default); omit for read-only viewers.
     onChange?: (html: string) => void;
     onChangeText?: (text: string) => void;
-    // Fires once after TipTap parses the initial content. Receives the editor
-    // instance plus the canonical (trimmed) html/text — same shape onChange
-    // will emit, so callers that fingerprint state don't see spurious diffs on
-    // first interaction.
+    // Canonical (trimmed) html/text on first parse — so callers that fingerprint
+    // state don't see spurious diffs on first interaction.
     onReady?: (arg: { editor: Editor; html: string; text: string }) => void;
     placeholder?: string;
     toolbar?: 'floating' | 'fixed' | 'none';
     className?: string;
     editable?: boolean;
-    // false: skip eigen-prose so caller's font/size/color inherit
     proseStyle?: boolean;
-    // Drop `h-full` from the default when the parent should size to content (e.g. for vertical alignment).
     containerClassName?: string;
-    // Opt-in TipTap TaskList + TaskItem ([] shortcut, toolbar button, data-checked persistence).
     // Read once at mount — useEditor doesn't re-initialise on prop change.
     taskList?: boolean;
-    // Only fires when `editable === false` and the user clicks a task-item checkbox.
-    // `onUpdate` is not guaranteed in read-only mode, so this is the canonical signal.
+    // The canonical signal for read-only task-item checkbox toggles; onUpdate
+    // is not guaranteed when editable=false.
     onCheckedChange?: (html: string) => void;
 };
 
@@ -59,8 +53,6 @@ export function LightEditor({
     const editorRef = useRef<Editor | null>(null);
     const onCheckedChangeRef = useRef(onCheckedChange);
     onCheckedChangeRef.current = onCheckedChange;
-    const onReadyRef = useRef(onReady);
-    onReadyRef.current = onReady;
 
     const editor = useEditor({
         extensions: [
@@ -127,8 +119,8 @@ export function LightEditor({
     useEffect(() => {
         if (!editor || readyFiredRef.current) return;
         readyFiredRef.current = true;
-        onReadyRef.current?.({ editor, html: trimEmptyEdges(editor.getHTML()), text: editor.getText().trim() });
-    }, [editor]);
+        onReady?.({ editor, html: trimEmptyEdges(editor.getHTML()), text: editor.getText().trim() });
+    }, [editor, onReady]);
 
     if (!editor) return null;
 

@@ -1,10 +1,14 @@
-import { getTaskStats } from '@workspace/lib/comments';
 import { isLightColor, lightenColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
-import { type HTMLAttributes, type ReactNode, useMemo } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { Card, CardContent } from '../../card';
 import { Progress } from '../../progress';
 import { LightEditor } from '../editor/light-editor';
+
+// TipTap's TaskItem always emits `data-checked="true|false"` on each task-list
+// <li>; anchoring on `<li` prevents matching unrelated data-checked attributes.
+const TASK_ITEMS_RE = /<li[^>]*\bdata-checked=/g;
+const CHECKED_ITEMS_RE = /<li[^>]*\bdata-checked="true"/g;
 
 type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     title: string;
@@ -35,10 +39,8 @@ export function NoteCard({
     ref,
     ...rest
 }: NoteCardProps) {
-    const taskStats = useMemo(
-        () => (description ? getTaskStats(description) : { total: 0, checked: 0 }),
-        [description],
-    );
+    const total = description ? (description.match(TASK_ITEMS_RE) ?? []).length : 0;
+    const checked = description ? (description.match(CHECKED_ITEMS_RE) ?? []).length : 0;
 
     return (
         <Card
@@ -79,15 +81,15 @@ export function NoteCard({
                         />
                     </div>
                 )}
-                {taskStats.total > 0 && (
+                {total > 0 && (
                     <div className="mt-2 flex items-center gap-2 opacity-60">
                         <Progress
-                            value={(taskStats.checked / taskStats.total) * 100}
+                            value={(checked / total) * 100}
                             className="flex-1 h-1 bg-current/20"
                             indicatorClassName="bg-current"
                         />
                         <span className="text-xs tabular-nums">
-                            {taskStats.checked}/{taskStats.total}
+                            {checked}/{total}
                         </span>
                     </div>
                 )}
