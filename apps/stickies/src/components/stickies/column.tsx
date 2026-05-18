@@ -18,7 +18,6 @@ type ColumnProps = {
     onEditColumn: (columnId: string) => void;
     onCardOpen?: (cardId: string) => void;
     onCardContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
-    onCardDescriptionChange?: (cardId: string, html: string) => void;
     isMobile: boolean;
     scrollToTopSignal?: number;
 };
@@ -33,7 +32,6 @@ export function Column({
     onEditColumn,
     onCardOpen,
     onCardContextMenu,
-    onCardDescriptionChange,
     isMobile,
     scrollToTopSignal,
 }: ColumnProps) {
@@ -113,7 +111,6 @@ export function Column({
                                     canWrite={canWrite}
                                     onOpen={onCardOpen}
                                     onContextMenu={onCardContextMenu}
-                                    onDescriptionChange={onCardDescriptionChange}
                                 />
                             ))}
                         </SortableContext>

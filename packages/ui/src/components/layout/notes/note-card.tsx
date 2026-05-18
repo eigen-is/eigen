@@ -3,7 +3,6 @@ import { cn } from '@workspace/ui/lib/utils';
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Card, CardContent } from '../../card';
 import { Progress } from '../../progress';
-import { RichTextView } from '../editor/rich-text-view';
 
 // TipTap's TaskItem always emits `data-checked="true|false"` on each task-list
 // <li>; anchoring on `<li` prevents matching unrelated data-checked attributes.
@@ -17,10 +16,6 @@ type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     statusIcon?: ReactNode;
     replyCount?: number;
     replyLabel?: string;
-    // Fires after a read-only checkbox click inside `description`. Receives the
-    // post-toggle HTML. Pass `undefined` to keep the description inert (e.g.
-    // when the user has no write permission, or in drag-preview overlays).
-    onDescriptionChange?: (html: string) => void;
     ref?: React.Ref<HTMLDivElement>;
 };
 
@@ -31,7 +26,6 @@ export function NoteCard({
     statusIcon,
     replyCount,
     replyLabel,
-    onDescriptionChange,
     onClick,
     onContextMenu,
     className,
@@ -64,13 +58,10 @@ export function NoteCard({
                 {statusIcon && <span className="absolute top-2 right-2">{statusIcon}</span>}
                 <span className={cn('line-clamp-2', statusIcon && 'pr-5')}>{title}</span>
                 {description && (
-                    <div className="text-xs mt-1 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,black_70%,transparent)]">
-                        <RichTextView
-                            html={description}
-                            onChange={onDescriptionChange}
-                            className="opacity-70 [&>*+*]:mt-1.5"
-                        />
-                    </div>
+                    <div
+                        className="text-xs mt-1 max-h-24 overflow-hidden opacity-70 pointer-events-none [&>*+*]:mt-1.5 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
+                        dangerouslySetInnerHTML={{ __html: description }}
+                    />
                 )}
                 {total > 0 && (
                     <div className="mt-2 flex items-center gap-2 opacity-60">

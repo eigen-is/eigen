@@ -179,13 +179,6 @@ export function StickiesBoard({
         cardContextMenu.close();
     };
 
-    const handleCardDescriptionChange = useCallback(
-        (cardId: string, description: string) => {
-            updateCard(cardId, { description });
-        },
-        [updateCard],
-    );
-
     const handleDeleteCard = () => {
         if (!deleteCardId) return;
         deleteCardFromBoard(deleteCardId);
@@ -321,9 +314,6 @@ export function StickiesBoard({
                                                     onCardOpen={handleCardOpen}
                                                     onCardContextMenu={
                                                         canWrite ? cardContextMenu.handleContextMenu : undefined
-                                                    }
-                                                    onCardDescriptionChange={
-                                                        canWrite ? handleCardDescriptionChange : undefined
                                                     }
                                                     isMobile={isMobile}
                                                     scrollToTopSignal={

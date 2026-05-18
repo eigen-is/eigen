@@ -7,7 +7,6 @@ import type { ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../dialog';
 import { Separator } from '../../separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip';
-import { RichTextView } from '../editor/rich-text-view';
 
 function IconAction({ icon: Icon, tooltip, onClick }: { icon?: LucideIcon; tooltip?: string; onClick?: () => void }) {
     if (!Icon || !tooltip || !onClick) return null;
@@ -74,10 +73,22 @@ export function NoteCardDialog({
 
                     {description && (
                         <div className="px-4 py-3 text-sm text-foreground">
-                            <RichTextView
-                                html={description}
-                                onChange={canWrite ? onDescriptionChange : undefined}
+                            <div
                                 className="eigen-prose"
+                                onClick={(e) => {
+                                    if (!canWrite || !onDescriptionChange) return;
+                                    const target = e.target as HTMLElement;
+                                    if (target.tagName !== 'INPUT' || (target as HTMLInputElement).type !== 'checkbox')
+                                        return;
+                                    const input = target as HTMLInputElement;
+                                    const li = input.closest('li[data-checked]');
+                                    if (!li) return;
+                                    li.setAttribute('data-checked', input.checked ? 'true' : 'false');
+                                    if (input.checked) input.setAttribute('checked', '');
+                                    else input.removeAttribute('checked');
+                                    onDescriptionChange(e.currentTarget.innerHTML);
+                                }}
+                                dangerouslySetInnerHTML={{ __html: description }}
                             />
                         </div>
                     )}
