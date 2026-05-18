@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { NoteCard } from '@workspace/ui';
-import { useCallback, useRef } from 'react';
+import { useRef } from 'react';
 
 type SortableNoteCardProps = {
     card: CommentCard;
@@ -29,11 +29,6 @@ export function SortableNoteCard({
 
     const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
-    const handleDescriptionChange = useCallback(
-        (html: string) => onDescriptionChange?.(card.id, html),
-        [card.id, onDescriptionChange],
-    );
-
     const handleClick = (e: React.MouseEvent) => {
         const start = pointerStart.current;
         pointerStart.current = null;
@@ -52,7 +47,7 @@ export function SortableNoteCard({
             description={card.description}
             color={card.color}
             replyCount={replyCount}
-            onDescriptionChange={canWrite && onDescriptionChange ? handleDescriptionChange : undefined}
+            onDescriptionChange={onDescriptionChange ? (html) => onDescriptionChange(card.id, html) : undefined}
             onPointerDownCapture={(e: React.PointerEvent) => {
                 pointerStart.current = { x: e.clientX, y: e.clientY };
             }}
