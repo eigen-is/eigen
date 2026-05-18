@@ -77,7 +77,6 @@ export function NoteCardDialog({
                             <LightEditor
                                 key={description}
                                 content={description}
-                                onChange={() => {}}
                                 editable={false}
                                 toolbar="none"
                                 taskList
