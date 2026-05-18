@@ -1,4 +1,5 @@
 import { EmptyState } from '@workspace/ui';
+import { AlphabeticalList } from '@workspace/ui/components/layout/alphabetical-list';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { cn } from '@workspace/ui/lib/utils';
 import { useMemo } from 'react';
@@ -22,17 +23,6 @@ export function TeamMemberList({ members, activeMemberEmail, searchQuery, onRowC
         return result;
     }, [members, searchQuery]);
 
-    const grouped = useMemo(() => {
-        const groups: Record<string, TeamMember[]> = {};
-        for (const member of filtered) {
-            const firstChar = (member.name || member.email).charAt(0).toUpperCase();
-            const key = /[A-Z]/.test(firstChar) ? firstChar : '#';
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(member);
-        }
-        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-    }, [filtered]);
-
     if (members.length === 0) {
         return <EmptyState message="No members in this team" />;
     }
@@ -44,27 +34,25 @@ export function TeamMemberList({ members, activeMemberEmail, searchQuery, onRowC
     return (
         <div className="w-full flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto">
-                {grouped.map(([letter, group]) => (
-                    <div key={letter} className="border-b last:border-b-0">
-                        <div className="flex items-center px-6 py-2 bg-muted/50">
-                            <h2 className="text-sm font-semibold">{letter}</h2>
+                <AlphabeticalList
+                    items={filtered}
+                    getKey={(m) => m.email}
+                    getGroupKey={(m) => {
+                        const firstChar = (m.name || m.email).charAt(0).toUpperCase();
+                        return /[A-Z]/.test(firstChar) ? firstChar : '#';
+                    }}
+                    renderItem={(member) => (
+                        <div
+                            className={cn(
+                                'flex items-center gap-3 px-6 py-3 eigen-list-item',
+                                activeMemberEmail === member.email && 'eigen-list-item-active',
+                            )}
+                            onClick={() => onRowClick(member.email)}
+                        >
+                            <UserItem name={member.name} email={member.email} className="flex-1" />
                         </div>
-                        <div>
-                            {group.map((member) => (
-                                <div
-                                    key={member.email}
-                                    className={cn(
-                                        'flex items-center gap-3 px-6 py-3 eigen-list-item',
-                                        activeMemberEmail === member.email && 'eigen-list-item-active',
-                                    )}
-                                    onClick={() => onRowClick(member.email)}
-                                >
-                                    <UserItem name={member.name} email={member.email} className="flex-1" />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
+                    )}
+                />
             </div>
         </div>
     );
