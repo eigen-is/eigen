@@ -1,7 +1,7 @@
 import { formatDate } from '@workspace/lib/date';
 import { Badge } from '@workspace/ui/components/badge';
-import { Button } from '@workspace/ui/components/button';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
+import { DangerZone } from '@workspace/ui/components/layout/delete/danger-zone';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
@@ -108,7 +108,6 @@ type AdminUserDetailProps = {
 };
 
 export function AdminUserDetail({ user, onDelete }: AdminUserDetailProps) {
-    const [showDelete, setShowDelete] = useState(false);
     return (
         <div className="p-6 space-y-6">
             <div className="flex items-start gap-4">
@@ -132,22 +131,13 @@ export function AdminUserDetail({ user, onDelete }: AdminUserDetailProps) {
                 </div>
             </div>
 
-            <div className="border-t pt-6">
-                <h3 className="text-sm font-medium text-destructive mb-2">Danger zone</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                    Permanently delete this user account and all associated data.
-                </p>
-                <Button variant="destructive" size="sm" onClick={() => setShowDelete(true)}>
-                    Delete user
-                </Button>
-                <DeleteDialog
-                    open={showDelete}
-                    onOpenChange={setShowDelete}
-                    title="Delete User"
-                    description={`Permanently delete ${user.name} (${user.email}) and all their data? This cannot be undone.`}
-                    onDelete={onDelete}
-                />
-            </div>
+            <DangerZone
+                description="Permanently delete this user account and all associated data."
+                buttonLabel="Delete user"
+                confirmTitle="Delete User"
+                confirmDescription={`Permanently delete ${user.name} (${user.email}) and all their data? This cannot be undone.`}
+                onConfirm={onDelete}
+            />
         </div>
     );
 }
