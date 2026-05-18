@@ -1,3 +1,5 @@
+import type { AnyExtension } from '@tiptap/core';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { type Editor, EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
@@ -22,21 +24,12 @@ type LightEditorProps = {
     proseStyle?: boolean;
     // Drop `h-full` from the default when the parent should size to content (e.g. for vertical alignment).
     containerClassName?: string;
+    // Opt-in TipTap TaskList + TaskItem ([] shortcut, toolbar button, data-checked persistence).
+    taskList?: boolean;
+    // Only fires when `editable === false` and the user clicks a task-item checkbox.
+    // `onUpdate` is not guaranteed in read-only mode, so this is the canonical signal.
+    onCheckedChange?: (html: string) => void;
 };
-
-// StarterKit configured for "light" rich text: bold, italic, lists, blockquote, hard break, link.
-// Heavier structural marks (headings, code blocks, horizontal rules) are disabled.
-const LIGHT_EXTENSIONS = [
-    StarterKit.configure({
-        heading: false,
-        codeBlock: false,
-        code: false,
-        horizontalRule: false,
-        link: {
-            HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
-        },
-    }),
-];
 
 // TipTap leaves an empty paragraph at the end after Enter and sometimes at the
 // start. Strip those from the emitted HTML so consumers (mail body, doc save)
@@ -46,6 +39,47 @@ const EMPTY_PARA_LEADING = /^\s*(?:<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>\s*)+/i;
 const EMPTY_PARA_TRAILING = /(?:\s*<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>)+\s*$/i;
 function trimEmptyEdges(html: string): string {
     return html.replace(EMPTY_PARA_LEADING, '').replace(EMPTY_PARA_TRAILING, '');
+}
+
+// Build extensions per-instance so the TaskItem onReadOnlyChecked closure
+// captures the current onCheckedChange prop value through the editor ref.
+function buildExtensions(opts: {
+    taskList: boolean;
+    getEditor: () => Editor | null;
+    getOnCheckedChange: () => ((html: string) => void) | undefined;
+}) {
+    const list: AnyExtension[] = [
+        StarterKit.configure({
+            heading: false,
+            codeBlock: false,
+            code: false,
+            horizontalRule: false,
+            link: {
+                autolink: true,
+                openOnClick: true,
+                HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+            },
+        }),
+    ];
+    if (opts.taskList) {
+        list.push(TaskList);
+        list.push(
+            TaskItem.configure({
+                nested: true,
+                onReadOnlyChecked: () => {
+                    // Return true to let ProseMirror commit the toggle, then read the
+                    // post-commit HTML on the next microtask and bubble it up.
+                    queueMicrotask(() => {
+                        const editor = opts.getEditor();
+                        const cb = opts.getOnCheckedChange();
+                        if (editor && cb) cb(trimEmptyEdges(editor.getHTML()));
+                    });
+                    return true;
+                },
+            }),
+        );
+    }
+    return list;
 }
 
 export function LightEditor({
@@ -59,9 +93,19 @@ export function LightEditor({
     editable = true,
     proseStyle = true,
     containerClassName = 'relative flex flex-col h-full',
+    taskList = false,
+    onCheckedChange,
 }: LightEditorProps) {
+    const editorRef = useRef<Editor | null>(null);
+    const onCheckedChangeRef = useRef(onCheckedChange);
+    onCheckedChangeRef.current = onCheckedChange;
+
     const editor = useEditor({
-        extensions: LIGHT_EXTENSIONS,
+        extensions: buildExtensions({
+            taskList,
+            getEditor: () => editorRef.current,
+            getOnCheckedChange: () => onCheckedChangeRef.current,
+        }),
         content,
         editable,
         editorProps: {
@@ -75,6 +119,7 @@ export function LightEditor({
             onChangeText?.(e.getText().trim());
         },
     });
+    editorRef.current = editor;
 
     const readyFiredRef = useRef(false);
     useEffect(() => {
