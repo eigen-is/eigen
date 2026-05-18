@@ -1,4 +1,5 @@
 import { Input } from '@workspace/ui/components/input';
+import { cn } from '@workspace/ui/lib/utils';
 import { type KeyboardEvent, useCallback, useRef, useState } from 'react';
 import { ContactSuggestList } from './contact-suggest-list';
 import type { ContactAutosuggestProps, ContactSuggestion } from './types';
@@ -118,7 +119,7 @@ export function ContactAutosuggest({
     }, []);
 
     return (
-        <div className={`relative ${className}`}>
+        <div className={cn('relative', className)}>
             <Input
                 id={id}
                 name={name}
@@ -150,7 +151,7 @@ export function ContactAutosuggest({
                     items={suggestions}
                     selectedIndex={selectedIndex}
                     onSelect={handleSelect}
-                    className={`w-full mt-1 ${suggestionsClassName}`}
+                    className={cn('w-full mt-1', suggestionsClassName)}
                 />
             )}
 

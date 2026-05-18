@@ -1,4 +1,5 @@
 import type { ViewMode } from '@workspace/lib/calendar';
+import { formatMonth } from '@workspace/lib/date';
 import { Button } from '@workspace/ui/components/button';
 import { Toolbar } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -15,7 +16,7 @@ type CalendarToolbarProps = {
 
 function formatTitle(date: Date, viewMode: ViewMode): string {
     if (viewMode === 'month') {
-        return date.toLocaleDateString('en', { month: 'long', year: 'numeric' });
+        return `${formatMonth(date, 'long')} ${date.getFullYear()}`;
     }
     const startOfWeek = new Date(date);
     const day = startOfWeek.getDay();
@@ -24,8 +25,8 @@ function formatTitle(date: Date, viewMode: ViewMode): string {
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-    const startMonth = startOfWeek.toLocaleDateString('en', { month: 'short' });
-    const endMonth = endOfWeek.toLocaleDateString('en', { month: 'short' });
+    const startMonth = formatMonth(startOfWeek, 'short');
+    const endMonth = formatMonth(endOfWeek, 'short');
     const year = endOfWeek.getFullYear();
 
     if (startOfWeek.getMonth() === endOfWeek.getMonth()) {

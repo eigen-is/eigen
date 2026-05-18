@@ -11,13 +11,13 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Toolbar as ToolbarWrapper } from '@workspace/ui/components/layout/toolbar/toolbar';
 import { UndoRedoButtons } from '@workspace/ui/components/layout/toolbar/undo-redo-buttons';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
+import { cn } from '@workspace/ui/lib/utils';
 import { Check, Plus, Redo, SquareKanban, Undo } from 'lucide-react';
 import type * as Y from 'yjs';
 
@@ -93,7 +93,10 @@ export function Toolbar({
                         <Tooltip key={c.value}>
                             <TooltipTrigger asChild>
                                 <button
-                                    className={`h-4 w-4 rounded-full border border-border/50 transition-transform hover:scale-125 flex items-center justify-center ${active ? 'ring-2 ring-ring ring-offset-1' : ''}`}
+                                    className={cn(
+                                        'h-4 w-4 rounded-full border border-border/50 transition-transform hover:scale-125 flex items-center justify-center',
+                                        active && 'ring-2 ring-ring ring-offset-1',
+                                    )}
                                     style={{ backgroundColor: c.value }}
                                     onClick={() => {
                                         const next = new Set(colorFilter);

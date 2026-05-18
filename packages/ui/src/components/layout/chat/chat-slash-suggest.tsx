@@ -1,3 +1,4 @@
+import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useRef } from 'react';
 import { useScrollToIndex } from '../../../hooks/use-scroll-to-index';
 
@@ -64,7 +65,7 @@ export function ChatSlashSuggest({
             {items.map((item, index) => (
                 <li
                     key={item.cmd}
-                    className={`px-3 py-2 eigen-list-item ${index === selectedIndex ? 'eigen-list-item-active' : ''}`}
+                    className={cn('px-3 py-2 eigen-list-item', index === selectedIndex && 'eigen-list-item-active')}
                     onMouseDown={(e) => {
                         e.preventDefault();
                         onSelect(cmds[index]);

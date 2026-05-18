@@ -19,7 +19,7 @@ export function EigenDocNewButton({ config, rootPath, condensed = false }: Eigen
                 <Button
                     variant="default"
                     size={condensed ? 'icon' : 'default'}
-                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
+                    className={condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}
                     onClick={() => setCreateOpen(true)}
                 >
                     <Plus className="h-4 w-4" />

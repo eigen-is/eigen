@@ -17,6 +17,7 @@ import {
 import { CommentMenuItems } from '@workspace/ui/components/layout/comments';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
+import { cn } from '@workspace/ui/lib/utils';
 import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2 } from 'lucide-react';
 import { memo } from 'react';
 import {
@@ -228,7 +229,11 @@ export const SlideObjectView = memo(function SlideObjectView({
 
     const objectDiv = (
         <div
-            className={`absolute ${selected ? 'ring-1 ring-selection-handle' : obj.type === 'text' ? 'border border-dashed border-border' : ''} ${editable && !editing ? 'cursor-move' : 'cursor-default'}`}
+            className={cn(
+                'absolute',
+                selected ? 'ring-1 ring-selection-handle' : obj.type === 'text' && 'border border-dashed border-border',
+                editable && !editing ? 'cursor-move' : 'cursor-default',
+            )}
             style={getObjectPositionStyle(obj)}
             onMouseDown={handleMouseDown}
             onDoubleClick={handleDoubleClick}
@@ -276,7 +281,10 @@ export const SlideObjectView = memo(function SlideObjectView({
                 HANDLE_POSITIONS.map(({ mode, className }) => (
                     <div
                         key={mode}
-                        className={`absolute h-3 w-3 bg-background border border-selection-handle rounded-sm ${className}`}
+                        className={cn(
+                            'absolute h-3 w-3 bg-background border border-selection-handle rounded-sm',
+                            className,
+                        )}
                         onMouseDown={(e) => {
                             e.stopPropagation();
                             onResizeStart(e, obj.id, mode, obj.x, obj.y, obj.w, obj.h);

@@ -17,6 +17,7 @@ import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
+import { cn } from '@workspace/ui/lib/utils';
 import { Check, RefreshCw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -119,9 +120,10 @@ function WaitlistRoute() {
                                 <button
                                     key={entry.id}
                                     type="button"
-                                    className={`flex flex-col gap-0.5 px-4 py-3 text-left hover:bg-muted/50 border-b ${
-                                        entry.id === entryId ? 'bg-muted' : ''
-                                    }`}
+                                    className={cn(
+                                        'flex flex-col gap-0.5 px-4 py-3 text-left hover:bg-muted/50 border-b',
+                                        entry.id === entryId && 'bg-muted',
+                                    )}
                                     onClick={() => handleRowClick(entry.id)}
                                 >
                                     <span className="text-sm font-medium truncate">{entry.email}</span>

@@ -47,6 +47,7 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
@@ -682,7 +683,10 @@ const TiptapEditor = ({
                 <div className="h-full relative overflow-hidden">
                     <div
                         ref={scrollContainerRef}
-                        className={`h-full w-full overflow-y-scroll bg-muted p-4 ${needsScale ? 'overflow-x-hidden' : ''}`}
+                        className={cn(
+                            'h-full w-full overflow-y-scroll bg-muted p-4',
+                            needsScale && 'overflow-x-hidden',
+                        )}
                         onClick={(e) => {
                             if (e.target === scrollContainerRef.current) {
                                 editor.commands.blur();
@@ -691,7 +695,10 @@ const TiptapEditor = ({
                     >
                         <div
                             data-document="true"
-                            className={`grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none ${needsScale ? '' : 'min-h-full m-auto'}`}
+                            className={cn(
+                                'grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
+                                !needsScale && 'min-h-full m-auto',
+                            )}
                             ref={documentRef}
                             style={
                                 needsScale
@@ -708,7 +715,10 @@ const TiptapEditor = ({
                     </div>
                     {isWide && (
                         <div
-                            className={`absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out ${showSidebar ? 'translate-x-0' : 'translate-x-full'}`}
+                            className={cn(
+                                'absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out',
+                                showSidebar ? 'translate-x-0' : 'translate-x-full',
+                            )}
                         >
                             {activePanel === 'comments' ? (
                                 <CommentPanel

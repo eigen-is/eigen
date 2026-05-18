@@ -9,11 +9,11 @@ export function formatTime(date: Date | string | number): string {
 }
 
 export function formatDate(date: Date | string | number): string {
-    return new Date(date).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return new Date(date).toLocaleDateString('en', { month: 'short', day: 'numeric' });
 }
 
 export function formatDateWithYear(date: Date | string | number): string {
-    return new Date(date).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 export function formatDateTime(date: Date | string | number): string {
@@ -44,8 +44,12 @@ export function formatTimeAgo(date: Date | string | number): string {
 
 export function formatFullDateTime(date: Date | string | number): string {
     const d = new Date(date);
-    const datePart = d.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+    const datePart = d.toLocaleDateString('en', { month: 'long', day: 'numeric', year: 'numeric' });
     return `${datePart} at ${formatTime(d)}`;
+}
+
+export function formatMonth(date: Date | string | number, style: 'long' | 'short' = 'long'): string {
+    return new Date(date).toLocaleDateString('en', { month: style });
 }
 
 export function formatInputDate(date: Date | string | number): string {

@@ -1,3 +1,4 @@
+import { cn } from '@workspace/ui/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import { createContext, type ReactNode, useContext } from 'react';
 import { Button } from '../../button.tsx';
@@ -32,7 +33,7 @@ function Column({ id, width, toolbar, onBack, children, className }: ColumnProps
           : { width, flexShrink: 0 };
 
     return (
-        <div className={`h-full flex flex-col overflow-hidden ${className || ''}`} style={style}>
+        <div className={cn('h-full flex flex-col overflow-hidden', className)} style={style}>
             {toolbar && (
                 <div className="h-12 flex items-center px-4 border-b shrink-0 border-r">
                     {isMobile && onBack && (

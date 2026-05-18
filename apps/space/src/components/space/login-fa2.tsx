@@ -150,13 +150,9 @@ export default function LoginFa2Page() {
                                 </Button>
 
                                 <div className="text-center">
-                                    <button
-                                        type="button"
-                                        className="text-sm text-muted-foreground hover:text-foreground underline"
-                                        onClick={() => setMode('backup')}
-                                    >
+                                    <Button type="button" variant="link" size="sm" onClick={() => setMode('backup')}>
                                         Use a backup code instead
-                                    </button>
+                                    </Button>
                                 </div>
                             </form>
                         </Form>
@@ -206,13 +202,9 @@ export default function LoginFa2Page() {
                                 </Button>
 
                                 <div className="text-center">
-                                    <button
-                                        type="button"
-                                        className="text-sm text-muted-foreground hover:text-foreground underline"
-                                        onClick={() => setMode('totp')}
-                                    >
+                                    <Button type="button" variant="link" size="sm" onClick={() => setMode('totp')}>
                                         Use authenticator app instead
-                                    </button>
+                                    </Button>
                                 </div>
                             </form>
                         </Form>

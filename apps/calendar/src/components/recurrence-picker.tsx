@@ -1,3 +1,4 @@
+import { formatMonth } from '@workspace/lib/date';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useMemo } from 'react';
 import { Frequency, RRule } from 'rrule';
@@ -31,7 +32,7 @@ export function RecurrencePicker({ value, onChange, startDate }: RecurrencePicke
     const weekdayIdx = getWeekdayIndex(startDate);
     const weekOfMonth = getWeekOfMonth(startDate);
     const dayName = DAY_NAMES[weekdayIdx];
-    const monthName = startDate.toLocaleString('en', { month: 'long' });
+    const monthName = formatMonth(startDate, 'long');
     const dayOfMonth = startDate.getDate();
 
     const presets = useMemo(() => {
