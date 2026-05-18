@@ -51,7 +51,8 @@
     "./docs/eigendoc": "./src/docs/eigendoc/index.ts",
     "./sheets": "./src/sheets/index.ts",
     "./sheets/*": "./src/sheets/*",
-    "./slides": "./src/slides/index.ts"
+    "./slides": "./src/slides/index.ts",
+    "./background": "./src/background/index.ts"
   },
   "peerDependencies": {
     "@tiptap/core": "^3.21.0",
