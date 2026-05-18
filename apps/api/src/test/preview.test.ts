@@ -157,6 +157,7 @@ describe('Preview', () => {
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
 
         // Thumbnail is generated in the background — poll for it.
+        // Budget 4s (vs 1s for image): ffmpeg subprocess is slower than in-process sharp.
         let path = uploaded;
         for (let i = 0; i < 40 && !path.thumbnail; i++) {
             await Bun.sleep(100);
