@@ -65,6 +65,7 @@ export function NoteCard({
                             editable={false}
                             toolbar="none"
                             taskList
+                            proseStyle={false}
                             containerClassName="relative opacity-70"
                             className="min-h-0"
                             onCheckedChange={onDescriptionChange}
