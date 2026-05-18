@@ -1,4 +1,3 @@
-import type { AnyExtension } from '@tiptap/core';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { type Editor, EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
@@ -25,6 +24,7 @@ type LightEditorProps = {
     // Drop `h-full` from the default when the parent should size to content (e.g. for vertical alignment).
     containerClassName?: string;
     // Opt-in TipTap TaskList + TaskItem ([] shortcut, toolbar button, data-checked persistence).
+    // Read once at mount — useEditor doesn't re-initialise on prop change.
     taskList?: boolean;
     // Only fires when `editable === false` and the user clicks a task-item checkbox.
     // `onUpdate` is not guaranteed in read-only mode, so this is the canonical signal.
@@ -39,47 +39,6 @@ const EMPTY_PARA_LEADING = /^\s*(?:<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>\s*)+/i;
 const EMPTY_PARA_TRAILING = /(?:\s*<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>)+\s*$/i;
 function trimEmptyEdges(html: string): string {
     return html.replace(EMPTY_PARA_LEADING, '').replace(EMPTY_PARA_TRAILING, '');
-}
-
-// Build extensions per-instance so the TaskItem onReadOnlyChecked closure
-// captures the current onCheckedChange prop value through the editor ref.
-function buildExtensions(opts: {
-    taskList: boolean;
-    getEditor: () => Editor | null;
-    getOnCheckedChange: () => ((html: string) => void) | undefined;
-}) {
-    const list: AnyExtension[] = [
-        StarterKit.configure({
-            heading: false,
-            codeBlock: false,
-            code: false,
-            horizontalRule: false,
-            link: {
-                autolink: true,
-                openOnClick: true,
-                HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
-            },
-        }),
-    ];
-    if (opts.taskList) {
-        list.push(TaskList);
-        list.push(
-            TaskItem.configure({
-                nested: true,
-                onReadOnlyChecked: () => {
-                    // Return true to let ProseMirror commit the toggle, then read the
-                    // post-commit HTML on the next microtask and bubble it up.
-                    queueMicrotask(() => {
-                        const editor = opts.getEditor();
-                        const cb = opts.getOnCheckedChange();
-                        if (editor && cb) cb(trimEmptyEdges(editor.getHTML()));
-                    });
-                    return true;
-                },
-            }),
-        );
-    }
-    return list;
 }
 
 export function LightEditor({
@@ -101,11 +60,38 @@ export function LightEditor({
     onCheckedChangeRef.current = onCheckedChange;
 
     const editor = useEditor({
-        extensions: buildExtensions({
-            taskList,
-            getEditor: () => editorRef.current,
-            getOnCheckedChange: () => onCheckedChangeRef.current,
-        }),
+        extensions: [
+            StarterKit.configure({
+                heading: false,
+                codeBlock: false,
+                code: false,
+                horizontalRule: false,
+                link: {
+                    autolink: true,
+                    openOnClick: true,
+                    HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+                },
+            }),
+            ...(taskList
+                ? [
+                      TaskList,
+                      TaskItem.configure({
+                          nested: true,
+                          onReadOnlyChecked: () => {
+                              // Return true to commit the toggle, then read post-commit HTML
+                              // on the next microtask via the refs (which always reflect
+                              // current values).
+                              queueMicrotask(() => {
+                                  const e = editorRef.current;
+                                  const cb = onCheckedChangeRef.current;
+                                  if (e && cb) cb(trimEmptyEdges(e.getHTML()));
+                              });
+                              return true;
+                          },
+                      }),
+                  ]
+                : []),
+        ],
         content,
         editable,
         editorProps: {
