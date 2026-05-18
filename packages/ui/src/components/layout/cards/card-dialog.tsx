@@ -62,6 +62,7 @@ export function CardDialog({
                 canWrite={canWrite}
                 onEdit={onUpdate ? () => setIsSettingsOpen(true) : undefined}
                 copyLinkUrl={copyLinkUrl}
+                onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
                 {...action}
             >
                 {card.chatName ? (
