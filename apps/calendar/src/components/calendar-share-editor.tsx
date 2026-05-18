@@ -2,7 +2,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
-import { validateEmailAddress } from '@workspace/lib/validation';
+import { parseContactInput } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -10,12 +10,12 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ContactAutosuggest } from '@workspace/ui/components/layout/contacts/contact-autosuggest';
+import { ContactAddRow } from '@workspace/ui/components/layout/contacts/contact-add-row';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
-import { Plus, Users } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { Users } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 
 type CalendarShareEditorProps = {
     shares: CalendarShare[] | null;
@@ -24,7 +24,6 @@ type CalendarShareEditorProps = {
 
 export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorProps) {
     const [newContactInput, setNewContactInput] = useState('');
-    const inputRef = useRef<HTMLInputElement>(null);
     const currentShares = shares || [];
 
     const { data: myTeams } = useMyTeams();
@@ -46,21 +45,9 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
 
     const processContactInput = useCallback(
         (value: string) => {
-            const emailMatch = value.match(/<(.+)>/);
-            let email: string;
-
-            if (emailMatch) {
-                email = emailMatch[1];
-            } else {
-                const isEmail = validateEmailAddress(value);
-                if (isEmail) {
-                    email = value.trim().toLowerCase();
-                } else {
-                    return false;
-                }
-            }
-
-            addShare(email.toLowerCase());
+            const parsed = parseContactInput(value);
+            if (!parsed) return false;
+            addShare(parsed.email);
             return true;
         },
         [addShare],
@@ -111,29 +98,13 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
         <div className="space-y-3">
             <h4 className="text-sm font-medium">Sharing</h4>
 
-            <div className="flex">
-                <div className="flex-1 relative">
-                    <ContactAutosuggest
-                        id="share-contact"
-                        value={newContactInput}
-                        onChange={handleContactSelected}
-                        onlyInternalMails={false}
-                        excludeEmails={excludeEmails}
-                        placeholder="Enter email addresses"
-                        inputRef={inputRef}
-                        onSubmit={handleAddContactClick}
-                    />
-                </div>
-                <Button
-                    size="icon"
-                    variant="outline"
-                    className="ml-2"
-                    onClick={handleAddContactClick}
-                    disabled={!newContactInput}
-                >
-                    <Plus className="h-4 w-4" />
-                </Button>
-            </div>
+            <ContactAddRow
+                id="share-contact"
+                value={newContactInput}
+                onChange={handleContactSelected}
+                onSubmit={handleAddContactClick}
+                excludeEmails={excludeEmails}
+            />
 
             {currentShares.length > 0 && (
                 <div className="space-y-2">
