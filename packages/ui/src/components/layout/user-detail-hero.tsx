@@ -15,13 +15,7 @@ export function UserDetailHero({ name, email, imageUrl, subtitle, badges, layout
         return (
             <div className="flex flex-col items-center gap-4 w-50">
                 <div className="h-40 w-40">
-                    <UserAvatar
-                        name={name}
-                        email={email}
-                        imageUrl={imageUrl ?? undefined}
-                        className="h-full w-full"
-                        size="lg"
-                    />
+                    <UserAvatar name={name} email={email} imageUrl={imageUrl ?? undefined} className="h-full w-full" />
                 </div>
                 <div className="text-center">
                     <h2 className="text-2xl font-bold">{name}</h2>
