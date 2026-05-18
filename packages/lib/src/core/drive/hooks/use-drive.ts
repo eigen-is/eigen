@@ -35,6 +35,8 @@ export const driveKeys = {
         [...driveKeys.mimeTypes(ownerId), mountId, mimeType] as const,
     paths: (ownerId: string) => [...driveKeys.owner(ownerId), 'path'] as const,
     path: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.paths(ownerId), mountId, pathId] as const,
+    breadcrumb: (ownerId: string, mountId: string, pathId: string) =>
+        [...driveKeys.path(ownerId, mountId, pathId), 'breadcrumb'] as const,
     permissions: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.owner(ownerId), 'permissions', mountId, pathId] as const,
     shared: (ownerId: string, to: 'by-me' | 'with-me') => [...driveKeys.owner(ownerId), 'shared', to] as const,
@@ -489,7 +491,7 @@ export function useEffectiveMembers(ownerId: string, mountId: string, pathId: st
 // GET BREADCRUMB PATH
 export function useBreadcrumb(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery<DrivePath[]>({
-        queryKey: [...driveKeys.path(ownerId, mountId, pathId || ''), 'breadcrumb'],
+        queryKey: driveKeys.breadcrumb(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return [];
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).breadcrumb.get();

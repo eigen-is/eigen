@@ -80,7 +80,6 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     const { user } = useAuth();
 
     const { data: labels = [], error: labelsError } = useLabels();
-    const [error, setError] = useState<string | null>(null);
     const [avatar, setAvatar] = useState<string | null>(contact?.avatar ?? null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -101,15 +100,8 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
         },
     });
 
-    const { handleSubmit: hookFormSubmit } = form;
-    const handleSubmit = hookFormSubmit(async (data) => {
-        setError(null);
-        try {
-            await onSave({ ...data, avatar });
-        } catch (e) {
-            console.error('Error saving contact:', e);
-            setError('An error occurred while saving the contact.');
-        }
+    const handleSubmit = form.handleSubmit(async (data) => {
+        await onSave({ ...data, avatar });
     });
 
     const isLoading = form.formState.isSubmitting;
@@ -117,8 +109,6 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     return (
         <div className="h-full flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto p-6">
-                {error && <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">{error}</div>}
-
                 {labelsError && (
                     <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
                         An error occurred while loading labels.

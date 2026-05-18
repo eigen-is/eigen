@@ -60,7 +60,7 @@ function TwoFaComponent() {
     };
 
     const handleVerifyTotp = async (code: string): Promise<boolean> => {
-        const data = await verifyTotp.mutateAsync(code);
+        const data = await verifyTotp.mutateAsync({ code });
         return !!data;
     };
 

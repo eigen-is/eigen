@@ -3,8 +3,9 @@ import { api } from '../../api';
 
 export const editorKeys = {
     all: ['editor'] as const,
+    owner: (ownerId: string) => [...editorKeys.all, ownerId] as const,
     content: (ownerId: string, mountId: string, pathId: string) =>
-        [...editorKeys.all, 'content', ownerId, mountId, pathId] as const,
+        [...editorKeys.owner(ownerId), 'content', mountId, pathId] as const,
 };
 
 export function invalidateEditorContent(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string) {

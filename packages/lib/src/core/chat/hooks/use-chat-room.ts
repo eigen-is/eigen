@@ -204,15 +204,11 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
                             addLocalMessage(inviteError);
                             return;
                         }
-                        try {
-                            const result = await inviteToChat.mutateAsync({ email: local.target });
-                            if (result?.alreadyHasAccess) {
-                                addLocalMessage(`${local.target} already has access.`);
-                            } else {
-                                addLocalMessage(`You invited ${local.target}.`);
-                            }
-                        } catch {
-                            addLocalMessage(`Failed to invite ${local.target}.`);
+                        const result = await inviteToChat.mutateAsync({ email: local.target });
+                        if (result?.alreadyHasAccess) {
+                            addLocalMessage(`${local.target} already has access.`);
+                        } else {
+                            addLocalMessage(`You invited ${local.target}.`);
                         }
                         return;
                     }

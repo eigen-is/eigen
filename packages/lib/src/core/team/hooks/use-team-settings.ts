@@ -7,8 +7,10 @@ import { AppError, onMutationError } from '../../api-error';
 
 export const teamKeys = {
     all: ['team'] as const,
-    settings: (teamId: string) => [...teamKeys.all, 'settings', teamId] as const,
-    members: (teamId: string) => [...teamKeys.all, 'members', teamId] as const,
+    owner: (teamId: string) => [...teamKeys.all, teamId] as const,
+    settings: (teamId: string) => [...teamKeys.owner(teamId), 'settings'] as const,
+    members: (teamId: string) => [...teamKeys.owner(teamId), 'members'] as const,
+    mounts: (teamId: string) => [...teamKeys.owner(teamId), 'mounts'] as const,
 };
 
 export function useTeamSettings(teamId: string) {

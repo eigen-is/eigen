@@ -88,25 +88,21 @@ export function TwoFactorSetup({
     };
 
     async function onPasswordSubmit(values: z.infer<typeof passwordFormSchema>) {
+        setIsLoading(true);
         try {
-            setIsLoading(true);
             await onInitialize2FA(values.password);
-        } catch (error) {
-            console.error('Error initializing two-factor authentication:', error);
         } finally {
             setIsLoading(false);
         }
     }
 
     async function onVerificationSubmit(values: z.infer<typeof verificationFormSchema>) {
+        setIsLoading(true);
         try {
-            setIsLoading(true);
             const success = await onVerifyTotp(values.verificationCode);
             if (success) {
                 setCurrentStep('recoverycodes');
             }
-        } catch (error) {
-            console.error('Error verifying two-factor authentication:', error);
         } finally {
             setIsLoading(false);
         }

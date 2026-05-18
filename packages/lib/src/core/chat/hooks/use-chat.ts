@@ -17,8 +17,9 @@ const MESSAGE_PAGE_SIZE = 50;
 
 export const chatKeys = {
     all: ['chat'] as const,
+    owner: (ownerId: string) => [...chatKeys.all, ownerId] as const,
     messages: (ownerId: string, mountId: string, chatId: string) =>
-        [...chatKeys.all, 'messages', ownerId, mountId, chatId] as const,
+        [...chatKeys.owner(ownerId), 'messages', mountId, chatId] as const,
 };
 
 export function useChats(ownerId: string) {
@@ -29,6 +30,7 @@ export function useChats(ownerId: string) {
             return response.data || [];
         },
         enabled: !!ownerId,
+        staleTime: 60_000,
     });
 }
 
@@ -66,6 +68,7 @@ export function useMessages(ownerId: string, mountId: string, chatId: string | u
             return lastPage[0]?.id;
         },
         enabled: !!chatId && !!ownerId && !!mountId,
+        staleTime: 60_000,
     });
 }
 

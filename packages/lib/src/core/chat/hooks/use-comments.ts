@@ -4,8 +4,9 @@ import { AppError, onMutationError } from '../../api-error';
 
 export const commentKeys = {
     all: ['comments'] as const,
+    owner: (ownerId: string) => [...commentKeys.all, ownerId] as const,
     container: (ownerId: string, mountId: string, containerId: string) =>
-        [...commentKeys.all, ownerId, mountId, containerId] as const,
+        [...commentKeys.owner(ownerId), mountId, containerId] as const,
     list: (ownerId: string, mountId: string, containerId: string) =>
         [...commentKeys.container(ownerId, mountId, containerId), 'list'] as const,
 };
@@ -17,7 +18,8 @@ export function useComments(ownerId: string, mountId: string, containerId: strin
             const response = await collabApi({ ownerId })({ mountId })({ pathId: containerId }).comments.get();
             return response.data ?? [];
         },
-        enabled: !!containerId,
+        enabled: !!ownerId && !!mountId && !!containerId,
+        staleTime: 120_000,
     });
 }
 

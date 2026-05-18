@@ -30,6 +30,7 @@ export const calendarKeys = {
             },
         ] as const,
     sharedCalendars: (ownerId: string) => [...calendarKeys.owner(ownerId), 'shared'] as const,
+    access: (ownerId: string, calendarId: string) => [...calendarKeys.owner(ownerId), 'access', calendarId] as const,
 };
 
 // --- Calendar CRUD ---
@@ -163,7 +164,7 @@ export function useDeleteEvent(ownerId: string) {
 
 export function useCalendarAccess(ownerId: string, calendarId: string, enabled = true) {
     return useQuery({
-        queryKey: [...calendarKeys.owner(ownerId), 'access', calendarId],
+        queryKey: calendarKeys.access(ownerId, calendarId),
         queryFn: async (): Promise<{
             ownerUserId: string;
             shares: Array<{ targetId: string; permission: string }>;
