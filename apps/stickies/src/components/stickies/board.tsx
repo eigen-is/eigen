@@ -119,6 +119,8 @@ export function StickiesBoard({
     // Add-card dialog state
     const [addOpen, setAddOpen] = useState(false);
     const [addTargetColumn, setAddTargetColumn] = useState<string | null>(null);
+    // Bumped after each successful add so the target column scrolls its newly-inserted top card into view.
+    const [scrollToTopOf, setScrollToTopOf] = useState<{ columnId: string; n: number } | null>(null);
 
     useCardIdFromChatName(board.tasks, initialChatName, setOpenCardId, {
         ready: isSynced,
@@ -144,8 +146,9 @@ export function StickiesBoard({
                     taskIds = new Y.Array<string>();
                     col.set('taskIds', taskIds);
                 }
-                taskIds.push([card.id]);
+                taskIds.insert(0, [card.id]);
             });
+            setScrollToTopOf((prev) => ({ columnId: targetColumnId, n: (prev?.n ?? 0) + 1 }));
             setAddTargetColumn(null);
             setAddOpen(false);
         },
@@ -312,6 +315,11 @@ export function StickiesBoard({
                                                         canWrite ? cardContextMenu.handleContextMenu : undefined
                                                     }
                                                     isMobile={isMobile}
+                                                    scrollToTopSignal={
+                                                        scrollToTopOf?.columnId === column.id
+                                                            ? scrollToTopOf.n
+                                                            : undefined
+                                                    }
                                                 />
                                             );
                                         })}
