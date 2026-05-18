@@ -172,7 +172,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         }
     }, [activeSlideId, deck.slideOrder]);
 
-    const addSlide = useCallback((background: BackgroundFill | null = { type: 'solid', color: '#ffffff' }) => {
+    const addSlide = useCallback((background: BackgroundFill | null = { type: 'solid', color: '#e60076' }) => {
         const doc = docRef.current;
         if (!doc) return;
         const slideId = `slide-${nanoid(6)}`;
