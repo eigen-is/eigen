@@ -2,6 +2,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import { cn } from '@workspace/ui/lib/utils';
 import { Pencil, Plus } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { SortableNoteCard } from './sortable-note-card';
@@ -53,7 +54,7 @@ export function Column({
     return (
         <div
             ref={setNodeRef}
-            className={`${columnMargin} ${columnWidth} flex flex-col ${isDragging ? 'opacity-10' : ''} h-full`}
+            className={cn(columnMargin, columnWidth, 'flex flex-col h-full', isDragging && 'opacity-10')}
             style={{
                 transform: CSS.Transform.toString(transform),
                 transition,
@@ -62,7 +63,10 @@ export function Column({
             }}
         >
             <div
-                className={`h-10 pl-3 font-medium text-sm bg-muted flex-shrink-0 flex items-center justify-between ${canWrite ? 'cursor-grab touch-none' : ''}`}
+                className={cn(
+                    'h-10 pl-3 font-medium text-sm bg-muted flex-shrink-0 flex items-center justify-between',
+                    canWrite && 'cursor-grab touch-none',
+                )}
                 {...(canWrite ? { ...attributes, ...listeners } : {})}
             >
                 <span className="truncate flex-1">{column.title}</span>
@@ -86,9 +90,10 @@ export function Column({
 
             <div
                 ref={contentRef}
-                className={`flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-3 border ${
-                    isDropAnimating ? 'bg-accent/10' : 'bg-background'
-                }`}
+                className={cn(
+                    'flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-3 border',
+                    isDropAnimating ? 'bg-accent/10' : 'bg-background',
+                )}
             >
                 {cards.length === 0 ? (
                     <div

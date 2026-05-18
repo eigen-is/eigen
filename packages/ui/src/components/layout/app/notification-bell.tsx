@@ -10,6 +10,7 @@ import {
     useUnreadNotificationCount,
 } from '@workspace/lib/notification';
 import type { Notification } from '@workspace/lib/types/notification';
+import { cn } from '@workspace/ui/lib/utils';
 import { Bell, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../button';
@@ -34,7 +35,11 @@ function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationI
 
     return (
         <div
-            className={`flex items-start gap-3 px-3 py-2.5 transition-colors ${isClickable ? 'cursor-pointer hover:bg-muted/50' : ''} ${!notification.read ? 'bg-primary/5' : ''}`}
+            className={cn(
+                'flex items-start gap-3 px-3 py-2.5 transition-colors',
+                isClickable && 'cursor-pointer hover:bg-muted/50',
+                !notification.read && 'bg-primary/5',
+            )}
             onClick={handleClick}
         >
             {notification.actorEmail && (
@@ -44,7 +49,10 @@ function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationI
             )}
             <div className="flex-1 min-w-0">
                 <p
-                    className={`text-sm leading-tight truncate ${!notification.read ? 'font-medium' : 'text-muted-foreground'}`}
+                    className={cn(
+                        'text-sm leading-tight truncate',
+                        !notification.read ? 'font-medium' : 'text-muted-foreground',
+                    )}
                 >
                     {notification.title}
                 </p>

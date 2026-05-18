@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { SignatureSection } from '../components/space/signature-section';
 
 export const Route = createFileRoute('/_auth/email')({
@@ -7,11 +8,18 @@ export const Route = createFileRoute('/_auth/email')({
 
 function RouteComponent() {
     return (
-        <div className="flex flex-col m-8">
-            <div className="w-full max-w-3xl">
-                <h1 className="text-2xl font-semibold mb-6">Mail</h1>
-                <SignatureSection />
-            </div>
-        </div>
+        <ColumnLayout>
+            <Column
+                id="detail"
+                width="flex"
+                toolbar={<span className="text-sm text-foreground font-normal">Mail</span>}
+            >
+                <div className="h-full overflow-y-auto">
+                    <div className="w-full max-w-3xl p-8">
+                        <SignatureSection />
+                    </div>
+                </div>
+            </Column>
+        </ColumnLayout>
     );
 }

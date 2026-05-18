@@ -14,6 +14,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 import { Calendar, Check, Copy, FolderTree, KeyRound, Mail, Plus, Trash2 } from 'lucide-react';
@@ -160,90 +161,97 @@ function ServicesComponent() {
     const { data: teams } = useMyTeams();
 
     return (
-        <div className="flex flex-col m-8">
-            <div className="w-full max-w-3xl">
-                <h1 className="text-2xl font-semibold mb-6">Integrations</h1>
-                <p className="text-sm text-muted-foreground mb-6">
-                    Connect your calendars, mail, and drive to external clients like Thunderbird, Apple Mail, Finder,
-                    rclone, or any app that supports CalDAV, IMAP, or WebDAV.
-                </p>
+        <ColumnLayout>
+            <Column
+                id="detail"
+                width="flex"
+                toolbar={<span className="text-sm text-foreground font-normal">Integrations</span>}
+            >
+                <div className="h-full overflow-y-auto">
+                    <div className="w-full max-w-3xl p-8">
+                        <p className="text-sm text-muted-foreground mb-6">
+                            Connect your calendars, mail, and drive to external clients like Thunderbird, Apple Mail,
+                            Finder, rclone, or any app that supports CalDAV, IMAP, or WebDAV.
+                        </p>
 
-                <div className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Calendar className="h-5 w-5" />
-                                CalDAV (Calendar sync)
-                            </CardTitle>
-                            <CardDescription>
-                                Use these settings to sync your Eigen calendars with an external calendar app.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <CopyableField label="Server URL" value={`${davBase}/`} />
-                            <CopyableField
-                                label="Server URL (Thunderbird)"
-                                value={`${davBase}/calendars/${user?.id}/`}
-                            />
-                            <CopyableField label="Username" value={user?.email ?? ''} />
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Mail className="h-5 w-5" />
-                                IMAP (Email sync)
-                            </CardTitle>
-                            <CardDescription>
-                                Use these settings to access your Eigen mailbox from an external email client.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-2 gap-3">
-                            <CopyableField label="IMAP server" value={host} />
-                            <CopyableField label="IMAP Port" value="993" />
-                            <CopyableField label="Security" value="SSL/TLS" />
-                            <CopyableField label="Username" value={user?.email ?? ''} />
-                            <CopyableField label="SMTP server" value={host} />
-                            <CopyableField label="SMTP port" value="465" />
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <FolderTree className="h-5 w-5" />
-                                WebDAV (Drive sync)
-                            </CardTitle>
-                            <CardDescription>
-                                Mount each drive separately in Finder, Explorer, rclone, DAVx5, or Mountain Duck.
-                                Authenticate with an app password generated below.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <CopyableField label="Username" value={user?.email ?? ''} />
-                            {personalMounts?.map((m) => (
-                                <CopyableField
-                                    key={m.id}
-                                    label={`Personal — ${m.name}`}
-                                    value={`${webdavBase}/${user?.id ?? ''}/${m.id}/`}
-                                />
-                            ))}
-                            {teams?.flatMap((team) =>
-                                team.mounts.map((m) => (
+                        <div className="space-y-6">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Calendar className="h-5 w-5" />
+                                        CalDAV (Calendar sync)
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Use these settings to sync your Eigen calendars with an external calendar app.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <CopyableField label="Server URL" value={`${davBase}/`} />
                                     <CopyableField
-                                        key={`${team.id}-${m.id}`}
-                                        label={`${team.name} — ${m.name}`}
-                                        value={`${webdavBase}/${teamOwnerId(team.id)}/${m.id}/`}
+                                        label="Server URL (Thunderbird)"
+                                        value={`${davBase}/calendars/${user?.id}/`}
                                     />
-                                )),
-                            )}
-                        </CardContent>
-                    </Card>
+                                    <CopyableField label="Username" value={user?.email ?? ''} />
+                                </CardContent>
+                            </Card>
 
-                    <AppPasswords />
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Mail className="h-5 w-5" />
+                                        IMAP (Email sync)
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Use these settings to access your Eigen mailbox from an external email client.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="grid grid-cols-2 gap-3">
+                                    <CopyableField label="IMAP server" value={host} />
+                                    <CopyableField label="IMAP Port" value="993" />
+                                    <CopyableField label="Security" value="SSL/TLS" />
+                                    <CopyableField label="Username" value={user?.email ?? ''} />
+                                    <CopyableField label="SMTP server" value={host} />
+                                    <CopyableField label="SMTP port" value="465" />
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <FolderTree className="h-5 w-5" />
+                                        WebDAV (Drive sync)
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Mount each drive separately in Finder, Explorer, rclone, DAVx5, or Mountain
+                                        Duck. Authenticate with an app password generated below.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <CopyableField label="Username" value={user?.email ?? ''} />
+                                    {personalMounts?.map((m) => (
+                                        <CopyableField
+                                            key={m.id}
+                                            label={`Personal — ${m.name}`}
+                                            value={`${webdavBase}/${user?.id ?? ''}/${m.id}/`}
+                                        />
+                                    ))}
+                                    {teams?.flatMap((team) =>
+                                        team.mounts.map((m) => (
+                                            <CopyableField
+                                                key={`${team.id}-${m.id}`}
+                                                label={`${team.name} — ${m.name}`}
+                                                value={`${webdavBase}/${teamOwnerId(team.id)}/${m.id}/`}
+                                            />
+                                        )),
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <AppPasswords />
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
+            </Column>
+        </ColumnLayout>
     );
 }

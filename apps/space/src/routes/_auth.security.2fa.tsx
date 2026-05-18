@@ -4,6 +4,7 @@ import { authClient, useDisable2FA, useInitialize2FA, useVerifyTotp } from '@wor
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { Separator } from '@workspace/ui/components/separator';
 import { ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -84,87 +85,100 @@ function TwoFaComponent() {
 
     if (twoFactorEnabled === null) return null;
 
+    const toolbar = <span className="text-sm text-foreground font-normal">Two-Factor Authentication</span>;
+
     if (twoFactorEnabled) {
         return (
-            <div className="flex flex-col m-8">
-                <div className="w-full max-w-3xl">
-                    <h1 className="text-2xl font-semibold mb-6">Two-Factor Authentication</h1>
+            <ColumnLayout>
+                <Column id="detail" width="flex" toolbar={toolbar}>
+                    <div className="h-full overflow-y-auto">
+                        <div className="w-full max-w-3xl p-8">
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-3 text-sm">
+                                    <ShieldCheck className="h-5 w-5 text-primary" />
+                                    <span>Two-factor authentication is enabled on your account.</span>
+                                </div>
 
-                    <div className="space-y-6">
-                        <div className="flex items-center gap-3 text-sm">
-                            <ShieldCheck className="h-5 w-5 text-primary" />
-                            <span>Two-factor authentication is enabled on your account.</span>
-                        </div>
+                                <Separator />
 
-                        <Separator />
-
-                        {!showDisableForm ? (
-                            <Button variant="destructive" onClick={() => setShowDisableForm(true)}>
-                                Disable Two-Factor Authentication
-                            </Button>
-                        ) : (
-                            <Form {...disableForm}>
-                                <form onSubmit={disableForm.handleSubmit(handleDisable)} className="space-y-4 max-w-sm">
-                                    <FormField
-                                        control={disableForm.control}
-                                        name="password"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Confirm your password</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="password"
-                                                        placeholder="Enter current password"
-                                                        autoComplete="current-password"
-                                                        autoFocus
-                                                        {...field}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <div className="flex gap-3">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={() => {
-                                                setShowDisableForm(false);
-                                                disableForm.reset();
-                                            }}
+                                {!showDisableForm ? (
+                                    <Button variant="destructive" onClick={() => setShowDisableForm(true)}>
+                                        Disable Two-Factor Authentication
+                                    </Button>
+                                ) : (
+                                    <Form {...disableForm}>
+                                        <form
+                                            onSubmit={disableForm.handleSubmit(handleDisable)}
+                                            className="space-y-4 max-w-sm"
                                         >
-                                            Cancel
-                                        </Button>
-                                        <Button type="submit" variant="destructive" disabled={disable2FA.isPending}>
-                                            {disable2FA.isPending ? 'Disabling...' : 'Disable'}
-                                        </Button>
-                                    </div>
-                                </form>
-                            </Form>
-                        )}
+                                            <FormField
+                                                control={disableForm.control}
+                                                name="password"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Confirm your password</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="password"
+                                                                placeholder="Enter current password"
+                                                                autoComplete="current-password"
+                                                                autoFocus
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <div className="flex gap-3">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        setShowDisableForm(false);
+                                                        disableForm.reset();
+                                                    }}
+                                                >
+                                                    Cancel
+                                                </Button>
+                                                <Button
+                                                    type="submit"
+                                                    variant="destructive"
+                                                    disabled={disable2FA.isPending}
+                                                >
+                                                    {disable2FA.isPending ? 'Disabling...' : 'Disable'}
+                                                </Button>
+                                            </div>
+                                        </form>
+                                    </Form>
+                                )}
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
+                </Column>
+            </ColumnLayout>
         );
     }
 
     return (
-        <div className="flex flex-col m-8">
-            <div className="w-full max-w-3xl">
-                <h1 className="text-2xl font-semibold mb-6">Two-Factor Authentication</h1>
-
-                <TwoFactorSetup
-                    onInitialize2FA={handleInitialize2FA}
-                    onVerifyTotp={handleVerifyTotp}
-                    onComplete={handleComplete}
-                    onBack={handleBack}
-                    totpUri={totpUri}
-                    secretKey={secretKey}
-                    backupCodes={backupCodes}
-                    currentStep={setupStep}
-                    setCurrentStep={setSetupStep}
-                />
-            </div>
-        </div>
+        <ColumnLayout>
+            <Column id="detail" width="flex" toolbar={toolbar}>
+                <div className="h-full overflow-y-auto">
+                    <div className="w-full max-w-3xl p-8">
+                        <TwoFactorSetup
+                            onInitialize2FA={handleInitialize2FA}
+                            onVerifyTotp={handleVerifyTotp}
+                            onComplete={handleComplete}
+                            onBack={handleBack}
+                            totpUri={totpUri}
+                            secretKey={secretKey}
+                            backupCodes={backupCodes}
+                            currentStep={setupStep}
+                            setCurrentStep={setSetupStep}
+                        />
+                    </div>
+                </div>
+            </Column>
+        </ColumnLayout>
     );
 }

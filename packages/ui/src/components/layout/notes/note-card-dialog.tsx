@@ -1,5 +1,6 @@
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { isLightColor, lightenColor } from '@workspace/lib/constants';
+import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { Link as LinkIcon, Pencil } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -74,7 +75,7 @@ export function NoteCardDialog({
                     )}
 
                     {(meta || copyLinkUrl || (canWrite && onEdit) || onAction) && (
-                        <div className={`flex items-center gap-2 px-4 pb-2 ${!description ? 'pt-2' : ''}`}>
+                        <div className={cn('flex items-center gap-2 px-4 pb-2', !description && 'pt-2')}>
                             {meta && <p className="flex-1 text-xs text-muted-foreground">{meta}</p>}
                             {copyLinkUrl && (
                                 <IconAction

@@ -11,6 +11,7 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from '@workspace/ui/components/context-menu';
+import { cn } from '@workspace/ui/lib/utils';
 import { Copy, Trash2 } from 'lucide-react';
 import { SlideThumbnail } from './slide-thumbnail';
 import { type DeckData, SLIDE_ASPECT_RATIO } from './types';
@@ -83,7 +84,7 @@ export function SlidePanel({
     });
 
     return (
-        <div className={`${mobile ? 'w-full' : 'w-52 flex-shrink-0 border-r'} bg-muted/30 flex flex-col h-full`}>
+        <div className={cn(mobile ? 'w-full' : 'w-52 flex-shrink-0 border-r', 'bg-muted/30 flex flex-col h-full')}>
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
                 {mobile ? (
                     slideList

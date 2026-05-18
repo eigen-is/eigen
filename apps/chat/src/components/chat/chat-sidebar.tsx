@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import { useChats, useUnreadChatIds } from '@workspace/lib/chat';
+import { useChats, useTeamsHaveChats, useUnreadChatIds } from '@workspace/lib/chat';
 import { useDriveAccess } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -97,6 +97,7 @@ export function ChatSidebar({
     const navigate = useNavigate();
 
     const { data: myTeams } = useMyTeams();
+    const hasAnyTeamChats = useTeamsHaveChats((myTeams ?? []).map((t) => t.id));
 
     const handleAfterCreate = useCallback(
         (newPath: DrivePath) => {
@@ -126,27 +127,25 @@ export function ChatSidebar({
                     <EigenLoader />
                 </div>
             ) : (
-                <SidebarSection condensed={condensed}>
-                    {chats.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">No chats yet</div>
-                    ) : (
-                        chats.map((chat) => (
+                chats.length > 0 && (
+                    <SidebarSection condensed={condensed}>
+                        {chats.map((chat) => (
                             <ChatItem
                                 key={chat.id}
                                 chat={chat}
                                 condensed={condensed}
                                 hasUnread={unreadChatIds.has(chat.id)}
                             />
-                        ))
-                    )}
-                </SidebarSection>
+                        ))}
+                    </SidebarSection>
+                )
             )}
 
-            {myTeams && myTeams.length > 0 && (
+            {hasAnyTeamChats && (
                 <>
                     <Separator />
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Chats'}>
-                        {myTeams.map((team) => (
+                        {(myTeams ?? []).map((team) => (
                             <TeamChatItems
                                 key={team.id}
                                 teamId={team.id}

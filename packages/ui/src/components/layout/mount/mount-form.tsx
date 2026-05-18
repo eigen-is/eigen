@@ -1,4 +1,5 @@
 import { EMPTY_S3, type S3Config } from '@workspace/lib/types';
+import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, CheckCircle2, Loader2, Wifi } from 'lucide-react';
 import { useState } from 'react';
 import { Alert, AlertDescription } from '../../alert';
@@ -213,10 +214,12 @@ export function MountForm({
                             Test Connection
                         </Button>
 
-                        {/* Hardcoded green is intentional: no theme token for success state */}
                         {s3Check && (
                             <span
-                                className={`text-sm flex items-center gap-1 ${s3Check.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}
+                                className={cn(
+                                    'text-sm flex items-center gap-1',
+                                    s3Check.ok ? 'text-success' : 'text-destructive',
+                                )}
                             >
                                 {s3Check.ok ? (
                                     <CheckCircle2 className="h-4 w-4" />

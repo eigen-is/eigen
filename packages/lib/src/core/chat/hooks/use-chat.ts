@@ -1,7 +1,15 @@
-import { type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+    type QueryClient,
+    useInfiniteQuery,
+    useMutation,
+    useQueries,
+    useQuery,
+    useQueryClient,
+} from '@tanstack/react-query';
 import { chatApi, driveApi } from '@workspace/lib/api';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { DRIVE_MIME_CHAT, type DrivePath } from '@workspace/lib/types/drive';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateItemCreated } from '../../drive/hooks/use-drive';
 
@@ -22,6 +30,24 @@ export function useChats(ownerId: string) {
         },
         enabled: !!ownerId,
     });
+}
+
+export function useTeamsHaveChats(teamIds: string[]): boolean {
+    const results = useQueries({
+        queries: teamIds.map((id) => {
+            const ownerId = teamOwnerId(id);
+            return {
+                queryKey: driveKeys.mime(ownerId, 'application-eigenchat'),
+                queryFn: async (): Promise<DrivePath[]> => {
+                    const response = await driveApi({ ownerId }).mime({ mimeType: 'application-eigenchat' }).get();
+                    return response.data || [];
+                },
+                enabled: !!id,
+                staleTime: 60_000,
+            };
+        }),
+    });
+    return results.some((q) => (q.data?.length ?? 0) > 0);
 }
 
 export function useMessages(ownerId: string, mountId: string, chatId: string | undefined) {

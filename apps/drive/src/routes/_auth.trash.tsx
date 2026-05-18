@@ -19,6 +19,7 @@ import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layo
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { getFileIcon } from '@workspace/ui/components/layout/drive';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { cn } from '@workspace/ui/lib/utils';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -81,7 +82,7 @@ function TrashRoute() {
                         <EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />
                     ) : (
                         <div className="flex-1 overflow-auto text-sm">
-                            <div className={`grid ${gridCols} border-b`}>
+                            <div className={cn('grid', gridCols, 'border-b')}>
                                 <div className="text-muted-foreground h-10 px-2 flex items-center font-medium">
                                     Name
                                 </div>
@@ -92,7 +93,7 @@ function TrashRoute() {
                             {trashedItems.map((item) => (
                                 <div
                                     key={item.id}
-                                    className={`grid ${gridCols} border-b transition-colors eigen-list-item group`}
+                                    className={cn('grid', gridCols, 'border-b transition-colors eigen-list-item group')}
                                     onContextMenu={(e) => contextMenu.handleContextMenu(e, item)}
                                 >
                                     <div className="px-2 py-1.5 flex items-center min-w-0 relative">

@@ -1,3 +1,4 @@
+import { cn } from '@workspace/ui/lib/utils';
 import { useRef } from 'react';
 import { useScrollToIndex } from '../../../hooks/use-scroll-to-index';
 import { UserItem } from '../user-item';
@@ -19,13 +20,16 @@ export function ContactSuggestList({ items, selectedIndex, onSelect, className =
     return (
         <ul
             ref={listRef}
-            className={`absolute z-10 bg-background border rounded-md shadow-lg overflow-y-auto max-h-48 ${className}`}
+            className={cn(
+                'absolute z-10 bg-background border rounded-md shadow-lg overflow-y-auto max-h-48',
+                className,
+            )}
             tabIndex={-1}
         >
             {items.map((suggestion, index) => (
                 <li
                     key={suggestion.id}
-                    className={`px-3 py-2 eigen-list-item ${index === selectedIndex ? 'eigen-list-item-active' : ''}`}
+                    className={cn('px-3 py-2 eigen-list-item', index === selectedIndex && 'eigen-list-item-active')}
                     onMouseDown={(e) => {
                         e.preventDefault();
                         onSelect(suggestion);
