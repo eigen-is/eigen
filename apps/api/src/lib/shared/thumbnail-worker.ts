@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import sharp from 'sharp';
 import { cleanupExtract, extractEmbeddedPreview } from '../preview/exiftool-preview';
+import { extractVideoFrame } from './video-thumbnail';
 
 type WorkerInput = {
     source: string | ArrayBuffer;
@@ -11,9 +12,9 @@ type WorkerInput = {
     options: { maxSize: number; quality: number; fit: 'inside' | 'cover' };
 };
 
-type WorkerOutput = { ok: true; data: ArrayBuffer; width: number; height: number } | { ok: false };
+type WorkerOutput = { ok: true; data: ArrayBuffer; width: number; height: number; duration?: number } | { ok: false };
 
-type ImageResult = { data: Buffer; width: number; height: number };
+type ImageResult = { data: Buffer; width: number; height: number; duration?: number };
 
 async function sharpResize(
     source: Buffer | string,
@@ -103,19 +104,41 @@ async function processImage(input: WorkerInput): Promise<ImageResult | null> {
     }
 }
 
+async function processVideo(input: WorkerInput): Promise<ImageResult | null> {
+    // v1: video thumbnails only generated when the source is a local file path.
+    // Upload-time always satisfies this (mount.getTempPath). S3-stored regeneration
+    // would require streaming to a temp file first; out of scope for v1.
+    if (typeof input.source !== 'string') return null;
+
+    const frame = await extractVideoFrame(input.source, input.tmpDir, input.pathId);
+    if (!frame) return null;
+
+    const resized = await sharpResize(frame.data, input.options);
+    if (!resized) return null;
+
+    return { ...resized, duration: frame.duration };
+}
+
 declare var self: Worker;
 
 self.onmessage = async (event: MessageEvent<WorkerInput>) => {
     try {
-        const result = await processImage(event.data);
+        const result = event.data.mimeType.startsWith('video/')
+            ? await processVideo(event.data)
+            : await processImage(event.data);
         if (result) {
             const ab = result.data.buffer.slice(
                 result.data.byteOffset,
                 result.data.byteOffset + result.data.byteLength,
             ) as ArrayBuffer;
-            postMessage({ ok: true, data: ab, width: result.width, height: result.height } satisfies WorkerOutput, [
-                ab,
-            ]);
+            const payload: WorkerOutput = {
+                ok: true,
+                data: ab,
+                width: result.width,
+                height: result.height,
+                ...(result.duration !== undefined && { duration: result.duration }),
+            };
+            postMessage(payload, [ab]);
         } else {
             postMessage({ ok: false } satisfies WorkerOutput);
         }

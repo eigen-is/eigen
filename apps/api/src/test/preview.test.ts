@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { isExiftoolCandidate } from '../lib/preview/exiftool-preview';
 import { isVideoCandidate } from '../lib/preview/video-preview';
-import { generateImagePreview } from '../lib/shared/thumbnails';
+import { generateImagePreview, saveThumbnail } from '../lib/shared/thumbnails';
 import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 describe('Preview', () => {
@@ -235,6 +235,43 @@ describe('isVideoCandidate', () => {
         expect(isVideoCandidate('application/pdf')).toBe(false);
         expect(isVideoCandidate('text/plain')).toBe(false);
         expect(isVideoCandidate('')).toBe(false);
+    });
+});
+
+describe('saveThumbnail (video)', () => {
+    const fixtureDir = `${import.meta.dir}/fixtures`;
+    const thumbsDir = `/tmp/eigen-video-thumbs-test-${Date.now()}`;
+
+    test('generates a webp thumbnail for an mp4', async () => {
+        const { isFfmpegAvailable } = await import('../lib/shared/video-thumbnail');
+        if (!(await isFfmpegAvailable())) {
+            console.warn('Skipping: ffmpeg not installed');
+            return;
+        }
+
+        const result = await saveThumbnail(
+            thumbsDir,
+            'video-test-pathid',
+            `${fixtureDir}/tiny-video.mp4`,
+            'video/mp4',
+            'tiny-video.mp4',
+        );
+
+        expect(result).not.toBeNull();
+        expect(result!.fileName).toBe('video-test-pathid.webp');
+        expect(result!.width).toBe(160);
+        expect(result!.height).toBe(120);
+        expect(result!.duration).toBeGreaterThan(1.9);
+        expect(result!.duration).toBeLessThan(2.5);
+
+        const file = Bun.file(`${thumbsDir}/video-test-pathid.webp`);
+        expect(await file.exists()).toBe(true);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        // WebP magic: RIFF....WEBP
+        expect(bytes[0]).toBe(0x52); // R
+        expect(bytes[1]).toBe(0x49); // I
+        expect(bytes[2]).toBe(0x46); // F
+        expect(bytes[3]).toBe(0x46); // F
     });
 });
 
