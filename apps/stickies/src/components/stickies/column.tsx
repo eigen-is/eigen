@@ -4,7 +4,7 @@ import type { CommentCard } from '@workspace/lib/types/comments';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { Pencil, Plus } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { StickyCard } from './card';
+import { SortableNoteCard } from './sortable-note-card';
 import type { ColumnItem } from './types';
 
 type ColumnProps = {
@@ -96,10 +96,10 @@ export function Column({
                         data-column-id={column.id}
                     />
                 ) : (
-                    <div className="flex-grow">
+                    <div className="flex-grow space-y-2">
                         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
                             {cards.map((card) => (
-                                <StickyCard
+                                <SortableNoteCard
                                     key={card.id}
                                     card={card}
                                     replyCount={card.chatName ? messageCounts.get(card.chatName) : undefined}
