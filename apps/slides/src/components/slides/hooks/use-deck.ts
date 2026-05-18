@@ -1,4 +1,5 @@
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -90,7 +91,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
 
             const slideYMap = new Y.Map();
             slideYMap.set('id', slideId);
-            slideYMap.set('background', { type: 'solid', color: '#e60076' } satisfies BackgroundFill);
+            slideYMap.set('background', { type: 'solid', color: DEFAULT_FILL_COLOR } satisfies BackgroundFill);
             const objectIds = new Y.Array();
             objectIds.push([objId]);
             slideYMap.set('objectIds', objectIds);
@@ -172,7 +173,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         }
     }, [activeSlideId, deck.slideOrder]);
 
-    const addSlide = useCallback((background: BackgroundFill | null = { type: 'solid', color: '#e60076' }) => {
+    const addSlide = useCallback((background: BackgroundFill | null = { type: 'solid', color: '#ffffff' }) => {
         const doc = docRef.current;
         if (!doc) return;
         const slideId = `slide-${nanoid(6)}`;

@@ -1,5 +1,7 @@
 import type { BackgroundFill } from '../types/background';
 
+export const DEFAULT_FILL_COLOR = '#e60076';
+
 type Style = {
     backgroundColor?: string;
     backgroundImage?: string;

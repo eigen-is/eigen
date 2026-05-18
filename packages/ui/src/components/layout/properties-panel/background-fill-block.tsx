@@ -1,3 +1,4 @@
+import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import { Button } from '@workspace/ui/components/button';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
@@ -25,12 +26,10 @@ import { PropertySection } from './properties-panel';
 type FillType = BackgroundFill['type'];
 type Segment = 'none' | FillType;
 
-const DEFAULT_COLOR = '#e60076';
-
 function carryColor(value: BackgroundFill | null): string {
     if (value?.type === 'solid') return value.color;
     if (value?.type === 'gradient') return value.from;
-    return DEFAULT_COLOR;
+    return DEFAULT_FILL_COLOR;
 }
 
 // 3x3 grid (centre cell is empty). CSS `linear-gradient` angle convention.
