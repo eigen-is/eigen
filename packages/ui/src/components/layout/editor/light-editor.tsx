@@ -42,17 +42,6 @@ function trimEmptyEdges(html: string): string {
     return html.replace(EMPTY_PARA_LEADING, '').replace(EMPTY_PARA_TRAILING, '');
 }
 
-// Shared input-style wrapper for embedding LightEditor inside a form — mimics
-// the shadcn Input border/focus-ring so the description field reads consistently
-// alongside Input/Label rows.
-export function EditorShell({ children }: { children: React.ReactNode }) {
-    return (
-        <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
-            {children}
-        </div>
-    );
-}
-
 export function LightEditor({
     content,
     onChange,
