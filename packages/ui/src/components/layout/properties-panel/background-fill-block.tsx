@@ -18,7 +18,7 @@ import {
     Palette,
     Trash2,
 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
 import { PropertySection } from './properties-panel';
 
 type FillType = BackgroundFill['type'];
@@ -282,14 +282,21 @@ function ImageBody({
                     <img src={previewUrl} alt="" className="w-full h-20 object-cover" />
                 </div>
             )}
-            <div className="flex gap-1">
-                <FitButton active={value.fit === 'cover'} onClick={() => onChange({ ...value, fit: 'cover' })}>
+            <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={value.fit}
+                onValueChange={(v) => v && onChange({ ...value, fit: v as 'cover' | 'contain' })}
+                className="w-full"
+            >
+                <ToggleGroupItem value="cover" className="flex-1 text-xs">
                     Cover
-                </FitButton>
-                <FitButton active={value.fit === 'contain'} onClick={() => onChange({ ...value, fit: 'contain' })}>
+                </ToggleGroupItem>
+                <ToggleGroupItem value="contain" className="flex-1 text-xs">
                     Contain
-                </FitButton>
-            </div>
+                </ToggleGroupItem>
+            </ToggleGroup>
             <div className="flex gap-1">
                 <Button variant="outline" size="sm" className="flex-1" onClick={onPick}>
                     Replace
@@ -299,20 +306,5 @@ function ImageBody({
                 </Button>
             </div>
         </div>
-    );
-}
-
-function FitButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={cn(
-                'flex-1 h-7 text-xs rounded border hover:bg-accent',
-                active ? 'border-foreground bg-accent' : 'border-border',
-            )}
-        >
-            {children}
-        </button>
     );
 }
