@@ -57,7 +57,7 @@ export function renderSlideObjectHtml(
             styles.push(`background-color:${obj.background.color}`);
         } else if (obj.background?.type === 'gradient') {
             const { from, to, angle } = obj.background;
-            styles.push(`background-image:linear-gradient(${angle}deg in oklab, ${from}, ${to})`);
+            styles.push(`background-image:linear-gradient(${angle}deg, ${from}, ${to})`);
         }
         const vAlign = obj.verticalAlign || 'top';
         const alignItems = vAlign === 'center' ? 'center' : vAlign === 'bottom' ? 'flex-end' : 'flex-start';
@@ -115,7 +115,7 @@ export function renderSlideHtml(
     if (bg?.type === 'solid') {
         containerStyles.push(`background-color:${bg.color}`);
     } else if (bg?.type === 'gradient') {
-        containerStyles.push(`background-image:linear-gradient(${bg.angle}deg in oklab, ${bg.from}, ${bg.to})`);
+        containerStyles.push(`background-image:linear-gradient(${bg.angle}deg, ${bg.from}, ${bg.to})`);
     } else if (bg?.type === 'image' && bg.mediaName) {
         const bgSrc = resolveImgSrc(bg.mediaName);
         if (bgSrc) {
