@@ -53,7 +53,9 @@ export async function generateImagePreview(
         resolvedSource = await source.arrayBuffer();
     }
 
-    fs.mkdirSync(tmpDir, { recursive: true });
+    if (tmpDir) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+    }
 
     return new Promise((resolve) => {
         const worker = new Worker(new URL('./thumbnail-worker', import.meta.url).href);
