@@ -5,6 +5,9 @@ type UseKeyboardListNavigationOptions<T> = {
     items: T[];
     activeId?: string;
     getId: (item: T) => string;
+    // For lists where the selection key differs from the routing key (admin members
+    // route by membership id but select/drag by userId). Defaults to getId.
+    getSelectionId?: (item: T) => string;
     onSelect: (id: string) => void;
     onQuickLook?: (id: string) => void;
     containerRef: RefObject<HTMLElement | null>;
@@ -18,6 +21,7 @@ export function useKeyboardListNavigation<T>({
     items,
     activeId,
     getId,
+    getSelectionId = getId,
     onSelect,
     containerRef,
     itemSelector = '.eigen-list-item',
@@ -74,7 +78,7 @@ export function useKeyboardListNavigation<T>({
 
     const updateSelection = (item: T, e: KeyboardEvent<HTMLElement>) => {
         if (!selection) return;
-        const id = getId(item);
+        const id = getSelectionId(item);
         if (e.shiftKey) selection.selectRange(id);
         else selection.select(id);
     };
@@ -151,7 +155,7 @@ export function useKeyboardListNavigation<T>({
                 e.preventDefault();
                 if (items.length > 0) {
                     setSelectedIndex(0);
-                    if (selection) selection.select(getId(items[0]));
+                    if (selection) selection.select(getSelectionId(items[0]));
                     notify(items[0], 0);
                     scrollToRow(0);
                 }
@@ -163,7 +167,7 @@ export function useKeyboardListNavigation<T>({
                 if (items.length > 0) {
                     const lastIndex = items.length - 1;
                     setSelectedIndex(lastIndex);
-                    if (selection) selection.select(getId(items[lastIndex]));
+                    if (selection) selection.select(getSelectionId(items[lastIndex]));
                     notify(items[lastIndex], lastIndex);
                     scrollToRow(lastIndex);
                 }

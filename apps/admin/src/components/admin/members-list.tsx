@@ -80,6 +80,7 @@ export function MembersList({ members, searchQuery, activeMemberId, onRowClick }
         items: filteredMembers,
         activeId: activeMemberId,
         getId: (m) => m.id,
+        getSelectionId: (m) => m.userId,
         onSelect: (id) => onRowClick(id),
         containerRef: listRef,
         selection,
