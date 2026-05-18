@@ -142,6 +142,40 @@ describe('Preview', () => {
         }
         expect(path.thumbnail).toBeTruthy();
     });
+
+    test('upload video generates thumbnail with duration', async () => {
+        const { isFfmpegAvailable } = await import('../lib/shared/video-thumbnail');
+        if (!(await isFfmpegAvailable())) {
+            console.warn('Skipping: ffmpeg not installed');
+            return;
+        }
+
+        const fs = await import('node:fs/promises');
+        const fixturePath = `${import.meta.dir}/fixtures/tiny-video.mp4`;
+        const bytes = await fs.readFile(fixturePath);
+        const file = new File([new Uint8Array(bytes)], 'clip.mp4', { type: 'video/mp4' });
+        const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
+
+        // Thumbnail is generated in the background — poll for it.
+        let path = uploaded;
+        for (let i = 0; i < 40 && !path.thumbnail; i++) {
+            await Bun.sleep(100);
+            const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/path/${uploaded.id}`);
+            path = await res.json();
+        }
+
+        expect(path.thumbnail).toBe(`${uploaded.id}.webp`);
+        expect(path.details).not.toBeNull();
+        expect(path.details!.width).toBe(160);
+        expect(path.details!.height).toBe(120);
+        expect(path.details!.duration).toBeGreaterThan(1.9);
+        expect(path.details!.duration).toBeLessThan(2.5);
+
+        // Thumb endpoint serves the webp.
+        const thumbRes = await authedRequest(token, `/drive/${ownerId}/${mountId}/thumb/${uploaded.id}.webp`);
+        expect(thumbRes.status).toBe(200);
+        expect(thumbRes.headers.get('content-type')).toBe('image/webp');
+    });
 });
 
 describe('generateImagePreview', () => {
