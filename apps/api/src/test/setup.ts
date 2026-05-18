@@ -30,9 +30,8 @@ const setupResponse = await app.handle(
         }),
     }),
 );
-const setupResult = (await setupResponse.json()) as { success: boolean; error?: string };
-if (!setupResult.success) {
-    throw new Error(`Setup failed: ${setupResult.error}`);
+if (!setupResponse.ok) {
+    throw new Error(`Setup failed (${setupResponse.status}): ${await setupResponse.text()}`);
 }
 
 const { auth } = await import('../lib/auth/auth');

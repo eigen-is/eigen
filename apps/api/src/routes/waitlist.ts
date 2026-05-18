@@ -13,11 +13,14 @@ import {
 } from '../lib/waitlist/waitlist';
 import { betterAuth } from './auth';
 
+// Waitlist is server-wide admin data (no Home owns it), so these routes omit the
+// `:ownerId` second-segment rule per AGENTS.md's home-independent carve-out.
+// Authorization is `requireAdmin` only.
 export const waitlistRouter = new Elysia({ name: 'waitlist' })
     .use(betterAuth)
 
     .get(
-        '/waitlist/:ownerId/entries',
+        '/waitlist/entries',
         async ({ user, query }) => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
@@ -27,7 +30,7 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
     )
 
     .put(
-        '/waitlist/:ownerId/entries/:id/accept',
+        '/waitlist/entries/:id/accept',
         async ({ user, params }): Promise<{ email: string; inviteToken: string }> => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
@@ -40,7 +43,7 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
     )
 
     .put(
-        '/waitlist/:ownerId/entries/:id/reject',
+        '/waitlist/entries/:id/reject',
         async ({ user, params }) => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
@@ -52,7 +55,7 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
     )
 
     .put(
-        '/waitlist/:ownerId/entries/:id/resend',
+        '/waitlist/entries/:id/resend',
         async ({ user, params }): Promise<{ email: string; inviteToken: string }> => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
@@ -65,7 +68,7 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
     )
 
     .delete(
-        '/waitlist/:ownerId/entries/:id',
+        '/waitlist/entries/:id',
         async ({ user, params }) => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();

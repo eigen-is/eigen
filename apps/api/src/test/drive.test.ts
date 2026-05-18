@@ -3245,13 +3245,12 @@ describe('Drive', () => {
             expect(data.some((p) => p.name === 'team-mime-test.txt')).toBe(true);
         });
 
-        test('non-member gets empty result on team mount-scoped MIME filter', async () => {
+        test('non-member gets 403 on team mount-scoped MIME filter', async () => {
             const res = await authedRequest(
                 ctx.bob.user.sessionToken,
                 `/drive/${teamOwner}/${teamMountId}/mime/text-plain`,
             );
-            const data = await assertJson<DrivePath[]>(res);
-            expect(data).toEqual([]);
+            expect(res.status).toBe(403);
         });
 
         test('invalid mount returns 404 for team member', async () => {

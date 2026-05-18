@@ -55,6 +55,17 @@ import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 import { streamFilesToTemp, writeTempWithHash } from './streaming';
 
+// Drive is the high-level domain API over multiple mounts. Routes reach it through
+// `getSharedDrive(ownerId, user)` (returns `Drive | SharedDrive`) for ACL-checked
+// access, or — for owner-only operations like /shared/by-me — through
+// `getDrive(user)` after `requireSelf(...)` rejects cross-owner callers.
+//
+// **Drift rule**: every NEW public method intended to be called from a route
+// MUST have a matching wrapper on SharedDrive — the union return type makes
+// missing wrappers a TS error at the route callsite. Methods that are NOT
+// route-callable (called by peer lib code only — Home, collab, chat, home-relay)
+// must be annotated with a `// Called by:` comment so future readers don't
+// mistake them for the public route surface.
 export default class Drive {
     private home: Home;
     protected owner: User;
@@ -97,6 +108,8 @@ export default class Drive {
         return mount.config;
     }
 
+    // Called by: Drive.init() bootstrap and TeamHome.addMount() (the latter is routed via
+    // POST /team/:ownerId/mount). Not directly route-callable on the drive surface.
     async addMount(config: MountConfig): Promise<void> {
         const mount = new Mount(this.owner.id, this.home.homeDir, config, this.home.getLocalDatabase.bind(this.home));
         await mount.init();
@@ -132,6 +145,8 @@ export default class Drive {
         return infos;
     }
 
+    // Called by: Home.size() (the aggregate surface routed via /home/.../size) and
+    // config/enforcement (quota checks during uploads). Not directly route-callable.
     async size(mountId: string): Promise<number> {
         const mount = this.getMount(mountId);
         return await mount.getTotalSize();
@@ -703,6 +718,8 @@ export default class Drive {
         return { sent };
     }
 
+    // Called by: SharedDrive.inviteToChat (delegates here after permission checks),
+    // and Drive internals. Kept on Drive only — no SharedDrive duplicate needed.
     async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
         const ancestors = await mount.getBreadcrumb(pathId);
@@ -776,6 +793,7 @@ export default class Drive {
         return (await this.documents.get(key)!()) as CollabDocument;
     }
 
+    // Called by: collab/collabDocument cleanup. Not route-callable.
     async closeCollabDocument(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         const key = `${this.owner.id}.${mountId}.${pathId}`;
@@ -809,6 +827,7 @@ export default class Drive {
         return mount.getChildByName(parentId, name);
     }
 
+    // Called by: collab/collabDocument lifecycle (touches mtime on edit). Not route-callable.
     async touchUpdatedAt(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         await mount.updatePath(pathId, {});
@@ -818,11 +837,16 @@ export default class Drive {
         await this.getMount(mountId).updatePath(pathId, { details });
     }
 
+    // Called by: chat/chat.ts and collab/collabDocument (create DB-backing files). Not route-callable.
     async touchFile(mountId: string, parentId: string, name: string, mimeType: string): Promise<string> {
         const mount = this.getMount(mountId);
         return mount.touchFile(parentId, name, mimeType);
     }
 
+    // Called by: GET /drive/:ownerId/shared/with-me — escape-hatch route that uses
+    // requireSelf(...) + getDrive(user). No SharedDrive wrapper by design: the listing
+    // IS the user's own state (paths shared with them), so cross-owner access has no
+    // meaning. See class doc above.
     async getSharedPathsWithMe(): Promise<DrivePath[]> {
         const results = await this.sharedDb.select().from(sharedSchema.sharedPaths).all();
         return results.map((r) => this.sharedRowToDrivePath(r));
@@ -840,6 +864,9 @@ export default class Drive {
         return results;
     }
 
+    // Called by: GET /drive/:ownerId/shared/by-me (escape-hatch route, requireSelf gated)
+    // and Drive.getSharedWith (own-drive filtering). No SharedDrive wrapper by design:
+    // an owner's "things I shared" registry is owner-scoped — see class doc above.
     async getSharedPathsByMe(): Promise<DrivePath[]> {
         const allResults: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
@@ -848,6 +875,8 @@ export default class Drive {
         return allResults;
     }
 
+    // Called by: home-relay (cross-home ACL propagation receiver) and share/reconciliation.
+    // Not route-callable — inbound side of the sharding seam.
     async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
         const displayName = stripEigenExtension(path.name);
         const memberships = await getMemberships(this.owner.id);

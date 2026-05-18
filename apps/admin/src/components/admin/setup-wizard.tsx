@@ -1,4 +1,5 @@
 import { setupApi } from '@workspace/lib/api';
+import { AppError } from '@workspace/lib/core/api-error';
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
@@ -14,8 +15,8 @@ import { StorageTypePicker } from './storage-type-picker';
 
 async function checkS3ViaSetup(config: S3Config): Promise<{ ok: boolean; message: string }> {
     const res = await setupApi.s3check.post(config);
-    if (res.error) return { ok: false, message: String(res.error) };
-    return res.data as { ok: boolean; message: string };
+    if (res.error) return { ok: false, message: new AppError(res).message };
+    return res.data;
 }
 
 export function SetupWizard() {
@@ -43,7 +44,7 @@ export function SetupWizard() {
         setupApi.status
             .get()
             .then((res) => {
-                const data = res.data as { setupRequired: boolean; domain?: string; mailDomain?: string };
+                const data = res.data;
                 if (!data?.setupRequired) {
                     setStep('already-setup');
                 } else {
@@ -85,12 +86,11 @@ export function SetupWizard() {
                       }
                     : {}),
             });
-            const result = res.data as { success: boolean; error?: string };
-            if (result?.success) {
-                setStep('complete');
-            } else {
-                setError(result?.error || 'Setup failed');
+            if (res.error) {
+                setError(new AppError(res).message);
+                return;
             }
+            setStep('complete');
         } catch {
             setError('Network error. Please try again.');
         } finally {

@@ -97,10 +97,7 @@ describe('Waitlist', () => {
     // -- Admin list --
 
     test('admin can list waitlist entries', async () => {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries?status=pending`,
-        );
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries?status=pending');
         const entries = await assertJson<WaitlistEntry[]>(res);
         expect(entries.length).toBeGreaterThanOrEqual(1);
         const entry = entries.find((e) => e.email === 'waitlist-user@example.com');
@@ -111,18 +108,16 @@ describe('Waitlist', () => {
     });
 
     test('non-admin cannot list waitlist', async () => {
-        const res = await authedRequest(ctx.bob.user.sessionToken, `/waitlist/${ctx.bob.user.id}/entries`);
+        const res = await authedRequest(ctx.bob.user.sessionToken, '/waitlist/entries');
         expect(res.status).toBe(403);
     });
 
     // -- Admin accept --
 
     test('admin can accept entry', async () => {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries/${entryId}/accept`,
-            { method: 'PUT' },
-        );
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/waitlist/entries/${entryId}/accept`, {
+            method: 'PUT',
+        });
         const data = await assertJson<{ email: string; inviteToken: string }>(res);
         expect(data.email).toBe('waitlist-user@example.com');
         expect(data.inviteToken).toBeTruthy();
@@ -130,10 +125,7 @@ describe('Waitlist', () => {
     });
 
     test('entry is now in invited status', async () => {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries?status=invited`,
-        );
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries?status=invited');
         const entries = await assertJson<WaitlistEntry[]>(res);
         const entry = entries.find((e) => e.id === entryId);
         expect(entry).toBeDefined();
@@ -143,11 +135,9 @@ describe('Waitlist', () => {
     });
 
     test('accepting already-invited entry fails', async () => {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries/${entryId}/accept`,
-            { method: 'PUT' },
-        );
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/waitlist/entries/${entryId}/accept`, {
+            method: 'PUT',
+        });
         expect(res.status).toBe(400);
     });
 
@@ -170,11 +160,9 @@ describe('Waitlist', () => {
     // -- Resend invite --
 
     test('admin can resend invite', async () => {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries/${entryId}/resend`,
-            { method: 'PUT' },
-        );
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/waitlist/entries/${entryId}/resend`, {
+            method: 'PUT',
+        });
         const data = await assertJson<{ email: string; inviteToken: string }>(res);
         expect(data.inviteToken).toBeTruthy();
         expect(data.inviteToken).not.toBe(inviteToken);
@@ -230,10 +218,7 @@ describe('Waitlist', () => {
     });
 
     test('entry is now registered', async () => {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries?status=registered`,
-        );
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries?status=registered');
         const entries = await assertJson<WaitlistEntry[]>(res);
         const entry = entries.find((e) => e.id === entryId);
         expect(entry).toBeDefined();
@@ -271,53 +256,38 @@ describe('Waitlist', () => {
     });
 
     test('admin can reject entry', async () => {
-        const listRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries?status=pending`,
-        );
+        const listRes = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries?status=pending');
         const entries = await assertJson<WaitlistEntry[]>(listRes);
         const entry = entries.find((e) => e.email === 'reject-me@example.com');
         expect(entry).toBeDefined();
 
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries/${entry!.id}/reject`,
-            { method: 'PUT' },
-        );
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/waitlist/entries/${entry!.id}/reject`, {
+            method: 'PUT',
+        });
         expect(res.status).toBe(200);
     });
 
     test('rejected entry can be re-accepted', async () => {
-        const listRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries?status=rejected`,
-        );
+        const listRes = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries?status=rejected');
         const entries = await assertJson<WaitlistEntry[]>(listRes);
         const entry = entries.find((e) => e.email === 'reject-me@example.com');
         expect(entry).toBeDefined();
 
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries/${entry!.id}/accept`,
-            { method: 'PUT' },
-        );
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/waitlist/entries/${entry!.id}/accept`, {
+            method: 'PUT',
+        });
         expect(res.status).toBe(200);
     });
 
     test('admin can delete entry', async () => {
-        const listRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries?status=invited`,
-        );
+        const listRes = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries?status=invited');
         const entries = await assertJson<WaitlistEntry[]>(listRes);
         const entry = entries.find((e) => e.email === 'reject-me@example.com');
         expect(entry).toBeDefined();
 
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/waitlist/${ctx.alice.user.id}/entries/${entry!.id}`,
-            { method: 'DELETE' },
-        );
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/waitlist/entries/${entry!.id}`, {
+            method: 'DELETE',
+        });
         expect(res.status).toBe(200);
     });
 
@@ -330,7 +300,7 @@ describe('Waitlist', () => {
             body: JSON.stringify({ onboarding: { waitlist: { enabled: false } } }),
         });
 
-        const res = await authedRequest(ctx.alice.user.sessionToken, `/waitlist/${ctx.alice.user.id}/entries`);
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries');
         expect(res.status).toBe(403);
 
         // Re-enable for cleanup

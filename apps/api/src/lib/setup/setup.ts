@@ -12,6 +12,7 @@ import {
     saveServerConfig,
 } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
+import { ApiError } from '../core/errors';
 import { checkS3Connection } from '../storage/s3-storage';
 
 export const isSetupRequired = checkSetupRequired;
@@ -206,13 +207,6 @@ export type SetupInput = {
     adminName: string;
 };
 
-export type SetupResult = {
-    success: boolean;
-    message?: string;
-    error?: string;
-    user?: { id: string; email: string; name: string };
-};
-
 export async function getSetupStatus(): Promise<{
     setupRequired: boolean;
     domain?: string;
@@ -234,26 +228,15 @@ export async function getSetupStatus(): Promise<{
     };
 }
 
-export async function completeSetup(input: SetupInput): Promise<SetupResult> {
-    if (!isSetupRequired()) {
-        return { success: false, error: 'Setup has already been completed' };
-    }
-
-    if (!input.domain) {
-        return { success: false, error: 'Domain is required' };
-    }
-
-    if (!input.orgName) {
-        return { success: false, error: 'Organization name is required' };
-    }
-
-    if (!input.storageType) {
-        return { success: false, error: 'Storage type is required' };
-    }
+export async function completeSetup(input: SetupInput): Promise<{ user: { id: string; email: string; name: string } }> {
+    if (!isSetupRequired()) throw new ApiError(400, 'Setup has already been completed');
+    if (!input.domain) throw new ApiError(400, 'Domain is required');
+    if (!input.orgName) throw new ApiError(400, 'Organization name is required');
+    if (!input.storageType) throw new ApiError(400, 'Storage type is required');
 
     if (input.storageType === 's3') {
         if (!input.s3Bucket || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
-            return { success: false, error: 'S3 configuration requires bucket, access key, and secret key' };
+            throw new ApiError(400, 'S3 configuration requires bucket, access key, and secret key');
         }
         const s3Result = await checkS3Connection({
             endpoint: input.s3Endpoint ?? '',
@@ -263,9 +246,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             secretAccessKey: input.s3SecretAccessKey,
             region: input.s3Region,
         });
-        if (!s3Result.ok) {
-            return { success: false, error: `S3 connection failed: ${s3Result.message}` };
-        }
+        if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
     }
 
     // Use DOMAIN env var if set to a real domain (not localhost)
@@ -273,17 +254,21 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
     if (envDomain && envDomain !== 'localhost') input.domain = envDomain;
 
     if (!input.adminEmail || !input.adminPassword || !input.adminName) {
-        return { success: false, error: 'Admin email, password, and name are required' };
+        throw new ApiError(400, 'Admin email, password, and name are required');
     }
-
     if (input.adminPassword.length < 8) {
-        return { success: false, error: 'Password must be at least 8 characters long' };
+        throw new ApiError(400, 'Password must be at least 8 characters long');
     }
 
-    try {
-        await initializeDatabaseSchema();
+    await initializeDatabaseSchema();
 
-        const user = await auth.api.createUser({
+    // better-auth is the only external integration here; surface its errors as 400
+    // (e.g. duplicate email, invalid slug) so the wizard can show the real message.
+    // Subsequent config/filesystem writes are internal and bubble as 500 if they fail.
+    let user: Awaited<ReturnType<typeof auth.api.createUser>>;
+    let org: Awaited<ReturnType<typeof auth.api.createOrganization>>;
+    try {
+        user = await auth.api.createUser({
             body: {
                 email: input.adminEmail,
                 password: input.adminPassword,
@@ -292,63 +277,41 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             },
         });
 
-        if (!user) {
-            throw new Error('Failed to create admin user');
-        }
-
-        // Create default organization via better-auth API
         const orgSlug = input.orgName
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-|-$/g, '');
-        const org = await auth.api.createOrganization({
-            body: {
-                name: input.orgName,
-                slug: orgSlug,
-                userId: user.user.id,
-            },
+        org = await auth.api.createOrganization({
+            body: { name: input.orgName, slug: orgSlug, userId: user.user.id },
         });
-
-        if (!org) {
-            throw new Error('Failed to create default organization');
-        }
-
-        const serverConfig: ServerConfig = {
-            domain: input.domain,
-            orgName: input.orgName,
-            orgId: org.id,
-            secret: randomBytes(32).toString('base64'),
-            setupCompleted: true,
-            setupCompletedAt: new Date().toISOString(),
-        };
-
-        await saveServerConfig(serverConfig);
-
-        const s3Config =
-            input.storageType === 's3'
-                ? {
-                      bucket: input.s3Bucket!,
-                      region: input.s3Region!,
-                      accessKeyId: input.s3AccessKeyId!,
-                      secretAccessKey: input.s3SecretAccessKey!,
-                      endpoint: input.s3Endpoint ?? '',
-                      prefix: '',
-                  }
-                : undefined;
-        await updateServerSettings({
-            defaults: { mount: { storageType: input.storageType, s3Config } },
-        });
-
-        return {
-            success: true,
-            message: 'Setup completed successfully',
-            user: { id: user.user.id, email: user.user.email, name: user.user.name },
-        };
     } catch (error) {
-        console.error('Setup failed:', error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Setup failed',
-        };
+        console.error('Setup failed during admin/org creation:', error);
+        throw new ApiError(400, error instanceof Error ? error.message : 'Setup failed');
     }
+    if (!org) throw new Error('Failed to create default organization');
+
+    const serverConfig: ServerConfig = {
+        domain: input.domain,
+        orgName: input.orgName,
+        orgId: org.id,
+        secret: randomBytes(32).toString('base64'),
+        setupCompleted: true,
+        setupCompletedAt: new Date().toISOString(),
+    };
+    await saveServerConfig(serverConfig);
+
+    const s3Config =
+        input.storageType === 's3'
+            ? {
+                  bucket: input.s3Bucket!,
+                  region: input.s3Region!,
+                  accessKeyId: input.s3AccessKeyId!,
+                  secretAccessKey: input.s3SecretAccessKey!,
+                  endpoint: input.s3Endpoint ?? '',
+                  prefix: '',
+              }
+            : undefined;
+    await updateServerSettings({ defaults: { mount: { storageType: input.storageType, s3Config } } });
+
+    return { user: { id: user.user.id, email: user.user.email, name: user.user.name } };
 }

@@ -65,6 +65,16 @@ export default class SharedDrive {
         throw new ApiError(403, 'No write permission');
     }
 
+    // Mime-type listings span every path in the owner's drive — there's no single pathId
+    // to ACL-check, so we gate on team membership of the owner. Cross-user (non-team)
+    // SharedDrive instances cannot list by mime type at all.
+    private async requireTeamMembership(): Promise<void> {
+        const parsed = parseOwnerId(this.owner.id);
+        if (parsed.type !== 'team') throw new ApiError(403, 'No read permission');
+        const memberships = await this.getUserMemberships();
+        if (!memberships.teamIds.includes(parsed.id)) throw new ApiError(403, 'No read permission');
+    }
+
     public async listMounts(): Promise<MountInfo[]> {
         return this.sharedDrive.listMounts();
     }
@@ -78,35 +88,19 @@ export default class SharedDrive {
 
     public async getMimeTypeContents(
         mimeType: string,
-        options?: {
-            excludeDocumentChildren?: boolean;
-        },
+        options?: { excludeDocumentChildren?: boolean },
     ): Promise<DrivePath[]> {
-        const parsed = parseOwnerId(this.owner.id);
-        if (parsed?.type === 'team') {
-            const memberships = await this.getUserMemberships();
-            if (memberships.teamIds.includes(parsed.id)) {
-                return this.sharedDrive.getMimeTypeContents(mimeType, options);
-            }
-        }
-        return [];
+        await this.requireTeamMembership();
+        return this.sharedDrive.getMimeTypeContents(mimeType, options);
     }
 
     public async getMountMimeTypeContents(
         mountId: string,
         mimeType: string,
-        options?: {
-            excludeDocumentChildren?: boolean;
-        },
+        options?: { excludeDocumentChildren?: boolean },
     ): Promise<DrivePath[]> {
-        const parsed = parseOwnerId(this.owner.id);
-        if (parsed?.type === 'team') {
-            const memberships = await this.getUserMemberships();
-            if (memberships.teamIds.includes(parsed.id)) {
-                return this.sharedDrive.getMountMimeTypeContents(mountId, mimeType, options);
-            }
-        }
-        return [];
+        await this.requireTeamMembership();
+        return this.sharedDrive.getMountMimeTypeContents(mountId, mimeType, options);
     }
 
     public async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships) {

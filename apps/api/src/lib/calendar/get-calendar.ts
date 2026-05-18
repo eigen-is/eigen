@@ -5,12 +5,6 @@ import { getHome } from '../home';
 import { pullCalendarPermission, pullCalendars } from '../home/home-relay';
 import type { User } from '../user';
 import { getMemberships } from '../user';
-import type { Calendar } from './calendar';
-
-type CalendarAccess = {
-    calendar: Calendar;
-    permission: CalendarShare['permission'];
-};
 
 export async function resolveCalendar(user: User, ownerId: string) {
     const parsed = parseOwnerId(ownerId);
@@ -24,11 +18,15 @@ export async function resolveCalendar(user: User, ownerId: string) {
     return home.calendar;
 }
 
-export async function resolveCalendarForEvents(
+// Check whether `user` may read or write `ownerId`'s calendar `calendarId`.
+// Returns just the permission — routes call cross-home pull/write functions in
+// `home-relay.ts` rather than touching another user's Calendar instance directly.
+// Throws 403 if the caller has no access.
+export async function checkCalendarAccess(
     user: User,
     ownerId: string,
     calendarId: string,
-): Promise<CalendarAccess> {
+): Promise<{ permission: CalendarShare['permission'] }> {
     const parsed = parseOwnerId(ownerId);
 
     if (parsed.type === 'team') {
@@ -36,23 +34,16 @@ export async function resolveCalendarForEvents(
         if (!memberships.teamIds.includes(parsed.id)) {
             throw new ApiError(403, 'Not a member of this team');
         }
-        const home = await getHome(ownerId); // ownerId-routed: team home
-        const permission = home.calendar.checkPermission(calendarId, user.email, memberships.teamIds);
-        return { calendar: home.calendar, permission: permission || 'read' };
+        const permission = await pullCalendarPermission(ownerId, calendarId, user.email, memberships.teamIds);
+        return { permission: permission || 'read' };
     }
 
-    if (ownerId === user.id) {
-        const home = await getHome(user.id); // own home
-        return { calendar: home.calendar, permission: 'write' };
-    }
+    if (ownerId === user.id) return { permission: 'write' };
 
     const memberships = await getMemberships(user.id);
     const permission = await pullCalendarPermission(ownerId, calendarId, user.email, memberships.teamIds);
-    if (!permission) {
-        throw new ApiError(403, 'No access to this calendar');
-    }
-    const ownerHome = await getHome(ownerId); // ownerId-routed: need calendar instance for caller
-    return { calendar: ownerHome.calendar, permission };
+    if (!permission) throw new ApiError(403, 'No access to this calendar');
+    return { permission };
 }
 
 export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {

@@ -2,84 +2,86 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tansta
 import { toast } from 'sonner';
 import { waitlistApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
+import { useIsGuest } from '../../auth/hooks/use-is-guest';
 
+// Waitlist is server-wide (home-independent route), so keys have no ownerId level.
 export const waitlistKeys = {
     all: ['waitlist'] as const,
-    owner: (ownerId: string) => [...waitlistKeys.all, ownerId] as const,
-    entries: (ownerId: string, status?: string) =>
-        [...waitlistKeys.owner(ownerId), 'entries', status ?? 'all'] as const,
+    entries: (status?: string) => [...waitlistKeys.all, 'entries', status ?? 'all'] as const,
 };
 
-export function invalidateWaitlistEntries(queryClient: QueryClient, ownerId: string) {
-    queryClient.invalidateQueries({ queryKey: waitlistKeys.owner(ownerId) });
+export function invalidateWaitlistEntries(queryClient: QueryClient) {
+    queryClient.invalidateQueries({ queryKey: waitlistKeys.all });
 }
 
-export function useWaitlistEntries(ownerId: string, status?: string) {
+export function useWaitlistEntries(status?: string) {
+    const isGuest = useIsGuest();
     return useQuery({
-        queryKey: waitlistKeys.entries(ownerId, status),
+        queryKey: waitlistKeys.entries(status),
         queryFn: async () => {
-            const res = await waitlistApi({ ownerId }).entries.get({ query: { status } });
+            const res = await waitlistApi.entries.get({ query: { status } });
             if (res.error) throw new AppError(res);
             return res.data;
         },
-        enabled: !!ownerId,
+        enabled: !isGuest,
+        staleTime: 1000 * 60 * 2,
     });
 }
 
-export function useAcceptWaitlistEntry(ownerId: string) {
+export function useAcceptWaitlistEntry() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (id: string) => {
-            const res = await waitlistApi({ ownerId }).entries({ id }).accept.put();
+            const res = await waitlistApi.entries({ id }).accept.put();
             if (res.error) throw new AppError(res);
             return res.data;
         },
         onSuccess: (data) => {
-            invalidateWaitlistEntries(queryClient, ownerId);
+            invalidateWaitlistEntries(queryClient);
             toast.success(`Invite sent to ${data?.email ?? 'user'}`);
         },
         onError: onMutationError,
     });
 }
 
-export function useRejectWaitlistEntry(ownerId: string) {
+export function useRejectWaitlistEntry() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (id: string) => {
-            const res = await waitlistApi({ ownerId }).entries({ id }).reject.put();
+            const res = await waitlistApi.entries({ id }).reject.put();
             if (res.error) throw new AppError(res);
             return res.data;
         },
-        onSuccess: () => invalidateWaitlistEntries(queryClient, ownerId),
+        onSuccess: () => invalidateWaitlistEntries(queryClient),
         onError: onMutationError,
     });
 }
 
-export function useResendWaitlistInvite(ownerId: string) {
+export function useResendWaitlistInvite() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (id: string) => {
-            const res = await waitlistApi({ ownerId }).entries({ id }).resend.put();
+            const res = await waitlistApi.entries({ id }).resend.put();
             if (res.error) throw new AppError(res);
             return res.data;
         },
         onSuccess: (data) => {
-            invalidateWaitlistEntries(queryClient, ownerId);
+            invalidateWaitlistEntries(queryClient);
             toast.success(`Invite re-sent to ${data?.email ?? 'user'}`);
         },
         onError: onMutationError,
     });
 }
 
-export function useDeleteWaitlistEntry(ownerId: string) {
+export function useDeleteWaitlistEntry() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (id: string) => {
-            const res = await waitlistApi({ ownerId }).entries({ id }).delete();
+            const res = await waitlistApi.entries({ id }).delete();
             if (res.error) throw new AppError(res);
             return res.data;
         },
-        onSuccess: () => invalidateWaitlistEntries(queryClient, ownerId),
+        onSuccess: () => invalidateWaitlistEntries(queryClient),
         onError: onMutationError,
     });
 }
