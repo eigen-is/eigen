@@ -8,7 +8,8 @@ import { LightEditorToolbar } from './light-editor-toolbar';
 
 type LightEditorProps = {
     content: string;
-    onChange: (html: string) => void;
+    // Required when `editable` is true (default); omit for read-only viewers.
+    onChange?: (html: string) => void;
     onChangeText?: (text: string) => void;
     // Fires once after TipTap parses the initial content. Receives the editor
     // instance plus the canonical (trimmed) html/text — same shape onChange
@@ -101,7 +102,7 @@ export function LightEditor({
             },
         },
         onUpdate: ({ editor: e }) => {
-            onChange(trimEmptyEdges(e.getHTML()));
+            onChange?.(trimEmptyEdges(e.getHTML()));
             onChangeText?.(e.getText().trim());
         },
     });
