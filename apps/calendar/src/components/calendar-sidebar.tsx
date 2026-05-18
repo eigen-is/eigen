@@ -4,8 +4,8 @@ import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EigenLoader, StorageUsage, TooltipButton } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
+import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
@@ -134,17 +134,12 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
         <div className="h-full flex flex-col bg-background">
             {isMobile && <SidebarHeader appName="calendar" onClose={onClose} />}
 
-            <div className="px-3 py-2">
-                <Button
-                    variant="default"
-                    size={condensed ? 'icon' : 'default'}
-                    className={cn(condensed ? 'w-10 p-0' : 'w-full justify-start gap-3')}
-                    onClick={() => setCreateEventOpen(true)}
-                >
-                    <CalendarPlus className="h-4 w-4" />
-                    {!condensed && <span>Create event</span>}
-                </Button>
-            </div>
+            <SidebarPrimaryButton
+                icon={CalendarPlus}
+                label="Create event"
+                condensed={condensed}
+                onClick={() => setCreateEventOpen(true)}
+            />
 
             <div className="overflow-auto flex-1">
                 <SidebarSection

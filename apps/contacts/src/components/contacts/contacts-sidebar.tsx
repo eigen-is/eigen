@@ -4,9 +4,9 @@ import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { Label } from '@workspace/lib/types/label';
 import { EigenLoader, SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
 import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
+import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserRoundPlus, UsersRound } from 'lucide-react';
@@ -28,19 +28,12 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false, 
         <div className="h-full flex flex-col bg-background">
             {isMobile && <SidebarHeader appName="contacts" onClose={onClose} />}
 
-            <div className="px-3 py-2">
-                <Button
-                    variant="default"
-                    size={condensed ? 'icon' : 'default'}
-                    asChild
-                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                >
-                    <Link to="/new">
-                        <UserRoundPlus className="h-4 w-4" />
-                        {!condensed && <span>Create contact</span>}
-                    </Link>
-                </Button>
-            </div>
+            <SidebarPrimaryButton
+                icon={UserRoundPlus}
+                label="Create contact"
+                condensed={condensed}
+                renderTrigger={(content) => <Link to="/new">{content}</Link>}
+            />
 
             <div className="overflow-auto flex-1">
                 <SidebarSection condensed={condensed}>
