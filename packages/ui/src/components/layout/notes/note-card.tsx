@@ -1,3 +1,4 @@
+import { getTaskStats } from '@workspace/lib/comments';
 import { isLightColor, lightenColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
 import type { HTMLAttributes, ReactNode } from 'react';
@@ -33,6 +34,8 @@ export function NoteCard({
     ref,
     ...rest
 }: NoteCardProps) {
+    const taskStats = description ? getTaskStats(description) : { total: 0, checked: 0 };
+
     return (
         <Card
             ref={ref}
@@ -66,6 +69,19 @@ export function NoteCard({
                             className="min-h-0"
                             onCheckedChange={onDescriptionChange}
                         />
+                    </div>
+                )}
+                {taskStats.total > 0 && (
+                    <div className="mt-2 flex items-center gap-2 opacity-60">
+                        <div className="flex-1 h-1 bg-current/20 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-current"
+                                style={{ width: `${(taskStats.checked / taskStats.total) * 100}%` }}
+                            />
+                        </div>
+                        <span className="text-xs tabular-nums">
+                            {taskStats.checked}/{taskStats.total}
+                        </span>
                     </div>
                 )}
                 {!!replyCount && (
