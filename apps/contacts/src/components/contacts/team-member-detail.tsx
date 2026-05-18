@@ -1,5 +1,6 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
-import { Toolbar, UserAvatar } from '@workspace/ui';
+import { Toolbar } from '@workspace/ui';
+import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
 import { Mail } from 'lucide-react';
 import type { TeamMember } from './team-member-list';
 
@@ -16,14 +17,7 @@ export function TeamMemberDetail({ member }: TeamMemberDetailProps) {
         <div className="h-full flex flex-col overflow-hidden">
             <div className="flex-1 overflow-auto p-6">
                 <div className="flex flex-col md:flex-row gap-8">
-                    <div className="flex flex-col items-center gap-4 w-50">
-                        <div className="h-40 w-40">
-                            <UserAvatar name={member.name} email={member.email} className="h-full w-full" size="lg" />
-                        </div>
-                        <div className="text-center">
-                            <h2 className="text-2xl font-bold">{member.name}</h2>
-                        </div>
-                    </div>
+                    <UserDetailHero layout="profile" name={member.name} email={member.email} />
 
                     <div className="flex-1 space-y-6">
                         <div className="space-y-4">
