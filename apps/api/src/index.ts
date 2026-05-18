@@ -2,6 +2,7 @@ import { app } from './app';
 import { shutdownAllHomes } from './lib/home';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
+import { isFfmpegAvailable } from './lib/shared/video-thumbnail';
 
 const server = app.listen({
     port: 8000,
@@ -11,6 +12,11 @@ const server = app.listen({
 export type { App as app } from './app';
 
 console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+
+isFfmpegAvailable().then((ok) => {
+    if (ok) console.log('🎬 ffmpeg available — video thumbnails enabled');
+    else console.warn('⚠️  ffmpeg not found on PATH — video thumbnails disabled');
+});
 
 registerScheduledJobs();
 
