@@ -79,7 +79,7 @@ export async function generateImagePreview(
                 data: Buffer.from(event.data.data),
                 width: event.data.width,
                 height: event.data.height,
-                duration: event.data.duration,
+                ...(event.data.duration !== undefined && { duration: event.data.duration }),
             });
         };
 
@@ -115,10 +115,6 @@ export async function saveThumbnail(
 
     const result = await generateImagePreview(source, mimeType, fileName, thumbsDir, pathId, opts);
     if (!result) return null;
-
-    if (!fs.existsSync(thumbsDir)) {
-        fs.mkdirSync(thumbsDir, { recursive: true });
-    }
 
     const thumbPath = getThumbnailPath(thumbsDir, pathId);
     await Bun.write(thumbPath, result.data);
