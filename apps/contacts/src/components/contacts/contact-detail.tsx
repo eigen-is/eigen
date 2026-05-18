@@ -15,6 +15,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { EigenLoader } from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
+import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import { Building, Calendar, Mail, MapPin, MoreVertical, Pencil, Phone, Printer, Trash2 } from 'lucide-react';
 
@@ -45,7 +46,7 @@ export function ContactDetailToolbar({ contact, filterType, filterId, onDeleteCl
                 </Link>
                 <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDeleteClick} />
 
-                <div className="h-6 w-[1px] bg-border mx-1" />
+                <Separator orientation="vertical" className="h-6 mx-1" />
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
