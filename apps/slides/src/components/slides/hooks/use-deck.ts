@@ -33,7 +33,7 @@ const OBJECT_FIELDS = [
     'letterSpacing',
     'lineHeight',
     'highlightColor',
-    'backgroundColor',
+    'background',
     'mediaName',
     'objectFit',
     'commentCardIds',
