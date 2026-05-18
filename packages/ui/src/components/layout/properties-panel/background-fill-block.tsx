@@ -2,6 +2,7 @@ import type { BackgroundFill } from '@workspace/lib/types/background';
 import { Button } from '@workspace/ui/components/button';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
 import { cn } from '@workspace/ui/lib/utils';
 import {
@@ -24,9 +25,13 @@ import { PropertySection } from './properties-panel';
 type FillType = BackgroundFill['type'];
 type Segment = 'none' | FillType;
 
-const DEFAULT_SOLID: BackgroundFill = { type: 'solid', color: '#ffffff' };
-const DEFAULT_GRADIENT: BackgroundFill = { type: 'gradient', from: '#ffffff', to: 'transparent', angle: 180 };
-const DEFAULT_IMAGE: BackgroundFill = { type: 'image', mediaName: '', fit: 'cover' };
+const DEFAULT_COLOR = '#e60076';
+
+function carryColor(value: BackgroundFill | null): string {
+    if (value?.type === 'solid') return value.color;
+    if (value?.type === 'gradient') return value.from;
+    return DEFAULT_COLOR;
+}
 
 // 3x3 grid (centre cell is empty). CSS `linear-gradient` angle convention.
 const DIRECTIONS = [
@@ -70,13 +75,13 @@ export function BackgroundFillBlock({
                 onChange(null);
                 return;
             case 'solid':
-                onChange(DEFAULT_SOLID);
+                onChange({ type: 'solid', color: carryColor(value) });
                 return;
             case 'gradient':
-                onChange(DEFAULT_GRADIENT);
+                onChange({ type: 'gradient', from: carryColor(value), to: 'transparent', angle: 180 });
                 return;
             case 'image':
-                onChange(DEFAULT_IMAGE);
+                onChange({ type: 'image', mediaName: '', fit: 'cover' });
                 onPickImage?.();
                 return;
         }
@@ -84,33 +89,30 @@ export function BackgroundFillBlock({
 
     return (
         <PropertySection title={title}>
-            <ToggleGroup
-                type="single"
-                value={current}
-                onValueChange={(v) => v && handleSegment(v as Segment)}
-                className="w-full justify-start"
-            >
-                {allowNone && (
-                    <ToggleGroupItem value="none" size="sm" className="h-7 w-7 p-0" aria-label="No fill">
-                        <Ban className="h-3.5 w-3.5" />
-                    </ToggleGroupItem>
-                )}
-                {allowedTypes.includes('solid') && (
-                    <ToggleGroupItem value="solid" size="sm" className="h-7 w-7 p-0" aria-label="Solid color">
-                        <Palette className="h-3.5 w-3.5" />
-                    </ToggleGroupItem>
-                )}
-                {allowedTypes.includes('gradient') && (
-                    <ToggleGroupItem value="gradient" size="sm" className="h-7 w-7 p-0" aria-label="Gradient">
-                        <div className="h-3.5 w-3.5 rounded-sm bg-gradient-to-br from-foreground to-transparent" />
-                    </ToggleGroupItem>
-                )}
-                {allowedTypes.includes('image') && (
-                    <ToggleGroupItem value="image" size="sm" className="h-7 w-7 p-0" aria-label="Image">
-                        <ImageIcon className="h-3.5 w-3.5" />
-                    </ToggleGroupItem>
-                )}
-            </ToggleGroup>
+            <Tabs value={current} onValueChange={(v) => handleSegment(v as Segment)}>
+                <TabsList className="w-full">
+                    {allowNone && (
+                        <TabsTrigger value="none" aria-label="No fill">
+                            <Ban className="h-3.5 w-3.5" />
+                        </TabsTrigger>
+                    )}
+                    {allowedTypes.includes('solid') && (
+                        <TabsTrigger value="solid" aria-label="Solid color">
+                            <Palette className="h-3.5 w-3.5" />
+                        </TabsTrigger>
+                    )}
+                    {allowedTypes.includes('gradient') && (
+                        <TabsTrigger value="gradient" aria-label="Gradient">
+                            <div className="h-3.5 w-3.5 rounded-sm bg-gradient-to-br from-foreground to-transparent" />
+                        </TabsTrigger>
+                    )}
+                    {allowedTypes.includes('image') && (
+                        <TabsTrigger value="image" aria-label="Image">
+                            <ImageIcon className="h-3.5 w-3.5" />
+                        </TabsTrigger>
+                    )}
+                </TabsList>
+            </Tabs>
 
             {mixed && <div className="text-xs text-muted-foreground">Multiple values — pick a type to set on all.</div>}
 
