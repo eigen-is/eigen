@@ -123,7 +123,15 @@ export function LightEditor({
         editable,
         editorProps: {
             attributes: {
-                class: cn(proseStyle && 'eigen-prose', 'outline-none min-h-[100px]', className),
+                // Hide trailing empty paragraphs that TipTap may keep in read-only
+                // mode — they add visible whitespace below content (e.g. clicking
+                // above a task list in a viewer would surface an empty p).
+                class: cn(
+                    proseStyle && 'eigen-prose',
+                    'outline-none min-h-[100px]',
+                    !editable && '[&>p:empty:last-child]:hidden',
+                    className,
+                ),
                 ...(placeholder ? { 'data-placeholder': placeholder } : {}),
             },
         },
@@ -140,34 +148,6 @@ export function LightEditor({
         readyFiredRef.current = true;
         onReadyRef.current?.({ editor, html: trimEmptyEdges(editor.getHTML()), text: editor.getText().trim() });
     }, [editor]);
-
-    // In read-only mode, TipTap can leave a trailing empty paragraph in the doc
-    // (clicking in the editor surface or our own setNodeMarkup dispatches can
-    // trigger ProseMirror's "ensure doc ends with a textblock" behaviour). Strip
-    // it from the actual state — CSS hiding is unreliable because the empty
-    // paragraph still occupies space via the editor's min-height contribution.
-    useEffect(() => {
-        if (!editor || editable) return;
-        const stripTrailingEmptyParagraph = () => {
-            let last = editor.state.doc.lastChild;
-            while (
-                last &&
-                last.type.name === 'paragraph' &&
-                last.content.size === 0 &&
-                editor.state.doc.childCount > 1
-            ) {
-                const docSize = editor.state.doc.content.size;
-                const tr = editor.state.tr.delete(docSize - last.nodeSize, docSize).setMeta('addToHistory', false);
-                editor.view.dispatch(tr);
-                last = editor.state.doc.lastChild;
-            }
-        };
-        stripTrailingEmptyParagraph();
-        editor.on('update', stripTrailingEmptyParagraph);
-        return () => {
-            editor.off('update', stripTrailingEmptyParagraph);
-        };
-    }, [editor, editable]);
 
     if (!editor) return null;
 
