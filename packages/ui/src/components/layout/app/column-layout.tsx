@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { createContext, type ReactNode, useContext } from 'react';
 import { Button } from '../../button.tsx';
+import { Separator } from '../../separator.tsx';
 import { useLayout } from './layout-context.tsx';
 
 type ColumnContextType = {
@@ -39,7 +40,7 @@ function Column({ id, width, toolbar, onBack, children, className }: ColumnProps
                             <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}>
                                 <ArrowLeft className="h-4 w-4" />
                             </Button>
-                            <div className="h-6 w-[1px] bg-border mx-1" />
+                            <Separator orientation="vertical" className="h-6 mx-1" />
                         </>
                     )}
                     {toolbar}
