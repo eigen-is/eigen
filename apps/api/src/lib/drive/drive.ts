@@ -1059,6 +1059,7 @@ export default class Drive {
                         ...(current.details ?? {}),
                         width: thumbnail.width,
                         height: thumbnail.height,
+                        ...(thumbnail.duration !== undefined && { duration: thumbnail.duration }),
                     },
                 });
                 this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
