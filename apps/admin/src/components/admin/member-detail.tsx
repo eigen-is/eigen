@@ -4,6 +4,7 @@ import { formatDate } from '@workspace/lib/date';
 import type { OrgMember } from '@workspace/lib/types/admin';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
+import { DangerZone } from '@workspace/ui/components/layout/delete/danger-zone';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
@@ -57,7 +58,6 @@ type MemberDetailProps = {
 };
 
 export function MemberDetail({ member, organizationId }: MemberDetailProps) {
-    const [showDelete, setShowDelete] = useState(false);
     const [draftRole, setDraftRole] = useState(member.role);
     const updateRole = useUpdateMemberRole(organizationId);
     const deleteUser = useDeleteUser(organizationId);
@@ -133,22 +133,13 @@ export function MemberDetail({ member, organizationId }: MemberDetailProps) {
             )}
 
             {member.role !== 'owner' && (
-                <div className="border-t pt-6">
-                    <h3 className="text-sm font-medium text-destructive mb-2">Danger zone</h3>
-                    <p className="text-sm text-muted-foreground mb-3">
-                        Permanently delete this user account and all associated data.
-                    </p>
-                    <Button variant="destructive" size="sm" onClick={() => setShowDelete(true)}>
-                        Delete user
-                    </Button>
-                    <DeleteDialog
-                        open={showDelete}
-                        onOpenChange={setShowDelete}
-                        title="Delete User"
-                        description={`Permanently delete ${member.name} and all their data? This removes the user account, files, emails, contacts, and calendars. This cannot be undone.`}
-                        onDelete={handleDelete}
-                    />
-                </div>
+                <DangerZone
+                    description="Permanently delete this user account and all associated data."
+                    buttonLabel="Delete user"
+                    confirmTitle="Delete User"
+                    confirmDescription={`Permanently delete ${member.name} and all their data? This removes the user account, files, emails, contacts, and calendars. This cannot be undone.`}
+                    onConfirm={handleDelete}
+                />
             )}
         </div>
     );
