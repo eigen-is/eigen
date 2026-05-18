@@ -67,7 +67,7 @@ export function NoteCard({
                             taskList
                             proseStyle={false}
                             containerClassName="relative opacity-70"
-                            className="min-h-0"
+                            className="min-h-0 [&>*+*]:mt-1.5"
                             onCheckedChange={onDescriptionChange}
                         />
                     </div>
