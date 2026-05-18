@@ -64,6 +64,9 @@ export function NoteCard({
                 {description && (
                     <div className="text-xs mt-1 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,black_70%,transparent)]">
                         <LightEditor
+                            // Force remount when Yjs propagates a new description — LightEditor
+                            // reads `content` once at init. Safe here because this instance is
+                            // always read-only; don't copy this idiom into an editable consumer.
                             key={description}
                             content={description}
                             editable={false}
