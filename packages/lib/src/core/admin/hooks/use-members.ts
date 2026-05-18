@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { OrgMember } from '@workspace/lib/types/admin';
 import { toast } from 'sonner';
 import { settingsApi } from '../../api';
@@ -48,7 +48,7 @@ export function useUpdateMemberRole(organizationId?: string) {
                 role,
                 organizationId,
             });
-            if (error) throw new Error(String(error));
+            if (error) throw new Error(error.message ?? 'Failed to update member role');
             // Keep user.role in sync so useIsAdmin works without an API call
             await authClient.admin.setRole({ userId, role: role === 'member' ? 'user' : 'admin' });
             return data;
@@ -68,7 +68,7 @@ export function useRemoveMember(organizationId?: string) {
                 memberIdOrEmail,
                 organizationId,
             });
-            if (error) throw new Error(String(error));
+            if (error) throw new Error(error.message ?? 'Failed to remove member');
             return data;
         },
         onSuccess: () => {
@@ -87,10 +87,17 @@ export function useDeleteUser(organizationId?: string) {
             return response.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.members(organizationId ?? '') });
+            invalidateAdminUsers(queryClient);
+            if (organizationId) {
+                queryClient.invalidateQueries({ queryKey: adminKeys.members(organizationId) });
+            }
         },
         onError: onMutationError,
     });
+}
+
+export function invalidateAdminUsers(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({ queryKey: adminKeys.users() });
 }
 
 export function useResetUserPassword() {
@@ -100,7 +107,7 @@ export function useResetUserPassword() {
                 userId,
                 newPassword,
             });
-            if (error) throw new Error(String(error));
+            if (error) throw new Error(error.message ?? 'Failed to reset password');
         },
         onSuccess: () => {
             toast.success('Password has been reset');
@@ -129,7 +136,7 @@ export function useCreateUser(organizationId?: string) {
                 password,
                 role,
             });
-            if (error) throw new Error(String(error));
+            if (error) throw new Error(error.message ?? 'Failed to create user');
             return data;
         },
         onSuccess: () => {

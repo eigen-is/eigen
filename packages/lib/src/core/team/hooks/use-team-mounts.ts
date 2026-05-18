@@ -4,13 +4,9 @@ import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import { AppError, onMutationError } from '../../api-error';
 import { teamKeys } from './use-team-settings';
 
-export const teamMountKeys = {
-    all: (teamId: string) => [...teamKeys.all, 'mounts', teamId] as const,
-};
-
 export function useTeamMounts(teamId: string) {
     return useQuery({
-        queryKey: teamMountKeys.all(teamId),
+        queryKey: teamKeys.mounts(teamId),
         queryFn: async () => {
             const res = await teamApi({ ownerId: teamOwnerId(teamId) }).mounts.get();
             return res.data || {};
@@ -65,5 +61,5 @@ export function useUpdateTeamMount(teamId: string) {
 }
 
 export function invalidateTeamMounts(queryClient: QueryClient, teamId: string): void {
-    queryClient.invalidateQueries({ queryKey: teamMountKeys.all(teamId) });
+    queryClient.invalidateQueries({ queryKey: teamKeys.mounts(teamId) });
 }

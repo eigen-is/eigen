@@ -339,13 +339,13 @@ Inconsistent with every other unauthorized `SharedDrive` method (e.g. `restorePa
 
 All 7 settings routes (`/settings/server`, `/settings/s3config`, etc.) at `apps/api/src/routes/settings.ts:19, 28, 108, 117, 130, 147, 160` use only `requireAdmin(user.id)`.
 
-**Action**: Either (a) prefix every settings route with `/settings/:ownerId/...` and add `requireSelf` + `requireAdmin`, or (b) document the "admin/server-wide route" carve-out in AGENTS.md. Lean toward (b).
+**Action**: Pick option (b) — `settings.ts`, `setup.ts`, and `public.ts` are **home-independent routes** (server-wide config, not owned by a Home). They should NOT carry `:ownerId`. Document this carve-out in AGENTS.md when §4 lands: the `:ownerId` second-segment rule applies to Home-scoped resources only; server-wide admin/setup/public endpoints are exempt.
 
 ### 4.5 `waitlist.ts` declares `:ownerId` but never reads it — high
 
 - `apps/api/src/routes/waitlist.ts:20-76` — `:ownerId` is purely cargo-cult; only `requireAdmin(user.id)` is checked.
 
-URL contract is a lie. Either remove `:ownerId` or add `requireSelf(params.ownerId, user.id)`.
+**Action**: Remove `:ownerId` — waitlist is server-wide (same carve-out as §4.4). The URL contract is currently a lie; the route is home-independent.
 
 ### 4.6 `chat.editMessage` returns `{success:false}` with HTTP 200 — medium-high
 

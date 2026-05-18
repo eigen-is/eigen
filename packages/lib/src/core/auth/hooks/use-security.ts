@@ -30,13 +30,21 @@ export function useInitialize2FA() {
 
 export function useVerifyTotp() {
     return useMutation({
-        mutationFn: async (code: string) => {
-            const result = await authClient.twoFactor.verifyTotp({ code });
+        mutationFn: async (input: { code: string; trustDevice?: boolean }) => {
+            const result = await authClient.twoFactor.verifyTotp(input);
             if (result.error) throw new Error(result.error.message ?? 'Failed to verify verification code');
             return result.data;
         },
-        onSuccess: () => {
-            toast.success('Two-factor authentication enabled');
+        onError: onMutationError,
+    });
+}
+
+export function useVerifyBackupCode() {
+    return useMutation({
+        mutationFn: async (input: { code: string; trustDevice?: boolean }) => {
+            const result = await authClient.twoFactor.verifyBackupCode(input);
+            if (result.error) throw new Error(result.error.message ?? 'Invalid backup code');
+            return result.data;
         },
         onError: onMutationError,
     });

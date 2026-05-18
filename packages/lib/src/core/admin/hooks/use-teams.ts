@@ -42,7 +42,7 @@ export function useCreateTeam(organizationId?: string) {
                 name,
                 organizationId,
             });
-            if (error) throw new Error(String(error));
+            if (error) throw new Error(error.message ?? 'Failed to create team');
             return data;
         },
         onSuccess: () => {
@@ -61,7 +61,7 @@ export function useRemoveTeam(organizationId?: string) {
                 teamId,
                 organizationId,
             });
-            if (error) throw new Error(String(error));
+            if (error) throw new Error(error.message ?? 'Failed to remove team');
             return data;
         },
         onSuccess: () => {
@@ -80,7 +80,7 @@ export function useAddTeamMember() {
                 teamId,
                 userId,
             });
-            if (error) throw new Error(String(error));
+            if (error) throw new Error(error.message ?? 'Failed to add team member');
             return data;
         },
         onSuccess: (_data, variables) => {
@@ -99,7 +99,7 @@ export function useRemoveTeamMember() {
                 teamId,
                 userId,
             });
-            if (error) throw new Error(String(error));
+            if (error) throw new Error(error.message ?? 'Failed to remove team member');
             return data;
         },
         onSuccess: (_data, variables) => {
@@ -118,7 +118,7 @@ export function useUpdateTeam(organizationId?: string) {
                 teamId,
                 data: { name },
             });
-            if (error) throw new Error(String(error));
+            if (error) throw new Error(error.message ?? 'Failed to update team');
             return data;
         },
         onSuccess: () => {

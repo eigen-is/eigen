@@ -22,6 +22,7 @@ export function useNotifications(ownerId: string, enabled: boolean = true) {
             return (response.data ?? []).map(parseNotification);
         },
         enabled: !!ownerId && enabled,
+        staleTime: 60_000,
     });
 }
 
@@ -33,6 +34,7 @@ export function useUnreadNotificationCount(ownerId: string) {
             return response.data?.count ?? 0;
         },
         enabled: !!ownerId,
+        staleTime: 60_000,
     });
 }
 

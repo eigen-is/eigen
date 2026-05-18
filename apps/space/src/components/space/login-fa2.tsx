@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { getRouteApi } from '@tanstack/react-router';
-import { authClient } from '@workspace/lib/auth';
+import { useVerifyBackupCode, useVerifyTotp } from '@workspace/lib/auth';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -19,7 +19,6 @@ import { Bar } from '@workspace/ui/components/layout/braket/bar';
 import { Ket } from '@workspace/ui/components/layout/braket/ket';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
 import { z } from 'zod';
 
 const totpSchema = z.object({
@@ -38,7 +37,10 @@ export default function LoginFa2Page() {
     const { appName } = useApp();
     const { redirect } = route.useSearch();
     const [mode, setMode] = useState<'totp' | 'backup'>('totp');
-    const [isLoading, setIsLoading] = useState(false);
+
+    const verifyTotp = useVerifyTotp();
+    const verifyBackupCode = useVerifyBackupCode();
+    const isLoading = verifyTotp.isPending || verifyBackupCode.isPending;
 
     const totpForm = useForm<z.infer<typeof totpSchema>>({
         resolver: zodResolver(totpSchema),
@@ -50,38 +52,14 @@ export default function LoginFa2Page() {
         defaultValues: { code: '', trustDevice: false },
     });
 
-    async function handleVerify(
-        apiCall: () => Promise<{ data: unknown; error?: { message?: string } | null }>,
-        fallbackError: string,
-    ) {
-        try {
-            setIsLoading(true);
-            const result = await apiCall();
-            if (result.data) {
-                toast.success('Verification successful');
-                window.location.href = redirect || '/';
-            } else {
-                toast.error(result.error?.message || fallbackError);
-            }
-        } catch {
-            toast.error('Verification failed');
-        } finally {
-            setIsLoading(false);
-        }
-    }
-
     async function onTotpSubmit(values: z.infer<typeof totpSchema>) {
-        await handleVerify(
-            () => authClient.twoFactor.verifyTotp({ code: values.code, trustDevice: values.trustDevice }),
-            'Invalid verification code',
-        );
+        const data = await verifyTotp.mutateAsync({ code: values.code, trustDevice: values.trustDevice });
+        if (data) window.location.href = redirect || '/';
     }
 
     async function onBackupSubmit(values: z.infer<typeof backupSchema>) {
-        await handleVerify(
-            () => authClient.twoFactor.verifyBackupCode({ code: values.code, trustDevice: values.trustDevice }),
-            'Invalid backup code',
-        );
+        const data = await verifyBackupCode.mutateAsync({ code: values.code, trustDevice: values.trustDevice });
+        if (data) window.location.href = redirect || '/';
     }
 
     return (
