@@ -5,7 +5,7 @@ import { DangerZone } from '@workspace/ui/components/layout/delete/danger-zone';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
+import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { cn } from '@workspace/ui/lib/utils';
 import { Trash2 } from 'lucide-react';
@@ -110,13 +110,7 @@ type AdminUserDetailProps = {
 export function AdminUserDetail({ user, onDelete }: AdminUserDetailProps) {
     return (
         <div className="p-6 space-y-6">
-            <div className="flex items-start gap-4">
-                <UserAvatar email={user.email} imageUrl={user.image ?? undefined} size="lg" />
-                <div className="min-w-0 flex-1">
-                    <h2 className="text-xl font-semibold truncate">{user.name}</h2>
-                    <p className="text-muted-foreground truncate">{user.email}</p>
-                </div>
-            </div>
+            <UserDetailHero name={user.name} email={user.email} imageUrl={user.image} subtitle={user.email} />
 
             <div className="space-y-4">
                 {user.role && (

@@ -7,7 +7,7 @@ import { Button } from '@workspace/ui/components/button';
 import { DangerZone } from '@workspace/ui/components/layout/delete/danger-zone';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
-import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
+import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { KeyRound, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -89,13 +89,7 @@ export function MemberDetail({ member, organizationId }: MemberDetailProps) {
 
     return (
         <div className="p-6 space-y-6">
-            <div className="flex items-start gap-4">
-                <UserAvatar email={member.email} imageUrl={member.image ?? undefined} size="lg" />
-                <div className="min-w-0 flex-1">
-                    <h2 className="text-xl font-semibold truncate">{member.name}</h2>
-                    <p className="text-muted-foreground truncate">{member.email}</p>
-                </div>
-            </div>
+            <UserDetailHero name={member.name} email={member.email} imageUrl={member.image} subtitle={member.email} />
 
             <div className="space-y-4">
                 <div>

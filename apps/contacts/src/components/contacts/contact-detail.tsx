@@ -4,7 +4,7 @@ import { useLabels } from '@workspace/lib/contacts';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
-import { Toolbar, TooltipButton, UserAvatar } from '@workspace/ui';
+import { Toolbar, TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -15,6 +15,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { EigenLoader } from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
+import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import { Building, Calendar, Mail, MapPin, MoreVertical, Pencil, Phone, Printer, Trash2 } from 'lucide-react';
@@ -128,30 +129,18 @@ export function ContactDetail({ contact }: ContactDetailProps) {
         <div className="h-full flex flex-col overflow-hidden" data-document="contact-detail">
             <div className="flex-1 overflow-auto p-6">
                 <div className="flex flex-col md:flex-row gap-8">
-                    <div className="flex flex-col items-center gap-4 w-50">
-                        <div className="h-40 w-40">
-                            <UserAvatar
-                                name={`${contact.firstName} ${contact.lastName}`}
-                                email={contact.email?.[0]}
-                                imageUrl={contact.avatar}
-                                className="h-full w-full"
-                                size="lg"
-                            />
-                        </div>
-
-                        <div className="text-center">
-                            <h2 className="text-2xl font-bold">
-                                {contact.firstName} {contact.lastName}
-                            </h2>
-                            {contact.jobTitle && contact.company && (
-                                <p className="text-muted-foreground">
-                                    {contact.jobTitle} at {contact.company}
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 justify-center">
-                            {contactLabels && contactLabels.length > 0 && !labelsLoading && !labelsError ? (
+                    <UserDetailHero
+                        layout="profile"
+                        name={`${contact.firstName} ${contact.lastName}`}
+                        email={contact.email?.[0]}
+                        imageUrl={contact.avatar}
+                        subtitle={
+                            contact.jobTitle && contact.company
+                                ? `${contact.jobTitle} at ${contact.company}`
+                                : undefined
+                        }
+                        badges={
+                            contactLabels && contactLabels.length > 0 && !labelsLoading && !labelsError ? (
                                 contactLabels.map((label: Label) => (
                                     <Badge
                                         key={label.id}
@@ -165,9 +154,9 @@ export function ContactDetail({ contact }: ContactDetailProps) {
                                 <EigenLoader />
                             ) : labelsError ? (
                                 <p className="text-sm text-destructive">Error loading labels</p>
-                            ) : null}
-                        </div>
-                    </div>
+                            ) : null
+                        }
+                    />
 
                     <div className="flex-1 space-y-6">
                         <div className="space-y-4">
