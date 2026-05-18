@@ -43,7 +43,7 @@ describe('document/slides', () => {
 
             const slideYMap = new Y.Map();
             slideYMap.set('id', 'slide-1');
-            slideYMap.set('backgroundColor', '#112233');
+            slideYMap.set('background', { type: 'solid', color: '#112233' });
             const objectIds = new Y.Array();
             objectIds.push(['obj-1']);
             slideYMap.set('objectIds', objectIds);
@@ -59,7 +59,7 @@ describe('document/slides', () => {
         expect(content.deck.slides['slide-1']).toMatchObject({
             id: 'slide-1',
             objectIds: ['obj-1'],
-            backgroundColor: '#112233',
+            background: { type: 'solid', color: '#112233' },
         });
         expect(content.deck.objects['obj-1']).toMatchObject({
             id: 'obj-1',

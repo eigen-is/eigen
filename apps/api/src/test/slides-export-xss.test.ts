@@ -28,7 +28,7 @@ function makeText(overrides: Partial<TextObject>): TextObject {
         letterSpacing: 0,
         lineHeight: 1.2,
         highlightColor: '',
-        backgroundColor: '',
+        background: null,
         ...overrides,
     };
 }

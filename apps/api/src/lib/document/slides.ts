@@ -1,4 +1,5 @@
 import type { DeckData, SlideObject } from '@workspace/lib/slides';
+import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
@@ -34,7 +35,7 @@ const OBJECT_FIELDS = [
     'letterSpacing',
     'lineHeight',
     'highlightColor',
-    'backgroundColor',
+    'background',
     'mediaName',
     'objectFit',
     'commentCardIds',
@@ -74,11 +75,11 @@ export async function readSlidesContent(mount: Mount, drivePath: DrivePath): Pro
         const slideMap = slideMapValue as Y.Map<unknown>;
         const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
         const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
+        const bgRaw = slideMap.get('background');
         deck.slides[slideId] = {
             id: slideId,
             objectIds: objIds,
-            backgroundColor: (slideMap.get('backgroundColor') as string) || '#ffffff',
-            backgroundMediaName: (slideMap.get('backgroundMediaName') as string) || '',
+            background: bgRaw && typeof bgRaw === 'object' ? (bgRaw as BackgroundFill) : null,
         };
     }
 

@@ -53,7 +53,12 @@ export function renderSlideObjectHtml(
     }
 
     if (obj.type === 'text') {
-        if (obj.backgroundColor) styles.push(`background-color:${obj.backgroundColor}`);
+        if (obj.background?.type === 'solid') {
+            styles.push(`background-color:${obj.background.color}`);
+        } else if (obj.background?.type === 'gradient') {
+            const { from, to, angle } = obj.background;
+            styles.push(`background-image:linear-gradient(${angle}deg, ${from}, ${to})`);
+        }
         const vAlign = obj.verticalAlign || 'top';
         const alignItems = vAlign === 'center' ? 'center' : vAlign === 'bottom' ? 'flex-end' : 'flex-start';
 
@@ -106,15 +111,19 @@ export function renderSlideHtml(
         containerStyles.push('width:100%', 'aspect-ratio:16/9', 'container-type:size');
     }
 
-    if (slide.backgroundColor) containerStyles.push(`background-color:${slide.backgroundColor}`);
-
-    if (slide.backgroundMediaName) {
-        const bgSrc = resolveImgSrc(slide.backgroundMediaName);
+    const bg = slide.background;
+    if (bg?.type === 'solid') {
+        containerStyles.push(`background-color:${bg.color}`);
+    } else if (bg?.type === 'gradient') {
+        containerStyles.push(`background-image:linear-gradient(${bg.angle}deg, ${bg.from}, ${bg.to})`);
+    } else if (bg?.type === 'image' && bg.mediaName) {
+        const bgSrc = resolveImgSrc(bg.mediaName);
         if (bgSrc) {
             containerStyles.push(
                 `background-image:url('${escapeHtml(bgSrc)}')`,
-                'background-size:cover',
+                `background-size:${bg.fit}`,
                 'background-position:center',
+                'background-repeat:no-repeat',
             );
         }
     }
