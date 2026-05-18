@@ -1,4 +1,5 @@
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import type { BackgroundFill } from '@workspace/lib/types/background';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
@@ -89,7 +90,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
 
             const slideYMap = new Y.Map();
             slideYMap.set('id', slideId);
-            slideYMap.set('backgroundColor', '#e60076');
+            slideYMap.set('background', { type: 'solid', color: '#e60076' } satisfies BackgroundFill);
             const objectIds = new Y.Array();
             objectIds.push([objId]);
             slideYMap.set('objectIds', objectIds);
@@ -127,11 +128,11 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 const slideMap = slideMapValue as Y.Map<unknown>;
                 const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
                 const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
+                const bgRaw = slideMap.get('background');
                 newState.slides[slideId] = {
                     id: slideId,
                     objectIds: objIds,
-                    backgroundColor: (slideMap.get('backgroundColor') as string) || '#ffffff',
-                    backgroundMediaName: (slideMap.get('backgroundMediaName') as string) || '',
+                    background: bgRaw && typeof bgRaw === 'object' ? (bgRaw as BackgroundFill) : null,
                 };
             }
             for (const [objId, objMapValue] of objectsMap) {
@@ -171,7 +172,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         }
     }, [activeSlideId, deck.slideOrder]);
 
-    const addSlide = useCallback((backgroundColor = '#ffffff') => {
+    const addSlide = useCallback((background: BackgroundFill | null = { type: 'solid', color: '#ffffff' }) => {
         const doc = docRef.current;
         if (!doc) return;
         const slideId = `slide-${nanoid(6)}`;
@@ -180,7 +181,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const slideOrderArray = doc.getArray('slideOrder');
             const slideYMap = new Y.Map();
             slideYMap.set('id', slideId);
-            slideYMap.set('backgroundColor', backgroundColor);
+            slideYMap.set('background', background);
             slideYMap.set('objectIds', new Y.Array());
             slidesMap.set(slideId, slideYMap);
             slideOrderArray.push([slideId]);
@@ -247,8 +248,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
 
                 const slideYMap = new Y.Map();
                 slideYMap.set('id', newSlideId);
-                slideYMap.set('backgroundColor', slide.backgroundColor);
-                slideYMap.set('backgroundMediaName', slide.backgroundMediaName || '');
+                slideYMap.set('background', slide.background ? structuredClone(slide.background) : null);
                 const objIdsArr = new Y.Array();
                 objIdsArr.push(newObjIds);
                 slideYMap.set('objectIds', objIdsArr);
@@ -276,7 +276,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     );
 
     const updateSlideBackground = useCallback(
-        (slideId: string, color: string, applyTo: ApplyTo = 'this') => {
+        (slideId: string, background: BackgroundFill | null, applyTo: ApplyTo = 'this') => {
             const doc = docRef.current;
             if (!doc) return;
             const targetIds = getTargetSlideIds(slideId, applyTo);
@@ -284,24 +284,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 const slidesMap = doc.getMap('slides');
                 for (const id of targetIds) {
                     const slideMap = slidesMap.get(id) as Y.Map<unknown> | undefined;
-                    if (slideMap) slideMap.set('backgroundColor', color);
-                }
-            });
-        },
-        [getTargetSlideIds],
-    );
-
-    const updateSlideBackgroundImage = useCallback(
-        (slideId: string, mediaName: string, applyTo: ApplyTo = 'this') => {
-            const doc = docRef.current;
-            if (!doc) return;
-            const targetIds = getTargetSlideIds(slideId, applyTo);
-            doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                for (const id of targetIds) {
-                    const slideMap = slidesMap.get(id) as Y.Map<unknown> | undefined;
-                    if (!slideMap) continue;
-                    slideMap.set('backgroundMediaName', mediaName);
+                    if (slideMap) slideMap.set('background', background);
                 }
             });
         },
@@ -520,7 +503,6 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         deleteSlide,
         duplicateSlide,
         updateSlideBackground,
-        updateSlideBackgroundImage,
         addObject,
         updateObject,
         updateObjects,

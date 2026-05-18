@@ -2,6 +2,8 @@ import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { closestCenter, DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { getBackgroundStyle } from '@workspace/lib/background';
+import { useMediaResolver } from '@workspace/lib/drive';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -37,6 +39,7 @@ export function SlidePanel({
     mobile,
 }: SlidePanelProps) {
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+    const { resolveMediaUrl } = useMediaResolver();
 
     const slideList = deck.slideOrder.map((slideId, index) => {
         const slide = deck.slides[slideId];
@@ -100,7 +103,7 @@ export function SlidePanel({
                                     className="w-36 rounded border border-primary overflow-hidden shadow-lg"
                                     style={{
                                         aspectRatio: SLIDE_ASPECT_RATIO,
-                                        backgroundColor: deck.slides[dragActiveId].backgroundColor,
+                                        ...getBackgroundStyle(deck.slides[dragActiveId].background, resolveMediaUrl),
                                     }}
                                 />
                             ) : null}

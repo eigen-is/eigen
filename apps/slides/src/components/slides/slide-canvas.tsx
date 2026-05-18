@@ -1,3 +1,4 @@
+import { getBackgroundStyle } from '@workspace/lib/background';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -66,7 +67,6 @@ export function SlideCanvas({
     onCommentDelete,
 }: SlideCanvasProps) {
     const { resolveMediaUrl } = useMediaResolver();
-    const bgUrl = slide.backgroundMediaName ? resolveMediaUrl(slide.backgroundMediaName) : null;
     const canvasRef = useRef<HTMLDivElement>(null);
     const { vSnaps, hSnaps } = useSnapTargets(objects, selectedObjectIds);
 
@@ -184,10 +184,7 @@ export function SlideCanvas({
                     maxHeight: '100%',
                     maxWidth: '100%',
                     containerType: 'size',
-                    backgroundColor: slide.backgroundColor,
-                    ...(bgUrl
-                        ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                        : {}),
+                    ...getBackgroundStyle(slide.background, resolveMediaUrl),
                 }}
                 onMouseDown={handleCanvasMouseDown}
                 onDrop={handleDrop}
