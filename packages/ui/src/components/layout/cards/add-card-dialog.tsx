@@ -73,7 +73,6 @@ function AddCardDialogContent({
                         <LightEditor
                             content={initialDescription}
                             onChange={setDescription}
-                            toolbar="fixed"
                             taskList
                             placeholder={placeholderDescription}
                             containerClassName="relative flex flex-col"
