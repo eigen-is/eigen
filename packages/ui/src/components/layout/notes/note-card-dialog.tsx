@@ -57,6 +57,19 @@ export function NoteCardDialog({
     onDescriptionChange,
     children,
 }: NoteCardDialogProps) {
+    const handleDescriptionClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!canWrite || !onDescriptionChange) return;
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' || (target as HTMLInputElement).type !== 'checkbox') return;
+        const input = target as HTMLInputElement;
+        const li = input.closest('li[data-checked]');
+        if (!li) return;
+        li.setAttribute('data-checked', input.checked ? 'true' : 'false');
+        if (input.checked) input.setAttribute('checked', '');
+        else input.removeAttribute('checked');
+        onDescriptionChange(e.currentTarget.innerHTML);
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="md" className="max-h-[70vh] flex flex-col p-0 gap-0">
@@ -75,19 +88,7 @@ export function NoteCardDialog({
                         <div className="px-4 py-3 text-sm text-foreground">
                             <div
                                 className="eigen-prose"
-                                onClick={(e) => {
-                                    if (!canWrite || !onDescriptionChange) return;
-                                    const target = e.target as HTMLElement;
-                                    if (target.tagName !== 'INPUT' || (target as HTMLInputElement).type !== 'checkbox')
-                                        return;
-                                    const input = target as HTMLInputElement;
-                                    const li = input.closest('li[data-checked]');
-                                    if (!li) return;
-                                    li.setAttribute('data-checked', input.checked ? 'true' : 'false');
-                                    if (input.checked) input.setAttribute('checked', '');
-                                    else input.removeAttribute('checked');
-                                    onDescriptionChange(e.currentTarget.innerHTML);
-                                }}
+                                onClick={handleDescriptionClick}
                                 dangerouslySetInnerHTML={{ __html: description }}
                             />
                         </div>

@@ -405,8 +405,8 @@
 
 /* ===== Task lists — TipTap output ===== */
 /* Top-level rather than nested under .eigen-prose/.tiptap so static HTML
-   renderers (e.g. RichTextView on the sticky board thumbnail) get the styling
-   without needing the prose font/colour override. */
+   renderers (e.g. NoteCard description thumbnail) get the styling without
+   needing the prose font/colour override. */
 
 ul[data-type="taskList"] {
     list-style: none;
