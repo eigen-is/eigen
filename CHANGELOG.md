@@ -3,6 +3,78 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.0.3] - 2026-05-18
+
+Quality release. Video thumbnails, optimistic image insert across collab apps, unified comments
+model, redesigned drive properties panel, shared sidebar across drive + eigendoc apps, and a
+deep refactor of the sheets engine.
+
+### Added
+
+- **Drive** — server-side video thumbnail generation: uploaded `video/*` files get a 512px WebP
+  still (1s fast-seek, fallback 0s) and `duration` on `path.details`. ffmpeg ships in the docker
+  image; absence is graceful (no thumbnail, no errors)
+- **Docs, Slides, Sheets** — optimistic image placeholders: dropped/pasted images render
+  instantly from a local blob URL and swap to the server URL once upload settles; zombie
+  pending cleanup on tab crash
+- **Slides** — direction-based marquee selection (contain when dragged right, intersect when
+  dragged left), matching standard design-tool behaviour
+- **Slides** — hold Alt to scale objects from center; Shift to constrain aspect ratio during
+  resize
+- **Slides** — unified `BackgroundFill` type covers solid colors and gradients for slide and
+  text-block backgrounds; shared `BackgroundFillBlock` properties panel with brand-color default,
+  color carry-over between fill modes, and tabbed segmented control
+- **Slides** — gradient backgrounds in server-side PDF export (oklab interpolation; plain-color
+  fallback under WeasyPrint)
+- **Comments** — unified model across Docs, Slides, Sheets, Stickies via a shared `CommentCard`
+  Y.Doc card (`createdBy`, `createdAt`, `color`); drive-attachment flow on the paperclip button
+- **Drive** — redesigned properties panel: tabbed segmented control, unified item context menu
+  across list and preview rows, shared `DriveItemMenuItems`
+- **Drive + EigenDoc apps** — unified `AppSidebar` with per-app accent colors, uppercase section
+  labels, and cross-app navigation
+- **Toolbars** — shared `DocumentShareCluster` sharing badge and shared `UndoRedoButtons` /
+  `useYjsUndoState` used in Slides and Stickies
+- **Stickies** — newly added cards scroll into view; board cards have a minimum height matching
+  the production look
+- **Admin** — alphabetical letter dividers in members, guests, and orphans lists via shared
+  `AlphabeticalList`
+
+### Changed
+
+- **Sheets** — engine renamed from `fortune-sheet` to `sheet`; internal field names migrated
+  from `luckysheet_*` snake_case to camelCase (`ctx.sheets`, `filterRange`, `setEditingCell`,
+  etc.); jQuery snippets and upstream port stubs removed
+- **Sheets** — comments sidebar is now a flex sibling of the canvas, not a z-index overlay
+- **Drive** — frontend URLs are runtime-resolved via a split `EIGEN_STATIC_BIND` variable,
+  fixing deployments where the API and static frontend share an origin
+- **Drive previews** — document and slide thumbnails scale by intrinsic width; plaintext/code
+  thumbnails render on the A4 page layout
+- **Mail** — settings split into a dedicated section in the App settings sidebar
+- **Performance** — images decode off the main thread for smoother rendering across apps
+- **Slides** — drag-snapping skips `setState` when the snapped rect is unchanged
+
+### Fixed
+
+- **Drive** — pending blob URLs no longer swap out before the server URL preloads, eliminating
+  a flash of broken image
+- **Drive** — missing collab documents throw `ApiError(404)` instead of returning silently
+- **Drive** — internal metadata fields no longer leak into the details display
+- **Mail** — email-address validation rejects malformed addresses inside angle brackets
+  (e.g. `<foo@>`)
+- **Comments** — `CardDialog` no longer auto-opens after comment creation in Docs, Slides,
+  and Sheets
+- **Comments** — restored `h-[50vh]` on `CommentThread`; "View comment" actions consistently
+  use the `MessageSquare` icon; URL re-navigation and pre-sync card visibility fixed in Docs
+- **Comments** — `CHAT_COMMENT_INDEX_UPDATED` broadcast when a comment row is seeded, so
+  other clients see new comments without reload
+- **Slides** — `isSameFill` treats `null` and `undefined` as equivalent, preventing spurious
+  dirty-state on background fills
+- **Slides** — "Apply to" select and "Apply" button align in height in the background
+  properties panel
+- **Admin** — Shift+Arrow extends selection in the members list
+- **Chat** — edit and delete throw `ApiError` on failure instead of returning a success flag
+- **Home** — two-phase destruct avoids a double-close race on sheet teardown
+
 ## [0.0.2] - 2026-05-11
 
 Maintenance release. Email-notification flows, guest-access controls, XLSX import, security
