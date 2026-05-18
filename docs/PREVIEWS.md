@@ -69,8 +69,9 @@ only the source-to-bytes step differs.
   written to `paths.details` like images; `duration` (seconds, number) is also written.
 - **Gate**: `isVideoCandidate(mimeType)` — true for any `video/*` MIME
   (`apps/api/src/lib/preview/video-preview.ts`).
-- **Dependency**: system `ffmpeg` binary, shipped in the docker image. If absent, video
-  uploads still succeed — the thumbnail is just not generated. One boot log warns.
+- **Dependency**: system `ffmpeg` binary, shipped in the docker image. If absent,
+  `isFfmpegAvailable()` returns false on first use and `extractVideoFrame` returns null —
+  uploads still succeed, the thumbnail is just not generated.
 - **Out of scope** (v1): animated WebP, backfill of existing videos, S3-stored video
   regeneration (upload-time only).
 
