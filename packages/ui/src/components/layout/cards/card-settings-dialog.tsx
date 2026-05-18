@@ -68,7 +68,6 @@ function CardSettingsDialogContent({
                                 canonicalInitialDescription.current = html;
                                 setDescription(html);
                             }}
-                            toolbar="fixed"
                             taskList
                             containerClassName="relative flex flex-col"
                             className="min-h-[120px]"
