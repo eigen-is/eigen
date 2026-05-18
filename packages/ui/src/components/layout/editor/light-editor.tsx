@@ -123,15 +123,7 @@ export function LightEditor({
         editable,
         editorProps: {
             attributes: {
-                // Hide trailing empty paragraphs that TipTap may keep in read-only
-                // mode — they add visible whitespace below content (e.g. clicking
-                // above a task list in a viewer would surface an empty p).
-                class: cn(
-                    proseStyle && 'eigen-prose',
-                    'outline-none min-h-[100px]',
-                    !editable && '[&>p:empty:last-child]:hidden',
-                    className,
-                ),
+                class: cn(proseStyle && 'eigen-prose', 'outline-none min-h-[100px]', className),
                 ...(placeholder ? { 'data-placeholder': placeholder } : {}),
             },
         },
