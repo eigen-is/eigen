@@ -28,6 +28,7 @@ import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker'
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
+import { UndoRedoButtons } from '@workspace/ui/components/layout/toolbar/undo-redo-buttons';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
@@ -372,17 +373,11 @@ export const EditorToolbar = ({
                 )}
                 {canWrite && !isMobile && (
                     <div className="flex items-center">
-                        <TooltipButton
-                            icon={Undo}
-                            tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
-                            disabled={!canUndo}
-                            onClick={() => editor.chain().focus().undo().run()}
-                        />
-                        <TooltipButton
-                            icon={Redo}
-                            tooltipText={`Redo (${formatForDisplay('Mod+Y')})`}
-                            disabled={!canRedo}
-                            onClick={() => editor.chain().focus().redo().run()}
+                        <UndoRedoButtons
+                            canUndo={canUndo}
+                            canRedo={canRedo}
+                            onUndo={() => editor.chain().focus().undo().run()}
+                            onRedo={() => editor.chain().focus().redo().run()}
                         />
                     </div>
                 )}
