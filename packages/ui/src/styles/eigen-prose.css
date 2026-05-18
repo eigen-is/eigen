@@ -350,6 +350,14 @@
         padding-left: 0;
     }
 
+    /* Hide trailing empty paragraph in read-only editors. PM keeps an empty
+       <p><br class="ProseMirror-trailingBreak"></p> around for cursor placement;
+       in a viewer it's just whitespace — and it grows whenever the user clicks
+       in the editor surface. The :has() target matches that exact structure. */
+    [contenteditable="false"] > p:last-child:has(> br.ProseMirror-trailingBreak:only-child) {
+        display: none;
+    }
+
     ul[data-type="taskList"] li {
         display: flex;
         align-items: flex-start;
