@@ -2,6 +2,7 @@ import type { OrgMember } from '@workspace/lib/types/admin';
 import { EmptyState } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
+import { AlphabeticalList } from '@workspace/ui/components/layout/alphabetical-list';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
@@ -89,29 +90,39 @@ export function MembersList({ members, searchQuery, activeMemberId, onRowClick }
     }
 
     return (
-        <div className="flex-1 overflow-y-auto outline-none" ref={listRef} onKeyDown={handleKeyDown}>
-            {filteredMembers.map((member, index) => (
-                <div
-                    key={member.id}
-                    className={cn(
-                        'flex items-center gap-3 px-4 py-3 eigen-list-item',
-                        (activeMemberId === member.id || selectedIndex === index) && 'eigen-list-item-active',
-                        selection.isSelected(member.userId) && 'eigen-list-item-selected',
-                    )}
-                    onClick={(e) => {
-                        selection.handleItemClick(member.userId, e);
-                        if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                            onRowClick(member.id);
-                        }
-                    }}
-                    {...drag.getDragProps(member)}
-                >
-                    <UserItem name={member.name} email={member.email} className="flex-1 min-w-0" />
-                    <Badge variant={roleBadgeVariant[member.role] ?? 'outline'} className="shrink-0 text-xs">
-                        {member.role}
-                    </Badge>
-                </div>
-            ))}
+        <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} ref={listRef} onKeyDown={handleKeyDown}>
+            <AlphabeticalList
+                items={filteredMembers}
+                getKey={(m) => m.id}
+                getGroupKey={(m) => m.name.charAt(0).toUpperCase()}
+                renderItem={(member, flatIndex) => (
+                    <div
+                        className={cn(
+                            'flex items-center gap-3 px-6 py-3 eigen-list-item',
+                            (activeMemberId === member.id || selectedIndex === flatIndex) && 'eigen-list-item-active',
+                            selection.isSelected(member.userId) && 'eigen-list-item-selected',
+                        )}
+                        onClick={(e) => {
+                            selection.handleItemClick(member.userId, e);
+                            if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                                onRowClick(member.id);
+                            }
+                        }}
+                        {...drag.getDragProps(member)}
+                    >
+                        <UserItem
+                            name={member.name}
+                            email={member.email}
+                            label={
+                                <Badge variant={roleBadgeVariant[member.role] ?? 'outline'} className="text-xs">
+                                    {member.role}
+                                </Badge>
+                            }
+                            className="flex-1"
+                        />
+                    </div>
+                )}
+            />
         </div>
     );
 }
