@@ -78,14 +78,27 @@ export function LightEditor({
                       TaskList,
                       TaskItem.configure({
                           nested: true,
-                          onReadOnlyChecked: () => {
-                              // Return true to commit the toggle, then read post-commit HTML
-                              // on the next microtask via the refs (which always reflect
-                              // current values).
+                          onReadOnlyChecked: (node, checked) => {
+                              // TipTap's read-only flow only flips the DOM checkbox; it doesn't
+                              // touch ProseMirror state, so `getHTML()` keeps emitting the old
+                              // data-checked. Mirror the editable path (setNodeMarkup) ourselves
+                              // so the toggle persists and reaches Y.Doc through onCheckedChange.
+                              const e = editorRef.current;
+                              if (!e) return false;
+                              let pos = -1;
+                              e.state.doc.descendants((descendant, p) => {
+                                  if (descendant === node) {
+                                      pos = p;
+                                      return false;
+                                  }
+                                  return true;
+                              });
+                              if (pos === -1) return false;
+                              const tr = e.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked });
+                              e.view.dispatch(tr);
                               queueMicrotask(() => {
-                                  const e = editorRef.current;
                                   const cb = onCheckedChangeRef.current;
-                                  if (e && cb) cb(trimEmptyEdges(e.getHTML()));
+                                  if (cb) cb(trimEmptyEdges(e.getHTML()));
                               });
                               return true;
                           },
