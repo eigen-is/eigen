@@ -3,6 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { Pencil, Plus } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { StickyCard } from './card';
 import type { ColumnItem } from './types';
 
@@ -17,6 +18,7 @@ type ColumnProps = {
     onCardOpen?: (cardId: string) => void;
     onCardContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
     isMobile: boolean;
+    scrollToTopSignal?: number;
 };
 
 export function Column({
@@ -30,12 +32,19 @@ export function Column({
     onCardOpen,
     onCardContextMenu,
     isMobile,
+    scrollToTopSignal,
 }: ColumnProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: column.id,
         data: { type: 'column', column },
         disabled: !canWrite,
     });
+    const contentRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (scrollToTopSignal === undefined) return;
+        contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [scrollToTopSignal]);
 
     const cardIds = cards.map((c) => c.id);
     const columnWidth = isMobile ? 'w-[92vw] min-w-[92vw]' : 'w-[280px] min-w-[280px]';
@@ -76,6 +85,7 @@ export function Column({
             </div>
 
             <div
+                ref={contentRef}
                 className={`flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-3 border ${
                     isDropAnimating ? 'bg-accent/10' : 'bg-background'
                 }`}
