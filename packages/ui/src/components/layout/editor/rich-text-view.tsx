@@ -23,12 +23,5 @@ export function RichTextView({ html, onChange, className }: RichTextViewProps) {
         onChange(e.currentTarget.innerHTML);
     };
 
-    return (
-        <div
-            className={cn(className)}
-            onClick={handleClick}
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: TipTap-serialised HTML from Y.Doc
-            dangerouslySetInnerHTML={{ __html: html }}
-        />
-    );
+    return <div className={cn(className)} onClick={handleClick} dangerouslySetInnerHTML={{ __html: html }} />;
 }
