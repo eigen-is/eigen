@@ -42,6 +42,17 @@ function trimEmptyEdges(html: string): string {
     return html.replace(EMPTY_PARA_LEADING, '').replace(EMPTY_PARA_TRAILING, '');
 }
 
+// Shared input-style wrapper for embedding LightEditor inside a form — mimics
+// the shadcn Input border/focus-ring so the description field reads consistently
+// alongside Input/Label rows.
+export function EditorShell({ children }: { children: React.ReactNode }) {
+    return (
+        <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
+            {children}
+        </div>
+    );
+}
+
 export function LightEditor({
     content,
     onChange,
@@ -59,6 +70,8 @@ export function LightEditor({
     const editorRef = useRef<Editor | null>(null);
     const onCheckedChangeRef = useRef(onCheckedChange);
     onCheckedChangeRef.current = onCheckedChange;
+    const onReadyRef = useRef(onReady);
+    onReadyRef.current = onReady;
 
     const editor = useEditor({
         extensions: [
@@ -106,11 +119,19 @@ export function LightEditor({
                   ]
                 : []),
         ],
-        content,
+        content: trimEmptyEdges(content),
         editable,
         editorProps: {
             attributes: {
-                class: cn(proseStyle && 'eigen-prose', 'outline-none min-h-[100px]', className),
+                // Hide trailing empty paragraphs that TipTap may keep in read-only
+                // mode — they add visible whitespace below content (e.g. clicking
+                // above a task list in a viewer would surface an empty p).
+                class: cn(
+                    proseStyle && 'eigen-prose',
+                    'outline-none min-h-[100px]',
+                    !editable && '[&>p:empty:last-child]:hidden',
+                    className,
+                ),
                 ...(placeholder ? { 'data-placeholder': placeholder } : {}),
             },
         },
@@ -125,8 +146,8 @@ export function LightEditor({
     useEffect(() => {
         if (!editor || readyFiredRef.current) return;
         readyFiredRef.current = true;
-        onReady?.({ editor, html: trimEmptyEdges(editor.getHTML()), text: editor.getText().trim() });
-    }, [editor, onReady]);
+        onReadyRef.current?.({ editor, html: trimEmptyEdges(editor.getHTML()), text: editor.getText().trim() });
+    }, [editor]);
 
     if (!editor) return null;
 
