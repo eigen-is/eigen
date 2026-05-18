@@ -56,6 +56,24 @@ to avoid buffering the entire file upfront.
 - **Gate**: `isExiftoolCandidate()` — true for any `image/*` mime or known exiftool extensions
   (defined in `packages/lib/src/constants/preview.ts`)
 
+## Video Thumbnails
+
+Server-side still-frame extraction for `video/*` uploads. Same async pipeline as image
+thumbnails (`regenerateThumbnailAsync` → Bun Worker → `saveThumbnail` → re-emit SSE),
+only the source-to-bytes step differs.
+
+- **Frame selection**: fast-seek at 1.0s (`-ss 1` before `-i`), falls back to 0s if the
+  video is shorter. Single frame, encoded as JPEG via `image2pipe`, then resized through
+  sharp to the same 512px WebP as images.
+- **Probing**: `ffprobe` extracts `width`, `height`, and `duration`. Width/height are
+  written to `paths.details` like images; `duration` (seconds, number) is also written.
+- **Gate**: `isVideoCandidate(mimeType)` — true for any `video/*` MIME
+  (`apps/api/src/lib/preview/video-preview.ts`).
+- **Dependency**: system `ffmpeg` binary, shipped in the docker image. If absent, video
+  uploads still succeed — the thumbnail is just not generated. One boot log warns.
+- **Out of scope** (v1): animated WebP, backfill of existing videos, S3-stored video
+  regeneration (upload-time only).
+
 ## Frontend Overlay
 
 ```
@@ -101,6 +119,8 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `apps/api/src/lib/preview/text-preview.ts`                                | markdown-it + lowlight → HTML body + DOMPurify   |
 | `apps/api/src/lib/preview/exiftool-preview.ts`                            | Embedded JPEG extraction for RAW/PSD/AI/HEIC     |
 | `apps/api/src/lib/shared/thumbnails.ts`                                   | Unified image processing (sharp + heic-convert + exiftool) |
+| `apps/api/src/lib/shared/video-thumbnail.ts`                              | ffmpeg-based video frame extractor + `isFfmpegAvailable`   |
+| `apps/api/src/lib/preview/video-preview.ts`                               | `isVideoCandidate` MIME gate                               |
 | `packages/lib/src/constants/preview.ts`                                   | `TextPreviewMode`, `getTextPreviewMode()`, `isExiftoolExtension()` |
 | `apps/api/src/lib/drive/drive.ts`                                         | `getPreview()` + `getTextPreview()` methods      |
 | `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` routes              |
@@ -116,7 +136,6 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 
 - CSV table rendering (currently treated as plaintext)
 - Eigen native type previews (eigendoc, eigenslides, eigensheets, eigenstickies)
-- Video thumbnail frames (FFmpeg dependency)
 - DOCX/XLSX/PPTX preview
 
 ---
