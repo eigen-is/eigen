@@ -137,7 +137,13 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
   inheritance — does NOT extend Drive. `getSharedDrive()` returns `Drive | SharedDrive`; routes can only
   call methods present on both, so adding a public method to `Drive` without a matching `SharedDrive`
   wrapper is a TS error at the callsite. Own-drive routes get raw Drive (no ACL overhead); cross-owner
-  routes get SharedDrive (ACL-checked)
+  routes get SharedDrive (ACL-checked).
+  **Escape hatch**: a small number of routes (`/shared/by-me`, `/shared/with-me`) need owner-only Drive
+  methods that have no meaningful ACL semantics. They `requireSelf(params.ownerId, user.id)` first and
+  then call `getDrive(user)` to obtain raw Drive — bypassing the SharedDrive surface. The drive.ts
+  class doc explains which methods are non-route-callable (annotated `// Called by:` — invoked by peer
+  lib code like collab/chat/home-relay, not from routes). If you add a route that needs one of those,
+  add a SharedDrive wrapper first, don't reach for the escape hatch
 - **Routes** (`apps/api/src/routes/drive.ts`): Thin Elysia handlers that delegate via `getSharedDrive`
 
 ### Frontend
@@ -241,7 +247,11 @@ These patterns have caused bugs across multiple domains:
 - **Every authenticated route must include `:ownerId` as the second path segment** — `ownerId` identifies the Home
   that owns the resource. For personal data it equals `user.id`; for team data it's `team_{teamId}`. This consistent
   prefix enables future load-balancer sharding by ownerId (all requests for one Home on the same server). Routes must
-  validate that the caller has access to the specified ownerId (owns it or is a team member)
+  validate that the caller has access to the specified ownerId (owns it or is a team member).
+  **Carve-out for home-independent routes**: server-wide endpoints that don't operate on a Home — first-run setup
+  (`setup.ts`), server-wide admin config (`settings.ts`, `waitlist.ts`), and unauthenticated public surfaces
+  (`public.ts`) — must NOT carry `:ownerId`. They're protected by `requireAdmin(user.id)` or their own gate, not
+  by Home ownership
 - **Never call `getHome()` for another user's data** — all cross-home interactions (where one user's action
   touches another user's Home) must go through the relay in `home-relay.ts`: `sendToHome()` for push,
   `pull*()` for reads. `getHome()` is fine for the current request's own home. This is the sharding seam —

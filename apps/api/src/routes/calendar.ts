@@ -1,10 +1,17 @@
-import type { CalendarEventOccurrence, CalendarItem, FreeBusyBlock } from '@workspace/lib/types/calendar';
+import type { CalendarItem, FreeBusyBlock } from '@workspace/lib/types/calendar';
 import { Elysia, t } from 'elysia';
-import { resolveCalendar, resolveCalendarForEvents, syncTeamCalendars } from '../lib/calendar/get-calendar';
+import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
-import { pullCalendarShares } from '../lib/home/home-relay';
+import {
+    createEventAt,
+    deleteEventAt,
+    pullCalendarById,
+    pullCalendarShares,
+    pullEventsInRange,
+    updateEventAt,
+} from '../lib/home/home-relay';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 
@@ -79,8 +86,10 @@ const UpdateSharedCalendarSchema = t.Object({
 });
 
 // Calendar routes allow cross-owner access (shared calendars, team calendars).
-// Access control is enforced by resolveCalendar()/resolveCalendarForEvents() which check
-// ownership, team membership, or individual calendar shares.
+// Access control is enforced by resolveCalendar() (own/team calendars) or
+// checkCalendarAccess() (event-scoped, may include cross-user shared calendars).
+// Cross-user reads/writes never touch the foreign Calendar instance directly —
+// they go through the relay functions in `home-relay.ts` (the sharding seam).
 export const calendarRouter = new Elysia({ name: 'calendar' })
     .use(betterAuth)
 
@@ -127,9 +136,12 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     )
 
     // --- Events ---
+    // Multi-calendar event-range stays on `resolveCalendar` because it aggregates over every
+    // calendar the caller owns (or the team home owns). Cross-user shared events are not
+    // included here — they're fetched via the calId-scoped event-range below.
     .get(
         '/calendar/:ownerId/event-range/:from/:to',
-        async ({ params, user }): Promise<CalendarEventOccurrence[]> => {
+        async ({ params, user }) => {
             requireNonGuest(user);
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.getEventsInRange(new Date(params.from * 1000), new Date(params.to * 1000));
@@ -144,11 +156,12 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/calendars/:calId/event-range/:from/:to',
         async ({ params, user }) => {
             requireNonGuest(user);
-            const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
-            const events = calendar.getEventsInRange(
+            const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
+            const events = await pullEventsInRange(
+                params.ownerId,
+                params.calId,
                 new Date(params.from * 1000),
                 new Date(params.to * 1000),
-                params.calId,
             );
             if (permission === 'free-busy') {
                 return events.map(
@@ -172,9 +185,9 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/calendars/:calId/events',
         async ({ params, body, user }) => {
             requireNonGuest(user);
-            const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
+            const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            return calendar.createEvent(params.calId, { ...body, createByUserId: user.id }, user);
+            return createEventAt(params.ownerId, params.calId, { ...body, createByUserId: user.id }, user);
         },
         { body: CreateEventSchema, auth: true },
     )
@@ -183,9 +196,9 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/calendars/:calId/events/:id',
         async ({ params, body, user }) => {
             requireNonGuest(user);
-            const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
+            const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            return calendar.updateEvent(params.id, body, user);
+            return updateEventAt(params.ownerId, params.id, body, user);
         },
         { body: UpdateEventSchema, auth: true },
     )
@@ -194,9 +207,9 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/calendars/:calId/events/:id',
         async ({ params, user }) => {
             requireNonGuest(user);
-            const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
+            const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            calendar.deleteEvent(params.id, user);
+            await deleteEventAt(params.ownerId, params.id, user);
             return { success: true };
         },
         { auth: true },
@@ -227,8 +240,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/calendars/:calId/access',
         async ({ params, user }) => {
             requireNonGuest(user);
-            const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
-            const calData = calendar.getCalendarById(params.calId);
+            const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
+            const calData = await pullCalendarById(params.ownerId, params.calId);
             if (!calData) throw new ApiError(404, 'Calendar not found');
             return { ownerUserId: params.ownerId, shares: permission === 'write' ? calData.shares || [] : [] };
         },

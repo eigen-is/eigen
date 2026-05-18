@@ -6,7 +6,6 @@ import {
     useResendWaitlistInvite,
     useWaitlistEntries,
 } from '@workspace/lib/admin';
-import { useAuth } from '@workspace/lib/auth';
 import { formatDateTime, formatTimeAgo } from '@workspace/lib/date';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { EmptyState, LoadingState } from '@workspace/ui';
@@ -37,20 +36,18 @@ export const Route = createFileRoute('/_auth/waitlist')({
 const TABS = ['pending', 'invited', 'registered', 'rejected'] as const;
 
 function WaitlistRoute() {
-    const { user } = useAuth();
-    const ownerId = user!.id;
     const { entryId, tab } = Route.useSearch();
     const activeTab = tab ?? 'pending';
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
     const [showDelete, setShowDelete] = useState(false);
 
-    const { data: entries = [], isLoading } = useWaitlistEntries(ownerId, activeTab);
+    const { data: entries = [], isLoading } = useWaitlistEntries(activeTab);
 
-    const accept = useAcceptWaitlistEntry(ownerId);
-    const reject = useRejectWaitlistEntry(ownerId);
-    const resend = useResendWaitlistInvite(ownerId);
-    const remove = useDeleteWaitlistEntry(ownerId);
+    const accept = useAcceptWaitlistEntry();
+    const reject = useRejectWaitlistEntry();
+    const resend = useResendWaitlistInvite();
+    const remove = useDeleteWaitlistEntry();
 
     const filtered = entries.filter(
         (e) =>

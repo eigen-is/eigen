@@ -10,11 +10,17 @@
 // server (or enqueues a message), and pull functions become remote API calls.
 
 import * as path from 'node:path';
-import type { Attendee, CalendarEvent, CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
+import type {
+    Attendee,
+    CalendarEvent,
+    CalendarEventOccurrence,
+    CalendarItem,
+    CalendarShare,
+} from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import type { InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/calendar';
+import type { Calendar, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/calendar';
 import { getAvatarsDir } from '../config/paths';
 import type { PersistInput } from '../notification-center/notification-center';
 import type { User } from '../user';
@@ -117,6 +123,50 @@ export async function pullCalendarShares(
 ): Promise<{ calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[]> {
     const home = await getHome(ownerUserId);
     return home.calendar.getSharedWith(email, teamIds);
+}
+
+// Calendar event seam — every read/write on another user's calendar routes through these.
+// In a sharded deployment, only this module changes: getHome() becomes an RPC to ownerId's
+// server. The `user` argument is the actor (for SSE/audit); same-server today, serialized
+// across the wire in a sharded future.
+export async function pullEventsInRange(
+    ownerUserId: string,
+    calendarId: string,
+    from: Date,
+    to: Date,
+): Promise<CalendarEventOccurrence[]> {
+    const home = await getHome(ownerUserId);
+    return home.calendar.getEventsInRange(from, to, calendarId);
+}
+
+export async function pullCalendarById(ownerUserId: string, calendarId: string): Promise<CalendarItem | null> {
+    const home = await getHome(ownerUserId);
+    return home.calendar.getCalendarById(calendarId);
+}
+
+export async function createEventAt(
+    ownerUserId: string,
+    calendarId: string,
+    input: Parameters<Calendar['createEvent']>[1],
+    user: User,
+): Promise<CalendarEvent> {
+    const home = await getHome(ownerUserId);
+    return home.calendar.createEvent(calendarId, input, user);
+}
+
+export async function updateEventAt(
+    ownerUserId: string,
+    eventId: string,
+    input: Parameters<Calendar['updateEvent']>[1],
+    user: User,
+): Promise<CalendarEvent> {
+    const home = await getHome(ownerUserId);
+    return home.calendar.updateEvent(eventId, input, user);
+}
+
+export async function deleteEventAt(ownerUserId: string, eventId: string, user: User): Promise<void> {
+    const home = await getHome(ownerUserId);
+    await home.calendar.deleteEvent(eventId, user);
 }
 
 export async function pullPendingInvitations(ownerUserId: string, attendeeEmail: string): Promise<CalendarEvent[]> {
