@@ -18,7 +18,7 @@ import {
     Palette,
     Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { PropertySection } from './properties-panel';
 
 type FillType = BackgroundFill['type'];
@@ -302,7 +302,7 @@ function ImageBody({
     );
 }
 
-function FitButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function FitButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
     return (
         <button
             type="button"
