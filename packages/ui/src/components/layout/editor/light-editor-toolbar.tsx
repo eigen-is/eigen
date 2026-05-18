@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/react';
-import { Bold, Italic, Link, List, ListOrdered, Quote } from 'lucide-react';
+import { Bold, Italic, Link, List, ListChecks, ListOrdered, Quote } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { cn } from '../../../lib/utils';
 
@@ -66,6 +66,14 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
                 title="Numbered list"
             />
+            {editor.schema.nodes.taskList && (
+                <ToolbarButton
+                    icon={ListChecks}
+                    isActive={editor.isActive('taskList')}
+                    onClick={() => editor.chain().focus().toggleTaskList().run()}
+                    title="Checklist"
+                />
+            )}
             <ToolbarButton
                 icon={Quote}
                 isActive={editor.isActive('blockquote')}
