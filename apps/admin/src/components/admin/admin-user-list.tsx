@@ -1,5 +1,6 @@
 import { formatDate } from '@workspace/lib/date';
 import { Badge } from '@workspace/ui/components/badge';
+import { AlphabeticalList } from '@workspace/ui/components/layout/alphabetical-list';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { DangerZone } from '@workspace/ui/components/layout/delete/danger-zone';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
@@ -60,23 +61,33 @@ export function AdminUserList({ users, searchQuery, activeUserId, onRowClick, em
 
     return (
         <div className="flex-1 overflow-y-auto">
-            {filtered.map((user) => (
-                <div
-                    key={user.id}
-                    className={cn(
-                        'flex items-center gap-3 px-4 py-3 eigen-list-item',
-                        activeUserId === user.id && 'eigen-list-item-active',
-                    )}
-                    onClick={() => onRowClick(user.id)}
-                >
-                    <UserItem name={user.name} email={user.email} className="flex-1 min-w-0" />
-                    {user.role && (
-                        <Badge variant="outline" className="shrink-0 text-xs">
-                            {user.role}
-                        </Badge>
-                    )}
-                </div>
-            ))}
+            <AlphabeticalList
+                items={filtered}
+                getKey={(u) => u.id}
+                getGroupKey={(u) => u.name.charAt(0).toUpperCase()}
+                renderItem={(user) => (
+                    <div
+                        className={cn(
+                            'flex items-center gap-3 px-6 py-3 eigen-list-item',
+                            activeUserId === user.id && 'eigen-list-item-active',
+                        )}
+                        onClick={() => onRowClick(user.id)}
+                    >
+                        <UserItem
+                            name={user.name}
+                            email={user.email}
+                            label={
+                                user.role && (
+                                    <Badge variant="outline" className="text-xs">
+                                        {user.role}
+                                    </Badge>
+                                )
+                            }
+                            className="flex-1"
+                        />
+                    </div>
+                )}
+            />
         </div>
     );
 }
