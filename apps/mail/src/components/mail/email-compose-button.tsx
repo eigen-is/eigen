@@ -1,5 +1,5 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
-import { Button } from '@workspace/ui/components/button';
+import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { MailPlus } from 'lucide-react';
 
 // Import route to get correct path information
@@ -31,15 +31,5 @@ export function EmailComposeButton({ condensed }: EmailComposeButtonProps) {
         });
     };
 
-    return (
-        <Button
-            variant="default"
-            size={condensed ? 'icon' : 'default'}
-            className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-            onClick={handleComposeClick}
-        >
-            <MailPlus className="h-4 w-4" />
-            {!condensed && <span>Compose</span>}
-        </Button>
-    );
+    return <SidebarPrimaryButton icon={MailPlus} label="Compose" condensed={condensed} onClick={handleComposeClick} />;
 }

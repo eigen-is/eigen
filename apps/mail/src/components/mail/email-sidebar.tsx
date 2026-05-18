@@ -150,9 +150,7 @@ export function EmailSidebar({
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName="mail" onClose={onClose} />}
 
-            <div className="px-3 py-2">
-                <EmailComposeButton condensed={condensed} />
-            </div>
+            <EmailComposeButton condensed={condensed} />
 
             <SidebarSection condensed={condensed}>
                 {isLoading ? (

@@ -6,10 +6,10 @@ import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
@@ -113,17 +113,12 @@ export function ChatSidebar({
             {isMobile && <SidebarHeader appName="chat" onClose={onClose} />}
 
             {!isGuest && (
-                <div className="px-3 py-2">
-                    <Button
-                        variant="default"
-                        size={condensed ? 'icon' : 'default'}
-                        className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                        onClick={() => setCreateChatOpen(true)}
-                    >
-                        <Plus className="h-4 w-4" />
-                        {!condensed && <span>New chat</span>}
-                    </Button>
-                </div>
+                <SidebarPrimaryButton
+                    icon={Plus}
+                    label="New chat"
+                    condensed={condensed}
+                    onClick={() => setCreateChatOpen(true)}
+                />
             )}
 
             {isLoading || !chats ? (
