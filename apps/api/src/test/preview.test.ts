@@ -223,14 +223,14 @@ describe('generateImagePreview', () => {
 });
 
 describe('isVideoCandidate', () => {
-    test('returns true for video MIME types', () => {
+    test('video/* MIME types are candidates', () => {
         expect(isVideoCandidate('video/mp4')).toBe(true);
         expect(isVideoCandidate('video/quicktime')).toBe(true);
         expect(isVideoCandidate('video/webm')).toBe(true);
         expect(isVideoCandidate('video/x-matroska')).toBe(true);
     });
 
-    test('returns false for non-video MIME types', () => {
+    test('non-video MIME types are not candidates', () => {
         expect(isVideoCandidate('image/png')).toBe(false);
         expect(isVideoCandidate('application/pdf')).toBe(false);
         expect(isVideoCandidate('text/plain')).toBe(false);
