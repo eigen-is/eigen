@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
+import { isVideoCandidate } from '../preview/video-preview';
 import type { StorageFile } from '../storage';
 
 type ImageSource = StorageFile | Buffer | string;
@@ -21,6 +22,7 @@ const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
 
 type ImageResult = ImageDimensions & {
     data: Buffer;
+    duration?: number;
 };
 
 export async function generateImagePreview(
@@ -31,7 +33,7 @@ export async function generateImagePreview(
     pathId: string,
     options?: ThumbnailOptions,
 ): Promise<ImageResult | null> {
-    if (!isExiftoolCandidate(mimeType, fileName)) return null;
+    if (!isExiftoolCandidate(mimeType, fileName) && !isVideoCandidate(mimeType)) return null;
 
     const opts = { ...DEFAULT_OPTIONS, ...options };
 
@@ -50,6 +52,8 @@ export async function generateImagePreview(
         // S3File — download to buffer, transfer zero-copy to worker
         resolvedSource = await source.arrayBuffer();
     }
+
+    fs.mkdirSync(tmpDir, { recursive: true });
 
     return new Promise((resolve) => {
         const worker = new Worker(new URL('./thumbnail-worker', import.meta.url).href);
@@ -75,6 +79,7 @@ export async function generateImagePreview(
                 data: Buffer.from(event.data.data),
                 width: event.data.width,
                 height: event.data.height,
+                duration: event.data.duration,
             });
         };
 
