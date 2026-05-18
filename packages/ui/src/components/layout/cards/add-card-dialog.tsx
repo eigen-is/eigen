@@ -3,8 +3,8 @@ import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
-import { Textarea } from '@workspace/ui/components/textarea';
 import { useState } from 'react';
 
 type AddCardDialogProps = {
@@ -53,7 +53,7 @@ function AddCardDialogContent({
         if (!title.trim()) return;
         setIsSubmitting(true);
         try {
-            await onSave({ title: title.trim(), description: description.trim(), color });
+            await onSave({ title: title.trim(), description, color });
             onOpenChange(false);
         } finally {
             setIsSubmitting(false);
@@ -78,14 +78,18 @@ function AddCardDialogContent({
                     />
                 </div>
                 <div className="grid gap-2">
-                    <Label htmlFor="card-description">Description</Label>
-                    <Textarea
-                        id="card-description"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder={placeholderDescription}
-                        rows={3}
-                    />
+                    <Label>Description</Label>
+                    <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-1 focus-within:ring-ring">
+                        <LightEditor
+                            content={initialDescription}
+                            onChange={setDescription}
+                            toolbar="fixed"
+                            taskList
+                            placeholder={placeholderDescription}
+                            containerClassName="relative flex flex-col"
+                            className="min-h-[80px]"
+                        />
+                    </div>
                 </div>
                 <div className="grid gap-2">
                     <Label>Color</Label>
