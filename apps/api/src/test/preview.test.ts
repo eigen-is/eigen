@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { isExiftoolCandidate } from '../lib/preview/exiftool-preview';
+import { isVideoCandidate } from '../lib/preview/video-preview';
 import { generateImagePreview } from '../lib/shared/thumbnails';
 import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
@@ -218,6 +219,22 @@ describe('generateImagePreview', () => {
         const meta = await sharp(result!.data).metadata();
         expect(meta.width).toBeLessThanOrEqual(32);
         expect(meta.height).toBeLessThanOrEqual(32);
+    });
+});
+
+describe('isVideoCandidate', () => {
+    test('returns true for video MIME types', () => {
+        expect(isVideoCandidate('video/mp4')).toBe(true);
+        expect(isVideoCandidate('video/quicktime')).toBe(true);
+        expect(isVideoCandidate('video/webm')).toBe(true);
+        expect(isVideoCandidate('video/x-matroska')).toBe(true);
+    });
+
+    test('returns false for non-video MIME types', () => {
+        expect(isVideoCandidate('image/png')).toBe(false);
+        expect(isVideoCandidate('application/pdf')).toBe(false);
+        expect(isVideoCandidate('text/plain')).toBe(false);
+        expect(isVideoCandidate('')).toBe(false);
     });
 });
 
