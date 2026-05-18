@@ -10,7 +10,9 @@ Findings come from six parallel audit agents. Each finding includes file:line re
 
 **2026-05-17 — Quick wins all landed** (see commit hashes in the table below). Review pass also extended item 8 to `storage-type-picker.tsx` and item 10 to `setup-wizard.tsx`/`server-settings.tsx`, and fixed a real regression introduced by item 12 (`fix(home): two-phase destruct to avoid double-close race`).
 
-Still open: §1 cross-app UI extractions, §3.1–§3.3 hook-layer correctness pass, §4.1 calendar home-relay refactor (the only real architectural debt), §5.2–§5.5 / §5.8–§5.10 type cleanups, §6.1–§6.6 over-engineering judgment calls. The doc is otherwise still authoritative.
+**2026-05-18 — §1 cross-app UI extractions landed** on `feat/extract-shared-ui-compositions`. New shared pieces: `DangerZone`, `UserDetailHero`, `AlphabeticalList<T>`, `SidebarPrimaryButton`, `useYjsUndoState` + `UndoRedoButtons`, `DocumentShareCluster`, `ContactAddRow` + `parseContactInput()`. The pass also (a) extended §1.7 into the admin lists (members/guests/orphans now use `AlphabeticalList` too), (b) fixed a pre-existing shift-arrow selection bug in `members-list.tsx` exposed during the migration, and (c) trimmed §1.4 — extracted the parser + add-row but skipped the generic `ShareList<TPermission>` because calendar's and drive's permission models diverge too far for a single abstraction to pay off. §1.9 was dropped entirely (avatar stacks are visually distinct, color-checkboxes are different shapes, `AddMemberDialog` has only one callsite today).
+
+Still open: §3.1–§3.3 hook-layer correctness pass, §4.1 calendar home-relay refactor (the only real architectural debt), §5.2–§5.5 / §5.8–§5.10 type cleanups (including `AdminUser` / `TeamMember` local projection types that remain on files touched by the §1 PR), §6.1–§6.6 over-engineering judgment calls. The doc is otherwise still authoritative.
 
 ---
 
