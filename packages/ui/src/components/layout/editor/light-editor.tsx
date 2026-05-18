@@ -21,9 +21,6 @@ type LightEditorProps = {
     containerClassName?: string;
     // Read once at mount — useEditor doesn't re-initialise on prop change.
     taskList?: boolean;
-    // The canonical signal for read-only task-item checkbox toggles; onUpdate
-    // is not guaranteed when editable=false.
-    onCheckedChange?: (html: string) => void;
 };
 
 // TipTap leaves an empty paragraph at the end after Enter and sometimes at the
@@ -48,12 +45,7 @@ export function LightEditor({
     proseStyle = true,
     containerClassName = 'relative flex flex-col h-full',
     taskList = false,
-    onCheckedChange,
 }: LightEditorProps) {
-    const editorRef = useRef<Editor | null>(null);
-    const onCheckedChangeRef = useRef(onCheckedChange);
-    onCheckedChangeRef.current = onCheckedChange;
-
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
@@ -67,40 +59,9 @@ export function LightEditor({
                     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
                 },
             }),
-            ...(taskList
-                ? [
-                      TaskList,
-                      TaskItem.configure({
-                          nested: true,
-                          onReadOnlyChecked: (node, checked) => {
-                              // TipTap's read-only flow only flips the DOM checkbox; it doesn't
-                              // touch ProseMirror state, so `getHTML()` keeps emitting the old
-                              // data-checked. Mirror the editable path (setNodeMarkup) ourselves
-                              // so the toggle persists and reaches Y.Doc through onCheckedChange.
-                              const e = editorRef.current;
-                              if (!e) return false;
-                              let pos = -1;
-                              e.state.doc.descendants((descendant, p) => {
-                                  if (descendant === node) {
-                                      pos = p;
-                                      return false;
-                                  }
-                                  return true;
-                              });
-                              if (pos === -1) return false;
-                              const tr = e.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked });
-                              e.view.dispatch(tr);
-                              queueMicrotask(() => {
-                                  const cb = onCheckedChangeRef.current;
-                                  if (cb) cb(trimEmptyEdges(e.getHTML()));
-                              });
-                              return true;
-                          },
-                      }),
-                  ]
-                : []),
+            ...(taskList ? [TaskList, TaskItem.configure({ nested: true })] : []),
         ],
-        content: trimEmptyEdges(content),
+        content,
         editable,
         editorProps: {
             attributes: {
@@ -113,7 +74,6 @@ export function LightEditor({
             onChangeText?.(e.getText().trim());
         },
     });
-    editorRef.current = editor;
 
     const readyFiredRef = useRef(false);
     useEffect(() => {

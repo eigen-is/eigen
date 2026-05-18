@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../dialog';
 import { Separator } from '../../separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip';
-import { LightEditor } from '../editor/light-editor';
+import { RichTextView } from '../editor/rich-text-view';
 
 function IconAction({ icon: Icon, tooltip, onClick }: { icon?: LucideIcon; tooltip?: string; onClick?: () => void }) {
     if (!Icon || !tooltip || !onClick) return null;
@@ -74,19 +74,10 @@ export function NoteCardDialog({
 
                     {description && (
                         <div className="px-4 py-3 text-sm text-foreground">
-                            <LightEditor
-                                // Force remount when Yjs propagates a new description —
-                                // LightEditor reads `content` once at init. Safe here because
-                                // this instance is always read-only; don't copy this idiom
-                                // into an editable consumer.
-                                key={description}
-                                content={description}
-                                editable={false}
-                                toolbar="none"
-                                taskList
-                                containerClassName="relative"
-                                className="min-h-0"
-                                onCheckedChange={canWrite ? onDescriptionChange : undefined}
+                            <RichTextView
+                                html={description}
+                                onChange={canWrite ? onDescriptionChange : undefined}
+                                className="eigen-prose"
                             />
                         </div>
                     )}

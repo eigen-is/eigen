@@ -343,49 +343,6 @@
         opacity: 0.8;
     }
 
-    /* Task Lists */
-
-    ul[data-type="taskList"] {
-        list-style: none;
-        padding-left: 0;
-    }
-
-    ul[data-type="taskList"] li {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.5em;
-        margin: 0;
-    }
-
-    ul[data-type="taskList"] li > label {
-        display: flex;
-        align-items: center;
-        flex-shrink: 0;
-        margin-top: 0.3em;
-        user-select: none;
-    }
-
-    ul[data-type="taskList"] li > label input[type="checkbox"] {
-        width: 1em;
-        height: 1em;
-        accent-color: var(--color-primary);
-        cursor: pointer;
-    }
-
-    ul[data-type="taskList"] li > div {
-        flex: 1;
-        min-width: 0;
-    }
-
-    ul[data-type="taskList"] li[data-checked="true"] > div {
-        text-decoration: line-through;
-        color: var(--color-muted-foreground);
-    }
-
-    ul[data-type="taskList"] ul[data-type="taskList"] {
-        padding-left: 1.5em;
-    }
-
     /* Table editor */
 
     table .selectedCell {
@@ -446,14 +403,50 @@
     }
 }
 
-/* Hide trailing empty paragraph in read-only TipTap editors. PM emits an empty
-   <p><br class="ProseMirror-trailingBreak"></p> at the end of any textblock for
-   cursor visualization — in a viewer it shows up as whitespace, and a click in
-   the editor surface can expand it. Top-level rule (NOT nested inside the
-   .eigen-prose/.tiptap block) so .tiptap[contenteditable="false"] matches the
-   editor root itself, not a descendant of it. */
-.tiptap[contenteditable="false"] > p:last-child:has(> br.ProseMirror-trailingBreak:only-child) {
-    display: none;
+/* ===== Task lists — TipTap output ===== */
+/* Top-level rather than nested under .eigen-prose/.tiptap so static HTML
+   renderers (e.g. RichTextView on the sticky board thumbnail) get the styling
+   without needing the prose font/colour override. */
+
+ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0;
+}
+
+ul[data-type="taskList"] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+    margin: 0;
+}
+
+ul[data-type="taskList"] li > label {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-top: 0.3em;
+    user-select: none;
+}
+
+ul[data-type="taskList"] li > label input[type="checkbox"] {
+    width: 1em;
+    height: 1em;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+}
+
+ul[data-type="taskList"] li > div {
+    flex: 1;
+    min-width: 0;
+}
+
+ul[data-type="taskList"] li[data-checked="true"] > div {
+    text-decoration: line-through;
+    color: var(--color-muted-foreground);
+}
+
+ul[data-type="taskList"] ul[data-type="taskList"] {
+    padding-left: 1.5em;
 }
 
 /* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */
