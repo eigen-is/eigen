@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     libvips \
     libimage-exiftool-perl \
     weasyprint \
+    ffmpeg \
     make \
     g++ \
     curl \
