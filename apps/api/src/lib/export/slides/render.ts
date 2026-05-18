@@ -56,6 +56,9 @@ export function renderSlideObjectHtml(
         if (obj.background?.type === 'solid') {
             styles.push(`background-color:${obj.background.color}`);
         } else if (obj.background?.type === 'gradient') {
+            // Why: no `in oklab` — WeasyPrint (PDF export) drops gradients with
+            // color-interpolation-method as invalid. Live editor uses
+            // getBackgroundStyle in real browsers and emits oklab there.
             const { from, to, angle } = obj.background;
             styles.push(`background-image:linear-gradient(${angle}deg, ${from}, ${to})`);
         }
