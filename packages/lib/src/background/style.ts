@@ -34,9 +34,9 @@ export function getBackgroundStyle(
     }
 }
 
-export function isSameFill(a: BackgroundFill | null, b: BackgroundFill | null): boolean {
-    if (a === b) return true;
-    if (!a || !b || a.type !== b.type) return false;
+export function isSameFill(a: BackgroundFill | null | undefined, b: BackgroundFill | null | undefined): boolean {
+    if (!a || !b) return !a && !b;
+    if (a.type !== b.type) return false;
     if (a.type === 'solid' && b.type === 'solid') return a.color === b.color;
     if (a.type === 'gradient' && b.type === 'gradient')
         return a.from === b.from && a.to === b.to && a.angle === b.angle;
