@@ -6,7 +6,7 @@ import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useExportDocument, useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CountBadge, Toolbar, TooltipButton } from '@workspace/ui';
+import { Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import {
@@ -26,7 +26,7 @@ import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/dri
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
-import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { UndoRedoButtons } from '@workspace/ui/components/layout/toolbar/undo-redo-buttons';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
@@ -55,7 +55,6 @@ import {
     Link2Off,
     List,
     ListOrdered,
-    MessageSquare,
     Minus,
     Pilcrow,
     Printer,
@@ -69,7 +68,6 @@ import {
     Type,
     Underline,
     Undo,
-    UserRoundPlus,
 } from 'lucide-react';
 import { useState } from 'react';
 import * as Y from 'yjs';
@@ -709,22 +707,13 @@ export const EditorToolbar = ({
             )}
 
             <div className="flex items-center">
-                {onToggleCommentPanel && (
-                    <div className="relative">
-                        <TooltipButton
-                            icon={MessageSquare}
-                            tooltipText="Comments"
-                            onClick={onToggleCommentPanel}
-                            active={commentPanelOpen}
-                        />
-                        <CountBadge count={unresolvedCommentCount ?? 0} />
-                    </div>
-                )}
-                {canWrite ? (
-                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
-                ) : (
-                    <DocumentModeButton canWrite={canWrite} />
-                )}
+                <DocumentShareCluster
+                    canWrite={canWrite}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    onToggleCommentPanel={onToggleCommentPanel}
+                    commentPanelOpen={commentPanelOpen}
+                    unresolvedCommentCount={unresolvedCommentCount}
+                />
             </div>
             {onImageUpload && (
                 <DrivePickerWithUpload
