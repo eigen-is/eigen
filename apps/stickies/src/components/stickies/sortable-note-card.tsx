@@ -10,9 +10,17 @@ type SortableNoteCardProps = {
     canWrite?: boolean;
     onOpen?: (cardId: string) => void;
     onContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
+    onDescriptionChange?: (cardId: string, html: string) => void;
 };
 
-export function SortableNoteCard({ card, replyCount, canWrite = true, onOpen, onContextMenu }: SortableNoteCardProps) {
+export function SortableNoteCard({
+    card,
+    replyCount,
+    canWrite = true,
+    onOpen,
+    onContextMenu,
+    onDescriptionChange,
+}: SortableNoteCardProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
         data: { type: 'task', task: card },
@@ -39,6 +47,9 @@ export function SortableNoteCard({ card, replyCount, canWrite = true, onOpen, on
             description={card.description}
             color={card.color}
             replyCount={replyCount}
+            onDescriptionChange={
+                canWrite && onDescriptionChange ? (html) => onDescriptionChange(card.id, html) : undefined
+            }
             onPointerDownCapture={(e: React.PointerEvent) => {
                 pointerStart.current = { x: e.clientX, y: e.clientY };
             }}
