@@ -3,7 +3,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Card, CardContent } from '../../card';
 import { Progress } from '../../progress';
-import { LightEditor } from '../editor/light-editor';
+import { RichTextView } from '../editor/rich-text-view';
 
 // TipTap's TaskItem always emits `data-checked="true|false"` on each task-list
 // <li>; anchoring on `<li` prevents matching unrelated data-checked attributes.
@@ -65,19 +65,10 @@ export function NoteCard({
                 <span className={cn('line-clamp-2', statusIcon && 'pr-5')}>{title}</span>
                 {description && (
                     <div className="text-xs mt-1 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,black_70%,transparent)]">
-                        <LightEditor
-                            // Force remount when Yjs propagates a new description — LightEditor
-                            // reads `content` once at init. Safe here because this instance is
-                            // always read-only; don't copy this idiom into an editable consumer.
-                            key={description}
-                            content={description}
-                            editable={false}
-                            toolbar="none"
-                            taskList
-                            proseStyle={false}
-                            containerClassName="relative opacity-70"
-                            className="min-h-0 [&>*+*]:mt-1.5"
-                            onCheckedChange={onDescriptionChange}
+                        <RichTextView
+                            html={description}
+                            onChange={onDescriptionChange}
+                            className="opacity-70 [&>*+*]:mt-1.5"
                         />
                     </div>
                 )}
