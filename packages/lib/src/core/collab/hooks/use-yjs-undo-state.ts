@@ -29,7 +29,7 @@ export function useYjsUndoState(undoManager: Y.UndoManager | null, canWrite: boo
     return {
         canUndo,
         canRedo,
-        undo: () => undoManager?.undo?.(),
-        redo: () => undoManager?.redo?.(),
+        undo: () => undoManager?.undo(),
+        redo: () => undoManager?.redo(),
     };
 }
