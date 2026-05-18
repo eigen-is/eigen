@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useMemo } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 type AlphabeticalListProps<T> = {
     items: T[];
@@ -8,20 +8,18 @@ type AlphabeticalListProps<T> = {
 };
 
 export function AlphabeticalList<T>({ items, getKey, getGroupKey, renderItem }: AlphabeticalListProps<T>) {
-    const groups = useMemo(() => {
-        const dict: Record<string, T[]> = {};
-        for (const item of items) {
-            const k = getGroupKey(item);
-            if (!dict[k]) dict[k] = [];
-            dict[k].push(item);
-        }
-        return Object.entries(dict).sort((a, b) => a[0].localeCompare(b[0]));
-    }, [items, getGroupKey]);
+    const groups: Record<string, T[]> = {};
+    for (const item of items) {
+        const k = getGroupKey(item);
+        if (!groups[k]) groups[k] = [];
+        groups[k].push(item);
+    }
+    const sortedGroups = Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
 
     let flatIndex = 0;
     return (
         <>
-            {groups.map(([letter, group]) => (
+            {sortedGroups.map(([letter, group]) => (
                 <div key={letter} className="border-b last:border-b-0">
                     <div className="flex items-center px-6 py-2 bg-muted/50">
                         <h2 className="text-sm font-semibold">{letter}</h2>
