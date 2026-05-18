@@ -5,7 +5,7 @@ import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@wor
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
-import { validateEmailAddress } from '@workspace/lib/validation';
+import { parseContactInput } from '@workspace/lib/validation';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -19,9 +19,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
-import { ClipboardCopy, Link, Lock, Mail, Plus, Unlock, Users } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ContactAutosuggest } from '../contacts/contact-autosuggest';
+import { ClipboardCopy, Link, Lock, Mail, Unlock, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ContactAddRow } from '../contacts/contact-add-row';
 import type { ContactSuggestion } from '../contacts/types';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserItem } from '../user-item';
@@ -45,7 +45,6 @@ export function DriveAccessListEdit({
 }: DriveAccessListEditProps) {
     const [pendingChanges, setPendingChanges] = useState(false);
     const [newContactInput, setNewContactInput] = useState('');
-    const inputRef = useRef<HTMLInputElement>(null);
 
     const [directListOverride, setDirectListOverride] = useState<DirectAccessItem[] | undefined>();
 
@@ -99,32 +98,19 @@ export function DriveAccessListEdit({
 
     const processContactInput = useCallback(
         (value: string) => {
-            const emailMatch = value.match(/<(.+)>/);
-            let email: string;
-            let displayName: string;
+            const parsed = parseContactInput(value);
+            if (!parsed) return false;
+            const { email, displayName } = parsed;
 
-            if (emailMatch) {
-                email = emailMatch[1];
-                displayName = value.split('<')[0].trim();
-            } else {
-                const isEmail = validateEmailAddress(value);
-                if (isEmail) {
-                    email = value.trim().toLowerCase();
-                    displayName = email.split('@')[0];
-                } else {
-                    return false;
-                }
-            }
-
-            if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === email.toLowerCase())) {
+            if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === email)) {
                 return false;
             }
 
             const suggestion: ContactSuggestion = {
-                id: email.toLowerCase(),
-                email: email.toLowerCase(),
-                displayName: displayName,
-                allEmails: [email.toLowerCase()],
+                id: email,
+                email,
+                displayName,
+                allEmails: [email],
             };
 
             handleAddUser(suggestion);
@@ -225,29 +211,14 @@ export function DriveAccessListEdit({
     return (
         <div className={cn('flex flex-col min-h-0', className)}>
             <div className="shrink-0">
-                <div className="flex mt-2">
-                    <div className="flex-1 relative">
-                        <ContactAutosuggest
-                            id="new-contact"
-                            value={newContactInput}
-                            onChange={handleContactSelected}
-                            onlyInternalMails={false}
-                            excludeEmails={excludeEmails}
-                            placeholder="Enter email addresses"
-                            inputRef={inputRef}
-                            onSubmit={handleAddContactClick}
-                        />
-                    </div>
-                    <Button
-                        size="icon"
-                        variant="outline"
-                        className="ml-2"
-                        onClick={handleAddContactClick}
-                        disabled={!newContactInput}
-                    >
-                        <Plus className="h-4 w-4" />
-                    </Button>
-                </div>
+                <ContactAddRow
+                    id="new-contact"
+                    value={newContactInput}
+                    onChange={handleContactSelected}
+                    onSubmit={handleAddContactClick}
+                    excludeEmails={excludeEmails}
+                    className="mt-2"
+                />
             </div>
 
             <Separator className="my-4 shrink-0" />
