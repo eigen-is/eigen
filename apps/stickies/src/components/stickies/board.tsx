@@ -214,6 +214,7 @@ export function StickiesBoard({
                     title={card.title}
                     description={card.description}
                     color={card.color}
+                    replyCount={card.chatName ? messageCounts.get(card.chatName) : undefined}
                     className={isMobile ? 'w-full' : 'w-[254px]'}
                 />
             );
