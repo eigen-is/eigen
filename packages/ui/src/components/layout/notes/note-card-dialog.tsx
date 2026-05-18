@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../dialog';
 import { Separator } from '../../separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip';
-import { LinkedText } from '../linked-text';
+import { LightEditor } from '../editor/light-editor';
 
 function IconAction({ icon: Icon, tooltip, onClick }: { icon?: LucideIcon; tooltip?: string; onClick?: () => void }) {
     if (!Icon || !tooltip || !onClick) return null;
@@ -36,6 +36,9 @@ type NoteCardDialogProps = {
     actionTooltip?: string;
     onAction?: () => void;
     copyLinkUrl?: string;
+    // Fires after a read-only task-list checkbox toggle inside `description`.
+    // Receives the post-toggle HTML. Only wired when `canWrite` is true.
+    onDescriptionChange?: (html: string) => void;
     children: ReactNode;
 };
 
@@ -52,6 +55,7 @@ export function NoteCardDialog({
     actionTooltip,
     onAction,
     copyLinkUrl,
+    onDescriptionChange,
     children,
 }: NoteCardDialogProps) {
     return (
@@ -70,7 +74,17 @@ export function NoteCardDialog({
 
                     {description && (
                         <div className="px-4 py-3 text-sm text-foreground">
-                            <LinkedText text={description} />
+                            <LightEditor
+                                key={description}
+                                content={description}
+                                onChange={() => {}}
+                                editable={false}
+                                toolbar="none"
+                                taskList
+                                containerClassName="relative"
+                                className="min-h-0"
+                                onCheckedChange={canWrite ? onDescriptionChange : undefined}
+                            />
                         </div>
                     )}
 
