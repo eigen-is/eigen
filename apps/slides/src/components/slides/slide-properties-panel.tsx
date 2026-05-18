@@ -1,3 +1,4 @@
+import { isSameFill } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -138,7 +139,6 @@ function TextProperties({
 }) {
     const [colorOpen, setColorOpen] = useState(false);
     const [highlightOpen, setHighlightOpen] = useState(false);
-    const [bgOpen, setBgOpen] = useState(false);
 
     const fontFamily = getMergedValue(objects, (o) => o.fontFamily);
     const fontSize = getMergedValue(objects, (o) => o.fontSize);
@@ -151,7 +151,6 @@ function TextProperties({
     const letterSpacing = getMergedValue(objects, (o) => o.letterSpacing);
     const lineHeight = getMergedValue(objects, (o) => o.lineHeight);
     const highlightColor = getMergedValue(objects, (o) => o.highlightColor);
-    const backgroundColor = getMergedValue(objects, (o) => o.backgroundColor);
 
     return (
         <>
@@ -297,19 +296,28 @@ function TextProperties({
                     }}
                     showReset
                 />
-                <ColorRow
-                    label="Fill"
-                    value={backgroundColor}
-                    onOpen={setBgOpen}
-                    open={bgOpen}
-                    onChange={(c) => {
-                        onUpdate({ backgroundColor: c });
-                        setBgOpen(false);
-                    }}
-                    showReset
-                />
             </PropertySection>
+            <TextBackgroundBlock objects={objects} onUpdate={onUpdate} />
         </>
+    );
+}
+
+function TextBackgroundBlock({
+    objects,
+    onUpdate,
+}: {
+    objects: TextObject[];
+    onUpdate: (updates: Partial<SlideObject>) => void;
+}) {
+    const first = objects[0]?.background ?? null;
+    const mixed = !objects.every((o) => isSameFill(o.background, first));
+    return (
+        <BackgroundFillBlock
+            value={mixed ? null : first}
+            mixed={mixed}
+            onChange={(next) => onUpdate({ background: next })}
+            allowedTypes={['solid', 'gradient']}
+        />
     );
 }
 

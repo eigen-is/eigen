@@ -35,7 +35,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     letterSpacing: 0,
     lineHeight: 1.2,
     highlightColor: '',
-    backgroundColor: '',
+    background: null,
     ...DEFAULT_BORDER,
     commentCardIds: [],
 };

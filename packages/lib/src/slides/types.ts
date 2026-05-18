@@ -28,7 +28,7 @@ export type TextObject = BaseObject & {
     letterSpacing: number;
     lineHeight: number;
     highlightColor: string;
-    backgroundColor: string;
+    background: BackgroundFill | null;
 };
 
 export type ImageObject = BaseObject & {

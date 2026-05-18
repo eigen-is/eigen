@@ -1,3 +1,4 @@
+import { getBackgroundStyle } from '@workspace/lib/background';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
@@ -43,7 +44,7 @@ export function getObjectPositionStyle(obj: SlideObject): React.CSSProperties {
         height: `${pxToPercent(obj.h, 'y')}%`,
         transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
         transformOrigin: 'center center',
-        backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
+        ...(obj.type === 'text' ? getBackgroundStyle(obj.background) : {}),
         ...(obj.borderWidth && obj.borderColor
             ? { border: `${pxToPercentHeight(obj.borderWidth)} solid ${obj.borderColor}` }
             : {}),

@@ -83,7 +83,7 @@ function buildClipboardItem(
             letterSpacing: obj.letterSpacing,
             lineHeight: obj.lineHeight,
             highlightColor: obj.highlightColor,
-            backgroundColor: obj.backgroundColor,
+            background: obj.background,
         },
     };
 }
@@ -393,7 +393,7 @@ function SlideEditorInner({
                             'letterSpacing',
                             'lineHeight',
                             'highlightColor',
-                            'backgroundColor',
+                            'background',
                         ] as const) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
