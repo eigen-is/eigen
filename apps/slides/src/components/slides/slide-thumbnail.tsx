@@ -1,3 +1,4 @@
+import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo } from 'react';
@@ -20,7 +21,6 @@ export const SlideThumbnail = memo(function SlideThumbnail({
     onClick,
 }: SlideThumbnailProps) {
     const { resolveMediaUrl } = useMediaResolver();
-    const bgUrl = slide.backgroundMediaName ? resolveMediaUrl(slide.backgroundMediaName) : null;
 
     return (
         <button
@@ -42,14 +42,7 @@ export const SlideThumbnail = memo(function SlideThumbnail({
                     className="w-full h-full relative"
                     style={{
                         containerType: 'size',
-                        backgroundColor: slide.backgroundColor,
-                        ...(bgUrl
-                            ? {
-                                  backgroundImage: `url(${bgUrl})`,
-                                  backgroundSize: 'cover',
-                                  backgroundPosition: 'center',
-                              }
-                            : {}),
+                        ...getBackgroundStyle(slide.background, resolveMediaUrl),
                     }}
                 >
                     {objects.map((obj) => (

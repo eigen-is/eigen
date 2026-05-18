@@ -10,7 +10,7 @@ type Style = {
 
 export function getBackgroundStyle(
     fill: BackgroundFill | null | undefined,
-    resolveMediaUrl?: (mediaName: string) => string,
+    resolveMediaUrl?: (mediaName: string) => string | null,
 ): Style {
     if (!fill) return {};
     switch (fill.type) {

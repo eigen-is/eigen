@@ -1,4 +1,5 @@
 import { useMediaResolver } from '@workspace/lib/drive';
+import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
@@ -6,6 +7,7 @@ import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker'
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
 import {
     AlignmentPicker,
+    BackgroundFillBlock,
     PropertiesPanel,
     PropertyNumberInput,
     PropertyRow,
@@ -19,7 +21,6 @@ import {
     AlignVerticalJustifyEnd,
     AlignVerticalJustifyStart,
     Bold,
-    ImageIcon,
     Italic,
     Strikethrough,
     Trash2,
@@ -489,25 +490,20 @@ function MergedNumberInput({
 type ApplyTo = 'this' | 'this-and-following' | 'all';
 
 type SlideBackgroundPanelProps = {
-    currentBackground: string;
-    currentBackgroundMediaName: string;
-    currentBackgroundImageUrl: string | null;
-    onUpdateBackground: (color: string, applyTo: ApplyTo) => void;
-    onUpdateBackgroundImage: (mediaName: string, applyTo: ApplyTo) => void;
+    background: BackgroundFill | null;
+    backgroundImageUrl: string | null;
+    onUpdateBackground: (background: BackgroundFill | null, applyTo: ApplyTo) => void;
     onUploadImage: (file: File) => Promise<string | null>;
     onPickImageFromDrive?: (paths: DrivePath[]) => void;
 };
 
 export function SlideBackgroundPanel({
-    currentBackground,
-    currentBackgroundMediaName,
-    currentBackgroundImageUrl,
+    background,
+    backgroundImageUrl,
     onUpdateBackground,
-    onUpdateBackgroundImage,
     onUploadImage,
     onPickImageFromDrive,
 }: SlideBackgroundPanelProps) {
-    const [colorOpen, setColorOpen] = useState(false);
     const [applyTo, setApplyTo] = useState<ApplyTo>('this');
     const [bgPickerOpen, setBgPickerOpen] = useState(false);
 
@@ -516,15 +512,14 @@ export function SlideBackgroundPanel({
             const file = files[0];
             if (!file) return;
             const mediaName = await onUploadImage(file);
-            if (mediaName) onUpdateBackgroundImage(mediaName, applyTo);
+            if (mediaName) onUpdateBackground({ type: 'image', mediaName, fit: 'cover' }, 'this');
         },
-        [onUploadImage, onUpdateBackgroundImage, applyTo],
+        [onUploadImage, onUpdateBackground],
     );
 
-    const handleApply = useCallback(() => {
-        onUpdateBackground(currentBackground, applyTo);
-        onUpdateBackgroundImage(currentBackgroundMediaName, applyTo);
-    }, [applyTo, currentBackground, currentBackgroundMediaName, onUpdateBackground, onUpdateBackgroundImage]);
+    const handleApplyToAll = useCallback(() => {
+        onUpdateBackground(background, applyTo);
+    }, [applyTo, background, onUpdateBackground]);
 
     return (
         <PropertiesPanel>
@@ -532,63 +527,12 @@ export function SlideBackgroundPanel({
                 <span className="text-sm font-medium">Slide</span>
             </div>
 
-            <PropertySection title="Background color">
-                <Popover open={colorOpen} onOpenChange={setColorOpen}>
-                    <PopoverTrigger asChild>
-                        <button className="flex items-center gap-2 h-8 px-2 rounded hover:bg-accent text-sm w-full">
-                            <div
-                                className="h-5 w-5 rounded border border-border shrink-0"
-                                style={{ backgroundColor: currentBackground }}
-                            />
-                            <span className="text-xs flex-1 text-left">Color</span>
-                            <span className="text-xs text-muted-foreground">{currentBackground}</span>
-                        </button>
-                    </PopoverTrigger>
-                    <PopoverContent side="left" align="start" className="w-auto">
-                        <ColorPicker
-                            value={currentBackground}
-                            onChange={(c) => {
-                                onUpdateBackground(c || '#ffffff', 'this');
-                                setColorOpen(false);
-                            }}
-                            showReset={false}
-                        />
-                    </PopoverContent>
-                </Popover>
-            </PropertySection>
-
-            <PropertySection title="Background image">
-                {currentBackgroundImageUrl ? (
-                    <div className="space-y-2">
-                        <div className="rounded border overflow-hidden">
-                            <img src={currentBackgroundImageUrl} alt="" className="w-full h-20 object-cover" />
-                        </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => onUpdateBackgroundImage('', 'this')}
-                        >
-                            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                            Remove image
-                        </Button>
-                    </div>
-                ) : (
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => setBgPickerOpen(true)}>
-                        <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
-                        Choose image
-                    </Button>
-                )}
-                <DrivePickerWithUpload
-                    open={bgPickerOpen}
-                    onOpenChange={setBgPickerOpen}
-                    title="Background image"
-                    mimeFilter={['image/*']}
-                    onPickFromDrive={(paths) => onPickImageFromDrive?.(paths)}
-                    onPickFromDevice={handleImageFromDevice}
-                    accept="image/*"
-                />
-            </PropertySection>
+            <BackgroundFillBlock
+                value={background}
+                onChange={(next) => onUpdateBackground(next, 'this')}
+                onPickImage={() => setBgPickerOpen(true)}
+                imagePreviewUrl={backgroundImageUrl}
+            />
 
             <div className="px-3 py-3">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Apply to</h4>
@@ -603,11 +547,21 @@ export function SlideBackgroundPanel({
                             <SelectItem value="all">All slides</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button size="sm" className="h-8 text-xs" onClick={handleApply}>
+                    <Button size="sm" className="h-8 text-xs" onClick={handleApplyToAll}>
                         Apply
                     </Button>
                 </div>
             </div>
+
+            <DrivePickerWithUpload
+                open={bgPickerOpen}
+                onOpenChange={setBgPickerOpen}
+                title="Background image"
+                mimeFilter={['image/*']}
+                onPickFromDrive={(paths) => onPickImageFromDrive?.(paths)}
+                onPickFromDevice={handleImageFromDevice}
+                accept="image/*"
+            />
         </PropertiesPanel>
     );
 }

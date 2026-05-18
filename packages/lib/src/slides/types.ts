@@ -1,3 +1,5 @@
+import type { BackgroundFill } from '../types/background';
+
 type BaseObject = {
     id: string;
     slideId: string;
@@ -40,8 +42,7 @@ export type SlideObject = TextObject | ImageObject;
 export type SlideItem = {
     id: string;
     objectIds: string[];
-    backgroundColor: string;
-    backgroundMediaName: string;
+    background: BackgroundFill | null;
 };
 
 export type DeckData = {

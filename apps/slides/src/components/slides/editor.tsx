@@ -1,6 +1,7 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { getBackgroundStyle } from '@workspace/lib/background';
 import { useComments, useResolveComment } from '@workspace/lib/chat';
 import {
     needsReUpload,
@@ -144,7 +145,6 @@ function SlideEditorInner({
         deleteSlide,
         duplicateSlide,
         updateSlideBackground,
-        updateSlideBackgroundImage,
         addObject,
         updateObject,
         updateObjects,
@@ -576,10 +576,14 @@ function SlideEditorInner({
             if (!mediaFolderId || !activeSlideId || paths.length === 0) return;
             const result = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId }).catch(() => null);
             if (result?.[0]) {
-                updateSlideBackgroundImage(activeSlideId, result[0].name, 'this');
+                updateSlideBackground(
+                    activeSlideId,
+                    { type: 'image', mediaName: result[0].name, fit: 'cover' },
+                    'this',
+                );
             }
         },
-        [mediaFolderId, activeSlideId, copyToMediaFolder, updateSlideBackgroundImage],
+        [mediaFolderId, activeSlideId, copyToMediaFolder, updateSlideBackground],
     );
 
     const handlePresent = useCallback(() => {
@@ -631,14 +635,14 @@ function SlideEditorInner({
         [selectedObjectIds, deck.objects],
     );
 
-    const backgroundImageUrl = activeSlide?.backgroundMediaName
-        ? resolveMediaUrl(activeSlide.backgroundMediaName)
-        : null;
+    const slideBackgroundImageUrl =
+        activeSlide?.background?.type === 'image' && activeSlide.background.mediaName
+            ? resolveMediaUrl(activeSlide.background.mediaName)
+            : null;
 
     if (!isSynced) return <LoadingState />;
 
     if (isPresenting && activeSlide) {
-        const bgUrl = activeSlide.backgroundMediaName ? resolveMediaUrl(activeSlide.backgroundMediaName) : null;
         return (
             <div
                 className="fixed inset-0 z-50 flex items-center justify-center bg-black cursor-none"
@@ -665,14 +669,7 @@ function SlideEditorInner({
                         aspectRatio: '16/9',
                         maxHeight: '100%',
                         containerType: 'size',
-                        backgroundColor: activeSlide.backgroundColor,
-                        ...(bgUrl
-                            ? {
-                                  backgroundImage: `url(${bgUrl})`,
-                                  backgroundSize: 'cover',
-                                  backgroundPosition: 'center',
-                              }
-                            : {}),
+                        ...getBackgroundStyle(activeSlide.background, resolveMediaUrl),
                     }}
                 >
                     {activeObjects.map((obj) => (
@@ -794,17 +791,11 @@ function SlideEditorInner({
                                     />
                                 ) : canWrite && activeSlideId ? (
                                     <SlideBackgroundPanel
-                                        currentBackground={activeSlide.backgroundColor}
-                                        currentBackgroundMediaName={activeSlide.backgroundMediaName}
-                                        currentBackgroundImageUrl={backgroundImageUrl}
-                                        onUpdateBackground={(
-                                            color: string,
-                                            applyTo: 'this' | 'this-and-following' | 'all',
-                                        ) => updateSlideBackground(activeSlideId!, color, applyTo)}
-                                        onUpdateBackgroundImage={(
-                                            mediaName: string,
-                                            applyTo: 'this' | 'this-and-following' | 'all',
-                                        ) => updateSlideBackgroundImage(activeSlideId!, mediaName, applyTo)}
+                                        background={activeSlide.background}
+                                        backgroundImageUrl={slideBackgroundImageUrl}
+                                        onUpdateBackground={(background, applyTo) =>
+                                            updateSlideBackground(activeSlideId!, background, applyTo)
+                                        }
                                         onUploadImage={handleBackgroundImageUpload}
                                         onPickImageFromDrive={handleBackgroundImagePickFromDrive}
                                     />
