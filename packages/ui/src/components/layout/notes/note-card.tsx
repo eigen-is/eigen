@@ -1,8 +1,9 @@
 import { getTaskStats } from '@workspace/lib/comments';
 import { isLightColor, lightenColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
-import type { HTMLAttributes, ReactNode } from 'react';
+import { type HTMLAttributes, type ReactNode, useMemo } from 'react';
 import { Card, CardContent } from '../../card';
+import { Progress } from '../../progress';
 import { LightEditor } from '../editor/light-editor';
 
 type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
@@ -34,7 +35,10 @@ export function NoteCard({
     ref,
     ...rest
 }: NoteCardProps) {
-    const taskStats = description ? getTaskStats(description) : { total: 0, checked: 0 };
+    const taskStats = useMemo(
+        () => (description ? getTaskStats(description) : { total: 0, checked: 0 }),
+        [description],
+    );
 
     return (
         <Card
@@ -74,12 +78,11 @@ export function NoteCard({
                 )}
                 {taskStats.total > 0 && (
                     <div className="mt-2 flex items-center gap-2 opacity-60">
-                        <div className="flex-1 h-1 bg-current/20 rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-current"
-                                style={{ width: `${(taskStats.checked / taskStats.total) * 100}%` }}
-                            />
-                        </div>
+                        <Progress
+                            value={(taskStats.checked / taskStats.total) * 100}
+                            className="flex-1 h-1 bg-current/20"
+                            indicatorClassName="bg-current"
+                        />
                         <span className="text-xs tabular-nums">
                             {taskStats.checked}/{taskStats.total}
                         </span>
