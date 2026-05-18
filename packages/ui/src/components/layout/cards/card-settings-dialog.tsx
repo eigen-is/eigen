@@ -3,9 +3,9 @@ import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
-import { Textarea } from '@workspace/ui/components/textarea';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 type CardSettingsDialogProps = {
     open: boolean;
@@ -17,19 +17,12 @@ type CardSettingsDialogProps = {
     dialogTitle?: string;
 };
 
-type CardSettingsDialogContentProps = {
-    initialTitle: string;
-    initialDescription: string;
-    initialColor: string;
-    onOpenChange: (open: boolean) => void;
-    onSave: (patch: { title?: string; description?: string; color?: string }) => void;
-    dialogTitle: string;
-};
+type CardSettingsDialogContentProps = Required<Omit<CardSettingsDialogProps, 'open'>>;
 
 function CardSettingsDialogContent({
-    initialTitle,
-    initialDescription,
-    initialColor,
+    title: initialTitle,
+    description: initialDescription,
+    color: initialColor,
     onOpenChange,
     onSave,
     dialogTitle,
@@ -37,13 +30,19 @@ function CardSettingsDialogContent({
     const [title, setTitle] = useState(initialTitle);
     const [description, setDescription] = useState(initialDescription);
     const [color, setColor] = useState(initialColor);
+    // Capture the canonical TipTap-emitted form of the seeded description on
+    // first mount. Old plain-text descriptions get wrapped in <p>...</p> by
+    // TipTap; without this, a "Save" with no edits would write the
+    // canonicalised HTML back, marking the card dirty for no reason. Mirrors
+    // the mail compose pattern (apps/mail/.../use-draft.ts).
+    const canonicalInitialDescription = useRef(initialDescription);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim()) return;
         const patch: { title?: string; description?: string; color?: string } = {};
         if (title !== initialTitle) patch.title = title;
-        if (description !== initialDescription) patch.description = description;
+        if (description !== canonicalInitialDescription.current) patch.description = description;
         if (color !== initialColor) patch.color = color;
         if (Object.keys(patch).length > 0) onSave(patch);
         onOpenChange(false);
@@ -60,13 +59,21 @@ function CardSettingsDialogContent({
                     <Input id="settings-title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
                 </div>
                 <div className="grid gap-2">
-                    <Label htmlFor="settings-description">Description</Label>
-                    <Textarea
-                        id="settings-description"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        rows={6}
-                    />
+                    <Label>Description</Label>
+                    <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
+                        <LightEditor
+                            content={initialDescription}
+                            onChange={setDescription}
+                            onReady={({ html }) => {
+                                canonicalInitialDescription.current = html;
+                                setDescription(html);
+                            }}
+                            toolbar="fixed"
+                            taskList
+                            containerClassName="relative flex flex-col"
+                            className="min-h-[120px]"
+                        />
+                    </div>
                 </div>
                 <div className="grid gap-2">
                     <Label>Color</Label>
@@ -105,9 +112,9 @@ export function CardSettingsDialog({
             <DialogContent size="sm">
                 {open && (
                     <CardSettingsDialogContent
-                        initialTitle={title}
-                        initialDescription={description}
-                        initialColor={color}
+                        title={title}
+                        description={description}
+                        color={color}
                         onOpenChange={onOpenChange}
                         onSave={onSave}
                         dialogTitle={dialogTitle}
