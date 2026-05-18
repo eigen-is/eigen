@@ -3,7 +3,8 @@ import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { EditorShell, LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
+import { EditorShell } from '@workspace/ui/components/layout/editor/editor-shell';
+import { LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { useRef, useState } from 'react';
 
