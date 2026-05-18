@@ -546,7 +546,7 @@ export function SlideBackgroundPanel({
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Apply to</h4>
                 <div className="flex gap-2">
                     <Select value={applyTo} onValueChange={(v) => setApplyTo(v as ApplyTo)}>
-                        <SelectTrigger className="h-8 text-xs flex-1">
+                        <SelectTrigger size="sm" className="text-xs flex-1">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
