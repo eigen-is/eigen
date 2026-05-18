@@ -34,6 +34,9 @@ export async function checkCalendarAccess(
         if (!memberships.teamIds.includes(parsed.id)) {
             throw new ApiError(403, 'Not a member of this team');
         }
+        // Team members get implicit read access to every calendar in the team home —
+        // calendars created inside a team home have no explicit shares but are visible
+        // to all members. Explicit shares (when present) can upgrade to 'write'.
         const permission = await pullCalendarPermission(ownerId, calendarId, user.email, memberships.teamIds);
         return { permission: permission || 'read' };
     }

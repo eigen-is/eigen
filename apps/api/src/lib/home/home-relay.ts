@@ -20,7 +20,12 @@ import type {
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import type { Calendar, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/calendar';
+import type {
+    CreateEventArgs,
+    InvitationUpdatePayload,
+    ReceiveInvitationPayload,
+    UpdateEventArgs,
+} from '../calendar/calendar';
 import { getAvatarsDir } from '../config/paths';
 import type { PersistInput } from '../notification-center/notification-center';
 import type { User } from '../user';
@@ -125,10 +130,12 @@ export async function pullCalendarShares(
     return home.calendar.getSharedWith(email, teamIds);
 }
 
-// Calendar event seam — every read/write on another user's calendar routes through these.
-// In a sharded deployment, only this module changes: getHome() becomes an RPC to ownerId's
-// server. The `user` argument is the actor (for SSE/audit); same-server today, serialized
-// across the wire in a sharded future.
+// --- Calendar event seam (reads + writes on another user's calendar) ---
+// Every read/write on a foreign calendar routes through one of the five functions below.
+// In a sharded deployment, only this module changes: getHome() becomes an RPC to the server
+// hosting ownerUserId. The `user` argument is the actor (for SSE/audit), same-server today,
+// serialized across the wire in a sharded future.
+
 export async function pullEventsInRange(
     ownerUserId: string,
     calendarId: string,
@@ -147,7 +154,7 @@ export async function pullCalendarById(ownerUserId: string, calendarId: string):
 export async function createEventAt(
     ownerUserId: string,
     calendarId: string,
-    input: Parameters<Calendar['createEvent']>[1],
+    input: CreateEventArgs,
     user: User,
 ): Promise<CalendarEvent> {
     const home = await getHome(ownerUserId);
@@ -157,7 +164,7 @@ export async function createEventAt(
 export async function updateEventAt(
     ownerUserId: string,
     eventId: string,
-    input: Parameters<Calendar['updateEvent']>[1],
+    input: UpdateEventArgs,
     user: User,
 ): Promise<CalendarEvent> {
     const home = await getHome(ownerUserId);

@@ -62,6 +62,43 @@ export type InvitationUpdatePayload = {
     attendees?: Attendee[];
 };
 
+// Server-side input shapes for Calendar.createEvent / updateEvent. Distinct from the shared
+// `CreateEventInput` / `UpdateEventInput` (FE wire shape — see packages/lib/src/types/calendar.ts)
+// because they (a) take calendarId as a separate positional arg and (b) carry internal CalDAV
+// fields (createByUserId, uid, uri, sequence) that the FE must never set.
+export type CreateEventArgs = {
+    title: string;
+    startTime: Date;
+    endTime: Date;
+    allDay: boolean;
+    description?: string | null;
+    location?: string | null;
+    rrule?: string | null;
+    timezone?: string | null;
+    parentEventId?: string | null;
+    recurrenceDate?: string | null;
+    status?: CalendarEvent['status'];
+    sequence?: number;
+    data?: EventData | null;
+    createByUserId?: string | null;
+    uid?: string | null;
+    uri?: string | null;
+};
+
+export type UpdateEventArgs = {
+    title?: string;
+    startTime?: Date;
+    endTime?: Date;
+    allDay?: boolean;
+    description?: string | null;
+    location?: string | null;
+    rrule?: string | null;
+    timezone?: string | null;
+    status?: CalendarEvent['status'];
+    sequence?: number;
+    data?: EventData | null;
+};
+
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
 }
@@ -329,28 +366,7 @@ export class Calendar {
 
     // --- Events ---
 
-    public createEvent(
-        calendarId: string,
-        input: {
-            title: string;
-            startTime: Date;
-            endTime: Date;
-            allDay: boolean;
-            description?: string | null;
-            location?: string | null;
-            rrule?: string | null;
-            timezone?: string | null;
-            parentEventId?: string | null;
-            recurrenceDate?: string | null;
-            status?: CalendarEvent['status'];
-            sequence?: number;
-            data?: EventData | null;
-            createByUserId?: string | null;
-            uid?: string | null;
-            uri?: string | null;
-        },
-        user?: User,
-    ): CalendarEvent {
+    public createEvent(calendarId: string, input: CreateEventArgs, user?: User): CalendarEvent {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
@@ -583,23 +599,7 @@ export class Calendar {
         this.deleteEvent(event.id);
     }
 
-    public updateEvent(
-        id: string,
-        input: {
-            title?: string;
-            startTime?: Date;
-            endTime?: Date;
-            allDay?: boolean;
-            description?: string | null;
-            location?: string | null;
-            rrule?: string | null;
-            timezone?: string | null;
-            status?: CalendarEvent['status'];
-            sequence?: number;
-            data?: EventData | null;
-        },
-        user?: User,
-    ): CalendarEvent {
+    public updateEvent(id: string, input: UpdateEventArgs, user?: User): CalendarEvent {
         const existing = this.getEventById(id);
         if (!existing) throw new ApiError(404, 'Event not found');
 
