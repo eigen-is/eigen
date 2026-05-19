@@ -28,7 +28,7 @@ import {
     Underline,
 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import type { ImageObject, SlideObject, TextObject } from './types';
+import type { ApplyTo, ImageObject, SlideObject, TextObject } from './types';
 import { BORDER_RADIUS_ROUND } from './types';
 
 const MIXED = 'mixed' as const;
@@ -494,8 +494,6 @@ function MergedNumberInput({
         />
     );
 }
-
-type ApplyTo = 'this' | 'this-and-following' | 'all';
 
 type SlideBackgroundPanelProps = {
     background: BackgroundFill | null;

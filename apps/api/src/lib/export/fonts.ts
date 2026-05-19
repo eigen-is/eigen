@@ -1,20 +1,14 @@
 import * as fs from 'node:fs';
-import fontExcalifont from '../../../../../packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.woff2' with {
+import fontExcalifont from '@workspace/ui/assets/fonts/excalifont/Excalifont-Regular.woff2' with { type: 'file' };
+import fontInterRegular from '@workspace/ui/assets/fonts/inter/Inter-Variable.woff2' with { type: 'file' };
+import fontInterItalic from '@workspace/ui/assets/fonts/inter/Inter-Variable-Italic.woff2' with { type: 'file' };
+import fontMonoRegular from '@workspace/ui/assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2' with {
     type: 'file',
 };
-import fontInterRegular from '../../../../../packages/ui/src/assets/fonts/inter/Inter-Variable.woff2' with {
+import fontSerifRegular from '@workspace/ui/assets/fonts/source-serif/SourceSerif4-Variable.woff2' with {
     type: 'file',
 };
-import fontInterItalic from '../../../../../packages/ui/src/assets/fonts/inter/Inter-Variable-Italic.woff2' with {
-    type: 'file',
-};
-import fontMonoRegular from '../../../../../packages/ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2' with {
-    type: 'file',
-};
-import fontSerifRegular from '../../../../../packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable.woff2' with {
-    type: 'file',
-};
-import fontSerifItalic from '../../../../../packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2' with {
+import fontSerifItalic from '@workspace/ui/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2' with {
     type: 'file',
 };
 

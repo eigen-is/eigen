@@ -1,4 +1,5 @@
 import { EMPTY_S3, type S3Config } from '@workspace/lib/types';
+import type { S3CheckResult } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, CheckCircle2, Loader2, Wifi } from 'lucide-react';
 import { useState } from 'react';
@@ -15,8 +16,6 @@ export type MountFormValues = {
     s3Config?: S3Config;
 };
 
-type S3CheckResult = { ok: boolean; message: string } | null;
-
 type MountFormProps = {
     defaultStorageType?: MountFormValues['storageType'];
     defaultMaxSizeMB?: number;
@@ -24,7 +23,7 @@ type MountFormProps = {
     initialValues?: Partial<MountFormValues>;
     onSubmit: (values: MountFormValues) => void | Promise<void>;
     onCancel?: () => void;
-    onS3Check?: (config: S3Config) => Promise<{ ok: boolean; message: string }>;
+    onS3Check?: (config: S3Config) => Promise<S3CheckResult>;
     submitLabel?: string;
     isEdit?: boolean;
 };
@@ -48,7 +47,7 @@ export function MountForm({
     const [s3Config, setS3Config] = useState<S3Config>(
         initialValues?.s3Config ?? (defaultS3Config ? { ...defaultS3Config } : { ...EMPTY_S3 }),
     );
-    const [s3Check, setS3Check] = useState<S3CheckResult>(null);
+    const [s3Check, setS3Check] = useState<S3CheckResult | null>(null);
     const [s3Checking, setS3Checking] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 

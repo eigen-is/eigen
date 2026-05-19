@@ -18,7 +18,6 @@ import type {
     CalendarShare,
 } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
-import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type {
     CreateEventArgs,
@@ -31,6 +30,13 @@ import type { PersistInput } from '../notification-center/notification-center';
 import type { User } from '../user';
 import { updateUser } from '../user/';
 import { atHome, getHome } from './get-home';
+import { TeamHome } from './team-home';
+
+async function getTeamHome(teamOwnerId: string): Promise<TeamHome> {
+    const home = await getHome(teamOwnerId);
+    if (!(home instanceof TeamHome)) throw new Error(`Not a team home: ${teamOwnerId}`);
+    return home;
+}
 
 export type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string }
@@ -217,17 +223,15 @@ export async function pushUserProfile(userId: string, name: string, avatarWebP: 
 }
 
 export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQuotaOverrides> {
-    const home = await getHome(teamOwnerId);
-    const settings = home.settings.get() as TeamSettings;
-    return settings.memberOverrides ?? {};
+    const home = await getTeamHome(teamOwnerId);
+    return home.settings.get().memberOverrides ?? {};
 }
 
 export async function pullTeamMounts(
     teamOwnerId: string,
 ): Promise<{ id: string; name: string; rootPathId: string | null }[]> {
-    const home = await getHome(teamOwnerId);
-    const settings = home.settings.get() as TeamSettings;
-    const mounts = settings.mounts ?? {};
+    const home = await getTeamHome(teamOwnerId);
+    const mounts = home.settings.get().mounts ?? {};
     const enabled = Object.entries(mounts).filter(([, m]) => m.enabled);
     return Promise.all(
         enabled.map(async ([id, m]) => {

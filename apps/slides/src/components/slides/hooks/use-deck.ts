@@ -6,9 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { normalizeDeck } from '../normalize-deck';
-import { DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
-
-type ApplyTo = 'this' | 'this-and-following' | 'all';
+import { type ApplyTo, DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
 
 const OBJECT_FIELDS = [
     'id',
