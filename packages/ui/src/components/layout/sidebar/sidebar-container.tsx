@@ -33,7 +33,7 @@ export function SidebarContainer({ sidebar }: SidebarContainerProps) {
                 className={`
                     ${isMobile ? (sidebarOpen ? 'fixed inset-0 z-50 bg-background' : 'hidden') : 'block'}
                     ${isTablet ? 'w-16' : 'w-64'}
-                    border-r h-full overflow-y-auto
+                    border-r h-full overflow-y-auto overflow-x-hidden
                 `}
             >
                 {sidebarContent}
