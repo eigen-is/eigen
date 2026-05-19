@@ -133,7 +133,7 @@ ensure_dist() {
         if [ ! -f "dist/$app/index.html" ]; then
             log "dist/$app/index.html missing — building all apps (one-off, takes a few minutes)"
             set -a; source .env.production; set +a
-            bun install >/dev/null
+            bun install --frozen-lockfile >/dev/null
             bun run --sequential --filter './apps/*' build >/dev/null
             return
         fi

@@ -50,7 +50,7 @@ export EIGEN_COMMIT=$(git rev-parse --short HEAD)
 export EIGEN_BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 echo "Installing dependencies..."
-bun install
+bun install --frozen-lockfile
 
 echo "Building frontend (sequential)..."
 bun run --sequential --filter './apps/*' build
