@@ -366,7 +366,8 @@ No cross-home DB access needed. The user's own databases already contain shared 
   Filter by name using SQL `LIKE` or index shared paths into the user's own `search.db` at share-receive time
   (in `Drive.receiveACLChange()`).
 - **Shared calendars**: Query `calendar.db` → `shared_calendars` table (has `calendarName`, `ownerUserId`). Shared
-  calendar events are fetched on-demand via the existing `resolveCalendarForEvents()` pattern.
+  calendar events are fetched on-demand via the `home-relay.ts` seam (`checkCalendarAccess` for permission +
+  `pullEventsInRange` for events).
 
 For v1, shared Drive path names are searchable via the user's index (indexed on `receiveACLChange`). Shared document
 *content* search is deferred to a later phase.

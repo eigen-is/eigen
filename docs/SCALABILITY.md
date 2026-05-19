@@ -46,10 +46,21 @@ relay module (`apps/api/src/lib/home/home-relay.ts`). This is the sharding seam.
 | `pullPendingInvitations`  | Events where a user is an attendee                |
 | `pullCalendarPermission`  | A user's permission level on an owner's calendar  |
 | `pullCalendars`           | All calendars from an owner's home                |
+| `pullCalendarById`        | A single calendar's metadata from an owner's home |
+| `pullEventsInRange`       | Events in a date range on an owner's calendar     |
+
+**Event mutations** on another user's calendar route through dedicated seam functions (the writes
+have return values, so they don't fit the fire-and-forget `sendToHome` pattern):
+
+| Function          | What it writes                                                   |
+|-------------------|------------------------------------------------------------------|
+| `createEventAt`   | Create an event on an owner's calendar; returns the new event    |
+| `updateEventAt`   | Update an event on an owner's calendar; returns the updated event |
+| `deleteEventAt`   | Delete an event on an owner's calendar                           |
 
 Today these are direct in-process calls via `getHome()`. In a sharded deployment, only `home-relay.ts`
-changes — `sendToHome()` routes to the correct server or enqueues a message, and pull functions become
-remote API calls.
+changes — `sendToHome()` routes to the correct server or enqueues a message, and pull/event functions
+become remote API calls.
 
 ### Self-Contained Receive Methods
 
