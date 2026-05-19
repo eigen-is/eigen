@@ -15,23 +15,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@work
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { CopyInput } from '@workspace/ui/components/layout/copy-input';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
-import { Calendar, Check, Copy, FolderTree, KeyRound, Mail, Plus, Trash2 } from 'lucide-react';
+import { Calendar, FolderTree, KeyRound, Mail, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 export const Route = createFileRoute('/_auth/services')({
     component: ServicesComponent,
 });
-
-function CopyableField({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="space-y-1">
-            <Label className="text-muted-foreground text-xs">{label}</Label>
-            <Input readOnly value={value} className="font-mono text-sm" onClick={(e) => e.currentTarget.select()} />
-        </div>
-    );
-}
 
 function AppPasswords() {
     const { data: passwords, isLoading } = useAppPasswords();
@@ -39,7 +31,6 @@ function AppPasswords() {
     const deleteMutation = useDeleteAppPassword();
     const [name, setName] = useState('');
     const [newKey, setNewKey] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
 
     const handleCreate = async () => {
         if (!name.trim()) return;
@@ -47,14 +38,6 @@ function AppPasswords() {
         if (result?.key) {
             setNewKey(result.key);
             setName('');
-        }
-    };
-
-    const handleCopy = () => {
-        if (newKey) {
-            navigator.clipboard.writeText(newKey);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
         }
     };
 
@@ -76,17 +59,7 @@ function AppPasswords() {
                         <p className="text-sm font-medium">
                             Copy this password now. You won't be able to see it again.
                         </p>
-                        <div className="flex items-center gap-2">
-                            <Input
-                                readOnly
-                                value={newKey}
-                                className="font-mono text-sm"
-                                onClick={(e) => e.currentTarget.select()}
-                            />
-                            <Button variant="outline" size="icon" onClick={handleCopy}>
-                                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                            </Button>
-                        </div>
+                        <CopyInput value={newKey} successMessage="App password copied to clipboard" />
                         <Button variant="outline" size="sm" onClick={() => setNewKey(null)}>
                             Done
                         </Button>
@@ -186,12 +159,12 @@ function ServicesComponent() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    <CopyableField label="Server URL" value={`${davBase}/`} />
-                                    <CopyableField
+                                    <CopyInput label="Server URL" value={`${davBase}/`} />
+                                    <CopyInput
                                         label="Server URL (Thunderbird)"
                                         value={`${davBase}/calendars/${user?.id}/`}
                                     />
-                                    <CopyableField label="Username" value={user?.email ?? ''} />
+                                    <CopyInput label="Username" value={user?.email ?? ''} />
                                 </CardContent>
                             </Card>
 
@@ -206,12 +179,12 @@ function ServicesComponent() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-2 gap-3">
-                                    <CopyableField label="IMAP server" value={host} />
-                                    <CopyableField label="IMAP Port" value="993" />
-                                    <CopyableField label="Security" value="SSL/TLS" />
-                                    <CopyableField label="Username" value={user?.email ?? ''} />
-                                    <CopyableField label="SMTP server" value={host} />
-                                    <CopyableField label="SMTP port" value="465" />
+                                    <CopyInput label="IMAP server" value={host} />
+                                    <CopyInput label="IMAP Port" value="993" />
+                                    <CopyInput label="Security" value="SSL/TLS" />
+                                    <CopyInput label="Username" value={user?.email ?? ''} />
+                                    <CopyInput label="SMTP server" value={host} />
+                                    <CopyInput label="SMTP port" value="465" />
                                 </CardContent>
                             </Card>
 
@@ -227,9 +200,9 @@ function ServicesComponent() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    <CopyableField label="Username" value={user?.email ?? ''} />
+                                    <CopyInput label="Username" value={user?.email ?? ''} />
                                     {personalMounts?.map((m) => (
-                                        <CopyableField
+                                        <CopyInput
                                             key={m.id}
                                             label={`Personal — ${m.name}`}
                                             value={`${webdavBase}/${user?.id ?? ''}/${m.id}/`}
@@ -237,7 +210,7 @@ function ServicesComponent() {
                                     ))}
                                     {teams?.flatMap((team) =>
                                         team.mounts.map((m) => (
-                                            <CopyableField
+                                            <CopyInput
                                                 key={`${team.id}-${m.id}`}
                                                 label={`${team.name} — ${m.name}`}
                                                 value={`${webdavBase}/${teamOwnerId(team.id)}/${m.id}/`}
