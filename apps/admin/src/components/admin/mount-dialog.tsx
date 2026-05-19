@@ -1,14 +1,13 @@
 import type { S3Config } from '@workspace/lib/types/mount';
+import type { S3CheckResult } from '@workspace/lib/types/settings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { MountForm, type MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
-
-type MountFormProps = React.ComponentProps<typeof MountForm>;
 
 type MountDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onSubmit: (values: MountFormValues) => Promise<void>;
-    onS3Check?: MountFormProps['onS3Check'];
+    onS3Check: (config: S3Config) => Promise<S3CheckResult>;
     initialValues?: Partial<MountFormValues>;
     title: string;
     submitLabel: string;

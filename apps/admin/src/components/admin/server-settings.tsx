@@ -1,10 +1,11 @@
 import {
+    useCheckS3Connection,
     useServerS3Config,
     useServerSettings,
     useUpdateServerS3Config,
     useUpdateServerSettings,
 } from '@workspace/lib/settings';
-import { EMPTY_S3 } from '@workspace/lib/types';
+import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
@@ -24,6 +25,7 @@ export function ServerSettingsPage() {
     const updateSettings = useUpdateServerSettings();
     const { data: s3Config } = useServerS3Config();
     const updateS3Config = useUpdateServerS3Config();
+    const s3Check = useCheckS3Connection();
 
     const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});
     const [dirty, setDirty] = useState(false);
@@ -61,6 +63,7 @@ export function ServerSettingsPage() {
     const currentS3 = s3Draft ?? s3Config ?? EMPTY_S3;
     const anyDirty = dirty || s3Dirty;
     const saving = updateSettings.isPending || updateS3Config.isPending;
+    const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
 
     const handleSave = async () => {
         if (s3Dirty && s3Draft && current.defaults.mount.storageType === 's3')
@@ -147,6 +150,7 @@ export function ServerSettingsPage() {
                         setS3Dirty(true);
                         setS3Draft(config);
                     }}
+                    checkS3={handleS3Check}
                 />
             </div>
 
@@ -198,12 +202,7 @@ export function ServerSettingsPage() {
                         <Button
                             onClick={handleSave}
                             disabled={
-                                saving ||
-                                (current.defaults.mount.storageType === 's3' &&
-                                    (!currentS3.endpoint ||
-                                        !currentS3.bucket ||
-                                        !currentS3.accessKeyId ||
-                                        !currentS3.secretAccessKey))
+                                saving || (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3))
                             }
                         >
                             {saving ? 'Saving...' : 'Save Changes'}

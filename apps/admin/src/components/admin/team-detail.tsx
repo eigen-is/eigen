@@ -12,12 +12,13 @@ import {
 } from '@workspace/lib/team';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
+import type { S3Config } from '@workspace/lib/types/mount';
 import { type MountSettings, mapStorageType } from '@workspace/lib/types/settings';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import type { MountForm, MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
+import type { MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -56,8 +57,6 @@ export function TeamDetailToolbar({ team, organizationId }: TeamDetailToolbarPro
         </div>
     );
 }
-
-type MountFormProps = React.ComponentProps<typeof MountForm>;
 
 type TeamDetailProps = {
     team: OrgTeam;
@@ -178,8 +177,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
         await removeMember.mutateAsync({ teamId: team.id, userId });
     };
 
-    const handleS3Check = (config: Parameters<NonNullable<MountFormProps['onS3Check']>>[0]) =>
-        s3Check.mutateAsync(config);
+    const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
 
     return (
         <div className="p-6 space-y-6 h-full overflow-y-auto">
