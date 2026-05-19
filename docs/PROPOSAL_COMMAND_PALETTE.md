@@ -198,6 +198,9 @@ and the `NotificationCenter`. No JSON payload bag.
 ```typescript
 // packages/lib/src/types/command-palette.ts
 import type { LucideIcon } from 'lucide-react';
+import type {
+    FileSearchHit, MailSearchHit, EventSearchHit, ChatSearchHit,
+} from './search';
 
 export type CommandGroup =
     | 'top-hit'
@@ -211,68 +214,43 @@ export type CommandGroup =
     | 'chats'
     | 'recents';
 
-type Base = {
+// FE-only presentation fields layered onto every result. Never crosses the wire —
+// backends emit kind-specific payload (see types/search.ts) and the palette adds
+// these in its provider before ranking.
+type Presentation = {
     id: string;
     group: CommandGroup;
     score: number;        // 0..100 — ranked across groups by `final`
     icon: LucideIcon;
 };
 
-export type ActionResult = Base & {
+// Backend-derived kinds: wire SearchHit + FE Presentation. SearchHit defines the `kind`
+// discriminator, so a plain `&` here is enough — no redeclaration.
+export type FileResult  = FileSearchHit  & Presentation;
+export type MailResult  = MailSearchHit  & Presentation;
+export type EventResult = EventSearchHit & Presentation;
+export type ChatResult  = ChatSearchHit  & Presentation;
+
+// FE-only kinds: actions, smart-parsed suggestions, cached contact suggestions.
+export type ActionResult = Presentation & {
     kind: 'action';
     title: string;
     subtitle?: string;
     keywords?: string[];
     shortcut?: string;
+    runInNewTab?: boolean;                          // ⌘↵ semantics — see open question 4
+    available?: (ctx: ActionContext) => boolean;    // gate by context (app, selection, role)
     action: (ctx: ActionContext) => void | Promise<void>;
     subActions?: (ctx: ActionContext) => ActionResult[];
 };
 
-export type FileResult = Base & {
-    kind: 'file';
-    title: string;
-    subtitle: string;
-    mimeType: string;
-    ownerId: string;
-    mountId: string;
-    pathId: string;
-    updatedAt: number;
-};
-
-export type MailResult = Base & {
-    kind: 'mail';
-    subject: string;
-    from: string;
-    mailbox: string;
-    snippet?: string;
-    receivedAt: number;
-};
-
-export type ContactResult = Base & {
+export type ContactResult = Presentation & {
     kind: 'contact';
     displayName: string;
     email: string;
 };
 
-export type EventResult = Base & {
-    kind: 'event';
-    title: string;
-    startsAt: number;
-    location?: string;
-    calendarName: string;
-};
-
-export type ChatResult = Base & {
-    kind: 'chat';
-    chatTitle: string;
-    chatId: string;
-    ownerId: string;
-    mountId: string;
-    snippet: string;
-    sentAt: number;
-};
-
-export type SmartResult = Base & {
+export type SmartResult = Presentation & {
     kind: 'smart';
     title: string;
     subtitle?: string;
@@ -288,6 +266,10 @@ Why a union rather than one shape with optional fields: callers (per-kind rows, 
 do `switch (r.kind)` and the compiler enforces exhaustiveness. The price is one row component per
 kind; the payoff is no `as any` and no runtime shape guards.
 
+Why split wire types from FE types: the search route stays portable to non-palette consumers
+(future per-app search pages, an API key client), and `LucideIcon` is a React component reference
+that can't be serialised. `Presentation` is the seam.
+
 ### Providers
 
 Two kinds of providers feed the engine. **Static providers** are FE-only — synchronous `useMemo`
@@ -300,17 +282,22 @@ no per-source HTTP fan-out.
 |--------------|-------------------------------|---------------------------------------------|-------|
 | `actions`    | `providers/actions.ts`        | Static command catalog (`commands/*.ts`)    | 1     |
 | `smart`      | `providers/smart.ts`          | `smart-parser.ts` (pure function on input)  | 3     |
-| `contacts`   | `providers/contacts.ts`       | `useContactSuggestions` (already cached)    | 3     |
+| `contacts`   | `providers/contacts.ts`       | `useContacts()` + `useMyTeams()` (lib hooks) | 3     |
 
-`useContactSuggestions` fetches contacts + team members once per session and caches via TanStack
-Query — typing into the palette does not refetch. Filtering by prefix is a pure synchronous
-operation over the cached list.
+The contacts provider lives in `packages/lib`, so it imports the underlying `useContacts()` and
+`useMyTeams()` hooks directly (both are in `packages/lib`); it cannot wrap
+`useContactSuggestions`, which is in `packages/ui` and would invert the dep direction. The same
+dedup-and-filter pass that `useContactSuggestions` runs gets reused here — extract it to
+`packages/lib/src/core/contacts/filter-suggestions.ts` if it doesn't already live in lib.
+Either way: the underlying TanStack queries have a session-long `staleTime` and the provider is
+a synchronous `useMemo` filter — typing into the palette does not refetch.
 
 #### The search provider (one backend call)
 
-A single endpoint at `/search/:ownerId` returns a mixed array of typed result variants
-(`FileResult | MailResult | EventResult | ChatResult`). One TanStack query per keystroke,
-debounced and cancelled via query-key change.
+A single endpoint at `/search/:ownerId` returns `SearchResponse = { results: SearchHit[]; total }`
+(wire shape from `packages/lib/src/types/search.ts`). The FE provider `&`s `Presentation` per hit
+to produce `FileResult | MailResult | EventResult | ChatResult`. One TanStack query per keystroke,
+debounced via a `useDebouncedValue` on the input and cancelled on query-key change.
 
 **Backend at v1: metadata-LIKE search across already-SQLite-resident text.** Three small domain
 methods queried in parallel from one route handler. No new database, no migrations, no FTS5
@@ -319,7 +306,7 @@ index. The columns are already there.
 | Domain    | What's searched                                       | New method                                        |
 |-----------|-------------------------------------------------------|---------------------------------------------------|
 | Drive     | `paths.name` across the user's mounts                 | `Drive.searchByName(q, {limit})`                  |
-| Mail      | `emails.subject` (+ optionally `fromShort`)           | `Maildir.searchSubjects(q, {limit})`              |
+| Mail      | `emails.subject` (+ optionally `fromShort`)           | `MailDB.searchSubjects(q, {limit})` — exposed via `home.mail.searchSubjects()` (Maildir delegates to its `db`) |
 | Calendar  | `events.title` (+ optionally `location`)              | `Calendar.searchEvents(q, {limit})`               |
 
 Contacts is **not** here — `useContactSuggestions` is already cached FE-side, so the contacts
@@ -344,17 +331,19 @@ provider filters synchronously without a backend hit.
     };
 }, { auth: true });
 
-// apps/api/src/lib/drive/drive.ts (new method)
-async searchByName(q: string, { limit }: { limit: number }): Promise<FileResult[]> {
+// apps/api/src/lib/drive/drive.ts (new method) — returns the wire type, not the
+// FE FileResult. The palette adds Presentation on top.
+async searchByName(q: string, { limit }: { limit: number }): Promise<FileSearchHit[]> {
     if (!q.trim()) return [];
     const pattern = `%${escapeLike(q)}%`;
-    const out: FileResult[] = [];
-    for (const mount of this.listMounts()) {
+    const out: FileSearchHit[] = [];
+    // Drive composes Mount instances internally; iterate via its existing accessor.
+    for (const mount of this.mounts()) {
         const rows = await mount.db.select().from(paths)
             .where(like(paths.name, pattern))
             .limit(limit)
             .all();
-        for (const r of rows) out.push(toFileResult(r, mount.id));
+        for (const r of rows) out.push(toFileSearchHit(r, mount.id, this.ownerId));
     }
     return out.slice(0, limit);
 }
@@ -464,8 +453,9 @@ single PR touching one file.
 ### Context publication
 
 The palette needs to know what's currently visible to surface contextual actions. Apps publish
-their current selection imperatively, identical in shape to how `PreviewProvider` exposes the
-currently-previewed file (`packages/ui/src/components/layout/preview-provider/preview-provider.tsx`).
+their current selection imperatively via a hook that mirrors the `usePreview` ergonomics
+(`packages/ui/src/components/layout/preview-provider/preview-provider.tsx`) — but with stack
+semantics (see below) because selections nest.
 
 ```typescript
 // In MailThreadView
@@ -478,8 +468,11 @@ function MailThreadView({ threadId, mailbox }: Props) {
 usePaletteSelection({ kind: 'drive-item', ownerId, mountId, pathId, mimeType });
 ```
 
-`usePaletteSelection` pushes onto a stack on mount and pops on unmount — the deepest mount wins.
-Same shape as `usePreview`. Plain React context + `useState`; no Zustand.
+`usePaletteSelection` pushes a frame onto a context-scoped stack on mount and pops it on unmount
+— the deepest mount wins. This is a new pattern (one we own, not inherited): `PreviewProvider`
+uses a single `useState<PreviewState | null>` setter — only one preview at a time. Selection
+nests (a comment thread inside a sheet inside an app), so we need a stack. Plain React context +
+`useState<PaletteSelection[]>`; no Zustand.
 
 ```typescript
 export type PaletteContext = {
@@ -498,12 +491,26 @@ export type PaletteSelection =
     | { kind: 'sheet-range'; ownerId: string; mountId: string; pathId: string; range: string }
     | { kind: 'chat-message'; ownerId: string; mountId: string; chatId: string; messageId: string }
     | { kind: 'calendar-event'; eventId: string };
+
+// ActionContext = PaletteContext + the side-effect helpers commands need to actually run.
+// Bundled here so individual command files (commands/<domain>.ts) stay terse and don't each
+// import the same handful of API helpers.
+export type ActionContext = PaletteContext & {
+    navigate: (url: string) => void;       // wraps router.navigate; `runInNewTab` honours ⌘↵
+    queryClient: QueryClient;              // for cache nudges after an action
+    createEigenDoc: (folder: { ownerId: string; mountId: string; pathId: string }) => Promise<void>;
+    openUploadDialog: () => void;
+    saveLink: (url: string) => Promise<void>;
+};
 ```
 
 ### Ranking
 
-`bm25` from FTS5 normalises into the 0..100 scale once SEARCH lands. Static commands carry a
-hand-tuned `score`. Final rank per result:
+Search hits arrive **pre-sorted by `bm25(search_fts)`** (most relevant first; cf.
+[PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) `SearchIndex.query`). The FE provider assigns
+`baseScore = 80 - i * 5` by position — first hit competes with hand-tuned action scores,
+later hits decay. Static commands (actions, smart, contact) carry their own `score` from the
+catalog. Final rank per result:
 
 ```text
 final = baseScore
@@ -530,9 +537,10 @@ export function useCommandResults(query: string, ctx: PaletteContext) {
     // Static providers — synchronous useMemo, no network
     const actions  = useActionResults(parsed, ctx);
     const smart    = useSmartResults(parsed, ctx);
-    const contacts = useContactResults(parsed, ctx); // wraps useContactSuggestions (already cached)
+    const contacts = useContactResults(parsed, ctx); // composes useContacts() + useMyTeams() (already cached)
 
-    // The single backend call — TanStack Query handles debounce + cancellation via query-key change
+    // The single backend call. useSearch debounces internally via useDebouncedValue on `parsed.q`;
+    // TanStack Query cancels in-flight requests when the (debounced) query key changes.
     const { data: search = [], isLoading } = useSearch(parsed, ctx);
 
     return useMemo(
@@ -636,8 +644,9 @@ Three file edits to make the palette globally available. Everything else is addi
   edits per feature.
 - **Per-Home model**: the palette honours `ownerId` (personal vs team) so team contexts get team
   data — same sharding boundary as everything else.
-- **Provider-stack pattern**: `CommandPaletteProvider` mirrors `PreviewProvider` exactly —
-  React context + `useState`, conditional render.
+- **Provider-stack pattern**: `CommandPaletteProvider` reuses `PreviewProvider`'s plumbing
+  (React context + `useState`, conditional render) for open/close state. Selection nests, so
+  `usePaletteSelection` adds a `useState<PaletteSelection[]>` stack on top — that part is new.
 - **Match cmdk to existing autosuggest UX**: the keyboard model the user already knows from
   `ContactAutosuggest` (↑↓ navigate, ↵ select, esc close) carries over unchanged.
 
@@ -650,7 +659,7 @@ Three file edits to make the palette globally available. Everything else is addi
 | 3     | Contacts provider via `useContactSuggestions`; smart-parser for email + URL                                        | S      | Phase 2                  |
 | 4     | Context publication (`usePaletteSelection`); selection-aware actions for mail / drive / docs / sheets / slides / stickies / chat | M      | Phase 2                  |
 | 5     | Sub-action sheet (`→` / `⌘K` on focused result)                                                                    | S      | Phase 4                  |
-| 6     | Backend `/search/:ownerId` — `Drive.searchByName` + `Maildir.searchSubjects` + `Calendar.searchEvents` (parallel `LIKE`); FE `search` provider | M | Phase 3 |
+| 6     | Backend `/search/:ownerId` — `Drive.searchByName` + `MailDB.searchSubjects` (via `home.mail`) + `Calendar.searchEvents` (parallel `LIKE`); FE `search` provider | M | Phase 3 |
 | 7     | Prefix scopes (`>`, `@`, `mail:`, `file:`, `event:`, `chat:`); help page (`?`)                                     | S      | Phase 5                  |
 | 8     | Recents provider — wires to `home.recents` once it lands                                                           | S      | PROPOSAL_HOME_RECENTS    |
 | 9     | Backend grows: `home.searchIndex` replaces the three parallel `LIKE`s with one FTS5 query — adds full mail bodies, contacts data field, doc/sheet/slide/stickies/chat content via Yjs extraction. FE provider unchanged. | L | PROPOSAL_SEARCH |
@@ -685,9 +694,13 @@ FE provider — only the route body changes.
 6. **Indexing chat content**: PROPOSAL_SEARCH Phase 2 indexes chat messages. Until that's done,
    `chat:` scope falls back to room titles only (queryable via Drive metadata). Acceptable degradation.
 
-7. **Search response shape**: the v1 endpoint returns `{ results: (FileResult | MailResult | EventResult)[], total }`.
-   When PROPOSAL_SEARCH lands the union grows (`ChatResult`, etc.) but the wrapper shape stays.
-   Lock it now so FE doesn't break later.
+7. **Search response shape — RESOLVED**: the wire returns `SearchResponse = { results: SearchHit[];
+   total }`, with `SearchHit = FileSearchHit | MailSearchHit | EventSearchHit | ChatSearchHit`
+   defined in `packages/lib/src/types/search.ts` (shared with
+   [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md)). The v1 stopgap emits the first three variants;
+   PROPOSAL_SEARCH Phase 2 (chat indexing) starts emitting `ChatSearchHit`. The FE projects
+   `SearchHit` → `CommandResult` by `&`-ing on `Presentation` (`id` / `group` / `score` / `icon`)
+   — non-serialisable bits stay off the wire.
 
 8. **Full-page search results**: the palette caps each section at 6. When a user wants to see *all*
    matches, there's nowhere to send them at v1 (Drive has no search page, Mail has no advanced
@@ -713,7 +726,8 @@ apps/api/src/lib/drive/
   drive.ts                         # phase 6 — adds Drive.searchByName(q, {limit})
 
 apps/api/src/lib/mail/
-  maildir.ts                       # phase 6 — adds Maildir.searchSubjects(q, {limit})
+  maildb.ts                        # phase 6 — adds MailDB.searchSubjects(q, {limit})
+  maildir.ts                       # phase 6 — exposes home.mail.searchSubjects() that delegates to this.db
 
 apps/api/src/lib/calendar/
   calendar.ts                      # phase 6 — adds Calendar.searchEvents(q, {limit})
@@ -742,7 +756,7 @@ packages/lib/src/core/command-palette/
   providers/
     types.ts
     actions.ts                     # FE-only — filters command catalog by query + ctx
-    contacts.ts                    # FE-only — wraps useContactSuggestions
+    contacts.ts                    # FE-only — composes useContacts() + useMyTeams() (both in lib); reuses the suggestion filter from packages/lib/src/core/contacts/
     smart.ts                       # FE-only — pure smart-parser output
     search.ts                      # the single backend call — TanStack query against /search/:ownerId
     recents.ts                     # phase 8 — wires to home.recents (PROPOSAL_HOME_RECENTS)
@@ -772,9 +786,9 @@ packages/ui/src/components/layout/app/command-palette/
   synchronous `useMemo` over already-cached data; the only network call is `/search/:ownerId`.
   No HTTP fan-out per source.
 - **Metadata-LIKE at v1, same URL grows** — `/search/:ownerId` ships with three parallel `LIKE`s
-  (`Drive.searchByName` + `Maildir.searchSubjects` + `Calendar.searchEvents`) — the columns are
-  already in SQLite, no new index. When PROPOSAL_SEARCH lands, the route body switches to
-  `home.searchIndex.query(...)`. URL, response shape, and FE provider stay stable.
+  (`Drive.searchByName` + `MailDB.searchSubjects` via `home.mail` + `Calendar.searchEvents`) —
+  the columns are already in SQLite, no new index. When PROPOSAL_SEARCH lands, the route body
+  switches to `home.searchIndex.query(...)`. URL, response shape, and FE provider stay stable.
 - **No FE-local recents** — don't ship what we'll replace. Recents wait for
   PROPOSAL_HOME_RECENTS. Empty state shows curated suggested commands until then.
 - **One Cmd+K, not split** — Notion's split (Cmd+P jump, Cmd+K command) doubles the keyboard
