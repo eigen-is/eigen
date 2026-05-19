@@ -70,7 +70,7 @@ function CardSettingsDialogContent({
                             }}
                             taskList
                             containerClassName="relative flex flex-col"
-                            className="min-h-[120px]"
+                            className="min-h-[200px]"
                         />
                     </div>
                 </div>
@@ -108,7 +108,7 @@ export function CardSettingsDialog({
 }: CardSettingsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="sm">
+            <DialogContent size="md">
                 {open && (
                     <CardSettingsDialogContent
                         title={title}

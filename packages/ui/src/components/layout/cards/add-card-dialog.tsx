@@ -76,7 +76,7 @@ function AddCardDialogContent({
                             taskList
                             placeholder={placeholderDescription}
                             containerClassName="relative flex flex-col"
-                            className="min-h-[80px]"
+                            className="min-h-[200px]"
                         />
                     </div>
                 </div>
@@ -117,7 +117,7 @@ export function AddCardDialog({
 }: AddCardDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="sm">
+            <DialogContent size="md">
                 {open && (
                     <AddCardDialogContent
                         initialTitle={initialTitle}
