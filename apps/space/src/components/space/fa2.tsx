@@ -13,9 +13,9 @@ import {
 import { Input } from '@workspace/ui/components/input';
 import { Separator } from '@workspace/ui/components/separator';
 import { Check, Copy, InfoIcon } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import QRCode from 'react-qr-code';
 import { z } from 'zod';
 
 const passwordFormSchema = z.object({
@@ -185,7 +185,7 @@ export function TwoFactorSetup({
                         <Card className="border-dashed">
                             <CardContent className="flex items-center justify-center p-6">
                                 <div className="w-48 h-48 flex items-center justify-center">
-                                    <QRCode value={totpUri} size={192} />
+                                    <QRCodeSVG value={totpUri} size={192} />
                                 </div>
                             </CardContent>
                         </Card>
