@@ -1,15 +1,21 @@
-# Unified Search
+# Search Index
 
-> **TLDR**: Single search field across all apps. SQLite FTS5 per-user search index at
-> `data/home/{userId}/eigen.search/search.db`. Content table + FTS5 virtual table with auto-sync triggers. Indexes mail,
-> docs, chat, stickies, contacts, calendar, drive metadata. Shared data searched via existing `shared.db` and
-> `shared_calendars` tables. Future: hybrid FTS5 + vector search.
+> **TLDR**: **Backend search infrastructure** consumed by the [command palette](PROPOSAL_COMMAND_PALETTE.md).
+> SQLite FTS5 per-user search index at `data/home/{userId}/eigen.search/search.db`. Content table + FTS5
+> virtual table with auto-sync triggers. Indexes mail, docs, chat, stickies, contacts, calendar, drive
+> metadata. Shared data searched via existing `shared.db` and `shared_calendars` tables. Future: hybrid
+> FTS5 + vector search. **No UI here — the palette is the only consumer.**
 
 ## Problem Statement
 
-- Users need one search field (Cmd+K) that returns results across Mail, Drive, Docs, Chat, Stickies, Contacts, Calendar
-- Must cover owned data AND data shared with the user (via ACL or team membership)
-- Must be self-hosted, no external search services
+The [command palette](PROPOSAL_COMMAND_PALETTE.md) needs fast, ranked content search across Mail, Drive,
+Docs, Chat, Stickies, Contacts, Calendar. Today there is none — every domain stores text in its own
+SQLite, and full-text search of Yjs document content is impossible without server-side extraction.
+
+- Cover owned data AND data shared with the user (via ACL or team membership)
+- Self-hosted, no external search services
+- Single FTS5 ranking across domains so the palette can compare a file's score against an email's against a
+  contact's in one query — cross-kind ranking requires unified BM25 in one place
 
 ## What's Searchable
 
@@ -374,43 +380,11 @@ For v1, shared Drive path names are searchable via the user's index (indexed on 
 
 ## Frontend
 
-### Search UI
-
-- **Trigger**: `Mod+K` hotkey via `@tanstack/react-hotkeys` (see Hotkeys section in `docs/CONTRIBUTING.md`)
-- **Component**: `packages/ui/src/components/layout/app/search-dialog.tsx`
-- **Pattern**: Dialog/command palette, rendered inside `EigenApp` provider stack
-- **Debounce**: 200ms on input before API call
-- **Display**: Results grouped by domain, each with app icon + title + snippet with `<mark>` highlights
-- **Navigation**: Click result → cross-app navigation via URL helpers from `packages/lib/src/core/api.ts`
-- **Hook**: `packages/lib/src/core/search/hooks/use-search.ts`
-
-### Query Keys
-
-```typescript
-// packages/lib/src/core/search/keys.ts
-export const searchKeys = {
-    all: ['search'] as const,
-    query: (ownerId: string, q: string, domain?: string) =>
-        [...searchKeys.all, ownerId, q, domain] as const,
-};
-```
-
-### Result Navigation
-
-Each result's `metadata` JSON contains the IDs needed to construct the target URL. The helpers are path-based
-(see `packages/lib/src/core/api.ts`):
-
-| Domain   | URL Construction                                                      |
-|----------|-----------------------------------------------------------------------|
-| Mail     | `getMailAppUrl(`box/${metadata.mailbox}/${itemId}`)`                  |
-| Drive    | `getDriveAppUrl(`fs/${ownerId}/${metadata.mountId}/${itemId}`)`       |
-| Docs     | `getDocUrl(ownerId, metadata.mountId, itemId)`                        |
-| Stickies | `getStickiesBoardUrl(ownerId, metadata.mountId, itemId)`              |
-| Slides   | `getSlideUrl(ownerId, metadata.mountId, itemId)`                      |
-| Sheets   | `getSheetUrl(ownerId, metadata.mountId, itemId)`                      |
-| Chat     | `getChatRoomUrl(ownerId, metadata.mountId, itemId)`                   |
-| Contacts | `getContactsAppUrl(itemId)`                                           |
-| Calendar | `getCalendarAppUrl(itemId)`                                           |
+The command palette is the sole consumer of `/search/:ownerId`. See
+[PROPOSAL_COMMAND_PALETTE.md](PROPOSAL_COMMAND_PALETTE.md) — its FE `search` provider wraps this endpoint,
+and per-domain result navigation lives in the palette's row components. Shared types
+(`SearchResult`, `SearchResponse`) live in `packages/lib/src/types/search.ts` and are imported by both
+sides of the seam.
 
 ## Research: Self-Hosted AI for Search (2026 Landscape)
 
@@ -651,11 +625,10 @@ communicates via HTTP, the user chooses which model to run. No Eigen code change
 | 1     | `search.db` schema + `SearchIndex` class + wire into `Home` (lazy init) + indexing hooks for mail, contacts, calendar, drive | M |
 | 2     | Chat message indexing (requires opening per-room DBs)                                                           | S      |
 | 3     | Yjs text extraction for docs, stickies, slides, sheets (hook into `DbProvider.createSnapshot`)                  | M      |
-| 4     | Search API endpoint (`apps/api/src/routes/search.ts`)                                                           | S      |
-| 5     | Frontend Cmd+K dialog + `useSearch` hook + result navigation                                                    | M      |
-| 6     | Shared data: index shared paths on `receiveACLChange`, search `shared_calendars`                                | S      |
-| 7     | Full re-index command (backfill existing data by walking all domain DBs)                                        | S      |
-| 8     | Semantic/vector search (future)                                                                                 | L      |
+| 4     | Search API endpoint (`apps/api/src/routes/search.ts`) — replaces the palette's metadata-LIKE stopgap            | S      |
+| 5     | Shared data: index shared paths on `receiveACLChange`, search `shared_calendars`                                | S      |
+| 6     | Full re-index command (backfill existing data by walking all domain DBs)                                        | S      |
+| 7     | Semantic/vector search (future)                                                                                 | L      |
 
 ### File Structure
 
@@ -668,10 +641,7 @@ apps/api/src/lib/search/
 
 apps/api/src/routes/search.ts   # Search endpoint
 
-packages/lib/src/types/search.ts              # SearchResult, SearchResponse types
-packages/lib/src/core/search/keys.ts          # Query key factory
-packages/lib/src/core/search/hooks/           # useSearch hook
-packages/ui/src/components/layout/app/search-dialog.tsx  # Cmd+K UI
+packages/lib/src/types/search.ts              # SearchResult, SearchResponse types (shared with command palette)
 ```
 
 ### Key Decisions
