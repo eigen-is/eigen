@@ -212,33 +212,106 @@ export class SearchIndex {
             .run();
     }
 
-    query(q: string, options?: { domain?: string; limit?: number; offset?: number }) {
+    query(q: string, options?: { domain?: string; limit?: number; offset?: number }): SearchResponse {
+        const ftsQuery = sanitizeFtsQuery(q);
+        if (!ftsQuery) return { results: [], total: 0 };
+
         const limit = Math.min(options?.limit ?? 20, 100);
         const offset = options?.offset ?? 0;
-        const ftsQuery = sanitizeFtsQuery(q);
+        const domains = options?.domain?.split(',').map(d => d.trim()).filter(Boolean) ?? [];
 
-        const domainFilter = options?.domain
-            ? sql`AND e.domain IN (${sql.raw(options.domain.split(',').map(d => `'${d.trim()}'`).join(','))})`
+        // Parameter-bound IN list via drizzle's sql.join — no string interpolation of user input.
+        const domainFilter = domains.length
+            ? sql` AND e.domain IN (${sql.join(domains.map(d => sql`${d}`), sql`, `)})`
             : sql``;
 
-        const results = this.db.all(sql`
-            SELECT e.domain, e.item_id, e.title,
+        const rows = this.db.all<SearchRow>(sql`
+            SELECT e.domain, e.item_id, e.mount_id, e.title, e.metadata, e.updated_at,
                    snippet(search_fts, 1, '<mark>', '</mark>', '...', 30) AS snippet,
-                   e.metadata, e.updated_at,
                    bm25(search_fts) AS rank
             FROM search_fts f
             JOIN search_entries e ON e.id = f.rowid
-            WHERE search_fts MATCH ${ftsQuery}
-            ${domainFilter}
+            WHERE search_fts MATCH ${ftsQuery}${domainFilter}
             ORDER BY rank
             LIMIT ${limit} OFFSET ${offset}
         `);
 
-        return results;
+        return { results: rows.map(projectRow), total: rows.length };
     }
 
     async destruct() {
         if (this.managedDb) await this.managedDb.close();
+    }
+}
+
+type SearchRow = {
+    domain: string; item_id: string; mount_id: string | null;
+    title: string; metadata: string | null;
+    updated_at: number; snippet: string; rank: number;
+};
+
+// FTS5 query strings have their own grammar (AND/OR/NOT, quotes, NEAR, column qualifiers).
+// User input is unsafe to interpolate verbatim — bare punctuation can fall through as a
+// column qualifier or unbalanced quote and throw at the SQLite layer. Strip metacharacters,
+// phrase-quote each remaining token, suffix `*` for prefix matching, AND-join.
+function sanitizeFtsQuery(raw: string): string {
+    return raw
+        .replace(/["()]/g, ' ')
+        .split(/\s+/)
+        .map(t => t.replace(/[*^:-]/g, ''))
+        .filter(t => t.length > 0)
+        .map(t => `"${t}"*`)
+        .join(' AND ');
+}
+
+// Project a generic FTS row into the typed wire union by reading domain-specific
+// fields out of the `metadata` JSON written at index time.
+function projectRow(row: SearchRow): SearchHit {
+    const m = row.metadata ? JSON.parse(row.metadata) as Record<string, unknown> : {};
+    switch (row.domain) {
+        case 'mail':
+            return {
+                kind: 'mail', itemId: row.item_id, subject: row.title,
+                from: String(m.from ?? ''), mailbox: String(m.mailbox ?? ''),
+                receivedAt: Number(m.receivedAt ?? row.updated_at),
+                snippet: row.snippet,
+            };
+        case 'event':
+            return {
+                kind: 'event', itemId: row.item_id, title: row.title,
+                startsAt: Number(m.startsAt ?? 0),
+                location: m.location ? String(m.location) : undefined,
+                calendarName: String(m.calendarName ?? ''),
+                snippet: row.snippet,
+            };
+        case 'chat':
+            return {
+                kind: 'chat', itemId: row.item_id,
+                chatId: String(m.chatId ?? ''),
+                ownerId: String(m.ownerId ?? ''),
+                mountId: row.mount_id ?? '',
+                chatTitle: String(m.chatTitle ?? ''),
+                sentAt: Number(m.sentAt ?? row.updated_at),
+                snippet: row.snippet,
+            };
+        case 'drive':
+        case 'doc':
+        case 'stickies':
+        case 'slides':
+        case 'sheets':
+            return {
+                kind: 'file', itemId: row.item_id,
+                ownerId: String(m.ownerId ?? ''),
+                mountId: row.mount_id ?? '',
+                pathId: row.item_id,
+                title: row.title,
+                subtitle: String(m.subtitle ?? ''),
+                mimeType: String(m.mimeType ?? ''),
+                updatedAt: row.updated_at,
+                snippet: row.snippet,
+            };
+        default:
+            throw new Error(`Unknown search domain: ${row.domain}`);
     }
 }
 ```
@@ -254,53 +327,105 @@ that call `upsert()` / `delete()` after their own DB writes.
 | Chat     | `ChatRoom.postMessage()` / `editMessage()`           | Upsert message                  |
 | Contacts | `Contacts.addContact()` / `updateContact()`          | Upsert contact fields           |
 | Calendar | `Calendar.createEvent()` / `updateEvent()`           | Upsert event title/desc         |
-| Drive    | `Drive.createFolder()` / `renamePath()` / `deleteFile()` | Upsert/delete file name    |
+| Drive    | `Drive.createFolder()` / `renamePath()` / `deletePath()` | Upsert/delete file name    |
 | Docs     | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
 | Stickies | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
 | Slides   | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
 | Sheets   | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
 
+Each domain writes a `metadata` JSON shaped to fit the matching `SearchHit` variant — mail emits
+`{ from, mailbox, receivedAt }`, drive/docs/stickies/slides/sheets emit `{ ownerId, mimeType,
+subtitle }`, calendar emits `{ startsAt, location, calendarName }`, chat emits `{ chatId,
+ownerId, chatTitle, sentAt }`. The `projectRow` helper above is the read side of this contract.
+
 ### Yjs Text Extraction
 
-Bun has no DOM, so `.toDOM().textContent` cannot be used. Walk the Yjs XML tree directly instead.
+Bun has no DOM, so `.toDOM().textContent` is not available. Walk the Yjs structure directly.
+**Each Eigen file type uses a different Yjs root** — `getXmlFragment('default')` is correct
+only for docs.
 
 ```typescript
 // apps/api/src/lib/search/yjs-extract.ts
 import * as Y from 'yjs';
 
+export type IndexedDocType = 'doc' | 'stickies' | 'slides' | 'sheets';
+
+export function extractTextFromYjs(stateData: Uint8Array, docType: IndexedDocType): string {
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, stateData);
+
+    switch (docType) {
+        // Docs: Tiptap writes the ProseMirror tree to Y.XmlFragment('default').
+        case 'doc':
+            return extractXmlText(doc.getXmlFragment('default'));
+
+        // Stickies: Y.Map('tasks') keys card id → Y.Map; `title` and `description` are each
+        // either a plain string or a Y.Text (the helper handles both branches).
+        case 'stickies':
+            return collectFromMapValues(doc.getMap('tasks'), ['title', 'description']);
+
+        // Slides: Y.Map('objects') keys shape id → Y.Map; text shapes carry a Y.Text in `text`.
+        case 'slides':
+            return collectFromMapValues(doc.getMap('objects'), ['text']);
+
+        // Sheets is the odd one out — state lives as a JSON-stringified snapshot at
+        // Y.Map('state').get('snapshot'), not as a Yjs tree. Parse, then walk celldata.
+        case 'sheets': {
+            const snapshot = doc.getMap('state').get('snapshot');
+            if (typeof snapshot !== 'string') return '';
+            try { return extractSheetText(JSON.parse(snapshot)); }
+            catch { return ''; }
+        }
+    }
+}
+
 function extractXmlText(element: Y.XmlElement | Y.XmlFragment): string {
     const parts: string[] = [];
     for (const child of element.toArray()) {
-        if (child instanceof Y.XmlText) {
-            parts.push(child.toJSON());
-        } else if (child instanceof Y.XmlElement || child instanceof Y.XmlFragment) {
-            parts.push(extractXmlText(child));
+        if (child instanceof Y.XmlText) parts.push(child.toJSON());
+        else if (child instanceof Y.XmlElement || child instanceof Y.XmlFragment) parts.push(extractXmlText(child));
+    }
+    return parts.join(' ');
+}
+
+function collectFromMapValues(map: Y.Map<unknown>, keys: readonly string[]): string {
+    const parts: string[] = [];
+    for (const value of map.values()) {
+        if (!(value instanceof Y.Map)) continue;
+        for (const key of keys) {
+            const v = value.get(key);
+            if (typeof v === 'string') parts.push(v);
+            else if (v instanceof Y.Text) parts.push(v.toString());
         }
     }
     return parts.join(' ');
 }
 
-export function extractTextFromYjs(stateData: Uint8Array, docType: string): string {
-    const doc = new Y.Doc();
-    Y.applyUpdate(doc, stateData);
-
-    switch (docType) {
-        case 'doc':
-            return extractXmlText(doc.getXmlFragment('default'));
-        case 'stickies':
-            return extractStickiesText(doc);
-        case 'slides':
-            return extractSlidesText(doc);
-        case 'sheets':
-            return extractSheetsText(doc);
-        default:
-            return '';
+// Walk fortune-sheet-style snapshot data: `data` is sheets[], each with `celldata` of
+// { r, c, v: { v, m, ct, ... } }. Prefer rendered `m`, fall back to raw `v`.
+function extractSheetText(snapshot: unknown): string {
+    if (!snapshot || typeof snapshot !== 'object') return '';
+    const sheets = (snapshot as { data?: unknown[] }).data;
+    if (!Array.isArray(sheets)) return '';
+    const parts: string[] = [];
+    for (const sheet of sheets) {
+        const cells = (sheet as { celldata?: { v?: { v?: unknown; m?: unknown } }[] }).celldata;
+        if (!Array.isArray(cells)) continue;
+        for (const cell of cells) {
+            const v = cell.v;
+            if (!v) continue;
+            if (typeof v.m === 'string') parts.push(v.m);
+            else if (typeof v.v === 'string') parts.push(v.v);
+        }
     }
+    return parts.join(' ');
 }
 ```
 
-Extraction runs inside `DbProvider.createSnapshot()` (every 100 Yjs updates). The `SearchIndex` reference is passed
-through `CollabDocument` → `DbProvider` at construction time.
+Extraction runs inside `DbProvider.createSnapshot()` — `SNAPSHOT_INTERVAL = 100` updates
+(`apps/api/src/lib/collab/collabDocument.ts:22`). The `SearchIndex` reference is passed
+through `CollabDocument` → `DbProvider` at construction time. Failures inside extraction must
+not block the snapshot itself; wrap in try/catch and log.
 
 ## Search API
 
@@ -318,21 +443,65 @@ GET /search/:ownerId?q=<query>&domain=<domain>&limit=<n>&offset=<n>
 
 ### Response
 
+Per-kind **discriminated union**, same discipline as `SSEvent`, `HomeMessage`, and the
+`NotificationCenter`. Eden Treaty surfaces typed results end-to-end — no `metadata:
+Record<string, unknown>` bag at the seam, no `as` casts in the FE.
+
+Presentation fields (`icon`, `group`, `score`) are deliberately **not** on the wire — they belong
+to the [command palette](PROPOSAL_COMMAND_PALETTE.md), which projects `SearchHit` → `CommandResult`
+by adding them on the FE. The wire stays portable to non-palette consumers.
+
 ```typescript
-// packages/lib/src/types/search.ts
-type SearchResult = {
-    domain: string;
-    itemId: string;
-    title: string;
-    snippet: string;
-    metadata: Record<string, unknown>;
+// packages/lib/src/types/search.ts — shared FE+BE wire types
+export type FileSearchHit = {
+    kind: 'file';
+    itemId: string;         // = pathId; kept as itemId for cross-kind keying
+    ownerId: string;
+    mountId: string;
+    pathId: string;
+    title: string;          // paths.name
+    subtitle: string;       // breadcrumb / mount label
+    mimeType: string;
     updatedAt: number;
+    snippet?: string;
 };
 
-type SearchResponse = {
-    results: SearchResult[];
-    total: number;
+export type MailSearchHit = {
+    kind: 'mail';
+    itemId: string;         // = emails.id
+    subject: string;
+    from: string;           // emails.fromShort
+    mailbox: string;
+    receivedAt: number;
+    snippet?: string;
 };
+
+export type EventSearchHit = {
+    kind: 'event';
+    itemId: string;         // = events.id
+    title: string;
+    startsAt: number;       // wire-normalised; DB column is `events.startTime`
+    location?: string;
+    calendarName: string;
+    snippet?: string;
+};
+
+export type ChatSearchHit = {
+    kind: 'chat';
+    itemId: string;         // = messages.id
+    chatId: string;
+    ownerId: string;
+    mountId: string;
+    chatTitle: string;
+    sentAt: number;
+    snippet?: string;       // present at Phase 9 (FTS5); absent at the v1 LIKE stopgap
+};
+
+// v1 union: file + mail + event (Phase 1-5 + 6 of palette). ChatSearchHit joins at Phase 2
+// of this proposal (chat content indexing). The wrapper shape is locked from day one.
+export type SearchHit = FileSearchHit | MailSearchHit | EventSearchHit | ChatSearchHit;
+
+export type SearchResponse = { results: SearchHit[]; total: number };
 ```
 
 ### Route
@@ -372,7 +541,7 @@ No cross-home DB access needed. The user's own databases already contain shared 
   Filter by name using SQL `LIKE` or index shared paths into the user's own `search.db` at share-receive time
   (in `Drive.receiveACLChange()`).
 - **Shared calendars**: Query `calendar.db` → `shared_calendars` table (has `calendarName`, `ownerUserId`). Shared
-  calendar events are fetched on-demand via the `home-relay.ts` seam (`checkCalendarAccess` for permission +
+  calendar events are fetched on-demand via the `home-relay.ts` seam (`pullCalendarPermission` for permission +
   `pullEventsInRange` for events).
 
 For v1, shared Drive path names are searchable via the user's index (indexed on `receiveACLChange`). Shared document
@@ -382,9 +551,9 @@ For v1, shared Drive path names are searchable via the user's index (indexed on 
 
 The command palette is the sole consumer of `/search/:ownerId`. See
 [PROPOSAL_COMMAND_PALETTE.md](PROPOSAL_COMMAND_PALETTE.md) — its FE `search` provider wraps this endpoint,
-and per-domain result navigation lives in the palette's row components. Shared types
-(`SearchResult`, `SearchResponse`) live in `packages/lib/src/types/search.ts` and are imported by both
-sides of the seam.
+and per-domain result navigation lives in the palette's row components. Shared wire types
+(`SearchHit` union + `SearchResponse`) live in `packages/lib/src/types/search.ts` and are imported by
+both sides of the seam; the palette `&`s `Presentation` on top for FE-only fields (icon, group, score).
 
 ## Research: Self-Hosted AI for Search (2026 Landscape)
 
@@ -641,7 +810,7 @@ apps/api/src/lib/search/
 
 apps/api/src/routes/search.ts   # Search endpoint
 
-packages/lib/src/types/search.ts              # SearchResult, SearchResponse types (shared with command palette)
+packages/lib/src/types/search.ts              # SearchHit (FileSearchHit | MailSearchHit | EventSearchHit | ChatSearchHit) + SearchResponse — shared with the palette
 ```
 
 ### Key Decisions
