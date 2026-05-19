@@ -1,0 +1,2 @@
+# Force LF on all text files so Windows checkouts don't churn the working tree.
+* text=auto eol=lf
