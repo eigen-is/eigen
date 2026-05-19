@@ -17,7 +17,7 @@ ENV SHARP_IGNORE_GLOBAL_LIBVIPS=0
 
 COPY . .
 
-RUN bun install --ignore-scripts
+RUN bun install --frozen-lockfile --ignore-scripts
 
 RUN mkdir -p /app/data/home /app/data/server
 
