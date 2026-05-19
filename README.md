@@ -148,34 +148,6 @@ collaboration runs through Yjs over WebSocket, while Server-Sent Events push liv
 | Real-time | [Yjs](https://yjs.dev) (collaborative editing) + WebSocket + SSE |
 | Tooling   | [Biome](https://biomejs.dev) (lint + format) + [Vite](https://vite.dev) (build) |
 
-## Project structure
-
-```
-apps/
-  api/          # Elysia backend (port 8000)
-  mail/         # Email client
-  drive/        # File storage
-  docs/         # Document editor
-  sheets/       # Spreadsheet editor
-  slides/       # Presentations
-  stickies/     # Kanban boards
-  calendar/     # Calendar
-  contacts/     # Contact management
-  chat/         # Real-time chat
-  space/        # Account settings
-  admin/        # Org/team admin
-  index/        # Landing page
-  setup/        # First-run wizard
-
-packages/
-  lib/          # Shared types, hooks, API client, validation
-  ui/           # Shared components and layout system
-  sheet/        # Spreadsheet engine + UI (forked from fortune-sheet/luckysheet)
-
-data/           # Runtime storage (gitignored)
-docs/           # Architecture documentation
-```
-
 ## Contributing
 
 Eigen is open source and contributions are welcome. The project is still in active early development — there's plenty
