@@ -11,6 +11,6 @@
   "dependencies": {
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
-    "react-qr-code": "^2.0.15"
+    "qrcode.react": "^4.2.0"
   }
 }
