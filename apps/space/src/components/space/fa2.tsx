@@ -11,6 +11,7 @@ import {
     FormMessage,
 } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
+import { CopyInput } from '@workspace/ui/components/layout/copy-input';
 import { Separator } from '@workspace/ui/components/separator';
 import { Check, Copy, InfoIcon } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -55,7 +56,6 @@ export function TwoFactorSetup({
     setCurrentStep,
 }: TwoFactorSetupProps) {
     const [isLoading, setIsLoading] = useState<boolean>(false);
-    const [isCopied, setIsCopied] = useState<boolean>(false);
     const [codesCopied, setCodesCopied] = useState<boolean>(false);
 
     const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
@@ -71,14 +71,6 @@ export function TwoFactorSetup({
             verificationCode: '',
         },
     });
-
-    const copyToClipboard = () => {
-        if (secretKey) {
-            navigator.clipboard.writeText(secretKey);
-            setIsCopied(true);
-            setTimeout(() => setIsCopied(false), 2000);
-        }
-    };
 
     const copyBackupCodes = () => {
         const text = backupCodes.join('\n');
@@ -197,12 +189,7 @@ export function TwoFactorSetup({
                             If you can't scan the QR code, you can manually enter this setup key into your app.
                         </p>
 
-                        <div className="flex items-center space-x-2">
-                            <Input value={secretKey} readOnly className="font-mono" />
-                            <Button variant="outline" size="icon" onClick={copyToClipboard} title="Copy to clipboard">
-                                {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                            </Button>
-                        </div>
+                        <CopyInput value={secretKey} successMessage="Setup key copied to clipboard" />
                     </div>
 
                     <div className="flex justify-between">
