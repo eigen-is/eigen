@@ -1,13 +1,13 @@
-import { EMPTY_S3, type S3Config } from '@workspace/lib/types';
+import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
+import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
-import { cn } from '@workspace/ui/lib/utils';
-import { AlertTriangle, CheckCircle2, Loader2, Wifi } from 'lucide-react';
 import { useState } from 'react';
-import { Alert, AlertDescription } from '../../alert';
 import { Button } from '../../button';
+import { DialogFooter } from '../../dialog';
 import { Input } from '../../input';
 import { Label } from '../../label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../select';
+import { S3ConfigCard } from './s3-config-card';
 
 export type MountFormValues = {
     name: string;
@@ -23,7 +23,7 @@ type MountFormProps = {
     initialValues?: Partial<MountFormValues>;
     onSubmit: (values: MountFormValues) => void | Promise<void>;
     onCancel?: () => void;
-    onS3Check?: (config: S3Config) => Promise<S3CheckResult>;
+    onS3Check: (config: S3Config) => Promise<S3CheckResult>;
     submitLabel?: string;
     isEdit?: boolean;
 };
@@ -47,38 +47,10 @@ export function MountForm({
     const [s3Config, setS3Config] = useState<S3Config>(
         initialValues?.s3Config ?? (defaultS3Config ? { ...defaultS3Config } : { ...EMPTY_S3 }),
     );
-    const [s3Check, setS3Check] = useState<S3CheckResult | null>(null);
-    const [s3Checking, setS3Checking] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     const isS3 = storageType === 's3';
-    const s3Valid = isS3 && s3Config.endpoint && s3Config.bucket && s3Config.accessKeyId && s3Config.secretAccessKey;
-
-    const handleStorageTypeChange = (value: string) => {
-        setStorageType(value as MountFormValues['storageType']);
-        setS3Check(null);
-    };
-
-    const handleS3Check = async () => {
-        if (!onS3Check || !s3Valid) return;
-        setS3Checking(true);
-        setS3Check(null);
-        try {
-            const result = await onS3Check(s3Config);
-            setS3Check(result);
-        } catch {
-            setS3Check({ ok: false, message: 'Connection check failed' });
-        } finally {
-            setS3Checking(false);
-        }
-    };
-
-    const updateS3 = (field: keyof S3Config, value: string) => {
-        setS3Config((prev) => ({ ...prev, [field]: value }));
-        setS3Check(null);
-    };
-
-    const canSubmit = name.trim() && maxSizeMB >= 10 && (!isS3 || s3Valid);
+    const canSubmit = name.trim() && maxSizeMB >= 10 && (!isS3 || isS3ConfigValid(s3Config));
 
     const handleSubmit = async () => {
         if (!canSubmit) return;
@@ -109,7 +81,11 @@ export function MountForm({
 
             <div className="space-y-1.5">
                 <Label>Storage Type</Label>
-                <Select value={storageType} onValueChange={handleStorageTypeChange} disabled={isEdit}>
+                <Select
+                    value={storageType}
+                    onValueChange={(value) => setStorageType(value as MountFormValues['storageType'])}
+                    disabled={isEdit}
+                >
                     <SelectTrigger>
                         <SelectValue />
                     </SelectTrigger>
@@ -131,108 +107,9 @@ export function MountForm({
                 />
             </div>
 
-            {isS3 && (
-                <div className="space-y-3 border rounded-lg p-4">
-                    <h4 className="text-sm font-medium">S3 Configuration</h4>
+            {isS3 && <S3ConfigCard value={s3Config} onChange={setS3Config} onCheck={onS3Check} isEdit={isEdit} />}
 
-                    {isEdit && (
-                        <Alert>
-                            <AlertTriangle className="h-4 w-4" />
-                            <AlertDescription>
-                                Changing S3 settings on an existing mount can break access to stored files. Test the
-                                connection before saving.
-                            </AlertDescription>
-                        </Alert>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                            <Label>Endpoint</Label>
-                            <Input
-                                value={s3Config.endpoint}
-                                onChange={(e) => updateS3('endpoint', e.target.value)}
-                                placeholder="https://s3.amazonaws.com"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>Bucket</Label>
-                            <Input
-                                value={s3Config.bucket}
-                                onChange={(e) => updateS3('bucket', e.target.value)}
-                                placeholder="my-bucket"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>Prefix</Label>
-                            <Input
-                                value={s3Config.prefix}
-                                onChange={(e) => updateS3('prefix', e.target.value)}
-                                placeholder="optional/path"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>Region</Label>
-                            <Input
-                                value={s3Config.region ?? ''}
-                                onChange={(e) => updateS3('region', e.target.value)}
-                                placeholder="eu-west-1"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>Access Key ID</Label>
-                            <Input
-                                value={s3Config.accessKeyId}
-                                onChange={(e) => updateS3('accessKeyId', e.target.value)}
-                                placeholder="AKIA..."
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>Secret Access Key</Label>
-                            <Input
-                                type="password"
-                                value={s3Config.secretAccessKey}
-                                onChange={(e) => updateS3('secretAccessKey', e.target.value)}
-                                placeholder="••••••••"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleS3Check}
-                            disabled={!s3Valid || s3Checking}
-                        >
-                            {s3Checking ? (
-                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                                <Wifi className="h-4 w-4 mr-1" />
-                            )}
-                            Test Connection
-                        </Button>
-
-                        {s3Check && (
-                            <span
-                                className={cn(
-                                    'text-sm flex items-center gap-1',
-                                    s3Check.ok ? 'text-success' : 'text-destructive',
-                                )}
-                            >
-                                {s3Check.ok ? (
-                                    <CheckCircle2 className="h-4 w-4" />
-                                ) : (
-                                    <AlertTriangle className="h-4 w-4" />
-                                )}
-                                {s3Check.message}
-                            </span>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <DialogFooter>
                 {onCancel && (
                     <Button variant="outline" onClick={onCancel}>
                         Cancel
@@ -241,7 +118,7 @@ export function MountForm({
                 <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
                     {submitting ? 'Saving...' : submitLabel}
                 </Button>
-            </div>
+            </DialogFooter>
         </div>
     );
 }

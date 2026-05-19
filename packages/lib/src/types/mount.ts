@@ -11,6 +11,10 @@ export type S3Config = {
 
 export const EMPTY_S3: S3Config = { endpoint: '', bucket: '', prefix: '', accessKeyId: '', secretAccessKey: '' };
 
+export function isS3ConfigValid(config: S3Config): boolean {
+    return !!(config.endpoint && config.bucket && config.accessKeyId && config.secretAccessKey);
+}
+
 export type MountConfig = {
     id: string;
     name: string;
