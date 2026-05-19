@@ -1,6 +1,6 @@
 import { useCheckS3Connection } from '@workspace/lib/settings';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { ServerStorageType } from '@workspace/lib/types/settings';
+import type { S3CheckResult, ServerStorageType } from '@workspace/lib/types/settings';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -8,8 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, CheckCircle2, Loader2, Wifi } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
-type S3CheckResult = { ok: boolean; message: string };
 
 type StorageTypePickerProps = {
     storageType: ServerStorageType;

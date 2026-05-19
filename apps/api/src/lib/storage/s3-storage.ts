@@ -1,8 +1,9 @@
+import type { S3CheckResult } from '@workspace/lib/types/settings';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
 import type { S3Config, StorageBackend } from './types';
 
-export async function checkS3Connection(config: S3Config): Promise<{ ok: boolean; message: string }> {
+export async function checkS3Connection(config: S3Config): Promise<S3CheckResult> {
     try {
         const client = new S3Client({
             endpoint: config.endpoint,

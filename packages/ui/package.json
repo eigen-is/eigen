@@ -46,6 +46,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./globals.css": "./src/styles/globals.css",
+    "./styles/eigen-prose.css": "./src/styles/eigen-prose.css",
+    "./styles/slide-text.css": "./src/styles/slide-text.css",
+    "./assets/fonts/excalifont/Excalifont-Regular.woff2": "./src/assets/fonts/excalifont/Excalifont-Regular.woff2",
+    "./assets/fonts/inter/Inter-Variable.woff2": "./src/assets/fonts/inter/Inter-Variable.woff2",
+    "./assets/fonts/inter/Inter-Variable-Italic.woff2": "./src/assets/fonts/inter/Inter-Variable-Italic.woff2",
+    "./assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2": "./src/assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2",
+    "./assets/fonts/source-serif/SourceSerif4-Variable.woff2": "./src/assets/fonts/source-serif/SourceSerif4-Variable.woff2",
+    "./assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2": "./src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2",
     "./postcss.config": "./postcss.config.mjs",
     "./lib/*": "./src/lib/*.ts",
     "./components/*": [

@@ -37,6 +37,8 @@ export type TeamSettings = {
 
 export type ServerStorageType = 'local-id' | 'local-fullnames' | 's3';
 
+export type S3CheckResult = { ok: boolean; message: string };
+
 export type ServerSettings = {
     quotas: {
         mailAndContactsMaxMB: number;

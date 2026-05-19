@@ -1,3 +1,12 @@
+export type AdminUser = {
+    id: string;
+    email: string;
+    name: string;
+    image: string | null;
+    role: string | null;
+    createdAt: Date;
+};
+
 export type OrgMember = {
     id: string;
     userId: string;

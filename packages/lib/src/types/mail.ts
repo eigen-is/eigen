@@ -101,6 +101,12 @@ export type EmailDraft = Omit<Email, 'to' | 'cc' | 'bcc'> & {
     bcc?: AddressObject;
 };
 
+// Drafts are produced by our own serializer, so to/cc/bcc are always a single AddressObject
+// (never an array). TS can't infer this from isDraft alone — this guard asserts the invariant.
+export function isEmailDraft(email: Email | null | undefined): email is EmailDraft {
+    return !!email?.isDraft;
+}
+
 export type NewDraft = {
     id?: string;
     subject?: string;

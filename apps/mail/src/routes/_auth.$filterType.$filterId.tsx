@@ -1,7 +1,8 @@
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
 import { useSpaceSettings } from '@workspace/lib/space';
-import type { Email, EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
+import type { Email } from '@workspace/lib/types/mail';
+import { isEmailDraft } from '@workspace/lib/types/mail';
 import { EmptyState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
@@ -89,7 +90,7 @@ function MailRoute() {
 
     const detailToolbar = isDraft ? (
         <EmailDraftToolbar
-            onDelete={() => handleDeleteEmail(selectedEmail as EmailDraftType)}
+            onDelete={() => isEmailDraft(selectedEmail) && handleDeleteEmail(selectedEmail)}
             onAttach={() => setFilePickerOpen(true)}
             isSending={actions.isSendPending}
             hasId={!!selectedEmail?.id}
@@ -169,7 +170,7 @@ function MailRoute() {
                                         ? `compose-${composeSessionKey ?? 'fresh'}`
                                         : (selectedEmail?.id ?? 'empty')
                                 }
-                                email={selectedEmail as EmailDraftType}
+                                email={isEmailDraft(selectedEmail) ? selectedEmail : null}
                                 prefillDraft={prefillDraft}
                                 to={to}
                                 signatureHtml={signatureHtml}

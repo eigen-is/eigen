@@ -1,6 +1,8 @@
 import type { ImageObject, TextObject } from '@workspace/lib/slides';
 
 export type { DeckData, ImageObject, SlideItem, SlideObject, TextObject } from '@workspace/lib/slides';
+
+export type ApplyTo = 'this' | 'this-and-following' | 'all';
 export {
     BORDER_RADIUS_ROUND,
     percentToPx,

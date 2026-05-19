@@ -2,10 +2,10 @@ import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
+// CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
+import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
 import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
-// CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
-import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-prose.css' with { type: 'text' };
 import { readEigendocContent } from '../../document/doc';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';

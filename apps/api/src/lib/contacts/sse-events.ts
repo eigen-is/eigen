@@ -1,19 +1,9 @@
-import type { SSEvent, SSEventType } from '@workspace/lib/types/sse';
+import type { SSEventContact, SSEventLabel } from '@workspace/lib/types/sse';
 
-type ContactEventType =
-    | typeof SSEventType.CONTACT_CREATED
-    | typeof SSEventType.CONTACT_UPDATED
-    | typeof SSEventType.CONTACT_DELETED;
-
-type LabelEventType =
-    | typeof SSEventType.LABEL_CREATED
-    | typeof SSEventType.LABEL_UPDATED
-    | typeof SSEventType.LABEL_DELETED;
-
-export function buildContactEvent(type: ContactEventType, contactId: string): SSEvent {
-    return { type, contactId } as SSEvent;
+export function buildContactEvent(type: SSEventContact['type'], contactId: string): SSEventContact {
+    return { type, contactId };
 }
 
-export function buildLabelEvent(type: LabelEventType, labelId: string): SSEvent {
-    return { type, labelId } as SSEvent;
+export function buildLabelEvent(type: SSEventLabel['type'], labelId: string): SSEventLabel {
+    return { type, labelId };
 }

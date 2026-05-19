@@ -1,5 +1,6 @@
+import type { AdminUser } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { ServerSettings } from '@workspace/lib/types/settings';
+import type { S3CheckResult, ServerSettings } from '@workspace/lib/types/settings';
 import { and, eq, ne, notInArray } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, user } from '../../auth-schema.ts';
@@ -128,14 +129,24 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .get(
         '/settings/users/:filter',
-        async ({ params, user: authUser }) => {
+        async ({ params, user: authUser }): Promise<AdminUser[]> => {
             await requireAdmin(authUser.id);
             const db = getAuthDrizzleDb();
+            // Project explicitly so the wire payload matches AdminUser exactly — `select()`
+            // would ship banReason / twoFactorEnabled / banned etc. to the admin UI.
+            const fields = {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                image: user.image,
+                role: user.role,
+                createdAt: user.createdAt,
+            };
             const memberUserIds = db.select({ userId: member.userId }).from(member);
             return params.filter === 'guest'
-                ? db.select().from(user).where(eq(user.role, 'guest')).all()
+                ? db.select(fields).from(user).where(eq(user.role, 'guest')).all()
                 : db
-                      .select()
+                      .select(fields)
                       .from(user)
                       .where(and(notInArray(user.id, memberUserIds), ne(user.role, 'guest')))
                       .all();
@@ -158,7 +169,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .post(
         '/settings/s3check',
-        async ({ body, user }) => {
+        async ({ body, user }): Promise<S3CheckResult> => {
             await requireAdmin(user.id);
             return checkS3Connection(toS3Config(body));
         },
