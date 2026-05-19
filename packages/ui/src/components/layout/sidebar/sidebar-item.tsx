@@ -41,9 +41,9 @@ export function SidebarItem({
 
     const content = (
         <>
-            {colorDot && <span className="h-3 w-3 rounded-full" style={{ backgroundColor: colorDot }} />}
+            {colorDot && <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: colorDot }} />}
             {icon}
-            {!condensed && label && <span>{label}</span>}
+            {!condensed && label && <span className="min-w-0 flex-1 truncate">{label}</span>}
             {children}
         </>
     );
