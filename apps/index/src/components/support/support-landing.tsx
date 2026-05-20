@@ -16,7 +16,7 @@ export function SupportLanding() {
                 <h1 className="text-3xl font-bold text-center mb-6">How can we help?</h1>
 
                 <div className="mx-auto max-w-md mb-12">
-                    <SearchTrigger className="flex w-full items-center gap-2 rounded-lg border px-4 py-3 text-muted-foreground hover:bg-muted" />
+                    <SearchTrigger className="w-full rounded-lg border px-4 py-3 hover:bg-muted" />
                 </div>
 
                 <h2 className="text-sm font-medium text-muted-foreground mb-3">Browse by topic</h2>
