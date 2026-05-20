@@ -13,7 +13,7 @@ type MyRouterContext = {
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
     beforeLoad: ({ context }) => {
-        if (context.auth.isAuthenticated && window.location.pathname === '/') {
+        if (typeof window !== 'undefined' && context.auth?.isAuthenticated && window.location.pathname === '/') {
             window.location.href = getSpaceAppUrl();
             return new Promise(() => {});
         }
