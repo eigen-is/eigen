@@ -4,21 +4,17 @@ import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import type { ArticleBody, ArticleMeta } from '../../content/manifest';
 import { ArticleContent } from '../ArticleContent';
 import { ArticleToc } from './article-toc';
-import { SectionNav } from './section-nav';
 import { getSection } from './sections';
 import { SupportBreadcrumb } from './support-breadcrumb';
 
-// A full article: section nav + body + on-this-page TOC, in ColumnLayout so the
-// toolbars/breadcrumb match Drive exactly. TOC column hidden below 2 headings.
+// A full article: body + on-this-page TOC. Section nav lives in the AppShell sidebar.
 export function SupportArticle({
     article,
     body,
-    siblings,
     related,
 }: {
     article: ArticleMeta;
     body: ArticleBody;
-    siblings: ArticleMeta[];
     related: ArticleMeta[];
 }) {
     const { isMobile } = useLayout();
@@ -29,13 +25,9 @@ export function SupportArticle({
 
     return (
         <ColumnLayout mobileColumn="article">
-            <Column id="nav" width="260px" toolbar={<span className="text-sm">{sectionTitle}</span>}>
-                <SectionNav section={section} articles={siblings} activeSlug={article.slug} />
-            </Column>
             <Column
                 id="article"
                 width="flex"
-                onBack={() => history.back()}
                 toolbar={
                     <SupportBreadcrumb
                         trail={[
@@ -47,7 +39,7 @@ export function SupportArticle({
                 }
             >
                 <div className="h-full overflow-y-auto">
-                    <div className="mx-auto max-w-[70ch] px-6 py-8" data-pagefind-body>
+                    <div className="mx-auto max-w-[70ch] px-6 py-8">
                         <h1 className="text-3xl font-bold mb-1">{article.title}</h1>
                         {article.updated && (
                             <p className="text-sm text-muted-foreground mb-6">Updated {article.updated}</p>

@@ -1,65 +1,50 @@
 import { Link } from '@tanstack/react-router';
-import { getSupportArticles } from '../../content/manifest';
+import { Card, CardContent } from '@workspace/ui/components/card';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { useEffect } from 'react';
 import { SECTIONS } from './sections';
-import { SearchTrigger } from './support-search';
 
-// The help center front door: a hero search box, a browse-by-app grid, and popular links.
-// Full-width and centred — not the column layout.
+// The help center front door: a hero and a browse-by-topic grid. No sidebar here.
 export function SupportLanding() {
-    const popular = getSupportArticles()
-        .filter((a) => a.type === 'overview' || a.type === 'how-to')
-        .slice(0, 6);
+    const { setSidebarHidden } = useLayout();
+    useEffect(() => {
+        setSidebarHidden(true);
+        return () => setSidebarHidden(false);
+    }, [setSidebarHidden]);
 
     return (
-        <div className="flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-4xl px-6 py-12">
-                <h1 className="text-3xl font-bold text-center mb-6">How can we help?</h1>
-
-                <div className="mx-auto max-w-md mb-12">
-                    <SearchTrigger className="w-full rounded-lg border px-4 py-3 hover:bg-muted" />
-                </div>
-
-                <h2 className="text-sm font-medium text-muted-foreground mb-3">Browse by topic</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-12">
-                    {SECTIONS.map((section) => {
-                        const Icon = section.icon;
-                        return (
-                            <Link
-                                key={section.id}
-                                to="/support/$section"
-                                params={{ section: section.id }}
-                                className="eigen-list-item flex flex-col gap-1 rounded-lg border p-4 hover:bg-muted"
-                            >
-                                <Icon className="h-5 w-5 text-muted-foreground" />
-                                <span className="font-medium">{section.title}</span>
-                                <span className="text-sm text-muted-foreground">{section.description}</span>
-                            </Link>
-                        );
-                    })}
-                </div>
-
-                {popular.length > 0 && (
-                    <>
-                        <h2 className="text-sm font-medium text-muted-foreground mb-3">Popular articles</h2>
-                        <ul className="space-y-1">
-                            {popular.map((article) => {
-                                const [section, file] = article.slug.split('/');
+        <ColumnLayout>
+            <Column id="landing" width="flex">
+                <div className="h-full overflow-y-auto">
+                    <div className="mx-auto max-w-4xl px-6 py-12">
+                        <h1 className="text-3xl font-bold text-center mb-10">How can we help?</h1>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
+                            {SECTIONS.map((section) => {
+                                const Icon = section.icon;
                                 return (
-                                    <li key={article.slug}>
-                                        <Link
-                                            to="/support/$section/$article"
-                                            params={{ section, article: file }}
-                                            className="text-link hover:underline"
-                                        >
-                                            {article.title}
-                                        </Link>
-                                    </li>
+                                    <Card
+                                        key={section.id}
+                                        className="overflow-hidden hover:shadow-md transition-shadow"
+                                    >
+                                        <CardContent className="p-0">
+                                            <Link
+                                                to="/support/$section"
+                                                params={{ section: section.id }}
+                                                className="block p-4"
+                                            >
+                                                <Icon className="h-6 w-6" style={{ color: section.color }} />
+                                                <h3 className="font-medium mt-2">{section.title}</h3>
+                                                <p className="text-sm text-muted-foreground">{section.description}</p>
+                                            </Link>
+                                        </CardContent>
+                                    </Card>
                                 );
                             })}
-                        </ul>
-                    </>
-                )}
-            </div>
-        </div>
+                        </div>
+                    </div>
+                </div>
+            </Column>
+        </ColumnLayout>
     );
 }

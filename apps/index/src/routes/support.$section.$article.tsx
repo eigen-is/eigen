@@ -32,9 +32,8 @@ function ArticleComponent() {
     }
 
     const all = getSupportArticles();
-    const siblings = all.filter((a) => a.section === article.section);
     const bySlug = new Map(all.map((a) => [a.slug, a]));
     const related = article.related.map((slug) => bySlug.get(slug)).filter((a): a is ArticleMeta => a !== undefined);
 
-    return <SupportArticle article={article} body={body} siblings={siblings} related={related} />;
+    return <SupportArticle article={article} body={body} related={related} />;
 }
