@@ -1,9 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { escapeHtml } from '@workspace/lib/html';
-import { renderToString } from 'react-dom/server';
-import { routeTree } from '../src/routeTree.gen';
+import { createServer } from 'vite';
 import type { ContentManifest } from './lib/content-types';
 
 const ROOT = process.cwd(); // apps/index
@@ -100,18 +98,6 @@ function jsonLd(m: PageMeta): string {
     return `<script type="application/ld+json">${JSON.stringify(data).replace(/<\//g, '<\\/')}</script>`;
 }
 
-async function renderRoute(path: string): Promise<string> {
-    // `auth: undefined!` mirrors main.tsx — __root.tsx's beforeLoad short-circuits
-    // on a falsy `context.auth?.isAuthenticated`, so no real auth is needed here.
-    const router = createRouter({
-        routeTree,
-        history: createMemoryHistory({ initialEntries: [path] }),
-        context: { auth: undefined! },
-    });
-    await router.load();
-    return renderToString(<RouterProvider router={router} />);
-}
-
 // dist/index/index.html for "/"; dist/index/<path>/index.html for the rest.
 function outFile(path: string): string {
     if (path === '/') return join(DIST, 'index.html');
@@ -131,22 +117,37 @@ function sitemap(routeList: Array<{ path: string; meta: PageMeta }>): string {
     return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
+// Render through a Vite SSR server so the route tree's Vite-only APIs
+// (import.meta.glob in the content loader, import.meta.env app URLs) resolve.
 async function main() {
-    const shell = readFileSync(join(DIST, 'index.html'), 'utf-8');
-    const all = routes();
-    for (const route of all) {
-        const appHtml = await renderRoute(route.path);
-        const page = withMeta(shell, route.meta)
-            .replace(
-                '</head>',
-                `<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>${jsonLd(route.meta)}</head>`,
-            )
-            .replace('<div id="app"></div>', `<div id="app">${appHtml}</div>`);
-        writeFileSync(outFile(route.path), page);
-        console.log(`Prerendered ${route.path}`);
+    const vite = await createServer({
+        root: ROOT,
+        server: { middlewareMode: true },
+        appType: 'custom',
+        logLevel: 'error',
+    });
+    try {
+        const { render } = (await vite.ssrLoadModule('/src/entry-server.tsx')) as {
+            render: (url: string) => Promise<string>;
+        };
+        const shell = readFileSync(join(DIST, 'index.html'), 'utf-8');
+        const all = routes();
+        for (const route of all) {
+            const appHtml = await render(route.path);
+            const page = withMeta(shell, route.meta)
+                .replace(
+                    '</head>',
+                    `<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>${jsonLd(route.meta)}</head>`,
+                )
+                .replace('<div id="app"></div>', `<div id="app">${appHtml}</div>`);
+            writeFileSync(outFile(route.path), page);
+            console.log(`Prerendered ${route.path}`);
+        }
+        writeFileSync(join(DIST, 'sitemap.xml'), sitemap(all));
+        console.log(`Prerender complete: ${all.length} routes + sitemap.xml`);
+    } finally {
+        await vite.close();
     }
-    writeFileSync(join(DIST, 'sitemap.xml'), sitemap(all));
-    console.log(`Prerender complete: ${all.length} routes + sitemap.xml`);
 }
 
 main();
