@@ -1,0 +1,12 @@
+:root {
+    --app-current-color: var(--app-space-color);
+    --app-current-color-soft: var(--app-space-color-soft);
+}
+
+.bg-app {
+    background-color: var(--app-space-color);
+}
+
+.text-app {
+    color: var(--app-space-color);
+}
