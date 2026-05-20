@@ -6,14 +6,22 @@
   "scripts": {
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
-    "prebuild": "bun run scripts/generate-blog-meta.ts",
-    "postbuild": "bun run scripts/post-build.ts",
-    "typecheck": "tsc --noEmit"
+    "prebuild": "bun run scripts/build-content.ts",
+    "postbuild": "bun run scripts/prerender.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@tanstack/react-hotkeys": "^0.1.1",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
-    "react-markdown": "^10.1.0"
+    "gray-matter": "^4.0.3",
+    "markdown-it": "^14.1.1",
+    "markdown-it-anchor": "^9.2.0",
+    "react-markdown": "^10.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2"
   }
 }
