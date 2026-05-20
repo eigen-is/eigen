@@ -13,15 +13,13 @@ Eigen Drive supports WebDAV (RFC 4918), so you can mount any of your drives as a
 
 You need an **app password** to connect. App passwords are separate credentials you create specifically for external clients. They work even when two-factor authentication is enabled, and you can revoke them at any time without changing your main password.
 
-To create one, open the **Integrations** page in Space (`/services`), scroll to **App passwords**, enter a name (e.g. "Finder" or "My laptop"), and click **Generate**. Copy the password — it is only shown once.
+To create one, open the [**Integrations** page](/space/services) in Space, scroll to **App passwords**, enter a name (e.g. "Finder" or "My laptop"), and click **Generate**. Copy the password — it is only shown once.
 
 The same page lists the WebDAV URL for each of your drives. The URL format is:
 
 ```
 https://<your-eigen-host>/webdav/<ownerId>/<mountId>/
 ```
-
-For personal drives `<ownerId>` is your user ID; for team drives it is `team_<teamId>`. You do not need to work out these values yourself — the Integrations page shows a ready-to-copy URL for every accessible mount.
 
 ## Connect on macOS (Finder)
 
@@ -30,7 +28,11 @@ For personal drives `<ownerId>` is your user ID; for team drives it is `team_<te
 3. Choose **Registered User**, enter your Eigen email address as the username, and the app password you generated as the password.
 4. Click **Connect**. The drive appears under **Locations** in the Finder sidebar.
 
+<div class="eigen-callout">
+
 Finder's built-in WebDAV support works but can be slow on large folders and caches metadata aggressively. For better performance, consider [Mountain Duck](https://mountainduck.io) (commercial) or [rclone](https://rclone.org) (free, command-line).
+
+</div>
 
 ## Connect on Windows (File Explorer)
 
