@@ -28,7 +28,7 @@ export function SupportArticle({
     const showToc = article.toc.length >= 2;
 
     return (
-        <ColumnLayout mobileColumn={isMobile ? 'article' : 'nav'}>
+        <ColumnLayout mobileColumn="article">
             <Column id="nav" width="260px" toolbar={<span className="text-sm">{sectionTitle}</span>}>
                 <SectionNav section={section} articles={siblings} activeSlug={article.slug} />
             </Column>
