@@ -1,8 +1,8 @@
-import type { ArticleBody, ArticleMeta, ContentManifest } from '../../scripts/lib/content-types';
+import type { ArticleBody, ArticleMeta, ContentManifest, TocEntry } from '../../scripts/lib/content-types';
 import blogManifest from './.generated/blog.manifest.json';
 import supportManifest from './.generated/support.manifest.json';
 
-export type { ArticleBody, ArticleMeta };
+export type { ArticleBody, ArticleMeta, TocEntry };
 
 const blog = (blogManifest as ContentManifest).articles;
 const support = (supportManifest as ContentManifest).articles;
