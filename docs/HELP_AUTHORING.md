@@ -22,7 +22,7 @@ a missing or malformed field fails the build.
 | `title` | yes | The H1, page title, and search result title. |
 | `description` | yes | One-sentence answer; meta description and search snippet. |
 | `type` | yes | `overview`, `how-to`, `troubleshooting`, `faq`, or `reference`. |
-| `category` | no | Groups articles in the section sidebar. |
+| `category` | no | Optional topic label for the article. |
 | `tags` | no | Used for the related-articles fallback. |
 | `related` | no | Explicit related article paths, e.g. `[drive/stop-sharing]`. |
 | `crossSections` | no | Extra section ids this article is also listed under, e.g. `[drive]`. The article keeps its single file and canonical URL. |
