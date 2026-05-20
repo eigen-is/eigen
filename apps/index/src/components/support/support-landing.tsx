@@ -3,8 +3,8 @@ import { getSupportArticles } from '../../content/manifest';
 import { SECTIONS } from './sections';
 import { SearchTrigger } from './support-search';
 
-// The help center front door: a hero, a browse-by-app grid, and popular links.
-// Full-width and centred — not the column layout. (Search is added in Phase 3.)
+// The help center front door: a hero search box, a browse-by-app grid, and popular links.
+// Full-width and centred — not the column layout.
 export function SupportLanding() {
     const popular = getSupportArticles()
         .filter((a) => a.type === 'overview' || a.type === 'how-to')
