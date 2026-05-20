@@ -11,8 +11,6 @@ import { Fragment } from 'react';
 
 export type Crumb = { label: string; to?: string };
 
-// The toolbar breadcrumb for section and article pages. The last crumb is the
-// current page (BreadcrumbPage); earlier crumbs link.
 export function SupportBreadcrumb({ trail }: { trail: Crumb[] }) {
     return (
         <Breadcrumb className="overflow-hidden">
