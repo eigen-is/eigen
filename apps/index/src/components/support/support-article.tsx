@@ -43,9 +43,6 @@ export function SupportArticle({
                         {showToc && (
                             <aside className="hidden xl:block xl:justify-self-end">
                                 <div className="sticky top-8 w-56">
-                                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                        On this page
-                                    </p>
                                     <ArticleToc toc={article.toc} />
                                 </div>
                             </aside>
