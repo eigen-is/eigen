@@ -56,9 +56,11 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
                     onOpenAutoFocus={readOnly ? (e) => e.preventDefault() : undefined}
                 >
                     <DialogHeader>
-                        <DialogTitle className="truncate overflow-visible" title={path.name}>
-                            Share '{path.name}'
-                        </DialogTitle>
+                        <div className="sm:max-w-[600px]">
+                            <DialogTitle className="truncate overflow-visible" title={path.name}>
+                                Share '{path.name}'
+                            </DialogTitle>
+                        </div>
                     </DialogHeader>
 
                     {readOnly ? (
