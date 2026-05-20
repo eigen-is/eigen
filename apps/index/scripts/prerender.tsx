@@ -134,12 +134,19 @@ async function main() {
         const all = routes();
         for (const route of all) {
             const appHtml = await render(route.path);
+            // React 19 auto-emits <link rel="preload"> for rendered <img> elements.
+            // renderToString produces this app fragment with no <head>, so those links
+            // land at the top of #app — but in the browser React hoists them to <head>.
+            // Move them to <head> here so the prerendered #app matches the client's
+            // first render; otherwise hydration mismatches and the page renders twice.
+            const hoisted = appHtml.match(/^(?:\s*<link\b[^>]*>)+/)?.[0] ?? '';
+            const appBody = appHtml.slice(hoisted.length);
             const page = withMeta(shell, route.meta)
                 .replace(
                     '</head>',
-                    `<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>${jsonLd(route.meta)}</head>`,
+                    `${hoisted}<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>${jsonLd(route.meta)}</head>`,
                 )
-                .replace('<div id="app"></div>', `<div id="app">${appHtml}</div>`);
+                .replace('<div id="app"></div>', `<div id="app">${appBody}</div>`);
             writeFileSync(outFile(route.path), page);
             console.log(`Prerendered ${route.path}`);
         }
