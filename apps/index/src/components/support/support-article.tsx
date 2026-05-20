@@ -47,7 +47,7 @@ export function SupportArticle({
                 }
             >
                 <div className="h-full overflow-y-auto">
-                    <div className="mx-auto max-w-[70ch] px-6 py-8">
+                    <div className="mx-auto max-w-[70ch] px-6 py-8" data-pagefind-body>
                         <h1 className="text-3xl font-bold mb-1">{article.title}</h1>
                         {article.updated && (
                             <p className="text-sm text-muted-foreground mb-6">Updated {article.updated}</p>
