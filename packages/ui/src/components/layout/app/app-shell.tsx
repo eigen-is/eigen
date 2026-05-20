@@ -5,9 +5,12 @@ import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-containe
 import { LayoutContext } from './layout-context.tsx';
 import { Topbar } from './topbar.tsx';
 
-const TanStackRouterDevtools = import.meta.env.DEV
-    ? lazy(() => import('@tanstack/react-router-devtools').then((m) => ({ default: m.TanStackRouterDevtools })))
-    : () => null;
+// Browser-only dev widget — never render it during SSR/prerender, where
+// renderToString cannot handle the lazy component's Suspense boundary.
+const TanStackRouterDevtools =
+    import.meta.env.DEV && !import.meta.env.SSR
+        ? lazy(() => import('@tanstack/react-router-devtools').then((m) => ({ default: m.TanStackRouterDevtools })))
+        : () => null;
 
 type AppShellProps = {
     appName: string;
