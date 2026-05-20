@@ -31,8 +31,9 @@ function ArticleComponent() {
         return <div className="p-8 text-muted-foreground">Article not found.</div>;
     }
 
-    const siblings = getSupportArticles().filter((a) => a.section === article.section);
-    const bySlug = new Map(getSupportArticles().map((a) => [a.slug, a]));
+    const all = getSupportArticles();
+    const siblings = all.filter((a) => a.section === article.section);
+    const bySlug = new Map(all.map((a) => [a.slug, a]));
     const related = article.related.map((slug) => bySlug.get(slug)).filter((a): a is ArticleMeta => a !== undefined);
 
     return <SupportArticle article={article} body={body} siblings={siblings} related={related} />;

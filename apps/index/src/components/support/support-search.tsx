@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogTitle } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import { Search } from 'lucide-react';
-import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 type PagefindHit = { url: string; meta: { title?: string }; excerpt: string };
 
@@ -67,10 +67,19 @@ export function SupportSearchProvider({ children }: { children: ReactNode }) {
         };
     }, [query]);
 
+    const search = useMemo(() => ({ open: () => setIsOpen(true) }), []);
+
+    // Reset the query on close so the dialog reopens clean; the query effect
+    // then clears hits/pending/unavailable once the query is empty.
+    const handleOpenChange = (open: boolean) => {
+        setIsOpen(open);
+        if (!open) setQuery('');
+    };
+
     return (
-        <SearchContext.Provider value={{ open: () => setIsOpen(true) }}>
+        <SearchContext.Provider value={search}>
             {children}
-            <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <Dialog open={isOpen} onOpenChange={handleOpenChange}>
                 <DialogContent showCloseButton={false} className="gap-0 overflow-hidden p-0 sm:max-w-xl">
                     <DialogTitle className="sr-only">Search help articles</DialogTitle>
                     <div className="flex items-center gap-2 border-b px-3">

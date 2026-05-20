@@ -11,7 +11,7 @@ export function SupportHeader() {
                 <Link to="/support" className="font-semibold">
                     eigen · Help Center
                 </Link>
-                <SearchTrigger className="flex items-center gap-2 rounded-md bg-primary-foreground/10 px-3 py-1.5 text-sm text-primary-foreground/80 hover:bg-primary-foreground/20" />
+                <SearchTrigger className="rounded-md bg-primary-foreground/10 px-3 py-1.5 text-primary-foreground/80 hover:bg-primary-foreground/20" />
                 <div className="flex-1" />
                 <Button
                     asChild
