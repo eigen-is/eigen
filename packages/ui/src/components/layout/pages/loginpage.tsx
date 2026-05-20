@@ -18,8 +18,8 @@ import { Bar } from '../braket/bar.tsx';
 import { Ket } from '../braket/ket.tsx';
 
 const loginFormSchema = z.object({
-    email: z.string().min(1, { message: 'Username is required' }),
-    password: z.string().min(1, { message: 'Password is required' }),
+    email: z.string().min(1, 'Username is required'),
+    password: z.string().min(1, 'Password is required'),
 });
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;

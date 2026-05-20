@@ -24,8 +24,8 @@ import { z } from 'zod';
 import { CalendarShareEditor } from './calendar-share-editor';
 
 const calendarFormSchema = z.object({
-    name: z.string().min(1, { message: 'Calendar name is required.' }),
-    color: z.string().min(1, { message: 'Color is required.' }),
+    name: z.string().min(1, 'Calendar name is required.'),
+    color: z.string().min(1, 'Color is required.'),
 });
 
 type CalendarFormValues = z.infer<typeof calendarFormSchema>;
