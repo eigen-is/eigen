@@ -16,18 +16,14 @@ function slugify(text: string): string {
 export function renderMarkdown(markdown: string): { html: string; toc: TocEntry[] } {
     const toc: TocEntry[] = [];
     const md = new MarkdownIt({ html: true, linkify: true, typographer: false });
-    md.use(anchor, { slugify, level: [2, 3] });
-
-    const tokens = md.parse(markdown, {});
-    for (let i = 0; i < tokens.length; i++) {
-        const token = tokens[i];
-        if (token.type !== 'heading_open') continue;
-        const level = token.tag === 'h2' ? 2 : token.tag === 'h3' ? 3 : 0;
-        if (level === 0) continue;
-        const inline = tokens[i + 1];
-        const text = inline?.content ?? '';
-        toc.push({ id: slugify(text), text, level });
-    }
+    md.use(anchor, {
+        slugify,
+        level: [2, 3],
+        callback: (token, { slug, title }) => {
+            const level = token.tag === 'h2' ? 2 : 3;
+            toc.push({ id: slug, text: title, level });
+        },
+    });
 
     return { html: md.render(markdown), toc };
 }
