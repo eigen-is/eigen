@@ -30,7 +30,7 @@ export function SupportShell({ children }: { children: ReactNode }) {
         <LayoutContext.Provider value={layout}>
             <div className="flex flex-col h-dvh">
                 <SupportHeader />
-                <div className="flex flex-1 overflow-hidden">{children}</div>
+                <div className="flex flex-1 w-full overflow-hidden">{children}</div>
             </div>
         </LayoutContext.Provider>
     );
