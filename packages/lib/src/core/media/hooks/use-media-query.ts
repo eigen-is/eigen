@@ -1,22 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
-export function useMediaQuery(query: string) {
-    const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-
-    useEffect(() => {
-        // Set initial value
-        const media = window.matchMedia(query);
-        setMatches(media.matches);
-
-        // Add listener for changes
-        const listener = () => setMatches(media.matches);
-        media.addEventListener('change', listener);
-
-        // Clean up
-        return () => media.removeEventListener('change', listener);
-    }, [query]);
-
-    return matches;
+// Prerender-safe media query hook. `getServerSnapshot` returns false (desktop
+// default) so a build-time render and the first client render agree — no
+// hydration mismatch. On the client `getSnapshot` reads the real value
+// synchronously, so client-only apps see no first-render flash.
+export function useMediaQuery(query: string): boolean {
+    return useSyncExternalStore(
+        (onChange) => {
+            if (typeof window === 'undefined') return () => {};
+            const media = window.matchMedia(query);
+            media.addEventListener('change', onChange);
+            return () => media.removeEventListener('change', onChange);
+        },
+        () => (typeof window === 'undefined' ? false : window.matchMedia(query).matches),
+        () => false,
+    );
 }
 
 export function useIsMobile() {
