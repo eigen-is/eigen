@@ -72,6 +72,7 @@ export const SLIDES_APP_URL = import.meta.env.VITE_APP_SLIDES_URL as string;
 export const SHEETS_APP_URL = import.meta.env.VITE_APP_SHEETS_URL as string;
 export const CALENDAR_APP_URL = import.meta.env.VITE_APP_CALENDAR_URL as string;
 export const ADMIN_APP_URL = import.meta.env.VITE_APP_ADMIN_URL as string;
+export const INDEX_APP_URL = import.meta.env.VITE_APP_INDEX_URL as string;
 
 const trimTrailingSlash = (url: string) => url.replace(/\/+$/, '');
 
@@ -92,6 +93,8 @@ export const getSlidesAppUrl = (path?: string) => joinAppUrl(SLIDES_APP_URL, pat
 export const getSheetsAppUrl = (path?: string) => joinAppUrl(SHEETS_APP_URL, path);
 export const getCalendarAppUrl = (path?: string) => joinAppUrl(CALENDAR_APP_URL, path);
 export const getAdminAppUrl = (path?: string) => joinAppUrl(ADMIN_APP_URL, path);
+export const getSupportUrl = (path?: string) => joinAppUrl(INDEX_APP_URL, path ? `support/${path}` : 'support');
+export const getHelpUrl = (section: string, slug: string) => getSupportUrl(`${section}/${slug}`);
 
 const getChatRoomUrl = (ownerId: string, mountId: string, chatId: string) =>
     getChatAppUrl(`${ownerId}/${mountId}/${chatId}`);
