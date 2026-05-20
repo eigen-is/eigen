@@ -13,9 +13,13 @@ export const supportFrontmatterSchema = z.object({
     tags: z.array(z.string()).default([]),
     related: z.array(z.string()).default([]),
     order: z.number().default(100),
+    // `gray-matter`'s YAML parser turns an unquoted date like `2026-05-20` into a Date;
+    // normalize it back to a YYYY-MM-DD string so the field stays a plain string.
     updated: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/, 'updated must be YYYY-MM-DD')
+        .preprocess(
+            (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v),
+            z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'updated must be YYYY-MM-DD'),
+        )
         .optional(),
     draft: z.boolean().default(false),
 });
