@@ -2,7 +2,6 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useCheckPermissions, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { HelpLink } from '@workspace/ui/components/help-link';
 import { DriveAccessList } from '@workspace/ui/components/layout/drive/drive-access-list';
 import { DriveAccessListEdit } from '@workspace/ui/components/layout/drive/drive-access-list-edit';
 import { DriveEmailCollaborators } from '@workspace/ui/components/layout/drive/drive-email-collaborators';
@@ -57,12 +56,9 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
                     onOpenAutoFocus={readOnly ? (e) => e.preventDefault() : undefined}
                 >
                     <DialogHeader>
-                        <div className="sm:max-w-[600px]">
-                            <DialogTitle className="truncate overflow-visible" title={path.name}>
-                                Share '{path.name}'
-                            </DialogTitle>
-                            <HelpLink section="drive" slug="share-a-file" />
-                        </div>
+                        <DialogTitle className="truncate overflow-visible" title={path.name}>
+                            Share '{path.name}'
+                        </DialogTitle>
                     </DialogHeader>
 
                     {readOnly ? (
