@@ -1,4 +1,4 @@
-type MediaItem = {
+export type MediaItem = {
     src: string;
     type: 'image' | 'video';
     caption?: string;
@@ -6,7 +6,7 @@ type MediaItem = {
     poster?: string;
 };
 
-type MediaGridData = {
+export type MediaGridData = {
     columns: string;
     items: MediaItem[];
 };
