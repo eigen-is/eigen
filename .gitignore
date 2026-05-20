@@ -67,3 +67,4 @@ next-env.d.ts
 /docs/superpowers/
 /docs/plans/
 /data/guest/
+/apps/index/src/content/.generated/
