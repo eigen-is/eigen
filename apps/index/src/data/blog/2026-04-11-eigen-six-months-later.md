@@ -1,7 +1,7 @@
 ---
 id: eigen-six-months-later
 title: "Eigen: Six Months Later"
-summary: "Six months after the proof of concept, Eigen grew from five basic apps to a full workspace with calendar, spreadsheets, slides, chat, IMAP and CalDAV. Now I need testers, and people who can help figure out what's next."
+description: "Six months after the proof of concept, Eigen grew from five basic apps to a full workspace with calendar, spreadsheets, slides, chat, IMAP and CalDAV. Now I need testers, and people who can help figure out what's next."
 ---
 
 Six months ago I [wrote about Eigen](https://eigen.is/blog/eigen-proof-of-concept): a European Google Workspace alternative where you
