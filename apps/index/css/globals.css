@@ -10,3 +10,15 @@
 .text-app {
     color: var(--app-space-color);
 }
+
+.eigen-callout {
+    margin: 1em 0;
+    padding: 0.75em 1em;
+    border-left: 3px solid var(--app-current-color);
+    border-radius: 0.375rem;
+    background-color: var(--app-current-color-soft);
+}
+
+.eigen-prose .eigen-callout p {
+    margin: 0;
+}

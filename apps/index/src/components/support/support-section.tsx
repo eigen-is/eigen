@@ -25,7 +25,7 @@ export function SupportSection({ section, articles }: { section: string; article
                 toolbar={<SupportBreadcrumb trail={[{ label: 'Help Center', to: '/support' }, { label: title }]} />}
             >
                 <div className="h-full overflow-y-auto px-6 py-6">
-                    <div className="mx-auto max-w-2xl">
+                    <div className="max-w-2xl">
                         <h1 className="text-2xl font-bold mb-1">{title}</h1>
                         {config && <p className="text-muted-foreground mb-6">{config.description}</p>}
                         <ul className="space-y-1">
