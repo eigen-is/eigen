@@ -430,17 +430,23 @@ within `apps/index` plus two small shared-package changes — URL helpers in `pa
 and a "Help" menu item in `packages/ui`; there are **no `apps/api` changes**. Phases 3 and 4
 are independent of each other.
 
-## Open questions
+## Resolved questions
 
-1. **Prerender mechanism** — rendering a TanStack Router SPA route to HTML at build is the
-   most novel piece. Options: TanStack Router's SSR utilities, or a route-by-route
-   `renderToString` with a memory history. To be settled in Phase 1.
-2. **Home page prerender** — Phase 1 makes the whole index app prerendered, so the landing
-   page gets SEO too. If its interactive bits (the waitlist form, the app carousel) cause
-   trouble, the documented fallback is conditional hydration — prerender only `/support` and
-   `/blog`, leave `/` as today's empty-mount `createRoot`.
-3. **`markdown-it` vs `remark`/`unified`** — `markdown-it` is the choice (simple,
-   synchronous); revisit only if a plugin need (e.g. richer admonitions) appears.
+The design questions raised while drafting this proposal — all now decided.
+
+1. **Prerender mechanism** — a route-by-route `renderToString` with a TanStack Router memory
+   history. The extended `post-build.ts` enumerates every route path from the content
+   manifests (`/`, `/blog` and each post, `/support`, each section, each article); for each
+   it builds the router with a memory history at that path, awaits route loading, renders the
+   app with `renderToString`, and writes the HTML into that route's `index.html`. This relies
+   only on TanStack Router's existing memory-history support — no adoption of TanStack Start.
+2. **Home page prerender** — every index-app route is prerendered, the home page included,
+   so the landing page gains SEO and the app hydrates uniformly with `hydrateRoot`. Fallback,
+   if the home page's interactive parts (the waitlist form, the app carousel) misbehave under
+   prerender: conditional hydration — prerender only `/support` and `/blog`, and leave `/` as
+   today's empty-mount `createRoot`.
+3. **Markdown processor** — `markdown-it`: simple, synchronous, and well suited to a build
+   script. Revisit only if a plugin need (e.g. richer admonitions) arises.
 
 ## Key decisions
 
