@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogTitle } from '@workspace/ui/components/dialog';
+import { cn } from '@workspace/ui/lib/utils';
 import { Search } from 'lucide-react';
 import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
 
@@ -26,6 +27,7 @@ export function SupportSearchProvider({ children }: { children: ReactNode }) {
     const [query, setQuery] = useState('');
     const [hits, setHits] = useState<PagefindHit[]>([]);
     const [unavailable, setUnavailable] = useState(false);
+    const [pending, setPending] = useState(false);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -41,8 +43,11 @@ export function SupportSearchProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!query.trim()) {
             setHits([]);
+            setUnavailable(false);
+            setPending(false);
             return;
         }
+        setPending(true);
         let cancelled = false;
         const timer = setTimeout(async () => {
             try {
@@ -52,6 +57,8 @@ export function SupportSearchProvider({ children }: { children: ReactNode }) {
                 if (!cancelled) setHits(data);
             } catch {
                 if (!cancelled) setUnavailable(true);
+            } finally {
+                if (!cancelled) setPending(false);
             }
         }, 150);
         return () => {
@@ -79,7 +86,7 @@ export function SupportSearchProvider({ children }: { children: ReactNode }) {
                         {unavailable && (
                             <p className="p-3 text-sm text-muted-foreground">Search is available in the built site.</p>
                         )}
-                        {!unavailable && query.trim() && hits.length === 0 && (
+                        {!unavailable && !pending && query.trim() && hits.length === 0 && (
                             <p className="p-3 text-sm text-muted-foreground">No results.</p>
                         )}
                         {hits.map((hit) => (
@@ -106,7 +113,7 @@ export function SearchTrigger({ className }: { className?: string }) {
         <button
             type="button"
             onClick={open}
-            className={className ?? 'flex items-center gap-2 text-sm text-muted-foreground'}
+            className={cn('flex items-center gap-2 text-sm text-muted-foreground', className)}
         >
             <Search className="h-4 w-4" />
             Search help articles…
