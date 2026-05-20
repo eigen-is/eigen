@@ -1,7 +1,7 @@
 ---
 id: eigen-proof-of-concept
 title: "Eigen: Building a Workspace"
-summary: "After two months of development, I built a working proof of concept for a Google Workspace alternative where you control your own data. Here's what works and what's next."
+description: "After two months of development, I built a working proof of concept for a Google Workspace alternative where you control your own data. Here's what works and what's next."
 ---
 
 Last spring I started wondering: how hard would it be to build my own Google Workspace? Given the situation in the USA
