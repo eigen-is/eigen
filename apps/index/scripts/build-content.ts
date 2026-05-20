@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parseMediaGrids } from '../src/components/parse-media-grids';
 import type { ArticleBody, ArticleMeta, ContentManifest } from './lib/content-types';
 import { blogFrontmatterSchema, supportFrontmatterSchema } from './lib/content-types';
@@ -25,13 +25,13 @@ function listMarkdown(dir: string, base = ''): string[] {
 
 function writeArticle(collection: string, slug: string, body: ArticleBody) {
     const file = join(OUT, collection, `${slug}.json`);
-    mkdirSync(join(file, '..'), { recursive: true });
+    mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(body));
 }
 
 function buildSupport(): ArticleMeta[] {
     const dir = join(DATA, 'support');
-    const draft: ArticleMeta[] = [];
+    const articles: ArticleMeta[] = [];
     for (const rel of listMarkdown(dir)) {
         const slug = rel.replace(/\.md$/, '');
         const section = slug.split('/')[0];
@@ -40,7 +40,7 @@ function buildSupport(): ArticleMeta[] {
         const { content, mediaGrids } = parseMediaGrids(body);
         const { html, toc } = renderMarkdown(content);
         writeArticle('support', slug, { html, mediaGrids });
-        draft.push({
+        articles.push({
             slug,
             section,
             title: data.title,
@@ -54,7 +54,7 @@ function buildSupport(): ArticleMeta[] {
             related: data.related,
         });
     }
-    return draft.map((a) => ({ ...a, related: resolveRelated(a, draft) }));
+    return articles.map((a) => ({ ...a, related: resolveRelated(a, articles) }));
 }
 
 function buildBlog(): ArticleMeta[] {
