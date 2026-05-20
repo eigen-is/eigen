@@ -96,7 +96,8 @@ function jsonLd(m: PageMeta): string {
         description: m.description,
         url: m.url,
     };
-    return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
+    // Replace </ to prevent </script> from breaking out of the script tag.
+    return `<script type="application/ld+json">${JSON.stringify(data).replace(/<\//g, '<\\/')}</script>`;
 }
 
 async function renderRoute(path: string): Promise<string> {
