@@ -31,7 +31,10 @@ export function AuthProvider({
     loadingFallback?: ReactNode;
 }): ReactNode {
     const [user, setUser] = useState<AuthUser | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    // On the server there is no session to check and effects never run, so start
+    // resolved — this lets SSR/prerender render children (unauthenticated) instead
+    // of the loading fallback. In the browser we wait for the session check.
+    const [isLoading, setIsLoading] = useState(typeof window !== 'undefined');
     const queryClient = useQueryClient();
 
     useEffect(() => {
