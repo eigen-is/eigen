@@ -7,7 +7,7 @@
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
     "prebuild": "bun run scripts/build-content.ts",
-    "postbuild": "bun run scripts/prerender.tsx",
+    "postbuild": "bun run scripts/prerender.tsx && bunx pagefind --site ../../dist/index",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
@@ -21,6 +21,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/markdown-it": "^14.1.2"
+    "@types/markdown-it": "^14.1.2",
+    "pagefind": "^1.5.2"
   }
 }
