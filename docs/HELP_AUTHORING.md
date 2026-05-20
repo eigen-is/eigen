@@ -65,4 +65,3 @@ Embed images and video with the media-grid syntax:
 
 - `cd apps/index && bun run scripts/build-content.ts` regenerates the content.
 - `bun run dev` previews the help center at `http://localhost:3000/support`.
-- Search requires a production build (`bun run build`); it does not run under `dev`.
