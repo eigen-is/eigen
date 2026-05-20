@@ -120,7 +120,8 @@ Article types — every article declares one in `type`:
 | `faq` | Short answers to common questions, visible on the page | `FAQPage` |
 | `reference` | Explain what options and terms mean | `Article` |
 
-`type` drives a small badge on cards and selects the JSON-LD schema for the page.
+`type` drives a small badge on cards. v1 emits a single `Article` JSON-LD schema for every
+article page; the per-type schemas in the table above (`HowTo`, `FAQPage`) are a fast-follow.
 
 ## Content model
 
@@ -167,8 +168,9 @@ draft: false                                       # true = excluded from the pr
   most shared `tags` within the same section. Resolved at build time.
 - **Media**: the blog's existing `<media-grid>` syntax (parsed by `parse-media-grids.ts`) is
   shared — grids render as static markup with a hydrated lightbox island. Plain `![alt](src)`
-  images are also supported; the build rewrites them to `<img loading="lazy">` with explicit
-  `width`/`height` to prevent layout shift. `alt` text is required.
+  images are also supported and render as standard `<img>`, styled responsively by the
+  shared `eigen-prose` stylesheet. `alt` text is required; `loading="lazy"` and explicit
+  `width`/`height` are a fast-follow.
 
 ## Rendering architecture
 
@@ -198,9 +200,11 @@ One shared content pipeline in `apps/index`, serving two **collections** — `bl
   fast, synchronous — well suited to a build script). It emits, per collection, a small
   **metadata manifest** (every article's frontmatter + TOC + resolved related list — no
   bodies) and **one rendered-HTML file per article**. Both are gitignored build artifacts.
-- **(2) Vite build** — the React routes import the manifest **eagerly** (it is small —
-  metadata only) and **lazy-load** per-article HTML, so the SPA bundle never contains every
-  article body.
+- **(2) Vite build** — the React routes import the manifest **and** the per-article HTML
+  **eagerly**. The bodies resolve synchronously, keeping the build-time prerender and the
+  client hydration in lockstep (no async loader data to rehydrate). At v1's article count
+  the bundle cost is negligible; a lazy glob with loader-data dehydration is a fast-follow
+  if the library grows into the hundreds.
 - **(3) Prerender** extends today's `post-build.ts`. Instead of only swapping `<title>`/OG
   tags, it renders **each route to full static HTML** — shell and article body — and writes
   it to that route's `index.html`. It also emits `sitemap.xml` and per-page JSON-LD.
@@ -391,9 +395,8 @@ apps/index/
     post-build.ts             # (3) prerender pass — extended: full-HTML render + JSON-LD + sitemap + Pagefind
   src/
     data/support/[section]/*.md          # help articles
-    content/                  # shared content loader — manifest + lazy per-article HTML
+    content/                  # shared content loader — manifest + eager per-article HTML
       manifest.ts
-      use-article.ts
     components/support/
       support-shell.tsx       # public shell — header + LayoutContext provider
       support-landing.tsx     # search hero + app grid + popular
@@ -440,11 +443,10 @@ The design questions raised while drafting this proposal — all now decided.
    it builds the router with a memory history at that path, awaits route loading, renders the
    app with `renderToString`, and writes the HTML into that route's `index.html`. This relies
    only on TanStack Router's existing memory-history support — no adoption of TanStack Start.
-2. **Home page prerender** — every index-app route is prerendered, the home page included,
-   so the landing page gains SEO and the app hydrates uniformly with `hydrateRoot`. Fallback,
-   if the home page's interactive parts (the waitlist form, the app carousel) misbehave under
-   prerender: conditional hydration — prerender only `/support` and `/blog`, and leave `/` as
-   today's empty-mount `createRoot`.
+2. **Home page prerender** — v1 prerenders the `/blog` and `/support` route trees only; `/`
+   stays a client-rendered SPA (`createRoot`). Scoping the prerender this way keeps those
+   routes provider-free, so the auth/query provider tree never has to be made SSR-safe.
+   Prerendering `/` for landing-page SEO is a fast-follow.
 3. **Markdown processor** — `markdown-it`: simple, synchronous, and well suited to a build
    script. Revisit only if a plugin need (e.g. richer admonitions) arises.
 
