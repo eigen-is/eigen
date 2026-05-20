@@ -30,7 +30,7 @@ export const formSchema = z
         lastName: z.string().optional(),
         company: z.string().optional(),
         jobTitle: z.string().optional(),
-        email: z.array(z.string().email().or(z.string().length(0))),
+        email: z.array(z.email().or(z.string().length(0))),
         phone: z.array(z.string()),
         address: z.array(
             z.object({

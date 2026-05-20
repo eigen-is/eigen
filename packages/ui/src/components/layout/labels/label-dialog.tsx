@@ -24,12 +24,8 @@ import { z } from 'zod';
 
 // Form schema for label management
 const labelFormSchema = z.object({
-    name: z.string().min(1, {
-        message: 'Label name is required.',
-    }),
-    color: z.string().min(1, {
-        message: 'Color is required.',
-    }),
+    name: z.string().min(1, 'Label name is required.'),
+    color: z.string().min(1, 'Color is required.'),
 });
 
 type LabelFormValues = z.infer<typeof labelFormSchema>;
