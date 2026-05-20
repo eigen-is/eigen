@@ -1,15 +1,13 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-interface BlogPostMeta {
+type BlogPostMeta = {
     title: string;
     summary: string;
     date: string;
-}
+};
 
-interface BlogMetaData {
-    [key: string]: BlogPostMeta;
-}
+type BlogMetaData = Record<string, BlogPostMeta>;
 
 function parseFrontmatter(markdown: string): { data: Record<string, string>; content: string } {
     const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
