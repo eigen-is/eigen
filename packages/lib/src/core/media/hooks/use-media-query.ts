@@ -12,7 +12,7 @@ export function useMediaQuery(query: string): boolean {
             media.addEventListener('change', onChange);
             return () => media.removeEventListener('change', onChange);
         },
-        () => (typeof window === 'undefined' ? false : window.matchMedia(query).matches),
+        () => window.matchMedia(query).matches,
         () => false,
     );
 }
