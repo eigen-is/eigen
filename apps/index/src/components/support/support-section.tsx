@@ -1,11 +1,18 @@
 import { Link } from '@tanstack/react-router';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { useEffect } from 'react';
 import type { ArticleMeta } from '../../content/manifest';
 import { getSection } from './sections';
 import { SupportBreadcrumb } from './support-breadcrumb';
 
-// A section page: the section's articles. Section navigation lives in the AppShell sidebar.
+// A section page: full-width article list, no sidebar (mirrors support-landing.tsx).
 export function SupportSection({ section, articles }: { section: string; articles: ArticleMeta[] }) {
+    const { setSidebarHidden } = useLayout();
+    useEffect(() => {
+        setSidebarHidden(true);
+        return () => setSidebarHidden(false);
+    }, [setSidebarHidden]);
     const config = getSection(section);
     const title = config?.title ?? section;
     const sorted = [...articles].sort((a, b) => a.order - b.order);

@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { useEffect } from 'react';
 import type { ArticleBody, ArticleMeta } from '../../content/manifest';
 import { ArticleContent } from '../ArticleContent';
 import { ArticleToc } from './article-toc';
@@ -17,7 +18,11 @@ export function SupportArticle({
     body: ArticleBody;
     related: ArticleMeta[];
 }) {
-    const { isMobile } = useLayout();
+    const { isMobile, setSidebarHidden } = useLayout();
+    // The section page hides the sidebar; ensure it is visible when viewing an article.
+    useEffect(() => {
+        setSidebarHidden(false);
+    }, [setSidebarHidden]);
     const section = article.section;
     const config = getSection(section);
     const sectionTitle = config?.title ?? section;
