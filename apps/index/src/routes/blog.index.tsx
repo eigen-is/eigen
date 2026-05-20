@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { BlogPost } from '../components/BlogPost';
 import { getArticleBody } from '../content/manifest';
-import { getAllBlogPosts, getLatestBlogPost } from '../data/blog-posts';
+import { getAllBlogPosts } from '../data/blog-posts';
 
 export const Route = createFileRoute('/blog/')({
     component: BlogOverviewComponent,
@@ -26,9 +26,8 @@ export const Route = createFileRoute('/blog/')({
 });
 
 function BlogOverviewComponent() {
-    const latestPost = getLatestBlogPost();
+    const [latestPost, ...otherPosts] = getAllBlogPosts();
     const body = latestPost ? getArticleBody('blog', latestPost.slug) : undefined;
-    const otherPosts = getAllBlogPosts().slice(1);
 
     return (
         <div className="min-h-screen bg-muted/50">

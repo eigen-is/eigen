@@ -5,9 +5,7 @@ export type BlogPost = ArticleMeta;
 export function getAllBlogPosts(): BlogPost[] {
     return getBlogArticles();
 }
-export function getLatestBlogPost(): BlogPost | undefined {
-    return getBlogArticles()[0];
-}
+
 export function getBlogPost(id: string): BlogPost | undefined {
     return getBlogArticle(id);
 }
