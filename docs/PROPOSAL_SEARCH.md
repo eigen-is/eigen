@@ -25,19 +25,20 @@ Requirements:
 
 ## What's searchable
 
-| Domain   | What's indexed                          | Source already text?            |
-|----------|-----------------------------------------|---------------------------------|
-| Mail     | Subject, sender, short body preview     | Yes — in the mail database      |
-| Drive    | File and folder names                   | Yes — in mount metadata         |
-| Calendar | Event title, description, location      | Yes — in the calendar database  |
-| Chat     | Message content, author                 | Yes — in the per-room database  |
-| Docs     | Document body text                      | No — extract from Yjs state     |
-| Stickies | Card titles and descriptions            | No — extract from Yjs state     |
-| Slides   | Slide text                              | No — extract from Yjs state     |
-| Sheets   | Cell text values                        | No — extract from Yjs state     |
+| Domain   | What's indexed                          | Source already text?                  |
+|----------|-----------------------------------------|---------------------------------------|
+| Mail     | Subject, sender, short body preview     | Yes — in the mail database            |
+| Drive    | File and folder names                   | Yes — in mount metadata               |
+| Calendar | Event title, description, location      | Yes — in the calendar database        |
+| Chat     | Message content, author                 | Yes — in the per-room database        |
+| Docs     | Document body text                      | No — extract from Yjs state           |
+| Stickies | Card titles and descriptions            | No — deferred (needs stickies export) |
+| Slides   | Slide text                              | No — extract from Yjs state           |
+| Sheets   | Cell text values                        | No — extract from Yjs state           |
 
-The first four are already plain text in SQLite. The four collaborative types store content as
-binary Yjs state and need text extraction — see [Content extraction](#content-extraction-from-collaborative-documents).
+The first four are already plain text in SQLite. The collaborative types store content as binary
+Yjs state and need text extraction — see [Content extraction](#content-extraction-from-collaborative-documents).
+Stickies content waits for stickies export to ship (also below).
 
 Contacts are deliberately **not** indexed — they are few and already fully cached on the
 frontend, so the command palette filters them client-side (see [Response shape](#response-shape)).
@@ -117,7 +118,7 @@ project spaces (favours B) or as a mostly-static single space (A and B converge)
 ### What the choice pins down downstream
 
 Whichever option is chosen, most of this proposal is identical — the FTS5 content-table
-structure, index-on-write, Yjs extraction, the grouped response, and the wire types do not
+structure, index-on-write, content extraction, the grouped response, and the wire types do not
 change. The decision only pins down:
 
 - **The `SearchIndex` service** — Option A: one instance on `Home`. Option B: one instance per
@@ -178,7 +179,7 @@ after its own database write. The index stays current without a separate sync jo
 | An event is created or updated                   | the calendar index                 |
 | A file or folder is created, renamed, or deleted | the (mount's) index                |
 | A chat message is posted or edited               | the (host mount's) index           |
-| A doc / stickies / slides / sheets snapshot      | the (host mount's) index           |
+| A doc / slides / sheets snapshot                 | the (host mount's) index           |
 
 (Under Option A, every row above writes the one per-Home index.) Each domain writes the metadata
 blob shaped to fit its result kind — mail emits sender, mailbox, and received time; drive and
@@ -191,14 +192,27 @@ runs per scope, so it parallelizes naturally and a single corrupt scope can be r
 
 ## Content extraction from collaborative documents
 
-Docs, stickies, slides, and sheets store their content as binary Yjs state, not text. The
-server has no DOM, so extraction walks the Yjs structure directly. **Each Eigen file type
-stores content under a different Yjs shape**, so extraction is per-type:
+Docs, slides, and sheets store their content as binary Yjs state, not plain text. Rather than
+write a second Yjs decoder, content extraction **reuses the export pipeline's content loaders** —
+the modules that already turn each file type's Yjs state into a structured form:
 
-- **Docs** — a rich-text XML fragment; walk it and collect the text nodes
-- **Stickies** — a map of cards; collect each card's title and description
-- **Slides** — a map of objects; collect the text of the text objects
-- **Sheets** — a JSON snapshot of cell data; collect the rendered cell values
+- **Docs** — `export/doc/content.ts` produces ProseMirror JSON (already shared with preview)
+- **Slides** — `export/slides/content.ts` produces `DeckData`
+- **Sheets** — `export/sheets/content.ts` produces `Sheet[]`
+
+These loaders are server-side and DOM-free — the same code path the document, slides, and sheets
+export already runs in Bun. Search adds only a **thin text collector** on top: a small per-type
+walk that pulls the words out of the structured form (ProseMirror JSON → text, `DeckData` →
+text, `Sheet[]` → cell text). The hard part — decoding each file type's distinct Yjs shape — is
+delegated to code that already exists, is tested, and is shared with export and preview, so
+search's notion of "document text" can't drift from theirs. Search does **not** run the full
+HTML export: that stage embeds fonts and base64 images, flattens CSS, and sanitises — all wasted
+work for an index that only wants words.
+
+**Stickies** have no export pipeline yet, so there is no content loader to reuse. Stickies
+*content* is therefore indexed **later** — once stickies export ships and brings an
+`export/stickies/content.ts` loader, the same thin-collector approach applies to it. Until then
+a stickies file contributes only its metadata (the file name) to the index.
 
 Extraction runs during **snapshot creation**, which already happens periodically (roughly every
 hundred edits) — acceptable staleness, and it avoids re-extracting on every keystroke. Under
@@ -308,7 +322,7 @@ What not to do:
 | Phase | Scope                                                                                                   | Effort |
 |-------|---------------------------------------------------------------------------------------------------------|--------|
 | 1     | The `search.db` schema and `DatabaseConfig`, the `SearchIndex` service (per the chosen storage option), the `/search` route returning the grouped shape, index-on-write hooks for **metadata** (mail, calendar, drive names), and a one-time backfill — the milestone where the palette's search lights up | M–L |
-| 2     | Content extraction for docs, stickies, slides, and sheets — hook into snapshot creation                  | M      |
+| 2     | Content extraction for docs, slides, and sheets — a thin text collector over the export content loaders, hooked into snapshot creation | M |
 | 3     | Chat message indexing — index message content                                                            | S      |
 | 4     | Shared data — make items shared with the user searchable                                                 | S–M    |
 | 5     | Semantic / vector search (future, opt-in)                                                                | L      |
@@ -319,6 +333,10 @@ palette searches metadata (filenames, subjects, titles); each later phase deepen
 searchable with no change to the palette's frontend. The storage-layout decision (above) should
 be settled before Phase 1 starts.
 
+**Stickies content** joins when stickies export ships and brings an `export/stickies/content.ts`
+loader — at that point the Phase 2 thin-collector approach extends to stickies. That work is
+tracked with stickies export, not scoped here.
+
 ## File structure
 
 ```
@@ -327,7 +345,7 @@ apps/api/src/lib/search/
   db-config.ts            # the search DatabaseConfig — FTS5 virtual table + sync triggers
   search-index.ts         # the SearchIndex service — upsert, delete, query
   search-coordinator.ts   # Option B only — enumerate enabled scopes, query, rank-fuse, group
-  yjs-extract.ts          # per-type text extraction from Yjs state (server-safe, no DOM)
+  extract-text.ts         # thin text collector over the export content loaders (docs/slides/sheets)
 
 apps/api/src/routes/
   search.ts               # the GET /search/:ownerId endpoint
@@ -346,8 +364,9 @@ packages/lib/src/types/
   only title and body are full-text indexed; triggers keep them in sync.
 - **Index on write** — each domain indexes through its existing mutation flow; no separate sync
   job. A one-time backfill covers pre-existing data.
-- **Content extraction on snapshot** — collaborative-document text is extracted when a snapshot
-  is created (already periodic), not per edit. Acceptable staleness for far less work.
+- **Content extraction reuses the export loaders** — collaborative text is pulled from the
+  export pipeline's Yjs content loaders (not a separate Yjs walker) by a thin text collector,
+  run at snapshot creation rather than per edit. Stickies wait for stickies export.
 - **Response grouped by kind** — a separate ranked, capped array per kind, mirroring the
   palette's sections; each hit a typed variant. Presentation fields stay off the wire. Identical
   under either storage option.
