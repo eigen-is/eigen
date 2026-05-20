@@ -9,64 +9,135 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SupportRouteImport } from './routes/support'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SupportIndexRouteImport } from './routes/support.index'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
+import { Route as SupportSectionRouteImport } from './routes/support.$section'
 import { Route as BlogIdRouteImport } from './routes/blog.$id'
+import { Route as SupportSectionArticleRouteImport } from './routes/support.$section.$article'
 
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const SupportIndexRoute = SupportIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SupportRoute,
 } as any)
 const BlogIndexRoute = BlogIndexRouteImport.update({
   id: '/blog/',
   path: '/blog/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SupportSectionRoute = SupportSectionRouteImport.update({
+  id: '/$section',
+  path: '/$section',
+  getParentRoute: () => SupportRoute,
+} as any)
 const BlogIdRoute = BlogIdRouteImport.update({
   id: '/blog/$id',
   path: '/blog/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SupportSectionArticleRoute = SupportSectionArticleRouteImport.update({
+  id: '/$article',
+  path: '/$article',
+  getParentRoute: () => SupportSectionRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/support': typeof SupportRouteWithChildren
   '/blog/$id': typeof BlogIdRoute
+  '/support/$section': typeof SupportSectionRouteWithChildren
   '/blog/': typeof BlogIndexRoute
+  '/support/': typeof SupportIndexRoute
+  '/support/$section/$article': typeof SupportSectionArticleRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/blog/$id': typeof BlogIdRoute
+  '/support/$section': typeof SupportSectionRouteWithChildren
   '/blog': typeof BlogIndexRoute
+  '/support': typeof SupportIndexRoute
+  '/support/$section/$article': typeof SupportSectionArticleRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/support': typeof SupportRouteWithChildren
   '/blog/$id': typeof BlogIdRoute
+  '/support/$section': typeof SupportSectionRouteWithChildren
   '/blog/': typeof BlogIndexRoute
+  '/support/': typeof SupportIndexRoute
+  '/support/$section/$article': typeof SupportSectionArticleRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/blog/$id' | '/blog/'
+  fullPaths:
+    | '/'
+    | '/support'
+    | '/blog/$id'
+    | '/support/$section'
+    | '/blog/'
+    | '/support/'
+    | '/support/$section/$article'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/blog/$id' | '/blog'
-  id: '__root__' | '/' | '/blog/$id' | '/blog/'
+  to:
+    | '/'
+    | '/blog/$id'
+    | '/support/$section'
+    | '/blog'
+    | '/support'
+    | '/support/$section/$article'
+  id:
+    | '__root__'
+    | '/'
+    | '/support'
+    | '/blog/$id'
+    | '/support/$section'
+    | '/blog/'
+    | '/support/'
+    | '/support/$section/$article'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SupportRoute: typeof SupportRouteWithChildren
   BlogIdRoute: typeof BlogIdRoute
   BlogIndexRoute: typeof BlogIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/support/': {
+      id: '/support/'
+      path: '/'
+      fullPath: '/support/'
+      preLoaderRoute: typeof SupportIndexRouteImport
+      parentRoute: typeof SupportRoute
     }
     '/blog/': {
       id: '/blog/'
@@ -75,6 +146,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BlogIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/support/$section': {
+      id: '/support/$section'
+      path: '/$section'
+      fullPath: '/support/$section'
+      preLoaderRoute: typeof SupportSectionRouteImport
+      parentRoute: typeof SupportRoute
+    }
     '/blog/$id': {
       id: '/blog/$id'
       path: '/blog/$id'
@@ -82,11 +160,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BlogIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/support/$section/$article': {
+      id: '/support/$section/$article'
+      path: '/$article'
+      fullPath: '/support/$section/$article'
+      preLoaderRoute: typeof SupportSectionArticleRouteImport
+      parentRoute: typeof SupportSectionRoute
+    }
   }
 }
 
+interface SupportSectionRouteChildren {
+  SupportSectionArticleRoute: typeof SupportSectionArticleRoute
+}
+
+const SupportSectionRouteChildren: SupportSectionRouteChildren = {
+  SupportSectionArticleRoute: SupportSectionArticleRoute,
+}
+
+const SupportSectionRouteWithChildren = SupportSectionRoute._addFileChildren(
+  SupportSectionRouteChildren,
+)
+
+interface SupportRouteChildren {
+  SupportSectionRoute: typeof SupportSectionRouteWithChildren
+  SupportIndexRoute: typeof SupportIndexRoute
+}
+
+const SupportRouteChildren: SupportRouteChildren = {
+  SupportSectionRoute: SupportSectionRouteWithChildren,
+  SupportIndexRoute: SupportIndexRoute,
+}
+
+const SupportRouteWithChildren =
+  SupportRoute._addFileChildren(SupportRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SupportRoute: SupportRouteWithChildren,
   BlogIdRoute: BlogIdRoute,
   BlogIndexRoute: BlogIndexRoute,
 }
