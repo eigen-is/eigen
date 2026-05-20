@@ -11,7 +11,10 @@ const support = (supportManifest as ContentManifest).articles;
 // prerender and client hydration in lockstep (no async loader data to rehydrate).
 // At v1's article count the bundle cost is negligible; switch to a lazy glob with
 // loader-data dehydration only if the library grows into the hundreds.
-const bodies = import.meta.glob<ArticleBody>('./.generated/**/*.json', { eager: true, import: 'default' });
+const bodies = import.meta.glob<ArticleBody>('./.generated/{blog,support}/**/*.json', {
+    eager: true,
+    import: 'default',
+});
 
 export function getBlogArticles(): ArticleMeta[] {
     return blog;
