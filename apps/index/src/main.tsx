@@ -2,6 +2,7 @@ import { createRouter, RouterProvider } from '@tanstack/react-router';
 import ReactDOM from 'react-dom/client';
 import { routeTree } from './routeTree.gen';
 import '@workspace/ui/globals.css';
+import './../css/globals.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@workspace/lib/auth';
 import { Toaster } from '@workspace/ui/components/sonner';
