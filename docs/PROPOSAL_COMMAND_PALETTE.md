@@ -1,42 +1,39 @@
 # Command Palette (⌘K)
 
-> **TLDR**: A single Cmd+K dialog mounted globally in the topbar that unifies **search**, **actions**,
-> **navigation**, and **smart suggestions**. Built on a typed `CommandResult` discriminated union
-> (one variant per kind, no JSON bag). FE-only providers (actions, smart-parser, contacts from
-> the already-cached `useContactSuggestions`) are synchronous; **one** backend call to
-> `/search/:ownerId` returns mixed search results per keystroke — no per-source HTTP fan-out.
-> Context-aware via apps publishing `usePaletteSelection(...)`. Reuses the already-shipped,
-> currently unused shadcn `<Command>` primitive (cmdk). At v1 the backend does **metadata-LIKE
-> search** — filenames (`paths.name`), email subjects (`emails.subject`), and event titles
-> (`events.title`) — three parallel queries from one route handler, no new index, no migrations.
-> Same endpoint URL that [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) — the dedicated **backend**
-> proposal — grows into. Recents wait for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md) —
-> no FE-local placeholder.
+> **TLDR**: A single Cmd+K dialog mounted globally in the topbar that unifies **search**,
+> **actions**, **navigation**, and **smart suggestions**. Built on a typed result model —
+> one variant per kind, no untyped JSON bag. Frontend-only providers (actions, smart-parser,
+> contacts) are synchronous over already-cached data; **one** backend call per keystroke
+> returns mixed search results. Context-aware via apps publishing their current selection.
+> Reuses the already-shipped, currently-unused shadcn `Command` primitive (cmdk). Search is
+> served by the FTS5 index from [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md), built as a parallel
+> prerequisite track — **not** re-implemented as a throwaway stopgap. The palette's no-backend
+> capabilities (actions, navigation, contacts, smart parsing, selection) ship independently
+> and don't wait on it. Recents wait for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md).
 
 ## Problem statement
 
-Today the topbar is `[AppSwitcher · AppLogo | document title | bell · avatar]` and nothing else
-(`packages/ui/src/components/layout/app/topbar.tsx:245-291`). Users have no fast way to:
+Today the topbar carries only the app switcher, app logo, document title, notification bell,
+and avatar — nothing else. Users have no fast way to:
 
 - Find anything that isn't in the current app's visible list
 - Take an action that crosses apps ("mail to alice", "share this file with the design team")
 - Jump to another app / mailbox / folder / team workspace without clicking through chrome
 - Discover what commands exist at all
 
-Three components already use a typed type-and-pick autosuggest pattern (`ContactAutosuggest`
-+ `useContactSuggestions`, `packages/ui/src/components/layout/contacts/`). It's proven; we
-need to scale it from one input to one global one.
+The contact autosuggest components already prove a typed type-and-pick pattern in this
+codebase. The palette scales that proven pattern from one input to one global one.
 
 ## Inspirations
 
-| Source                | What we take                                                                                                |
-|-----------------------|-------------------------------------------------------------------------------------------------------------|
-| **macOS Spotlight**   | Top Hit, sectioned results, parametrised actions (`alice@…` → "Send mail to alice"), tab/space for previews |
-| **Raycast**           | Extensible command catalog, sub-action sheet, command keywords/aliases, ranked-by-usage                     |
-| **Linear**            | Context-aware commands (in an issue → "Change status" surfaces), prefix filter modes                        |
-| **VSCode**            | Prefix scopes (`>` commands, `@` symbols, `:` line)                                                         |
-| **Notion**            | One Cmd+P (jump) + Cmd+K (commands) — we collapse to one Cmd+K with sectioned blend                         |
-| **iOS Spotlight**     | Detect the *shape* of the input, suggest a tailored action                                                  |
+| Source              | What we take                                                                                               |
+|---------------------|------------------------------------------------------------------------------------------------------------|
+| **macOS Spotlight** | Top Hit, sectioned results, parametrised actions (`alice@…` → "Send mail to alice"), tab/space for previews |
+| **Raycast**         | Extensible command catalog, sub-action sheet, command keywords/aliases, ranked-by-usage, clipboard actions  |
+| **Linear**          | Context-aware commands (in an issue → "Change status" surfaces), prefix filter modes                        |
+| **VSCode**          | Prefix scopes (`>` commands, `@` symbols, `:` line)                                                        |
+| **Notion**          | One Cmd+P (jump) + Cmd+K (commands) — we collapse to one Cmd+K with sectioned blend                         |
+| **iOS Spotlight**   | Detect the *shape* of the input, suggest a tailored action                                                 |
 
 Deliberately avoided:
 
@@ -46,50 +43,56 @@ Deliberately avoided:
 
 ## Day-in-the-life
 
-| User intent                                  | Keystrokes                                          | What surfaces                                                |
-|----------------------------------------------|-----------------------------------------------------|--------------------------------------------------------------|
-| Mail alice quickly                            | `⌘K alice@…` `↵`                                    | Smart → "Mail to alice@…" → opens Mail compose               |
-| Find the Q4 budget                            | `⌘K budget` `↵`                                     | Files (filename match at v1; FTS5 body when SEARCH lands)    |
-| Start a new doc here                          | `⌘K new doc` `↵`                                    | Action → "New document" creates in `currentFolder`           |
-| Jump to today's calendar                      | `⌘K cal today` `↵`                                  | Navigate → Calendar app, today's view                        |
-| Search emails about Q3                        | `⌘K mail: q3` `↵`                                   | Mail-scoped subject search (v1); body once SEARCH lands       |
-| Share the file I'm viewing                    | (file open) `⌘K share` `↵`                          | Selection action → Share dialog for that file                |
-| Switch to team workspace                      | `⌘K team eigen dev` `↵`                             | Action → switches `ownerId` to `team_<id>`                   |
-| Open a URL someone pasted in chat             | `⌘K` paste url `↵`                                  | Smart → "Open link" / "Save link to Drive"                   |
-| See what's possible right now                  | `⌘K` (empty)                                        | Empty state → curated suggested actions by context           |
-| See every command                             | `⌘K ?` `↵`                                          | Help → full reference                                        |
+| User intent                  | Keystrokes                   | What surfaces                                          |
+|------------------------------|------------------------------|--------------------------------------------------------|
+| Mail alice quickly           | `⌘K alice@…` `↵`             | Smart → "Mail to alice@…" → opens Mail compose         |
+| Find the Q4 budget           | `⌘K budget` `↵`              | Files → ranked search hits                             |
+| Start a new doc here         | `⌘K new doc` `↵`             | Action → "New document" creates in the current folder  |
+| Jump to today's calendar     | `⌘K cal today` `↵`           | Navigate → Calendar app, today's view                  |
+| Search emails about Q3       | `⌘K mail: q3` `↵`            | Mail-scoped search                                     |
+| Share the file I'm viewing   | (file open) `⌘K share` `↵`   | Selection action → Share dialog for that file          |
+| Switch to team workspace     | `⌘K team eigen dev` `↵`      | Action → switches owner to the team                    |
+| Open a URL pasted in chat    | `⌘K` paste url `↵`           | Smart → "Open link" / "Save link to Drive"             |
+| See what's possible now      | `⌘K` (empty)                 | Empty state → curated suggested actions by context     |
+| See every command            | `⌘K ?` `↵`                   | Help → full reference                                  |
 
 ## Goals
 
 1. **Cmd+K from anywhere** opens one dialog that searches across all Eigen data **and** runs actions
-2. **Single input, many intents** — search queries, action verbs, and smart-parsed input (`alice@…`, `https://…`) all flow through one field
-3. **Context-aware** — current app, current owner, current selection influence what's surfaced and what action verbs do
+2. **Single input, many intents** — search queries, action verbs, and smart-parsed input
+   (`alice@…`, `https://…`) all flow through one field
+3. **Context-aware** — current app, current owner, and current selection influence what's surfaced
 4. **Keyboard-first** — every result reachable, every action one Enter away, sub-actions one keystroke away
-5. **Extensible by typed contribution** — each domain owns one `commands/<domain>.ts` file; no central registry edits per feature
-6. **One backend call per keystroke** — FE-only providers (actions, smart, contacts) are synchronous `useMemo` over in-memory data; the only network call is the single `/search/:ownerId` query. No HTTP fan-out per source.
-7. **Ships incrementally** — v1 backend search is metadata-LIKE across filenames + email subjects + event titles (no new index, no migrations), at the same URL that PROPOSAL_SEARCH grows into. Recents wait for PROPOSAL_HOME_RECENTS — no localStorage placeholder.
-8. **Typed end-to-end** — discriminated union per kind, Elysia → Eden Treaty → hooks → components, no `as any`, no JSON payload bags
+5. **Extensible by typed contribution** — each domain owns one command file; no central registry edits per feature
+6. **One backend call per keystroke** — the frontend-only providers are synchronous over in-memory
+   data; the only network call is the single search query. No HTTP fan-out per source.
+7. **Ships incrementally** — the no-backend palette (actions, navigation, contacts, smart parsing,
+   selection) is useful on its own. Search lights up when the search-index track lands; the two
+   are decoupled.
+8. **Typed end-to-end** — a discriminated union per kind, flowing server → client with no casts and no JSON bags
 
 ## Non-goals (v1)
 
 - AI / chat ("ask Eigen anything") — see [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) §Research
-- Per-user recents (action / file / email) — wait for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md); no FE-local placeholder
-- Full-text search of email **bodies**, document content, chat messages — depends on PROPOSAL_SEARCH; v1 backend is metadata-only (filenames, email subjects, event titles)
+- Per-user recents — wait for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md); no frontend-local placeholder
 - Cross-org search — each `Home` is searched independently
 - Plugin / extension system — commands are first-party only at v1
 - Quicklinks (Raycast-style parametrised URL templates) — defer
-- Natural-language datetime parsing ("tomorrow 3pm") — risk of wrong suggestion outweighs convenience until telemetry justifies it
-- Math / calculator / unit conversion in the input — same reason
+- Natural-language datetime parsing, math, unit conversion in the input — risk of a wrong
+  suggestion outweighs convenience until telemetry justifies it
+
+The depth of search content (filenames and subjects vs. full document/email bodies) is set by
+how far the search-index track has progressed — see [Search](#search). It is not a palette concern.
 
 ## UX
 
 ### Trigger
 
-- `Mod+K` from anywhere opens the dialog (`useHotkey('Mod+K', …)` in `GlobalHotkeys`,
-  `packages/ui/src/components/layout/app/eigen-app.tsx:24-30`). `Mod+K` is currently free across
-  the codebase (verified).
-- The topbar grows a centred search-pill trigger (the empty slot between AppLogo and the right
-  cluster at `topbar.tsx:277-280` is where it lands). Click → opens dialog. Pill shows hint `⌘K`.
+- `Mod+K` from anywhere opens the dialog, registered alongside the other global hotkeys.
+  `Mod+K` is currently free across the codebase (verified — `Mod+P`, `Mod+B`, `Mod+Z`, `Mod+Y`
+  are taken; `K` is not).
+- The topbar grows a centred search-pill trigger in its currently-empty centre slot. Click
+  opens the dialog. The pill shows the `⌘K` hint.
 - `Esc` closes the dialog.
 
 ### Layout
@@ -120,53 +123,49 @@ Deliberately avoided:
 └─────────────────────────────────────────────────────────┘
 ```
 
-Sections collapse when empty. The Top Hit is the global max above a confidence threshold (≥ 60).
-Section order is fixed; result order within a section is by `final` score.
+Sections collapse when empty. The Top Hit is the global highest-ranked result above a confidence
+threshold. Section order is fixed; order within a section is by final rank.
 
-**Empty state** (no query entered): the dialog shows a **Suggested** section — a hand-picked
-static list of 6-8 universal actions (New doc · Mail · Drive · Calendar · Switch to team ·
-Settings) plus the current app's top contextual actions. It's not magic — it's a static array
-chosen by the team. Per-user ranked recency arrives when `home.recents` lands.
+**Empty state** (no query): the dialog shows a **Suggested** section — a hand-picked static list
+of 6–8 universal actions (New doc · Mail · Drive · Calendar · Switch to team · Settings) plus the
+current app's top contextual actions. It's not magic — it's a curated array. Per-user ranked
+recency arrives when `home.recents` lands.
 
 ### Result limits and overflow
 
-Each section caps at **6 results**, ranked by `final`. Total visible at full match is ~30 rows
-(top hit + 5 sections × 6). Arrow keys scroll through everything visible — cmdk handles overflow
-with a soft scroll inside the dialog and keeps the focused item in view.
+Each section caps at **6 results**, ranked. Total visible at full match is roughly 30 rows.
+Arrow keys scroll through everything visible; the dialog keeps the focused item in view.
 
-We **do not** show "Show N more" links at v1 — there's nowhere meaningful to navigate to. Drive
-has no full-search page, Mail has no full-search page, etc. Users refine the query to narrow.
-This matches Spotlight's behaviour: cap, rely on query refinement, no expansion inside the
-dialog.
-
-When PROPOSAL_SEARCH lands and dedicated full-search pages exist per app (Drive search, Mail
-advanced search), each section grows a footer item: `↳ Show all 47 results in Drive`. Clicking
-it navigates to that app's search page with the query pre-filled. See open question §Full-page
-search results.
+We **do not** show "Show N more" links at v1 — there's nowhere meaningful to navigate to (no app
+has a full-search page yet). Users refine the query to narrow, matching Spotlight's behaviour.
+When dedicated per-app search pages exist, each section can grow a `↳ Show all N in <App>` footer
+that navigates there with the query pre-filled — see open questions.
 
 The reason for caps: stacking 100 rows in a popover degrades fast — keyboard scroll becomes a
-chore, the focused item disappears off-screen, the dialog overwhelms the page behind it. Caps +
-good ranking keeps the dialog tight and the relevant items in the first viewport.
+chore and the focused item disappears off-screen. Caps plus good ranking keeps the dialog tight.
 
 ### Prefix modes
 
 When the query starts with a prefix, the result set scopes:
 
-| Prefix      | Scope                                       |
-|-------------|---------------------------------------------|
-| `>`         | Actions only (VSCode idiom)                 |
-| `@`         | Contacts / people                           |
-| `mail:`     | Mail only                                   |
-| `file:`     | Files only                                  |
-| `event:`    | Calendar only                               |
-| `chat:`     | Chat messages only (after SEARCH Phase 2)   |
-| `?`         | Help — list every command + shortcut        |
+| Prefix    | Scope                                  |
+|-----------|----------------------------------------|
+| `>`       | Actions only (VSCode idiom)            |
+| `@`       | Contacts / people                      |
+| `mail:`   | Mail only                              |
+| `file:`   | Files only                             |
+| `event:`  | Calendar only                          |
+| `chat:`   | Chat messages only                     |
+| `?`       | Help — list every command + shortcut   |
 
-No prefix = full blend. The active scope is shown as a chip in the footer; `Ctrl+Tab` cycles.
+No prefix = full blend. The active scope shows as a chip in the footer. Cycling through scopes
+needs a key the browser doesn't reserve — **not `Ctrl+Tab`**, which browsers intercept for tab
+switching and never deliver to page scripts. Use a plain affordance (e.g. `Tab` to advance the
+chip, or click it) instead.
 
 ### Sub-action sheet
 
-`→` (or `⌘K` while the palette is open) on a focused result opens a second-level cmdk sheet of
+`→` (primary) or `⌘K` (power-user alias) on a focused result opens a second-level sheet of
 actions for that result.
 
 ```
@@ -191,249 +190,107 @@ Reuses the same `Command` primitive, nested. `Esc` (or `←`) goes back.
 
 ### Result model — one typed kind per result
 
-Following the **typed-table-per-kind** discipline from PROPOSAL_HOME_RECENTS §"One typed table per kind",
-results are a **discriminated union** with one variant per kind. Same shape as `SSEvent`, `HomeMessage`,
-and the `NotificationCenter`. No JSON payload bag.
+Results are a **discriminated union**, one variant per kind — the same discipline as `SSEvent`,
+`HomeMessage`, and the `NotificationCenter`. No JSON payload bag.
 
-```typescript
-// packages/lib/src/types/command-palette.ts
-import type { LucideIcon } from 'lucide-react';
-import type {
-    FileSearchHit, MailSearchHit, EventSearchHit, ChatSearchHit,
-} from './search';
+| Kind         | Source        | Notes                                                       |
+|--------------|---------------|-------------------------------------------------------------|
+| `action`     | frontend-only | A catalog command — title, keywords, optional shortcut, run handler, optional availability predicate and sub-actions factory |
+| `smart`      | frontend-only | A smart-parsed interpretation of the input (mail-to, open link, …) |
+| `contact`    | frontend-only | A person from already-cached contact + team data            |
+| `file`       | search wire   | A Drive / docs / sheets / slides / stickies hit             |
+| `mail`       | search wire   | An email hit                                                |
+| `event`      | search wire   | A calendar event hit                                        |
+| `chat`       | search wire   | A chat message hit (once chat content is indexed)           |
 
-export type CommandGroup =
-    | 'top-hit'
-    | 'suggested'         // smart interpretations of the input
-    | 'selected-actions'  // actions on the focused result OR app's current selection
-    | 'actions'
-    | 'files'
-    | 'mail'
-    | 'contacts'
-    | 'events'
-    | 'chats'
-    | 'recents';
+Each kind carries a thin **presentation layer** added on the frontend — a stable id, a group, a
+rank score, and an icon. Presentation never crosses the wire: an icon is a React component
+reference and can't be serialised. The search endpoint emits kind-specific *wire* payloads
+(defined once in the shared search types); the palette layers presentation on top before ranking.
 
-// FE-only presentation fields layered onto every result. Never crosses the wire —
-// backends emit kind-specific payload (see types/search.ts) and the palette adds
-// these in its provider before ranking.
-type Presentation = {
-    id: string;
-    group: CommandGroup;
-    score: number;        // 0..100 — ranked across groups by `final`
-    icon: LucideIcon;
-};
+Why a union rather than one shape with optional fields: callers (per-kind rows, ranking,
+sub-actions) switch on `kind` and the compiler enforces exhaustiveness. The price is one row
+component per kind; the payoff is no casts and no runtime shape guards.
 
-// Backend-derived kinds: wire SearchHit + FE Presentation. SearchHit defines the `kind`
-// discriminator, so a plain `&` here is enough — no redeclaration.
-export type FileResult  = FileSearchHit  & Presentation;
-export type MailResult  = MailSearchHit  & Presentation;
-export type EventResult = EventSearchHit & Presentation;
-export type ChatResult  = ChatSearchHit  & Presentation;
-
-// FE-only kinds: actions, smart-parsed suggestions, cached contact suggestions.
-export type ActionResult = Presentation & {
-    kind: 'action';
-    title: string;
-    subtitle?: string;
-    keywords?: string[];
-    shortcut?: string;
-    runInNewTab?: boolean;                          // ⌘↵ semantics — see open question 4
-    available?: (ctx: ActionContext) => boolean;    // gate by context (app, selection, role)
-    action: (ctx: ActionContext) => void | Promise<void>;
-    subActions?: (ctx: ActionContext) => ActionResult[];
-};
-
-export type ContactResult = Presentation & {
-    kind: 'contact';
-    displayName: string;
-    email: string;
-};
-
-export type SmartResult = Presentation & {
-    kind: 'smart';
-    title: string;
-    subtitle?: string;
-    action: (ctx: ActionContext) => void | Promise<void>;
-};
-
-export type CommandResult =
-    | ActionResult | FileResult | MailResult | ContactResult
-    | EventResult | ChatResult | SmartResult;
-```
-
-Why a union rather than one shape with optional fields: callers (per-kind rows, ranking, sub-actions)
-do `switch (r.kind)` and the compiler enforces exhaustiveness. The price is one row component per
-kind; the payoff is no `as any` and no runtime shape guards.
-
-Why split wire types from FE types: the search route stays portable to non-palette consumers
-(future per-app search pages, an API key client), and `LucideIcon` is a React component reference
-that can't be serialised. `Presentation` is the seam.
+Why split wire types from frontend types: the search endpoint stays portable to non-palette
+consumers (future per-app search pages), and the non-serialisable presentation bits stay off
+the wire.
 
 ### Providers
 
-Two kinds of providers feed the engine. **Static providers** are FE-only — synchronous `useMemo`
-over data the FE already has, no network. **The search provider** is one backend call. There is
-no per-source HTTP fan-out.
+Two kinds of providers feed the engine. **Static providers** are frontend-only — synchronous
+over data the frontend already has, no network. **The search provider** is one backend call.
+There is no per-source HTTP fan-out.
 
-#### Static providers (no network)
+| Provider   | Kind          | Reads from                                              |
+|------------|---------------|---------------------------------------------------------|
+| `actions`  | static        | The static command catalog (one file per domain)        |
+| `smart`    | static        | The smart-parser (a pure function over the input)       |
+| `contacts` | static        | Already-cached contact + team queries                   |
+| `search`   | backend call  | The `/search` endpoint — one debounced query            |
 
-| Provider     | File                          | Reads from                                  | Phase |
-|--------------|-------------------------------|---------------------------------------------|-------|
-| `actions`    | `providers/actions.ts`        | Static command catalog (`commands/*.ts`)    | 1     |
-| `smart`      | `providers/smart.ts`          | `smart-parser.ts` (pure function on input)  | 3     |
-| `contacts`   | `providers/contacts.ts`       | `useContacts()` + `useMyTeams()` (lib hooks) | 3     |
+The contacts provider lives in the shared lib package and composes the existing contact and
+team hooks directly. The contact merge/dedup logic that the autosuggest components already use
+should live in the shared lib package so both the autosuggest UI and the palette share one
+implementation — move it there if it isn't already. The underlying queries have a session-long
+stale time, so typing into the palette never refetches contacts.
 
-The contacts provider lives in `packages/lib`, so it imports the underlying `useContacts()` and
-`useMyTeams()` hooks directly (both are in `packages/lib`); it cannot wrap
-`useContactSuggestions`, which is in `packages/ui` and would invert the dep direction. The same
-dedup-and-filter pass that `useContactSuggestions` runs gets reused here — extract it to
-`packages/lib/src/core/contacts/filter-suggestions.ts` if it doesn't already live in lib.
-Either way: the underlying TanStack queries have a session-long `staleTime` and the provider is
-a synchronous `useMemo` filter — typing into the palette does not refetch.
+### Search
 
-#### The search provider (one backend call)
+The palette **does not own a search backend**. It consumes one endpoint — `/search/:ownerId`,
+described in [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md). That endpoint is backed by per-Home
+SQLite FTS5 search indexes that each domain keeps current by indexing on write. It returns
+results **grouped by kind** (files, mail, events, and — once chat indexing lands — chats) in a
+single call. The exact index storage layout is an open question in PROPOSAL_SEARCH.md and does
+not affect the palette.
 
-A single endpoint at `/search/:ownerId` returns `SearchResponse = { results: SearchHit[]; total }`
-(wire shape from `packages/lib/src/types/search.ts`). The FE provider `&`s `Presentation` per hit
-to produce `FileResult | MailResult | EventResult | ChatResult`. One TanStack query per keystroke,
-debounced via a `useDebouncedValue` on the input and cancelled on query-key change.
+**Build the search backend as a prerequisite track, not as a phase inside the palette.**
+PROPOSAL_SEARCH's first phase (the index schema and service, the metadata indexing hooks for
+mail, calendar, and drive, and the search route) plus a one-time backfill of existing data is
+everything the palette needs to light up search. That track is independent of the palette's
+frontend work and can proceed in parallel with palette Phases 1–5.
 
-**Backend at v1: metadata-LIKE search across already-SQLite-resident text.** Three small domain
-methods queried in parallel from one route handler. No new database, no migrations, no FTS5
-index. The columns are already there.
+**No stopgap.** An earlier draft shipped a throwaway interim — three parallel SQL `LIKE` queries
+over filenames, mail subjects, and event titles, to be deleted once the real index landed. That
+is cut, for three reasons: it costs about the same to build as the index's first phase; it is
+explicitly thrown away afterwards; and a per-Home search index with versioned migrations is a
+routine, well-trodden pattern here — there is no migration cost to avoid. Doing it once is
+simpler and cheaper. Cutting the stopgap also means **no new search methods on the Drive, Mail,
+or Calendar classes** — so none of the Drive layering rules (the SharedDrive wrapper requirement)
+come into play. The search route only ever touches a dedicated search index.
 
-| Domain    | What's searched                                       | New method                                        |
-|-----------|-------------------------------------------------------|---------------------------------------------------|
-| Drive     | `paths.name` across the user's mounts                 | `Drive.searchByName(q, {limit})`                  |
-| Mail      | `emails.subject` (+ optionally `fromShort`)           | `MailDB.searchSubjects(q, {limit})` — exposed via `home.mail.searchSubjects()` (Maildir delegates to its `db`) |
-| Calendar  | `events.title` (+ optionally `location`)              | `Calendar.searchEvents(q, {limit})`               |
+**The palette's search provider** is a single debounced query against the endpoint. The input is
+debounced before it becomes a query key, and the request forwards an abort signal so a superseded
+keystroke's request is genuinely cancelled — not merely ignored after it returns. One network
+call per keystroke; every other provider is local.
 
-Contacts is **not** here — `useContactSuggestions` is already cached FE-side, so the contacts
-provider filters synchronously without a backend hit.
+**Team contexts** work unchanged: the endpoint is owner-scoped, so browsing a team workspace
+searches the team's data under the same access checks as the rest of the app.
 
-```typescript
-// apps/api/src/routes/search.ts (new)
-.get('/search/:ownerId', async ({params, query, user}) => {
-    const parsed = parseOwnerId(params.ownerId);
-    if (parsed.type === 'user') requireSelf(params.ownerId, user.id);
-    else if (parsed.type === 'team') await requireTeamAccess(user.id, parsed.id);
-    const home = await getHome(params.ownerId);
-    const limit = Math.min(Number(query.limit ?? 20), 100);
-    const [files, mail, events] = await Promise.all([
-        home.drive.searchByName(query.q, { limit }),
-        home.mail.searchSubjects(query.q, { limit }),
-        home.calendar.searchEvents(query.q, { limit }),
-    ]);
-    return {
-        results: [...files, ...mail, ...events],
-        total: files.length + mail.length + events.length,
-    };
-}, { auth: true });
-
-// apps/api/src/lib/drive/drive.ts (new method) — returns the wire type, not the
-// FE FileResult. The palette adds Presentation on top.
-async searchByName(q: string, { limit }: { limit: number }): Promise<FileSearchHit[]> {
-    if (!q.trim()) return [];
-    const pattern = `%${escapeLike(q)}%`;
-    const out: FileSearchHit[] = [];
-    // Drive composes Mount instances internally; iterate via its existing accessor.
-    for (const mount of this.mounts()) {
-        const rows = await mount.db.select().from(paths)
-            .where(like(paths.name, pattern))
-            .limit(limit)
-            .all();
-        for (const r of rows) out.push(toFileSearchHit(r, mount.id, this.ownerId));
-    }
-    return out.slice(0, limit);
-}
-```
-
-`LIKE %q%` doesn't benefit from a B-tree index, but each table has well under 10k rows for
-typical users — SQLite handles it in single-digit milliseconds. Three parallel queries within one
-route handler add no meaningful latency.
-
-When PROPOSAL_SEARCH lands, the route body swaps to `home.searchIndex.query(...)` — one DB query
-against the unified FTS5 index instead of three per-domain `LIKE`s. **Same URL, same response
-shape.** The FE provider doesn't change.
-
-When the user is browsing a team workspace (`ownerId = team_{id}`), the team's `Home` is queried,
-so the same endpoint searches team data. Standard `requireTeamAccess` gate.
+**Richer results arrive for free.** As PROPOSAL_SEARCH's later phases index document, spreadsheet,
+slide, and chat *content* (not just metadata), the same endpoint returns more — the palette's
+provider does not change.
 
 ### Smart parser
 
-Tiny pure function on the query string. Conservative at v1.
+A tiny pure function over the query string, conservative at v1. It recognises two shapes:
 
-```typescript
-// packages/lib/src/core/command-palette/smart-parser.ts
-const EMAIL = /^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$/i;
-const URL_ = /^https?:\/\/\S+$/i;
+- An **email address** → "Mail to …" (opens compose) and "Find emails from …" (opens Mail filtered by sender)
+- A **URL** → "Open link" (new tab) and "Save link to Drive"
 
-export function parseSmart(q: string, ctx: PaletteContext): SmartResult[] {
-    const out: SmartResult[] = [];
-
-    if (EMAIL.test(q)) {
-        const email = q.toLowerCase();
-        out.push({
-            kind: 'smart', id: 'mail-to', group: 'suggested', score: 100, icon: Mail,
-            title: `Mail to ${email}`,
-            action: ({ navigate }) => navigate(getMailComposeUrl(email)),
-        });
-        out.push({
-            kind: 'smart', id: 'find-from', group: 'suggested', score: 92, icon: Inbox,
-            title: `Find emails from ${email}`,
-            action: ({ navigate }) => navigate(`${getMailAppUrl()}?from=${encodeURIComponent(email)}`),
-        });
-    } else if (URL_.test(q)) {
-        out.push({
-            kind: 'smart', id: 'open-url', group: 'suggested', score: 100, icon: ExternalLink,
-            title: 'Open link',
-            action: () => window.open(q, '_blank', 'noopener'),
-        });
-        out.push({
-            kind: 'smart', id: 'save-link', group: 'suggested', score: 88, icon: BookmarkPlus,
-            title: 'Save link to Drive',
-            action: ({ saveLink }) => saveLink(q),
-        });
-    }
-
-    return out;
-}
-```
-
-Patterns explicitly deferred: natural-language datetime, math, currency, unit conversion. Each adds
-risk-of-wrong-suggestion that erodes trust faster than its convenience pays back. Add after telemetry
-shows demand.
+Each suggestion must navigate to a target that actually exists — "Find emails from …" depends on
+the Mail app supporting a sender filter in its URL; confirm that before shipping the suggestion,
+or drop it. Patterns explicitly deferred: natural-language datetime, math, currency, unit
+conversion. Each adds risk-of-wrong-suggestion that erodes trust faster than its convenience pays
+back. Add after telemetry shows demand. Content-aware shapes (image URLs, pasted files) are a
+separate later phase — see [Content-aware input](#content-aware-input-later-phase).
 
 ### Action catalog
 
-Each domain owns one TypeScript file declaring its commands. `available(ctx)` gates them; an optional
-`subActions(ctx)` factory builds the second-level sheet on demand.
-
-```typescript
-// packages/lib/src/core/command-palette/commands/drive.ts
-import { FileText, Upload } from 'lucide-react';
-
-export const driveCommands: ActionResult[] = [
-    {
-        kind: 'action', id: 'drive.new-doc', group: 'actions', score: 80,
-        icon: FileText,
-        title: 'New document',
-        subtitle: 'Create a doc in the current folder',
-        keywords: ['create', 'doc', 'write'],
-        action: ({ createEigenDoc, currentFolder }) => createEigenDoc(currentFolder),
-    },
-    {
-        kind: 'action', id: 'drive.upload', group: 'actions', score: 75,
-        icon: Upload,
-        title: 'Upload files',
-        keywords: ['attach', 'add', 'file'],
-        action: ({ openUploadDialog }) => openUploadDialog(),
-        available: ctx => ctx.app === 'drive',
-    },
-    // … new sheet / slides / stickies / chat / folder
-];
-```
+Each domain owns one command file declaring its commands. A command carries a title, keywords,
+an optional keyboard shortcut, a run handler, an optional **availability predicate** (gates it by
+app, selection, or role), and an optional **sub-actions factory** (builds the second-level sheet
+on demand).
 
 Action categories targeted for v1:
 
@@ -442,365 +299,277 @@ Action categories targeted for v1:
 | **Create**    | New doc · sheet · slides · stickies · chat · event · contact · folder · upload                 |
 | **Compose**   | Mail to … (smart) · Reply to current thread (selection) · Forward (selection)                  |
 | **Navigate**  | Go to Mail · Drive · Calendar · Contacts · Stickies · Slides · Sheets · Chat · Space · Settings |
-| **Mailbox**   | Inbox · Sent · Drafts · Trash · Archive (route to `box/<name>`)                                |
+| **Mailbox**   | Inbox · Sent · Drafts · Trash · Archive                                                        |
 | **Selection** | Share · Star · Rename · Move · Delete · Copy link · Show in folder · Open in new tab           |
 | **Switch**    | Switch to team: <name> · Switch to personal · Open admin (admin only)                          |
 | **View**      | Toggle sidebar · Toggle theme · Print                                                          |
 
-Every command lives in `packages/lib/src/core/command-palette/commands/<domain>.ts`. Adding one is a
-single PR touching one file.
+Adding a command is a single change touching one domain file. No central registry edits.
 
 ### Context publication
 
-The palette needs to know what's currently visible to surface contextual actions. Apps publish
-their current selection imperatively via a hook that mirrors the `usePreview` ergonomics
-(`packages/ui/src/components/layout/preview-provider/preview-provider.tsx`) — but with stack
-semantics (see below) because selections nest.
+The palette needs to know what's currently in focus to surface contextual actions. A small hook
+lets a view declare its current selection — an open mail thread, a previewed Drive item, a doc
+cursor, a sheet range, a chat message, a calendar event. The selection is **plain typed data** —
+a discriminated union of descriptors — so commands can use it in their availability predicates.
 
-```typescript
-// In MailThreadView
-function MailThreadView({ threadId, mailbox }: Props) {
-    usePaletteSelection({ kind: 'mail-thread', threadId, mailbox });
-    // …
-}
+It mirrors the ergonomics of the existing preview provider: **a single piece of context state**,
+set on mount, cleared on unmount, last writer wins. An earlier draft proposed a *stack* of
+selections so nested views (a comment thread inside a sheet) could each contribute. Drop that for
+v1: a stack's "deepest wins" semantics depend on React effect ordering, and child effects run
+*before* parent effects — which makes the last-registered frame the *shallowest*, not the
+deepest. Mirror the preview provider's single nullable state exactly. Revisit a stack only if a
+concrete nesting conflict actually appears — consistent with the codebase's bias against
+abstractions you don't yet need.
 
-// In FilePreview
-usePaletteSelection({ kind: 'drive-item', ownerId, mountId, pathId, mimeType });
-```
-
-`usePaletteSelection` pushes a frame onto a context-scoped stack on mount and pops it on unmount
-— the deepest mount wins. This is a new pattern (one we own, not inherited): `PreviewProvider`
-uses a single `useState<PreviewState | null>` setter — only one preview at a time. Selection
-nests (a comment thread inside a sheet inside an app), so we need a stack. Plain React context +
-`useState<PaletteSelection[]>`; no Zustand.
-
-```typescript
-export type PaletteContext = {
-    user: AuthUser;
-    ownerId: string;
-    app: AppName;
-    route: string;
-    selection?: PaletteSelection;
-    currentFolder?: { ownerId: string; mountId: string; pathId: string };
-};
-
-export type PaletteSelection =
-    | { kind: 'mail-thread'; threadId: string; mailbox: string }
-    | { kind: 'drive-item'; ownerId: string; mountId: string; pathId: string; mimeType: string }
-    | { kind: 'doc-cursor'; ownerId: string; mountId: string; pathId: string }
-    | { kind: 'sheet-range'; ownerId: string; mountId: string; pathId: string; range: string }
-    | { kind: 'chat-message'; ownerId: string; mountId: string; chatId: string; messageId: string }
-    | { kind: 'calendar-event'; eventId: string };
-
-// ActionContext = PaletteContext + the side-effect helpers commands need to actually run.
-// Bundled here so individual command files (commands/<domain>.ts) stay terse and don't each
-// import the same handful of API helpers.
-export type ActionContext = PaletteContext & {
-    navigate: (url: string) => void;       // wraps router.navigate; `runInNewTab` honours ⌘↵
-    queryClient: QueryClient;              // for cache nudges after an action
-    createEigenDoc: (folder: { ownerId: string; mountId: string; pathId: string }) => Promise<void>;
-    openUploadDialog: () => void;
-    saveLink: (url: string) => Promise<void>;
-};
-```
+Commands run with a **context object**: the palette context (user, owner, current app, route,
+current selection, current folder) plus a small set of side-effect helpers commands need —
+navigation, the query client for cache nudges, and a few global operations (create a document,
+open the upload dialog, save a link). Bundling them keeps each command file terse.
 
 ### Ranking
 
-Search hits arrive **pre-sorted by `bm25(search_fts)`** (most relevant first; cf.
-[PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) `SearchIndex.query`). The FE provider assigns
-`baseScore = 80 - i * 5` by position — first hit competes with hand-tuned action scores,
-later hits decay. Static commands (actions, smart, contact) carry their own `score` from the
-catalog. Final rank per result:
+Search hits arrive pre-sorted by the index's relevance rank; the search provider assigns a base
+score by position so the first hit competes with hand-tuned action scores and later hits decay.
+Static commands carry their own catalog-authored base score. Final rank combines:
 
-```text
-final = baseScore
-      + (titleStartsWithQuery ? 30 : 0)
-      + (titleContainsQuery   ? 10 : 0)
-      + (keywordMatch         ?  8 : 0)
-      + recencyBoost(useCount, daysSinceLastUse)   // 0..20 from home.recents
-      + (commandIsContextual(ctx) ? 15 : 0)        // boosts current-app actions
-      + (group === 'suggested'    ? 12 : 0)        // smart parses lead
-```
+- the base score (search position, or catalog score for static commands)
+- a boost when the title **starts with** the query, a smaller boost when it merely **contains** it
+- a small boost on a keyword match
+- a recency boost (once `home.recents` lands)
+- a boost for actions relevant to the current app/selection
+- a boost for smart suggestions, so a confident smart parse leads
 
-Top Hit is `max(final)` if ≥ 60. Otherwise no Top Hit row — the highest match in its own section
-is the first thing the user sees.
+The Top Hit is the single highest final rank, shown only above a confidence threshold; otherwise
+the first row of the highest-ranked section is what the user sees first.
 
 ### The engine
 
-One hook merges every provider. Four inputs, **one** network call.
+One hook merges every provider — the static providers (synchronous) and the single debounced
+search call. It parses the query for prefix scopes, applies scope filtering, groups results into
+sections, ranks within each section, and picks the Top Hit. The dialog bypasses cmdk's built-in
+filter because ranking is already done across heterogeneous typed providers.
 
-```typescript
-// packages/lib/src/core/command-palette/hooks/use-command-results.ts
-export function useCommandResults(query: string, ctx: PaletteContext) {
-    const parsed = useMemo(() => parseQuery(query), [query]);
+**Sections render as soon as their provider resolves; the Top Hit waits.** The static providers
+are synchronous, so the Actions, Suggested, and Contacts sections appear the instant the user
+types. The search-backed sections (Files, Mail, Events) stream in when the debounced request
+returns, a few hundred milliseconds later. The Top Hit is the one result that competes *across*
+groups, so it needs the full picture to be correct — computing it from partial data makes the
+promoted row flicker as search results land. The engine therefore **holds the Top Hit until the
+search request resolves**; the section beneath still shows the result, so nothing feels slow —
+only the promoted row settles a beat later. Two cases skip the wait: a deterministic smart-parse
+(an email address, a URL) can take the Top Hit immediately, and a query under a prefix scope
+that issues no search call has nothing to wait for.
 
-    // Static providers — synchronous useMemo, no network
-    const actions  = useActionResults(parsed, ctx);
-    const smart    = useSmartResults(parsed, ctx);
-    const contacts = useContactResults(parsed, ctx); // composes useContacts() + useMyTeams() (already cached)
+## Content-aware input (later phase)
 
-    // The single backend call. useSearch debounces internally via useDebouncedValue on `parsed.q`;
-    // TanStack Query cancels in-flight requests when the (debounced) query key changes.
-    const { data: search = [], isLoading } = useSearch(parsed, ctx);
+Today the input reads only text. Two upgrades turn the palette into a clipboard-aware action
+launcher — a Raycast-style direction worth taking *after* the core ships.
 
-    return useMemo(
-        () => ({ ...mergeAndRank({ actions, smart, contacts, search }, parsed, ctx), isLoading }),
-        [actions, smart, contacts, search, parsed, ctx, isLoading],
-    );
-}
-```
+**1. Image-URL detection.** The smart parser distinguishes an image URL from a plain link (by
+extension or known image host). The suggestion is context-dependent:
 
-`mergeAndRank` applies scope filtering (if a prefix is active), groups by `group`, sorts by `final`,
-and picks the Top Hit. Returns `{ topHit, sections, isLoading }`.
+- In an open document → "Insert image into document"
+- In a Drive or docs browser view → "Save image to Drive" (current folder)
+- Anywhere → still offers "Open link" / "Save link to Drive"
 
-The dialog wraps `<Command shouldFilter={false}>` — cmdk's built-in filter is bypassed because we
-already ranked across heterogeneous typed providers.
+**2. File paste and drop.** The input accepts pasted or dropped files. The field switches to a
+file-action mode (the file shown as a chip), and suggests:
+
+- "Save to Drive" → the current folder, via the existing upload pipeline and quota enforcement
+- "Send by mail" → when an email address is also in the input, compose a mail with the file attached
+
+### Two seams these need
+
+- **Acting inside the current app.** "Insert image into the open document" is unlike every v1
+  action — v1 actions navigate, open global dialogs, or run global mutations; none reach into a
+  live editor. This needs a typed **capability bridge**: an app with a focused editor registers
+  an imperative handler ("insert-image") that the palette can invoke. Keep it separate from the
+  selection hook — the selection stays pure data (good for availability predicates), capabilities
+  are its imperative complement. The save-to-Drive and send-by-mail actions do **not** need this
+  bridge — they're global helpers.
+- **Carrying binary across navigation.** "Send file by mail" cannot pass a file through a URL.
+  Either upload it to Drive first and attach it by reference, or stash the file in a shared
+  pending-attachment store the compose view reads. Save-to-Drive has no such issue.
+
+### Considerations
+
+- **Fetching a remote image to save it**: a server-side fetch of an arbitrary user-supplied URL
+  is an SSRF surface and must be guarded (block internal addresses and metadata endpoints). A
+  client-side fetch avoids SSRF but hits CORS on many image hosts. Decide the strategy — see open
+  questions.
+- **Quota**: pasted and dropped files go through the same size and quota enforcement as ordinary uploads.
+- **Browser support**: pasted *images* are reliable; arbitrary files copied from the OS file
+  manager are only partially supported — drag-and-drop onto the palette is the more dependable sibling.
+- **Sequencing**: keep the v1 smart parser tiny. The global-helper wins (save image/file to Drive)
+  are simpler and come first; the in-editor insert and send-by-mail-with-attachment need the extra
+  seams above and come last.
 
 ## Topbar trigger
 
-The topbar gets one new element: a centred pill in the empty slot at `topbar.tsx:277-280`.
+The topbar gets one new element: a centred search pill in its currently-empty centre slot. It
+shows a search icon, placeholder text, and the `⌘K` hint; clicking it opens the dialog.
 
-```tsx
-<button
-    onClick={() => commandPalette.open()}
-    className="bg-app-foreground/5 hover:bg-app-foreground/10 text-app-foreground/70
-               h-8 max-w-md w-full rounded-md px-3 flex items-center gap-2"
->
-    <Search className="h-4 w-4" />
-    <span className="flex-1 text-left text-sm">Search files, people, or jump anywhere…</span>
-    <kbd className="text-xs">⌘K</kbd>
-</button>
-```
-
-Hidden on mobile (the search input is too small below ~640px). Mobile users open the palette from
-the AppSwitcher dropdown or via `Mod+K` on an attached keyboard.
+The full pill is too wide for small screens and hides below the mobile breakpoint — but the
+palette is a search-first feature, so mobile still needs a **visible** entry point (a compact
+search icon button in the topbar), not only `Mod+K` (which needs a keyboard) or a buried menu
+item. See open questions.
 
 ## UI components
 
 ```
 packages/ui/src/components/layout/app/command-palette/
-  command-palette.tsx            # the dialog — wraps <CommandDialog> with shouldFilter={false}
-  command-palette-provider.tsx   # context: open/close, selection stack
-  command-palette-trigger.tsx    # the topbar pill
-  command-row-action.tsx         # one row component per kind — switch (r.kind) at the engine
-  command-row-file.tsx           # so each row is concrete-typed
-  command-row-mail.tsx
-  command-row-contact.tsx
-  command-row-event.tsx
-  command-row-chat.tsx
-  command-row-smart.tsx
+  command-palette.tsx            # the dialog — wraps the Command primitive, ranking-controlled
+  command-palette-provider.tsx   # context: open/close state, current selection
+  command-palette-trigger.tsx    # the topbar pill (and the compact mobile button)
+  command-row-*.tsx              # one row component per result kind
   command-footer.tsx             # bottom hint bar
-  use-palette-shortcuts.ts       # Mod+K binding; mounted inside GlobalHotkeys
+  use-palette-shortcuts.ts       # the Mod+K binding
 ```
 
-Reuses the **already-shipped, currently-unused** shadcn primitive at
-`packages/ui/src/components/command.tsx` (exports: `Command`, `CommandDialog`, `CommandInput`,
-`CommandList`, `CommandEmpty`, `CommandGroup`, `CommandItem`, `CommandSeparator`, `CommandShortcut`).
-Drives the dialog, list, keyboard navigation, and empty state out of the box.
+Reuses the **already-shipped, currently-unused** shadcn `Command` primitive (cmdk) — it drives
+the dialog, list, keyboard navigation, and empty state out of the box.
 
 ## Settings
 
-Per project memory, settings nest as shallow optional objects (`packages/lib/src/types/settings.ts`).
-
-```typescript
-type UserSettings = {
-    theme?: ...;
-    mounts?: ...;
-    email?: ...;
-    commandPalette?: {
-        enabled?: boolean;         // default true
-        smartSuggestions?: boolean; // default true (gates smart-parser output)
-    };
-};
-```
-
-Mod+K is hard-coded at v1 — per-user rebinding lands with per-command hotkeys (Phase 11).
+Settings nest as shallow optional objects, matching the existing pattern. A `commandPalette`
+sub-object on user settings gates the feature (default on) and the smart suggestions (default
+on). `Mod+K` is hard-coded at v1 — per-user rebinding lands with per-command hotkeys.
 
 ## Wiring summary
 
-| Change                                            | File                                                                  |
-|---------------------------------------------------|-----------------------------------------------------------------------|
-| Add `CommandPaletteProvider` to the stack         | `packages/ui/src/components/layout/app/eigen-app.tsx:54` (alongside `PreviewProvider`) |
-| Register `Mod+K` in `GlobalHotkeys`               | `packages/ui/src/components/layout/app/eigen-app.tsx:24-30`           |
-| Add `<CommandPaletteTrigger />` to the topbar     | `packages/ui/src/components/layout/app/topbar.tsx:277` (centre slot)  |
+| Change                                        | Where                                              |
+|-----------------------------------------------|----------------------------------------------------|
+| Add the command-palette provider to the stack | The app provider stack, alongside the preview provider |
+| Register `Mod+K`                              | The global hotkeys component                       |
+| Add the search-pill trigger                   | The topbar centre slot                             |
 
-Three file edits to make the palette globally available. Everything else is additive
-(`commands/<domain>.ts`, `sources/<source>.ts`, row components).
+Three integration points make the palette globally available. Everything else is additive —
+command files, providers, and row components.
 
 ## Why this fits Eigen
 
-- **Typed end-to-end**: `CommandResult` is a discriminated union per kind — same pattern as
-  `NotificationCenter`, `SSEvent`, `HomeMessage`. Eden Treaty surfaces server results with concrete
-  types. No `as any`, no JSON payloads.
-- **Hooks in `packages/lib`**: every data-fetching hook lives where AGENTS.md requires; UI consumes
-  typed results only.
-- **Reuses existing primitives**: shadcn `<Command>` (already shipped), `useHotkey`,
-  `useContactSuggestions`, the URL helpers in `packages/lib/src/core/api.ts`.
-- **Doesn't block on proposals**: v1 backend is metadata-LIKE across already-resident SQLite
-  columns (filenames, mail subjects, event titles) — no new database, no FTS5, no migrations.
-  Same endpoint URL that PROPOSAL_SEARCH grows into; when richer search lands the FE provider
-  doesn't change.
-- **One module per domain**: each app contributes one `commands/<domain>.ts` file. No central
-  edits per feature.
-- **Per-Home model**: the palette honours `ownerId` (personal vs team) so team contexts get team
-  data — same sharding boundary as everything else.
-- **Provider-stack pattern**: `CommandPaletteProvider` reuses `PreviewProvider`'s plumbing
-  (React context + `useState`, conditional render) for open/close state. Selection nests, so
-  `usePaletteSelection` adds a `useState<PaletteSelection[]>` stack on top — that part is new.
-- **Match cmdk to existing autosuggest UX**: the keyboard model the user already knows from
-  `ContactAutosuggest` (↑↓ navigate, ↵ select, esc close) carries over unchanged.
+- **Typed end-to-end**: the result model is a discriminated union per kind — the same pattern as
+  `NotificationCenter`, `SSEvent`, `HomeMessage`. No casts, no JSON payloads.
+- **Hooks in the shared lib package**: every data-fetching hook lives where the project rules
+  require; the UI consumes typed results only.
+- **Reuses existing primitives**: the shadcn `Command` component (already shipped, currently
+  unused), the global hotkey hook, the contact-suggestion logic, the API URL helpers.
+- **Search via the shared index**: the palette and any future per-app search page consume one
+  endpoint backed by one index. The palette does not fork its own search backend.
+- **One module per domain**: each app contributes one command file. No central edits per feature.
+- **Per-Home model**: the palette honours the owner (personal vs team) so team contexts get team
+  data — the same sharding boundary as everything else.
+- **Mirrors an existing provider**: open/close and selection state reuse the preview provider's
+  plumbing — React context plus a single state value.
+- **Familiar keyboard model**: ↑↓ navigate, ↵ select, esc close — carried over unchanged from the
+  contact autosuggest the user already knows.
 
 ## Phased implementation
 
-| Phase | Scope                                                                                                              | Effort | Depends on               |
-|-------|--------------------------------------------------------------------------------------------------------------------|--------|--------------------------|
-| 1     | Provider wiring, `Command` primitive in topbar, Mod+K hotkey, empty-state = curated suggested commands             | S      | —                        |
-| 2     | Static actions catalog (create, navigate, view), per-app `commands/` files, `actions` provider                     | M      | Phase 1                  |
-| 3     | Contacts provider via `useContactSuggestions`; smart-parser for email + URL                                        | S      | Phase 2                  |
-| 4     | Context publication (`usePaletteSelection`); selection-aware actions for mail / drive / docs / sheets / slides / stickies / chat | M      | Phase 2                  |
-| 5     | Sub-action sheet (`→` / `⌘K` on focused result)                                                                    | S      | Phase 4                  |
-| 6     | Backend `/search/:ownerId` — `Drive.searchByName` + `MailDB.searchSubjects` (via `home.mail`) + `Calendar.searchEvents` (parallel `LIKE`); FE `search` provider | M | Phase 3 |
-| 7     | Prefix scopes (`>`, `@`, `mail:`, `file:`, `event:`, `chat:`); help page (`?`)                                     | S      | Phase 5                  |
-| 8     | Recents provider — wires to `home.recents` once it lands                                                           | S      | PROPOSAL_HOME_RECENTS    |
-| 9     | Backend grows: `home.searchIndex` replaces the three parallel `LIKE`s with one FTS5 query — adds full mail bodies, contacts data field, doc/sheet/slide/stickies/chat content via Yjs extraction. FE provider unchanged. | L | PROPOSAL_SEARCH |
-| 10    | Smart-parser growth: datetime → "Create event", math → calculator, unit conversion                                 | M      | Phase 9 (telemetry)      |
-| 11    | Pinned commands, per-command hotkeys, aliases (Quicklinks)                                                         | L      | Phase 10                 |
+| Phase  | Scope                                                                                          | Effort | Depends on            |
+|--------|------------------------------------------------------------------------------------------------|--------|-----------------------|
+| **Prereq** | Search backend — FTS5 index, metadata indexing hooks, the `/search` route, one-time backfill (PROPOSAL_SEARCH) | M | runs in parallel |
+| 1      | Provider wiring, the `Command` primitive in the topbar, the `Mod+K` hotkey, curated empty state | S      | —                     |
+| 2      | Static actions catalog (create, navigate, view), per-app command files                          | M      | 1                     |
+| 3      | Contacts provider; smart parser for email + URL                                                 | S      | 2                     |
+| 4      | Context publication; selection-aware actions across mail / drive / docs / sheets / slides / stickies / chat | M | 2          |
+| 5      | Sub-action sheet                                                                                | S      | 4                     |
+| 6      | Search provider — consume the `/search` endpoint                                                | S      | 3, Prereq             |
+| 7      | Prefix scopes and the help page                                                                 | S      | 5                     |
+| 8      | Recents provider — wires to `home.recents`                                                      | S      | PROPOSAL_HOME_RECENTS |
+| 9      | Content-aware input — image-URL suggestions and file paste/drop (global-helper actions first, then in-editor insert and send-by-mail) | M | 4, 6 |
+| 10     | Smart-parser growth — datetime, math, unit conversion                                           | M      | telemetry             |
+| 11     | Pinned commands, per-command hotkeys, aliases                                                   | L      | 10                    |
 
-Phase 1-7 is a *complete* palette without depending on either proposal: jumps, creates, contacts,
-smart parses, metadata search (filenames + mail subjects + event titles), selection actions,
-prefix scopes. Phase 8 wires recents when PROPOSAL_HOME_RECENTS ships. Phase 9 swaps to FTS5 +
-body content when PROPOSAL_SEARCH ships. Same `/search/:ownerId` URL, same response shape, same
-FE provider — only the route body changes.
+Phases 1–5 and 7 are a **complete, useful palette with no backend at all** — jumps, creates,
+contacts, smart parses, selection actions, prefix scopes. Phase 6 lights up search whenever the
+prerequisite track is ready; the two don't block each other. The depth of search results grows
+on its own as the search-index track indexes more content — no palette change.
 
 ## Open questions
 
-1. **Sub-action key**: `→` (primary) with Cmd+K as a power-user alias. Cmd+K alone would mean
-   "same key does different things depending on whether the dialog is open" — cognitive overhead
-   not worth it. Linear uses →; we follow.
-
-2. **Top Hit confidence threshold**: when to *not* show one. Linear always shows it; Spotlight
-   sometimes doesn't. Lean: only when `final ≥ 60`.
-
-3. **Mobile**: full-screen sheet vs bottom drawer. cmdk supports both. The topbar pill hides below
-   ~640px; the palette opens via Mod+K (Bluetooth keyboard) or the AppSwitcher menu.
-
-4. **Result navigation in new tab**: `Cmd+Enter` opens the result's URL in a new tab. Action results
-   have no URL — disable, or run the action in a "new tab" mode where applicable? Decide per-action
-   via `Result.runInNewTab`.
-
-5. **Telemetry**: per-command usage would feed ranking *and* product decisions. A `command_recents`
-   table mirrors the existing two kinds in PROPOSAL_HOME_RECENTS cleanly.
-
-6. **Indexing chat content**: PROPOSAL_SEARCH Phase 2 indexes chat messages. Until that's done,
-   `chat:` scope falls back to room titles only (queryable via Drive metadata). Acceptable degradation.
-
-7. **Search response shape — RESOLVED**: the wire returns `SearchResponse = { results: SearchHit[];
-   total }`, with `SearchHit = FileSearchHit | MailSearchHit | EventSearchHit | ChatSearchHit`
-   defined in `packages/lib/src/types/search.ts` (shared with
-   [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md)). The v1 stopgap emits the first three variants;
-   PROPOSAL_SEARCH Phase 2 (chat indexing) starts emitting `ChatSearchHit`. The FE projects
-   `SearchHit` → `CommandResult` by `&`-ing on `Presentation` (`id` / `group` / `score` / `icon`)
-   — non-serialisable bits stay off the wire.
-
-8. **Full-page search results**: the palette caps each section at 6. When a user wants to see *all*
-   matches, there's nowhere to send them at v1 (Drive has no search page, Mail has no advanced
-   search). The current answer is "refine the query." When PROPOSAL_SEARCH lands and dedicated
-   per-app search pages exist, each section grows a footer `↳ Show all N in <App>` that navigates
-   there with the query pre-filled. The search pages are separate work — flag now.
-
-9. **Naming honesty**: "Command palette" reads as VSCode (commands first). For Eigen, search is
-   the dominant use case — typing a query and hitting Enter is the 80% path. *Quick Find*,
-   *Spotlight*, or just *Search* might be more honest. The decision affects the trigger pill's
-   placeholder text more than the architecture; decide before launch.
-
-10. **i18n**: English-only per project memory. Smart-parser verbs (`mail to`, `find emails from`)
-    stay English. If localisation lands later, verbs become a registry.
+1. **Sub-action key**: `→` as primary, `⌘K` as a power-user alias. `⌘K` alone would mean "the
+   same key does different things depending on whether the dialog is open" — not worth the
+   overhead. Linear uses `→`; we follow.
+2. **Top Hit confidence threshold**: when to *not* show one. Lean: only above a clear rank margin.
+3. **Mobile**: the dialog form (full-screen sheet vs. bottom drawer) *and* the entry point. The
+   topbar pill hides on small screens, but a search-first feature needs a visible mobile
+   affordance — decide on a compact search icon button, don't rely on `Mod+K` and a menu item alone.
+4. **Result navigation in a new tab**: `⌘↵` opens a result's URL in a new tab. Actions have no
+   URL — decide per-action whether a "new tab" mode applies.
+5. **Telemetry**: per-command usage would feed both ranking and product decisions. A recents-style
+   table is the clean place for it.
+6. **Naming**: "Command palette" reads as VSCode (commands first). For Eigen, search is the
+   dominant path. The decision mostly affects the trigger pill's placeholder text — decide before
+   launch; "command palette" is fine as the internal name.
+7. **Content-aware input — remote-image fetch strategy**: a server-side fetch is an SSRF surface;
+   a client-side fetch hits CORS on many hosts. Decide before building "Save image to Drive". And:
+   pasting an image URL into the palette competes with pasting it straight into the editor — the
+   palette flow must be clearly better (uniformity, discoverability) to justify itself.
+8. **Full-page search results**: each section caps at 6, with nowhere to send a user who wants all
+   matches until dedicated per-app search pages exist. The current answer is "refine the query";
+   per-app search pages are separate work — flagged here.
+9. **i18n**: English-only per project scope. Smart-parser verbs stay English; if localisation
+   lands later, verbs become a registry.
 
 ## File structure
 
 ```
-apps/api/src/routes/
-  search.ts                        # phase 6 — /search/:ownerId (3 parallel LIKEs at v1; FTS5 once PROPOSAL_SEARCH ships)
-
-apps/api/src/lib/drive/
-  drive.ts                         # phase 6 — adds Drive.searchByName(q, {limit})
-
-apps/api/src/lib/mail/
-  maildb.ts                        # phase 6 — adds MailDB.searchSubjects(q, {limit})
-  maildir.ts                       # phase 6 — exposes home.mail.searchSubjects() that delegates to this.db
-
-apps/api/src/lib/calendar/
-  calendar.ts                      # phase 6 — adds Calendar.searchEvents(q, {limit})
-
 packages/lib/src/types/
-  command-palette.ts               # CommandResult union, PaletteSelection, PaletteContext
-  search.ts                        # phase 6 — SearchResponse = { results, total } (shared with PROPOSAL_SEARCH)
+  command-palette.ts             # the result model, selection + context shapes
 
 packages/lib/src/core/command-palette/
-  keys.ts                          # TanStack query keys
-  parse-query.ts                   # detect prefix scopes
-  smart-parser.ts                  # query → SmartResult[]
-  rank.ts                          # final = baseScore + boosts
-  commands/
-    drive.ts
-    mail.ts
-    calendar.ts
-    docs.ts
-    sheets.ts
-    slides.ts
-    stickies.ts
-    chat.ts
-    contacts.ts
-    nav.ts                         # cross-app jumps
-    view.ts                        # sidebar, theme, print
+  keys.ts                        # TanStack query keys
+  parse-query.ts                 # prefix-scope detection
+  smart-parser.ts                # query string → smart suggestions
+  rank.ts                        # cross-provider ranking
+  commands/                      # one file per domain — drive, mail, calendar, docs,
+                                 #   sheets, slides, stickies, chat, contacts, nav, view
   providers/
-    types.ts
-    actions.ts                     # FE-only — filters command catalog by query + ctx
-    contacts.ts                    # FE-only — composes useContacts() + useMyTeams() (both in lib); reuses the suggestion filter from packages/lib/src/core/contacts/
-    smart.ts                       # FE-only — pure smart-parser output
-    search.ts                      # the single backend call — TanStack query against /search/:ownerId
-    recents.ts                     # phase 8 — wires to home.recents (PROPOSAL_HOME_RECENTS)
+    actions.ts                   # frontend-only — filters the command catalog
+    contacts.ts                  # frontend-only — composes cached contact + team data
+    smart.ts                     # frontend-only — smart-parser output
+    search.ts                    # the single backend call
+    recents.ts                   # wires to home.recents when it lands
   hooks/
-    use-command-palette.ts         # open/close
-    use-command-results.ts         # the engine — merges providers
-    use-palette-selection.ts       # apps publish current selection
+    use-command-palette.ts       # open / close
+    use-command-results.ts       # the engine — merges providers
+    use-palette-selection.ts     # apps publish their current selection
 
 packages/ui/src/components/layout/app/command-palette/
   command-palette.tsx
   command-palette-provider.tsx
   command-palette-trigger.tsx
-  command-row-action.tsx
-  command-row-file.tsx
-  command-row-mail.tsx
-  command-row-contact.tsx
-  command-row-event.tsx
-  command-row-chat.tsx
-  command-row-smart.tsx
+  command-row-*.tsx
   command-footer.tsx
   use-palette-shortcuts.ts
 ```
 
+The search index, the `/search` route, the per-domain indexing hooks, and the shared search wire
+types are owned by [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md); the palette imports the wire types
+and consumes the endpoint.
+
 ## Key decisions
 
-- **One backend call per keystroke** — FE-only providers (actions, smart, contacts) are
-  synchronous `useMemo` over already-cached data; the only network call is `/search/:ownerId`.
-  No HTTP fan-out per source.
-- **Metadata-LIKE at v1, same URL grows** — `/search/:ownerId` ships with three parallel `LIKE`s
-  (`Drive.searchByName` + `MailDB.searchSubjects` via `home.mail` + `Calendar.searchEvents`) —
-  the columns are already in SQLite, no new index. When PROPOSAL_SEARCH lands, the route body
-  switches to `home.searchIndex.query(...)`. URL, response shape, and FE provider stay stable.
-- **No FE-local recents** — don't ship what we'll replace. Recents wait for
-  PROPOSAL_HOME_RECENTS. Empty state shows curated suggested commands until then.
-- **One Cmd+K, not split** — Notion's split (Cmd+P jump, Cmd+K command) doubles the keyboard
-  surface. A single dialog with sectioned results is easier to teach; prefix modes recover the
-  precision when wanted.
-- **Discriminated union per result kind, not JSON bag** — matches `NotificationCenter`, `SSEvent`,
-  `HomeMessage` precedent. TypeScript exhaustiveness across rows/ranking pays for the per-kind
-  row component.
-- **shadcn `<Command>` primitive** — already shipped, currently unused; perfect fit.
-  `shouldFilter={false}` because we blend heterogeneous typed providers and control ranking.
-- **Apps publish selection via hook** — not via global state inspection. Cleanest seam, mirrors
-  `usePreview` shape, no implicit coupling.
+- **One backend call per keystroke** — the frontend-only providers (actions, smart, contacts) are
+  synchronous over already-cached data; the only network call is the search query. No HTTP
+  fan-out per source.
+- **No search stopgap** — the palette consumes the shared FTS5 index from PROPOSAL_SEARCH, built
+  as a parallel prerequisite track. A throwaway interim (parallel SQL `LIKE` queries) is *not*
+  built: it costs the same as the real index's first phase, gets deleted afterwards, and avoids
+  no real migration cost. Doing it once is simpler and removes any new search methods from the
+  Drive/Mail/Calendar classes.
+- **No frontend-local recents** — don't ship what we'll replace. Recents wait for
+  PROPOSAL_HOME_RECENTS. The empty state shows curated suggested commands until then.
+- **One Cmd+K, not split** — a single dialog with sectioned results is easier to teach than
+  Notion's Cmd+P / Cmd+K split; prefix modes recover the precision when wanted.
+- **Discriminated union per result kind, not a JSON bag** — matches the `NotificationCenter`,
+  `SSEvent`, `HomeMessage` precedent. Compiler-enforced exhaustiveness pays for the per-kind row component.
+- **shadcn `Command` primitive** — already shipped, currently unused; a perfect fit. Ranking is
+  controlled by the engine, not cmdk's built-in filter.
+- **Apps publish selection via a hook** — not via global state inspection. A single state value,
+  mirroring the preview provider; no stack until a real nesting conflict demands one.
 - **Smart parser starts tiny** — email + URL only. Wrong suggestions erode trust; add patterns
-  when usage shows demand.
-- **Mod+K is hard-coded** — until per-command hotkeys ship in Phase 11. One thing at a time.
+  when usage shows demand. Content-aware input (image URLs, file paste) is a defined later phase.
+- **Mod+K is hard-coded** — until per-command hotkeys ship. One thing at a time.

@@ -1,827 +1,357 @@
 # Search Index
 
-> **TLDR**: **Backend search infrastructure** consumed by the [command palette](PROPOSAL_COMMAND_PALETTE.md).
-> SQLite FTS5 per-user search index at `data/home/{userId}/eigen.search/search.db`. Content table + FTS5
-> virtual table with auto-sync triggers. Indexes mail, docs, chat, stickies, contacts, calendar, drive
-> metadata. Shared data searched via existing `shared.db` and `shared_calendars` tables. Future: hybrid
-> FTS5 + vector search. **No UI here — the palette is the only consumer.**
+> **TLDR**: The **backend search infrastructure** consumed by the
+> [command palette](PROPOSAL_COMMAND_PALETTE.md). SQLite FTS5 full-text search. **Where the
+> index physically lives is an open decision** — one database per Home, or one per scope (per
+> mount, plus mail and calendar). This proposal documents both, with a working lean toward
+> per-scope, for a review round to settle. Each domain indexes its text on write; the search
+> endpoint returns results **grouped by kind** — the palette renders one section per group.
+> Future: optional hybrid keyword + vector search. **No UI here — the palette is the only
+> consumer.**
 
-## Problem Statement
+## Problem statement
 
-The [command palette](PROPOSAL_COMMAND_PALETTE.md) needs fast, ranked content search across Mail, Drive,
-Docs, Chat, Stickies, Contacts, Calendar. Today there is none — every domain stores text in its own
-SQLite, and full-text search of Yjs document content is impossible without server-side extraction.
+The [command palette](PROPOSAL_COMMAND_PALETTE.md) needs fast, ranked full-text search across
+Mail, Drive, Docs, Chat, Stickies, Slides, Sheets, and Calendar. Today there is none: each
+domain stores its text in its own SQLite database, and the content of collaborative documents is
+binary Yjs state that can't be searched without server-side text extraction.
 
-- Cover owned data AND data shared with the user (via ACL or team membership)
-- Self-hosted, no external search services
-- Single FTS5 ranking across domains so the palette can compare a file's score against an email's against a
-  contact's in one query — cross-kind ranking requires unified BM25 in one place
+Requirements:
 
-## What's Searchable
+- Cover data the user owns **and** data shared with them
+- Self-hosted — no external search services
+- **Ranked results, grouped by kind** — the palette renders a section per kind (files, mail,
+  events, chats), each ranked on its own; only the single promoted "Top Hit" compares across kinds
 
-| Domain   | Storage                          | What to Index                              | Source DB/Path                               |
-|----------|----------------------------------|--------------------------------------------|----------------------------------------------|
-| Mail     | `mail.db` + Maildir `.eml` files | subject, fromShort, textShort              | `eigen.mail/mail.db` (emails table)          |
-| Docs     | Yjs `data.db` (binary)           | Extracted plain text from Yjs doc          | `mounts/{id}/data/{pathId}` (collab DB)      |
-| Chat     | SQLite `data.db` per room        | message content, authorEmail               | `mounts/{id}/data/{pathId}` (messages table) |
-| Stickies | Yjs `data.db` (binary)           | Card titles, descriptions from Yjs         | `mounts/{id}/data/{pathId}` (collab DB)      |
-| Slides   | Yjs `data.db` (binary)           | Slide text content from Yjs                | `mounts/{id}/data/{pathId}` (collab DB)      |
-| Sheets   | Yjs `data.db` (binary)           | Cell text values from Yjs                  | `mounts/{id}/data/{pathId}` (collab DB)      |
-| Contacts | `contacts.db`                    | firstName, lastName, email, company, notes | `eigen.contacts/contacts.db`                 |
-| Calendar | `calendar.db`                    | title, description, location               | `eigen.calendar/calendar.db`                 |
-| Drive    | `metadata.db` per mount          | file/folder name                           | `mounts/{id}/metadata.db` (paths table)      |
+## What's searchable
 
-### Current Data Available in SQLite (no extraction needed)
+| Domain   | What's indexed                          | Source already text?            |
+|----------|-----------------------------------------|---------------------------------|
+| Mail     | Subject, sender, short body preview     | Yes — in the mail database      |
+| Drive    | File and folder names                   | Yes — in mount metadata         |
+| Calendar | Event title, description, location      | Yes — in the calendar database  |
+| Chat     | Message content, author                 | Yes — in the per-room database  |
+| Docs     | Document body text                      | No — extract from Yjs state     |
+| Stickies | Card titles and descriptions            | No — extract from Yjs state     |
+| Slides   | Slide text                              | No — extract from Yjs state     |
+| Sheets   | Cell text values                        | No — extract from Yjs state     |
 
-- **Mail**: `emails.subject`, `emails.fromShort`, `emails.textShort`
-- **Chat**: `messages.content`, `messages.authorEmail`
-- **Contacts**: `contacts.firstName`, `contacts.lastName`, `contacts.data` (JSON with email, company, notes)
-- **Calendar**: `events.title`, `events.description`, `events.location`
-- **Drive**: `paths.name` (file/folder names)
+The first four are already plain text in SQLite. The four collaborative types store content as
+binary Yjs state and need text extraction — see [Content extraction](#content-extraction-from-collaborative-documents).
 
-### Requires Yjs Text Extraction
-
-- **Docs/Stickies/Slides/Sheets**: Binary Yjs state in `doc_snapshots.stateData`. Decode Yjs doc, walk XML/Map tree,
-  extract plain text. Runs on snapshot creation (every 100 updates, see `CollabDocument.DbProvider`).
+Contacts are deliberately **not** indexed — they are few and already fully cached on the
+frontend, so the command palette filters them client-side (see [Response shape](#response-shape)).
 
 ## Approach: SQLite FTS5
 
-### Why FTS5
+FTS5 is SQLite's built-in full-text search module. It's the right fit:
 
-- Already using SQLite everywhere — zero new dependencies
-- FTS5 is built into Bun's SQLite (compiled with `-DSQLITE_ENABLE_FTS5`)
-- Fast: sub-millisecond queries on moderate data
-- Supports ranking (`bm25()`), snippet extraction, prefix queries
-- Per-user isolation matches existing data layout
+- Already using SQLite everywhere — zero new dependencies; FTS5 is compiled into Bun's SQLite
+- Fast — sub-millisecond queries on the data volumes a self-hosted deployment sees
+- Built-in relevance ranking (`bm25()`), snippet extraction, and prefix queries
+- Per-file databases match Eigen's existing data-isolation model
 
-### Search Index Location
+## Search index location
 
-```
-data/home/{userId}/eigen.search/
-  search.db          # FTS5 search index
-```
+The index uses SQLite FTS5 (above). **Where it physically lives — and how many database files
+there are — is an open decision.** Two options are on the table; this section documents both.
+The rest of the proposal is drafted against Option B (the current lean), with the differences
+collected at the end of this section.
 
-Teams: `data/team/{teamId}/eigen.search/search.db` (Drive + Calendar only, matching `TeamHome` scope).
+### Option A — one index per Home
 
-### Schema
+A single `search.db` per Home — one per user, one per team — holding every domain's content in
+one FTS table, discriminated by a `kind` column.
 
-Uses the FTS5 **external content table** pattern: a regular `search_entries` table holds all data (domain, metadata,
-etc.), while FTS5 only indexes `title` and `body`. SQLite triggers keep FTS in sync automatically.
+**For:**
 
-```sql
-CREATE TABLE search_entries (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    domain TEXT NOT NULL,        -- 'mail' | 'doc' | 'chat' | 'stickies' | 'contacts' | 'calendar' | 'drive'
-    item_id TEXT NOT NULL,       -- domain-specific ID (email id, pathId, contact id, event id)
-    mount_id TEXT,               -- NULL for non-drive domains (mail, contacts, calendar)
-    title TEXT NOT NULL,         -- primary searchable text (subject, name, title)
-    body TEXT NOT NULL DEFAULT '',-- secondary searchable text (email body, doc content, message)
-    metadata TEXT,               -- JSON: { mailbox, mimeType, authorEmail, ... }
-    updated_at INTEGER DEFAULT (unixepoch()),
-    UNIQUE(domain, item_id)
-);
+- The storage unit matches the access unit. Search is always Home-wide, and so is the index —
+  no cross-scope merge. Per-kind result groups come from one table, and the cross-kind Top Hit
+  ranks on native, comparable `bm25()`.
+- One schema, one file, one migration history, one rebuild — one thing to reason about and back up.
+- One open database handle per Home.
 
-CREATE VIRTUAL TABLE search_fts USING fts5(
-    title, body,
-    content='search_entries',
-    content_rowid='id',
-    tokenize='unicode61'
-);
+**Against:**
 
--- Triggers to keep FTS in sync with content table
-CREATE TRIGGER search_ai AFTER INSERT ON search_entries BEGIN
-    INSERT INTO search_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
-END;
+- A mount's lifecycle doesn't map onto storage. Disabled mounts must be filtered out on every
+  query; deleting a mount needs an explicit "remove all rows for this mount" cleanup; nothing
+  structurally prevents orphaned rows.
+- The index is a Home-level service, but collaborative content is indexed from snapshot-creation
+  code that only holds the mount — the index reference must be threaded down to it.
+- A corrupt index disables all search for that Home until it is rebuilt.
+- Every domain writes one file — mild write contention (WAL makes this minor).
 
-CREATE TRIGGER search_ad AFTER DELETE ON search_entries BEGIN
-    INSERT INTO search_fts(search_fts, rowid, title, body) VALUES('delete', old.id, old.title, old.body);
-END;
+### Option B — one index per scope
 
-CREATE TRIGGER search_au AFTER UPDATE ON search_entries BEGIN
-    INSERT INTO search_fts(search_fts, rowid, title, body) VALUES('delete', old.id, old.title, old.body);
-    INSERT INTO search_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
-END;
-```
+One `search.db` per Drive mount (`mounts/{mountId}/search.db`), one for mail, one for calendar.
+All share a single `DatabaseConfig` — one schema and one migration definition, instantiated per
+scope, exactly as Eigen already does for mount `metadata.db` (one `MOUNT_DB_CONFIG`, many
+mounts, each self-versioning on open). Many database *files*, but one schema.
 
-This avoids indexing non-searchable columns (domain, item_id, metadata) in FTS5 while keeping domain filtering via
-a simple JOIN on the content table.
+**For:**
 
-### Drizzle Schema
+- Mounts are project-scoped lifecycle units (enable, disable, archive, read-only). Per-mount
+  storage maps onto that: a disabled mount's index is simply not queried; an archived mount's
+  index is naturally frozen; a deleted mount takes its index with it — no cleanup, no orphans.
+- Collaborative content is indexed locally — the snapshot code already holds the mount, so its
+  index is reachable without threading a Home service down.
+- Blast radius and rebuild are per scope; a mail-only or calendar-only index is trivial to
+  reason about.
 
-```typescript
-// apps/api/src/lib/search/schema.ts
-import {sql} from 'drizzle-orm';
-import {integer, sqliteTable, text, uniqueIndex} from 'drizzle-orm/sqlite-core';
+**Against:**
 
-export const searchEntries = sqliteTable('search_entries', {
-    id: integer('id').primaryKey({autoIncrement: true}),
-    domain: text('domain').notNull(),
-    itemId: text('item_id').notNull(),
-    mountId: text('mount_id'),
-    title: text('title').notNull(),
-    body: text('body').notNull().default(''),
-    metadata: text('metadata'),
-    updatedAt: integer('updated_at').default(sql`(unixepoch())`),
-}, (table) => ({
-    domainItem: uniqueIndex('idx_domain_item').on(table.domain, table.itemId),
-}));
-```
+- Search is Home-wide, so every query fans out across all enabled scopes. Same-kind results
+  from different mounts must be merged by rank fusion (Reciprocal Rank Fusion), because
+  `bm25()` is comparable only within one index. Real recurring per-query work.
+- More open file handles per Home; a Home-level coordinator is needed to gather and merge.
+- The cross-kind Top Hit is a rank-fusion approximation, not a native ranking.
 
-### DatabaseConfig
+### How much it matters
 
-```typescript
-// apps/api/src/lib/search/db-config.ts
-export const SEARCH_DB_CONFIG: DatabaseConfig<typeof schema> = {
-    name: 'search',
-    currentVersion: 1,
-    schema,
-    migrations: [{
-        version: 1,
-        up: (db) => db.exec(`
-            CREATE TABLE IF NOT EXISTS search_entries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                domain TEXT NOT NULL,
-                item_id TEXT NOT NULL,
-                mount_id TEXT,
-                title TEXT NOT NULL,
-                body TEXT NOT NULL DEFAULT '',
-                metadata TEXT,
-                updated_at INTEGER DEFAULT (unixepoch()),
-                UNIQUE(domain, item_id)
-            );
-            CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
-                title, body,
-                content='search_entries', content_rowid='id',
-                tokenize='unicode61'
-            );
-            CREATE TRIGGER IF NOT EXISTS search_ai AFTER INSERT ON search_entries BEGIN
-                INSERT INTO search_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
-            END;
-            CREATE TRIGGER IF NOT EXISTS search_ad AFTER DELETE ON search_entries BEGIN
-                INSERT INTO search_fts(search_fts, rowid, title, body) VALUES('delete', old.id, old.title, old.body);
-            END;
-            CREATE TRIGGER IF NOT EXISTS search_au AFTER UPDATE ON search_entries BEGIN
-                INSERT INTO search_fts(search_fts, rowid, title, body) VALUES('delete', old.id, old.title, old.body);
-                INSERT INTO search_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
-            END;
-        `)
-    }]
-};
-```
+The gap is small at one mount — a typical solo user — where the two are nearly identical for
+Drive. It widens with multi-mount teams: Option A then avoids a cross-mount merge on every
+keystroke, while Option B avoids query-time filtering and lifecycle bookkeeping. The deciding
+factor is how mounts are expected to be used — as long-lived, enable/disable/archive-able
+project spaces (favours B) or as a mostly-static single space (A and B converge).
 
-### SearchIndex Class
+### What the choice pins down downstream
 
-Lazy-initialized domain service on `Home`, like `Contacts`, `Calendar`, etc. Accessed via `home.searchIndex`.
+Whichever option is chosen, most of this proposal is identical — the FTS5 content-table
+structure, index-on-write, Yjs extraction, the grouped response, and the wire types do not
+change. The decision only pins down:
 
-```typescript
-// apps/api/src/lib/search/search-index.ts
-export class SearchIndex {
-    private home: Home;
-    private managedDb!: ManagedDatabase<typeof schema>;
-    private db!: BunSQLiteDatabase<typeof schema>;
+- **The `SearchIndex` service** — Option A: one instance on `Home`. Option B: one instance per
+  scope, plus a Home-level coordinator that merges.
+- **The query path** — Option A: per-kind queries against one database. Option B: fan-out
+  across scopes, then a rank-fusion merge of same-kind results.
+- **Lifecycle cleanup** — Option A: an explicit delete-by-mount on mount removal. Option B: the
+  mount's index is disposed with the mount.
+- **File count** — Option A: one `search.db` per Home. Option B: one per mount, plus mail and
+  calendar.
 
-    constructor(home: Home) {
-        this.home = home;
-    }
+### Status
 
-    async init() {
-        this.managedDb = await this.home.getLocalDatabase(SEARCH_DB_CONFIG, 'eigen.search/search.db');
-        this.db = this.managedDb.db;
-    }
+**Open — to be settled in a later review round.** Working lean: Option B, for the mount-
+lifecycle fit. The sections below are drafted against Option B; under Option A, substitute the
+four points above.
 
-    upsert(domain: string, itemId: string, title: string, body: string, metadata?: Record<string, unknown>, mountId?: string) {
-        // INSERT OR REPLACE triggers search_ad + search_ai, keeping FTS in sync
-        this.db.insert(schema.searchEntries).values({
-            domain, itemId, mountId: mountId ?? null,
-            title, body, metadata: metadata ? JSON.stringify(metadata) : null,
-        }).onConflictDoUpdate({
-            target: [schema.searchEntries.domain, schema.searchEntries.itemId],
-            set: { title, body, metadata: metadata ? JSON.stringify(metadata) : null, updatedAt: sql`(unixepoch())` },
-        }).run();
-    }
+## Index structure
 
-    delete(domain: string, itemId: string) {
-        this.db.delete(schema.searchEntries)
-            .where(and(eq(schema.searchEntries.domain, domain), eq(schema.searchEntries.itemId, itemId)))
-            .run();
-    }
+Every `search.db` has the same structure, built on FTS5's **external-content-table** pattern:
 
-    deleteByMount(mountId: string) {
-        this.db.delete(schema.searchEntries)
-            .where(eq(schema.searchEntries.mountId, mountId))
-            .run();
-    }
+- A **content table** — one row per indexed item: its kind (`file`, `chat`, `mail`, `event`),
+  the source item's id, the searchable title and body text, a small metadata blob (domain
+  fields used to render a result), and a timestamp. A uniqueness constraint on kind + item id
+  makes re-indexing an idempotent upsert.
+- An **FTS5 virtual table** indexing only the title and body.
+- **Triggers** keeping the FTS table in sync on every insert, update, and delete.
 
-    query(q: string, options?: { domain?: string; limit?: number; offset?: number }): SearchResponse {
-        const ftsQuery = sanitizeFtsQuery(q);
-        if (!ftsQuery) return { results: [], total: 0 };
+Under Option B a mount's index holds `file` and `chat` rows (a chat room is a file in the
+mount), while the mail and calendar indexes hold a single kind each; under Option A all kinds
+share one table. Either way the `kind` column drives per-kind queries and the grouped response.
+Each database is versioned through the standard `ManagedDatabase` migration mechanism.
 
-        const limit = Math.min(options?.limit ?? 20, 100);
-        const offset = options?.offset ?? 0;
-        const domains = options?.domain?.split(',').map(d => d.trim()).filter(Boolean) ?? [];
+### The SearchIndex service
 
-        // Parameter-bound IN list via drizzle's sql.join — no string interpolation of user input.
-        const domainFilter = domains.length
-            ? sql` AND e.domain IN (${sql.join(domains.map(d => sql`${d}`), sql`, `)})`
-            : sql``;
+`SearchIndex` wraps one `search.db`. It exposes **upsert**, **delete**, and **query**.
 
-        const rows = this.db.all<SearchRow>(sql`
-            SELECT e.domain, e.item_id, e.mount_id, e.title, e.metadata, e.updated_at,
-                   snippet(search_fts, 1, '<mark>', '</mark>', '...', 30) AS snippet,
-                   bm25(search_fts) AS rank
-            FROM search_fts f
-            JOIN search_entries e ON e.id = f.rowid
-            WHERE search_fts MATCH ${ftsQuery}${domainFilter}
-            ORDER BY rank
-            LIMIT ${limit} OFFSET ${offset}
-        `);
+Under Option B it is instantiated **per scope** — a `Mount` owns its `SearchIndex`, the mailbox
+owns one, the calendar owns one — and a thin **Home-level coordinator** drives a search across
+scopes: it enumerates the Home's enabled mounts plus mail and calendar, queries each scope's
+index, and merges the results (see [Search API](#search-api)). Under Option A there is a single
+`SearchIndex` on `Home` and no coordinator. Either way the route handler stays thin.
 
-        return { results: rows.map(projectRow), total: rows.length };
-    }
+**Query sanitization matters.** FTS5 has its own query grammar (`AND`/`OR`/`NOT`, quoting,
+column qualifiers). Raw user input can't be passed through — stray punctuation falls through as
+a qualifier or an unbalanced quote and throws at the SQLite layer. The query method strips
+metacharacters, phrase-quotes each token, appends a prefix-match wildcard, and joins tokens —
+so arbitrary typed input is always a safe, sensible query.
 
-    async destruct() {
-        if (this.managedDb) await this.managedDb.close();
-    }
-}
+## Indexing strategy
 
-type SearchRow = {
-    domain: string; item_id: string; mount_id: string | null;
-    title: string; metadata: string | null;
-    updated_at: number; snippet: string; rank: number;
-};
+**Index on write.** Each domain hooks into its existing mutation flow and writes to the index
+after its own database write. The index stays current without a separate sync job.
 
-// FTS5 query strings have their own grammar (AND/OR/NOT, quotes, NEAR, column qualifiers).
-// User input is unsafe to interpolate verbatim — bare punctuation can fall through as a
-// column qualifier or unbalanced quote and throw at the SQLite layer. Strip metacharacters,
-// phrase-quote each remaining token, suffix `*` for prefix matching, AND-join.
-function sanitizeFtsQuery(raw: string): string {
-    return raw
-        .replace(/["()]/g, ' ')
-        .split(/\s+/)
-        .map(t => t.replace(/[*^:-]/g, ''))
-        .filter(t => t.length > 0)
-        .map(t => `"${t}"*`)
-        .join(' AND ');
-}
+| Write                                            | Indexed into                       |
+|--------------------------------------------------|------------------------------------|
+| An email is added or deleted                     | the mail index                     |
+| An event is created or updated                   | the calendar index                 |
+| A file or folder is created, renamed, or deleted | the (mount's) index                |
+| A chat message is posted or edited               | the (host mount's) index           |
+| A doc / stickies / slides / sheets snapshot      | the (host mount's) index           |
 
-// Project a generic FTS row into the typed wire union by reading domain-specific
-// fields out of the `metadata` JSON written at index time.
-function projectRow(row: SearchRow): SearchHit {
-    const m = row.metadata ? JSON.parse(row.metadata) as Record<string, unknown> : {};
-    switch (row.domain) {
-        case 'mail':
-            return {
-                kind: 'mail', itemId: row.item_id, subject: row.title,
-                from: String(m.from ?? ''), mailbox: String(m.mailbox ?? ''),
-                receivedAt: Number(m.receivedAt ?? row.updated_at),
-                snippet: row.snippet,
-            };
-        case 'event':
-            return {
-                kind: 'event', itemId: row.item_id, title: row.title,
-                startsAt: Number(m.startsAt ?? 0),
-                location: m.location ? String(m.location) : undefined,
-                calendarName: String(m.calendarName ?? ''),
-                snippet: row.snippet,
-            };
-        case 'chat':
-            return {
-                kind: 'chat', itemId: row.item_id,
-                chatId: String(m.chatId ?? ''),
-                ownerId: String(m.ownerId ?? ''),
-                mountId: row.mount_id ?? '',
-                chatTitle: String(m.chatTitle ?? ''),
-                sentAt: Number(m.sentAt ?? row.updated_at),
-                snippet: row.snippet,
-            };
-        case 'drive':
-        case 'doc':
-        case 'stickies':
-        case 'slides':
-        case 'sheets':
-            return {
-                kind: 'file', itemId: row.item_id,
-                ownerId: String(m.ownerId ?? ''),
-                mountId: row.mount_id ?? '',
-                pathId: row.item_id,
-                title: row.title,
-                subtitle: String(m.subtitle ?? ''),
-                mimeType: String(m.mimeType ?? ''),
-                updatedAt: row.updated_at,
-                snippet: row.snippet,
-            };
-        default:
-            throw new Error(`Unknown search domain: ${row.domain}`);
-    }
-}
-```
+(Under Option A, every row above writes the one per-Home index.) Each domain writes the metadata
+blob shaped to fit its result kind — mail emits sender, mailbox, and received time; drive and
+the collaborative types emit owner, mime type, and a subtitle; calendar emits start time,
+location, and calendar name; chat emits chat id, owner, chat title, and sent time. The query
+side reads those fields back to build the typed result.
 
-### Indexing Strategy
+A **one-time backfill** populates the index by walking each domain's data. Under Option B it
+runs per scope, so it parallelizes naturally and a single corrupt scope can be rebuilt alone.
 
-Index on write — each domain hooks into its existing mutation flow. The `SearchIndex` is passed to domain classes
-that call `upsert()` / `delete()` after their own DB writes.
+## Content extraction from collaborative documents
 
-| Domain   | Trigger                                              | What Happens                    |
-|----------|------------------------------------------------------|---------------------------------|
-| Mail     | `MailDB.addEmail()` / `deleteEmail()`                | Upsert/delete from search index |
-| Chat     | `ChatRoom.postMessage()` / `editMessage()`           | Upsert message                  |
-| Contacts | `Contacts.addContact()` / `updateContact()`          | Upsert contact fields           |
-| Calendar | `Calendar.createEvent()` / `updateEvent()`           | Upsert event title/desc         |
-| Drive    | `Drive.createFolder()` / `renamePath()` / `deletePath()` | Upsert/delete file name    |
-| Docs     | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
-| Stickies | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
-| Slides   | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
-| Sheets   | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
+Docs, stickies, slides, and sheets store their content as binary Yjs state, not text. The
+server has no DOM, so extraction walks the Yjs structure directly. **Each Eigen file type
+stores content under a different Yjs shape**, so extraction is per-type:
 
-Each domain writes a `metadata` JSON shaped to fit the matching `SearchHit` variant — mail emits
-`{ from, mailbox, receivedAt }`, drive/docs/stickies/slides/sheets emit `{ ownerId, mimeType,
-subtitle }`, calendar emits `{ startsAt, location, calendarName }`, chat emits `{ chatId,
-ownerId, chatTitle, sentAt }`. The `projectRow` helper above is the read side of this contract.
+- **Docs** — a rich-text XML fragment; walk it and collect the text nodes
+- **Stickies** — a map of cards; collect each card's title and description
+- **Slides** — a map of objects; collect the text of the text objects
+- **Sheets** — a JSON snapshot of cell data; collect the rendered cell values
 
-### Yjs Text Extraction
-
-Bun has no DOM, so `.toDOM().textContent` is not available. Walk the Yjs structure directly.
-**Each Eigen file type uses a different Yjs root** — `getXmlFragment('default')` is correct
-only for docs.
-
-```typescript
-// apps/api/src/lib/search/yjs-extract.ts
-import * as Y from 'yjs';
-
-export type IndexedDocType = 'doc' | 'stickies' | 'slides' | 'sheets';
-
-export function extractTextFromYjs(stateData: Uint8Array, docType: IndexedDocType): string {
-    const doc = new Y.Doc();
-    Y.applyUpdate(doc, stateData);
-
-    switch (docType) {
-        // Docs: Tiptap writes the ProseMirror tree to Y.XmlFragment('default').
-        case 'doc':
-            return extractXmlText(doc.getXmlFragment('default'));
-
-        // Stickies: Y.Map('tasks') keys card id → Y.Map; `title` and `description` are each
-        // either a plain string or a Y.Text (the helper handles both branches).
-        case 'stickies':
-            return collectFromMapValues(doc.getMap('tasks'), ['title', 'description']);
-
-        // Slides: Y.Map('objects') keys shape id → Y.Map; text shapes carry a Y.Text in `text`.
-        case 'slides':
-            return collectFromMapValues(doc.getMap('objects'), ['text']);
-
-        // Sheets is the odd one out — state lives as a JSON-stringified snapshot at
-        // Y.Map('state').get('snapshot'), not as a Yjs tree. Parse, then walk celldata.
-        case 'sheets': {
-            const snapshot = doc.getMap('state').get('snapshot');
-            if (typeof snapshot !== 'string') return '';
-            try { return extractSheetText(JSON.parse(snapshot)); }
-            catch { return ''; }
-        }
-    }
-}
-
-function extractXmlText(element: Y.XmlElement | Y.XmlFragment): string {
-    const parts: string[] = [];
-    for (const child of element.toArray()) {
-        if (child instanceof Y.XmlText) parts.push(child.toJSON());
-        else if (child instanceof Y.XmlElement || child instanceof Y.XmlFragment) parts.push(extractXmlText(child));
-    }
-    return parts.join(' ');
-}
-
-function collectFromMapValues(map: Y.Map<unknown>, keys: readonly string[]): string {
-    const parts: string[] = [];
-    for (const value of map.values()) {
-        if (!(value instanceof Y.Map)) continue;
-        for (const key of keys) {
-            const v = value.get(key);
-            if (typeof v === 'string') parts.push(v);
-            else if (v instanceof Y.Text) parts.push(v.toString());
-        }
-    }
-    return parts.join(' ');
-}
-
-// Walk fortune-sheet-style snapshot data: `data` is sheets[], each with `celldata` of
-// { r, c, v: { v, m, ct, ... } }. Prefer rendered `m`, fall back to raw `v`.
-function extractSheetText(snapshot: unknown): string {
-    if (!snapshot || typeof snapshot !== 'object') return '';
-    const sheets = (snapshot as { data?: unknown[] }).data;
-    if (!Array.isArray(sheets)) return '';
-    const parts: string[] = [];
-    for (const sheet of sheets) {
-        const cells = (sheet as { celldata?: { v?: { v?: unknown; m?: unknown } }[] }).celldata;
-        if (!Array.isArray(cells)) continue;
-        for (const cell of cells) {
-            const v = cell.v;
-            if (!v) continue;
-            if (typeof v.m === 'string') parts.push(v.m);
-            else if (typeof v.v === 'string') parts.push(v.v);
-        }
-    }
-    return parts.join(' ');
-}
-```
-
-Extraction runs inside `DbProvider.createSnapshot()` — `SNAPSHOT_INTERVAL = 100` updates
-(`apps/api/src/lib/collab/collabDocument.ts:22`). The `SearchIndex` reference is passed
-through `CollabDocument` → `DbProvider` at construction time. Failures inside extraction must
-not block the snapshot itself; wrap in try/catch and log.
+Extraction runs during **snapshot creation**, which already happens periodically (roughly every
+hundred edits) — acceptable staleness, and it avoids re-extracting on every keystroke. Under
+Option B the mount's own `SearchIndex` is reachable directly from the snapshot code; under
+Option A the Home's index reference must be threaded down to it. Extraction failures must never
+block the snapshot itself — they're caught and logged.
 
 ## Search API
 
-### Endpoint
+A single owner-scoped endpoint:
 
-```
-GET /search/:ownerId?q=<query>&domain=<domain>&limit=<n>&offset=<n>
-```
+- **`GET /search/:ownerId`** — takes a query string, an optional kind filter (used by the
+  palette's prefix scopes, e.g. `mail:`), and a per-kind result cap. It validates access the
+  same way the Drive and Calendar routes do (owner is the caller, or the caller is a member of
+  the team), then runs the query and returns the grouped response.
 
-- `q`: FTS5 query string (supports `"exact phrase"`, `prefix*`, `OR`, `NOT`)
-- `domain`: optional filter (comma-separated: `mail,chat`)
-- `limit`: default 20, max 100
-- `offset`: pagination offset
-- Returns results sorted by FTS5 `bm25()` rank
+Internally the query path depends on the storage option. Under Option B a Home-level coordinator
+queries every **enabled** mount index plus the mail and calendar indexes — one capped query per
+kind per scope — and merges: same-kind results from different mounts (files, chats) are fused by
+rank position (Reciprocal Rank Fusion) into one ranked group; mail and calendar are
+single-scope and rank natively with `bm25()`. Under Option A the same grouped result comes from
+per-kind queries against the one index, ranked natively throughout.
 
-### Response
+When the user is browsing a team workspace, the owner is the team, so the same endpoint searches
+the team's data under the standard team-access check.
 
-Per-kind **discriminated union**, same discipline as `SSEvent`, `HomeMessage`, and the
-`NotificationCenter`. Eden Treaty surfaces typed results end-to-end — no `metadata:
-Record<string, unknown>` bag at the seam, no `as` casts in the FE.
+### Response shape
 
-Presentation fields (`icon`, `group`, `score`) are deliberately **not** on the wire — they belong
-to the [command palette](PROPOSAL_COMMAND_PALETTE.md), which projects `SearchHit` → `CommandResult`
-by adding them on the FE. The wire stays portable to non-palette consumers.
+The response is **grouped by kind** — a separate array for files, mail, events, and chats, each
+already ranked and capped. This mirrors how the palette renders search results: one fixed
+section per kind. The frontend drops each group straight into its section — no client-side
+bucketing — and only the cross-kind Top Hit needs logic that spans groups. This is identical
+under either storage option.
 
-```typescript
-// packages/lib/src/types/search.ts — shared FE+BE wire types
-export type FileSearchHit = {
-    kind: 'file';
-    itemId: string;         // = pathId; kept as itemId for cross-kind keying
-    ownerId: string;
-    mountId: string;
-    pathId: string;
-    title: string;          // paths.name
-    subtitle: string;       // breadcrumb / mount label
-    mimeType: string;
-    updatedAt: number;
-    snippet?: string;
-};
+Grouping by *kind* (not by mount) is deliberate: it stays stable as a user adds mounts, where a
+mount-keyed shape would not. Items shared with the user appear inside their kind's group, flagged
+by a non-self owner — not as a separate group. Chat is part of the shape from day one but stays
+empty until chat indexing ships (Phase 3).
 
-export type MailSearchHit = {
-    kind: 'mail';
-    itemId: string;         // = emails.id
-    subject: string;
-    from: string;           // emails.fromShort
-    mailbox: string;
-    receivedAt: number;
-    snippet?: string;
-};
+Each hit is a typed variant — file, mail, event, chat — carrying a `kind` discriminator the
+frontend's row components switch on. Same discipline as `SSEvent`, `HomeMessage`, and the
+notification center: no untyped JSON bag at the seam, no casts on the frontend. Contacts are
+**not** in the response — the palette serves people from its own cached frontend provider.
 
-export type EventSearchHit = {
-    kind: 'event';
-    itemId: string;         // = events.id
-    title: string;
-    startsAt: number;       // wire-normalised; DB column is `events.startTime`
-    location?: string;
-    calendarName: string;
-    snippet?: string;
-};
+Presentation fields — icon, ranking score, result group — are deliberately **not** on the wire.
+They belong to the [command palette](PROPOSAL_COMMAND_PALETTE.md), which projects each search
+hit into its own result model by adding them on the frontend. Keeping them off the wire leaves
+the endpoint portable to other consumers (a future per-app search page). The shared wire types
+live in the lib package and are imported by both sides.
 
-export type ChatSearchHit = {
-    kind: 'chat';
-    itemId: string;         // = messages.id
-    chatId: string;
-    ownerId: string;
-    mountId: string;
-    chatTitle: string;
-    sentAt: number;
-    snippet?: string;       // present at Phase 9 (FTS5); absent at the v1 LIKE stopgap
-};
+## Searching shared data
 
-// v1 union: file + mail + event (Phase 1-5 + 6 of palette). ChatSearchHit joins at Phase 2
-// of this proposal (chat content indexing). The wrapper shape is locked from day one.
-export type SearchHit = FileSearchHit | MailSearchHit | EventSearchHit | ChatSearchHit;
+Items shared *with* the user live in another user's data, so they are not in this Home's own
+index. Searching shared data is a **later phase**:
 
-export type SearchResponse = { results: SearchHit[]; total: number };
-```
-
-### Route
-
-Follows existing route patterns. Uses `parseOwnerId` + access checks matching `drive` and `calendar` routes.
-
-```typescript
-// apps/api/src/routes/search.ts
-import {Elysia, t} from 'elysia';
-import {betterAuth} from './auth';
-import {getHome} from '../lib/home';
-import {requireSelf} from '../lib/core/access';
-import {parseOwnerId} from '@workspace/lib/types';
-import {requireTeamAccess} from '../lib/core/access';
-
-export const searchRouter = new Elysia({name: 'search'})
-    .use(betterAuth)
-    .get('/search/:ownerId', async ({params, query, user}) => {
-        const parsed = parseOwnerId(params.ownerId);
-        if (parsed.type === 'user') requireSelf(params.ownerId, user.id);
-        else if (parsed.type === 'team') await requireTeamAccess(user.id, parsed.id);
-
-        const home = await getHome(params.ownerId);
-        return home.searchIndex.query(query.q, {
-            domain: query.domain,
-            limit: query.limit ? Number(query.limit) : undefined,
-            offset: query.offset ? Number(query.offset) : undefined,
-        });
-    }, {auth: true});
-```
-
-### Searching Shared Data
-
-No cross-home DB access needed. The user's own databases already contain shared item metadata:
-
-- **Shared Drive paths**: Query `shared.db` → `shared_paths` table (has `name`, `ownerId`, `mountId`, `mimeType`).
-  Filter by name using SQL `LIKE` or index shared paths into the user's own `search.db` at share-receive time
-  (in `Drive.receiveACLChange()`).
-- **Shared calendars**: Query `calendar.db` → `shared_calendars` table (has `calendarName`, `ownerUserId`). Shared
-  calendar events are fetched on-demand via the `home-relay.ts` seam (`pullCalendarPermission` for permission +
-  `pullEventsInRange` for events).
-
-For v1, shared Drive path names are searchable via the user's index (indexed on `receiveACLChange`). Shared document
-*content* search is deferred to a later phase.
+- **Shared filenames** can come earlier — the shared-path metadata the Home already holds
+  (name, owner, mount, mime type) can be indexed locally.
+- **Shared document content** and **shared calendar events** need query-time federation — the
+  search also reaching the indexes of the Homes that own the user's shared items. This interacts
+  with the relay/sharding seam and is deferred past the palette's first release.
 
 ## Frontend
 
-The command palette is the sole consumer of `/search/:ownerId`. See
-[PROPOSAL_COMMAND_PALETTE.md](PROPOSAL_COMMAND_PALETTE.md) — its FE `search` provider wraps this endpoint,
-and per-domain result navigation lives in the palette's row components. Shared wire types
-(`SearchHit` union + `SearchResponse`) live in `packages/lib/src/types/search.ts` and are imported by
-both sides of the seam; the palette `&`s `Presentation` on top for FE-only fields (icon, group, score).
+The command palette is the only consumer of `/search/:ownerId`. Its frontend search provider is
+a single debounced query against this endpoint; the response arrives already grouped by kind, so
+each group maps straight to a palette section. Per-kind result rendering and navigation live in
+the palette. See [PROPOSAL_COMMAND_PALETTE.md](PROPOSAL_COMMAND_PALETTE.md).
 
-## Research: Self-Hosted AI for Search (2026 Landscape)
+## Future: semantic / vector search
 
-### Do Embeddings Make Sense for Eigen?
+FTS5 keyword search handles the large majority of self-hosted search needs — known-item lookup,
+subject and name search, exact keywords. Embeddings add value in narrower cases: semantic
+matches without keyword overlap, natural-language queries, and cross-language retrieval. They
+are a compelling **opt-in v2 enhancement**, not a v1 requirement, and must never be mandatory —
+FTS5 has to work standalone.
 
-FTS5 keyword search handles the majority of search use cases well. Embeddings add value in specific scenarios:
+If added, the shape is **hybrid search**: FTS5 does a fast first pass to narrow candidates, then
+vector similarity re-ranks them, with a tunable weighting between the two. With embeddings
+disabled, the query is pure FTS5.
 
-**Where embeddings help:**
-- Semantic matching without keyword overlap ("firearm courtroom" → finds "gun trial")
-- Natural language queries across domains ("meeting notes about the budget from last week")
-- Cross-language retrieval (query in English, find Dutch documents)
-- Finding related content (similar emails, related docs)
+**Embedding models** (2026) — several run efficiently on CPU:
 
-**Where FTS5 is sufficient:**
-- Exact keyword search, subject/name lookup
-- Known-item search ("find the invoice from Acme Corp")
-- Small corpora (typical self-hosted deployment: < 50K indexed items per user)
+| Model                | Size (quantized) | Notes                                                      |
+|----------------------|------------------|------------------------------------------------------------|
+| EmbeddingGemma-300M  | ~200 MB          | Best-in-class small model; ONNX; 100+ languages — recommended |
+| Qwen3-Embedding-0.6B | ~400 MB          | Long context, flexible output dimensions                   |
+| all-MiniLM-L6-v2     | ~80 MB           | Tiny, fast, well-understood — minimal-resource fallback    |
 
-**Verdict**: FTS5 is the right v1. Embeddings are a compelling v2 enhancement for users with large mailboxes
-(> 10K messages), multilingual content, or natural-language search habits. The self-hosted AI ecosystem in 2026 makes
-this feasible without cloud dependencies — but it adds deployment complexity that should be opt-in.
+**Runtime** — recommended: in-process ONNX inference (Transformers.js) with EmbeddingGemma-300M.
+No sidecar, no native extensions; the model file ships in the image or downloads on first use.
+The alternative is an Ollama sidecar, which makes sense for deployments that already run Ollama
+or that also want small-LLM features later (query expansion, summarization) — Eigen would talk
+to it over HTTP. Small LLMs are not needed for search itself, v1 or v2.
 
-### Embedding Models (2026 State of the Art)
+**Vector storage** — keep vectors alongside the FTS content table so indexing stays a single
+atomic operation per database.
 
-The embedding model landscape has matured significantly. Several models now run efficiently on CPU with minimal RAM,
-making them viable for self-hosted deployments.
+What not to do:
 
-| Model                    | Params | Dims         | Context | RAM (q8) | License    | Notes                                             |
-|--------------------------|--------|--------------|---------|----------|------------|----------------------------------------------------|
-| **EmbeddingGemma-300M**  | 308M   | 768 (MRL→128)| 2K      | ~200MB   | Gemma      | Google. Best-in-class <500M on MMTEB. ONNX available. Encoder architecture (not decoder). 100+ languages. Transformers.js compatible. |
-| **Qwen3-Embedding-0.6B** | 0.6B   | 1024 (MRL→32)| 32K     | ~400MB   | Apache 2.0 | Alibaba. Instruction-aware. Flexible output dims 32–1024. GGUF available. 100+ languages. Long context for chunked docs. |
-| **Nomic Embed Text v2**  | 475M (305M active) | 768 (MRL→256) | 512 | ~300MB | Open source | First MoE embedding model. Strong on BEIR/MIRACL. GGUF available. 100+ languages. |
-| **all-MiniLM-L6-v2**    | 22M    | 384          | 256     | ~80MB    | Apache 2.0 | Sentence-transformers classic. Tiny, fast, well-understood. Good baseline. ONNX available. |
-| **snowflake-arctic-embed-s** | 33M | 384         | 512     | ~60MB    | Apache 2.0 | Strong retrieval for its size. Optimized for search. |
-| **BGE-M3**               | 568M   | 1024         | 8K      | ~600MB   | MIT        | Multi-functionality (dense + sparse + multi-vector). 100+ languages. Overkill for most Eigen deployments. |
+- Don't bundle an LLM in the Docker image — too large, not everyone wants it
+- Don't make embeddings mandatory — FTS5 must stand alone
+- Don't run LLM inference inside the Bun process — too slow, blocks the event loop; sidecar only
+- Don't store vectors in a separate database — keep them with the FTS content
 
-**Recommendation for Eigen**: **EmbeddingGemma-300M** offers the best balance of quality, size, and ecosystem support.
-At ~200MB quantized it fits comfortably alongside the Eigen server. ONNX format works directly with Transformers.js
-in the Bun process — no sidecar service needed. Falls back to **all-MiniLM-L6-v2** (~80MB) for minimal-resource
-deployments.
+## Implementation plan
 
-### Small Language Models (2026 State of the Art)
+| Phase | Scope                                                                                                   | Effort |
+|-------|---------------------------------------------------------------------------------------------------------|--------|
+| 1     | The `search.db` schema and `DatabaseConfig`, the `SearchIndex` service (per the chosen storage option), the `/search` route returning the grouped shape, index-on-write hooks for **metadata** (mail, calendar, drive names), and a one-time backfill — the milestone where the palette's search lights up | M–L |
+| 2     | Content extraction for docs, stickies, slides, and sheets — hook into snapshot creation                  | M      |
+| 3     | Chat message indexing — index message content                                                            | S      |
+| 4     | Shared data — make items shared with the user searchable                                                 | S–M    |
+| 5     | Semantic / vector search (future, opt-in)                                                                | L      |
 
-Beyond embeddings, small LLMs could power features like query expansion, search result summarization, or AI-assisted
-email triage. The 2026 landscape has capable models that run on CPU or a single consumer GPU.
+Phase 1 is the **prerequisite track** the command palette depends on — see that proposal's phase
+table. It can be built in parallel with the palette's frontend-only phases. After Phase 1 the
+palette searches metadata (filenames, subjects, titles); each later phase deepens what's
+searchable with no change to the palette's frontend. The storage-layout decision (above) should
+be settled before Phase 1 starts.
 
-| Model                    | Params | Context | VRAM/RAM  | License    | Notes                                             |
-|--------------------------|--------|---------|-----------|------------|----------------------------------------------------|
-| **Qwen3.5-0.8B**        | 0.8B   | 262K    | ~1GB q4   | Apache 2.0 | Multimodal (text+image). 200+ languages. Smallest viable instruct model. Thinking mode can be unstable. |
-| **SmolLM3-3B**           | 3B     | 64K→128K| ~2GB q4   | Apache 2.0 | HuggingFace. Dual-mode reasoning (/think, /no_think). Fully open training recipe. Best transparency. |
-| **Phi-4-mini (3.8B)**    | 3.8B   | 128K    | ~2.5GB q4 | MIT        | Microsoft. Strong reasoning for its size. Comparable to 7–9B models. Multilingual (20+ languages). |
-| **Gemma-3n-E2B**         | ~5B (2B effective) | 32K | ~2GB | Gemma | Google. Selective parameter activation. Multimodal (text+image+audio+video). Mobile-first. |
-| **Ministral-3-3B**       | 3.4B   | 256K    | ~2.5GB q4 | Apache 2.0 | Mistral. Agent-ready (function calling, JSON output). Vision encoder included. |
-
-**For Eigen search specifically**, LLMs are not needed for v1 or v2. They become relevant if Eigen adds broader AI
-features (email drafting, document summarization, meeting prep). If added, **Ollama as a sidecar** is the most
-practical deployment model — users configure an Ollama endpoint, Eigen calls it via HTTP API.
-
-### Runtime Options for Embedding Inference
-
-Four viable paths for running embedding models in a Bun/TypeScript server:
-
-#### 1. Transformers.js (`@huggingface/transformers`) — Recommended for Eigen
-
-In-process ONNX inference via WASM backend. No native dependencies, no sidecar.
-
-```typescript
-import { AutoModel, AutoTokenizer } from '@huggingface/transformers';
-
-const model = await AutoModel.from_pretrained('onnx-community/embeddinggemma-300m-ONNX', {
-    dtype: 'q8',  // quantized: smaller, faster
-});
-const tokenizer = await AutoTokenizer.from_pretrained('onnx-community/embeddinggemma-300m-ONNX');
-
-function embed(text: string): Promise<Float32Array> {
-    const inputs = await tokenizer(text, { padding: true, truncation: true });
-    const { sentence_embedding } = await model(inputs);
-    return sentence_embedding.data;
-}
-```
-
-- **Pros**: Zero external dependencies. Runs in the Bun process. ~50–200ms per embedding on modern CPU. Model files
-  cached locally after first download (or bundled in Docker image). Supports EmbeddingGemma, all-MiniLM, and most
-  ONNX models.
-- **Cons**: WASM is slower than native. First load downloads model files (~200MB). Memory overhead for model in
-  process. Not suitable for LLMs (too slow for generation).
-- **Bun compatibility**: Transformers.js v3 officially supports Node.js server-side. Bun compatibility is functional
-  with WASM backend (no WebGPU on server). May need `node_compat` flag in Bun for some ONNX runtime features.
-
-#### 2. Ollama (sidecar service)
-
-Separate process running llama.cpp under the hood. HTTP API for embeddings and chat.
-
-```typescript
-const response = await fetch('http://localhost:11434/api/embed', {
-    method: 'POST',
-    body: JSON.stringify({ model: 'nomic-embed-text', input: text }),
-});
-const { embeddings } = await response.json();
-```
-
-- **Pros**: Mature, well-tested. Supports both embedding and LLM models. GPU acceleration. Easy model management
-  (`ollama pull nomic-embed-text`). Already common in self-hosted setups.
-- **Cons**: Requires separate process/container. Network hop latency (~5–20ms overhead). Another moving part in
-  deployment. Users must install and configure Ollama.
-- **Best for**: Deployments that already run Ollama, or when LLM features are also needed.
-
-#### 3. sqlite-lembed + sqlite-vec (SQL-native)
-
-SQLite extensions that generate embeddings and store/query vectors directly in SQL. Powered by llama.cpp.
-
-```sql
--- Load extensions
-.load ./lembed0
-.load ./vec0
-
--- Register model
-INSERT INTO temp.lembed_models(name, model)
-    SELECT 'embed', lembed_model_from_file('embeddinggemma-300m.q8_0.gguf');
-
--- Generate embedding + store in vector table
-INSERT INTO search_vectors(rowid, embedding)
-    SELECT id, lembed('embed', title || ' ' || body)
-    FROM search_entries;
-
--- KNN query
-SELECT rowid, distance
-FROM search_vectors
-WHERE embedding MATCH lembed('embed', 'firearm courtroom')
-ORDER BY distance LIMIT 10;
-```
-
-- **Pros**: Elegant — embedding + vector search in pure SQL. No HTTP calls. Fast (llama.cpp native). Pairs perfectly
-  with sqlite-vec. GGUF models from Ollama/HuggingFace work directly.
-- **Cons**: Native SQLite extensions need to be compiled per platform. May conflict with Bun's built-in SQLite (Bun
-  uses its own SQLite build). Docker image must include the `.so`/`.dylib` files. Pre-v1 maturity for sqlite-lembed.
-- **Best for**: If the native extension compatibility with Bun's SQLite can be confirmed.
-
-#### 4. llama.cpp server (standalone)
-
-Dedicated C++ inference server with OpenAI-compatible API, including `/v1/embeddings` endpoint.
-
-- **Pros**: Maximum performance. GPU support. Can serve both embeddings and chat completions.
-- **Cons**: Another binary to deploy. More operational complexity than Ollama.
-- **Best for**: High-throughput or GPU-accelerated deployments.
-
-### Recommended Approach for Eigen
-
-**Embedding inference**: Use **Transformers.js** with **EmbeddingGemma-300M** (ONNX, q8) for zero-dependency
-in-process embedding. This keeps deployment simple — no sidecar, no native extensions. The model file (~200MB) ships
-in the Docker image or is downloaded on first use.
-
-**Vector storage**: Use **sqlite-vec** (`npm install sqlite-vec`) for KNN search. Pure C extension with npm package,
-loads via `Database.loadExtension()`. Store vectors in a `vec0` virtual table alongside the existing `search_entries`
-content table.
-
-**Configuration**: Make embedding optional and configurable. Users can:
-- Disable it entirely (FTS5-only, default)
-- Use built-in Transformers.js (opt-in, downloads model on first use)
-- Point to an Ollama endpoint (for users who already run Ollama)
-
-### Vector Storage Schema
-
-Extends the existing `search.db` with a `vec0` virtual table:
-
-```sql
--- Requires sqlite-vec extension loaded
-CREATE VIRTUAL TABLE IF NOT EXISTS search_vectors USING vec0(
-    embedding float[768]  -- EmbeddingGemma-300M output dims (or 384 for MiniLM)
-);
-```
-
-The `search_vectors` rowid maps 1:1 to `search_entries.id`. Insert embeddings alongside FTS content:
-
-```typescript
-// In SearchIndex.upsert(), after writing to search_entries:
-if (this.embeddingEnabled) {
-    const vector = await this.embedder.embed(title + ' ' + body);
-    this.db.run(sql`INSERT OR REPLACE INTO search_vectors(rowid, embedding) VALUES (${entryId}, ${vector})`);
-}
-```
-
-### Hybrid Search Query
-
-When embeddings are available, combine FTS5 keyword scores with vector similarity:
-
-```sql
--- Step 1: FTS5 candidate retrieval (fast, narrows to ~100 candidates)
-WITH fts_matches AS (
-    SELECT e.id, e.domain, e.item_id, e.title, e.metadata, e.updated_at,
-           bm25(search_fts) AS fts_rank,
-           snippet(search_fts, 1, '<mark>', '</mark>', '...', 30) AS snippet
-    FROM search_fts f
-    JOIN search_entries e ON e.id = f.rowid
-    WHERE search_fts MATCH ?
-    LIMIT 100
-)
--- Step 2: Re-rank with vector similarity
-SELECT m.*, v.distance AS vec_distance,
-       (m.fts_rank * 0.7 + v.distance * 0.3) AS hybrid_rank
-FROM fts_matches m
-LEFT JOIN search_vectors v ON v.rowid = m.id
-WHERE v.embedding MATCH ? -- query embedding
-ORDER BY hybrid_rank
-LIMIT 20;
-```
-
-FTS5 acts as a fast first-pass filter. Vector similarity re-ranks the candidates. The `alpha` weighting (0.7/0.3)
-can be tuned. When embeddings are disabled, the query falls back to pure FTS5 ranking.
-
-### Use Cases Beyond Search
-
-If Eigen adds LLM support (via Ollama sidecar), several features become possible:
-
-| Feature              | Model needed        | Description                                                    |
-|----------------------|---------------------|----------------------------------------------------------------|
-| Query expansion      | Small LLM (0.8–3B) | Rewrite "budget meeting" → "financial planning discussion meeting notes quarterly review" for better FTS5 recall |
-| Result summarization | Small LLM (0.8–3B) | Summarize top-N search results into a concise answer           |
-| Email triage         | Small LLM (3B+)    | Auto-categorize incoming mail (urgent, newsletter, receipt)    |
-| Document Q&A         | Small LLM (3B+)    | RAG: retrieve relevant chunks, answer questions about own docs |
-| Smart compose        | Small LLM (3B+)    | Draft email replies based on conversation context              |
-
-These are future features beyond search. They all benefit from the same Ollama sidecar architecture — Eigen
-communicates via HTTP, the user chooses which model to run. No Eigen code changes needed when better models release.
-
-### What Not to Do
-
-- **Don't bundle an LLM in the Docker image** — too large (2–8GB), not everyone wants it
-- **Don't make embeddings mandatory** — FTS5 must work standalone, embeddings are an enhancement
-- **Don't run LLM inference in the Bun process** — too slow via WASM, blocks the event loop. Ollama sidecar only
-- **Don't build a custom embedding pipeline** — use Transformers.js or Ollama, both are battle-tested
-- **Don't store vectors in a separate database** — keep them in `search.db` alongside FTS5 for atomic operations
-
-## Implementation Plan
-
-| Phase | Scope                                                                                                           | Effort |
-|-------|-----------------------------------------------------------------------------------------------------------------|--------|
-| 1     | `search.db` schema + `SearchIndex` class + wire into `Home` (lazy init) + indexing hooks for mail, contacts, calendar, drive | M |
-| 2     | Chat message indexing (requires opening per-room DBs)                                                           | S      |
-| 3     | Yjs text extraction for docs, stickies, slides, sheets (hook into `DbProvider.createSnapshot`)                  | M      |
-| 4     | Search API endpoint (`apps/api/src/routes/search.ts`) — replaces the palette's metadata-LIKE stopgap            | S      |
-| 5     | Shared data: index shared paths on `receiveACLChange`, search `shared_calendars`                                | S      |
-| 6     | Full re-index command (backfill existing data by walking all domain DBs)                                        | S      |
-| 7     | Semantic/vector search (future)                                                                                 | L      |
-
-### File Structure
+## File structure
 
 ```
 apps/api/src/lib/search/
-  schema.ts           # Drizzle schema (search_entries table)
-  db-config.ts        # SEARCH_DB_CONFIG with FTS5 + triggers migration
-  search-index.ts     # SearchIndex class (upsert, delete, query)
-  yjs-extract.ts      # Yjs text extraction helpers (server-safe, no DOM)
+  schema.ts               # the content table (Drizzle)
+  db-config.ts            # the search DatabaseConfig — FTS5 virtual table + sync triggers
+  search-index.ts         # the SearchIndex service — upsert, delete, query
+  search-coordinator.ts   # Option B only — enumerate enabled scopes, query, rank-fuse, group
+  yjs-extract.ts          # per-type text extraction from Yjs state (server-safe, no DOM)
 
-apps/api/src/routes/search.ts   # Search endpoint
+apps/api/src/routes/
+  search.ts               # the GET /search/:ownerId endpoint
 
-packages/lib/src/types/search.ts              # SearchHit (FileSearchHit | MailSearchHit | EventSearchHit | ChatSearchHit) + SearchResponse — shared with the palette
+packages/lib/src/types/
+  search.ts               # shared wire types — the search-hit variants + grouped response shape
 ```
 
-### Key Decisions
+## Key decisions
 
-- **Per-user index** (not global) — matches existing data isolation model, avoids ACL filtering at query time for
-  owned data
-- **Content table + FTS5** (not bare FTS5) — domain, item_id, metadata stay in a regular table; only title/body are
-  full-text indexed. Triggers keep FTS in sync. Enables efficient domain filtering via JOIN
-- **Index on write** (not batch) — keeps index current, leverages existing mutation flow
-- **Yjs extraction on snapshot** (every ~100 updates) — acceptable staleness, avoids per-keystroke overhead
-- **No cross-home search for v1** — shared data searched via user's own `shared.db` and `shared_calendars`, not by
-  opening remote search indexes. Simpler and avoids concurrent DB access issues
-- **FTS5 first, vectors later** — FTS5 is sufficient for v1, semantic search adds complexity with diminishing returns
-  for typical self-hosted deployments
+- **Index storage layout — OPEN.** One index per Home, or one per scope (per mount, plus mail
+  and calendar). Both options, with honest pros and cons, are weighed in
+  [Search index location](#search-index-location); the choice is deferred to a review round.
+  Working lean: per scope, for the mount-lifecycle fit.
+- **Content table + FTS5 virtual table** — kind, ids, and metadata stay in a regular table;
+  only title and body are full-text indexed; triggers keep them in sync.
+- **Index on write** — each domain indexes through its existing mutation flow; no separate sync
+  job. A one-time backfill covers pre-existing data.
+- **Content extraction on snapshot** — collaborative-document text is extracted when a snapshot
+  is created (already periodic), not per edit. Acceptable staleness for far less work.
+- **Response grouped by kind** — a separate ranked, capped array per kind, mirroring the
+  palette's sections; each hit a typed variant. Presentation fields stay off the wire. Identical
+  under either storage option.
+- **No cross-home search for v1** — items shared from other users are searchable in a later
+  phase, via local metadata indexing and/or query federation.
+- **FTS5 first, vectors later** — keyword search is sufficient for v1; semantic search is an
+  opt-in enhancement that must never be required.
