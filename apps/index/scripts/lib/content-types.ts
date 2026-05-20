@@ -12,6 +12,8 @@ export const supportFrontmatterSchema = z.object({
     category: z.string().min(1).optional(),
     tags: z.array(z.string()).default([]),
     related: z.array(z.string()).default([]),
+    // Extra section ids this article is also listed in (without changing its canonical URL).
+    crossSections: z.array(z.string()).default([]),
     order: z.number().default(100),
     // `gray-matter`'s YAML parser turns an unquoted date like `2026-05-20` into a Date;
     // normalize it back to a YYYY-MM-DD string so the field stays a plain string.
@@ -47,6 +49,7 @@ export type ArticleMeta = {
     date?: string; // blog only — YYYY-MM-DD from the filename
     toc: TocEntry[];
     related: string[]; // resolved slugs
+    crossSections: string[]; // support: extra sections this article is also listed in
 };
 
 export type ContentManifest = { articles: ArticleMeta[] };

@@ -52,6 +52,7 @@ function buildSupport(): ArticleMeta[] {
             updated: data.updated,
             toc,
             related: data.related,
+            crossSections: data.crossSections,
         });
     }
     return articles.map((a) => ({ ...a, related: resolveRelated(a, articles) }));
@@ -76,6 +77,7 @@ function buildBlog(): ArticleMeta[] {
             date: dateMatch ? dateMatch[1] : '',
             toc,
             related: [],
+            crossSections: [],
         });
     }
     return articles.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));

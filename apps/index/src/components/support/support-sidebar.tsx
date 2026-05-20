@@ -16,7 +16,7 @@ export function SupportSidebar({ condensed = false, onClose, isMobile = false }:
     if (!section) return <div className="flex h-full flex-col" />;
 
     const articles = getSupportArticles()
-        .filter((a) => a.section === section)
+        .filter((a) => a.section === section || a.crossSections.includes(section))
         .sort((a, b) => a.order - b.order);
     const sectionTitle = getSection(section)?.title;
 
@@ -25,7 +25,7 @@ export function SupportSidebar({ condensed = false, onClose, isMobile = false }:
             {isMobile && <SidebarHeader appName="support" onClose={onClose} />}
             <SidebarSection condensed={condensed} title={sectionTitle}>
                 {articles.map((article) => {
-                    const file = article.slug.split('/')[1];
+                    const [articleSection, file] = article.slug.split('/');
                     return (
                         <SidebarItem
                             key={article.slug}
@@ -33,7 +33,7 @@ export function SupportSidebar({ condensed = false, onClose, isMobile = false }:
                             label={article.title}
                             condensed={condensed}
                             to="/support/$section/$article"
-                            params={{ section, article: file }}
+                            params={{ section: articleSection, article: file }}
                         />
                     );
                 })}

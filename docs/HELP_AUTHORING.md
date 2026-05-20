@@ -25,6 +25,7 @@ a missing or malformed field fails the build.
 | `category` | no | Groups articles in the section sidebar. |
 | `tags` | no | Used for the related-articles fallback. |
 | `related` | no | Explicit related article paths, e.g. `[drive/stop-sharing]`. |
+| `crossSections` | no | Extra section ids this article is also listed under, e.g. `[drive]`. The article keeps its single file and canonical URL. |
 | `order` | no | Sort weight within the section (default 100). |
 | `updated` | no | `YYYY-MM-DD`; shown on the page. |
 | `draft` | no | `true` excludes the article from the build. |
