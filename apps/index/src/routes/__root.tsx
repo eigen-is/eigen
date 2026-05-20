@@ -3,9 +3,12 @@ import { getSpaceAppUrl } from '@workspace/lib/api';
 import type { AuthContextType } from '@workspace/lib/auth';
 import { lazy, Suspense } from 'react';
 
-const TanStackRouterDevtools = import.meta.env.DEV
-    ? lazy(() => import('@tanstack/react-router-devtools').then((m) => ({ default: m.TanStackRouterDevtools })))
-    : () => null;
+// Browser-only dev widget — never render it during SSR/prerender, where
+// renderToString cannot handle the lazy component's Suspense boundary.
+const TanStackRouterDevtools =
+    import.meta.env.DEV && !import.meta.env.SSR
+        ? lazy(() => import('@tanstack/react-router-devtools').then((m) => ({ default: m.TanStackRouterDevtools })))
+        : () => null;
 
 type MyRouterContext = {
     auth: AuthContextType;
