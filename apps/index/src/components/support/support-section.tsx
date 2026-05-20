@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import type { ArticleMeta } from '../../content/manifest';
 import { SectionNav } from './section-nav';
 import { getSection } from './sections';
@@ -8,13 +7,12 @@ import { SupportBreadcrumb } from './support-breadcrumb';
 
 // A section landing page: section nav + the section's articles.
 export function SupportSection({ section, articles }: { section: string; articles: ArticleMeta[] }) {
-    const { isMobile } = useLayout();
     const config = getSection(section);
     const title = config?.title ?? section;
     const sorted = [...articles].sort((a, b) => a.order - b.order);
 
     return (
-        <ColumnLayout mobileColumn={isMobile ? 'list' : 'nav'}>
+        <ColumnLayout mobileColumn="list">
             <Column id="nav" width="260px" toolbar={<span className="text-sm">Help Center</span>}>
                 <SectionNav section={section} articles={articles} />
             </Column>
