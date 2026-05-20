@@ -42,7 +42,8 @@ function App() {
 
 const rootElement = document.getElementById('app')!;
 
-if (!rootElement.innerHTML) {
-    const root = ReactDOM.createRoot(rootElement);
-    root.render(<App />);
+if (rootElement.hasChildNodes()) {
+    ReactDOM.hydrateRoot(rootElement, <App />);
+} else {
+    ReactDOM.createRoot(rootElement).render(<App />);
 }
