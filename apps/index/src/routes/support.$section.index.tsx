@@ -13,6 +13,6 @@ export const Route = createFileRoute('/support/$section/')({
 
 function SectionComponent() {
     const { section } = useParams({ from: '/support/$section/' });
-    const articles = getSupportArticles().filter((a) => a.section === section);
+    const articles = getSupportArticles().filter((a) => a.section === section || a.crossSections.includes(section));
     return <SupportSection section={section} articles={articles} />;
 }

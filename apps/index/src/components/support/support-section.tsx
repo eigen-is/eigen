@@ -30,12 +30,12 @@ export function SupportSection({ section, articles }: { section: string; article
                         {config && <p className="text-muted-foreground mb-6">{config.description}</p>}
                         <ul className="space-y-1">
                             {sorted.map((article) => {
-                                const file = article.slug.split('/')[1];
+                                const [articleSection, file] = article.slug.split('/');
                                 return (
                                     <li key={article.slug}>
                                         <Link
                                             to="/support/$section/$article"
-                                            params={{ section, article: file }}
+                                            params={{ section: articleSection, article: file }}
                                             className="text-link hover:underline"
                                         >
                                             {article.title}

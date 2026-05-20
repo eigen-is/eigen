@@ -4,6 +4,7 @@ description: "Access your Eigen Drive files directly in Finder, File Explorer, o
 type: how-to
 category: WebDAV
 tags: [webdav, drive, finder, windows, mount]
+crossSections: [drive]
 updated: 2026-05-20
 ---
 
