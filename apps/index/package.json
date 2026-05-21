@@ -8,7 +8,7 @@
     "build": "bunx --bun vite build",
     "prebuild": "bun run scripts/build-content.ts",
     "postbuild": "bun run scripts/prerender.tsx",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun run scripts/build-content.ts && tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
