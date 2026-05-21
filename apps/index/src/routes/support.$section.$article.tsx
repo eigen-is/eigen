@@ -10,11 +10,11 @@ export const Route = createFileRoute('/support/$section/$article')({
     component: ArticleComponent,
     head: ({ params }) => {
         const article = getSupportArticle(params.section, params.article);
-        if (!article) return { meta: [{ title: 'Article not found - Eigen Help' }] };
+        if (!article) return { meta: [{ title: 'Article not found - Eigen Support' }] };
         const url = `https://eigen.is/support/${params.section}/${params.article}`;
         return {
             meta: [
-                { title: `${article.title} - Eigen Help` },
+                { title: `${article.title} - Eigen Support` },
                 { name: 'description', content: article.description },
                 { property: 'og:title', content: article.title },
                 { property: 'og:description', content: article.description },

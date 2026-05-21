@@ -35,7 +35,7 @@ function routes(): PrerenderRoute[] {
         {
             path: '/support',
             meta: {
-                title: 'Help Center - eigen',
+                title: 'Eigen Support',
                 description: 'Help and documentation for Eigen.',
                 url: `${BASE_URL}/support`,
                 type: 'website',
@@ -59,7 +59,7 @@ function routes(): PrerenderRoute[] {
         list.push({
             path: `/support/${section}`,
             meta: {
-                title: `${section} - Eigen Help`,
+                title: `${section} - Eigen Support`,
                 description: `Help articles for ${section}.`,
                 url: `${BASE_URL}/support/${section}`,
                 type: 'website',
@@ -70,7 +70,7 @@ function routes(): PrerenderRoute[] {
         list.push({
             path: `/support/${a.slug}`,
             meta: {
-                title: `${a.title} - Eigen Help`,
+                title: `${a.title} - Eigen Support`,
                 description: a.description,
                 url: `${BASE_URL}/support/${a.slug}`,
                 type: 'article',
