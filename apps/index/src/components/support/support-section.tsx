@@ -17,7 +17,7 @@ export function SupportSection({ section, articles }: { section: string; article
                 width="flex"
                 toolbar={
                     <div className="mx-auto w-full max-w-2xl px-2">
-                        <ArticleBreadcrumb trail={[{ label: 'Help Center', to: '/support' }, { label: title }]} />
+                        <ArticleBreadcrumb trail={[{ label: 'Eigen Support', to: '/support' }, { label: title }]} />
                     </div>
                 }
             >

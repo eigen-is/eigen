@@ -30,7 +30,7 @@ export function SupportArticle({
                     <div className="mx-auto w-full max-w-[70ch]">
                         <ArticleBreadcrumb
                             trail={[
-                                { label: 'Help Center', to: '/support' },
+                                { label: 'Eigen Support', to: '/support' },
                                 { label: sectionTitle, to: `/support/${section}` },
                                 { label: article.title },
                             ]}

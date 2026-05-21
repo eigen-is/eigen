@@ -7,7 +7,7 @@ export const Route = createFileRoute('/support/$section/')({
     component: SectionComponent,
     head: ({ params }) => {
         const section = getSection(params.section);
-        return { meta: [{ title: `${section?.title ?? params.section} - Eigen Help` }] };
+        return { meta: [{ title: `${section?.title ?? params.section} - Eigen Support` }] };
     },
 });
 
