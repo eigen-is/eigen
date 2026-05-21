@@ -4,17 +4,14 @@ import supportManifest from './.generated/support.manifest.json';
 
 export type { ArticleBody, ArticleMeta, TocEntry };
 
+export type ArticleCollection = 'blog' | 'support';
+
+// The article a page was prerendered for, inlined into that page's HTML so the
+// route component can render its body synchronously (see scripts/prerender.tsx).
+export type PageArticle = { collection: ArticleCollection; slug: string; body: ArticleBody };
+
 const blog = (blogManifest as ContentManifest).articles;
 const support = (supportManifest as ContentManifest).articles;
-
-// Article bodies, eager-imported so they resolve synchronously — this keeps the
-// prerender and client hydration in lockstep (no async loader data to rehydrate).
-// At v1's article count the bundle cost is negligible; switch to a lazy glob with
-// loader-data dehydration only if the library grows into the hundreds.
-const bodies = import.meta.glob<ArticleBody>('./.generated/{blog,support}/**/*.json', {
-    eager: true,
-    import: 'default',
-});
 
 export function getBlogArticles(): ArticleMeta[] {
     return blog;
@@ -29,8 +26,38 @@ export function getBlogArticle(id: string): ArticleMeta | undefined {
     return blog.find((a) => a.slug === id);
 }
 
-// Get one article's rendered body. Synchronous (bodies are eager-imported), so
-// route components read it directly with no loader — prerender and hydration agree.
-export function getArticleBody(collection: 'blog' | 'support', slug: string): ArticleBody | undefined {
-    return bodies[`./.generated/${collection}/${slug}.json`];
+// Article bodies are imported lazily: each .json becomes its own chunk and stays
+// out of the shared bundle, so a visitor only ever downloads the body they open.
+const bodies = import.meta.glob<ArticleBody>('./.generated/{blog,support}/**/*.json', {
+    import: 'default',
+});
+
+// The body the prerender inlined for this page. On the client it comes from the
+// JSON <script>; on the server the prerender supplies it via setPrerenderBody.
+function readInlinedArticle(): PageArticle | null {
+    if (typeof document === 'undefined') return null;
+    const el = document.getElementById('eigen-article-body');
+    return el?.textContent ? (JSON.parse(el.textContent) as PageArticle) : null;
+}
+
+let pageArticle: PageArticle | null = readInlinedArticle();
+
+// Called by entry-server.tsx before each prerender render — the server has no DOM
+// to read the inlined <script> from.
+export function setPrerenderBody(article: PageArticle | null): void {
+    pageArticle = article;
+}
+
+// This page's own body, available synchronously, or undefined for any other
+// article. Lets the prerender and hydration render the same thing with no flash.
+export function getInlinedBody(collection: ArticleCollection, slug: string): ArticleBody | undefined {
+    return pageArticle && pageArticle.collection === collection && pageArticle.slug === slug
+        ? pageArticle.body
+        : undefined;
+}
+
+// Lazy-load an article body — used when navigating to an article other than the
+// one this page was prerendered for. undefined if the slug has no body file.
+export function fetchArticleBody(collection: ArticleCollection, slug: string): Promise<ArticleBody> | undefined {
+    return bodies[`./.generated/${collection}/${slug}.json`]?.();
 }

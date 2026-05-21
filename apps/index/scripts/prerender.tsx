@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { escapeHtml } from '@workspace/lib/html';
 import { createServer } from 'vite';
-import type { ContentManifest } from './lib/content-types';
+import type { ArticleBody, ContentManifest } from './lib/content-types';
 
 const ROOT = process.cwd(); // apps/index
 const DIST = join(ROOT, '..', '..', 'dist', 'index');
@@ -16,13 +16,21 @@ function manifest(name: string): ContentManifest {
 }
 
 type PageMeta = { title: string; description: string; url: string; type: 'website' | 'article'; updated?: string };
+type ArticleRef = { collection: 'blog' | 'support'; slug: string };
+type PageArticle = ArticleRef & { body: ArticleBody };
+type PrerenderRoute = { path: string; meta: PageMeta; article?: ArticleRef };
 
 // Build the route list: the /blog and /support trees (not "/", which stays SPA).
-function routes(): Array<{ path: string; meta: PageMeta }> {
-    const list: Array<{ path: string; meta: PageMeta }> = [
+function routes(): PrerenderRoute[] {
+    const blogArticles = manifest('blog').articles;
+    const support = manifest('support').articles;
+    const latestBlog = blogArticles[0];
+    const list: PrerenderRoute[] = [
         {
             path: '/blog',
             meta: { title: 'Blog - eigen', description: DEFAULT_DESCRIPTION, url: `${BASE_URL}/blog`, type: 'website' },
+            // The blog index renders the latest post in full.
+            article: latestBlog ? { collection: 'blog', slug: latestBlog.slug } : undefined,
         },
         {
             path: '/support',
@@ -34,7 +42,7 @@ function routes(): Array<{ path: string; meta: PageMeta }> {
             },
         },
     ];
-    for (const a of manifest('blog').articles) {
+    for (const a of blogArticles) {
         list.push({
             path: `/blog/${a.slug}`,
             meta: {
@@ -44,9 +52,9 @@ function routes(): Array<{ path: string; meta: PageMeta }> {
                 type: 'article',
                 updated: a.date,
             },
+            article: { collection: 'blog', slug: a.slug },
         });
     }
-    const support = manifest('support').articles;
     for (const section of new Set(support.map((a) => a.section))) {
         list.push({
             path: `/support/${section}`,
@@ -68,6 +76,7 @@ function routes(): Array<{ path: string; meta: PageMeta }> {
                 type: 'article',
                 updated: a.updated,
             },
+            article: { collection: 'support', slug: a.slug },
         });
     }
     return list;
@@ -98,6 +107,13 @@ function jsonLd(m: PageMeta): string {
     return `<script type="application/ld+json">${JSON.stringify(data).replace(/<\//g, '<\\/')}</script>`;
 }
 
+// Pair a route's article ref with its prerendered body, read from the generated
+// content. Used both for the server render and for the inlined hydration <script>.
+function readArticle(ref: ArticleRef): PageArticle {
+    const body = JSON.parse(readFileSync(join(GEN, ref.collection, `${ref.slug}.json`), 'utf-8')) as ArticleBody;
+    return { ...ref, body };
+}
+
 // dist/index/index.html for "/"; dist/index/<path>/index.html for the rest.
 function outFile(path: string): string {
     if (path === '/') return join(DIST, 'index.html');
@@ -106,7 +122,7 @@ function outFile(path: string): string {
     return join(dir, 'index.html');
 }
 
-function sitemap(routeList: Array<{ path: string; meta: PageMeta }>): string {
+function sitemap(routeList: PrerenderRoute[]): string {
     const urls = routeList
         .map((r) => {
             const loc = escapeHtml(BASE_URL + (r.path === '/' ? '' : r.path));
@@ -128,12 +144,13 @@ async function main() {
     });
     try {
         const { render } = (await vite.ssrLoadModule('/src/entry-server.tsx')) as {
-            render: (url: string) => Promise<string>;
+            render: (url: string, article: PageArticle | null) => Promise<string>;
         };
         const shell = readFileSync(join(DIST, 'index.html'), 'utf-8');
         const all = routes();
         for (const route of all) {
-            const appHtml = await render(route.path);
+            const article = route.article ? readArticle(route.article) : null;
+            const appHtml = await render(route.path, article);
             // React 19 auto-emits <link rel="preload"> for rendered <img> elements.
             // renderToString produces this app fragment with no <head>, so those links
             // land at the top of #app — but in the browser React hoists them to <head>.
@@ -141,12 +158,18 @@ async function main() {
             // first render; otherwise hydration mismatches and the page renders twice.
             const hoisted = appHtml.match(/^(?:\s*<link\b[^>]*>)+/)?.[0] ?? '';
             const appBody = appHtml.slice(hoisted.length);
+            // Inline the page's own body so the client's first render resolves it
+            // synchronously — see getInlinedBody in src/content/manifest.ts. Escape
+            // </ so the body HTML cannot break out of the script tag.
+            const inlined = article
+                ? `<script type="application/json" id="eigen-article-body">${JSON.stringify(article).replace(/<\//g, '<\\/')}</script>`
+                : '';
             const page = withMeta(shell, route.meta)
                 .replace(
                     '</head>',
                     `${hoisted}<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>${jsonLd(route.meta)}</head>`,
                 )
-                .replace('<div id="app"></div>', `<div id="app">${appBody}</div>`);
+                .replace('<div id="app"></div>', `<div id="app">${appBody}</div>${inlined}`);
             writeFileSync(outFile(route.path), page);
             console.log(`Prerendered ${route.path}`);
         }

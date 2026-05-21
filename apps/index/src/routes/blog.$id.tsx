@@ -1,6 +1,10 @@
-import { createFileRoute, Link, useParams } from '@tanstack/react-router';
-import { BlogPost } from '../components/BlogPost';
-import { getArticleBody } from '../content/manifest';
+import { createFileRoute, useParams } from '@tanstack/react-router';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { useEffect } from 'react';
+import { ArticleBreadcrumb } from '../components/article-breadcrumb';
+import { BlogPost } from '../components/blog-post';
+import { useArticleBody } from '../content/use-article-body';
 import { getBlogPost } from '../data/blog-posts';
 
 export const Route = createFileRoute('/blog/$id')({
@@ -26,34 +30,38 @@ export const Route = createFileRoute('/blog/$id')({
 function BlogPostComponent() {
     const { id } = useParams({ from: '/blog/$id' });
     const post = getBlogPost(id);
-    const body = post ? getArticleBody('blog', post.slug) : undefined;
+    const body = useArticleBody('blog', id);
+    const { setDocumentTitle } = useLayout();
 
-    if (!post || !body) {
-        return (
-            <div className="min-h-screen bg-muted/50">
-                <div className="container mx-auto px-4 py-8 max-w-3xl">
-                    <div className="mb-8">
-                        <Link to="/blog" className="text-link hover:text-link/80 hover:underline">
-                            ← Back to blog
-                        </Link>
-                    </div>
-                    <h1 className="text-3xl font-bold mb-4">Post not found</h1>
-                    <p className="text-muted-foreground">The blog post you're looking for doesn't exist.</p>
-                </div>
-            </div>
-        );
+    useEffect(() => {
+        setDocumentTitle(post?.title ?? '');
+        return () => setDocumentTitle('');
+    }, [post?.title, setDocumentTitle]);
+
+    if (!post) {
+        return <div className="p-8 text-muted-foreground">Post not found.</div>;
+    }
+    if (!body) {
+        return <div className="p-8 text-muted-foreground">Loading…</div>;
     }
 
     return (
-        <div className="min-h-screen bg-muted/50">
-            <div className="container mx-auto px-4 py-8 max-w-3xl">
-                <div className="mb-8">
-                    <Link to="/blog" className="text-link hover:text-link/80 hover:underline">
-                        ← Back to blog
-                    </Link>
+        <ColumnLayout>
+            <Column
+                id="post"
+                width="flex"
+                toolbar={
+                    <div className="mx-auto w-full max-w-[70ch]">
+                        <ArticleBreadcrumb trail={[{ label: 'Blog', to: '/blog' }, { label: post.title }]} />
+                    </div>
+                }
+            >
+                <div className="h-full overflow-y-auto">
+                    <div className="mx-auto w-full max-w-[70ch] px-6 py-10">
+                        <BlogPost post={post} body={body} />
+                    </div>
                 </div>
-                <BlogPost post={post} body={body} />
-            </div>
-        </div>
+            </Column>
+        </ColumnLayout>
     );
 }
