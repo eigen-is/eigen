@@ -1,6 +1,6 @@
 import type { ArticleBody } from '../content/manifest';
 import type { BlogPost as BlogPostType } from '../data/blog-posts';
-import { ArticleContent } from './ArticleContent';
+import { ArticleContent } from './article-content';
 
 type BlogPostProps = { post: BlogPostType; body: ArticleBody };
 

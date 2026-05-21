@@ -1,6 +1,6 @@
 import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
-import { MediaPreview } from './MediaPreview';
+import { MediaPreview } from './media-preview';
 
 type MediaItemProps = {
     src: string;
@@ -88,8 +88,4 @@ export function MediaGrid({ columns = '2', items = [] }: MediaGridProps) {
     const gridCols = gridColsMap[columns] || 'grid-cols-1 md:grid-cols-2';
 
     return <div className={cn('grid', gridCols, 'gap-6 my-8')}>{mediaElements}</div>;
-}
-
-export function Media(props: MediaItemProps) {
-    return <MediaItem {...props} />;
 }

@@ -1,10 +1,10 @@
 import { Link } from '@tanstack/react-router';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import type { ArticleBody, ArticleMeta } from '../../content/manifest';
-import { ArticleContent } from '../ArticleContent';
+import { ArticleBreadcrumb } from '../article-breadcrumb';
+import { ArticleContent } from '../article-content';
 import { ArticleToc } from './article-toc';
 import { getSection } from './sections';
-import { SupportBreadcrumb } from './support-breadcrumb';
 
 // A full article: a single centered column with a sticky on-this-page TOC in the gutter.
 export function SupportArticle({
@@ -28,7 +28,7 @@ export function SupportArticle({
                 width="flex"
                 toolbar={
                     <div className="mx-auto w-full max-w-[70ch]">
-                        <SupportBreadcrumb
+                        <ArticleBreadcrumb
                             trail={[
                                 { label: 'Help Center', to: '/support' },
                                 { label: sectionTitle, to: `/support/${section}` },

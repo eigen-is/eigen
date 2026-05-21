@@ -1,7 +1,10 @@
 import { createFileRoute, useParams } from '@tanstack/react-router';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { useEffect } from 'react';
 import { SupportArticle } from '../components/support/support-article';
 import type { ArticleMeta } from '../content/manifest';
-import { getArticleBody, getSupportArticle, getSupportArticles } from '../content/manifest';
+import { getSupportArticle, getSupportArticles } from '../content/manifest';
+import { useArticleBody } from '../content/use-article-body';
 
 export const Route = createFileRoute('/support/$section/$article')({
     component: ArticleComponent,
@@ -25,10 +28,19 @@ export const Route = createFileRoute('/support/$section/$article')({
 function ArticleComponent() {
     const { section, article: file } = useParams({ from: '/support/$section/$article' });
     const article = getSupportArticle(section, file);
-    const body = article ? getArticleBody('support', article.slug) : undefined;
+    const body = useArticleBody('support', `${section}/${file}`);
+    const { setDocumentTitle } = useLayout();
 
-    if (!article || !body) {
+    useEffect(() => {
+        setDocumentTitle(article?.title ?? '');
+        return () => setDocumentTitle('');
+    }, [article?.title, setDocumentTitle]);
+
+    if (!article) {
         return <div className="p-8 text-muted-foreground">Article not found.</div>;
+    }
+    if (!body) {
+        return <div className="p-8 text-muted-foreground">Loading…</div>;
     }
 
     const all = getSupportArticles();

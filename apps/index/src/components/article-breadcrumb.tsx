@@ -11,7 +11,8 @@ import { Fragment } from 'react';
 
 export type Crumb = { label: string; to?: string };
 
-export function SupportBreadcrumb({ trail }: { trail: Crumb[] }) {
+// Toolbar breadcrumb shared by the support and blog article layouts.
+export function ArticleBreadcrumb({ trail }: { trail: Crumb[] }) {
     return (
         <Breadcrumb className="overflow-hidden">
             <BreadcrumbList>

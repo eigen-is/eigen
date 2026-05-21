@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { ArticleBody } from '../content/manifest';
-import { MediaGrid } from './MediaGrid';
+import { MediaGrid } from './media-grid';
 
 type ArticleContentProps = { body: ArticleBody; className?: string };
 
