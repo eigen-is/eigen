@@ -108,6 +108,18 @@ describe('SearchIndex', () => {
         index.upsert(mailDoc('m1', 'subj', 'body'));
         expect(index.isEmpty()).toBe(false);
     });
+
+    test('upsertBatch indexes every doc in one transaction and is idempotent', async () => {
+        const index = await freshIndex();
+        index.upsertBatch([
+            mailDoc('m1', 'alpha report', 'body'),
+            mailDoc('m2', 'beta report', 'body'),
+            mailDoc('m3', 'gamma report', 'body'),
+        ]);
+        expect(index.query('report', 10)).toHaveLength(3);
+        index.upsertBatch([mailDoc('m1', 'alpha report', 'body')]);
+        expect(index.query('report', 10)).toHaveLength(3);
+    });
 });
 
 const isWindows = process.platform === 'win32';
