@@ -172,13 +172,16 @@ export default class MailDB {
             .run();
     }
 
-    updateDraftContent(id: string, subject: string, textShort: string): void {
+    // `text` is the full draft body. emails.textShort stays a truncated preview for list
+    // views, but the search index gets the complete body.
+    updateDraftContent(id: string, subject: string, text: string): void {
         this.db
             .update(schema.emails)
-            .set({ subject, textShort, updatedAt: new Date() })
+            .set({ subject, textShort: text.slice(0, 200), updatedAt: new Date() })
             .where(eq(schema.emails.id, id))
             .run();
-        this.reindexEmail(id);
+        const email = this.getEmail(id);
+        if (email) this.safeIndex(() => this.searchIndex.upsert(emailToSearchDoc({ ...email, textShort: text })));
     }
 
     getAllEmails(mailbox: string) {
