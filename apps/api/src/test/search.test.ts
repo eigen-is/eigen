@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import type { SearchResponse } from '@workspace/lib/types/search';
 import { openLocalDatabase } from '../lib/core/managed-database';
 import { SEARCH_DB_CONFIG } from '../lib/search/db-config';
 import { type SearchDoc, SearchIndex } from '../lib/search/search-index';
-import { app, authedRequest, getTestContext, TEST_DATA_DIR } from './setup';
+import { app, assertJson, authedRequest, getTestContext, TEST_DATA_DIR } from './setup';
 
 let indexCounter = 0;
 async function freshIndex(): Promise<SearchIndex> {
@@ -164,5 +165,57 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
 
         await home.mail.backfillSearchIndex();
         expect(home.mail.search('wibblesome', 20).length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+describe.skipIf(isWindows)('Search endpoint', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('GET /search returns a delivered email', async () => {
+        await deliverMail('alice@test.eigen.is', 'Flibbertigibbet endpoint test', 'body');
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/search/${ctx.alice.user.id}?q=flibbertigibbet`);
+        const data = await assertJson<SearchResponse>(res);
+        expect(data.mail.some((h) => h.subject === 'Flibbertigibbet endpoint test')).toBe(true);
+    });
+
+    test('sources=mail searches mail; sources=calendar returns an empty mail array', async () => {
+        await deliverMail('alice@test.eigen.is', 'Snorkblat sources test', 'body');
+
+        const mailRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=snorkblat&sources=mail`,
+        );
+        const mailData = await assertJson<SearchResponse>(mailRes);
+        expect(mailData.mail.some((h) => h.subject === 'Snorkblat sources test')).toBe(true);
+
+        const calRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=snorkblat&sources=calendar`,
+        );
+        const calData = await assertJson<SearchResponse>(calRes);
+        expect(calData.mail).toEqual([]);
+    });
+
+    test("searching another user's ownerId is rejected with 403", async () => {
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/search/${ctx.alice.user.id}?q=anything`);
+        expect(res.status).toBe(403);
+    });
+
+    test('a missing query is rejected with a validation error', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/search/${ctx.alice.user.id}`);
+        expect(res.status).toBe(422);
+    });
+
+    test('a punctuation-only query does not error', async () => {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=${encodeURIComponent('!@#$%')}`,
+        );
+        const data = await assertJson<SearchResponse>(res);
+        expect(data.mail).toEqual([]);
     });
 });
