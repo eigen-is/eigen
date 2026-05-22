@@ -26,6 +26,7 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
             isReplied: false,
             hasAttachments: parsedMail.attachments?.length > 0,
             fromShort: parsedMail.from?.value[0]?.name || parsedMail.from?.value[0]?.address || 'Unknown',
+            fromAddress: parsedMail.from?.value[0]?.address || '',
             textShort: parsedMail.text || '',
         } as Email;
     } catch (error) {

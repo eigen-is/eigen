@@ -173,6 +173,28 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         await home.mail.backfillSearchIndex();
         expect(home.mail.search('wibblesome', 20).length).toBeGreaterThanOrEqual(1);
     });
+
+    test('search finds an email by sender address even when the sender has a display name', async () => {
+        const eml = [
+            'From: "Jane Doe" <jane.doe@example.com>',
+            'To: alice@test.eigen.is',
+            'Subject: lunch on friday',
+            '',
+            'see you then',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        expect(home.mail.search('jane.doe@example.com', 20).length).toBeGreaterThanOrEqual(1);
+    });
 });
 
 describe.skipIf(isWindows)('Search endpoint', () => {
