@@ -1,9 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { openLocalDatabase } from '../lib/core/managed-database';
 import { SEARCH_DB_CONFIG } from '../lib/search/db-config';
 import { type SearchDoc, SearchIndex } from '../lib/search/search-index';
-import { TEST_DATA_DIR } from './setup';
+import { app, authedRequest, getTestContext, TEST_DATA_DIR } from './setup';
 
 let indexCounter = 0;
 async function freshIndex(): Promise<SearchIndex> {
@@ -99,5 +99,70 @@ describe('SearchIndex', () => {
         const hit = index.query('subj', 10)[0];
         expect(hit.metadata).toEqual({ from: 'alice@test.eigen.is', mailbox: 'Sent' });
         expect(hit.sortKey).toBe(123);
+    });
+});
+
+const isWindows = process.platform === 'win32';
+
+// Delivery awaits the inbox sync, so the email is parsed into mail.db (and indexed) by the
+// time the deliver response returns.
+function deliverMail(to: string, subject: string, body: string): Promise<Response> {
+    const eml = ['From: sender@example.com', `To: ${to}`, `Subject: ${subject}`, '', body].join('\r\n');
+    return app.handle(
+        new Request(`http://localhost/mail/deliver/${to}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'message/rfc822' },
+            body: new TextEncoder().encode(eml).buffer,
+        }),
+    );
+}
+
+describe.skipIf(isWindows)('Mail search (Maildir)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('a delivered email is found by Maildir.search', async () => {
+        const res = await deliverMail('alice@test.eigen.is', 'Zorptastic quarterly figures', 'body text');
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        const hits = home.mail.search('zorptastic', 20);
+        expect(hits.some((h) => h.subject === 'Zorptastic quarterly figures')).toBe(true);
+    });
+
+    test('search matches the sender address', async () => {
+        await deliverMail('alice@test.eigen.is', 'plain subject one', 'hello');
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        expect(home.mail.search('sender@example.com', 20).length).toBeGreaterThanOrEqual(1);
+    });
+
+    test('deleting an email removes it from search', async () => {
+        await deliverMail('alice@test.eigen.is', 'Glompy deletion candidate', 'body');
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+
+        const hit = home.mail.search('glompy', 20)[0];
+        expect(hit).toBeDefined();
+
+        const del = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/${hit.id}`, {
+            method: 'DELETE',
+        });
+        expect([200, 204]).toContain(del.status);
+
+        expect(home.mail.search('glompy', 20)).toEqual([]);
+    });
+
+    test('backfillSearchIndex re-runs cleanly and search still works', async () => {
+        await deliverMail('alice@test.eigen.is', 'Wibblesome backfill subject', 'body');
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+
+        await home.mail.backfillSearchIndex();
+        expect(home.mail.search('wibblesome', 20).length).toBeGreaterThanOrEqual(1);
     });
 });

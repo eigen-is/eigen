@@ -1,16 +1,49 @@
 import type { EmailSummary } from '@workspace/lib/types/mail';
+import type { MailSearchHit } from '@workspace/lib/types/search';
 import { and, count, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Home } from '../home';
+import { SEARCH_DB_CONFIG } from '../search/db-config';
+import { type SearchDoc, SearchIndex } from '../search/search-index';
 import { MAIL_DB_CONFIG } from './db-config';
 import * as schema from './schema';
+
+// The fields the search index needs from an email. Both the `record` built in addEmail and
+// a row read back via getEmail() structurally satisfy this shape.
+type IndexableEmail = {
+    id: string;
+    subject: string;
+    fromShort: string;
+    textShort: string;
+    mailbox: string;
+    date: Date;
+};
+
+// The mail-specific display fields carried in a search hit's `metadata`. emailToSearchDoc
+// writes this shape; searchMail reads it back — one named type keeps the two seams in sync.
+type MailSearchMetadata = { from: string; mailbox: string };
+
+// Projection of an email into a generic search document. Sender and body are joined into
+// the indexed `body` so both are searchable; `metadata` carries display-only fields.
+function emailToSearchDoc(email: IndexableEmail): SearchDoc {
+    const metadata: MailSearchMetadata = { from: email.fromShort, mailbox: email.mailbox };
+    return {
+        kind: 'mail',
+        itemId: email.id,
+        title: email.subject,
+        body: `${email.fromShort}\n${email.textShort}`,
+        metadata,
+        sortKey: email.date.getTime(),
+    };
+}
 
 export default class MailDB {
     private home: Home;
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
+    private searchIndex!: SearchIndex;
 
     constructor(home: Home) {
         this.home = home;
@@ -19,6 +52,23 @@ export default class MailDB {
     async init() {
         this.managedDb = await this.home.getLocalDatabase(MAIL_DB_CONFIG, PATHS.MAIL.DB);
         this.db = this.managedDb.db;
+        const searchManaged = await this.home.getLocalDatabase(SEARCH_DB_CONFIG, PATHS.MAIL.SEARCH_DB);
+        this.searchIndex = new SearchIndex(searchManaged.db);
+    }
+
+    // Search-index writes are best-effort: the index is derived data, so a failure here must
+    // never break mail delivery or any mail mutation.
+    private safeIndex(action: () => void): void {
+        try {
+            action();
+        } catch (error) {
+            console.error('mail search index update failed:', error);
+        }
+    }
+
+    private reindexEmail(id: string): void {
+        const email = this.getEmail(id);
+        if (email) this.safeIndex(() => this.searchIndex.upsert(emailToSearchDoc(email)));
     }
 
     addEmail(email: EmailSummary): boolean {
@@ -43,13 +93,17 @@ export default class MailDB {
         };
 
         const existing = this.db.select().from(schema.emails).where(eq(schema.emails.id, record.id)).get();
+        let inserted: boolean;
         if (existing) {
             const { id, ...rest } = record;
             this.db.update(schema.emails).set(rest).where(eq(schema.emails.id, email.id)).run();
-            return false;
+            inserted = false;
+        } else {
+            this.db.insert(schema.emails).values(record).run();
+            inserted = true;
         }
-        this.db.insert(schema.emails).values(record).run();
-        return true;
+        this.safeIndex(() => this.searchIndex.upsert(emailToSearchDoc(record)));
+        return inserted;
     }
 
     size() {
@@ -75,10 +129,12 @@ export default class MailDB {
 
     deleteEmail(id: string) {
         this.db.delete(schema.emails).where(eq(schema.emails.id, id)).run();
+        this.safeIndex(() => this.searchIndex.delete('mail', id));
     }
 
     moveEmail(id: string, mailbox: string) {
         this.db.update(schema.emails).set({ mailbox }).where(eq(schema.emails.id, id)).run();
+        this.reindexEmail(id);
     }
 
     setRead(id: string, isRead: boolean) {
@@ -115,10 +171,38 @@ export default class MailDB {
             .set({ subject, textShort, updatedAt: new Date() })
             .where(eq(schema.emails.id, id))
             .run();
+        this.reindexEmail(id);
     }
 
     getAllEmails(mailbox: string) {
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
+    }
+
+    searchMail(query: string, limit: number): MailSearchHit[] {
+        return this.searchIndex.query(query, limit).map((hit) => {
+            const meta = hit.metadata as MailSearchMetadata;
+            return {
+                kind: 'mail' as const,
+                id: hit.itemId,
+                subject: hit.title,
+                from: meta.from,
+                mailbox: meta.mailbox,
+                date: new Date(hit.sortKey),
+            };
+        });
+    }
+
+    // Idempotent full re-index of every email into the search index. Per-email best-effort
+    // so one bad row never aborts the rest.
+    async backfillSearchIndex(): Promise<void> {
+        const emails = this.db.select().from(schema.emails).all();
+        for (const email of emails) {
+            try {
+                this.searchIndex.upsert(emailToSearchDoc(email));
+            } catch (error) {
+                console.error(`mail search backfill failed for ${email.id}:`, error);
+            }
+        }
     }
 
     async destruct(): Promise<void> {

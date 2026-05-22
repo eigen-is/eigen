@@ -9,6 +9,7 @@ import type {
     MaildirMailbox,
     NewDraft,
 } from '@workspace/lib/types/mail';
+import type { MailSearchHit } from '@workspace/lib/types/search';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { renderAttachmentPills } from '../core/mail-template';
@@ -95,10 +96,19 @@ export default class Maildir {
         this.store
             .cleanupStaleDraftTemps()
             .catch((err) => console.error('maildir: stale draft temp cleanup failed', err));
+        this.backfillSearchIndex().catch((err) => console.error('maildir: search backfill failed', err));
     }
 
     async size(): Promise<number> {
         return (await this.store.dirSize()) || this.db.size();
+    }
+
+    search(query: string, limit: number): MailSearchHit[] {
+        return this.db.searchMail(query, limit);
+    }
+
+    backfillSearchIndex(): Promise<void> {
+        return this.db.backfillSearchIndex();
     }
 
     // -- Mailbox operations --
