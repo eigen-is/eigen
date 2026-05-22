@@ -16,13 +16,14 @@ async function freshIndex(): Promise<SearchIndex> {
     return new SearchIndex(managed.db);
 }
 
-function mailDoc(id: string, title: string, body: string, sortKey = Date.now()): SearchDoc {
+function mailDoc(id: string, title: string, body: string, sortKey = Date.now(), bucket = ''): SearchDoc {
     return {
         kind: 'mail',
         itemId: id,
+        bucket,
         title,
         body,
-        metadata: { from: 'sender@test.eigen.is', mailbox: '' },
+        metadata: { from: 'sender@test.eigen.is' },
         sortKey,
     };
 }
@@ -92,14 +93,35 @@ describe('SearchIndex', () => {
         index.upsert({
             kind: 'mail',
             itemId: 'm1',
+            bucket: 'Sent',
             title: 'subj',
             body: 'b',
-            metadata: { from: 'alice@test.eigen.is', mailbox: 'Sent' },
+            metadata: { from: 'alice@test.eigen.is' },
             sortKey: 123,
         });
         const hit = index.query('subj', 10)[0];
-        expect(hit.metadata).toEqual({ from: 'alice@test.eigen.is', mailbox: 'Sent' });
+        expect(hit.bucket).toBe('Sent');
+        expect(hit.metadata).toEqual({ from: 'alice@test.eigen.is' });
         expect(hit.sortKey).toBe(123);
+    });
+
+    test('query with buckets filter returns only matching-bucket hits', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'blarptastic sent mail', 'body', Date.now(), 'Sent'));
+        index.upsert(mailDoc('m2', 'blarptastic inbox mail', 'body', Date.now(), ''));
+        const hits = index.query('blarptastic', 10, { buckets: ['Sent'] });
+        expect(hits).toHaveLength(1);
+        expect(hits[0].itemId).toBe('m1');
+        expect(hits[0].bucket).toBe('Sent');
+    });
+
+    test('query with excludeBuckets drops excluded-bucket hits', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'quibberised inbox mail', 'body', Date.now(), ''));
+        index.upsert(mailDoc('m2', 'quibberised trash mail', 'body', Date.now(), 'Trash'));
+        const hits = index.query('quibberised', 10, { excludeBuckets: ['Trash'] });
+        expect(hits).toHaveLength(1);
+        expect(hits[0].itemId).toBe('m1');
     });
 
     test('isEmpty reflects whether the index has rows', async () => {
@@ -124,17 +146,34 @@ describe('SearchIndex', () => {
 
 const isWindows = process.platform === 'win32';
 
-// Delivery awaits the inbox sync, so the email is parsed into mail.db (and indexed) by the
-// time the deliver response returns.
-function deliverMail(to: string, subject: string, body: string): Promise<Response> {
+// Delivers an email and polls until it appears in the search index, making delivery-based
+// tests deterministic. A filesystem-watcher-triggered sync can race the delivery's own sync
+// (Maildir's syncingMailboxes dedup map joins an in-flight sync that may have snapshotted the
+// directory before the new file was written). Polling with a fresh mailboxGet() call after any
+// stale sync has resolved guarantees a new sync runs that picks up the file.
+async function deliverMail(ownerId: string, to: string, subject: string, body: string): Promise<void> {
     const eml = ['From: sender@example.com', `To: ${to}`, `Subject: ${subject}`, '', body].join('\r\n');
-    return app.handle(
+    const res = await app.handle(
         new Request(`http://localhost/mail/deliver/${to}`, {
             method: 'POST',
             headers: { 'Content-Type': 'message/rfc822' },
             body: new TextEncoder().encode(eml).buffer,
         }),
     );
+    if (!res.ok) throw new Error(`deliverMail: POST failed with status ${res.status}`);
+
+    const { getHome } = await import('../lib/home');
+    // Use a distinctive word from the subject for the search probe.
+    const probeWord = subject.split(/\s+/).find((w) => w.length >= 4) ?? subject;
+    for (let i = 0; i < 40; i++) {
+        const home = await getHome(ownerId);
+        // Drive a fresh sync so any email sitting in new/ is indexed.
+        await home.mail.mailboxGet('');
+        const hits = home.mail.search(probeWord, 50);
+        if (hits.some((h) => h.subject === subject)) return;
+        await Bun.sleep(25);
+    }
+    throw new Error(`deliverMail: '${subject}' was not indexed within the timeout`);
 }
 
 describe.skipIf(isWindows)('Mail search (Maildir)', () => {
@@ -145,8 +184,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
     });
 
     test('a delivered email is found by Maildir.search', async () => {
-        const res = await deliverMail('alice@test.eigen.is', 'Zorptastic quarterly figures', 'body text');
-        expect(res.status).toBe(200);
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Zorptastic quarterly figures', 'body text');
 
         const { getHome } = await import('../lib/home');
         const home = await getHome(ctx.alice.user.id);
@@ -155,14 +193,14 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
     });
 
     test('search matches the sender address', async () => {
-        await deliverMail('alice@test.eigen.is', 'plain subject one', 'hello');
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'plain subject one', 'hello');
         const { getHome } = await import('../lib/home');
         const home = await getHome(ctx.alice.user.id);
         expect(home.mail.search('sender@example.com', 20).length).toBeGreaterThanOrEqual(1);
     });
 
     test('deleting an email removes it from search', async () => {
-        await deliverMail('alice@test.eigen.is', 'Glompy deletion candidate', 'body');
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Glompy deletion candidate', 'body');
         const { getHome } = await import('../lib/home');
         const home = await getHome(ctx.alice.user.id);
 
@@ -178,7 +216,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
     });
 
     test('backfillSearchIndex re-runs cleanly and search still works', async () => {
-        await deliverMail('alice@test.eigen.is', 'Wibblesome backfill subject', 'body');
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Wibblesome backfill subject', 'body');
         const { getHome } = await import('../lib/home');
         const home = await getHome(ctx.alice.user.id);
 
@@ -203,9 +241,38 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         );
         expect(res.status).toBe(200);
 
+        // Poll until the delivered email is indexed (avoids the watcher/delivery sync race).
+        const { getHome } = await import('../lib/home');
+        let found = false;
+        for (let i = 0; i < 40; i++) {
+            const home = await getHome(ctx.alice.user.id);
+            await home.mail.mailboxGet('');
+            if (home.mail.search('jane.doe@example.com', 20).length >= 1) {
+                found = true;
+                break;
+            }
+            await Bun.sleep(25);
+        }
+        expect(found).toBe(true);
+    });
+
+    test('moving an email to Trash hides it from default search but not when Trash is requested', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Frobulated trash test', 'body');
         const { getHome } = await import('../lib/home');
         const home = await getHome(ctx.alice.user.id);
-        expect(home.mail.search('jane.doe@example.com', 20).length).toBeGreaterThanOrEqual(1);
+
+        const hit = home.mail.search('frobulated', 20)[0];
+        expect(hit).toBeDefined();
+
+        const move = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/move`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: hit.id, targetMailbox: 'Trash' }),
+        });
+        expect([200, 204]).toContain(move.status);
+
+        expect(home.mail.search('frobulated', 20)).toEqual([]);
+        expect(home.mail.search('frobulated', 20, ['Trash']).some((h) => h.id === hit.id)).toBe(true);
     });
 });
 
@@ -217,14 +284,14 @@ describe.skipIf(isWindows)('Search endpoint', () => {
     });
 
     test('GET /search returns a delivered email', async () => {
-        await deliverMail('alice@test.eigen.is', 'Flibbertigibbet endpoint test', 'body');
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Flibbertigibbet endpoint test', 'body');
         const res = await authedRequest(ctx.alice.user.sessionToken, `/search/${ctx.alice.user.id}?q=flibbertigibbet`);
         const data = await assertJson<SearchResponse>(res);
         expect(data.mail.some((h) => h.subject === 'Flibbertigibbet endpoint test')).toBe(true);
     });
 
     test('sources=mail searches mail; sources=calendar returns an empty mail array', async () => {
-        await deliverMail('alice@test.eigen.is', 'Snorkblat sources test', 'body');
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Snorkblat sources test', 'body');
 
         const mailRes = await authedRequest(
             ctx.alice.user.sessionToken,
@@ -258,5 +325,23 @@ describe.skipIf(isWindows)('Search endpoint', () => {
         );
         const data = await assertJson<SearchResponse>(res);
         expect(data.mail).toEqual([]);
+    });
+
+    test('mailbox param scopes search to that mailbox only', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Splorbified inbox mail', 'body');
+
+        const withMailbox = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=splorbified&mailbox=Sent`,
+        );
+        const withMailboxData = await assertJson<SearchResponse>(withMailbox);
+        expect(withMailboxData.mail).toEqual([]);
+
+        const noMailbox = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=splorbified`,
+        );
+        const noMailboxData = await assertJson<SearchResponse>(noMailbox);
+        expect(noMailboxData.mail.some((h) => h.subject === 'Splorbified inbox mail')).toBe(true);
     });
 });

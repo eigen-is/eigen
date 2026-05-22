@@ -20,7 +20,11 @@ export const searchRouter = new Elysia({ name: 'search' })
                 .filter((source) => source.length > 0);
             const searchMail = !sources || sources.includes('mail');
 
-            const mail = searchMail ? home.mail.search(query.q, query.limit ?? 20) : [];
+            const mailboxes = query.mailbox
+                ?.split(',')
+                .map((m) => m.trim())
+                .filter((m) => m.length > 0);
+            const mail = searchMail ? home.mail.search(query.q, query.limit ?? 20, mailboxes) : [];
             return { mail };
         },
         {
@@ -28,6 +32,7 @@ export const searchRouter = new Elysia({ name: 'search' })
             query: t.Object({
                 q: t.String({ minLength: 1 }),
                 sources: t.Optional(t.String()),
+                mailbox: t.Optional(t.String()),
                 limit: t.Optional(t.Number({ minimum: 1, maximum: 50 })),
             }),
         },

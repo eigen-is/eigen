@@ -4,6 +4,7 @@ export const searchContent = sqliteTable('search_content', {
     rowid: integer('rowid').primaryKey(),
     kind: text('kind').notNull(),
     itemId: text('itemId').notNull(),
+    bucket: text('bucket').notNull().default(''),
     title: text('title').notNull().default(''),
     body: text('body').notNull().default(''),
     metadata: text('metadata').notNull().default('{}'),

@@ -14,6 +14,7 @@ export const SEARCH_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     rowid INTEGER PRIMARY KEY,
                     kind TEXT NOT NULL,
                     itemId TEXT NOT NULL,
+                    bucket TEXT NOT NULL DEFAULT '', -- empty string is a valid value (e.g. mail's inbox), not "unset"
                     title TEXT NOT NULL DEFAULT '',
                     body TEXT NOT NULL DEFAULT '',
                     metadata TEXT NOT NULL DEFAULT '{}',
