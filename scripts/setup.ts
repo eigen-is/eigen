@@ -5,7 +5,7 @@
 // the user runs Eigen behind an existing webserver, and prints the DNS records to add.
 // Idempotent: re-running shows current values as defaults.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline';
@@ -332,6 +332,25 @@ VITE_APP_SHEETS_URL=/sheets
 
 writeFileSync(ENV_PATH, env);
 console.log(`\n✓ Wrote ${ENV_PATH}`);
+
+// --- data directory ---
+//
+// docker-compose.yml runs eigen-api as user 1000:1000 and bind-mounts ./data into the
+// container. The directory must exist and be writable by that UID before the stack starts.
+mkdirSync('data', { recursive: true });
+let dataOwned = false;
+try {
+    const chown = Bun.spawn(['chown', '-R', '1000:1000', 'data'], { stdout: 'ignore', stderr: 'ignore' });
+    await chown.exited;
+    dataOwned = chown.exitCode === 0;
+} catch {
+    // chown unavailable (non-Unix host) — fall through to the manual instruction.
+}
+console.log(
+    dataOwned
+        ? '✓ Prepared data/ (owned by 1000:1000 for the container)'
+        : '  Could not set data/ ownership — before starting, run: sudo chown -R 1000:1000 data',
+);
 
 // --- reverse-proxy snippets ---
 //
