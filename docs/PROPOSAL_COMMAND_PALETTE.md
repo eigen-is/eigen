@@ -241,8 +241,8 @@ The palette **does not own a search backend**. It consumes one endpoint — `/se
 described in [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md). That endpoint is backed by per-Home
 SQLite FTS5 search indexes that each domain keeps current by indexing on write. It returns
 results **grouped by kind** (files, mail, events, and — once chat indexing lands — chats) in a
-single call. The exact index storage layout is an open question in PROPOSAL_SEARCH.md and does
-not affect the palette.
+single call. The index storage layout (settled as one index per scope in PROPOSAL_SEARCH.md)
+does not affect the palette.
 
 **Build the search backend as a prerequisite track, not as a phase inside the palette.**
 PROPOSAL_SEARCH's first phase (the index schema and service, the metadata indexing hooks for
@@ -329,19 +329,32 @@ open the upload dialog, save a link). Bundling them keeps each command file ters
 
 ### Ranking
 
-Search hits arrive pre-sorted by the index's relevance rank; the search provider assigns a base
-score by position so the first hit competes with hand-tuned action scores and later hits decay.
-Static commands carry their own catalog-authored base score. Final rank combines:
+Ranking is two layers: ordering **within** a section, and choosing the one promoted **Top Hit**
+across them.
 
-- the base score (search position, or catalog score for static commands)
-- a boost when the title **starts with** the query, a smaller boost when it merely **contains** it
-- a small boost on a keyword match
-- a recency boost (once `home.recents` lands)
-- a boost for actions relevant to the current app/selection
-- a boost for smart suggestions, so a confident smart parse leads
+**Within a section, each provider keeps its own order.** The search sections (Files, Mail,
+Events, Chat) arrive already ranked by the `/search` endpoint — each kind by its own `bm25()`,
+well-calibrated within one index — and the palette does not re-rank them. Actions are ordered by
+a catalog-authored base score plus boosts: a larger boost when the title **starts with** the
+query, a smaller one when it merely **contains** it, a small keyword-match boost, an
+app/selection-relevance boost, and a recency boost (once `home.recents` lands). Contacts and
+smart suggestions keep their own order.
 
-The Top Hit is the single highest final rank, shown only above a confidence threshold; otherwise
-the first row of the highest-ranked section is what the user sees first.
+**The Top Hit is decided structurally, not by a fused score.** It is tempting to give every
+result one numeric "final rank" and promote the maximum — but search relevance scores are *not
+comparable across kinds*: a #1 mail hit and a #1 calendar hit carry the same positional weight
+and would simply tie (see [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md#ranking-and-cross-kind-merging)).
+The Top Hit is therefore promoted only on a **strong, cross-comparable signal**:
+
+- a confident deterministic smart-parse (an email address, a URL) — it leads outright; or
+- a **structural title/name match** — the query exactly equals a result's title, is a prefix of
+  it, or has all its terms in the title. Being structural rather than statistical, this *is*
+  comparable across a mail hit, a calendar event, an action and a contact alike; the palette
+  computes it uniformly from the `title` every result already carries.
+
+A **confidence threshold** gates it: when nothing clears the bar, **no Top Hit is shown** — the
+first row of the first populated section is simply what the user sees first. macOS Spotlight and
+Raycast behave this way.
 
 ### The engine
 
@@ -492,7 +505,10 @@ on its own as the search-index track indexes more content — no palette change.
 1. **Sub-action key**: `→` as primary, `⌘K` as a power-user alias. `⌘K` alone would mean "the
    same key does different things depending on whether the dialog is open" — not worth the
    overhead. Linear uses `→`; we follow.
-2. **Top Hit confidence threshold**: when to *not* show one. Lean: only above a clear rank margin.
+2. **Top Hit confidence threshold**: the *shape* is settled in [Ranking](#ranking) — promote
+   only on a strong structural title match or a confident smart-parse, else show no Top Hit.
+   What stays open is the exact bar (how strong a prefix/contains match must be), tuned with
+   telemetry.
 3. **Mobile**: the dialog form (full-screen sheet vs. bottom drawer) *and* the entry point. The
    topbar pill hides on small screens, but a search-first feature needs a visible mobile
    affordance — decide on a compact search icon button, don't rely on `Mod+K` and a menu item alone.
