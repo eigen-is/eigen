@@ -101,6 +101,13 @@ describe('SearchIndex', () => {
         expect(hit.metadata).toEqual({ from: 'alice@test.eigen.is', mailbox: 'Sent' });
         expect(hit.sortKey).toBe(123);
     });
+
+    test('isEmpty reflects whether the index has rows', async () => {
+        const index = await freshIndex();
+        expect(index.isEmpty()).toBe(true);
+        index.upsert(mailDoc('m1', 'subj', 'body'));
+        expect(index.isEmpty()).toBe(false);
+    });
 });
 
 const isWindows = process.platform === 'win32';

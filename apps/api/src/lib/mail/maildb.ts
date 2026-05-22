@@ -54,6 +54,11 @@ export default class MailDB {
         this.db = this.managedDb.db;
         const searchManaged = await this.home.getLocalDatabase(SEARCH_DB_CONFIG, PATHS.MAIL.SEARCH_DB);
         this.searchIndex = new SearchIndex(searchManaged.db);
+        // Backfill only a fresh index — the write-hooks keep an existing one current, and the
+        // search.db file persists across Home recreates, so this runs at most once.
+        if (this.searchIndex.isEmpty()) {
+            this.backfillSearchIndex().catch((err) => console.error('mail search backfill failed:', err));
+        }
     }
 
     // Search-index writes are best-effort: the index is derived data, so a failure here must

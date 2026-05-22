@@ -96,7 +96,6 @@ export default class Maildir {
         this.store
             .cleanupStaleDraftTemps()
             .catch((err) => console.error('maildir: stale draft temp cleanup failed', err));
-        this.backfillSearchIndex().catch((err) => console.error('maildir: search backfill failed', err));
     }
 
     async size(): Promise<number> {

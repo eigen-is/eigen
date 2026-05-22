@@ -64,6 +64,13 @@ export class SearchIndex {
             .run();
     }
 
+    isEmpty(): boolean {
+        return (
+            this.db.select({ rowid: schema.searchContent.rowid }).from(schema.searchContent).limit(1).get() ===
+            undefined
+        );
+    }
+
     query(text: string, limit: number): SearchHit[] {
         const match = sanitizeFtsQuery(text);
         if (!match) return [];
