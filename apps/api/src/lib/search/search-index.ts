@@ -7,6 +7,7 @@ export type SearchKind = 'mail';
 export type SearchDoc = {
     kind: SearchKind;
     itemId: string;
+    bucket: string;
     title: string;
     body: string;
     metadata: Record<string, unknown>;
@@ -18,6 +19,7 @@ export type SearchHit = Omit<SearchDoc, 'body'>;
 type FtsRow = {
     kind: string;
     itemId: string;
+    bucket: string;
     title: string;
     metadata: string;
     sortKey: number;
@@ -53,6 +55,7 @@ export class SearchIndex {
                     .values({
                         kind: doc.kind,
                         itemId: doc.itemId,
+                        bucket: doc.bucket,
                         title: doc.title,
                         body: doc.body,
                         metadata,
@@ -60,7 +63,7 @@ export class SearchIndex {
                     })
                     .onConflictDoUpdate({
                         target: [schema.searchContent.kind, schema.searchContent.itemId],
-                        set: { title: doc.title, body: doc.body, metadata, sortKey: doc.sortKey },
+                        set: { bucket: doc.bucket, title: doc.title, body: doc.body, metadata, sortKey: doc.sortKey },
                     })
                     .run();
             }
@@ -81,16 +84,32 @@ export class SearchIndex {
         );
     }
 
-    query(text: string, limit: number): SearchHit[] {
+    query(text: string, limit: number, opts?: { buckets?: string[]; excludeBuckets?: string[] }): SearchHit[] {
         const match = sanitizeFtsQuery(text);
         if (!match) return [];
 
+        let bucketFilter = sql``;
+        // When both are provided, `buckets` (allowlist) takes precedence over `excludeBuckets`.
+        if (opts?.buckets?.length) {
+            const list = sql.join(
+                opts.buckets.map((b) => sql`${b}`),
+                sql`, `,
+            );
+            bucketFilter = sql` AND c.bucket IN (${list})`;
+        } else if (opts?.excludeBuckets?.length) {
+            const list = sql.join(
+                opts.excludeBuckets.map((b) => sql`${b}`),
+                sql`, `,
+            );
+            bucketFilter = sql` AND c.bucket NOT IN (${list})`;
+        }
+
         const rows = this.db.all(sql`
-            SELECT c.kind AS kind, c.itemId AS itemId, c.title AS title,
+            SELECT c.kind AS kind, c.itemId AS itemId, c.bucket AS bucket, c.title AS title,
                    c.metadata AS metadata, c.sortKey AS sortKey
             FROM search_fts
             JOIN search_content c ON c.rowid = search_fts.rowid
-            WHERE search_fts MATCH ${match}
+            WHERE search_fts MATCH ${match}${bucketFilter}
             ORDER BY bm25(search_fts), c.sortKey DESC
             LIMIT ${limit}
         `) as FtsRow[];
@@ -98,6 +117,7 @@ export class SearchIndex {
         return rows.map((row) => ({
             kind: row.kind as SearchKind,
             itemId: row.itemId,
+            bucket: row.bucket,
             title: row.title,
             metadata: JSON.parse(row.metadata) as Record<string, unknown>,
             sortKey: row.sortKey,

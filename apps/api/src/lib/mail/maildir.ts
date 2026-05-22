@@ -102,8 +102,8 @@ export default class Maildir {
         return (await this.store.dirSize()) || this.db.size();
     }
 
-    search(query: string, limit: number): MailSearchHit[] {
-        return this.db.searchMail(query, limit);
+    search(query: string, limit: number, mailboxes?: string[]): MailSearchHit[] {
+        return this.db.searchMail(query, limit, mailboxes);
     }
 
     backfillSearchIndex(): Promise<void> {

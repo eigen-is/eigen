@@ -22,17 +22,22 @@ type IndexableEmail = {
     date: Date;
 };
 
+// Mailboxes excluded from default mail search — users can still search them explicitly.
+const SEARCH_EXCLUDED_MAILBOXES = ['Trash', 'Junk'];
+
 // The mail-specific display fields carried in a search hit's `metadata`. emailToSearchDoc
 // writes this shape; searchMail reads it back — one named type keeps the two seams in sync.
-type MailSearchMetadata = { from: string; mailbox: string };
+type MailSearchMetadata = { from: string };
 
 // Projection of an email into a generic search document. Sender and body are joined into
 // the indexed `body` so both are searchable; `metadata` carries display-only fields.
+// `bucket` holds the mailbox so the search index can filter by it without knowing mail concepts.
 function emailToSearchDoc(email: IndexableEmail): SearchDoc {
-    const metadata: MailSearchMetadata = { from: email.fromShort, mailbox: email.mailbox };
+    const metadata: MailSearchMetadata = { from: email.fromShort };
     return {
         kind: 'mail',
         itemId: email.id,
+        bucket: email.mailbox,
         title: email.subject,
         body: `${email.fromShort}\n${email.fromAddress}\n${email.textShort}`,
         metadata,
@@ -188,15 +193,16 @@ export default class MailDB {
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
     }
 
-    searchMail(query: string, limit: number): MailSearchHit[] {
-        return this.searchIndex.query(query, limit).map((hit) => {
+    searchMail(query: string, limit: number, mailboxes?: string[]): MailSearchHit[] {
+        const opts = mailboxes?.length ? { buckets: mailboxes } : { excludeBuckets: SEARCH_EXCLUDED_MAILBOXES };
+        return this.searchIndex.query(query, limit, opts).map((hit) => {
             const meta = hit.metadata as MailSearchMetadata;
             return {
                 kind: 'mail' as const,
                 id: hit.itemId,
                 subject: hit.title,
                 from: meta.from,
-                mailbox: meta.mailbox,
+                mailbox: hit.bucket,
                 date: new Date(hit.sortKey),
             };
         });
