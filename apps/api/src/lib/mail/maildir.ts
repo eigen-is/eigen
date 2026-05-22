@@ -341,7 +341,7 @@ export default class Maildir {
         await this.store.writeDraftMeta(existingId, meta);
 
         const textShort = (email.text || '').slice(0, 200);
-        this.db.updateDraftContent(existingId, meta.subject, textShort);
+        this.db.updateDraftContent(existingId, meta.subject, email.text || '');
 
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: 'Drafts' });
 
