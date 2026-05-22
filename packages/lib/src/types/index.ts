@@ -11,6 +11,7 @@ export * from './mount';
 export * from './notification';
 export * from './owner';
 export * from './public';
+export * from './search';
 export * from './settings';
 export * from './sse';
 export * from './util';
