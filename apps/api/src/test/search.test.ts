@@ -1,0 +1,103 @@
+import { describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
+import { openLocalDatabase } from '../lib/core/managed-database';
+import { SEARCH_DB_CONFIG } from '../lib/search/db-config';
+import { type SearchDoc, SearchIndex } from '../lib/search/search-index';
+import { TEST_DATA_DIR } from './setup';
+
+let indexCounter = 0;
+async function freshIndex(): Promise<SearchIndex> {
+    indexCounter += 1;
+    const managed = await openLocalDatabase(
+        SEARCH_DB_CONFIG,
+        join(TEST_DATA_DIR, `search-unit-${indexCounter}`, 'search.db'),
+    );
+    return new SearchIndex(managed.db);
+}
+
+function mailDoc(id: string, title: string, body: string, sortKey = Date.now()): SearchDoc {
+    return {
+        kind: 'mail',
+        itemId: id,
+        title,
+        body,
+        metadata: { from: 'sender@test.eigen.is', mailbox: '' },
+        sortKey,
+    };
+}
+
+describe('SearchIndex', () => {
+    test('upsert then query finds a hit by a title word', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'Quarterly budget review', 'numbers inside'));
+        const hits = index.query('budget', 10);
+        expect(hits).toHaveLength(1);
+        expect(hits[0].itemId).toBe('m1');
+        expect(hits[0].title).toBe('Quarterly budget review');
+    });
+
+    test('query matches words in the body', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'Hello', 'the pangolin is asleep'));
+        expect(index.query('pangolin', 10)).toHaveLength(1);
+    });
+
+    test('query returns nothing for a non-matching term', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'Hello world', 'body text'));
+        expect(index.query('zzzznomatch', 10)).toEqual([]);
+    });
+
+    test('delete removes a hit from results', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'deletable subject', 'body'));
+        expect(index.query('deletable', 10)).toHaveLength(1);
+        index.delete('mail', 'm1');
+        expect(index.query('deletable', 10)).toEqual([]);
+    });
+
+    test('re-upsert with the same kind+itemId updates in place, no duplicate', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'first subject', 'body'));
+        index.upsert(mailDoc('m1', 'second subject', 'body'));
+        expect(index.query('first', 10)).toEqual([]);
+        const hits = index.query('second', 10);
+        expect(hits).toHaveLength(1);
+        expect(hits[0].itemId).toBe('m1');
+    });
+
+    test('punctuation-heavy input does not throw and still matches', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'Q3 results', 'body'));
+        expect(() => index.query('"q3"* (results):', 10)).not.toThrow();
+        expect(index.query('q3 results', 10)).toHaveLength(1);
+    });
+
+    test('an empty or all-punctuation query returns no results', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'something', 'body'));
+        expect(index.query('   ', 10)).toEqual([]);
+        expect(index.query('!@#$%', 10)).toEqual([]);
+    });
+
+    test('limit caps the number of hits', async () => {
+        const index = await freshIndex();
+        for (let i = 0; i < 5; i += 1) index.upsert(mailDoc(`m${i}`, `report ${i}`, 'body'));
+        expect(index.query('report', 3)).toHaveLength(3);
+    });
+
+    test('metadata and sortKey round-trip through the index', async () => {
+        const index = await freshIndex();
+        index.upsert({
+            kind: 'mail',
+            itemId: 'm1',
+            title: 'subj',
+            body: 'b',
+            metadata: { from: 'alice@test.eigen.is', mailbox: 'Sent' },
+            sortKey: 123,
+        });
+        const hit = index.query('subj', 10)[0];
+        expect(hit.metadata).toEqual({ from: 'alice@test.eigen.is', mailbox: 'Sent' });
+        expect(hit.sortKey).toBe(123);
+    });
+});
