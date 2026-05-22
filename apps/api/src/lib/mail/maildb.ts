@@ -202,16 +202,20 @@ export default class MailDB {
         });
     }
 
-    // Idempotent full re-index of every email into the search index. Per-email best-effort
-    // so one bad row never aborts the rest.
+    // Idempotent full re-index of every email. Runs in transactional batches and yields the
+    // event loop between them (Bun.sleep(0)), so even a large mailbox never blocks concurrent
+    // requests for longer than a single batch.
     async backfillSearchIndex(): Promise<void> {
+        const BATCH_SIZE = 250;
         const emails = this.db.select().from(schema.emails).all();
-        for (const email of emails) {
+        for (let i = 0; i < emails.length; i += BATCH_SIZE) {
+            const batch = emails.slice(i, i + BATCH_SIZE);
             try {
-                this.searchIndex.upsert(emailToSearchDoc(email));
+                this.searchIndex.upsertBatch(batch.map(emailToSearchDoc));
             } catch (error) {
-                console.error(`mail search backfill failed for ${email.id}:`, error);
+                console.error(`mail search backfill failed for batch at offset ${i}:`, error);
             }
+            await Bun.sleep(0);
         }
     }
 

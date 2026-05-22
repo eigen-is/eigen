@@ -39,22 +39,32 @@ export class SearchIndex {
     constructor(private db: BunSQLiteDatabase<typeof schema>) {}
 
     upsert(doc: SearchDoc): void {
-        const metadata = JSON.stringify(doc.metadata);
-        this.db
-            .insert(schema.searchContent)
-            .values({
-                kind: doc.kind,
-                itemId: doc.itemId,
-                title: doc.title,
-                body: doc.body,
-                metadata,
-                sortKey: doc.sortKey,
-            })
-            .onConflictDoUpdate({
-                target: [schema.searchContent.kind, schema.searchContent.itemId],
-                set: { title: doc.title, body: doc.body, metadata, sortKey: doc.sortKey },
-            })
-            .run();
+        this.upsertBatch([doc]);
+    }
+
+    // Upserts many docs in a single transaction — far fewer fsyncs than one-by-one, which is
+    // what makes the backfill cheap. A single-doc upsert is just a one-element batch.
+    upsertBatch(docs: SearchDoc[]): void {
+        if (docs.length === 0) return;
+        this.db.transaction((tx) => {
+            for (const doc of docs) {
+                const metadata = JSON.stringify(doc.metadata);
+                tx.insert(schema.searchContent)
+                    .values({
+                        kind: doc.kind,
+                        itemId: doc.itemId,
+                        title: doc.title,
+                        body: doc.body,
+                        metadata,
+                        sortKey: doc.sortKey,
+                    })
+                    .onConflictDoUpdate({
+                        target: [schema.searchContent.kind, schema.searchContent.itemId],
+                        set: { title: doc.title, body: doc.body, metadata, sortKey: doc.sortKey },
+                    })
+                    .run();
+            }
+        });
     }
 
     delete(kind: SearchKind, itemId: string): void {
