@@ -1,6 +1,6 @@
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { Elysia, t } from 'elysia';
-import { requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
 
@@ -10,6 +10,7 @@ export const searchRouter = new Elysia({ name: 'search' })
     .get(
         '/search/:ownerId',
         async ({ params, query, user }): Promise<SearchResponse> => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const home = await getHome(params.ownerId);
 
