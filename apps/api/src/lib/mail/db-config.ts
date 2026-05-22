@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mail',
-    currentVersion: 1,
+    currentVersion: 2,
     schema,
     migrations: [
         {
@@ -48,6 +48,10 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 );
                 CREATE INDEX IF NOT EXISTS idx_emails_to_labels_labelId ON emails_to_labels(labelId);
             `),
+        },
+        {
+            version: 2,
+            up: (db) => db.exec(`ALTER TABLE emails ADD COLUMN fromAddress TEXT NOT NULL DEFAULT '';`),
         },
     ],
 };
