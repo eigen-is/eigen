@@ -1,7 +1,7 @@
+import { Database } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { auth } from '../auth/auth';
 import { getServerDataPath } from '../config/paths';
 import {
@@ -17,7 +17,7 @@ import { checkS3Connection } from '../storage/s3-storage';
 
 export const isSetupRequired = checkSetupRequired;
 
-async function initializeDatabaseSchema(): Promise<void> {
+async function resetAuthDatabase(): Promise<void> {
     const dbPath = getServerDataPath('users3.db');
     const dataDir = dirname(dbPath);
 
@@ -25,7 +25,7 @@ async function initializeDatabaseSchema(): Promise<void> {
         mkdirSync(dataDir, { recursive: true });
     }
 
-    const db = drizzle(dbPath);
+    const db = new Database(dbPath);
 
     await db.run(`CREATE TABLE IF NOT EXISTS "user" (
         "id" text PRIMARY KEY NOT NULL,
@@ -191,6 +191,40 @@ async function initializeDatabaseSchema(): Promise<void> {
                       "metadata"
                       text
                   )`);
+
+    // completeSetup() — the only caller — runs only while setup is incomplete, so rows
+    // here are normally orphans from an earlier attempt that failed partway, and
+    // clearing them lets a retry succeed instead of colliding with the admin email's
+    // UNIQUE constraint. But setupCompleted lives in config.json, a separate file: were
+    // that lost or reset while users3.db survived, these rows would be real data — so
+    // snapshot the database first. Clearing is then always recoverable, never destructive.
+    const { n: existingUsers } = db.query('SELECT count(*) AS n FROM "user"').get() as { n: number };
+    if (existingUsers > 0) {
+        const backupPath = getServerDataPath(`users3.backup-${Date.now()}.db`);
+        writeFileSync(backupPath, db.serialize());
+        console.warn(
+            `[setup] users3.db already held ${existingUsers} user(s); backed up to ${backupPath} before clearing`,
+        );
+    }
+
+    // Children before parents so the deletes hold regardless of FK enforcement.
+    for (const table of [
+        'team_member',
+        'team',
+        'member',
+        'invitation',
+        'session',
+        'account',
+        'two_factor',
+        'apikey',
+        'verification',
+        'user',
+        'organization',
+    ]) {
+        await db.run(`DELETE FROM "${table}"`);
+    }
+
+    db.close();
 }
 
 export type SetupInput = {
@@ -260,7 +294,7 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         throw new ApiError(400, 'Password must be at least 8 characters long');
     }
 
-    await initializeDatabaseSchema();
+    await resetAuthDatabase();
 
     // better-auth is the only external integration here; surface its errors as 400
     // (e.g. duplicate email, invalid slug) so the wizard can show the real message.
@@ -290,16 +324,6 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
     }
     if (!org) throw new Error('Failed to create default organization');
 
-    const serverConfig: ServerConfig = {
-        domain: input.domain,
-        orgName: input.orgName,
-        orgId: org.id,
-        secret: randomBytes(32).toString('base64'),
-        setupCompleted: true,
-        setupCompletedAt: new Date().toISOString(),
-    };
-    await saveServerConfig(serverConfig);
-
     const s3Config =
         input.storageType === 's3'
             ? {
@@ -312,6 +336,19 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
               }
             : undefined;
     await updateServerSettings({ defaults: { mount: { storageType: input.storageType, s3Config } } });
+
+    // setupCompleted flips here — written last so a failure in any step above leaves
+    // setup re-runnable: isSetupRequired() stays true and resetAuthDatabase() clears
+    // the partial state on the next attempt.
+    const serverConfig: ServerConfig = {
+        domain: input.domain,
+        orgName: input.orgName,
+        orgId: org.id,
+        secret: randomBytes(32).toString('base64'),
+        setupCompleted: true,
+        setupCompletedAt: new Date().toISOString(),
+    };
+    await saveServerConfig(serverConfig);
 
     return { user: { id: user.user.id, email: user.user.email, name: user.user.name } };
 }
