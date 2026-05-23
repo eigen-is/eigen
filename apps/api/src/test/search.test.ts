@@ -31,10 +31,7 @@ describe('SearchIndex', () => {
     test('upsert then query finds a hit by a title word', async () => {
         const index = await freshIndex();
         index.upsert(mailDoc('m1', 'Quarterly budget review', 'numbers inside'));
-        const hits = index.query('budget', 10);
-        expect(hits).toHaveLength(1);
-        expect(hits[0].itemId).toBe('m1');
-        expect(hits[0].title).toBe('Quarterly budget review');
+        expect(index.query('budget', 10)).toEqual(['m1']);
     });
 
     test('query matches words in the body', async () => {
@@ -62,9 +59,7 @@ describe('SearchIndex', () => {
         index.upsert(mailDoc('m1', 'first subject', 'body'));
         index.upsert(mailDoc('m1', 'second subject', 'body'));
         expect(index.query('first', 10)).toEqual([]);
-        const hits = index.query('second', 10);
-        expect(hits).toHaveLength(1);
-        expect(hits[0].itemId).toBe('m1');
+        expect(index.query('second', 10)).toEqual(['m1']);
     });
 
     test('punctuation-heavy input does not throw and still matches', async () => {
@@ -87,38 +82,25 @@ describe('SearchIndex', () => {
         expect(index.query('report', 3)).toHaveLength(3);
     });
 
-    test('bucket and sortKey round-trip through the index', async () => {
+    test('higher sortKey orders ahead of lower sortKey for equally ranked hits', async () => {
         const index = await freshIndex();
-        index.upsert({
-            kind: 'mail',
-            itemId: 'm1',
-            bucket: 'Sent',
-            title: 'subj',
-            body: 'b',
-            sortKey: 123,
-        });
-        const hit = index.query('subj', 10)[0];
-        expect(hit.bucket).toBe('Sent');
-        expect(hit.sortKey).toBe(123);
+        index.upsert(mailDoc('m1', 'glimflub equal', 'body', 1000));
+        index.upsert(mailDoc('m2', 'glimflub equal', 'body', 2000));
+        expect(index.query('glimflub', 10)).toEqual(['m2', 'm1']);
     });
 
     test('query with buckets filter returns only matching-bucket hits', async () => {
         const index = await freshIndex();
         index.upsert(mailDoc('m1', 'blarptastic sent mail', 'body', Date.now(), 'Sent'));
         index.upsert(mailDoc('m2', 'blarptastic inbox mail', 'body', Date.now(), ''));
-        const hits = index.query('blarptastic', 10, { buckets: ['Sent'] });
-        expect(hits).toHaveLength(1);
-        expect(hits[0].itemId).toBe('m1');
-        expect(hits[0].bucket).toBe('Sent');
+        expect(index.query('blarptastic', 10, { buckets: ['Sent'] })).toEqual(['m1']);
     });
 
     test('query with excludeBuckets drops excluded-bucket hits', async () => {
         const index = await freshIndex();
         index.upsert(mailDoc('m1', 'quibberised inbox mail', 'body', Date.now(), ''));
         index.upsert(mailDoc('m2', 'quibberised trash mail', 'body', Date.now(), 'Trash'));
-        const hits = index.query('quibberised', 10, { excludeBuckets: ['Trash'] });
-        expect(hits).toHaveLength(1);
-        expect(hits[0].itemId).toBe('m1');
+        expect(index.query('quibberised', 10, { excludeBuckets: ['Trash'] })).toEqual(['m1']);
     });
 
     test('isEmpty reflects whether the index has rows', async () => {
