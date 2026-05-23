@@ -44,9 +44,11 @@ export function buildSections(input: BuildInput): Sections {
     // suggestions.
     const smartList = input.scope ? [] : input.smart;
 
-    actionList = actionList.slice(0, SECTION_CAP);
-    mailList = mailList.slice(0, SECTION_CAP);
-    contactList = contactList.slice(0, SECTION_CAP);
+    // Engine owns final ordering: sort by descending rank, then cap. Providers can set rank
+    // however they like; the engine guarantees the section is in rank order.
+    actionList = [...actionList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
+    mailList = [...mailList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
+    contactList = [...contactList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
 
     // Top Hit:
     //   1. A deterministic smart parse takes it outright.

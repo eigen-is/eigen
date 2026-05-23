@@ -6,6 +6,10 @@ import { useSearch } from '../../search';
 import { useDebouncedValue } from '../hooks/use-debounced-value';
 import { parseQuery } from '../parse-query';
 
+// Debounce keystrokes before firing the mail search. 150ms is short enough that the user
+// doesn't notice the wait but long enough to coalesce a fast typing burst.
+const MAIL_SEARCH_DEBOUNCE_MS = 150;
+
 export function useMailSearchResults(
     ctx: CommandContext,
     input: string,
@@ -13,7 +17,7 @@ export function useMailSearchResults(
     results: PaletteResult[];
     isPending: boolean;
 } {
-    const debouncedInput = useDebouncedValue(input, 150);
+    const debouncedInput = useDebouncedValue(input, MAIL_SEARCH_DEBOUNCE_MS);
     const parsed = parseQuery(debouncedInput);
 
     // When a scope is set that excludes mail, skip the call entirely.
@@ -43,5 +47,7 @@ export function useMailSearchResults(
         }));
     }, [data]);
 
-    return { results, isPending: !scopeBlocks && parsed.q.length > 0 && isFetching };
+    const willSearch = !scopeBlocks && input.trim().length > 0;
+    const isDebouncing = willSearch && input !== debouncedInput;
+    return { results, isPending: willSearch && (isDebouncing || isFetching) };
 }
