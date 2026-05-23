@@ -1,52 +1,21 @@
+import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
 import type { Command } from '@workspace/lib/types/command-palette';
-import { FileText, FolderPlus, MessageSquare, Presentation, Sheet, SquareKanban } from 'lucide-react';
+import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { FolderPlus } from 'lucide-react';
 
-// "New …" actions hand off to the shared DriveCreateEigenDoc and DriveCreateFolder
-// dialogs mounted in app-shell's PaletteRunner. `openDriveCreate(kind)` toggles them
-// open; the user picks the location via the same DriveLocationPicker that the Drive
-// sidebar's New menu uses. Labels and icons mirror that menu (drive-new-menu.tsx)
-// so the palette and the sidebar stay consistent at a glance.
+// "New …" actions hand off to the shared DriveCreateEigenDoc / DriveCreateFolder
+// dialogs mounted in app-shell's PaletteRunner — the same dialogs the Drive sidebar's
+// New menu uses (drive-new-menu.tsx). Labels and icons derive from the EIGEN_DOC_TYPE_INFO
+// + EIGEN_DOC_ICONS registries so the palette and the sidebar stay aligned by construction.
 export const createCommands: Command[] = [
-    {
-        id: 'create.doc',
-        title: 'New doc',
-        keywords: ['eigendoc', 'document', 'create'],
-        icon: FileText,
+    ...Object.values(EIGEN_DOC_TYPE_INFO).map<Command>((info) => ({
+        id: `create.${info.type}`,
+        title: `New ${info.label.toLowerCase()}`,
+        keywords: [`eigen${info.type}`, 'create'],
+        icon: EIGEN_DOC_ICONS[info.type],
         baseRank: 12,
-        run: (ctx) => ctx.openDriveCreate('doc'),
-    },
-    {
-        id: 'create.stickies',
-        title: 'New stickies',
-        keywords: ['eigenstickies', 'kanban', 'create'],
-        icon: SquareKanban,
-        baseRank: 12,
-        run: (ctx) => ctx.openDriveCreate('stickies'),
-    },
-    {
-        id: 'create.chat',
-        title: 'New chat',
-        keywords: ['eigenchat', 'create'],
-        icon: MessageSquare,
-        baseRank: 12,
-        run: (ctx) => ctx.openDriveCreate('chat'),
-    },
-    {
-        id: 'create.slides',
-        title: 'New slide',
-        keywords: ['eigenslides', 'presentation', 'deck', 'create'],
-        icon: Presentation,
-        baseRank: 12,
-        run: (ctx) => ctx.openDriveCreate('slides'),
-    },
-    {
-        id: 'create.sheets',
-        title: 'New sheet',
-        keywords: ['eigensheets', 'spreadsheet', 'create'],
-        icon: Sheet,
-        baseRank: 12,
-        run: (ctx) => ctx.openDriveCreate('sheets'),
-    },
+        run: (ctx) => ctx.openDriveCreate(info.type),
+    })),
     {
         id: 'create.folder',
         title: 'New folder',
