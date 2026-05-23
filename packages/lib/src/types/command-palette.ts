@@ -28,11 +28,10 @@ export type PaletteSelection = { items: DrivePath[] } | null;
 
 // Handlers a route publishes alongside the selection. Pure cross-app actions (Open
 // in new tab, Copy link, Mail to…) live in the catalog and don't need this — only
-// actions that depend on route-local dialog state (Rename, Share, Delete, Quick
-// preview, Download, Email collaborators) come through here. Drive's DriveLayout
-// is the canonical publisher; the eigendoc viewers can wire their own subset.
+// actions that depend on route-local dialog state (Rename, Share, Delete, Download,
+// Email collaborators) come through here. Quick preview is global (via openPreview
+// on CommandContext) and not part of this surface.
 export type PaletteSelectionActions = {
-    onQuickLook?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
     onRename?: (item: DrivePath) => void;
     onShare?: (item: DrivePath) => void;
@@ -51,6 +50,7 @@ export type CommandContext = {
     navigate: (to: string) => void;
     openDriveCreate: (kind: EigenDocType | 'folder') => void;
     openMailComposeWith: (opts: { to?: string; attachments?: DrivePath[] }) => void;
+    openPreview: (path: DrivePath) => void;
     toggleTheme: () => void;
 };
 

@@ -17,7 +17,7 @@ import {
 import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, SquareKanban, UploadIcon } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
 import { useLayout } from '../app/layout-context.tsx';
@@ -200,10 +200,15 @@ export function DriveList({
     const [selectedItems, setSelectedItems] = useState<DrivePath[]>([]);
     const dragCounter = useRef(0);
 
-    // Publish the table's multi-selection to the command palette. The palette uses it
-    // to surface item-aware actions (Mail to…, Open in new tab, Copy link, …). When
-    // nothing is selected we publish null so the palette clears its selection state.
-    usePaletteSelection(selectedItems.length > 0 ? { items: selectedItems } : null);
+    // Publish the table's multi-selection to the command palette. Memoized so the
+    // wrapper's identity stays stable across re-renders that don't actually change the
+    // selection — otherwise the publication effect would refire and the context
+    // update would re-render this component, looping.
+    const paletteSelection = useMemo(
+        () => (selectedItems.length > 0 ? { items: selectedItems } : null),
+        [selectedItems],
+    );
+    usePaletteSelection(paletteSelection);
     // Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {

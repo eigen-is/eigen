@@ -39,8 +39,11 @@ function SlideView() {
     );
 
     // Publish the open document as a 1-item palette selection so item-aware commands
-    // (Mail to…, Copy link, …) surface from anywhere.
-    usePaletteSelection(path ? { items: [path] } : null);
+    // (Mail to…, Copy link, …) surface from anywhere. Memoized to keep the wrapper's
+    // identity stable across re-renders (avoids a publication-effect → context-update
+    // → re-render loop).
+    const paletteSelection = useMemo(() => (path ? { items: [path] } : null), [path]);
+    usePaletteSelection(paletteSelection);
 
     const canWrite = docInfo?.canWrite ?? false;
     const mediaFolderId = docInfo?.folderContents?.find((f) => f.name === 'media')?.id ?? null;

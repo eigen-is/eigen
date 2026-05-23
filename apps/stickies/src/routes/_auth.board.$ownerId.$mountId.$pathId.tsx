@@ -29,8 +29,11 @@ function StickiesRoute() {
     }, [docInfo?.path?.name, setDocumentTitle]);
 
     // Publish the open document as a 1-item palette selection so item-aware commands
-    // (Mail to…, Copy link, …) surface from anywhere.
-    usePaletteSelection(docInfo?.path ? { items: [docInfo.path] } : null);
+    // (Mail to…, Copy link, …) surface from anywhere. Memoized to keep the wrapper's
+    // identity stable across re-renders (avoids a publication-effect → context-update
+    // → re-render loop).
+    const paletteSelection = useMemo(() => (docInfo?.path ? { items: [docInfo.path] } : null), [docInfo?.path]);
+    usePaletteSelection(paletteSelection);
 
     const handleAccessDialogOpen = useCallback(() => {
         setAccessDialogOpen(true);
