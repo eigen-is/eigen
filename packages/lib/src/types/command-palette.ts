@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type { Contact } from './contact';
-import type { DrivePath } from './drive';
+import type { DrivePath, EigenDocType } from './drive';
 import type { EmailSummary } from './mail';
 
 export type AppName =
@@ -34,9 +34,7 @@ export type CommandContext = {
     currentApp: AppName;
     selection: PaletteSelection;
     navigate: (to: string) => void;
-    openDriveCreate: (
-        kind: 'doc' | 'sheet' | 'slides' | 'stickies' | 'contact' | 'event' | 'folder' | 'upload',
-    ) => void;
+    openDriveCreate: (kind: EigenDocType | 'folder') => void;
     openMailComposeWith: (opts: { to?: string; attachments?: DrivePath[] }) => void;
     toggleTheme: () => void;
 };

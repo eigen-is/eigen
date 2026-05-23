@@ -1,11 +1,14 @@
 import { Outlet } from '@tanstack/react-router';
-import { getDriveAppUrl, openMailComposeWith } from '@workspace/lib/api';
+import { openMailComposeWith } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useCommandPalette } from '@workspace/lib/command-palette';
 import { useIsMobile, useIsTablet } from '@workspace/lib/media';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import type { AppName, CommandContext } from '@workspace/lib/types/command-palette';
+import type { EigenDocType } from '@workspace/lib/types/drive';
 import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react';
+import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc.tsx';
+import { DriveCreateFolder } from '../drive/drive-create-folder.tsx';
 import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container.tsx';
 import { CommandPalette } from './command-palette/command-palette.tsx';
 import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts.ts';
@@ -77,6 +80,10 @@ export function AppShell({
     );
 }
 
+// What `ctx.openDriveCreate(kind)` puts on the wire. `null` = no dialog open;
+// an EigenDocType opens DriveCreateEigenDoc; 'folder' opens DriveCreateFolder.
+type CreateDialogKind = EigenDocType | 'folder' | null;
+
 function PaletteRunner() {
     usePaletteShortcuts();
     const auth = useAuth();
@@ -84,6 +91,7 @@ function PaletteRunner() {
     const { selection } = useCommandPalette();
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
+    const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
 
     const toggleTheme = useCallback(() => {
         const next = settings?.theme === 'dark' ? 'light' : 'dark';
@@ -101,14 +109,38 @@ function PaletteRunner() {
             navigate: (url) => {
                 window.location.href = url;
             },
-            openDriveCreate: (kind) => {
-                window.location.href = getDriveAppUrl(`${ownerId}?create=${encodeURIComponent(kind)}`);
-            },
+            // Open the same shared dialogs the Drive sidebar's New menu uses
+            // (drive-new-menu.tsx). The dialog's DriveLocationPicker lets the user
+            // pick where to create.
+            openDriveCreate: (kind) => setCreateDialog(kind),
             openMailComposeWith,
             toggleTheme,
         }),
         [ownerId, currentApp, selection, toggleTheme],
     );
 
-    return <CommandPalette ctx={ctx} />;
+    const eigenDocKind = createDialog && createDialog !== 'folder' ? createDialog : null;
+
+    return (
+        <>
+            <CommandPalette ctx={ctx} />
+            {eigenDocKind && (
+                <DriveCreateEigenDoc
+                    type={eigenDocKind}
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setCreateDialog(null);
+                    }}
+                    defaultOwnerId={ownerId}
+                />
+            )}
+            <DriveCreateFolder
+                open={createDialog === 'folder'}
+                onOpenChange={(open) => {
+                    if (!open) setCreateDialog(null);
+                }}
+                defaultOwnerId={ownerId}
+            />
+        </>
+    );
 }

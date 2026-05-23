@@ -7,4 +7,4 @@ import { viewCommands } from './view';
 export const allCommands: Command[] = [...navCommands, ...createCommands, ...driveCommands, ...viewCommands];
 
 // Curated subset shown in the empty-state Suggested section.
-export const SUGGESTED_COMMAND_IDS = ['nav.mail', 'nav.drive', 'nav.calendar', 'create.doc', 'nav.settings'];
+export const SUGGESTED_COMMAND_IDS = ['nav.mail', 'nav.drive', 'nav.calendar', 'create.doc', 'nav.space'];
