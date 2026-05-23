@@ -13,6 +13,12 @@ export type SearchDoc = {
     sortKey: number;
 };
 
+export type SearchQueryOptions = {
+    buckets?: string[];
+    excludeBuckets?: string[];
+    itemIds?: string[];
+};
+
 // FTS5's query grammar treats " * ( ) : ^ - and similar punctuation as operators, so raw
 // user input cannot be passed through. Replace every non-letter/digit run with a space,
 // phrase-quote each token and append a prefix wildcard: 'q3 budget!' -> '"q3"* "budget"*'.
@@ -74,11 +80,7 @@ export class SearchIndex {
     // canonical store — callers look the ids up there. `bucket` and `sortKey` stay in the SQL
     // (filter + order) but never leave the index; the caller already knows the kind from the
     // search.db file it queried.
-    query(
-        text: string,
-        limit: number,
-        opts?: { buckets?: string[]; excludeBuckets?: string[]; itemIds?: string[] },
-    ): string[] {
+    query(text: string, limit: number, opts?: SearchQueryOptions): string[] {
         const match = sanitizeFtsQuery(text);
         if (!match) return [];
         // An empty allowlist would generate a WHERE clause that matches nothing; short-circuit
