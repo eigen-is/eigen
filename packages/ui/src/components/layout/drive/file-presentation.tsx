@@ -1,4 +1,5 @@
-import { DRIVE_TYPE_FOLDER, type DrivePathType, type EigenDocType, getEigenDocInfoByMime } from '@workspace/lib/types';
+import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
+import { DRIVE_TYPE_FOLDER, type DrivePathType, getEigenDocInfoByMime } from '@workspace/lib/types';
 import {
     File,
     FileArchive,
@@ -12,20 +13,9 @@ import {
     FileVideo,
     Folder,
     type LucideIcon,
-    MessageSquare,
     Presentation,
-    Sheet,
-    SquareKanban,
 } from 'lucide-react';
 import type React from 'react';
-
-export const EIGEN_DOC_ICONS: Record<EigenDocType, LucideIcon> = {
-    doc: FileText,
-    stickies: SquareKanban,
-    slides: Presentation,
-    sheets: Sheet,
-    chat: MessageSquare,
-};
 
 const ARCHIVE_MIMES = new Set([
     'application/zip',

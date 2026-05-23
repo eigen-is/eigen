@@ -1,6 +1,7 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
 import { DEFAULT_MOUNT_ID, usePathInfo } from '@workspace/lib/drive';
-import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -11,16 +12,7 @@ import {
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
 import { DriveUploadFiles } from '@workspace/ui/components/layout/drive/drive-upload-files';
-import {
-    FileText,
-    FolderPlus,
-    MessageSquare,
-    Plus,
-    Presentation,
-    Sheet,
-    SquareKanban,
-    Upload as UploadIcon,
-} from 'lucide-react';
+import { FolderPlus, Plus, Upload as UploadIcon } from 'lucide-react';
 import { useState } from 'react';
 
 type DriveNewMenuProps = {
@@ -89,26 +81,15 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
                             <FolderPlus className="h-4 w-4 mr-2" />
                             New folder
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('doc')}>
-                            <FileText className="h-4 w-4 mr-2" />
-                            New doc
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('stickies')}>
-                            <SquareKanban className="h-4 w-4 mr-2" />
-                            New stickies
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('chat')}>
-                            <MessageSquare className="h-4 w-4 mr-2" />
-                            New chat
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('slides')}>
-                            <Presentation className="h-4 w-4 mr-2" />
-                            New slide
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateType('sheets')}>
-                            <Sheet className="h-4 w-4 mr-2" />
-                            New sheet
-                        </DropdownMenuItem>
+                        {Object.values(EIGEN_DOC_TYPE_INFO).map((info) => {
+                            const Icon = EIGEN_DOC_ICONS[info.type];
+                            return (
+                                <DropdownMenuItem key={info.type} onClick={() => setCreateType(info.type)}>
+                                    <Icon className="h-4 w-4 mr-2" />
+                                    New {info.label.toLowerCase()}
+                                </DropdownMenuItem>
+                            );
+                        })}
                         <DropdownMenuItem onClick={() => setUploadOpen(true)}>
                             <UploadIcon className="h-4 w-4 mr-2" />
                             Upload file
