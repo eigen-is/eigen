@@ -596,4 +596,94 @@ describe.skipIf(isWindows)('Search endpoint', () => {
         const lowerData = await assertJson<SearchResponse>(lowerRes);
         expect(lowerData.mail.some((h) => h.subject === 'Quorbifax inbox normalise test')).toBe(true);
     });
+
+    test('?from= forwards a sender filter to mail search', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'endpointfrom unique subject', 'body');
+
+        // Second message from a different sender; same subject keyword.
+        const eml = [
+            'From: other@example.com',
+            'To: alice@test.eigen.is',
+            'Subject: endpointfrom another subject',
+            '',
+            'body',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        for (let i = 0; i < 40; i++) {
+            await home.mail.mailboxGet('');
+            if (home.mail.search({ q: 'endpointfrom', limit: 20 }).length >= 2) break;
+            await Bun.sleep(25);
+        }
+
+        const filtered = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=endpointfrom&from=${encodeURIComponent('sender@example.com')}`,
+        );
+        const data = await assertJson<SearchResponse>(filtered);
+        expect(data.mail.some((h) => h.subject === 'endpointfrom unique subject')).toBe(true);
+        expect(data.mail.some((h) => h.subject === 'endpointfrom another subject')).toBe(false);
+    });
+
+    test('?to= forwards a recipient filter to mail search', async () => {
+        const eml = [
+            'From: sender@example.com',
+            'To: "Fred Tofilter" <fred.tofilter@example.com>',
+            'Subject: endpointto fred subject',
+            '',
+            'body',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        for (let i = 0; i < 40; i++) {
+            await home.mail.mailboxGet('');
+            if (home.mail.search({ q: 'endpointto', limit: 20 }).length >= 1) break;
+            await Bun.sleep(25);
+        }
+
+        const filtered = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=endpointto&to=${encodeURIComponent('fred.tofilter@example.com')}`,
+        );
+        const data = await assertJson<SearchResponse>(filtered);
+        expect(data.mail.some((h) => h.subject === 'endpointto fred subject')).toBe(true);
+    });
+
+    test('?from= with sources=calendar still returns an empty mail array (mail filters ignored when mail is excluded)', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'endpointexcluded unique subject', 'body');
+
+        const filtered = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=endpointexcluded&from=${encodeURIComponent('sender@example.com')}&sources=calendar`,
+        );
+        const data = await assertJson<SearchResponse>(filtered);
+        expect(data.mail).toEqual([]);
+    });
+
+    test('?from= longer than 256 characters is rejected with a validation error', async () => {
+        const longFrom = 'a'.repeat(257);
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=anything&from=${encodeURIComponent(longFrom)}`,
+        );
+        expect(res.status).toBe(422);
+    });
 });
