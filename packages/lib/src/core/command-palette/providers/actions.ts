@@ -7,8 +7,8 @@ export function useActionResults(ctx: CommandContext, input: string): PaletteRes
     return useMemo(() => {
         const visible = allCommands.filter((cmd: Command) => !cmd.availability || cmd.availability(ctx));
         if (input.trim().length === 0) {
-            // Empty-input gets nothing from this provider — the engine routes the curated
-            // subset via SUGGESTED_COMMAND_IDS.
+            // Return the full visible list; the engine's empty-input branch filters to
+            // SUGGESTED_COMMAND_IDS.
             return visible.map((cmd) => commandToResult(cmd, cmd.baseRank ?? 0));
         }
         const ranked = visible
