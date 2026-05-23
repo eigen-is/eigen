@@ -1,3 +1,4 @@
+import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -196,7 +197,13 @@ export function DriveList({
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
     const [isDragging, setIsDragging] = useState(false);
+    const [selectedItems, setSelectedItems] = useState<DrivePath[]>([]);
     const dragCounter = useRef(0);
+
+    // Publish the table's multi-selection to the command palette. The palette uses it
+    // to surface item-aware actions (Mail to…, Open in new tab, Copy link, …). When
+    // nothing is selected we publish null so the palette clears its selection state.
+    usePaletteSelection(selectedItems.length > 0 ? { items: selectedItems } : null);
     // Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {
@@ -323,6 +330,7 @@ export function DriveList({
                 allowDelete={allowDelete}
                 onRename={onRename}
                 onMove={onMove}
+                onSelectionChange={setSelectedItems}
                 ancestorBreadcrumb={breadcrumbPaths ?? []}
                 showParentRow={(breadcrumbPaths?.length ?? 0) > 1}
                 onQuickLook={onQuickLook}
