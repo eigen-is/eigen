@@ -2,13 +2,13 @@ import { getDriveItemUrl, getDriveShareUrl, openDocument } from '@workspace/lib/
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import type { Command } from '@workspace/lib/types/command-palette';
 import { isOpenable } from '@workspace/lib/types/drive';
-import { ExternalLink, Link, Mail } from 'lucide-react';
+import { Download, ExternalLink, Eye, Link, Mail, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 
 // Selection-aware commands. They surface only when the palette has a non-empty
 // selection (published by DriveList for multi-select tables, or by each eigendoc
-// viewer for the open document). The handlers mirror DriveItemMenuItems' pure
-// actions — anything that needs route-local dialog state (Rename, Share, Delete,
-// Email collaborators) stays in the Drive context menu for now.
+// viewer for the open document). Pure cross-app actions resolve via direct imports
+// (URL helpers + clipboard); dialog-state actions read from ctx.selectionActions,
+// which DriveLayout publishes when it's mounted.
 export const driveCommands: Command[] = [
     {
         id: 'drive.open',
@@ -40,6 +40,21 @@ export const driveCommands: Command[] = [
         },
     },
     {
+        id: 'drive.quick-preview',
+        title: 'Quick preview',
+        keywords: ['preview', 'look'],
+        icon: Eye,
+        baseRank: 16,
+        availability: (ctx) =>
+            ctx.selection?.items.length === 1 &&
+            ctx.selection.items[0].type !== 'folder' &&
+            !!ctx.selectionActions?.onQuickLook,
+        run: (ctx) => {
+            const item = ctx.selection?.items[0];
+            if (item) ctx.selectionActions?.onQuickLook?.(item);
+        },
+    },
+    {
         id: 'drive.copy-link',
         title: 'Copy link',
         keywords: ['url', 'share'],
@@ -61,6 +76,69 @@ export const driveCommands: Command[] = [
         run: (ctx) => {
             if (!ctx.selection || ctx.selection.items.length === 0) return;
             ctx.openMailComposeWith({ attachments: ctx.selection.items });
+        },
+    },
+    {
+        id: 'drive.download',
+        title: 'Download',
+        keywords: ['save'],
+        icon: Download,
+        baseRank: 13,
+        availability: (ctx) =>
+            ctx.selection?.items.length === 1 &&
+            ctx.selection.items[0].type === 'file' &&
+            !!ctx.selectionActions?.onDownload,
+        run: (ctx) => {
+            const item = ctx.selection?.items[0];
+            if (item) ctx.selectionActions?.onDownload?.(item);
+        },
+    },
+    {
+        id: 'drive.rename',
+        title: 'Rename',
+        keywords: ['name'],
+        icon: Pencil,
+        baseRank: 12,
+        availability: (ctx) => ctx.selection?.items.length === 1 && !!ctx.selectionActions?.onRename,
+        run: (ctx) => {
+            const item = ctx.selection?.items[0];
+            if (item) ctx.selectionActions?.onRename?.(item);
+        },
+    },
+    {
+        id: 'drive.share',
+        title: 'Share',
+        keywords: ['access', 'permissions'],
+        icon: UserRoundPlus,
+        baseRank: 11,
+        availability: (ctx) => ctx.selection?.items.length === 1 && !!ctx.selectionActions?.onShare,
+        run: (ctx) => {
+            const item = ctx.selection?.items[0];
+            if (item) ctx.selectionActions?.onShare?.(item);
+        },
+    },
+    {
+        id: 'drive.email-collaborators',
+        title: 'Email collaborators',
+        keywords: ['notify'],
+        icon: Mail,
+        baseRank: 10,
+        availability: (ctx) => ctx.selection?.items.length === 1 && !!ctx.selectionActions?.onEmailCollaborators,
+        run: (ctx) => {
+            const item = ctx.selection?.items[0];
+            if (item) ctx.selectionActions?.onEmailCollaborators?.(item);
+        },
+    },
+    {
+        id: 'drive.delete',
+        title: 'Move to trash',
+        keywords: ['delete', 'remove'],
+        icon: Trash2,
+        baseRank: 9,
+        availability: (ctx) => (ctx.selection?.items.length ?? 0) > 0 && !!ctx.selectionActions?.onDelete,
+        run: (ctx) => {
+            const items = ctx.selection?.items;
+            if (items && items.length > 0) ctx.selectionActions?.onDelete?.(items);
         },
     },
 ];

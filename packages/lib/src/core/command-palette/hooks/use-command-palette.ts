@@ -1,4 +1,4 @@
-import type { PaletteScope, PaletteSelection } from '@workspace/lib/types/command-palette';
+import type { PaletteScope, PaletteSelection, PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { Dispatch, SetStateAction } from 'react';
 import { createContext, useContext } from 'react';
 
@@ -11,6 +11,8 @@ export type CommandPaletteContextValue = {
     setScope: Dispatch<SetStateAction<PaletteScope | undefined>>;
     selection: PaletteSelection;
     setSelection: Dispatch<SetStateAction<PaletteSelection>>;
+    selectionActions: PaletteSelectionActions;
+    setSelectionActions: Dispatch<SetStateAction<PaletteSelectionActions>>;
 };
 
 export const CommandPaletteContext = createContext<CommandPaletteContextValue | null>(null);
