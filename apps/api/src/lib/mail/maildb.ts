@@ -191,10 +191,44 @@ export default class MailDB {
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
     }
 
-    searchMail(query: string, limit: number, mailboxes?: string[]): EmailSummary[] {
-        const opts =
-            mailboxes && mailboxes.length > 0 ? { buckets: mailboxes } : { excludeBuckets: SEARCH_EXCLUDED_MAILBOXES };
-        const ids = this.searchIndex.query(query, limit, opts);
+    searchMail(opts: { q: string; limit: number; mailboxes?: string[]; from?: string; to?: string }): EmailSummary[] {
+        // Filter-first: when a structured filter is present, narrow to candidate ids via
+        // mail.db's own indexed columns, then ask the search index to rank within that
+        // subset. Exact recall at any selectivity; no candidate-pool over-fetch.
+        let itemIds: string[] | undefined;
+        if (opts.from || opts.to) {
+            const conditions = [];
+            if (opts.from) {
+                const needle = `%${opts.from.toLowerCase()}%`;
+                conditions.push(
+                    sql`(lower(${schema.emails.fromShort}) LIKE ${needle} OR lower(${schema.emails.fromAddress}) LIKE ${needle})`,
+                );
+            }
+            if (opts.to) {
+                const needle = `%${opts.to.toLowerCase()}%`;
+                conditions.push(sql`lower(${schema.emails.recipientsAll}) LIKE ${needle}`);
+            }
+            const rows = this.db
+                .select({ id: schema.emails.id })
+                .from(schema.emails)
+                .where(and(...conditions))
+                .all();
+            itemIds = rows.map((r) => r.id);
+            if (itemIds.length === 0) return [];
+        }
+
+        const indexOpts: { buckets?: string[]; excludeBuckets?: string[]; itemIds?: string[] } = {};
+        if (itemIds) indexOpts.itemIds = itemIds;
+        if (opts.mailboxes && opts.mailboxes.length > 0) {
+            indexOpts.buckets = opts.mailboxes;
+        } else {
+            // Default mailbox exclusion applies whether or not a structured filter is active —
+            // the user has not opted into searching Trash/Spam unless they pass `mailboxes`
+            // explicitly.
+            indexOpts.excludeBuckets = SEARCH_EXCLUDED_MAILBOXES;
+        }
+
+        const ids = this.searchIndex.query(opts.q, opts.limit, indexOpts);
         if (ids.length === 0) return [];
         const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
         const byId = new Map(rows.map((r) => [r.id, r]));

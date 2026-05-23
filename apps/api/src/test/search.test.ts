@@ -175,7 +175,7 @@ async function deliverMail(ownerId: string, to: string, subject: string, body: s
         const home = await getHome(ownerId);
         // Drive a fresh sync so any email sitting in new/ is indexed.
         await home.mail.mailboxGet('');
-        const hits = home.mail.search(probeWord, 50);
+        const hits = home.mail.search({ q: probeWord, limit: 50 });
         if (hits.some((h) => h.subject === subject)) return;
         await Bun.sleep(25);
     }
@@ -194,7 +194,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
 
         const { getHome } = await import('../lib/home');
         const home = await getHome(ctx.alice.user.id);
-        const hits = home.mail.search('zorptastic', 20);
+        const hits = home.mail.search({ q: 'zorptastic', limit: 20 });
         expect(hits.some((h) => h.subject === 'Zorptastic quarterly figures')).toBe(true);
     });
 
@@ -219,7 +219,11 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         for (let i = 0; i < 40; i++) {
             const home = await getHome(ctx.alice.user.id);
             await home.mail.mailboxGet('');
-            if (home.mail.search('distinctive.sender@example.com', 20).some((h) => h.subject === 'plain subject one')) {
+            if (
+                home.mail
+                    .search({ q: 'distinctive.sender@example.com', limit: 20 })
+                    .some((h) => h.subject === 'plain subject one')
+            ) {
                 found = true;
                 break;
             }
@@ -233,7 +237,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const { getHome } = await import('../lib/home');
         const home = await getHome(ctx.alice.user.id);
 
-        const hit = home.mail.search('glompy', 20)[0];
+        const hit = home.mail.search({ q: 'glompy', limit: 20 })[0];
         expect(hit).toBeDefined();
 
         const del = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/${hit.id}`, {
@@ -241,7 +245,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         });
         expect([200, 204]).toContain(del.status);
 
-        expect(home.mail.search('glompy', 20)).toEqual([]);
+        expect(home.mail.search({ q: 'glompy', limit: 20 })).toEqual([]);
     });
 
     test('backfillSearchIndex re-runs cleanly and search still works', async () => {
@@ -250,7 +254,9 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const home = await getHome(ctx.alice.user.id);
 
         await home.mail.backfillSearchIndex();
-        expect(home.mail.search('wibblesome', 20).some((h) => h.subject === 'Wibblesome backfill subject')).toBe(true);
+        expect(
+            home.mail.search({ q: 'wibblesome', limit: 20 }).some((h) => h.subject === 'Wibblesome backfill subject'),
+        ).toBe(true);
     });
 
     test('search finds an email by sender address even when the sender has a display name', async () => {
@@ -276,7 +282,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         for (let i = 0; i < 40; i++) {
             const home = await getHome(ctx.alice.user.id);
             await home.mail.mailboxGet('');
-            if (home.mail.search('jane.doe@example.com', 20).length >= 1) {
+            if (home.mail.search({ q: 'jane.doe@example.com', limit: 20 }).length >= 1) {
                 found = true;
                 break;
             }
@@ -306,10 +312,10 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const home = await getHome(ctx.alice.user.id);
         for (let i = 0; i < 40; i += 1) {
             await home.mail.mailboxGet('');
-            if (home.mail.search('floopendish', 50).length > 0) break;
+            if (home.mail.search({ q: 'floopendish', limit: 50 }).length > 0) break;
             await Bun.sleep(25);
         }
-        const hits = home.mail.search('bob.recipient@example.com', 20);
+        const hits = home.mail.search({ q: 'bob.recipient@example.com', limit: 20 });
         expect(hits.some((h) => h.subject === 'floopendish recipient test')).toBe(true);
     });
 
@@ -318,7 +324,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const { getHome } = await import('../lib/home');
         const home = await getHome(ctx.alice.user.id);
 
-        const hit = home.mail.search('frobulated', 20)[0];
+        const hit = home.mail.search({ q: 'frobulated', limit: 20 })[0];
         expect(hit).toBeDefined();
 
         const move = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/move`, {
@@ -328,8 +334,10 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         });
         expect([200, 204]).toContain(move.status);
 
-        expect(home.mail.search('frobulated', 20)).toEqual([]);
-        expect(home.mail.search('frobulated', 20, ['Trash']).some((h) => h.id === hit.id)).toBe(true);
+        expect(home.mail.search({ q: 'frobulated', limit: 20 })).toEqual([]);
+        expect(
+            home.mail.search({ q: 'frobulated', limit: 20, mailboxes: ['Trash'] }).some((h) => h.id === hit.id),
+        ).toBe(true);
     });
 
     test('search finds an email by a CC recipient address', async () => {
@@ -357,7 +365,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
             await home.mail.mailboxGet('');
             if (
                 home.mail
-                    .search('distinctive.carol@example.com', 20)
+                    .search({ q: 'distinctive.carol@example.com', limit: 20 })
                     .some((h) => h.subject === 'Zorbiplex cc recipient test')
             ) {
                 found = true;
@@ -366,6 +374,133 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
             await Bun.sleep(25);
         }
         expect(found).toBe(true);
+    });
+
+    test('from filter respects default mailbox exclusion (Trash stays hidden)', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'fromexclude unique subject', 'body');
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+
+        const hit = home.mail.search({ q: 'fromexclude', limit: 20 })[0];
+        expect(hit).toBeDefined();
+
+        const move = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/move`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: hit.id, targetMailbox: 'Trash' }),
+        });
+        expect([200, 204]).toContain(move.status);
+
+        // Default search excludes Trash even when from filter is active.
+        expect(home.mail.search({ q: 'fromexclude', limit: 20, from: 'sender@example.com' })).toEqual([]);
+        // Explicit Trash request reaches it.
+        expect(
+            home.mail
+                .search({ q: 'fromexclude', limit: 20, from: 'sender@example.com', mailboxes: ['Trash'] })
+                .some((h) => h.id === hit.id),
+        ).toBe(true);
+    });
+
+    test('search with from filter returns only mails from that sender', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'fromfilter alpha subject', 'body');
+
+        // Second delivery from a different sender that also contains "fromfilter".
+        const eml = [
+            'From: other@example.com',
+            'To: alice@test.eigen.is',
+            'Subject: fromfilter beta subject',
+            '',
+            'body text',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        // Poll until both rows are indexed.
+        for (let i = 0; i < 40; i++) {
+            await home.mail.mailboxGet('');
+            if (home.mail.search({ q: 'fromfilter', limit: 50 }).length >= 2) break;
+            await Bun.sleep(25);
+        }
+
+        const filtered = home.mail.search({ q: 'fromfilter', limit: 20, from: 'sender@example.com' });
+        expect(filtered.length).toBeGreaterThanOrEqual(1);
+        expect(filtered.every((h) => h.fromAddress === 'sender@example.com')).toBe(true);
+        expect(filtered.some((h) => h.subject === 'fromfilter alpha subject')).toBe(true);
+        expect(filtered.some((h) => h.subject === 'fromfilter beta subject')).toBe(false);
+    });
+
+    test('search with to filter returns mails sent to that recipient', async () => {
+        const eml = [
+            'From: sender@example.com',
+            'To: "Dee Specific" <dee.specific@example.com>',
+            'Subject: tofilter dee subject',
+            '',
+            'body',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        for (let i = 0; i < 40; i++) {
+            await home.mail.mailboxGet('');
+            if (home.mail.search({ q: 'tofilter', limit: 20 }).length >= 1) break;
+            await Bun.sleep(25);
+        }
+
+        const hits = home.mail.search({ q: 'tofilter', limit: 20, to: 'dee.specific@example.com' });
+        expect(hits.some((h) => h.subject === 'tofilter dee subject')).toBe(true);
+    });
+
+    test('from filter to a non-existent sender returns no hits', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'noresult unique subject', 'body');
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        expect(home.mail.search({ q: 'noresult', limit: 20, from: 'nobody@nowhere.example' })).toEqual([]);
+    });
+
+    test('search with from filter matches a CC recipient via to filter', async () => {
+        const eml = [
+            'From: sender@example.com',
+            'To: alice@test.eigen.is',
+            'Cc: "Ed Distinctive" <ed.distinctive@example.com>',
+            'Subject: ccfilter unique subject',
+            '',
+            'body',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        for (let i = 0; i < 40; i++) {
+            await home.mail.mailboxGet('');
+            if (home.mail.search({ q: 'ccfilter', limit: 20 }).length >= 1) break;
+            await Bun.sleep(25);
+        }
+
+        const hits = home.mail.search({ q: 'ccfilter', limit: 20, to: 'ed.distinctive@example.com' });
+        expect(hits.some((h) => h.subject === 'ccfilter unique subject')).toBe(true);
     });
 });
 

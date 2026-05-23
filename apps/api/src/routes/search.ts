@@ -25,7 +25,7 @@ export const searchRouter = new Elysia({ name: 'search' })
                 .map((m) => m.trim())
                 .filter((m) => m.length > 0)
                 .map((m) => (m.toLowerCase() === 'inbox' ? '' : m));
-            const mail = searchMail ? home.mail.search(query.q, query.limit ?? 20, mailboxes) : [];
+            const mail = searchMail ? home.mail.search({ q: query.q, limit: query.limit ?? 20, mailboxes }) : [];
             return { mail };
         },
         {
