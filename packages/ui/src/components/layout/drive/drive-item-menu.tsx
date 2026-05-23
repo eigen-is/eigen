@@ -1,4 +1,4 @@
-import { getDriveItemUrl, getDriveShareUrl } from '@workspace/lib/api';
+import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { type DrivePath, isFolderType, isOpenable } from '@workspace/lib/types';
 import {
@@ -168,6 +168,10 @@ export function DriveItemMenuItems({
                             >
                                 <Link className="h-4 w-4 mr-2" />
                                 Copy link
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={run(() => openMailComposeWith({ attachments: [item] }))}>
+                                <Mail className="h-4 w-4 mr-2" />
+                                Mail to…
                             </DropdownMenuItem>
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
