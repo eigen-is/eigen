@@ -473,7 +473,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         expect(home.mail.search({ q: 'noresult', limit: 20, from: 'nobody@nowhere.example' })).toEqual([]);
     });
 
-    test('search with from filter matches a CC recipient via to filter', async () => {
+    test('search by CC recipient address via the to filter', async () => {
         const eml = [
             'From: sender@example.com',
             'To: alice@test.eigen.is',

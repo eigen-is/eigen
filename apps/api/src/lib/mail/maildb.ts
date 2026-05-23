@@ -5,7 +5,7 @@ import { PATHS } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Home } from '../home';
 import { SEARCH_DB_CONFIG } from '../search/db-config';
-import { type SearchDoc, SearchIndex } from '../search/search-index';
+import { type SearchDoc, SearchIndex, type SearchQueryOptions } from '../search/search-index';
 import { MAIL_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
@@ -217,13 +217,13 @@ export default class MailDB {
             if (itemIds.length === 0) return [];
         }
 
-        const indexOpts: { buckets?: string[]; excludeBuckets?: string[]; itemIds?: string[] } = {};
+        const indexOpts: SearchQueryOptions = {};
         if (itemIds) indexOpts.itemIds = itemIds;
         if (opts.mailboxes && opts.mailboxes.length > 0) {
             indexOpts.buckets = opts.mailboxes;
         } else {
             // Default mailbox exclusion applies whether or not a structured filter is active —
-            // the user has not opted into searching Trash/Spam unless they pass `mailboxes`
+            // the user has not opted into searching Trash/Junk unless they pass `mailboxes`
             // explicitly.
             indexOpts.excludeBuckets = SEARCH_EXCLUDED_MAILBOXES;
         }
