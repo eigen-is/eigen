@@ -26,7 +26,7 @@ Requirements:
 
 | Domain   | What's indexed                          | Source already text?                  |
 |----------|-----------------------------------------|---------------------------------------|
-| Mail     | Subject, sender, short body preview     | Yes — in the mail database            |
+| Mail     | Subject, sender, recipient, short body preview | Yes — in the mail database     |
 | Drive    | File and folder names                   | Yes — in mount metadata               |
 | Calendar | Event title, description, location      | Yes — in the calendar database        |
 | Chat     | Message content, author                 | Yes — in the per-room database        |

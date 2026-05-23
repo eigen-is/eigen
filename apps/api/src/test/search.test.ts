@@ -253,6 +253,34 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         expect(found).toBe(true);
     });
 
+    test('search finds an email by its To recipient (display name and address)', async () => {
+        const eml = [
+            'From: sender@example.com',
+            'To: "Bob Recipient" <bob.recipient@example.com>',
+            'Subject: floopendish recipient test',
+            '',
+            'body text',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        for (let i = 0; i < 40; i += 1) {
+            await home.mail.mailboxGet('');
+            if (home.mail.search('floopendish', 50).length > 0) break;
+            await Bun.sleep(25);
+        }
+        const hits = home.mail.search('bob.recipient@example.com', 20);
+        expect(hits.some((h) => h.subject === 'floopendish recipient test')).toBe(true);
+    });
+
     test('moving an email to Trash hides it from default search but not when Trash is requested', async () => {
         await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Frobulated trash test', 'body');
         const { getHome } = await import('../lib/home');
