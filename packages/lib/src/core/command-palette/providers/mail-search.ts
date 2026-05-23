@@ -1,3 +1,4 @@
+import { getMailAppUrl } from '@workspace/lib/api';
 import type { CommandContext, PaletteResult } from '@workspace/lib/types/command-palette';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import { Mail } from 'lucide-react';
@@ -44,6 +45,7 @@ export function useMailSearchResults(
             group: 'mail',
             rank: -i,
             payload: email,
+            run: (ctx) => ctx.navigate(getMailAppUrl(`box/inbox?msg=${email.id}`)),
         }));
     }, [data]);
 

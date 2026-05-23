@@ -87,6 +87,7 @@ export type PaletteResult =
           group: ResultGroup;
           rank: number;
           payload: Contact;
+          run: (ctx: CommandContext) => void;
       }
     | {
           kind: 'mail';
@@ -97,6 +98,7 @@ export type PaletteResult =
           group: ResultGroup;
           rank: number;
           payload: EmailSummary;
+          run: (ctx: CommandContext) => void;
       };
 
 export type Sections = {

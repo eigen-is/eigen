@@ -38,5 +38,8 @@ function contactToResult(contact: Contact, rank: number): PaletteResult {
         group: 'contacts',
         rank,
         payload: contact,
+        run: (ctx) => {
+            if (primaryEmail) ctx.openMailComposeWith({ to: primaryEmail });
+        },
     };
 }
