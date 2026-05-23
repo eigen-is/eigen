@@ -112,6 +112,13 @@ const getSheetUrl = (ownerId: string, mountId: string, pathId: string) =>
 export const getMailComposeUrl = (address: string) =>
     getMailAppUrl(`box/inbox?mode=compose&to=${encodeURIComponent(address)}`);
 
+export function openMailComposeWith(opts: { to?: string; attachments?: DrivePath[] }): void {
+    const params = new URLSearchParams({ mode: 'compose' });
+    if (opts.to) params.set('to', opts.to);
+    if (opts.attachments?.length) params.set('attachments', opts.attachments.map((a) => a.id).join(','));
+    window.location.href = getMailAppUrl(`box/inbox?${params}`);
+}
+
 export const getSpaceProfileUrl = () => getSpaceAppUrl('user');
 export const getSpacePasswordUrl = () => getSpaceAppUrl('security/password');
 export const getSpaceLogin2faUrl = (search: string = '') => `${getSpaceAppUrl('login-2fa')}${search}`;
