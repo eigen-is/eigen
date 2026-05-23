@@ -1,4 +1,5 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
+import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import { useConvertDocument, useDeletePaths, useExportDocument, useMovePath } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { useCallback, useMemo } from 'react';
@@ -167,6 +168,22 @@ export function DriveLayout({
         },
         [onQuickLook, sortedContents],
     );
+
+    // Publish the same DriveItemMenuItems handlers to the palette so its selection-aware
+    // commands (Rename, Share, Delete, Quick preview, Download, Email collaborators) hit
+    // the same dialogs as right-clicking on a row.
+    const paletteActions = useMemo(
+        () => ({
+            onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
+            onDownload: handleDownloadPath,
+            onRename: allowRename ? handleRenamePath : undefined,
+            onShare: allowShare ? handleShareClick : undefined,
+            onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
+            onDelete: allowDelete ? handleDeletePaths : undefined,
+        }),
+        [onQuickLook, wrappedQuickLook, allowRename, allowShare, allowDelete],
+    );
+    usePaletteSelectionActions(paletteActions);
 
     if (isLoading) {
         return <LoadingState />;

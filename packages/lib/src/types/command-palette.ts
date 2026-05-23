@@ -26,6 +26,20 @@ export type ResultGroup = 'top-hit' | 'suggested' | 'actions' | 'mail' | 'contac
 // Drive selection — both surface the same actions (Share, Mail to…, Copy link, …).
 export type PaletteSelection = { items: DrivePath[] } | null;
 
+// Handlers a route publishes alongside the selection. Pure cross-app actions (Open
+// in new tab, Copy link, Mail to…) live in the catalog and don't need this — only
+// actions that depend on route-local dialog state (Rename, Share, Delete, Quick
+// preview, Download, Email collaborators) come through here. Drive's DriveLayout
+// is the canonical publisher; the eigendoc viewers can wire their own subset.
+export type PaletteSelectionActions = {
+    onQuickLook?: (item: DrivePath) => void;
+    onDownload?: (item: DrivePath) => void;
+    onRename?: (item: DrivePath) => void;
+    onShare?: (item: DrivePath) => void;
+    onEmailCollaborators?: (item: DrivePath) => void;
+    onDelete?: (items: DrivePath[]) => void;
+} | null;
+
 // The bag command handlers receive. Bundles app-aware navigation + the helpers
 // commands actually need to run their side effects. Other helpers are added when a
 // real caller needs them.
@@ -33,6 +47,7 @@ export type CommandContext = {
     ownerId: string;
     currentApp: AppName;
     selection: PaletteSelection;
+    selectionActions: PaletteSelectionActions;
     navigate: (to: string) => void;
     openDriveCreate: (kind: EigenDocType | 'folder') => void;
     openMailComposeWith: (opts: { to?: string; attachments?: DrivePath[] }) => void;

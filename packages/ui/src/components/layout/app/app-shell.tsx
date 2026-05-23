@@ -88,7 +88,7 @@ function PaletteRunner() {
     usePaletteShortcuts();
     const auth = useAuth();
     const { appName } = useLayout();
-    const { selection } = useCommandPalette();
+    const { selection, selectionActions } = useCommandPalette();
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
     const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
@@ -106,6 +106,7 @@ function PaletteRunner() {
             ownerId,
             currentApp,
             selection,
+            selectionActions,
             navigate: (url) => {
                 window.location.href = url;
             },
@@ -116,7 +117,7 @@ function PaletteRunner() {
             openMailComposeWith,
             toggleTheme,
         }),
-        [ownerId, currentApp, selection, toggleTheme],
+        [ownerId, currentApp, selection, selectionActions, toggleTheme],
     );
 
     const eigenDocKind = createDialog && createDialog !== 'folder' ? createDialog : null;
