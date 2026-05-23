@@ -172,10 +172,33 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
     });
 
     test('search matches the sender address', async () => {
-        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'plain subject one', 'hello');
+        const eml = [
+            'From: "Some Sender" <distinctive.sender@example.com>',
+            'To: alice@test.eigen.is',
+            'Subject: plain subject one',
+            '',
+            'hello',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
         const { getHome } = await import('../lib/home');
-        const home = await getHome(ctx.alice.user.id);
-        expect(home.mail.search('sender@example.com', 20).length).toBeGreaterThanOrEqual(1);
+        let found = false;
+        for (let i = 0; i < 40; i++) {
+            const home = await getHome(ctx.alice.user.id);
+            await home.mail.mailboxGet('');
+            if (home.mail.search('distinctive.sender@example.com', 20).some((h) => h.subject === 'plain subject one')) {
+                found = true;
+                break;
+            }
+            await Bun.sleep(25);
+        }
+        expect(found).toBe(true);
     });
 
     test('deleting an email removes it from search', async () => {
@@ -200,7 +223,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const home = await getHome(ctx.alice.user.id);
 
         await home.mail.backfillSearchIndex();
-        expect(home.mail.search('wibblesome', 20).length).toBeGreaterThanOrEqual(1);
+        expect(home.mail.search('wibblesome', 20).some((h) => h.subject === 'Wibblesome backfill subject')).toBe(true);
     });
 
     test('search finds an email by sender address even when the sender has a display name', async () => {
@@ -281,6 +304,42 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         expect(home.mail.search('frobulated', 20)).toEqual([]);
         expect(home.mail.search('frobulated', 20, ['Trash']).some((h) => h.id === hit.id)).toBe(true);
     });
+
+    test('search finds an email by a CC recipient address', async () => {
+        const eml = [
+            'From: sender@example.com',
+            'To: alice@test.eigen.is',
+            'Cc: "Carol Ccperson" <distinctive.carol@example.com>',
+            'Subject: Zorbiplex cc recipient test',
+            '',
+            'body text',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../lib/home');
+        let found = false;
+        for (let i = 0; i < 40; i++) {
+            const home = await getHome(ctx.alice.user.id);
+            await home.mail.mailboxGet('');
+            if (
+                home.mail
+                    .search('distinctive.carol@example.com', 20)
+                    .some((h) => h.subject === 'Zorbiplex cc recipient test')
+            ) {
+                found = true;
+                break;
+            }
+            await Bun.sleep(25);
+        }
+        expect(found).toBe(true);
+    });
 });
 
 describe.skipIf(isWindows)('Search endpoint', () => {
@@ -350,5 +409,29 @@ describe.skipIf(isWindows)('Search endpoint', () => {
         );
         const noMailboxData = await assertJson<SearchResponse>(noMailbox);
         expect(noMailboxData.mail.some((h) => h.subject === 'Splorbified inbox mail')).toBe(true);
+    });
+
+    test('a query longer than 256 characters is rejected with a validation error', async () => {
+        const longQ = 'a'.repeat(257);
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/search/${ctx.alice.user.id}?q=${longQ}`);
+        expect(res.status).toBe(422);
+    });
+
+    test('mailbox=Inbox and mailbox=inbox both scope search to the inbox bucket', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Quorbifax inbox normalise test', 'body');
+
+        const upperRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=quorbifax&mailbox=Inbox`,
+        );
+        const upperData = await assertJson<SearchResponse>(upperRes);
+        expect(upperData.mail.some((h) => h.subject === 'Quorbifax inbox normalise test')).toBe(true);
+
+        const lowerRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=quorbifax&mailbox=inbox`,
+        );
+        const lowerData = await assertJson<SearchResponse>(lowerRes);
+        expect(lowerData.mail.some((h) => h.subject === 'Quorbifax inbox normalise test')).toBe(true);
     });
 });

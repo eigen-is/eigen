@@ -23,14 +23,15 @@ export const searchRouter = new Elysia({ name: 'search' })
             const mailboxes = query.mailbox
                 ?.split(',')
                 .map((m) => m.trim())
-                .filter((m) => m.length > 0);
+                .filter((m) => m.length > 0)
+                .map((m) => (m.toLowerCase() === 'inbox' ? '' : m));
             const mail = searchMail ? home.mail.search(query.q, query.limit ?? 20, mailboxes) : [];
             return { mail };
         },
         {
             auth: true,
             query: t.Object({
-                q: t.String({ minLength: 1 }),
+                q: t.String({ minLength: 1, maxLength: 256 }),
                 sources: t.Optional(t.String()),
                 mailbox: t.Optional(t.String()),
                 limit: t.Optional(t.Number({ minimum: 1, maximum: 50 })),

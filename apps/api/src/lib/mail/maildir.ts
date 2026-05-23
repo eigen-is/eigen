@@ -340,7 +340,19 @@ export default class Maildir {
         await this.store.writeDraftMeta(existingId, meta);
 
         const textShort = (email.text || '').slice(0, 200);
-        this.db.updateDraftContent(existingId, meta.subject, email.text || '');
+        const toAddrObjs = email.to ? (Array.isArray(email.to) ? email.to : [email.to]) : [];
+        const ccAddrObjs = email.cc ? (Array.isArray(email.cc) ? email.cc : [email.cc]) : [];
+        const firstTo = toAddrObjs[0]?.value[0];
+        const allRecipients = [...toAddrObjs, ...ccAddrObjs].flatMap((o) => o.value);
+        const recipients = {
+            toShort: firstTo?.name || firstTo?.address || '',
+            toAddress: firstTo?.address || '',
+            recipientsAll: allRecipients
+                .map((a) => `${a.name || ''} ${a.address || ''}`.trim())
+                .filter((s) => s.length > 0)
+                .join('\n'),
+        };
+        this.db.updateDraftContent(existingId, meta.subject, email.text || '', recipients);
 
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: 'Drafts' });
 

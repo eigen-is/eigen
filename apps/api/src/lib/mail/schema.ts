@@ -9,6 +9,7 @@ export const emails = sqliteTable('emails', {
     fromAddress: text('fromAddress').notNull().default(''),
     toShort: text('toShort').notNull().default(''),
     toAddress: text('toAddress').notNull().default(''),
+    recipientsAll: text('recipientsAll').notNull().default(''),
     textShort: text('textShort').notNull(),
     size: integer('size', { mode: 'number' }).notNull().default(0),
     date: integer('date', { mode: 'timestamp' }).notNull(),

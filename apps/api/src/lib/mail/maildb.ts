@@ -21,7 +21,7 @@ function emailToSearchDoc(email: EmailSummary): SearchDoc {
         itemId: email.id,
         bucket: email.mailbox,
         title: email.subject,
-        body: `${email.fromShort}\n${email.fromAddress}\n${email.toShort}\n${email.toAddress}\n${email.textShort}`,
+        body: `${email.fromShort}\n${email.fromAddress}\n${email.toShort}\n${email.toAddress}\n${email.recipientsAll}\n${email.textShort}`,
         sortKey: email.date.getTime(),
     };
 }
@@ -74,6 +74,7 @@ export default class MailDB {
             fromAddress: String(email.fromAddress || ''),
             toShort: String(email.toShort || ''),
             toAddress: String(email.toAddress || ''),
+            recipientsAll: String(email.recipientsAll || ''),
             textShort: String(email.textShort || ''),
             date,
             size: email.size,
@@ -162,10 +163,24 @@ export default class MailDB {
 
     // `text` is the full draft body. emails.textShort stays a truncated preview for list
     // views, but the search index gets the complete body.
-    updateDraftContent(id: string, subject: string, text: string): void {
+    updateDraftContent(
+        id: string,
+        subject: string,
+        text: string,
+        recipients?: { toShort: string; toAddress: string; recipientsAll: string },
+    ): void {
         this.db
             .update(schema.emails)
-            .set({ subject, textShort: text.slice(0, 200), updatedAt: new Date() })
+            .set({
+                subject,
+                textShort: text.slice(0, 200),
+                updatedAt: new Date(),
+                ...(recipients && {
+                    toShort: recipients.toShort,
+                    toAddress: recipients.toAddress,
+                    recipientsAll: recipients.recipientsAll,
+                }),
+            })
             .where(eq(schema.emails.id, id))
             .run();
         const email = this.getEmail(id);
