@@ -27,6 +27,7 @@ import { UserAvatar } from '../user-avatar.tsx';
 import { UserItem } from '../user-item.tsx';
 import { AboutDialog } from './about-dialog.tsx';
 import { AppLogo } from './app-logo.tsx';
+import { CommandPaletteTrigger } from './command-palette/command-palette-trigger.tsx';
 import { useLayout } from './layout-context.tsx';
 import { NotificationBell } from './notification-bell.tsx';
 
@@ -278,9 +279,11 @@ export function Topbar({ rootRoute }: TopbarProps) {
                     {documentTitle && !isMobile && (
                         <span className="text-white/70 truncate max-w-[400px]">{documentTitle}</span>
                     )}
+                    {!documentTitle && !isMobile && <CommandPaletteTrigger />}
                 </div>
 
                 <div className="flex items-center gap-1 px-4 shrink-0">
+                    {isMobile && <CommandPaletteTrigger />}
                     <NotificationBell />
                     {isMobile && <AppSwitcher isGuest={isGuest} />}
                     {isGuest ? <GuestUserDropdown rootRoute={rootRoute} /> : <UserDropdown rootRoute={rootRoute} />}
