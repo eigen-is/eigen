@@ -142,9 +142,9 @@ for the record.
 Every `search.db` has the same structure, built on FTS5's **external-content-table** pattern:
 
 - A **content table** — one row per indexed item: its kind (`file`, `chat`, `mail`, `event`),
-  the source item's id, the searchable title and body text, a small metadata blob (domain
-  fields used to render a result), and a timestamp. A uniqueness constraint on kind + item id
-  makes re-indexing an idempotent upsert.
+  the source item's id, a `bucket` facet (a generic per-kind filterable label — for mail, the
+  mailbox name), the searchable title and body text, and a numeric sort key. A uniqueness
+  constraint on kind + item id makes re-indexing an idempotent upsert.
 - An **FTS5 virtual table** indexing only the title and body.
 - **Triggers** keeping the FTS table in sync on every insert, update, and delete.
 
@@ -182,11 +182,12 @@ after its own database write. The index stays current without a separate sync jo
 | A chat message is posted or edited               | the (host mount's) index           |
 | A doc / slides / sheets snapshot                 | the (host mount's) index           |
 
-(Under Option A, every row above writes the one per-Home index.) Each domain writes the metadata
-blob shaped to fit its result kind — mail emits sender, mailbox, and received time; drive and
-the collaborative types emit owner, mime type, and a subtitle; calendar emits start time,
-location, and calendar name; chat emits chat id, owner, chat title, and sent time. The query
-side reads those fields back to build the typed result.
+(Under Option A, every row above writes the one per-Home index.) Each domain populates the index
+with the FTS text (title, body) plus the `bucket` for its kind (mail: mailbox; calendar:
+calendar id; files: TBD). Display data for a hit comes from the canonical store at query time,
+not from the index — the index stays small and the response uses the **canonical domain type**
+for each kind (e.g. an `EmailSummary` for a mail hit), exactly what the mail listing endpoint
+returns.
 
 A **one-time backfill** populates the index by walking each domain's data. Under Option B it
 runs per scope, so it parallelizes naturally and a single corrupt scope can be rebuilt alone.
@@ -254,16 +255,18 @@ mount-keyed shape would not. Items shared with the user appear inside their kind
 by a non-self owner — not as a separate group. Chat is part of the shape from day one but stays
 empty until chat indexing ships (Phase 3).
 
-Each hit is a typed variant — file, mail, event, chat — carrying a `kind` discriminator the
-frontend's row components switch on. Same discipline as `SSEvent`, `HomeMessage`, and the
-notification center: no untyped JSON bag at the seam, no casts on the frontend. Contacts are
-**not** in the response — the palette serves people from its own cached frontend provider.
+Each hit is the canonical domain type for its kind (`EmailSummary` for mail, `DrivePath` for
+files, the canonical event/chat types for those). The grouping (`response.mail` vs
+`response.file`) discriminates; frontend row components can be exactly the components per-app
+views already use for those types. Same discipline as `SSEvent` / `HomeMessage` — no untyped
+JSON bag at the seam, no casts. Contacts are **not** in the response — the palette serves
+people from its own cached frontend provider.
 
-Presentation fields — icon, ranking score, result group — are deliberately **not** on the wire.
-They belong to the [command palette](PROPOSAL_COMMAND_PALETTE.md), which projects each search
-hit into its own result model by adding them on the frontend. Keeping them off the wire leaves
-the endpoint portable to other consumers (a future per-app search page). The shared wire types
-live in the lib package and are imported by both sides.
+Non-serialisable presentation (icons, React, the palette's rank score, the section grouping)
+stays off the wire. Display data, however, **is** the canonical type — that is exactly what
+makes the endpoint reusable: per-app in-app search (Mail's, Drive's) can render its existing
+row components against the `EmailSummary[]` / `DrivePath[]` this endpoint returns. The shared
+wire types live in the lib package and are imported by both sides.
 
 ## Ranking and cross-kind merging
 
@@ -380,7 +383,7 @@ What not to do:
 
 | Phase | Scope                                                                                                   | Effort |
 |-------|---------------------------------------------------------------------------------------------------------|--------|
-| 1     | The `search.db` schema and `DatabaseConfig`, the `SearchIndex` service (per the chosen storage option), the `/search` route returning the grouped shape, index-on-write hooks for **metadata** (mail, calendar, drive names), and a one-time backfill — the milestone where the palette's search lights up | M–L |
+| 1     | The `search.db` schema and `DatabaseConfig`, the `SearchIndex` service (per the chosen storage option), the `/search` route returning the grouped shape, index-on-write hooks indexing mail subjects, calendar event titles, and drive file names, and a one-time backfill — the milestone where the palette's search lights up | M–L |
 | 2     | Content extraction for docs, slides, and sheets — a thin text collector over the export content loaders, hooked into snapshot creation | M |
 | 3     | Chat message indexing — index message content                                                            | S      |
 | 4     | Shared data — make items shared with the user searchable                                                 | S–M    |
@@ -388,7 +391,7 @@ What not to do:
 
 Phase 1 is the **prerequisite track** the command palette depends on — see that proposal's phase
 table. It can be built in parallel with the palette's frontend-only phases. After Phase 1 the
-palette searches metadata (filenames, subjects, titles); each later phase deepens what's
+palette searches the indexed fields (filenames, subjects, titles); each later phase deepens what's
 searchable with no change to the palette's frontend. The storage-layout decision (above) should
 be settled before Phase 1 starts.
 
@@ -410,7 +413,7 @@ apps/api/src/routes/
   search.ts               # the GET /search/:ownerId endpoint
 
 packages/lib/src/types/
-  search.ts               # shared wire types — the search-hit variants + grouped response shape
+  search.ts               # shared wire types — the grouped response shape that maps each kind to its canonical domain type
 ```
 
 ## Key decisions
@@ -423,16 +426,17 @@ packages/lib/src/types/
   all-query-terms-in-title), not a fused numeric score — `bm25()` is not cross-index comparable
   and RRF degenerates on disjoint result sets. No relevance score crosses the wire. See
   [Ranking and cross-kind merging](#ranking-and-cross-kind-merging).
-- **Content table + FTS5 virtual table** — kind, ids, and metadata stay in a regular table;
-  only title and body are full-text indexed; triggers keep them in sync.
+- **Content table + FTS5 virtual table** — kind, ids, bucket, and sort key stay in a regular
+  table; only title and body are full-text indexed; triggers keep them in sync.
 - **Index on write** — each domain indexes through its existing mutation flow; no separate sync
   job. A one-time backfill covers pre-existing data.
 - **Content extraction reuses the export loaders** — collaborative text is pulled from the
   export pipeline's Yjs content loaders (not a separate Yjs walker) by a thin text collector,
   run at snapshot creation rather than per edit. Stickies wait for stickies export.
 - **Response grouped by kind** — a separate ranked, capped array per kind, mirroring the
-  palette's sections; each hit a typed variant. Presentation fields stay off the wire. Identical
-  under either storage option.
+  palette's sections; each group holds the canonical domain type for that kind (so per-app
+  in-app search can reuse the endpoint); non-serialisable presentation stays off the wire.
+  Identical under either storage option.
 - **No cross-home search for v1** — items shared from other users are searchable in a later
   phase, via local metadata indexing and/or query federation.
 - **FTS5 first, vectors later** — keyword search is sufficient for v1; semantic search is an

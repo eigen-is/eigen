@@ -9,7 +9,6 @@ import type {
     MaildirMailbox,
     NewDraft,
 } from '@workspace/lib/types/mail';
-import type { MailSearchHit } from '@workspace/lib/types/search';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { renderAttachmentPills } from '../core/mail-template';
@@ -102,7 +101,7 @@ export default class Maildir {
         return (await this.store.dirSize()) || this.db.size();
     }
 
-    search(query: string, limit: number, mailboxes?: string[]): MailSearchHit[] {
+    search(query: string, limit: number, mailboxes?: string[]): EmailSummary[] {
         return this.db.searchMail(query, limit, mailboxes);
     }
 

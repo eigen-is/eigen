@@ -7,6 +7,5 @@ export const searchContent = sqliteTable('search_content', {
     bucket: text('bucket').notNull().default(''),
     title: text('title').notNull().default(''),
     body: text('body').notNull().default(''),
-    metadata: text('metadata').notNull().default('{}'),
     sortKey: integer('sortKey').notNull().default(0),
 });
