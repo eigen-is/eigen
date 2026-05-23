@@ -9,27 +9,13 @@ import { type SearchDoc, SearchIndex } from '../search/search-index';
 import { MAIL_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
-// The fields the search index needs from an email. Both the `record` built in addEmail and
-// a row read back via getEmail() structurally satisfy this shape.
-type IndexableEmail = {
-    id: string;
-    subject: string;
-    fromShort: string;
-    fromAddress: string;
-    toShort: string;
-    toAddress: string;
-    textShort: string;
-    mailbox: string;
-    date: Date;
-};
-
 // Mailboxes excluded from default mail search — users can still search them explicitly.
 const SEARCH_EXCLUDED_MAILBOXES = ['Trash', 'Junk'];
 
-// Projection of an email into a generic search document. Sender and body are joined into
-// the indexed `body` so both are searchable.
-// `bucket` holds the mailbox so the search index can filter by it without knowing mail concepts.
-function emailToSearchDoc(email: IndexableEmail): SearchDoc {
+// Projection of an email into a generic search document. Sender, recipient and body are
+// joined into the indexed `body` so all three are searchable. `bucket` holds the mailbox so
+// the search index can filter by it without knowing mail concepts.
+function emailToSearchDoc(email: EmailSummary): SearchDoc {
     return {
         kind: 'mail',
         itemId: email.id,
@@ -193,12 +179,11 @@ export default class MailDB {
     searchMail(query: string, limit: number, mailboxes?: string[]): EmailSummary[] {
         const opts =
             mailboxes && mailboxes.length > 0 ? { buckets: mailboxes } : { excludeBuckets: SEARCH_EXCLUDED_MAILBOXES };
-        const hits = this.searchIndex.query(query, limit, opts);
-        if (hits.length === 0) return [];
-        const ids = hits.map((h) => h.itemId);
+        const ids = this.searchIndex.query(query, limit, opts);
+        if (ids.length === 0) return [];
         const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
         const byId = new Map(rows.map((r) => [r.id, r]));
-        return hits.map((h) => byId.get(h.itemId)).filter((r): r is NonNullable<typeof r> => r !== undefined);
+        return ids.map((id) => byId.get(id)).filter((r): r is NonNullable<typeof r> => r !== undefined);
     }
 
     // Idempotent full re-index of every email. Runs in transactional batches and yields the

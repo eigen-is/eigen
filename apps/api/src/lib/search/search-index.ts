@@ -13,16 +13,6 @@ export type SearchDoc = {
     sortKey: number;
 };
 
-export type SearchHit = Omit<SearchDoc, 'body'>;
-
-type FtsRow = {
-    kind: string;
-    itemId: string;
-    bucket: string;
-    title: string;
-    sortKey: number;
-};
-
 // FTS5's query grammar treats " * ( ) : ^ - and similar punctuation as operators, so raw
 // user input cannot be passed through. Replace every non-letter/digit run with a space,
 // phrase-quote each token and append a prefix wildcard: 'q3 budget!' -> '"q3"* "budget"*'.
@@ -80,7 +70,11 @@ export class SearchIndex {
         );
     }
 
-    query(text: string, limit: number, opts?: { buckets?: string[]; excludeBuckets?: string[] }): SearchHit[] {
+    // Returns itemIds in `bm25() ASC, sortKey DESC` order. Display data lives in each domain's
+    // canonical store — callers look the ids up there. `bucket` and `sortKey` stay in the SQL
+    // (filter + order) but never leave the index; the caller already knows the kind from the
+    // search.db file it queried.
+    query(text: string, limit: number, opts?: { buckets?: string[]; excludeBuckets?: string[] }): string[] {
         const match = sanitizeFtsQuery(text);
         if (!match) return [];
 
@@ -101,21 +95,14 @@ export class SearchIndex {
         }
 
         const rows = this.db.all(sql`
-            SELECT c.kind AS kind, c.itemId AS itemId, c.bucket AS bucket, c.title AS title,
-                   c.sortKey AS sortKey
+            SELECT c.itemId AS itemId
             FROM search_fts
             JOIN search_content c ON c.rowid = search_fts.rowid
             WHERE search_fts MATCH ${match}${bucketFilter}
             ORDER BY bm25(search_fts), c.sortKey DESC
             LIMIT ${limit}
-        `) as FtsRow[];
+        `) as { itemId: string }[];
 
-        return rows.map((row) => ({
-            kind: row.kind as SearchKind,
-            itemId: row.itemId,
-            bucket: row.bucket,
-            title: row.title,
-            sortKey: row.sortKey,
-        }));
+        return rows.map((row) => row.itemId);
     }
 }
