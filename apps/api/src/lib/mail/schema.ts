@@ -7,6 +7,8 @@ export const emails = sqliteTable('emails', {
     subject: text('subject').notNull(),
     fromShort: text('fromShort').notNull(),
     fromAddress: text('fromAddress').notNull().default(''),
+    toShort: text('toShort').notNull().default(''),
+    toAddress: text('toAddress').notNull().default(''),
     textShort: text('textShort').notNull(),
     size: integer('size', { mode: 'number' }).notNull().default(0),
     date: integer('date', { mode: 'timestamp' }).notNull(),

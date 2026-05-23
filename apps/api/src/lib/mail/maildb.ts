@@ -16,6 +16,8 @@ type IndexableEmail = {
     subject: string;
     fromShort: string;
     fromAddress: string;
+    toShort: string;
+    toAddress: string;
     textShort: string;
     mailbox: string;
     date: Date;
@@ -33,7 +35,7 @@ function emailToSearchDoc(email: IndexableEmail): SearchDoc {
         itemId: email.id,
         bucket: email.mailbox,
         title: email.subject,
-        body: `${email.fromShort}\n${email.fromAddress}\n${email.textShort}`,
+        body: `${email.fromShort}\n${email.fromAddress}\n${email.toShort}\n${email.toAddress}\n${email.textShort}`,
         sortKey: email.date.getTime(),
     };
 }
@@ -84,6 +86,8 @@ export default class MailDB {
             subject: email.subject?.toString() || '',
             fromShort: String(email.fromShort || ''),
             fromAddress: String(email.fromAddress || ''),
+            toShort: String(email.toShort || ''),
+            toAddress: String(email.toAddress || ''),
             textShort: String(email.textShort || ''),
             date,
             size: email.size,

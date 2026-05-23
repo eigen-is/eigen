@@ -51,7 +51,12 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
         },
         {
             version: 2,
-            up: (db) => db.exec(`ALTER TABLE emails ADD COLUMN fromAddress TEXT NOT NULL DEFAULT '';`),
+            up: (db) =>
+                db.exec(`
+                ALTER TABLE emails ADD COLUMN fromAddress TEXT NOT NULL DEFAULT '';
+                ALTER TABLE emails ADD COLUMN toShort TEXT NOT NULL DEFAULT '';
+                ALTER TABLE emails ADD COLUMN toAddress TEXT NOT NULL DEFAULT '';
+            `),
         },
     ],
 };

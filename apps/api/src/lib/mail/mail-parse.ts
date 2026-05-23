@@ -14,6 +14,9 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
             parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim();
         }
 
+        const toRecipients = parsedMail.to ? (Array.isArray(parsedMail.to) ? parsedMail.to : [parsedMail.to]) : [];
+        const firstTo = toRecipients[0]?.value[0];
+
         return {
             ...parsedMail,
             id: messageId,
@@ -27,6 +30,8 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
             hasAttachments: parsedMail.attachments?.length > 0,
             fromShort: parsedMail.from?.value[0]?.name || parsedMail.from?.value[0]?.address || 'Unknown',
             fromAddress: parsedMail.from?.value[0]?.address || '',
+            toShort: firstTo?.name || firstTo?.address || '',
+            toAddress: firstTo?.address || '',
             textShort: parsedMail.text || '',
         } as Email;
     } catch (error) {
