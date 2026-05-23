@@ -45,13 +45,10 @@ export const driveCommands: Command[] = [
         keywords: ['preview', 'look'],
         icon: Eye,
         baseRank: 16,
-        availability: (ctx) =>
-            ctx.selection?.items.length === 1 &&
-            ctx.selection.items[0].type !== 'folder' &&
-            !!ctx.selectionActions?.onQuickLook,
+        availability: (ctx) => ctx.selection?.items.length === 1 && ctx.selection.items[0].type !== 'folder',
         run: (ctx) => {
             const item = ctx.selection?.items[0];
-            if (item) ctx.selectionActions?.onQuickLook?.(item);
+            if (item) ctx.openPreview(item);
         },
     },
     {

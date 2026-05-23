@@ -99,27 +99,39 @@ export function DriveLayout({
         }
     };
 
-    const handleDeletePaths = (paths: DrivePath[]) => {
-        if (!allowDelete || paths.length === 0) return;
-        deletePathsMutation.mutate(paths, {
-            onSuccess: () => {
-                for (const path of paths) onAfterAction?.('delete', path);
-            },
-        });
-    };
+    // Memoized handlers below: stable identity is required because they're published
+    // to the command palette via usePaletteSelectionActions, and that effect refires
+    // whenever the action object's identity changes. Without memoization, the
+    // useCommandPalette context subscription combined with each re-render of
+    // DriveLayout produced an infinite setState loop.
+    const handleDeletePaths = useCallback(
+        (paths: DrivePath[]) => {
+            if (!allowDelete || paths.length === 0) return;
+            deletePathsMutation.mutate(paths, {
+                onSuccess: () => {
+                    for (const path of paths) onAfterAction?.('delete', path);
+                },
+            });
+        },
+        [allowDelete, deletePathsMutation, onAfterAction],
+    );
 
-    const handleRenamePath = (path: DrivePath) => {
-        if (allowRename) {
-            dialogs.rename.openDialog(path);
-        }
-    };
+    const handleRenamePath = useCallback(
+        (path: DrivePath) => {
+            if (allowRename) dialogs.rename.openDialog(path);
+        },
+        [allowRename, dialogs.rename.openDialog],
+    );
 
-    const handleMovePath = async (path: DrivePath, targetItemId: string) => {
-        if (!allowMove) return;
-        await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
-    };
+    const handleMovePath = useCallback(
+        async (path: DrivePath, targetItemId: string) => {
+            if (!allowMove) return;
+            await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
+        },
+        [allowMove, movePath],
+    );
 
-    const handleDownloadPath = (path: DrivePath) => {
+    const handleDownloadPath = useCallback((path: DrivePath) => {
         if (path?.type === 'file' && path.id) {
             const downloadUrl = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             const a = document.createElement('a');
@@ -129,36 +141,43 @@ export function DriveLayout({
             a.click();
             document.body.removeChild(a);
         }
-    };
+    }, []);
 
     const { exportDocument, isExporting } = useExportDocument();
 
-    const handleExportPath = (path: DrivePath, format: string) =>
-        exportDocument(path.ownerId, path.mountId, path.id, format);
+    const handleExportPath = useCallback(
+        (path: DrivePath, format: string) => exportDocument(path.ownerId, path.mountId, path.id, format),
+        [exportDocument],
+    );
 
-    const handleConvertPath = (path: DrivePath, targetType: 'eigensheets' | 'eigendoc') => {
-        if (!path.parentId) return;
-        convertMutation.mutate(
-            { pathId: path.id, targetType, parentId: path.parentId },
-            {
-                onSuccess: (newPath) => {
-                    openDocument(newPath);
+    const handleConvertPath = useCallback(
+        (path: DrivePath, targetType: 'eigensheets' | 'eigendoc') => {
+            if (!path.parentId) return;
+            convertMutation.mutate(
+                { pathId: path.id, targetType, parentId: path.parentId },
+                {
+                    onSuccess: (newPath) => {
+                        openDocument(newPath);
+                    },
                 },
-            },
-        );
-    };
+            );
+        },
+        [convertMutation],
+    );
 
-    const handleShareClick = (path: DrivePath) => {
-        if (allowShare) {
-            dialogs.share.openDialog(path);
-        }
-    };
+    const handleShareClick = useCallback(
+        (path: DrivePath) => {
+            if (allowShare) dialogs.share.openDialog(path);
+        },
+        [allowShare, dialogs.share.openDialog],
+    );
 
-    const handleEmailCollaborators = (path: DrivePath) => {
-        if (allowShare) {
-            dialogs.email.openDialog(path);
-        }
-    };
+    const handleEmailCollaborators = useCallback(
+        (path: DrivePath) => {
+            if (allowShare) dialogs.email.openDialog(path);
+        },
+        [allowShare, dialogs.email.openDialog],
+    );
 
     const sortedContents = useMemo(() => [...folderContents].sort(sortFn), [folderContents, sortFn]);
 
@@ -169,19 +188,28 @@ export function DriveLayout({
         [onQuickLook, sortedContents],
     );
 
-    // Publish the same DriveItemMenuItems handlers to the palette so its selection-aware
-    // commands (Rename, Share, Delete, Quick preview, Download, Email collaborators) hit
-    // the same dialogs as right-clicking on a row.
+    // Publish the route-local dialog handlers to the palette. Quick preview is
+    // intentionally omitted — it goes via CommandContext.openPreview (a global, from
+    // the PreviewProvider that wraps the whole app), which keeps this object's
+    // identity from churning when an inline onQuickLook prop changes each render.
     const paletteActions = useMemo(
         () => ({
-            onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
             onDownload: handleDownloadPath,
             onRename: allowRename ? handleRenamePath : undefined,
             onShare: allowShare ? handleShareClick : undefined,
             onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
             onDelete: allowDelete ? handleDeletePaths : undefined,
         }),
-        [onQuickLook, wrappedQuickLook, allowRename, allowShare, allowDelete],
+        [
+            handleDownloadPath,
+            handleRenamePath,
+            handleShareClick,
+            handleEmailCollaborators,
+            handleDeletePaths,
+            allowRename,
+            allowShare,
+            allowDelete,
+        ],
     );
     usePaletteSelectionActions(paletteActions);
 

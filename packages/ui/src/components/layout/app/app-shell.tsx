@@ -9,6 +9,7 @@ import type { EigenDocType } from '@workspace/lib/types/drive';
 import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react';
 import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc.tsx';
 import { DriveCreateFolder } from '../drive/drive-create-folder.tsx';
+import { usePreview } from '../preview-provider/preview-provider.tsx';
 import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container.tsx';
 import { CommandPalette } from './command-palette/command-palette.tsx';
 import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts.ts';
@@ -91,6 +92,7 @@ function PaletteRunner() {
     const { selection, selectionActions } = useCommandPalette();
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
+    const { openPreview } = usePreview();
     const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
 
     const toggleTheme = useCallback(() => {
@@ -115,9 +117,10 @@ function PaletteRunner() {
             // pick where to create.
             openDriveCreate: (kind) => setCreateDialog(kind),
             openMailComposeWith,
+            openPreview: (path) => openPreview(path),
             toggleTheme,
         }),
-        [ownerId, currentApp, selection, selectionActions, toggleTheme],
+        [ownerId, currentApp, selection, selectionActions, openPreview, toggleTheme],
     );
 
     const eigenDocKind = createDialog && createDialog !== 'folder' ? createDialog : null;
