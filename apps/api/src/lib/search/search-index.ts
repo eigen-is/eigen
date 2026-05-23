@@ -74,9 +74,16 @@ export class SearchIndex {
     // canonical store — callers look the ids up there. `bucket` and `sortKey` stay in the SQL
     // (filter + order) but never leave the index; the caller already knows the kind from the
     // search.db file it queried.
-    query(text: string, limit: number, opts?: { buckets?: string[]; excludeBuckets?: string[] }): string[] {
+    query(
+        text: string,
+        limit: number,
+        opts?: { buckets?: string[]; excludeBuckets?: string[]; itemIds?: string[] },
+    ): string[] {
         const match = sanitizeFtsQuery(text);
         if (!match) return [];
+        // An empty allowlist would generate a WHERE clause that matches nothing; short-circuit
+        // so callers don't need to special-case it.
+        if (opts?.itemIds && opts.itemIds.length === 0) return [];
 
         let bucketFilter = sql``;
         // When both are provided, `buckets` (allowlist) takes precedence over `excludeBuckets`.
@@ -94,11 +101,20 @@ export class SearchIndex {
             bucketFilter = sql` AND c.bucket NOT IN (${list})`;
         }
 
+        let itemIdFilter = sql``;
+        if (opts?.itemIds?.length) {
+            const list = sql.join(
+                opts.itemIds.map((id) => sql`${id}`),
+                sql`, `,
+            );
+            itemIdFilter = sql` AND c.itemId IN (${list})`;
+        }
+
         const rows = this.db.all(sql`
             SELECT c.itemId AS itemId
             FROM search_fts
             JOIN search_content c ON c.rowid = search_fts.rowid
-            WHERE search_fts MATCH ${match}${bucketFilter}
+            WHERE search_fts MATCH ${match}${bucketFilter}${itemIdFilter}
             ORDER BY bm25(search_fts), c.sortKey DESC, c.itemId DESC
             LIMIT ${limit}
         `) as { itemId: string }[];
