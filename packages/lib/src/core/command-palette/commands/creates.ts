@@ -1,69 +1,58 @@
 import type { Command } from '@workspace/lib/types/command-palette';
-import { Calendar, FileText, FolderPlus, Presentation, StickyNote, Table, Upload, UserPlus } from 'lucide-react';
+import { FileText, FolderPlus, MessageSquare, Presentation, Sheet, SquareKanban } from 'lucide-react';
 
+// "New …" actions hand off to the shared DriveCreateEigenDoc and DriveCreateFolder
+// dialogs mounted in app-shell's PaletteRunner. `openDriveCreate(kind)` toggles them
+// open; the user picks the location via the same DriveLocationPicker that the Drive
+// sidebar's New menu uses. Labels and icons mirror that menu (drive-new-menu.tsx)
+// so the palette and the sidebar stay consistent at a glance.
 export const createCommands: Command[] = [
     {
         id: 'create.doc',
-        title: 'New document',
-        keywords: ['eigendoc', 'create'],
+        title: 'New doc',
+        keywords: ['eigendoc', 'document', 'create'],
         icon: FileText,
         baseRank: 12,
         run: (ctx) => ctx.openDriveCreate('doc'),
     },
     {
-        id: 'create.sheet',
-        title: 'New spreadsheet',
-        keywords: ['eigensheets', 'create'],
-        icon: Table,
+        id: 'create.stickies',
+        title: 'New stickies',
+        keywords: ['eigenstickies', 'kanban', 'create'],
+        icon: SquareKanban,
         baseRank: 12,
-        run: (ctx) => ctx.openDriveCreate('sheet'),
+        run: (ctx) => ctx.openDriveCreate('stickies'),
+    },
+    {
+        id: 'create.chat',
+        title: 'New chat',
+        keywords: ['eigenchat', 'create'],
+        icon: MessageSquare,
+        baseRank: 12,
+        run: (ctx) => ctx.openDriveCreate('chat'),
     },
     {
         id: 'create.slides',
-        title: 'New presentation',
-        keywords: ['eigenslides', 'create', 'deck'],
+        title: 'New slide',
+        keywords: ['eigenslides', 'presentation', 'deck', 'create'],
         icon: Presentation,
         baseRank: 12,
         run: (ctx) => ctx.openDriveCreate('slides'),
     },
     {
-        id: 'create.stickies',
-        title: 'New stickies board',
-        keywords: ['eigenstickies', 'kanban', 'create'],
-        icon: StickyNote,
+        id: 'create.sheets',
+        title: 'New sheet',
+        keywords: ['eigensheets', 'spreadsheet', 'create'],
+        icon: Sheet,
         baseRank: 12,
-        run: (ctx) => ctx.openDriveCreate('stickies'),
-    },
-    {
-        id: 'create.contact',
-        title: 'New contact',
-        keywords: ['person', 'address'],
-        icon: UserPlus,
-        baseRank: 10,
-        run: (ctx) => ctx.openDriveCreate('contact'),
-    },
-    {
-        id: 'create.event',
-        title: 'New event',
-        keywords: ['calendar', 'meeting'],
-        icon: Calendar,
-        baseRank: 10,
-        run: (ctx) => ctx.openDriveCreate('event'),
+        run: (ctx) => ctx.openDriveCreate('sheets'),
     },
     {
         id: 'create.folder',
         title: 'New folder',
-        keywords: ['drive'],
+        keywords: ['drive', 'create'],
         icon: FolderPlus,
         baseRank: 8,
         run: (ctx) => ctx.openDriveCreate('folder'),
-    },
-    {
-        id: 'create.upload',
-        title: 'Upload file',
-        keywords: ['drive'],
-        icon: Upload,
-        baseRank: 8,
-        run: (ctx) => ctx.openDriveCreate('upload'),
     },
 ];

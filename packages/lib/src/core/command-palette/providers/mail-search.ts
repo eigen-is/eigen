@@ -45,7 +45,7 @@ export function useMailSearchResults(
             group: 'mail',
             rank: -i,
             payload: email,
-            run: (ctx) => ctx.navigate(getMailAppUrl(`box/inbox?msg=${email.id}`)),
+            run: (ctx) => ctx.navigate(getMailAppUrl(`box/inbox?mailId=${email.id}`)),
         }));
     }, [data]);
 
