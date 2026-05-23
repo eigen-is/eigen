@@ -99,7 +99,7 @@ export class SearchIndex {
             FROM search_fts
             JOIN search_content c ON c.rowid = search_fts.rowid
             WHERE search_fts MATCH ${match}${bucketFilter}
-            ORDER BY bm25(search_fts), c.sortKey DESC
+            ORDER BY bm25(search_fts), c.sortKey DESC, c.itemId DESC
             LIMIT ${limit}
         `) as { itemId: string }[];
 

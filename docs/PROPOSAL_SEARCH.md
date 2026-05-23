@@ -26,7 +26,7 @@ Requirements:
 
 | Domain   | What's indexed                          | Source already text?                  |
 |----------|-----------------------------------------|---------------------------------------|
-| Mail     | Subject, sender, recipient, short body preview | Yes — in the mail database     |
+| Mail     | Subject, sender, recipients (To and CC), short body preview | Yes — in the mail database     |
 | Drive    | File and folder names                   | Yes — in mount metadata               |
 | Calendar | Event title, description, location      | Yes — in the calendar database        |
 | Chat     | Message content, author                 | Yes — in the per-room database        |
@@ -135,7 +135,10 @@ change. The decision only pins down:
 ranking analysis ([Ranking and cross-kind merging](#ranking-and-cross-kind-merging)) reinforces
 it — per-scope indexes keep each kind's `bm25()` well-calibrated, where one shared index would
 not. The mail slice is implemented against Option B; the Option A pros and cons above are kept
-for the record.
+for the record. **Initial slice ships personal-mail only.** The route uses `requireSelf`, so
+team-owner search is deferred to the slice that adds mail to `TeamHome`. The wire shape is
+forward-compatible — adding a `mountId` source returns a `{ files: ... }` group without breaking
+existing consumers.
 
 ## Index structure
 
@@ -240,7 +243,8 @@ and why neither uses a fused `bm25()` score — is set out in
 groups come straight from the one index.
 
 When the user is browsing a team workspace, the owner is the team, so the same endpoint searches
-the team's data under the standard team-access check.
+the team's data under the standard team-access check. (Phase: deferred — the initial mail slice
+is personal-owner only.)
 
 ### Response shape
 

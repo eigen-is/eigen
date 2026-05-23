@@ -71,6 +71,7 @@ export type EmailSummary = {
     fromAddress: string;
     toShort: string;
     toAddress: string;
+    recipientsAll: string;
     textShort: string;
     date: Date;
     isRead: boolean;
