@@ -121,6 +121,33 @@ describe('SearchIndex', () => {
         index.upsertBatch([mailDoc('m1', 'alpha report', 'body')]);
         expect(index.query('report', 10)).toHaveLength(3);
     });
+
+    test('itemIds allowlist trims results to matching ids only', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'krimsonflux subject', 'body'));
+        index.upsert(mailDoc('m2', 'krimsonflux subject', 'body'));
+        index.upsert(mailDoc('m3', 'krimsonflux subject', 'body'));
+        const ids = index.query('krimsonflux', 10, { itemIds: ['m1', 'm3'] });
+        expect(ids.sort()).toEqual(['m1', 'm3']);
+    });
+
+    test('empty itemIds allowlist returns no results', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'verbosity', 'body'));
+        expect(index.query('verbosity', 10, { itemIds: [] })).toEqual([]);
+    });
+
+    test('itemIds composes with excludeBuckets', async () => {
+        const index = await freshIndex();
+        index.upsert(mailDoc('m1', 'flarmsplork mail', 'body', Date.now(), ''));
+        index.upsert(mailDoc('m2', 'flarmsplork mail', 'body', Date.now(), 'Trash'));
+        index.upsert(mailDoc('m3', 'flarmsplork mail', 'body', Date.now(), ''));
+        const ids = index.query('flarmsplork', 10, {
+            itemIds: ['m1', 'm2'],
+            excludeBuckets: ['Trash'],
+        });
+        expect(ids).toEqual(['m1']);
+    });
 });
 
 const isWindows = process.platform === 'win32';
