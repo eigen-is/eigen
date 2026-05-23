@@ -1,12 +1,5 @@
-export type MailSearchHit = {
-    kind: 'mail';
-    id: string;
-    subject: string;
-    from: string;
-    mailbox: string;
-    date: Date;
-};
+import type { EmailSummary } from './mail';
 
 export type SearchResponse = {
-    mail: MailSearchHit[];
+    mail: EmailSummary[];
 };

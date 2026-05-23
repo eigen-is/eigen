@@ -23,7 +23,6 @@ function mailDoc(id: string, title: string, body: string, sortKey = Date.now(), 
         bucket,
         title,
         body,
-        metadata: { from: 'sender@test.eigen.is' },
         sortKey,
     };
 }
@@ -88,7 +87,7 @@ describe('SearchIndex', () => {
         expect(index.query('report', 3)).toHaveLength(3);
     });
 
-    test('metadata and sortKey round-trip through the index', async () => {
+    test('bucket and sortKey round-trip through the index', async () => {
         const index = await freshIndex();
         index.upsert({
             kind: 'mail',
@@ -96,12 +95,10 @@ describe('SearchIndex', () => {
             bucket: 'Sent',
             title: 'subj',
             body: 'b',
-            metadata: { from: 'alice@test.eigen.is' },
             sortKey: 123,
         });
         const hit = index.query('subj', 10)[0];
         expect(hit.bucket).toBe('Sent');
-        expect(hit.metadata).toEqual({ from: 'alice@test.eigen.is' });
         expect(hit.sortKey).toBe(123);
     });
 

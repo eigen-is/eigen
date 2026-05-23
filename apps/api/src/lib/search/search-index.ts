@@ -10,7 +10,6 @@ export type SearchDoc = {
     bucket: string;
     title: string;
     body: string;
-    metadata: Record<string, unknown>;
     sortKey: number;
 };
 
@@ -21,7 +20,6 @@ type FtsRow = {
     itemId: string;
     bucket: string;
     title: string;
-    metadata: string;
     sortKey: number;
 };
 
@@ -50,7 +48,6 @@ export class SearchIndex {
         if (docs.length === 0) return;
         this.db.transaction((tx) => {
             for (const doc of docs) {
-                const metadata = JSON.stringify(doc.metadata);
                 tx.insert(schema.searchContent)
                     .values({
                         kind: doc.kind,
@@ -58,12 +55,11 @@ export class SearchIndex {
                         bucket: doc.bucket,
                         title: doc.title,
                         body: doc.body,
-                        metadata,
                         sortKey: doc.sortKey,
                     })
                     .onConflictDoUpdate({
                         target: [schema.searchContent.kind, schema.searchContent.itemId],
-                        set: { bucket: doc.bucket, title: doc.title, body: doc.body, metadata, sortKey: doc.sortKey },
+                        set: { bucket: doc.bucket, title: doc.title, body: doc.body, sortKey: doc.sortKey },
                     })
                     .run();
             }
@@ -106,7 +102,7 @@ export class SearchIndex {
 
         const rows = this.db.all(sql`
             SELECT c.kind AS kind, c.itemId AS itemId, c.bucket AS bucket, c.title AS title,
-                   c.metadata AS metadata, c.sortKey AS sortKey
+                   c.sortKey AS sortKey
             FROM search_fts
             JOIN search_content c ON c.rowid = search_fts.rowid
             WHERE search_fts MATCH ${match}${bucketFilter}
@@ -119,7 +115,6 @@ export class SearchIndex {
             itemId: row.itemId,
             bucket: row.bucket,
             title: row.title,
-            metadata: JSON.parse(row.metadata) as Record<string, unknown>,
             sortKey: row.sortKey,
         }));
     }

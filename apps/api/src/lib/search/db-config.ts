@@ -17,7 +17,6 @@ export const SEARCH_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     bucket TEXT NOT NULL DEFAULT '', -- empty string is a valid value (e.g. mail's inbox), not "unset"
                     title TEXT NOT NULL DEFAULT '',
                     body TEXT NOT NULL DEFAULT '',
-                    metadata TEXT NOT NULL DEFAULT '{}',
                     sortKey INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_search_kind_item

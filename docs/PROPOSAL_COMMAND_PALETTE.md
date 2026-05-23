@@ -203,18 +203,22 @@ Results are a **discriminated union**, one variant per kind — the same discipl
 | `event`      | search wire   | A calendar event hit                                        |
 | `chat`       | search wire   | A chat message hit (once chat content is indexed)           |
 
-Each kind carries a thin **presentation layer** added on the frontend — a stable id, a group, a
-rank score, and an icon. Presentation never crosses the wire: an icon is a React component
-reference and can't be serialised. The search endpoint emits kind-specific *wire* payloads
-(defined once in the shared search types); the palette layers presentation on top before ranking.
+The wire is the **canonical domain type per kind** (`EmailSummary` for mail, `DrivePath` for
+files, …). The palette adds the **thin presentation layer** on top: the `kind` discriminator
+(the wire groups by kind; the palette flattens using it), the result group, a rank score, and
+an icon. Non-serialisable presentation (icons are React component references; the rank score
+belongs to the palette) never crosses the wire. Per-app in-app search (Mail searching itself,
+Drive searching itself) can reuse the same endpoint and render its own row components against
+the canonical type.
 
 Why a union rather than one shape with optional fields: callers (per-kind rows, ranking,
 sub-actions) switch on `kind` and the compiler enforces exhaustiveness. The price is one row
 component per kind; the payoff is no casts and no runtime shape guards.
 
-Why split wire types from frontend types: the search endpoint stays portable to non-palette
-consumers (future per-app search pages), and the non-serialisable presentation bits stay off
-the wire.
+The split is between the canonical domain type on the wire and the non-serialisable presentation
+on the frontend. The endpoint stays portable to non-palette consumers (future per-app search
+pages, per-app in-app search); the presentation layer (icons, rank scores) stays off the wire
+and on the frontend where it belongs.
 
 ### Providers
 

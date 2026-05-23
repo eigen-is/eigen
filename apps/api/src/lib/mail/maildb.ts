@@ -1,6 +1,5 @@
 import type { EmailSummary } from '@workspace/lib/types/mail';
-import type { MailSearchHit } from '@workspace/lib/types/search';
-import { and, count, eq, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -25,22 +24,16 @@ type IndexableEmail = {
 // Mailboxes excluded from default mail search — users can still search them explicitly.
 const SEARCH_EXCLUDED_MAILBOXES = ['Trash', 'Junk'];
 
-// The mail-specific display fields carried in a search hit's `metadata`. emailToSearchDoc
-// writes this shape; searchMail reads it back — one named type keeps the two seams in sync.
-type MailSearchMetadata = { from: string };
-
 // Projection of an email into a generic search document. Sender and body are joined into
-// the indexed `body` so both are searchable; `metadata` carries display-only fields.
+// the indexed `body` so both are searchable.
 // `bucket` holds the mailbox so the search index can filter by it without knowing mail concepts.
 function emailToSearchDoc(email: IndexableEmail): SearchDoc {
-    const metadata: MailSearchMetadata = { from: email.fromShort };
     return {
         kind: 'mail',
         itemId: email.id,
         bucket: email.mailbox,
         title: email.subject,
         body: `${email.fromShort}\n${email.fromAddress}\n${email.textShort}`,
-        metadata,
         sortKey: email.date.getTime(),
     };
 }
@@ -193,19 +186,15 @@ export default class MailDB {
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
     }
 
-    searchMail(query: string, limit: number, mailboxes?: string[]): MailSearchHit[] {
-        const opts = mailboxes?.length ? { buckets: mailboxes } : { excludeBuckets: SEARCH_EXCLUDED_MAILBOXES };
-        return this.searchIndex.query(query, limit, opts).map((hit) => {
-            const meta = hit.metadata as MailSearchMetadata;
-            return {
-                kind: 'mail' as const,
-                id: hit.itemId,
-                subject: hit.title,
-                from: meta.from,
-                mailbox: hit.bucket,
-                date: new Date(hit.sortKey),
-            };
-        });
+    searchMail(query: string, limit: number, mailboxes?: string[]): EmailSummary[] {
+        const opts =
+            mailboxes && mailboxes.length > 0 ? { buckets: mailboxes } : { excludeBuckets: SEARCH_EXCLUDED_MAILBOXES };
+        const hits = this.searchIndex.query(query, limit, opts);
+        if (hits.length === 0) return [];
+        const ids = hits.map((h) => h.itemId);
+        const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        return hits.map((h) => byId.get(h.itemId)).filter((r): r is NonNullable<typeof r> => r !== undefined);
     }
 
     // Idempotent full re-index of every email. Runs in transactional batches and yields the
