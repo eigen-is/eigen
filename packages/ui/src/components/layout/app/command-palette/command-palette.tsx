@@ -1,11 +1,10 @@
-import { getMailAppUrl } from '@workspace/lib/api';
 import { useCommandPalette, useCommandResults } from '@workspace/lib/command-palette';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandList } from '@workspace/ui/components/command';
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import type { KeyboardEvent } from 'react';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { CommandFooter } from './command-footer';
 import { CommandRowAction } from './command-row-action';
 import { CommandRowContact } from './command-row-contact';
@@ -45,58 +44,26 @@ export function CommandPalette({ ctx }: Props) {
         }
     }, [open, setInput, setScope]);
 
-    const renderResult = useMemo(
-        () => (r: PaletteResult) => {
-            switch (r.kind) {
-                case 'action':
-                    return (
-                        <CommandRowAction
-                            key={r.id}
-                            result={r}
-                            onSelect={() => {
-                                r.run(ctx);
-                                setOpen(false);
-                            }}
-                        />
-                    );
-                case 'smart':
-                    return (
-                        <CommandRowSmart
-                            key={r.id}
-                            result={r}
-                            onSelect={() => {
-                                r.run(ctx);
-                                setOpen(false);
-                            }}
-                        />
-                    );
-                case 'contact':
-                    return (
-                        <CommandRowContact
-                            key={r.id}
-                            result={r}
-                            onSelect={() => {
-                                const addr = r.payload.email[0];
-                                if (addr) ctx.openMailComposeWith({ to: addr });
-                                setOpen(false);
-                            }}
-                        />
-                    );
-                case 'mail':
-                    return (
-                        <CommandRowMail
-                            key={r.id}
-                            result={r}
-                            onSelect={() => {
-                                ctx.navigate(getMailAppUrl(`box/inbox?msg=${r.payload.id}`));
-                                setOpen(false);
-                            }}
-                        />
-                    );
+    const renderResult = (r: PaletteResult) => {
+        const onSelect = () => {
+            r.run(ctx);
+            setOpen(false);
+        };
+        switch (r.kind) {
+            case 'action':
+                return <CommandRowAction key={r.id} result={r} onSelect={onSelect} />;
+            case 'smart':
+                return <CommandRowSmart key={r.id} result={r} onSelect={onSelect} />;
+            case 'contact':
+                return <CommandRowContact key={r.id} result={r} onSelect={onSelect} />;
+            case 'mail':
+                return <CommandRowMail key={r.id} result={r} onSelect={onSelect} />;
+            default: {
+                const _exhaustive: never = r;
+                return _exhaustive;
             }
-        },
-        [ctx, setOpen],
-    );
+        }
+    };
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>

@@ -25,6 +25,7 @@ function mailResult(id: string, title: string, rank: number): PaletteResult {
         group: 'mail',
         rank,
         payload: {} as EmailSummary,
+        run: () => {},
     };
 }
 
