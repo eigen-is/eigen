@@ -82,7 +82,6 @@ export type PaletteResult =
           kind: 'contact';
           id: string;
           title: string;
-          subtitle?: string;
           icon: LucideIcon;
           group: ResultGroup;
           rank: number;
@@ -93,7 +92,6 @@ export type PaletteResult =
           kind: 'mail';
           id: string;
           title: string;
-          subtitle?: string;
           icon: LucideIcon;
           group: ResultGroup;
           rank: number;

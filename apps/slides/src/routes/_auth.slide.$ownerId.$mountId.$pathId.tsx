@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useCollabDocumentInfo } from '@workspace/lib/collab';
-import { usePaletteSelection } from '@workspace/lib/command-palette';
+import { usePaletteDocSelection } from '@workspace/lib/command-palette';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
@@ -39,11 +39,8 @@ function SlideView() {
     );
 
     // Publish the open document as a 1-item palette selection so item-aware commands
-    // (Mail to…, Copy link, …) surface from anywhere. Memoized to keep the wrapper's
-    // identity stable across re-renders (avoids a publication-effect → context-update
-    // → re-render loop).
-    const paletteSelection = useMemo(() => (path ? { items: [path] } : null), [path]);
-    usePaletteSelection(paletteSelection);
+    // (Mail to…, Copy link, …) surface from anywhere.
+    usePaletteDocSelection(path);
 
     const canWrite = docInfo?.canWrite ?? false;
     const mediaFolderId = docInfo?.folderContents?.find((f) => f.name === 'media')?.id ?? null;

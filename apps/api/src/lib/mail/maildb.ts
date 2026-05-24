@@ -244,6 +244,9 @@ export default class MailDB {
     // by the stale snapshot the next batch would otherwise carry. Rows deleted mid-backfill
     // simply drop out of the per-batch SELECT.
     async backfillSearchIndex(): Promise<void> {
+        // 250 trades SQLite transaction overhead (one upsertBatch = one transaction)
+        // against per-batch latency. Not benchmarked; revisit if a huge mailbox shows
+        // noticeable read stalls during the one-time backfill.
         const BATCH_SIZE = 250;
         const ids = this.db
             .select({ id: schema.emails.id })
