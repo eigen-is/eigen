@@ -1,47 +1,35 @@
 import { getContactsAppUrl } from '@workspace/lib/api';
 import type { CommandContext, PaletteResult } from '@workspace/lib/types/command-palette';
-import type { Contact } from '@workspace/lib/types/contact';
+import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { User } from 'lucide-react';
 import { useMemo } from 'react';
-import { useContacts } from '../../contacts/hooks/use-contacts';
+import { useContactSuggestions } from '../../contacts';
 
-// Canonical Contact fields (per packages/lib/src/types/contact.ts):
-//   { id, firstName, lastName, email: string[], phone: string[], ... }
-// — useContacts() takes no args; it resolves ownerId from useAuth() internally.
-
-function contactName(c: Contact): string {
-    const full = `${c.firstName} ${c.lastName}`.trim();
-    return full || c.email[0] || 'Unknown contact';
-}
-
+// Reuse the same suggestion hook the mail/calendar/drive-share autosuggest UIs
+// use — personal contacts + team members, merged and deduped. Without this the
+// palette would silently miss team members typing their name.
 export function useContactResults(_ctx: CommandContext, input: string): PaletteResult[] {
-    const { data: contacts } = useContacts();
+    const { suggestions } = useContactSuggestions(input);
 
-    return useMemo(() => {
-        if (input.trim().length === 0) return [];
-        const needle = input.trim().toLowerCase();
-        const matches = (contacts ?? []).filter(
-            (c) =>
-                contactName(c).toLowerCase().includes(needle) || c.email.some((e) => e.toLowerCase().includes(needle)),
-        );
-        return matches.slice(0, 6).map((c, i) => contactToResult(c, -i));
-    }, [contacts, input]);
+    return useMemo(() => suggestions.slice(0, 6).map((s, i) => suggestionToResult(s, -i)), [suggestions]);
 }
 
-function contactToResult(contact: Contact, rank: number): PaletteResult {
-    const primaryEmail = contact.email[0];
+function suggestionToResult(s: ContactSuggestion, rank: number): PaletteResult {
     return {
         kind: 'contact',
-        id: `contact.${contact.id}`,
-        title: contactName(contact),
-        subtitle: primaryEmail,
+        id: `contact.${s.id}`,
+        title: s.displayName,
+        subtitle: s.email,
         icon: User,
         group: 'contacts',
         rank,
-        payload: contact,
-        // Opening a contact result jumps to the contacts app's "All contacts" book
-        // with the contact pre-selected — same URL the contacts app uses for its own
-        // row clicks (apps/contacts/src/routes/_auth.$filterType.$filterId.tsx).
-        run: (ctx) => ctx.navigate(getContactsAppUrl(`book/all?contactId=${contact.id}`)),
+        payload: s,
+        // Personal contacts open in the contacts app's All view by id (same URL the
+        // app uses for its own row clicks). Team members aren't in the personal book,
+        // so jumping to compose with their email is the canonical action.
+        run: (ctx) =>
+            s.kind === 'personal'
+                ? ctx.navigate(getContactsAppUrl(`book/all?contactId=${s.id}`))
+                : ctx.openMailComposeWith({ to: s.email }),
     };
 }
