@@ -1,5 +1,6 @@
 import type { Command } from '@workspace/lib/types/command-palette';
 import { Sun } from 'lucide-react';
+import { BASE_RANKS } from './base-ranks';
 
 export const viewCommands: Command[] = [
     {
@@ -7,7 +8,7 @@ export const viewCommands: Command[] = [
         title: 'Toggle theme',
         keywords: ['dark', 'light'],
         icon: Sun,
-        baseRank: 4,
+        baseRank: BASE_RANKS.VIEW_UTILITY,
         run: (ctx) => ctx.toggleTheme(),
     },
 ];

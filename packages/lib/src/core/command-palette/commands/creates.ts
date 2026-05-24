@@ -2,6 +2,7 @@ import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
 import type { Command } from '@workspace/lib/types/command-palette';
 import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { FolderPlus } from 'lucide-react';
+import { BASE_RANKS } from './base-ranks';
 
 // "New …" actions hand off to the shared DriveCreateEigenDoc / DriveCreateFolder
 // dialogs mounted in app-shell's PaletteRunner — the same dialogs the Drive sidebar's
@@ -13,7 +14,7 @@ export const createCommands: Command[] = [
         title: `New ${info.label.toLowerCase()}`,
         keywords: [`eigen${info.type}`, 'create'],
         icon: EIGEN_DOC_ICONS[info.type],
-        baseRank: 12,
+        baseRank: BASE_RANKS.CREATE_EIGENDOC,
         run: (ctx) => ctx.openDriveCreate(info.type),
     })),
     {
@@ -21,7 +22,7 @@ export const createCommands: Command[] = [
         title: 'New folder',
         keywords: ['drive', 'create'],
         icon: FolderPlus,
-        baseRank: 8,
+        baseRank: BASE_RANKS.CREATE_FOLDER,
         run: (ctx) => ctx.openDriveCreate('folder'),
     },
 ];
