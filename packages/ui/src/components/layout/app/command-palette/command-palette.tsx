@@ -68,11 +68,18 @@ export function CommandPalette({ ctx }: Props) {
         }
     };
 
+    // Reset the input/scope when the palette OPENS, not when it closes. Resetting on
+    // close means the dialog re-renders with empty input during its close animation —
+    // for an Enter-driven action that navigates (window.location.href), the user sees
+    // the "Suggested" empty-input flash before the page swaps. Clearing on open keeps
+    // the typed query visible until the dialog actually unmounts.
+    const wasOpenRef = useRef(false);
     useEffect(() => {
-        if (!open) {
+        if (open && !wasOpenRef.current) {
             setInput('');
             setScope(undefined);
         }
+        wasOpenRef.current = open;
     }, [open, setInput, setScope]);
 
     const renderResult = (r: PaletteResult) => {
@@ -108,15 +115,17 @@ export function CommandPalette({ ctx }: Props) {
                     onValueChange={setSelectedValue}
                     className={cn('rounded-md')}
                 >
-                    <div className="flex items-center gap-2 px-3 pt-2">
-                        {scope && <span className="rounded bg-muted px-2 py-0.5 text-xs">{SCOPE_CHIPS[scope]}</span>}
-                        <CommandInput
-                            value={input}
-                            onValueChange={setInput}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Search and jump anywhere…"
-                        />
-                    </div>
+                    {scope && (
+                        <div className="flex items-center gap-2 px-3 pt-2">
+                            <span className="rounded bg-muted px-2 py-0.5 text-xs">{SCOPE_CHIPS[scope]}</span>
+                        </div>
+                    )}
+                    <CommandInput
+                        value={input}
+                        onValueChange={setInput}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Search and jump anywhere…"
+                    />
                     {/* Fixed height keeps the dialog from jumping as the result set shrinks/grows. */}
                     <CommandList ref={listRef} className="h-[420px] max-h-[420px]">
                         <CommandEmpty>No results.</CommandEmpty>
