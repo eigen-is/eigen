@@ -63,13 +63,13 @@ export function useSmartResults(ctx: CommandContext, input: string): PaletteResu
         // so the contact card itself still claims the Top Hit via structural match; this
         // row sits in the Suggestions section directly under it. Skip when the typed
         // input is already the suggestion's email (the deterministic path covers it).
+        // No subtitle — the title already contains the email, the name was redundant.
         const top = suggestions[0];
         if (top && parsed?.value !== top.email) {
             out.push({
                 kind: 'smart',
                 id: `smart.mail-to-contact-${top.id}`,
                 title: `Send mail to ${top.email}`,
-                subtitle: top.displayName,
                 icon: Mail,
                 group: 'smart',
                 rank: 500,
