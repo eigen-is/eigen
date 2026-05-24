@@ -1,5 +1,5 @@
 import type { CommandContext, Sections } from '@workspace/lib/types/command-palette';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { SUGGESTED_COMMAND_IDS } from '../commands';
 import { buildSections } from '../engine';
 import { parseQuery } from '../parse-query';
@@ -17,15 +17,17 @@ export function useCommandResults(ctx: CommandContext, input: string): Sections 
     const smart = useSmartResults(ctx, input); // smart sees raw input — parses for shape
     const mail = useMailSearchResults(ctx, input);
 
+    // While a mail search is in flight, keep rendering the last settled merge so the
+    // palette doesn't collapse on every keystroke. The previous merge is "stale" in
+    // the same sense that any debounced UI is — the user sees a frozen good state
+    // for a few hundred milliseconds, then the new merge replaces it in one step.
+    // Writing to a ref inside useMemo is the React docs' recommended cache pattern
+    // (see "You Might Not Need an Effect" → caching expensive calculations).
+    const lastSettledRef = useRef<Sections>(EMPTY_SECTIONS);
+
     return useMemo(() => {
-        // While a mail search is in flight, hold back the entire result set. The
-        // alternative — showing actions/contacts immediately and letting mail join
-        // later — visibly reorders the palette and made it feel unstable. With this
-        // gate the user sees a single coherent merge once the search settles.
-        // Scope-blocked queries (e.g. ">actions", "@alice") never enter pending, so
-        // they render immediately as before.
-        if (mail.isPending) return EMPTY_SECTIONS;
-        return buildSections({
+        if (mail.isPending) return lastSettledRef.current;
+        const next = buildSections({
             action,
             contact,
             smart,
@@ -34,5 +36,7 @@ export function useCommandResults(ctx: CommandContext, input: string): Sections 
             scope: parsed.scope,
             suggestedCommandIds: SUGGESTED_COMMAND_IDS,
         });
+        lastSettledRef.current = next;
+        return next;
     }, [action, contact, smart, mail.results, mail.isPending, input, parsed.scope]);
 }
