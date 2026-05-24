@@ -39,7 +39,6 @@ export function ChatPlayerSuggest({
                 id: m.email,
                 displayName: m.displayName,
                 email: m.email,
-                allEmails: [m.email],
             }));
 
         if (!includeContacts) {

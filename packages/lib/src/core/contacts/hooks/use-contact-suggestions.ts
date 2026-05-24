@@ -8,20 +8,28 @@ import { useContacts } from './use-contacts';
 // the user can reach." Consumed by ContactAutosuggest (mail/calendar/drive-share),
 // ChatPlayerSuggest, and the command palette providers. Team members are merged in
 // first (higher priority), personal contacts second; dedup is by lowercased email.
-export function useContactSuggestions(query: string, onlyInternalMails: boolean = false, excludeEmails: string[] = []) {
+export function useContactSuggestions(
+    query: string,
+    onlyInternalMails: boolean = false,
+    excludeEmails: string[] = [],
+): { suggestions: ContactSuggestion[]; isLoading: boolean } {
     const { data: contacts, isLoading: contactsLoading } = useContacts();
     const { data: myTeams } = useMyTeams();
     const { data: config } = usePublicConfig();
     // 'Internal' suggestions are scoped by the mail domain — same suffix the user's address has.
     const domain = config?.mailDomain;
 
-    // Collect all unique team members across teams, deduped by email
+    // Walk every team-member exactly once, deduped by lowercased email. The first
+    // team a member is found in wins their teamId — sufficient for palette nav, which
+    // just needs one valid team/<teamId>?contactId=<email> URL.
     const teamMembers = useMemo(() => {
-        if (!myTeams) return new Map<string, { email: string; name: string }>();
-        const members = new Map<string, { email: string; name: string }>();
+        if (!myTeams) return new Map<string, { email: string; name: string; teamId: string }>();
+        const members = new Map<string, { email: string; name: string; teamId: string }>();
         for (const team of myTeams) {
             for (const member of team.members) {
-                members.set(member.email.toLowerCase(), member);
+                const key = member.email.toLowerCase();
+                if (members.has(key)) continue;
+                members.set(key, { email: member.email, name: member.name, teamId: team.id });
             }
         }
         return members;
@@ -50,7 +58,7 @@ export function useContactSuggestions(query: string, onlyInternalMails: boolean 
                 id: member.email,
                 displayName: member.name || member.email,
                 email: member.email,
-                allEmails: [member.email],
+                teamId: member.teamId,
             });
         }
 
@@ -77,7 +85,6 @@ export function useContactSuggestions(query: string, onlyInternalMails: boolean 
                     id: contact.id,
                     displayName: `${contact.firstName} ${contact.lastName}`,
                     email: bestEmail,
-                    allEmails: contact.email,
                 });
             }
         }

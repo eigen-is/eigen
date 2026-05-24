@@ -24,13 +24,13 @@ export type Contact = {
 
 // Projection produced by useContactSuggestions: the de-duped union of personal
 // contacts + team members the autosuggest UIs (mail/calendar/chat/drive-share) and
-// the command palette all consume. `kind` lets callers branch (e.g., palette opens
-// the contacts app for personal entries and compose for team members, which don't
-// have a personal contact id).
+// the command palette all consume. `kind` + `teamId` let the palette navigate
+// team members to their team-scoped detail page (book/all doesn't index them).
 export type ContactSuggestion = {
     kind: 'personal' | 'team';
     id: string;
     displayName: string;
     email: string;
-    allEmails: string[];
+    // Only set for kind: 'team' — the team the member was matched from.
+    teamId?: string;
 };
