@@ -3,6 +3,7 @@ import { copyToClipboard } from '@workspace/lib/clipboard';
 import type { Command, CommandContext } from '@workspace/lib/types/command-palette';
 import { isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Download, ExternalLink, Eye, Link, Mail, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
+import { BASE_RANKS } from './base-ranks';
 
 // Selection-aware commands. They surface only when the palette has a non-empty
 // selection (published by DriveList for multi-select tables, or by each eigendoc
@@ -26,7 +27,7 @@ export const driveCommands: Command[] = [
         title: 'Open',
         keywords: ['open'],
         icon: ExternalLink,
-        baseRank: 18,
+        baseRank: BASE_RANKS.DRIVE_OPEN,
         group: 'selection',
         availability: (ctx) => ctx.selection?.items.length === 1 && isOpenable(ctx.selection.items[0]),
         dynamicTitle: (ctx) => `Open ${selectionLabel(ctx)}`,
@@ -40,7 +41,7 @@ export const driveCommands: Command[] = [
         title: 'Open in new tab',
         keywords: ['open', 'tab'],
         icon: ExternalLink,
-        baseRank: 17,
+        baseRank: BASE_RANKS.DRIVE_OPEN_NEW_TAB,
         group: 'selection',
         availability: (ctx) => {
             const item = ctx.selection?.items[0];
@@ -59,7 +60,7 @@ export const driveCommands: Command[] = [
         title: 'Quick preview',
         keywords: ['preview', 'look'],
         icon: Eye,
-        baseRank: 16,
+        baseRank: BASE_RANKS.DRIVE_QUICK_PREVIEW,
         group: 'selection',
         availability: (ctx) => ctx.selection?.items.length === 1 && ctx.selection.items[0].type !== 'folder',
         dynamicTitle: (ctx) => `Preview ${selectionLabel(ctx)}`,
@@ -73,7 +74,7 @@ export const driveCommands: Command[] = [
         title: 'Mail to…',
         keywords: ['send', 'attach', 'compose'],
         icon: Mail,
-        baseRank: 15,
+        baseRank: BASE_RANKS.DRIVE_MAIL_TO,
         group: 'selection',
         availability: (ctx) => (ctx.selection?.items.length ?? 0) > 0,
         dynamicTitle: (ctx) => `Mail ${selectionLabel(ctx)}`,
@@ -87,7 +88,7 @@ export const driveCommands: Command[] = [
         title: 'Copy link',
         keywords: ['url', 'share'],
         icon: Link,
-        baseRank: 14,
+        baseRank: BASE_RANKS.DRIVE_COPY_LINK,
         group: 'selection',
         availability: (ctx) => ctx.selection?.items.length === 1,
         dynamicTitle: (ctx) => `Copy link to ${selectionLabel(ctx)}`,
@@ -101,7 +102,7 @@ export const driveCommands: Command[] = [
         title: 'Download',
         keywords: ['save'],
         icon: Download,
-        baseRank: 13,
+        baseRank: BASE_RANKS.DRIVE_DOWNLOAD,
         group: 'selection',
         availability: (ctx) =>
             ctx.selection?.items.length === 1 &&
@@ -118,7 +119,7 @@ export const driveCommands: Command[] = [
         title: 'Rename',
         keywords: ['name'],
         icon: Pencil,
-        baseRank: 12,
+        baseRank: BASE_RANKS.DRIVE_RENAME,
         group: 'selection',
         availability: (ctx) => ctx.selection?.items.length === 1 && !!ctx.selectionActions?.onRename,
         dynamicTitle: (ctx) => `Rename ${selectionLabel(ctx)}`,
@@ -132,7 +133,7 @@ export const driveCommands: Command[] = [
         title: 'Share',
         keywords: ['access', 'permissions'],
         icon: UserRoundPlus,
-        baseRank: 11,
+        baseRank: BASE_RANKS.DRIVE_SHARE,
         group: 'selection',
         availability: (ctx) => ctx.selection?.items.length === 1 && !!ctx.selectionActions?.onShare,
         dynamicTitle: (ctx) => `Share ${selectionLabel(ctx)}`,
@@ -146,7 +147,7 @@ export const driveCommands: Command[] = [
         title: 'Email collaborators',
         keywords: ['notify'],
         icon: Mail,
-        baseRank: 10,
+        baseRank: BASE_RANKS.DRIVE_EMAIL_COLLABORATORS,
         group: 'selection',
         availability: (ctx) => ctx.selection?.items.length === 1 && !!ctx.selectionActions?.onEmailCollaborators,
         dynamicTitle: (ctx) => `Email collaborators for ${selectionLabel(ctx)}`,
@@ -160,7 +161,7 @@ export const driveCommands: Command[] = [
         title: 'Move to trash',
         keywords: ['delete', 'remove'],
         icon: Trash2,
-        baseRank: 9,
+        baseRank: BASE_RANKS.DRIVE_DELETE,
         group: 'selection',
         availability: (ctx) => (ctx.selection?.items.length ?? 0) > 0 && !!ctx.selectionActions?.onDelete,
         dynamicTitle: (ctx) => `Move ${selectionLabel(ctx)} to trash`,
