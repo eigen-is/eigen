@@ -53,7 +53,6 @@ describe('buildSections', () => {
             mail: mails,
             input: 'foo',
             scope: undefined,
-            isMailPending: false,
         });
         expect(sections.groups.find((g) => g.id === 'actions')?.items.length).toBe(6);
         expect(sections.groups.find((g) => g.id === 'mail')?.items.length).toBe(6);
@@ -67,12 +66,11 @@ describe('buildSections', () => {
             mail: [],
             input: 'foo',
             scope: undefined,
-            isMailPending: false,
         });
         expect(sections.groups.map((g) => g.id)).toEqual(['actions']);
     });
 
-    test('a deterministic smart parse claims the Top Hit even while mail is pending', () => {
+    test('a deterministic smart parse claims the Top Hit', () => {
         const det = smart('smart.mail-to', 'Mail to alice@example.com', { deterministic: true });
         const sections = buildSections({
             action: [],
@@ -81,25 +79,11 @@ describe('buildSections', () => {
             mail: [],
             input: 'alice@example.com',
             scope: undefined,
-            isMailPending: true,
         });
         expect(sections.topHit?.id).toBe('smart.mail-to');
     });
 
-    test('no Top Hit while mail is pending without a deterministic smart parse', () => {
-        const sections = buildSections({
-            action: [action('a1', 'A1', 0)],
-            contact: [],
-            smart: [],
-            mail: [],
-            input: 'something',
-            scope: undefined,
-            isMailPending: true,
-        });
-        expect(sections.topHit).toBeUndefined();
-    });
-
-    test('an exact title match becomes the Top Hit when mail has resolved', () => {
+    test('an exact title match becomes the Top Hit', () => {
         const exact = action('a.exact', 'New document', 0);
         const sections = buildSections({
             action: [exact],
@@ -108,7 +92,6 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'something else', 0)],
             input: 'new document',
             scope: undefined,
-            isMailPending: false,
         });
         expect(sections.topHit?.id).toBe('a.exact');
     });
@@ -121,7 +104,6 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'thing', 0)],
             input: 'xyz',
             scope: undefined,
-            isMailPending: false,
         });
         expect(sections.topHit).toBeUndefined();
     });
@@ -134,7 +116,6 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             input: 'foo',
             scope: 'mail',
-            isMailPending: false,
         });
         expect(sections.groups.map((g) => g.id)).toEqual(['mail']);
     });
@@ -147,7 +128,6 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             input: 'foo',
             scope: 'actions',
-            isMailPending: false,
         });
         expect(sections.groups.map((g) => g.id)).toEqual(['actions']);
     });
@@ -164,7 +144,6 @@ describe('buildSections', () => {
             mail: [],
             input: '',
             scope: undefined,
-            isMailPending: false,
             suggestedCommandIds: ['nav.mail'],
         });
         expect(sections.groups.map((g) => g.id)).toEqual(['suggested']);
