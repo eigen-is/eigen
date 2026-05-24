@@ -1,5 +1,42 @@
 # Search Index
 
+> **Status — v1 (mail) shipped on `feat/search-index-mail`.** Code in
+> `apps/api/src/lib/search/search-index.ts` (the generic FTS5 service, kind-agnostic) +
+> `apps/api/src/lib/mail/maildb.ts` (mail-specific indexing on write) +
+> `apps/api/src/routes/search.ts` (the `/search/:ownerId` endpoint) +
+> `packages/lib/src/core/search/` (FE hook + keys + invalidate).
+>
+> **Shipped:**
+> - `SearchIndex` SQLite FTS5 service: kind-agnostic columns (`itemId`, `bucket`, `title`, `body`,
+>   `sortKey`), `query(text, limit, opts)` with `buckets` / `excludeBuckets` / `itemIds` allowlist
+>   composition + empty-allowlist short-circuit, `bm25` + `sortKey` ranking, sanitised FTS query
+>   grammar.
+> - Mail indexing: `MailDB.addEmail` / `updateDraftContent` index on write; index is best-effort
+>   (failures never break mail delivery). Body row joins from/to/recipientsAll/textShort so all four
+>   surfaces match.
+> - `searchMail` filter-first: `from` / `to` filters narrow the candidate id set via mail.db's own
+>   indexed columns (`fromShort` / `fromAddress` / `recipientsAll`), then the FTS index ranks
+>   within that subset. Exact recall at any selectivity.
+> - Default mailbox exclusion (`Trash`, `Junk`) applied whether or not a structured filter is
+>   active.
+> - Route: `GET /search/:ownerId?q&sources&mailbox&from&to&limit` returning canonical
+>   `EmailSummary[]`. `from` / `to` capped at 256 chars.
+> - Frontend: `useSearch` hook with `searchKeys` query keys (includes `ownerId`), 30s `staleTime`,
+>   `enabled` guard, AbortSignal threaded through Eden Treaty.
+> - SSE: `invalidateSearchOwner` wired into every mail mutation event (`MAIL_RECEIVED`,
+>   `MAIL_DELETED`, `MAIL_MOVED`, `MAIL_READ_CHANGED`, `MAIL_FLAGS_CHANGED`,
+>   `MAIL_DRAFT_UPDATED`, `MAIL_SENT`).
+> - Test coverage: 41 tests across the SearchIndex unit, Maildir integration, and endpoint blocks —
+>   including `from` / `to` combinations, Trash exclusion, recipient + CC search, normalisation.
+>
+> **Index location:** **one index per Home** (`.eigen-storage/mail/search.db`), matching this
+> proposal's eventual "Option A" recommendation. Schema lives in
+> `apps/api/src/lib/search/db-config.ts`, reusable across kinds. Currently mail-only.
+>
+> **Deferred (post-v1):** Drive indexing, calendar indexing, chat indexing; pre-shared index for
+> cross-Home search; vector / semantic search. The shared schema means each new kind is an
+> additive write-path + a route source rather than a schema change.
+
 > **TLDR**: The **backend search infrastructure** consumed by the
 > [command palette](PROPOSAL_COMMAND_PALETTE.md). SQLite FTS5 full-text search, **one index per
 > scope** (per mount, plus mail and calendar). Each domain indexes its text on write; the

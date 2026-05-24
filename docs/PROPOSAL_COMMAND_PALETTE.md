@@ -1,5 +1,34 @@
 # Command Palette (⌘K)
 
+> **Status — v1 shipped on `feat/search-index-mail`.** Code in `packages/lib/src/core/command-palette/`
+> + `packages/ui/src/components/layout/app/command-palette/`, mounted by `AppShell.PaletteRunner`.
+>
+> **Shipped:** `Mod+K` dialog with the typed result model (`action` / `smart` / `contact` / `mail`),
+> the four providers, the catalog (nav derived from the shared `apps` registry; creates derived from
+> `EIGEN_DOC_TYPE_INFO`; selection-aware drive actions), the engine (`buildSections` with Top Hit /
+> Suggestions / Selection / Mail / Contacts / Actions), scope prefixes (`mail:` / `>` / `@`) and the
+> scope chip via Tab. Smart parser for `email@…` (deterministic Top Hit) and `http(s)://…`
+> (deterministic with `noopener,noreferrer`). Smart contact-derived `Send mail to <email>` row.
+> Selection publication from DriveList + the four eigendoc viewers. Selection-aware actions
+> published from `DriveLayout` via `usePaletteSelectionActions` (Rename / Share / Delete / Quick
+> preview / Download / Email collaborators) plus the pure ones in the catalog (Open / Open in new
+> tab / Copy link / Mail to…). Cross-app `Mail to…` carries drive attachments via
+> `?attach=<owner>/<mount>/<path>,…`, routed through Mail's existing `handleDriveAttach`.
+> Search invalidation on every mail mutation SSE. The palette is gated by `useOptionalCommandPalette`
+> + `useOptionalPreview` so the marketing routes in `apps/index` (which don't mount `EigenApp`'s
+> stack) don't crash.
+>
+> **Deferred (post-v1):** Sub-action sheet (`→`); `file:` / `event:` / `chat:` / `?` prefixes (no
+> backends yet); per-user recents (waits for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md));
+> per-user `commandPalette` opt-out setting; AI assist.
+>
+> **Documented divergence from the proposal:** the engine holds the entire merge during
+> `mail.isPending` rather than streaming sections as their providers resolve and waiting only the
+> Top Hit. The behaviour was chosen to eliminate visible reorder/flicker as mail results join the
+> synchronously-rendered actions/contacts. Trade-off: first results appear after the debounce + RTT
+> window (~350ms) instead of immediately. See
+> `packages/lib/src/core/command-palette/hooks/use-command-results.ts`.
+
 > **TLDR**: A single Cmd+K dialog mounted globally in the topbar that unifies **search**,
 > **actions**, **navigation**, and **smart suggestions**. Built on a typed result model —
 > one variant per kind, no untyped JSON bag. Frontend-only providers (actions, smart-parser,
