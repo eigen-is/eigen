@@ -1,7 +1,7 @@
 import { Outlet } from '@tanstack/react-router';
 import { openMailComposeWith } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { useCommandPalette } from '@workspace/lib/command-palette';
+import { useCommandPalette, useOptionalCommandPalette } from '@workspace/lib/command-palette';
 import { useIsMobile, useIsTablet } from '@workspace/lib/media';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import type { CommandContext } from '@workspace/lib/types/command-palette';
@@ -9,7 +9,7 @@ import type { EigenDocType } from '@workspace/lib/types/drive';
 import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react';
 import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc.tsx';
 import { DriveCreateFolder } from '../drive/drive-create-folder.tsx';
-import { usePreview } from '../preview-provider/preview-provider.tsx';
+import { useOptionalPreview, usePreview } from '../preview-provider/preview-provider.tsx';
 import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container.tsx';
 import { CommandPalette } from './command-palette/command-palette.tsx';
 import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts.ts';
@@ -85,7 +85,18 @@ export function AppShell({
 // an EigenDocType opens DriveCreateEigenDoc; 'folder' opens DriveCreateFolder.
 type CreateDialogKind = EigenDocType | 'folder' | null;
 
+// AppShell is used by both EigenApp-wrapped apps (mail/drive/docs/…) and the
+// index app's marketing routes (blog/support), which don't mount the
+// CommandPaletteProvider + PreviewProvider stack. Render nothing in the latter
+// case so PaletteRunnerInner can use the required hooks without guards.
 function PaletteRunner() {
+    const palette = useOptionalCommandPalette();
+    const preview = useOptionalPreview();
+    if (!palette || !preview) return null;
+    return <PaletteRunnerInner />;
+}
+
+function PaletteRunnerInner() {
     usePaletteShortcuts();
     const auth = useAuth();
     const { selection, selectionActions } = useCommandPalette();
