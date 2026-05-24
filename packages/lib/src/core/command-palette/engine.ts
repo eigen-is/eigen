@@ -8,7 +8,6 @@ type BuildInput = {
     mail: PaletteResult[];
     input: string;
     scope?: PaletteScope;
-    isMailPending: boolean;
     suggestedCommandIds?: string[];
 };
 
@@ -20,6 +19,11 @@ const QUALITY_RANK: Record<NonNullable<ReturnType<typeof structuralMatchQuality>
     'all-tokens-in-title': 1,
 };
 
+// Pure merge function: given the four provider outputs for a settled query, produce
+// the rendered Sections. The caller (useCommandResults) holds back the call while a
+// search is in flight — so this never sees a partial state and never has to gate on
+// pending. That gate is what made the palette feel unstable: local providers were
+// updating before mail joined, then everything reordered when the search came back.
 export function buildSections(input: BuildInput): Sections {
     // Empty input → suggested only, ignoring search / smart / contacts.
     if (input.input.trim().length === 0) {
@@ -35,13 +39,12 @@ export function buildSections(input: BuildInput): Sections {
         };
     }
 
-    // Scope filter — drop everything except the selected source.
+    // Scope filter — drop everything except the selected source. Smart is hidden
+    // under any scope; the user has narrowed intent and cross-kind suggestions would
+    // muddy that.
     let actionList = input.scope && input.scope !== 'actions' ? [] : input.action;
     let mailList = input.scope && input.scope !== 'mail' ? [] : input.mail;
     let contactList = input.scope && input.scope !== 'contacts' ? [] : input.contact;
-    // Smart suggestions are always allowed when no scope is active. With a scope, they're
-    // hidden — the user has narrowed intent and we should not muddy that with cross-kind
-    // suggestions.
     const smartList = input.scope ? [] : input.smart;
 
     // Engine owns final ordering: sort by descending rank, then cap. Providers can set rank
@@ -50,14 +53,13 @@ export function buildSections(input: BuildInput): Sections {
     mailList = [...mailList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     contactList = [...contactList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
 
-    // Top Hit:
-    //   1. A deterministic smart parse takes it outright.
-    //   2. Else, wait for mail to resolve before promoting a structural title match.
+    // Top Hit: a deterministic smart parse claims it outright; otherwise the strongest
+    // structural title match across the merged candidates wins.
     let topHit: PaletteResult | undefined;
     const deterministicSmart = smartList.find((r) => r.kind === 'smart' && r.deterministic);
     if (deterministicSmart) {
         topHit = { ...deterministicSmart, group: 'top-hit' };
-    } else if (!input.isMailPending) {
+    } else {
         const candidates: PaletteResult[] = [...actionList, ...mailList, ...contactList];
         let bestQuality = 0;
         for (const r of candidates) {
@@ -72,9 +74,7 @@ export function buildSections(input: BuildInput): Sections {
     const groups: Sections['groups'] = [];
     // v1 invariant: every smart result is deterministic — the smart provider only ever
     // emits results with `deterministic: true` for email/URL shapes. Any deterministic smart
-    // already claimed the Top Hit above. A non-deterministic smart cannot be produced in v1,
-    // so we don't render a separate smart section here. When non-deterministic smart lands
-    // (e.g. natural-language datetime suggestions), this is where its section attaches.
+    // already claimed the Top Hit above, so we don't render a separate smart section here.
     if (actionList.length > 0) groups.push({ id: 'actions', heading: 'Actions', items: actionList });
     if (mailList.length > 0) groups.push({ id: 'mail', heading: 'Mail', items: mailList });
     if (contactList.length > 0) groups.push({ id: 'contacts', heading: 'Contacts', items: contactList });
