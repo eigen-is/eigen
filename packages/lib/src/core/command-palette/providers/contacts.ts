@@ -24,12 +24,10 @@ function suggestionToResult(s: ContactSuggestion, rank: number): PaletteResult {
         group: 'contacts',
         rank,
         payload: s,
-        // Personal contacts open in the contacts app's All view by id (same URL the
-        // app uses for its own row clicks). Team members aren't in the personal book,
-        // so jumping to compose with their email is the canonical action.
-        run: (ctx) =>
-            s.kind === 'personal'
-                ? ctx.navigate(getContactsAppUrl(`book/all?contactId=${s.id}`))
-                : ctx.openMailComposeWith({ to: s.email }),
+        // Always jump to the contacts app — the "Send mail to <email>" smart row
+        // already covers the compose intent; the contact row's job is to open the
+        // person's page in contacts. The route handles both personal contacts and
+        // team-member emails.
+        run: (ctx) => ctx.navigate(getContactsAppUrl(`book/all?contactId=${s.id}`)),
     };
 }
