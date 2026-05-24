@@ -41,7 +41,7 @@ function firstResultId(sections: Sections): string | undefined {
 
 export function CommandPalette({ ctx }: Props) {
     const { open, setOpen, input, setInput, scope, setScope } = useCommandPalette();
-    const sections = useCommandResults(ctx, input);
+    const sections = useCommandResults(ctx, input, scope);
 
     const firstId = useMemo(() => firstResultId(sections), [sections]);
     const [selectedValue, setSelectedValue] = useState<string | undefined>(firstId);
