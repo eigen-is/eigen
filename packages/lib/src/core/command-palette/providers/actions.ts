@@ -1,4 +1,4 @@
-import type { Command, CommandContext, PaletteResult } from '@workspace/lib/types/command-palette';
+import type { Command, CommandContext, PaletteResult, ResultGroup } from '@workspace/lib/types/command-palette';
 import { useMemo } from 'react';
 import { allCommands } from '../commands';
 import { actionBoosts } from '../rank';
@@ -7,33 +7,33 @@ export function useActionResults(ctx: CommandContext, input: string): PaletteRes
     return useMemo(() => {
         const visible = allCommands.filter((cmd: Command) => !cmd.availability || cmd.availability(ctx));
         if (input.trim().length === 0) {
-            // Return the full visible list; the engine's empty-input branch filters to
-            // SUGGESTED_COMMAND_IDS.
-            return visible.map((cmd) => commandToResult(cmd, cmd.baseRank ?? 0));
+            // Return every visible command. The engine routes selection-group ones to
+            // the "Selection" section (always shown when a selection is present) and
+            // catalog ones to "Suggested" via SUGGESTED_COMMAND_IDS.
+            return visible.map((cmd) => commandToResult(cmd, ctx, cmd.baseRank ?? 0));
         }
         const ranked = visible
             .map((cmd) => {
-                const boost = actionBoosts(input, {
-                    title: cmd.title,
-                    keywords: cmd.keywords,
-                });
-                return { cmd, score: (cmd.baseRank ?? 0) + boost };
+                const title = cmd.dynamicTitle ? cmd.dynamicTitle(ctx) : cmd.title;
+                const boost = actionBoosts(input, { title, keywords: cmd.keywords });
+                return { cmd, title, score: (cmd.baseRank ?? 0) + boost };
             })
             .filter((entry) => entry.score > 0 || matchesById(entry.cmd.id, input))
             .sort((a, b) => b.score - a.score);
-        return ranked.map(({ cmd, score }) => commandToResult(cmd, score));
+        return ranked.map(({ cmd, score }) => commandToResult(cmd, ctx, score));
     }, [ctx, input]);
 }
 
-function commandToResult(cmd: Command, rank: number): PaletteResult {
+function commandToResult(cmd: Command, ctx: CommandContext, rank: number): PaletteResult {
+    const group: ResultGroup = cmd.group === 'selection' ? 'selection' : 'actions';
     return {
         kind: 'action',
         id: cmd.id,
-        title: cmd.title,
+        title: cmd.dynamicTitle ? cmd.dynamicTitle(ctx) : cmd.title,
         keywords: cmd.keywords,
         shortcut: cmd.shortcut,
         icon: cmd.icon,
-        group: 'actions',
+        group,
         rank,
         run: cmd.run,
     };
