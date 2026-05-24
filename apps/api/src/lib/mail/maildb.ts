@@ -238,15 +238,27 @@ export default class MailDB {
     // Idempotent full re-index of every email. Runs in transactional batches and yields the
     // event loop between them (Bun.sleep(0)), so even a large mailbox never blocks concurrent
     // requests for longer than a single batch.
+    //
+    // The id list is snapshotted up front, but each batch re-reads its rows fresh from
+    // mail.db — so a delete/move/draft-update that lands during a yield isn't overwritten
+    // by the stale snapshot the next batch would otherwise carry. Rows deleted mid-backfill
+    // simply drop out of the per-batch SELECT.
     async backfillSearchIndex(): Promise<void> {
         const BATCH_SIZE = 250;
-        const emails = this.db.select().from(schema.emails).all();
-        for (let i = 0; i < emails.length; i += BATCH_SIZE) {
-            const batch = emails.slice(i, i + BATCH_SIZE);
-            try {
-                this.searchIndex.upsertBatch(batch.map(emailToSearchDoc));
-            } catch (error) {
-                console.error(`mail search backfill failed for batch at offset ${i}:`, error);
+        const ids = this.db
+            .select({ id: schema.emails.id })
+            .from(schema.emails)
+            .all()
+            .map((r) => r.id);
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+            const batchIds = ids.slice(i, i + BATCH_SIZE);
+            const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, batchIds)).all();
+            if (rows.length > 0) {
+                try {
+                    this.searchIndex.upsertBatch(rows.map(emailToSearchDoc));
+                } catch (error) {
+                    console.error(`mail search backfill failed for batch at offset ${i}:`, error);
+                }
             }
             await Bun.sleep(0);
         }

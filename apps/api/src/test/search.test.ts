@@ -597,6 +597,36 @@ describe.skipIf(isWindows)('Search endpoint', () => {
         expect(lowerData.mail.some((h) => h.subject === 'Quorbifax inbox normalise test')).toBe(true);
     });
 
+    test('mailbox=trash (any case) reaches the Trash bucket', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Crinkmore trash case test', 'body');
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+
+        const hit = home.mail.search({ q: 'crinkmore', limit: 20 })[0];
+        expect(hit).toBeDefined();
+
+        const move = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/move`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: hit.id, targetMailbox: 'Trash' }),
+        });
+        expect([200, 204]).toContain(move.status);
+
+        const upperRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=crinkmore&mailbox=Trash`,
+        );
+        const upperData = await assertJson<SearchResponse>(upperRes);
+        expect(upperData.mail.some((h) => h.subject === 'Crinkmore trash case test')).toBe(true);
+
+        const lowerRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=crinkmore&mailbox=trash`,
+        );
+        const lowerData = await assertJson<SearchResponse>(lowerRes);
+        expect(lowerData.mail.some((h) => h.subject === 'Crinkmore trash case test')).toBe(true);
+    });
+
     test('?from= forwards a sender filter to mail search', async () => {
         await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'endpointfrom unique subject', 'body');
 

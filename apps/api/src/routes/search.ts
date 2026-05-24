@@ -20,11 +20,12 @@ export const searchRouter = new Elysia({ name: 'search' })
                 .filter((source) => source.length > 0);
             const searchMail = !sources || sources.includes('mail');
 
+            // Pass user-typed names through verbatim; Maildir.search() owns the canonical
+            // casing rules (Inbox -> '', case-insensitive match against STANDARD_MAILBOXES).
             const mailboxes = query.mailbox
                 ?.split(',')
                 .map((m) => m.trim())
-                .filter((m) => m.length > 0)
-                .map((m) => (m.toLowerCase() === 'inbox' ? '' : m));
+                .filter((m) => m.length > 0);
             const mail = searchMail
                 ? home.mail.search({
                       q: query.q,

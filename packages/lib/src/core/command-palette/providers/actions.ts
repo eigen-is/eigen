@@ -16,9 +16,12 @@ export function useActionResults(ctx: CommandContext, input: string): PaletteRes
             .map((cmd) => {
                 const title = cmd.dynamicTitle ? cmd.dynamicTitle(ctx) : cmd.title;
                 const boost = actionBoosts(input, { title, keywords: cmd.keywords });
-                return { cmd, title, score: (cmd.baseRank ?? 0) + boost };
+                return { cmd, title, boost, score: (cmd.baseRank ?? 0) + boost };
             })
-            .filter((entry) => entry.score > 0 || matchesById(entry.cmd.id, input))
+            // Gate on `boost`, not `score`: every catalog command has a positive baseRank,
+            // so `score > 0` would admit every visible command for any non-matching query.
+            // The match signal is `boost`; baseRank is purely a tie-breaker for sorting.
+            .filter((entry) => entry.boost > 0 || matchesById(entry.cmd.id, input))
             .sort((a, b) => b.score - a.score);
         return ranked.map(({ cmd, title, score }) => commandToResult(cmd, ctx, score, title));
     }, [ctx, input]);
