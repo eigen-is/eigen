@@ -107,13 +107,10 @@ export function DriveAccessListEdit({
             }
 
             const suggestion: ContactSuggestion = {
-                // Manual entry — treat as a personal-like contact for the share row;
-                // the `kind` field is unused by the share flow but required by the type.
                 kind: 'personal',
                 id: email,
                 email,
                 displayName,
-                allEmails: [email],
             };
 
             handleAddUser(suggestion);

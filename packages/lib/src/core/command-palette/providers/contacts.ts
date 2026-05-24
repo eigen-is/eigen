@@ -11,7 +11,7 @@ import { useContactSuggestions } from '../../contacts';
 export function useContactResults(_ctx: CommandContext, input: string): PaletteResult[] {
     const { suggestions } = useContactSuggestions(input);
 
-    return useMemo(() => suggestions.slice(0, 6).map((s, i) => suggestionToResult(s, -i)), [suggestions]);
+    return useMemo(() => suggestions.map((s, i) => suggestionToResult(s, -i)), [suggestions]);
 }
 
 function suggestionToResult(s: ContactSuggestion, rank: number): PaletteResult {
@@ -24,10 +24,12 @@ function suggestionToResult(s: ContactSuggestion, rank: number): PaletteResult {
         group: 'contacts',
         rank,
         payload: s,
-        // Always jump to the contacts app — the "Send mail to <email>" smart row
-        // already covers the compose intent; the contact row's job is to open the
-        // person's page in contacts. The route handles both personal contacts and
-        // team-member emails.
-        run: (ctx) => ctx.navigate(getContactsAppUrl(`book/all?contactId=${s.id}`)),
+        // Personal contacts open in the contacts app's All view by uuid; team members
+        // open in their team's view scoped by email (book/all doesn't index team
+        // members — see apps/contacts/src/routes/_auth.$filterType.$filterId.tsx).
+        run: (ctx) =>
+            s.kind === 'team' && s.teamId
+                ? ctx.navigate(getContactsAppUrl(`team/${s.teamId}?contactId=${encodeURIComponent(s.email)}`))
+                : ctx.navigate(getContactsAppUrl(`book/all?contactId=${s.id}`)),
     };
 }
