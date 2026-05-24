@@ -2,13 +2,15 @@ import type { CommandContext, PaletteResult } from '@workspace/lib/types/command
 import { ExternalLink, Mail } from 'lucide-react';
 import { useMemo } from 'react';
 import { useContactSuggestions } from '../../contacts';
+import { parseQuery } from '../parse-query';
 import { parseSmartInput } from '../parse-smart-input';
 
 export function useSmartResults(ctx: CommandContext, input: string): PaletteResult[] {
     // Same shared hook the autosuggest UIs use — picks up personal contacts AND
     // team members so typing a teammate's name also triggers the "Send mail to <email>"
-    // suggestion under Top Hit.
-    const { suggestions } = useContactSuggestions(input);
+    // suggestion under Top Hit. Feed it the scope-stripped query so `mail: alice`
+    // matches contacts named "alice", not the literal "mail: alice".
+    const { suggestions } = useContactSuggestions(parseQuery(input).q);
 
     return useMemo(() => {
         const out: PaletteResult[] = [];

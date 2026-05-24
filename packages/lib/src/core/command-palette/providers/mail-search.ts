@@ -58,7 +58,10 @@ export function useMailSearchResults(
         });
     }, [data]);
 
-    const willSearch = !scopeBlocks && input.trim().length > 0;
-    const isDebouncing = willSearch && input !== debouncedInput;
-    return { results, isPending: willSearch && (isDebouncing || isFetching) };
+    // `willSearch` matches the `enabled` predicate above — same shape both ways so
+    // typing only an operator (`from:alice@x` with no q) doesn't stick `isPending`
+    // permanently true while the underlying query is disabled.
+    const willSearch = !scopeBlocks && parsed.q.length > 0;
+    const isDebouncing = !scopeBlocks && input.trim().length > 0 && input !== debouncedInput;
+    return { results, isPending: (willSearch && isFetching) || isDebouncing };
 }
