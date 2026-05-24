@@ -19,6 +19,15 @@ const SCOPE_CHIPS: Record<PaletteScope, string> = {
     contacts: 'Contacts',
 };
 
+// Tab cycles through scopes. The lookup makes the order obvious at a glance and is
+// easier to maintain than a chained ternary.
+const NEXT_SCOPE: Record<PaletteScope | 'none', PaletteScope | undefined> = {
+    none: 'mail',
+    mail: 'actions',
+    actions: 'contacts',
+    contacts: undefined,
+};
+
 // First item the engine produced — the Top Hit if there is one, else the first
 // item of the first group. cmdk doesn't re-select on its own when items change, so
 // we drive the highlight from here.
@@ -53,11 +62,9 @@ export function CommandPalette({ ctx }: Props) {
             setScope(undefined);
             return;
         }
-        if (e.key === 'Tab' && !scope) {
+        if (e.key === 'Tab') {
             e.preventDefault();
-            setScope((prev) =>
-                prev === undefined ? 'mail' : prev === 'mail' ? 'actions' : prev === 'actions' ? 'contacts' : undefined,
-            );
+            setScope((prev) => NEXT_SCOPE[prev ?? 'none']);
         }
     };
 
@@ -83,8 +90,11 @@ export function CommandPalette({ ctx }: Props) {
             case 'mail':
                 return <CommandRowMail key={r.id} result={r} onSelect={onSelect} />;
             default: {
+                // Exhaustiveness guard: if a new PaletteResult kind is added without a row
+                // component, TypeScript refuses to compile this assignment AND we fail loud
+                // at runtime instead of silently rendering nothing.
                 const _exhaustive: never = r;
-                return _exhaustive;
+                throw new Error(`Unhandled PaletteResult kind: ${(_exhaustive as PaletteResult).kind}`);
             }
         }
     };

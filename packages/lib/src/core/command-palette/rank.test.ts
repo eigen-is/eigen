@@ -41,10 +41,4 @@ describe('actionBoosts', () => {
     test('empty query returns 0', () => {
         expect(actionBoosts('', { title: 'New document', keywords: [] })).toBe(0);
     });
-
-    test('current-app boost adds on top', () => {
-        const base = actionBoosts('budget', { title: 'budget review', keywords: [] });
-        const boosted = actionBoosts('budget', { title: 'budget review', keywords: [], currentAppMatch: true });
-        expect(boosted).toBeGreaterThan(base);
-    });
 });

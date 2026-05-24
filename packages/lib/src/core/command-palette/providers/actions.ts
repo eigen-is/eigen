@@ -20,18 +20,16 @@ export function useActionResults(ctx: CommandContext, input: string): PaletteRes
             })
             .filter((entry) => entry.score > 0 || matchesById(entry.cmd.id, input))
             .sort((a, b) => b.score - a.score);
-        return ranked.map(({ cmd, score }) => commandToResult(cmd, ctx, score));
+        return ranked.map(({ cmd, title, score }) => commandToResult(cmd, ctx, score, title));
     }, [ctx, input]);
 }
 
-function commandToResult(cmd: Command, ctx: CommandContext, rank: number): PaletteResult {
+function commandToResult(cmd: Command, ctx: CommandContext, rank: number, title?: string): PaletteResult {
     const group: ResultGroup = cmd.group === 'selection' ? 'selection' : 'actions';
     return {
         kind: 'action',
         id: cmd.id,
-        title: cmd.dynamicTitle ? cmd.dynamicTitle(ctx) : cmd.title,
-        keywords: cmd.keywords,
-        shortcut: cmd.shortcut,
+        title: title ?? (cmd.dynamicTitle ? cmd.dynamicTitle(ctx) : cmd.title),
         icon: cmd.icon,
         group,
         rank,

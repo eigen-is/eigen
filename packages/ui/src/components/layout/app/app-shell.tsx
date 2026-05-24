@@ -4,7 +4,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useCommandPalette } from '@workspace/lib/command-palette';
 import { useIsMobile, useIsTablet } from '@workspace/lib/media';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
-import type { AppName, CommandContext } from '@workspace/lib/types/command-palette';
+import type { CommandContext } from '@workspace/lib/types/command-palette';
 import type { EigenDocType } from '@workspace/lib/types/drive';
 import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react';
 import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc.tsx';
@@ -13,7 +13,7 @@ import { usePreview } from '../preview-provider/preview-provider.tsx';
 import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container.tsx';
 import { CommandPalette } from './command-palette/command-palette.tsx';
 import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts.ts';
-import { LayoutContext, useLayout } from './layout-context.tsx';
+import { LayoutContext } from './layout-context.tsx';
 import { Topbar } from './topbar.tsx';
 
 // Browser-only dev widget — never render it during SSR/prerender, where
@@ -88,7 +88,6 @@ type CreateDialogKind = EigenDocType | 'folder' | null;
 function PaletteRunner() {
     usePaletteShortcuts();
     const auth = useAuth();
-    const { appName } = useLayout();
     const { selection, selectionActions } = useCommandPalette();
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
@@ -101,12 +100,10 @@ function PaletteRunner() {
     }, [settings?.theme, updateSettings]);
 
     const ownerId = auth.user?.id ?? '';
-    const currentApp = appName.toLowerCase() as AppName;
 
     const ctx = useMemo<CommandContext>(
         () => ({
             ownerId,
-            currentApp,
             selection,
             selectionActions,
             navigate: (url) => {
@@ -117,10 +114,10 @@ function PaletteRunner() {
             // pick where to create.
             openDriveCreate: (kind) => setCreateDialog(kind),
             openMailComposeWith,
-            openPreview: (path) => openPreview(path),
+            openPreview,
             toggleTheme,
         }),
-        [ownerId, currentApp, selection, selectionActions, openPreview, toggleTheme],
+        [ownerId, selection, selectionActions, openPreview, toggleTheme],
     );
 
     const eigenDocKind = createDialog && createDialog !== 'folder' ? createDialog : null;

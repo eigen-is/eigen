@@ -3,21 +3,6 @@ import type { Contact } from './contact';
 import type { DrivePath, EigenDocType } from './drive';
 import type { EmailSummary } from './mail';
 
-export type AppName =
-    | 'mail'
-    | 'drive'
-    | 'docs'
-    | 'sheets'
-    | 'slides'
-    | 'stickies'
-    | 'calendar'
-    | 'contacts'
-    | 'chat'
-    | 'space'
-    | 'admin'
-    | 'index'
-    | 'settings';
-
 export type PaletteScope = 'mail' | 'actions' | 'contacts';
 
 export type ResultGroup = 'top-hit' | 'suggested' | 'smart' | 'selection' | 'mail' | 'contacts' | 'actions';
@@ -44,7 +29,6 @@ export type PaletteSelectionActions = {
 // real caller needs them.
 export type CommandContext = {
     ownerId: string;
-    currentApp: AppName;
     selection: PaletteSelection;
     selectionActions: PaletteSelectionActions;
     navigate: (to: string) => void;
@@ -64,7 +48,6 @@ export type Command = {
     id: string;
     title: string;
     keywords?: string[];
-    shortcut?: string;
     icon: LucideIcon;
     baseRank?: number;
     group?: 'actions' | 'selection';
@@ -79,8 +62,6 @@ export type PaletteResult =
           id: string;
           title: string;
           subtitle?: string;
-          keywords?: string[];
-          shortcut?: string;
           icon: LucideIcon;
           group: ResultGroup;
           rank: number;
