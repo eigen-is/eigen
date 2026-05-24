@@ -15,6 +15,7 @@
 | Shared paths    | `{home}/mounts/shared.db`                       | Files shared with this user                              |
 | Contacts        | `{home}/eigen.contacts/contacts.db`             | Contact data                                             |
 | Mail            | `{home}/eigen.mail/mail.db`                     | Email metadata                                           |
+| Mail search     | `{home}/eigen.mail/search.db`                   | FTS5 index over mail (subject + recipients + body snippet). Domain-agnostic schema, mail-only writer today. See [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) |
 | Calendar        | `{home}/eigen.calendar/calendar.db`             | Calendars, events, shared calendars                      |
 | Collab docs     | Via storage backend (`{dataDbPathId}`)           | Yjs snapshots + updates                                  |
 | Chat rooms      | Via storage backend (`{dataDbPathId}`)           | Messages + read state                                    |
