@@ -1,5 +1,5 @@
 import { getMailAppUrl } from '@workspace/lib/api';
-import type { CommandContext, PaletteResult } from '@workspace/lib/types/command-palette';
+import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import { Mail } from 'lucide-react';
 import { useMemo } from 'react';
@@ -14,6 +14,7 @@ const MAIL_SEARCH_DEBOUNCE_MS = 150;
 export function useMailSearchResults(
     ctx: CommandContext,
     input: string,
+    scope: PaletteScope | undefined,
 ): {
     results: PaletteResult[];
     isPending: boolean;
@@ -21,8 +22,9 @@ export function useMailSearchResults(
     const debouncedInput = useDebouncedValue(input, MAIL_SEARCH_DEBOUNCE_MS);
     const parsed = parseQuery(debouncedInput);
 
-    // When a scope is set that excludes mail, skip the call entirely.
-    const scopeBlocks = parsed.scope === 'actions' || parsed.scope === 'contacts';
+    // Skip the network call when scope excludes mail. The effective scope already
+    // merges the typed prefix (`mail:`, `>`, `@`) with the chip scope set via Tab.
+    const scopeBlocks = scope === 'actions' || scope === 'contacts';
 
     const { data, isFetching } = useSearch({
         ownerId: ctx.ownerId,
@@ -51,7 +53,7 @@ export function useMailSearchResults(
                 group: 'mail',
                 rank: -i,
                 payload: email,
-                run: (ctx) => ctx.navigate(getMailAppUrl(`box/${filterId}?mailId=${email.id}`)),
+                run: (rctx) => rctx.navigate(getMailAppUrl(`box/${filterId}?mailId=${email.id}`)),
             };
         });
     }, [data]);
