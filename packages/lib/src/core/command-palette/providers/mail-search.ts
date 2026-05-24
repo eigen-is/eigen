@@ -1,6 +1,5 @@
 import { getMailAppUrl } from '@workspace/lib/api';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
-import type { EmailSummary } from '@workspace/lib/types/mail';
 import { Mail } from 'lucide-react';
 import { useMemo } from 'react';
 import { useSearch } from '../../search';
@@ -38,7 +37,7 @@ export function useMailSearchResults(
 
     const results = useMemo<PaletteResult[]>(() => {
         if (!data) return [];
-        return data.mail.map((email: EmailSummary, i: number) => {
+        return data.mail.map((email, i) => {
             // The mail route lives at /_auth/$filterType/$filterId — `box/<mailbox>` is
             // its canonical shape. Inbox is stored as the empty string in mail.db; route
             // segments need 'inbox'. Other mailboxes are lowercased because useEmails
@@ -48,7 +47,6 @@ export function useMailSearchResults(
                 kind: 'mail' as const,
                 id: `mail.${email.id}`,
                 title: email.subject || '(no subject)',
-                subtitle: email.fromShort || email.fromAddress,
                 icon: Mail,
                 group: 'mail',
                 rank: -i,

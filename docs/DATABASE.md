@@ -68,6 +68,7 @@ Each domain defines its schema and migrations in `db-config.ts`:
 | `SHARE_REGISTRY_DB_CONFIG`      | `apps/api/src/lib/share/db-config.ts`                |
 | `CONTACTS_DB_CONFIG`            | `apps/api/src/lib/contacts/db-config.ts`             |
 | `MAIL_DB_CONFIG`                | `apps/api/src/lib/mail/db-config.ts`                 |
+| `SEARCH_DB_CONFIG`              | `apps/api/src/lib/search/db-config.ts`               |
 | `COLLAB_DB_CONFIG`              | `apps/api/src/lib/collab/db-config.ts`               |
 | `CHAT_ROOM_DB_CONFIG`           | `apps/api/src/lib/chat/db-config.ts`                 |
 | `COMMENT_INDEX_DB_CONFIG`       | `apps/api/src/lib/chat/comment-db-config.ts`         |

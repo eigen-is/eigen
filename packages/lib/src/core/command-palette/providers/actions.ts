@@ -18,10 +18,10 @@ export function useActionResults(ctx: CommandContext, input: string): PaletteRes
                 const boost = actionBoosts(input, { title, keywords: cmd.keywords });
                 return { cmd, title, boost, score: (cmd.baseRank ?? 0) + boost };
             })
-            // Gate on `boost`, not `score`: every catalog command has a positive baseRank,
-            // so `score > 0` would admit every visible command for any non-matching query.
-            // The match signal is `boost`; baseRank is purely a tie-breaker for sorting.
-            .filter((entry) => entry.boost > 0 || matchesById(entry.cmd.id, input))
+            // Gate on `boost`: every catalog command has a positive baseRank, so
+            // `score > 0` would admit every visible command for any non-matching query.
+            // The match signal is `boost`; baseRank only breaks ties during sort.
+            .filter((entry) => entry.boost > 0)
             .sort((a, b) => b.score - a.score);
         return ranked.map(({ cmd, title, score }) => commandToResult(cmd, ctx, score, title));
     }, [ctx, input]);
@@ -38,10 +38,4 @@ function commandToResult(cmd: Command, ctx: CommandContext, rank: number, title?
         rank,
         run: cmd.run,
     };
-}
-
-// Hidden behaviour: typing a command's full id (e.g. "nav.mail") always matches.
-// Cheap to add and gives us a stable test handle without leaking through the UI.
-function matchesById(id: string, input: string): boolean {
-    return id.toLowerCase().includes(input.trim().toLowerCase());
 }

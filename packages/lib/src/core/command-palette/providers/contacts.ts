@@ -19,7 +19,6 @@ function suggestionToResult(s: ContactSuggestion, rank: number): PaletteResult {
         kind: 'contact',
         id: `contact.${s.id}`,
         title: s.displayName,
-        subtitle: s.email,
         icon: User,
         group: 'contacts',
         rank,

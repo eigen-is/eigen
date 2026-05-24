@@ -1,4 +1,5 @@
 import type { PaletteSelection } from '@workspace/lib/types/command-palette';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { useEffect, useMemo } from 'react';
 import { useCommandPalette } from './use-command-palette';
 
@@ -25,4 +26,13 @@ export function usePaletteSelection(selection: PaletteSelection): void {
         setSelection(stable);
         return () => setSelection(null);
     }, [stable, setSelection]);
+}
+
+// Convenience wrapper for the four eigendoc viewer routes (docs/sheets/slides/stickies):
+// publishes the currently-open document as a single-item palette selection so
+// item-aware commands (Mail to…, Copy link, Quick preview, …) surface from the viewer.
+// Saves each viewer from repeating the same useMemo + usePaletteSelection pair.
+export function usePaletteDocSelection(path: DrivePath | null | undefined): void {
+    const selection = useMemo<PaletteSelection>(() => (path ? { items: [path] } : null), [path]);
+    usePaletteSelection(selection);
 }

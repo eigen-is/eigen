@@ -35,7 +35,10 @@ export function ChatPlayerSuggest({
                 return m.email.toLowerCase().includes(q) || m.displayName.toLowerCase().includes(q);
             })
             .map((m) => ({
-                kind: 'team',
+                // Chat room participants — not workspace team members. The discriminator
+                // routes downstream consumers (e.g. the palette's contact provider) to the
+                // personal-contact landing, not a team-scoped page that wouldn't exist.
+                kind: 'personal',
                 id: m.email,
                 displayName: m.displayName,
                 email: m.email,
