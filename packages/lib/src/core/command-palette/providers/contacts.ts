@@ -1,3 +1,4 @@
+import { getContactsAppUrl } from '@workspace/lib/api';
 import type { CommandContext, PaletteResult } from '@workspace/lib/types/command-palette';
 import type { Contact } from '@workspace/lib/types/contact';
 import { User } from 'lucide-react';
@@ -38,8 +39,9 @@ function contactToResult(contact: Contact, rank: number): PaletteResult {
         group: 'contacts',
         rank,
         payload: contact,
-        run: (ctx) => {
-            if (primaryEmail) ctx.openMailComposeWith({ to: primaryEmail });
-        },
+        // Opening a contact result jumps to the contacts app's "All contacts" book
+        // with the contact pre-selected — same URL the contacts app uses for its own
+        // row clicks (apps/contacts/src/routes/_auth.$filterType.$filterId.tsx).
+        run: (ctx) => ctx.navigate(getContactsAppUrl(`book/all?contactId=${contact.id}`)),
     };
 }

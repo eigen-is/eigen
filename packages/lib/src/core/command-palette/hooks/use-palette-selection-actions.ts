@@ -41,8 +41,8 @@ export function usePaletteSelectionActions(actions: PaletteSelectionActions): vo
         }
         if (actions.onDelete) wrapped.onDelete = (items) => actionsRef.current?.onDelete?.(items);
         return wrapped;
-        // shapeKey captures the booleans we care about; actions identity is intentionally not a dep.
-        // biome-ignore lint/correctness/useExhaustiveDependencies: shapeKey is the meaningful trigger
+        // shapeKey is the meaningful trigger; actions identity is intentionally not a dep
+        // because the wrappers route through actionsRef and don't capture the closure.
     }, [shapeKey]);
 
     useEffect(() => {

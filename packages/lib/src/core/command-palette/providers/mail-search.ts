@@ -36,17 +36,24 @@ export function useMailSearchResults(
 
     const results = useMemo<PaletteResult[]>(() => {
         if (!data) return [];
-        return data.mail.map((email: EmailSummary, i: number) => ({
-            kind: 'mail' as const,
-            id: `mail.${email.id}`,
-            title: email.subject || '(no subject)',
-            subtitle: email.fromShort || email.fromAddress,
-            icon: Mail,
-            group: 'mail',
-            rank: -i,
-            payload: email,
-            run: (ctx) => ctx.navigate(getMailAppUrl(`box/inbox?mailId=${email.id}`)),
-        }));
+        return data.mail.map((email: EmailSummary, i: number) => {
+            // The mail route lives at /_auth/$filterType/$filterId — `box/<mailbox>` is
+            // its canonical shape. Inbox is stored as the empty string in mail.db; route
+            // segments need 'inbox'. Other mailboxes are lowercased because useEmails
+            // lowercases the URL path on the wire (and the sidebar URLs match).
+            const filterId = email.mailbox ? email.mailbox.toLowerCase() : 'inbox';
+            return {
+                kind: 'mail' as const,
+                id: `mail.${email.id}`,
+                title: email.subject || '(no subject)',
+                subtitle: email.fromShort || email.fromAddress,
+                icon: Mail,
+                group: 'mail',
+                rank: -i,
+                payload: email,
+                run: (ctx) => ctx.navigate(getMailAppUrl(`box/${filterId}?mailId=${email.id}`)),
+            };
+        });
     }, [data]);
 
     const willSearch = !scopeBlocks && input.trim().length > 0;

@@ -17,8 +17,8 @@ export function usePaletteSelection(selection: PaletteSelection): void {
     const stable = useMemo<PaletteSelection>(() => {
         if (!selection) return null;
         return { items: selection.items };
-        // idsKey captures the only thing consumers care about; selection identity is intentionally not a dep.
-        // biome-ignore lint/correctness/useExhaustiveDependencies: idsKey is the meaningful trigger
+        // idsKey is the meaningful trigger; selection identity is intentionally not a dep —
+        // we re-wrap only when the set of ids changes.
     }, [idsKey]);
 
     useEffect(() => {
