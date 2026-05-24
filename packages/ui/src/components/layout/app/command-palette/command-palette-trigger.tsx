@@ -1,4 +1,4 @@
-import { useCommandPalette } from '@workspace/lib/command-palette';
+import { useOptionalCommandPalette } from '@workspace/lib/command-palette';
 import { Button } from '@workspace/ui/components/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
@@ -8,8 +8,14 @@ import { Search } from 'lucide-react';
 // so icons + the search pill use the same white-on-dark treatment as NotificationBell
 // and AppSwitcher (see topbar.tsx). Don't tie this to the theme — the topbar itself
 // doesn't.
+//
+// Topbar renders this unconditionally, but the marketing-only index app (blog/support)
+// doesn't mount the CommandPaletteProvider — mirror PaletteRunner (app-shell.tsx) and
+// render nothing when no provider is in the tree.
 export function CommandPaletteTrigger() {
-    const { setOpen } = useCommandPalette();
+    const palette = useOptionalCommandPalette();
+    if (!palette) return null;
+    const { setOpen } = palette;
     return (
         <>
             <button
