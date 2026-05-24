@@ -20,7 +20,7 @@ export type AppName =
 
 export type PaletteScope = 'mail' | 'actions' | 'contacts';
 
-export type ResultGroup = 'top-hit' | 'suggested' | 'actions' | 'mail' | 'contacts';
+export type ResultGroup = 'top-hit' | 'suggested' | 'selection' | 'mail' | 'contacts' | 'actions';
 
 // A 1-item selection from an eigendoc viewer is identical in shape to a 1-item
 // Drive selection — both surface the same actions (Share, Mail to…, Copy link, …).
@@ -55,7 +55,11 @@ export type CommandContext = {
 };
 
 // Static catalog entry. Engine wraps these into `PaletteResult` of kind 'action'
-// after applying availability + boosts.
+// after applying availability + boosts. `group: 'selection'` marks selection-aware
+// commands — they only surface when a selection is present and render in the top
+// "Selection" section instead of the catalog's "Actions" section. `dynamicTitle` lets
+// a selection command tailor its label to the current item(s) — "Share Q4-budget"
+// rather than a generic "Share".
 export type Command = {
     id: string;
     title: string;
@@ -63,7 +67,9 @@ export type Command = {
     shortcut?: string;
     icon: LucideIcon;
     baseRank?: number;
+    group?: 'actions' | 'selection';
     availability?: (ctx: CommandContext) => boolean;
+    dynamicTitle?: (ctx: CommandContext) => string;
     run: (ctx: CommandContext) => void;
 };
 
