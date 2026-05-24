@@ -20,7 +20,7 @@ export type AppName =
 
 export type PaletteScope = 'mail' | 'actions' | 'contacts';
 
-export type ResultGroup = 'top-hit' | 'suggested' | 'selection' | 'mail' | 'contacts' | 'actions';
+export type ResultGroup = 'top-hit' | 'suggested' | 'smart' | 'selection' | 'mail' | 'contacts' | 'actions';
 
 // A 1-item selection from an eigendoc viewer is identical in shape to a 1-item
 // Drive selection — both surface the same actions (Share, Mail to…, Copy link, …).
