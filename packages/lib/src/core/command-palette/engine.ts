@@ -1,4 +1,4 @@
-import type { PaletteResult, PaletteScope, ResultGroup, Sections } from '@workspace/lib/types/command-palette';
+import type { PaletteResult, PaletteScope, Sections } from '@workspace/lib/types/command-palette';
 import { structuralMatchQuality } from './rank';
 
 type BuildInput = {
@@ -49,9 +49,9 @@ export function buildSections(input: BuildInput): Sections {
             return { topHit: undefined, groups: [{ id: 'selection', heading: 'Selection', items: capped }] };
         }
         const ids = input.suggestedCommandIds ?? [];
-        const suggested = actionList
-            .filter((r) => ids.includes(r.id))
-            .map((r) => (r.kind === 'action' ? ({ ...r, group: 'suggested' as ResultGroup } as PaletteResult) : r));
+        const suggested = actionList.flatMap<PaletteResult>((r) =>
+            r.kind === 'action' && ids.includes(r.id) ? [{ ...r, group: 'suggested' }] : [],
+        );
         return {
             topHit: undefined,
             groups: suggested.length

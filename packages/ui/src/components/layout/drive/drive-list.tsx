@@ -1,6 +1,7 @@
 import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     ContextMenu,
@@ -16,7 +17,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
 import { cn } from '@workspace/ui/lib/utils';
-import { FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, SquareKanban, UploadIcon } from 'lucide-react';
+import { FolderPlus, Plus, UploadIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
@@ -35,14 +36,20 @@ type CreateCallbacks = {
     onCreateSheets?: () => void;
 };
 
+// Derive each eigendoc entry from the shared registries so adding a doc type is a
+// single-source edit (EIGEN_DOC_TYPE_INFO + EIGEN_DOC_ICONS), not a copy here.
 const CREATE_MENU_DEFS: { key: keyof CreateCallbacks; icon: typeof FolderPlus; label: string; buttonLabel: string }[] =
     [
         { key: 'onCreateFolder', icon: FolderPlus, label: 'New folder', buttonLabel: 'New folder' },
-        { key: 'onCreateDoc', icon: FileText, label: 'New doc', buttonLabel: 'New doc' },
-        { key: 'onCreateStickies', icon: SquareKanban, label: 'New stickies', buttonLabel: 'New stickies' },
-        { key: 'onCreateChat', icon: MessageSquare, label: 'New chat', buttonLabel: 'New chat' },
-        { key: 'onCreateSlides', icon: Presentation, label: 'New slide', buttonLabel: 'New slide' },
-        { key: 'onCreateSheets', icon: Sheet, label: 'New sheet', buttonLabel: 'New sheet' },
+        ...Object.values(EIGEN_DOC_TYPE_INFO).map((info) => {
+            const label = `New ${info.label.toLowerCase()}`;
+            return {
+                key: `onCreate${info.type.charAt(0).toUpperCase()}${info.type.slice(1)}` as keyof CreateCallbacks,
+                icon: EIGEN_DOC_ICONS[info.type],
+                label,
+                buttonLabel: label,
+            };
+        }),
         { key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload' },
     ];
 

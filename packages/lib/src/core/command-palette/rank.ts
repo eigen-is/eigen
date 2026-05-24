@@ -15,21 +15,13 @@ export function structuralMatchQuality(query: string, title: string): MatchQuali
     return null;
 }
 
-export function actionBoosts(
-    query: string,
-    action: { title: string; keywords?: string[]; currentAppMatch?: boolean },
-): number {
+export function actionBoosts(query: string, action: { title: string; keywords?: string[] }): number {
     const q = query.trim().toLowerCase();
     if (q.length === 0) return 0;
 
     const title = action.title.toLowerCase();
-    let boost = 0;
-
-    if (title.startsWith(q)) boost += 100;
-    else if (title.includes(q)) boost += 40;
-    else if (action.keywords?.some((kw) => kw.toLowerCase().includes(q))) boost += 15;
-
-    if (action.currentAppMatch) boost += 10;
-
-    return boost;
+    if (title.startsWith(q)) return 100;
+    if (title.includes(q)) return 40;
+    if (action.keywords?.some((kw) => kw.toLowerCase().includes(q))) return 15;
+    return 0;
 }
