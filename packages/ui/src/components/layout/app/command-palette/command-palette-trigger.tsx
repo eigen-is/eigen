@@ -1,8 +1,13 @@
 import { useCommandPalette } from '@workspace/lib/command-palette';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { Button } from '@workspace/ui/components/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
 import { Search } from 'lucide-react';
 
+// Topbar sits on `bg-app` (the dark app-coloured bar) in both light and dark themes,
+// so icons + the search pill use the same white-on-dark treatment as NotificationBell
+// and AppSwitcher (see topbar.tsx). Don't tie this to the theme — the topbar itself
+// doesn't.
 export function CommandPaletteTrigger() {
     const { setOpen } = useCommandPalette();
     return (
@@ -11,8 +16,8 @@ export function CommandPaletteTrigger() {
                 type="button"
                 onClick={() => setOpen(true)}
                 className={cn(
-                    'hidden md:flex items-center gap-2 rounded-md border bg-muted/40 px-3 h-8',
-                    'text-sm text-muted-foreground hover:bg-muted transition-colors',
+                    'hidden md:flex items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 h-8',
+                    'text-sm text-white/70 hover:bg-white/15 hover:text-white transition-colors',
                     'min-w-[280px]',
                 )}
             >
@@ -20,7 +25,19 @@ export function CommandPaletteTrigger() {
                 <span className="flex-1 text-left">Search and jump anywhere</span>
                 <kbd className="text-xs font-mono">⌘K</kbd>
             </button>
-            <TooltipButton icon={Search} tooltipText="Search" onClick={() => setOpen(true)} className="md:hidden" />
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setOpen(true)}
+                        className="md:hidden h-8 w-8 text-white hover:bg-primary/20 hover:text-white"
+                    >
+                        <Search className="h-4 w-4" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>Search</TooltipContent>
+            </Tooltip>
         </>
     );
 }
