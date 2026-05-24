@@ -81,11 +81,7 @@ export function EigenDocListView({
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
-            allowCreateDoc={config.driveType === 'doc'}
-            allowCreateStickies={config.driveType === 'stickies'}
-            allowCreateChat={false}
-            allowCreateSlides={config.driveType === 'slides'}
-            allowCreateSheets={config.driveType === 'sheets'}
+            allowedCreateTypes={new Set([config.createType])}
             getItemHref={getDriveItemUrl}
             showBreadcrumb={false}
             currentPath={rootPath}

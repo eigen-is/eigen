@@ -5,6 +5,7 @@ import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/dr
 import {
     type DrivePath,
     type DriveSearchParams,
+    type EigenDocType,
     isDocumentType,
     isFolderType,
     isInlineEditable,
@@ -107,11 +108,7 @@ function DriveRoute() {
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
-            allowCreateDoc={false}
-            allowCreateStickies={false}
-            allowCreateChat={false}
-            allowCreateSlides={false}
-            allowCreateSheets={false}
+            allowedCreateTypes={new Set<EigenDocType>()}
             showBreadcrumb={false}
             allowRename={to === 'by-me'}
             onQuickLook={onQuickLook}

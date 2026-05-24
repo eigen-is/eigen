@@ -1,7 +1,7 @@
 import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb } from '@workspace/lib/drive';
 import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
-import { type DrivePath, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     ContextMenu,
@@ -17,7 +17,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
 import { cn } from '@workspace/ui/lib/utils';
-import { FolderPlus, Plus, UploadIcon } from 'lucide-react';
+import { FolderPlus, type LucideIcon, Plus, UploadIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
@@ -28,33 +28,34 @@ import { useMountLabel } from './drive-mount-list';
 
 type CreateCallbacks = {
     onCreateFolder?: () => void;
+    onCreateEigenDoc?: Partial<Record<EigenDocType, () => void>>;
     onUploadFile?: () => void;
-    onCreateDoc?: () => void;
-    onCreateStickies?: () => void;
-    onCreateChat?: () => void;
-    onCreateSlides?: () => void;
-    onCreateSheets?: () => void;
 };
+
+type CreateMenuKind = 'folder' | 'upload' | EigenDocType;
+type CreateMenuDef = { kind: CreateMenuKind; icon: LucideIcon; label: string; buttonLabel: string };
 
 // Derive each eigendoc entry from the shared registries so adding a doc type is a
 // single-source edit (EIGEN_DOC_TYPE_INFO + EIGEN_DOC_ICONS), not a copy here.
-const CREATE_MENU_DEFS: { key: keyof CreateCallbacks; icon: typeof FolderPlus; label: string; buttonLabel: string }[] =
-    [
-        { key: 'onCreateFolder', icon: FolderPlus, label: 'New folder', buttonLabel: 'New folder' },
-        ...Object.values(EIGEN_DOC_TYPE_INFO).map((info) => {
-            const label = `New ${info.label.toLowerCase()}`;
-            return {
-                key: `onCreate${info.type.charAt(0).toUpperCase()}${info.type.slice(1)}` as keyof CreateCallbacks,
-                icon: EIGEN_DOC_ICONS[info.type],
-                label,
-                buttonLabel: label,
-            };
-        }),
-        { key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload' },
-    ];
+const CREATE_MENU_DEFS: CreateMenuDef[] = [
+    { kind: 'folder', icon: FolderPlus, label: 'New folder', buttonLabel: 'New folder' },
+    ...Object.values(EIGEN_DOC_TYPE_INFO).map((info): CreateMenuDef => {
+        const label = `New ${info.label.toLowerCase()}`;
+        return { kind: info.type, icon: EIGEN_DOC_ICONS[info.type], label, buttonLabel: label };
+    }),
+    { kind: 'upload', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload' },
+];
 
 function getCreateMenuItems(cb: CreateCallbacks) {
-    return CREATE_MENU_DEFS.filter((def) => cb[def.key]).map((def) => ({ ...def, onSelect: cb[def.key]! }));
+    return CREATE_MENU_DEFS.flatMap((def) => {
+        const onSelect =
+            def.kind === 'folder'
+                ? cb.onCreateFolder
+                : def.kind === 'upload'
+                  ? cb.onUploadFile
+                  : cb.onCreateEigenDoc?.[def.kind];
+        return onSelect ? [{ ...def, onSelect }] : [];
+    });
 }
 
 type DriveListToolbarProps = CreateCallbacks & {
@@ -73,11 +74,7 @@ export function DriveListToolbar({
     onRowActivate,
     onCreateFolder,
     onUploadFile,
-    onCreateDoc,
-    onCreateStickies,
-    onCreateChat,
-    onCreateSlides,
-    onCreateSheets,
+    onCreateEigenDoc,
 }: DriveListToolbarProps) {
     const { data: breadcrumbPaths = [] } = useBreadcrumb(ownerId, mountId, showBreadcrumb ? pathId : undefined);
     const mountLabel = useMountLabel(ownerId, mountId);
@@ -87,15 +84,7 @@ export function DriveListToolbar({
         onRowActivate?.(path);
     };
 
-    const createItems = getCreateMenuItems({
-        onCreateFolder,
-        onUploadFile,
-        onCreateDoc,
-        onCreateStickies,
-        onCreateChat,
-        onCreateSlides,
-        onCreateSheets,
-    });
+    const createItems = getCreateMenuItems({ onCreateFolder, onUploadFile, onCreateEigenDoc });
 
     const newItemButton =
         createItems.length === 0 ? null : createItems.length === 1 ? (
@@ -112,8 +101,8 @@ export function DriveListToolbar({
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {createItems.map(({ key, icon: Icon, label, onSelect }) => (
-                        <DropdownMenuItem key={key} onClick={onSelect}>
+                    {createItems.map(({ kind, icon: Icon, label, onSelect }) => (
+                        <DropdownMenuItem key={kind} onClick={onSelect}>
                             <Icon className="h-4 w-4 mr-2" />
                             {label}
                         </DropdownMenuItem>
@@ -182,11 +171,7 @@ export function DriveList({
     currentPath,
     onShareClick,
     onEmailCollaborators,
-    onCreateDoc,
-    onCreateStickies,
-    onCreateChat,
-    onCreateSlides,
-    onCreateSheets,
+    onCreateEigenDoc,
     onConvert,
     onDownload,
     onExport,
@@ -285,15 +270,7 @@ export function DriveList({
         }
     };
 
-    const createItems = getCreateMenuItems({
-        onCreateFolder,
-        onUploadFile,
-        onCreateDoc,
-        onCreateStickies,
-        onCreateChat,
-        onCreateSlides,
-        onCreateSheets,
-    });
+    const createItems = getCreateMenuItems({ onCreateFolder, onUploadFile, onCreateEigenDoc });
 
     if (isLoading) {
         return <LoadingState />;
@@ -360,8 +337,8 @@ export function DriveList({
         <ContextMenu>
             <ContextMenuTrigger asChild>{contentDiv}</ContextMenuTrigger>
             <ContextMenuContent>
-                {createItems.map(({ key, icon: Icon, label, onSelect }) => (
-                    <ContextMenuItem key={key} onSelect={onSelect}>
+                {createItems.map(({ kind, icon: Icon, label, onSelect }) => (
+                    <ContextMenuItem key={kind} onSelect={onSelect}>
                         <Icon className="h-4 w-4 mr-2" />
                         {label}
                     </ContextMenuItem>
