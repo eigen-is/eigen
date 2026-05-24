@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useCollabDocumentInfo } from '@workspace/lib/collab';
+import { usePaletteDocSelection } from '@workspace/lib/command-palette';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
@@ -25,6 +26,10 @@ function CollaborativeTextEditor() {
         setDocumentTitle(title);
         return () => setDocumentTitle('');
     }, [docInfo?.path?.name, setDocumentTitle]);
+
+    // Publish the open document as a 1-item palette selection so item-aware commands
+    // (Mail to…, Copy link, …) surface from anywhere.
+    usePaletteDocSelection(docInfo?.path);
 
     const handleAccessDialogOpen = useCallback(() => {
         setAccessDialogOpen(true);

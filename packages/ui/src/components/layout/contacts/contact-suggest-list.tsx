@@ -1,8 +1,8 @@
+import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { cn } from '@workspace/ui/lib/utils';
 import { useRef } from 'react';
 import { useScrollToIndex } from '../../../hooks/use-scroll-to-index';
 import { UserItem } from '../user-item';
-import type { ContactSuggestion } from './types';
 
 type ContactSuggestListProps = {
     items: ContactSuggestion[];

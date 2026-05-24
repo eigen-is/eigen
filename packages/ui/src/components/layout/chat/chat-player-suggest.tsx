@@ -1,8 +1,8 @@
+import { useContactSuggestions } from '@workspace/lib/contacts';
 import type { RoomMember } from '@workspace/lib/types/chat';
+import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { useEffect, useMemo } from 'react';
 import { ContactSuggestList } from '../contacts/contact-suggest-list';
-import type { ContactSuggestion } from '../contacts/types';
-import { useContactSuggestions } from '../contacts/use-contact-suggestions';
 
 type ChatPlayerSuggestProps = {
     query: string;
@@ -35,10 +35,13 @@ export function ChatPlayerSuggest({
                 return m.email.toLowerCase().includes(q) || m.displayName.toLowerCase().includes(q);
             })
             .map((m) => ({
+                // Chat room participants — not workspace team members. The discriminator
+                // routes downstream consumers (e.g. the palette's contact provider) to the
+                // personal-contact landing, not a team-scoped page that wouldn't exist.
+                kind: 'personal',
                 id: m.email,
                 displayName: m.displayName,
                 email: m.email,
-                allEmails: [m.email],
             }));
 
         if (!includeContacts) {

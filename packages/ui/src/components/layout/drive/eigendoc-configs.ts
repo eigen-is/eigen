@@ -1,6 +1,6 @@
+import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
 import { EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
 import type { EigenDocAppConfig } from './eigendoc-config';
-import { EIGEN_DOC_ICONS } from './file-presentation';
 
 // Per-app config consumed by the EigenDoc app shell (EigenDocRoot, EigenDocListView,
 // EigenDocSharedView, EigenDocNewButton). Both metadata and icons derive from

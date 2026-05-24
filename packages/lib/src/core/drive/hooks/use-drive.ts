@@ -1,4 +1,4 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
 import {
     DRIVE_MIME_CHAT,
@@ -175,6 +175,24 @@ export function usePathInfo(ownerId: string, mountId: string, pathId: string | u
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         staleTime: 1000 * 60 * 5, // 5 minutes
+    });
+}
+
+// Batch variant — shares cache with usePathInfo so a path fetched here hits the
+// same `driveKeys.path` entry. Returns the underlying useQuery results in order.
+export function usePathInfos(refs: { ownerId: string; mountId: string; pathId: string }[]) {
+    return useQueries({
+        queries: refs.map((r) => ({
+            queryKey: driveKeys.path(r.ownerId, r.mountId, r.pathId),
+            queryFn: async (): Promise<DrivePath | null> => {
+                const response = await driveApi({ ownerId: r.ownerId })({ mountId: r.mountId })
+                    .path({ pathId: r.pathId })
+                    .get();
+                return response.data || null;
+            },
+            enabled: !!r.pathId && !!r.ownerId && !!r.mountId,
+            staleTime: 1000 * 60 * 5,
+        })),
     });
 }
 

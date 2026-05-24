@@ -1,16 +1,36 @@
 import type { EmailSummary } from '@workspace/lib/types/mail';
-import { and, count, eq, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Home } from '../home';
+import { SEARCH_DB_CONFIG } from '../search/db-config';
+import { type SearchDoc, SearchIndex, type SearchQueryOptions } from '../search/search-index';
 import { MAIL_DB_CONFIG } from './db-config';
 import * as schema from './schema';
+
+// Mailboxes excluded from default mail search — users can still search them explicitly.
+const SEARCH_EXCLUDED_MAILBOXES = ['Trash', 'Junk'];
+
+// Projection of an email into a generic search document. Sender, recipient and body are
+// joined into the indexed `body` so all three are searchable. `bucket` holds the mailbox so
+// the search index can filter by it without knowing mail concepts.
+function emailToSearchDoc(email: EmailSummary): SearchDoc {
+    return {
+        kind: 'mail',
+        itemId: email.id,
+        bucket: email.mailbox,
+        title: email.subject,
+        body: `${email.fromShort}\n${email.fromAddress}\n${email.toShort}\n${email.toAddress}\n${email.recipientsAll}\n${email.textShort}`,
+        sortKey: email.date.getTime(),
+    };
+}
 
 export default class MailDB {
     private home: Home;
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
+    private searchIndex!: SearchIndex;
 
     constructor(home: Home) {
         this.home = home;
@@ -19,6 +39,28 @@ export default class MailDB {
     async init() {
         this.managedDb = await this.home.getLocalDatabase(MAIL_DB_CONFIG, PATHS.MAIL.DB);
         this.db = this.managedDb.db;
+        const searchManaged = await this.home.getLocalDatabase(SEARCH_DB_CONFIG, PATHS.MAIL.SEARCH_DB);
+        this.searchIndex = new SearchIndex(searchManaged.db);
+        // Backfill only a fresh index — the write-hooks keep an existing one current, and the
+        // search.db file persists across Home recreates, so this runs at most once.
+        if (this.searchIndex.isEmpty()) {
+            this.backfillSearchIndex().catch((err) => console.error('mail search backfill failed:', err));
+        }
+    }
+
+    // Search-index writes are best-effort: the index is derived data, so a failure here must
+    // never break mail delivery or any mail mutation.
+    private safeIndex(action: () => void): void {
+        try {
+            action();
+        } catch (error) {
+            console.error('mail search index update failed:', error);
+        }
+    }
+
+    private reindexEmail(id: string): void {
+        const email = this.getEmail(id);
+        if (email) this.safeIndex(() => this.searchIndex.upsert(emailToSearchDoc(email)));
     }
 
     addEmail(email: EmailSummary): boolean {
@@ -29,6 +71,10 @@ export default class MailDB {
             filename: email.filename,
             subject: email.subject?.toString() || '',
             fromShort: String(email.fromShort || ''),
+            fromAddress: String(email.fromAddress || ''),
+            toShort: String(email.toShort || ''),
+            toAddress: String(email.toAddress || ''),
+            recipientsAll: String(email.recipientsAll || ''),
             textShort: String(email.textShort || ''),
             date,
             size: email.size,
@@ -43,13 +89,17 @@ export default class MailDB {
         };
 
         const existing = this.db.select().from(schema.emails).where(eq(schema.emails.id, record.id)).get();
+        let inserted: boolean;
         if (existing) {
             const { id, ...rest } = record;
             this.db.update(schema.emails).set(rest).where(eq(schema.emails.id, email.id)).run();
-            return false;
+            inserted = false;
+        } else {
+            this.db.insert(schema.emails).values(record).run();
+            inserted = true;
         }
-        this.db.insert(schema.emails).values(record).run();
-        return true;
+        this.safeIndex(() => this.searchIndex.upsert(emailToSearchDoc(record)));
+        return inserted;
     }
 
     size() {
@@ -75,10 +125,12 @@ export default class MailDB {
 
     deleteEmail(id: string) {
         this.db.delete(schema.emails).where(eq(schema.emails.id, id)).run();
+        this.safeIndex(() => this.searchIndex.delete('mail', id));
     }
 
     moveEmail(id: string, mailbox: string) {
         this.db.update(schema.emails).set({ mailbox }).where(eq(schema.emails.id, id)).run();
+        this.reindexEmail(id);
     }
 
     setRead(id: string, isRead: boolean) {
@@ -109,16 +161,110 @@ export default class MailDB {
             .run();
     }
 
-    updateDraftContent(id: string, subject: string, textShort: string): void {
+    // `text` is the full draft body. emails.textShort stays a truncated preview for list
+    // views, but the search index gets the complete body.
+    updateDraftContent(
+        id: string,
+        subject: string,
+        text: string,
+        recipients?: { toShort: string; toAddress: string; recipientsAll: string },
+    ): void {
         this.db
             .update(schema.emails)
-            .set({ subject, textShort, updatedAt: new Date() })
+            .set({
+                subject,
+                textShort: text.slice(0, 200),
+                updatedAt: new Date(),
+                ...(recipients && {
+                    toShort: recipients.toShort,
+                    toAddress: recipients.toAddress,
+                    recipientsAll: recipients.recipientsAll,
+                }),
+            })
             .where(eq(schema.emails.id, id))
             .run();
+        const email = this.getEmail(id);
+        if (email) this.safeIndex(() => this.searchIndex.upsert(emailToSearchDoc({ ...email, textShort: text })));
     }
 
     getAllEmails(mailbox: string) {
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
+    }
+
+    searchMail(opts: { q: string; limit: number; mailboxes?: string[]; from?: string; to?: string }): EmailSummary[] {
+        // Filter-first: when a structured filter is present, narrow to candidate ids via
+        // mail.db's own indexed columns, then ask the search index to rank within that
+        // subset. Exact recall at any selectivity; no candidate-pool over-fetch.
+        let itemIds: string[] | undefined;
+        if (opts.from || opts.to) {
+            const conditions = [];
+            if (opts.from) {
+                const needle = `%${opts.from.toLowerCase()}%`;
+                conditions.push(
+                    sql`(lower(${schema.emails.fromShort}) LIKE ${needle} OR lower(${schema.emails.fromAddress}) LIKE ${needle})`,
+                );
+            }
+            if (opts.to) {
+                const needle = `%${opts.to.toLowerCase()}%`;
+                conditions.push(sql`lower(${schema.emails.recipientsAll}) LIKE ${needle}`);
+            }
+            const rows = this.db
+                .select({ id: schema.emails.id })
+                .from(schema.emails)
+                .where(and(...conditions))
+                .all();
+            itemIds = rows.map((r) => r.id);
+            if (itemIds.length === 0) return [];
+        }
+
+        const indexOpts: SearchQueryOptions = {};
+        if (itemIds) indexOpts.itemIds = itemIds;
+        if (opts.mailboxes && opts.mailboxes.length > 0) {
+            indexOpts.buckets = opts.mailboxes;
+        } else {
+            // Default mailbox exclusion applies whether or not a structured filter is active —
+            // the user has not opted into searching Trash/Junk unless they pass `mailboxes`
+            // explicitly.
+            indexOpts.excludeBuckets = SEARCH_EXCLUDED_MAILBOXES;
+        }
+
+        const ids = this.searchIndex.query(opts.q, opts.limit, indexOpts);
+        if (ids.length === 0) return [];
+        const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        return ids.map((id) => byId.get(id)).filter((r): r is NonNullable<typeof r> => r !== undefined);
+    }
+
+    // Idempotent full re-index of every email. Runs in transactional batches and yields the
+    // event loop between them (Bun.sleep(0)), so even a large mailbox never blocks concurrent
+    // requests for longer than a single batch.
+    //
+    // The id list is snapshotted up front, but each batch re-reads its rows fresh from
+    // mail.db — so a delete/move/draft-update that lands during a yield isn't overwritten
+    // by the stale snapshot the next batch would otherwise carry. Rows deleted mid-backfill
+    // simply drop out of the per-batch SELECT.
+    async backfillSearchIndex(): Promise<void> {
+        // 250 trades SQLite transaction overhead (one upsertBatch = one transaction)
+        // against per-batch latency. Not benchmarked; revisit if a huge mailbox shows
+        // noticeable read stalls during the one-time backfill.
+        const BATCH_SIZE = 250;
+        const ids = this.db
+            .select({ id: schema.emails.id })
+            .from(schema.emails)
+            .all()
+            .map((r) => r.id);
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+            const batchIds = ids.slice(i, i + BATCH_SIZE);
+            const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, batchIds)).all();
+            if (rows.length > 0) {
+                try {
+                    this.searchIndex.upsertBatch(rows.map(emailToSearchDoc));
+                } catch (error) {
+                    console.error(`mail search backfill failed for batch at offset ${i}:`, error);
+                }
+            }
+            await Bun.sleep(0);
+        }
     }
 
     async destruct(): Promise<void> {

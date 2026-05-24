@@ -44,10 +44,15 @@ Every app wraps its root route in `AppShell`:
 `EigenApp` (`packages/ui/src/components/layout/app/eigen-app.tsx`) wraps every app with providers:
 
 HotkeysProvider → TooltipProvider → QueryClientProvider → AuthProvider(loadingFallback) → ThemeProvider →
-SSEProvider → UploadProvider → PreviewProvider → GlobalHotkeys → ErrorBoundary → Toaster + ReactQueryDevtools
+SSEProvider → UploadProvider → PreviewProvider → CommandPaletteProvider → GlobalHotkeys → ErrorBoundary →
+Toaster + ReactQueryDevtools
 
 `AuthProvider` accepts a `loadingFallback` prop (defaults to `<LoadingScreen />`) shown while auth state loads.
 `ThemeProvider` applies light/dark/system theme from user space settings.
+`CommandPaletteProvider` holds the palette's open state + the current selection/selectionActions
+published by routes; `AppShell` mounts `PaletteRunner` (which renders `<CommandPalette>` + the shared
+create dialogs) inside it. Apps that don't wrap with `EigenApp` (the marketing routes in `apps/index`)
+omit the palette stack — `PaletteRunner` exits early via `useOptionalCommandPalette` so they don't crash.
 
 ## ColumnLayout & Column
 
@@ -148,6 +153,8 @@ menu needs submenu.
 | `useLabels`           | `labels/label-provider.tsx`                      | Hook: addLabel, updateLabel, deleteLabel   |
 | `PreviewProvider`     | `preview-provider/preview-provider.tsx`          | File preview (images, videos, PDFs)        |
 | `usePreview`          | `preview-provider/preview-provider.tsx`          | Hook: openPreview, closePreview            |
+| `useOptionalPreview`  | `preview-provider/preview-provider.tsx`          | Returns null when no provider in the tree  |
+| `CommandPaletteProvider` | `app/command-palette/command-palette-provider.tsx` | Holds palette open/input/scope + published selection/selectionActions |
 
 ### User Components
 
@@ -168,10 +175,38 @@ menu needs submenu.
 
 ### Contacts
 
-| Component               | File                                  | Description                             |
-|-------------------------|---------------------------------------|-----------------------------------------|
-| `ContactAutosuggest`    | `contacts/contact-autosuggest.tsx`    | Input with contact suggestions dropdown |
-| `useContactSuggestions` | `contacts/use-contact-suggestions.ts` | Hook: filter contacts by query          |
+| Component               | File                                                                | Description                                                                                |
+|-------------------------|---------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| `ContactAutosuggest`    | `packages/ui/src/components/layout/contacts/contact-autosuggest.tsx` | Input with contact suggestions dropdown                                                    |
+| `ContactSuggestList`    | `packages/ui/src/components/layout/contacts/contact-suggest-list.tsx` | Presentational `<ul>` of suggestions (used by autosuggest + chat @-mention)               |
+| `ContactAddRow`         | `packages/ui/src/components/layout/contacts/contact-add-row.tsx`     | ContactAutosuggest + plus button (drive/calendar share dialogs)                            |
+| `useContactSuggestions` | `packages/lib/src/core/contacts/hooks/use-contact-suggestions.ts`    | Hook: merge personal contacts + team members, filter by query. `kind: 'personal' \| 'team'` + `teamId` lets consumers branch. Lives in lib so the command palette and the autosuggest UIs share one implementation |
+| `ContactSuggestion`     | `packages/lib/src/types/contact.ts`                                  | Canonical projection: `{ kind, id, displayName, email, teamId? }`                          |
+
+### Command Palette
+
+`Mod+K` opens a global palette that searches and acts across every app. Architecture in
+`packages/lib/src/core/command-palette/` (engine, parsers, rank, providers, commands, hooks) +
+`packages/ui/src/components/layout/app/command-palette/` (dialog, rows, footer, trigger).
+The catalog draws from the shared `apps` registry (`@workspace/lib/apps`) and the
+`EIGEN_DOC_TYPE_INFO` + `EIGEN_DOC_ICONS` registries — adding a new EigenDocType updates the
+palette's New menu automatically. Selection-aware actions arrive via `usePaletteSelection` +
+`usePaletteSelectionActions` published by routes (DriveList multi-select, eigendoc viewers
+publish 1-item selections).
+
+| Component                    | File                                                                                | Description                                                                                                            |
+|------------------------------|-------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `CommandPalette`             | `packages/ui/src/components/layout/app/command-palette/command-palette.tsx`         | The `Mod+K` dialog: cmdk `<Command>` with controlled value (first-item-selected on each result-set change), fixed `h-[420px]` list, scope chip header, kind-aware rows |
+| `CommandPaletteTrigger`      | `packages/ui/src/components/layout/app/command-palette/command-palette-trigger.tsx` | Topbar pill (desktop) + icon button (mobile), styled to match the existing `bg-app` topbar buttons                     |
+| `usePaletteShortcuts`        | `packages/ui/src/components/layout/app/command-palette/use-palette-shortcuts.ts`    | Global `Mod+K` capture                                                                                                 |
+| `CommandRow*` components     | `packages/ui/src/components/layout/app/command-palette/command-row-*.tsx`           | One row component per kind (action, smart, contact, mail) — palette density (h-4 icons / h-5 avatar)                   |
+| `useCommandPalette`          | `@workspace/lib/command-palette`                                                    | Read palette context (open/input/scope/selection/selectionActions). Throws if no provider                              |
+| `useOptionalCommandPalette`  | `@workspace/lib/command-palette`                                                    | Returns `null` when no provider — used by `PaletteRunner` to skip rendering in apps without `EigenApp`                 |
+| `useCommandResults`          | `@workspace/lib/command-palette`                                                    | Composes the 4 providers + the engine; holds the last settled merge during `mail.isPending` so the palette doesn't flicker on keystrokes |
+| `usePaletteSelection`        | `@workspace/lib/command-palette`                                                    | Publish a `{items: DrivePath[]}` selection from a route (DriveList, each eigendoc viewer). Stable on `idsKey`           |
+| `usePaletteSelectionActions` | `@workspace/lib/command-palette`                                                    | Publish dialog-opening handlers (rename/share/delete/etc.) from `DriveLayout`. Stable on a shape-key so callers don't need to memoise perfectly |
+| `Command` / `PaletteResult`  | `packages/lib/src/types/command-palette.ts`                                         | Catalog entry + discriminated-union result types. Result kinds: `action`, `smart`, `contact`, `mail`. `Command.group: 'actions' \| 'selection'` + `dynamicTitle(ctx) => string` for item-aware labels |
+| `buildSections`              | `packages/lib/src/core/command-palette/engine.ts`                                   | Pure merge: groups → Top Hit → Suggestions → Selection → Mail → Contacts → Actions. Sections cap at 6                  |
 
 ### Context Menu
 

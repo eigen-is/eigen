@@ -68,6 +68,10 @@ export type EmailSummary = {
     filename: string;
     subject: string;
     fromShort: string;
+    fromAddress: string;
+    toShort: string;
+    toAddress: string;
+    recipientsAll: string;
     textShort: string;
     date: Date;
     isRead: boolean;

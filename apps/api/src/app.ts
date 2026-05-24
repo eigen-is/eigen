@@ -20,6 +20,7 @@ import { internalRouter } from './routes/internal';
 import { mailRouter } from './routes/mail';
 import { notificationRouter } from './routes/notification';
 import { publicRouter } from './routes/public';
+import { searchRouter } from './routes/search';
 import { settingsRouter } from './routes/settings';
 import { setupRouter } from './routes/setup';
 import { spaceRouter } from './routes/space';
@@ -104,6 +105,7 @@ export const app = new Elysia()
     .use(chatRouter)
     .use(editorRouter)
     .use(notificationRouter)
+    .use(searchRouter)
     .use(sseRouter)
     .use(internalRouter)
     .use(caldavRouter)

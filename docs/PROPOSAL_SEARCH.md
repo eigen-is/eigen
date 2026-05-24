@@ -1,13 +1,49 @@
 # Search Index
 
+> **Status — v1 (mail) shipped on `feat/search-index-mail`.** Code in
+> `apps/api/src/lib/search/search-index.ts` (the generic FTS5 service, kind-agnostic) +
+> `apps/api/src/lib/mail/maildb.ts` (mail-specific indexing on write) +
+> `apps/api/src/routes/search.ts` (the `/search/:ownerId` endpoint) +
+> `packages/lib/src/core/search/` (FE hook + keys + invalidate).
+>
+> **Shipped:**
+> - `SearchIndex` SQLite FTS5 service: kind-agnostic columns (`itemId`, `bucket`, `title`, `body`,
+>   `sortKey`), `query(text, limit, opts)` with `buckets` / `excludeBuckets` / `itemIds` allowlist
+>   composition + empty-allowlist short-circuit, `bm25` + `sortKey` ranking, sanitised FTS query
+>   grammar.
+> - Mail indexing: `MailDB.addEmail` / `updateDraftContent` index on write; index is best-effort
+>   (failures never break mail delivery). Body row joins from/to/recipientsAll/textShort so all four
+>   surfaces match.
+> - `searchMail` filter-first: `from` / `to` filters narrow the candidate id set via mail.db's own
+>   indexed columns (`fromShort` / `fromAddress` / `recipientsAll`), then the FTS index ranks
+>   within that subset. Exact recall at any selectivity.
+> - Default mailbox exclusion (`Trash`, `Junk`) applied whether or not a structured filter is
+>   active.
+> - Route: `GET /search/:ownerId?q&sources&mailbox&from&to&limit` returning canonical
+>   `EmailSummary[]`. `from` / `to` capped at 256 chars.
+> - Frontend: `useSearch` hook with `searchKeys` query keys (includes `ownerId`), 30s `staleTime`,
+>   `enabled` guard, AbortSignal threaded through Eden Treaty.
+> - SSE: `invalidateSearchOwner` wired into every mail mutation event (`MAIL_RECEIVED`,
+>   `MAIL_DELETED`, `MAIL_MOVED`, `MAIL_READ_CHANGED`, `MAIL_FLAGS_CHANGED`,
+>   `MAIL_DRAFT_UPDATED`, `MAIL_SENT`).
+> - Test coverage: 41 tests across the SearchIndex unit, Maildir integration, and endpoint blocks —
+>   including `from` / `to` combinations, Trash exclusion, recipient + CC search, normalisation.
+>
+> **Index location:** **one index per Home** (`.eigen-storage/mail/search.db`), matching this
+> proposal's eventual "Option A" recommendation. Schema lives in
+> `apps/api/src/lib/search/db-config.ts`, reusable across kinds. Currently mail-only.
+>
+> **Deferred (post-v1):** Drive indexing, calendar indexing, chat indexing; pre-shared index for
+> cross-Home search; vector / semantic search. The shared schema means each new kind is an
+> additive write-path + a route source rather than a schema change.
+
 > **TLDR**: The **backend search infrastructure** consumed by the
-> [command palette](PROPOSAL_COMMAND_PALETTE.md). SQLite FTS5 full-text search. **Where the
-> index physically lives is an open decision** — one database per Home, or one per scope (per
-> mount, plus mail and calendar). This proposal documents both, with a working lean toward
-> per-scope, for a review round to settle. Each domain indexes its text on write; the search
-> endpoint returns results **grouped by kind** — the palette renders one section per group.
-> Future: optional hybrid keyword + vector search. **No UI here — the palette is the only
-> consumer.**
+> [command palette](PROPOSAL_COMMAND_PALETTE.md). SQLite FTS5 full-text search, **one index per
+> scope** (per mount, plus mail and calendar). Each domain indexes its text on write; the
+> search endpoint returns results **grouped by kind** — the palette renders one section per
+> group. Each kind is ranked within itself by `bm25()`; cross-kind ordering is structural, not
+> a fused score. Future: optional hybrid keyword + vector search. **No UI here — the palette is
+> the only consumer.**
 
 ## Problem statement
 
@@ -27,7 +63,7 @@ Requirements:
 
 | Domain   | What's indexed                          | Source already text?                  |
 |----------|-----------------------------------------|---------------------------------------|
-| Mail     | Subject, sender, short body preview     | Yes — in the mail database            |
+| Mail     | Subject, sender, recipients (To and CC), short body preview | Yes — in the mail database     |
 | Drive    | File and folder names                   | Yes — in mount metadata               |
 | Calendar | Event title, description, location      | Yes — in the calendar database        |
 | Chat     | Message content, author                 | Yes — in the per-room database        |
@@ -67,8 +103,9 @@ one FTS table, discriminated by a `kind` column.
 **For:**
 
 - The storage unit matches the access unit. Search is always Home-wide, and so is the index —
-  no cross-scope merge. Per-kind result groups come from one table, and the cross-kind Top Hit
-  ranks on native, comparable `bm25()`.
+  no cross-scope merge, and per-kind result groups come from one table. (One table does *not*,
+  however, buy a meaningful cross-kind ranking — see
+  [Ranking and cross-kind merging](#ranking-and-cross-kind-merging).)
 - One schema, one file, one migration history, one rebuild — one thing to reason about and back up.
 - One open database handle per Home.
 
@@ -101,11 +138,10 @@ mounts, each self-versioning on open). Many database *files*, but one schema.
 
 **Against:**
 
-- Search is Home-wide, so every query fans out across all enabled scopes. Same-kind results
-  from different mounts must be merged by rank fusion (Reciprocal Rank Fusion), because
-  `bm25()` is comparable only within one index. Real recurring per-query work.
+- Search is Home-wide, so every query fans out across all enabled scopes, and same-kind
+  results from different mounts must then be combined per query — `bm25()` is comparable only
+  within one index, so the combine cannot just sort on score. Real recurring per-query work.
 - More open file handles per Home; a Home-level coordinator is needed to gather and merge.
-- The cross-kind Top Hit is a rank-fusion approximation, not a native ranking.
 
 ### How much it matters
 
@@ -124,7 +160,7 @@ change. The decision only pins down:
 - **The `SearchIndex` service** — Option A: one instance on `Home`. Option B: one instance per
   scope, plus a Home-level coordinator that merges.
 - **The query path** — Option A: per-kind queries against one database. Option B: fan-out
-  across scopes, then a rank-fusion merge of same-kind results.
+  across scopes, then a per-query combine of same-kind results from different mounts.
 - **Lifecycle cleanup** — Option A: an explicit delete-by-mount on mount removal. Option B: the
   mount's index is disposed with the mount.
 - **File count** — Option A: one `search.db` per Home. Option B: one per mount, plus mail and
@@ -132,18 +168,23 @@ change. The decision only pins down:
 
 ### Status
 
-**Open — to be settled in a later review round.** Working lean: Option B, for the mount-
-lifecycle fit. The sections below are drafted against Option B; under Option A, substitute the
-four points above.
+**Settled: Option B** — one index per scope. The mount-lifecycle fit decided it, and the
+ranking analysis ([Ranking and cross-kind merging](#ranking-and-cross-kind-merging)) reinforces
+it — per-scope indexes keep each kind's `bm25()` well-calibrated, where one shared index would
+not. The mail slice is implemented against Option B; the Option A pros and cons above are kept
+for the record. **Initial slice ships personal-mail only.** The route uses `requireSelf`, so
+team-owner search is deferred to the slice that adds mail to `TeamHome`. The wire shape is
+forward-compatible — adding a `mountId` source returns a `{ files: ... }` group without breaking
+existing consumers.
 
 ## Index structure
 
 Every `search.db` has the same structure, built on FTS5's **external-content-table** pattern:
 
 - A **content table** — one row per indexed item: its kind (`file`, `chat`, `mail`, `event`),
-  the source item's id, the searchable title and body text, a small metadata blob (domain
-  fields used to render a result), and a timestamp. A uniqueness constraint on kind + item id
-  makes re-indexing an idempotent upsert.
+  the source item's id, a `bucket` facet (a generic per-kind filterable label — for mail, the
+  mailbox name), the searchable title and body text, and a numeric sort key. A uniqueness
+  constraint on kind + item id makes re-indexing an idempotent upsert.
 - An **FTS5 virtual table** indexing only the title and body.
 - **Triggers** keeping the FTS table in sync on every insert, update, and delete.
 
@@ -181,11 +222,12 @@ after its own database write. The index stays current without a separate sync jo
 | A chat message is posted or edited               | the (host mount's) index           |
 | A doc / slides / sheets snapshot                 | the (host mount's) index           |
 
-(Under Option A, every row above writes the one per-Home index.) Each domain writes the metadata
-blob shaped to fit its result kind — mail emits sender, mailbox, and received time; drive and
-the collaborative types emit owner, mime type, and a subtitle; calendar emits start time,
-location, and calendar name; chat emits chat id, owner, chat title, and sent time. The query
-side reads those fields back to build the typed result.
+(Under Option A, every row above writes the one per-Home index.) Each domain populates the index
+with the FTS text (title, body) plus the `bucket` for its kind (mail: mailbox; calendar:
+calendar id; files: TBD). Display data for a hit comes from the canonical store at query time,
+not from the index — the index stays small and the response uses the **canonical domain type**
+for each kind (e.g. an `EmailSummary` for a mail hit), exactly what the mail listing endpoint
+returns.
 
 A **one-time backfill** populates the index by walking each domain's data. Under Option B it
 runs per scope, so it parallelizes naturally and a single corrupt scope can be rebuilt alone.
@@ -231,13 +273,15 @@ A single owner-scoped endpoint:
 
 Internally the query path depends on the storage option. Under Option B a Home-level coordinator
 queries every **enabled** mount index plus the mail and calendar indexes — one capped query per
-kind per scope — and merges: same-kind results from different mounts (files, chats) are fused by
-rank position (Reciprocal Rank Fusion) into one ranked group; mail and calendar are
-single-scope and rank natively with `bm25()`. Under Option A the same grouped result comes from
-per-kind queries against the one index, ranked natively throughout.
+kind per scope — and combines the same-kind results from different mounts into one group per
+kind; mail and calendar are single-scope. How that combine and the cross-kind ordering work —
+and why neither uses a fused `bm25()` score — is set out in
+[Ranking and cross-kind merging](#ranking-and-cross-kind-merging). Under Option A the per-kind
+groups come straight from the one index.
 
 When the user is browsing a team workspace, the owner is the team, so the same endpoint searches
-the team's data under the standard team-access check.
+the team's data under the standard team-access check. (Phase: deferred — the initial mail slice
+is personal-owner only.)
 
 ### Response shape
 
@@ -252,16 +296,75 @@ mount-keyed shape would not. Items shared with the user appear inside their kind
 by a non-self owner — not as a separate group. Chat is part of the shape from day one but stays
 empty until chat indexing ships (Phase 3).
 
-Each hit is a typed variant — file, mail, event, chat — carrying a `kind` discriminator the
-frontend's row components switch on. Same discipline as `SSEvent`, `HomeMessage`, and the
-notification center: no untyped JSON bag at the seam, no casts on the frontend. Contacts are
-**not** in the response — the palette serves people from its own cached frontend provider.
+Each hit is the canonical domain type for its kind (`EmailSummary` for mail, `DrivePath` for
+files, the canonical event/chat types for those). The grouping (`response.mail` vs
+`response.file`) discriminates; frontend row components can be exactly the components per-app
+views already use for those types. Same discipline as `SSEvent` / `HomeMessage` — no untyped
+JSON bag at the seam, no casts. Contacts are **not** in the response — the palette serves
+people from its own cached frontend provider.
 
-Presentation fields — icon, ranking score, result group — are deliberately **not** on the wire.
-They belong to the [command palette](PROPOSAL_COMMAND_PALETTE.md), which projects each search
-hit into its own result model by adding them on the frontend. Keeping them off the wire leaves
-the endpoint portable to other consumers (a future per-app search page). The shared wire types
-live in the lib package and are imported by both sides.
+Non-serialisable presentation (icons, React, the palette's rank score, the section grouping)
+stays off the wire. Display data, however, **is** the canonical type — that is exactly what
+makes the endpoint reusable: per-app in-app search (Mail's, Drive's) can render its existing
+row components against the `EmailSummary[]` / `DrivePath[]` this endpoint returns. The shared
+wire types live in the lib package and are imported by both sides.
+
+## Ranking and cross-kind merging
+
+Turning matches into a useful order is the hard part of search. These constraints are real, and
+the model follows from them.
+
+**`bm25()` ranks well only within one index.** SQLite FTS5's `bm25()` depends on collection-wide
+statistics — the document count, each term's document frequency (IDF), and the average document
+length. Those differ per index, so a `bm25()` value from the mail index and one from the
+calendar index — or from two different mount indexes — sit on different, incomparable scales.
+`bm25()` is a *within-one-index, within-one-query* ranking signal, never an absolute or
+cross-index quality measure.
+
+**One shared index does not fix this.** Putting every kind in one FTS5 table (Option A) does put
+scores on one scale — but it *miscalibrates* that scale. `bm25()`'s length normalization assumes
+a roughly homogeneous corpus; mixing ~10-word calendar notes with multi-thousand-word document
+bodies makes the average-length parameter meaningless, and the result systematically favors
+short items (notes, subjects, filenames) over long bodies regardless of true relevance. It also
+degrades within-kind ordering, since each kind is then ranked against global statistics rather
+than its own. One scale, but a skewed one — comparable numbers, not a meaningful ranking.
+
+**Reciprocal Rank Fusion does not merge cross-kind results.** RRF combines several ranked lists
+by summing `1 / (k + rank)` over the lists each item appears in; its power is rewarding
+*consensus* — an item ranked highly by several lists at once. But Eigen's sources hold
+**disjoint items**: a mail hit exists only in the mail list, a file only in its mount's list.
+With disjoint lists every item appears in exactly one list, so its RRF score collapses to a
+single `1 / (k + rank)` term — RRF degenerates to "interleave by rank position, discard match
+quality." Every list's #1 ties, every #2 ties; a perfect match in one kind cannot beat a
+mediocre top result of another. RRF is therefore **not** used to merge cross-kind or cross-mount
+results. Its legitimate use is hybrid search (see *Future: semantic / vector search* below) —
+fusing the lexical (`bm25()`) and vector rankings of *the same corpus*, where an item genuinely
+appears in both lists.
+
+**The model.** Each scope's index ranks its own kind with its own, well-calibrated `bm25()` —
+good *within* a kind. Cross-kind ordering is then handled structurally, never by a fused number:
+
+- Results are returned **grouped by kind**; the palette renders one section per kind, each in
+  its kind's `bm25()` order. No cross-kind score is needed for this.
+- The one cross-kind decision — the promoted **Top Hit** — is made by the palette from
+  **structural match-quality signals**, which *are* comparable across kinds precisely because
+  they are not statistical: whether the query exactly equals the result's title, is a prefix of
+  it, or has all its terms in the title (versus only the body). A confident smart-parse (an
+  email address, a URL) can also take the Top Hit. When nothing clears a confidence threshold,
+  no Top Hit is shown — the user just sees the sectioned results. macOS Spotlight and Raycast
+  behave this way.
+- Same-kind results from **different mounts** are combined the same way — structural
+  match-quality first; a plain rank-position interleave is at most a last-resort tiebreak among
+  otherwise-equal results, never the primary signal.
+- **No numeric relevance score crosses the wire.** The palette derives what it needs — section
+  order is the within-kind rank, and title-match quality is computed from the `title` already
+  returned. Consistent with presentation and ranking being the palette's concern.
+
+The honest consequence: a single trustworthy ranking over genuinely heterogeneous content is
+deliberately *not* attempted from one lexical score. Doing that well is a hard IR problem
+(field-weighted scoring, learning-to-rank, embeddings) outside this proposal's scope. The
+lightweight FTS5 design keeps `bm25()` to within-kind ranking and resolves cross-kind
+structurally.
 
 ## Searching shared data
 
@@ -321,7 +424,7 @@ What not to do:
 
 | Phase | Scope                                                                                                   | Effort |
 |-------|---------------------------------------------------------------------------------------------------------|--------|
-| 1     | The `search.db` schema and `DatabaseConfig`, the `SearchIndex` service (per the chosen storage option), the `/search` route returning the grouped shape, index-on-write hooks for **metadata** (mail, calendar, drive names), and a one-time backfill — the milestone where the palette's search lights up | M–L |
+| 1     | The `search.db` schema and `DatabaseConfig`, the `SearchIndex` service (per the chosen storage option), the `/search` route returning the grouped shape, index-on-write hooks indexing mail subjects, calendar event titles, and drive file names, and a one-time backfill — the milestone where the palette's search lights up | M–L |
 | 2     | Content extraction for docs, slides, and sheets — a thin text collector over the export content loaders, hooked into snapshot creation | M |
 | 3     | Chat message indexing — index message content                                                            | S      |
 | 4     | Shared data — make items shared with the user searchable                                                 | S–M    |
@@ -329,7 +432,7 @@ What not to do:
 
 Phase 1 is the **prerequisite track** the command palette depends on — see that proposal's phase
 table. It can be built in parallel with the palette's frontend-only phases. After Phase 1 the
-palette searches metadata (filenames, subjects, titles); each later phase deepens what's
+palette searches the indexed fields (filenames, subjects, titles); each later phase deepens what's
 searchable with no change to the palette's frontend. The storage-layout decision (above) should
 be settled before Phase 1 starts.
 
@@ -344,32 +447,37 @@ apps/api/src/lib/search/
   schema.ts               # the content table (Drizzle)
   db-config.ts            # the search DatabaseConfig — FTS5 virtual table + sync triggers
   search-index.ts         # the SearchIndex service — upsert, delete, query
-  search-coordinator.ts   # Option B only — enumerate enabled scopes, query, rank-fuse, group
+  search-coordinator.ts   # Option B only — enumerate enabled scopes, query, combine, group
   extract-text.ts         # thin text collector over the export content loaders (docs/slides/sheets)
 
 apps/api/src/routes/
   search.ts               # the GET /search/:ownerId endpoint
 
 packages/lib/src/types/
-  search.ts               # shared wire types — the search-hit variants + grouped response shape
+  search.ts               # shared wire types — the grouped response shape that maps each kind to its canonical domain type
 ```
 
 ## Key decisions
 
-- **Index storage layout — OPEN.** One index per Home, or one per scope (per mount, plus mail
-  and calendar). Both options, with honest pros and cons, are weighed in
-  [Search index location](#search-index-location); the choice is deferred to a review round.
-  Working lean: per scope, for the mount-lifecycle fit.
-- **Content table + FTS5 virtual table** — kind, ids, and metadata stay in a regular table;
-  only title and body are full-text indexed; triggers keep them in sync.
+- **Index storage layout — one index per scope (Option B).** Per mount, plus mail and calendar.
+  Chosen for the mount-lifecycle fit and because it keeps each kind's `bm25()` well-calibrated;
+  weighed in [Search index location](#search-index-location).
+- **Cross-kind ranking is structural, not score-fused.** Each kind is ranked within itself by
+  `bm25()`; the cross-kind Top Hit is decided by structural match-quality (exact / prefix /
+  all-query-terms-in-title), not a fused numeric score — `bm25()` is not cross-index comparable
+  and RRF degenerates on disjoint result sets. No relevance score crosses the wire. See
+  [Ranking and cross-kind merging](#ranking-and-cross-kind-merging).
+- **Content table + FTS5 virtual table** — kind, ids, bucket, and sort key stay in a regular
+  table; only title and body are full-text indexed; triggers keep them in sync.
 - **Index on write** — each domain indexes through its existing mutation flow; no separate sync
   job. A one-time backfill covers pre-existing data.
 - **Content extraction reuses the export loaders** — collaborative text is pulled from the
   export pipeline's Yjs content loaders (not a separate Yjs walker) by a thin text collector,
   run at snapshot creation rather than per edit. Stickies wait for stickies export.
 - **Response grouped by kind** — a separate ranked, capped array per kind, mirroring the
-  palette's sections; each hit a typed variant. Presentation fields stay off the wire. Identical
-  under either storage option.
+  palette's sections; each group holds the canonical domain type for that kind (so per-app
+  in-app search can reuse the endpoint); non-serialisable presentation stays off the wire.
+  Identical under either storage option.
 - **No cross-home search for v1** — items shared from other users are searchable in a later
   phase, via local metadata indexing and/or query federation.
 - **FTS5 first, vectors later** — keyword search is sufficient for v1; semantic search is an

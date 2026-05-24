@@ -11,6 +11,7 @@ import { LoadingScreen } from '../pages/loading-screen.tsx';
 import { PreviewProvider } from '../preview-provider/preview-provider.tsx';
 import { SSEProvider } from '../sse-provider';
 import { UploadProvider } from '../upload-provider/upload-provider.tsx';
+import { CommandPaletteProvider } from './command-palette/command-palette-provider.tsx';
 import { ThemeProvider } from './theme-provider.tsx';
 
 const ReactQueryDevtools = import.meta.env.DEV
@@ -51,9 +52,11 @@ export function EigenApp({ children }: EigenAppProps) {
                             <SSEProvider>
                                 <UploadProvider>
                                     <PreviewProvider>
-                                        <GlobalHotkeys />
-                                        <ErrorBoundary>{children}</ErrorBoundary>
-                                        <Toaster />
+                                        <CommandPaletteProvider>
+                                            <GlobalHotkeys />
+                                            <ErrorBoundary>{children}</ErrorBoundary>
+                                            <Toaster />
+                                        </CommandPaletteProvider>
                                     </PreviewProvider>
                                 </UploadProvider>
                             </SSEProvider>

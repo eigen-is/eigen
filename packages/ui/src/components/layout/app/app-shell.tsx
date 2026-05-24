@@ -1,7 +1,18 @@
 import { Outlet } from '@tanstack/react-router';
+import { openMailComposeWith } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import { useCommandPalette, useOptionalCommandPalette } from '@workspace/lib/command-palette';
 import { useIsMobile, useIsTablet } from '@workspace/lib/media';
-import { lazy, type ReactNode, Suspense, useState } from 'react';
+import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
+import type { CommandContext } from '@workspace/lib/types/command-palette';
+import type { EigenDocType } from '@workspace/lib/types/drive';
+import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react';
+import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc.tsx';
+import { DriveCreateFolder } from '../drive/drive-create-folder.tsx';
+import { useOptionalPreview, usePreview } from '../preview-provider/preview-provider.tsx';
 import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container.tsx';
+import { CommandPalette } from './command-palette/command-palette.tsx';
+import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts.ts';
 import { LayoutContext } from './layout-context.tsx';
 import { Topbar } from './topbar.tsx';
 
@@ -57,6 +68,7 @@ export function AppShell({
         >
             <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute} />
+                <PaletteRunner />
                 <div className="flex flex-1 w-full overflow-hidden">
                     {sidebar && !sidebarHidden && <SidebarContainer sidebar={sidebar} />}
                     <main className="flex-1 flex h-full overflow-hidden">{children ?? <Outlet />}</main>
@@ -66,5 +78,81 @@ export function AppShell({
                 <TanStackRouterDevtools position="bottom-left" />
             </Suspense>
         </LayoutContext.Provider>
+    );
+}
+
+// What `ctx.openDriveCreate(kind)` puts on the wire. `null` = no dialog open;
+// an EigenDocType opens DriveCreateEigenDoc; 'folder' opens DriveCreateFolder.
+type CreateDialogKind = EigenDocType | 'folder' | null;
+
+// AppShell is used by both EigenApp-wrapped apps (mail/drive/docs/…) and the
+// index app's marketing routes (blog/support), which don't mount the
+// CommandPaletteProvider + PreviewProvider stack. Render nothing in the latter
+// case so PaletteRunnerInner can use the required hooks without guards.
+function PaletteRunner() {
+    const palette = useOptionalCommandPalette();
+    const preview = useOptionalPreview();
+    if (!palette || !preview) return null;
+    return <PaletteRunnerInner />;
+}
+
+function PaletteRunnerInner() {
+    usePaletteShortcuts();
+    const auth = useAuth();
+    const { selection, selectionActions } = useCommandPalette();
+    const { data: settings } = useSpaceSettings();
+    const updateSettings = useUpdateSpaceSettings();
+    const { openPreview } = usePreview();
+    const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
+
+    const toggleTheme = useCallback(() => {
+        const next = settings?.theme === 'dark' ? 'light' : 'dark';
+        updateSettings.mutate({ theme: next });
+    }, [settings?.theme, updateSettings]);
+
+    const ownerId = auth.user?.id ?? '';
+
+    const ctx = useMemo<CommandContext>(
+        () => ({
+            ownerId,
+            selection,
+            selectionActions,
+            navigate: (url) => {
+                window.location.href = url;
+            },
+            // Open the same shared dialogs the Drive sidebar's New menu uses
+            // (drive-new-menu.tsx). The dialog's DriveLocationPicker lets the user
+            // pick where to create.
+            openDriveCreate: (kind) => setCreateDialog(kind),
+            openMailComposeWith,
+            openPreview,
+            toggleTheme,
+        }),
+        [ownerId, selection, selectionActions, openPreview, toggleTheme],
+    );
+
+    const eigenDocKind = createDialog && createDialog !== 'folder' ? createDialog : null;
+
+    return (
+        <>
+            <CommandPalette ctx={ctx} />
+            {eigenDocKind && (
+                <DriveCreateEigenDoc
+                    type={eigenDocKind}
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setCreateDialog(null);
+                    }}
+                    defaultOwnerId={ownerId}
+                />
+            )}
+            <DriveCreateFolder
+                open={createDialog === 'folder'}
+                onOpenChange={(open) => {
+                    if (!open) setCreateDialog(null);
+                }}
+                defaultOwnerId={ownerId}
+            />
+        </>
     );
 }

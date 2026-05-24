@@ -101,6 +101,17 @@ export default class Maildir {
         return (await this.store.dirSize()) || this.db.size();
     }
 
+    search(opts: { q: string; limit: number; mailboxes?: string[]; from?: string; to?: string }): EmailSummary[] {
+        // Canonicalise mailbox names here so callers can pass any case (e.g. `trash`,
+        // `Trash`, `inbox`) without knowing the canonical form stored in the index bucket.
+        const mailboxes = opts.mailboxes?.map(canonicalMailbox);
+        return this.db.searchMail({ ...opts, mailboxes });
+    }
+
+    backfillSearchIndex(): Promise<void> {
+        return this.db.backfillSearchIndex();
+    }
+
     // -- Mailbox operations --
 
     async mailboxesList(): Promise<MaildirMailbox[]> {
@@ -332,7 +343,19 @@ export default class Maildir {
         await this.store.writeDraftMeta(existingId, meta);
 
         const textShort = (email.text || '').slice(0, 200);
-        this.db.updateDraftContent(existingId, meta.subject, textShort);
+        const toAddrObjs = email.to ? (Array.isArray(email.to) ? email.to : [email.to]) : [];
+        const ccAddrObjs = email.cc ? (Array.isArray(email.cc) ? email.cc : [email.cc]) : [];
+        const firstTo = toAddrObjs[0]?.value[0];
+        const allRecipients = [...toAddrObjs, ...ccAddrObjs].flatMap((o) => o.value);
+        const recipients = {
+            toShort: firstTo?.name || firstTo?.address || '',
+            toAddress: firstTo?.address || '',
+            recipientsAll: allRecipients
+                .map((a) => `${a.name || ''} ${a.address || ''}`.trim())
+                .filter((s) => s.length > 0)
+                .join('\n'),
+        };
+        this.db.updateDraftContent(existingId, meta.subject, email.text || '', recipients);
 
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: 'Drafts' });
 

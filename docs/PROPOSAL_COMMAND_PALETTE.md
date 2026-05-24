@@ -1,5 +1,34 @@
 # Command Palette (⌘K)
 
+> **Status — v1 shipped on `feat/search-index-mail`.** Code in `packages/lib/src/core/command-palette/`
+> + `packages/ui/src/components/layout/app/command-palette/`, mounted by `AppShell.PaletteRunner`.
+>
+> **Shipped:** `Mod+K` dialog with the typed result model (`action` / `smart` / `contact` / `mail`),
+> the four providers, the catalog (nav derived from the shared `apps` registry; creates derived from
+> `EIGEN_DOC_TYPE_INFO`; selection-aware drive actions), the engine (`buildSections` with Top Hit /
+> Suggestions / Selection / Mail / Contacts / Actions), scope prefixes (`mail:` / `>` / `@`) and the
+> scope chip via Tab. Smart parser for `email@…` (deterministic Top Hit) and `http(s)://…`
+> (deterministic with `noopener,noreferrer`). Smart contact-derived `Send mail to <email>` row.
+> Selection publication from DriveList + the four eigendoc viewers. Selection-aware actions
+> published from `DriveLayout` via `usePaletteSelectionActions` (Rename / Share / Delete / Quick
+> preview / Download / Email collaborators) plus the pure ones in the catalog (Open / Open in new
+> tab / Copy link / Mail to…). Cross-app `Mail to…` carries drive attachments via
+> `?attach=<owner>/<mount>/<path>,…`, routed through Mail's existing `handleDriveAttach`.
+> Search invalidation on every mail mutation SSE. The palette is gated by `useOptionalCommandPalette`
+> + `useOptionalPreview` so the marketing routes in `apps/index` (which don't mount `EigenApp`'s
+> stack) don't crash.
+>
+> **Deferred (post-v1):** Sub-action sheet (`→`); `file:` / `event:` / `chat:` / `?` prefixes (no
+> backends yet); per-user recents (waits for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md));
+> per-user `commandPalette` opt-out setting; AI assist.
+>
+> **Documented divergence from the proposal:** the engine holds the entire merge during
+> `mail.isPending` rather than streaming sections as their providers resolve and waiting only the
+> Top Hit. The behaviour was chosen to eliminate visible reorder/flicker as mail results join the
+> synchronously-rendered actions/contacts. Trade-off: first results appear after the debounce + RTT
+> window (~350ms) instead of immediately. See
+> `packages/lib/src/core/command-palette/hooks/use-command-results.ts`.
+
 > **TLDR**: A single Cmd+K dialog mounted globally in the topbar that unifies **search**,
 > **actions**, **navigation**, and **smart suggestions**. Built on a typed result model —
 > one variant per kind, no untyped JSON bag. Frontend-only providers (actions, smart-parser,
@@ -203,18 +232,22 @@ Results are a **discriminated union**, one variant per kind — the same discipl
 | `event`      | search wire   | A calendar event hit                                        |
 | `chat`       | search wire   | A chat message hit (once chat content is indexed)           |
 
-Each kind carries a thin **presentation layer** added on the frontend — a stable id, a group, a
-rank score, and an icon. Presentation never crosses the wire: an icon is a React component
-reference and can't be serialised. The search endpoint emits kind-specific *wire* payloads
-(defined once in the shared search types); the palette layers presentation on top before ranking.
+The wire is the **canonical domain type per kind** (`EmailSummary` for mail, `DrivePath` for
+files, …). The palette adds the **thin presentation layer** on top: the `kind` discriminator
+(the wire groups by kind; the palette flattens using it), the result group, a rank score, and
+an icon. Non-serialisable presentation (icons are React component references; the rank score
+belongs to the palette) never crosses the wire. Per-app in-app search (Mail searching itself,
+Drive searching itself) can reuse the same endpoint and render its own row components against
+the canonical type.
 
 Why a union rather than one shape with optional fields: callers (per-kind rows, ranking,
 sub-actions) switch on `kind` and the compiler enforces exhaustiveness. The price is one row
 component per kind; the payoff is no casts and no runtime shape guards.
 
-Why split wire types from frontend types: the search endpoint stays portable to non-palette
-consumers (future per-app search pages), and the non-serialisable presentation bits stay off
-the wire.
+The split is between the canonical domain type on the wire and the non-serialisable presentation
+on the frontend. The endpoint stays portable to non-palette consumers (future per-app search
+pages, per-app in-app search); the presentation layer (icons, rank scores) stays off the wire
+and on the frontend where it belongs.
 
 ### Providers
 
@@ -241,8 +274,8 @@ The palette **does not own a search backend**. It consumes one endpoint — `/se
 described in [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md). That endpoint is backed by per-Home
 SQLite FTS5 search indexes that each domain keeps current by indexing on write. It returns
 results **grouped by kind** (files, mail, events, and — once chat indexing lands — chats) in a
-single call. The exact index storage layout is an open question in PROPOSAL_SEARCH.md and does
-not affect the palette.
+single call. The index storage layout (settled as one index per scope in PROPOSAL_SEARCH.md)
+does not affect the palette.
 
 **Build the search backend as a prerequisite track, not as a phase inside the palette.**
 PROPOSAL_SEARCH's first phase (the index schema and service, the metadata indexing hooks for
@@ -329,19 +362,32 @@ open the upload dialog, save a link). Bundling them keeps each command file ters
 
 ### Ranking
 
-Search hits arrive pre-sorted by the index's relevance rank; the search provider assigns a base
-score by position so the first hit competes with hand-tuned action scores and later hits decay.
-Static commands carry their own catalog-authored base score. Final rank combines:
+Ranking is two layers: ordering **within** a section, and choosing the one promoted **Top Hit**
+across them.
 
-- the base score (search position, or catalog score for static commands)
-- a boost when the title **starts with** the query, a smaller boost when it merely **contains** it
-- a small boost on a keyword match
-- a recency boost (once `home.recents` lands)
-- a boost for actions relevant to the current app/selection
-- a boost for smart suggestions, so a confident smart parse leads
+**Within a section, each provider keeps its own order.** The search sections (Files, Mail,
+Events, Chat) arrive already ranked by the `/search` endpoint — each kind by its own `bm25()`,
+well-calibrated within one index — and the palette does not re-rank them. Actions are ordered by
+a catalog-authored base score plus boosts: a larger boost when the title **starts with** the
+query, a smaller one when it merely **contains** it, a small keyword-match boost, an
+app/selection-relevance boost, and a recency boost (once `home.recents` lands). Contacts and
+smart suggestions keep their own order.
 
-The Top Hit is the single highest final rank, shown only above a confidence threshold; otherwise
-the first row of the highest-ranked section is what the user sees first.
+**The Top Hit is decided structurally, not by a fused score.** It is tempting to give every
+result one numeric "final rank" and promote the maximum — but search relevance scores are *not
+comparable across kinds*: a #1 mail hit and a #1 calendar hit carry the same positional weight
+and would simply tie (see [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md#ranking-and-cross-kind-merging)).
+The Top Hit is therefore promoted only on a **strong, cross-comparable signal**:
+
+- a confident deterministic smart-parse (an email address, a URL) — it leads outright; or
+- a **structural title/name match** — the query exactly equals a result's title, is a prefix of
+  it, or has all its terms in the title. Being structural rather than statistical, this *is*
+  comparable across a mail hit, a calendar event, an action and a contact alike; the palette
+  computes it uniformly from the `title` every result already carries.
+
+A **confidence threshold** gates it: when nothing clears the bar, **no Top Hit is shown** — the
+first row of the first populated section is simply what the user sees first. macOS Spotlight and
+Raycast behave this way.
 
 ### The engine
 
@@ -492,7 +538,10 @@ on its own as the search-index track indexes more content — no palette change.
 1. **Sub-action key**: `→` as primary, `⌘K` as a power-user alias. `⌘K` alone would mean "the
    same key does different things depending on whether the dialog is open" — not worth the
    overhead. Linear uses `→`; we follow.
-2. **Top Hit confidence threshold**: when to *not* show one. Lean: only above a clear rank margin.
+2. **Top Hit confidence threshold**: the *shape* is settled in [Ranking](#ranking) — promote
+   only on a strong structural title match or a confident smart-parse, else show no Top Hit.
+   What stays open is the exact bar (how strong a prefix/contains match must be), tuned with
+   telemetry.
 3. **Mobile**: the dialog form (full-screen sheet vs. bottom drawer) *and* the entry point. The
    topbar pill hides on small screens, but a search-first feature needs a visible mobile
    affordance — decide on a compact search icon button, don't rely on `Mod+K` and a menu item alone.
