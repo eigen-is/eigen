@@ -22,3 +22,10 @@ export function useCommandPalette(): CommandPaletteContextValue {
     if (!ctx) throw new Error('useCommandPalette must be used inside <CommandPaletteProvider>');
     return ctx;
 }
+
+// Returns null when no provider is in the tree, for callers that want to render
+// nothing in that case (e.g. AppShell when used by the marketing-only index app
+// which doesn't mount the full EigenApp provider stack).
+export function useOptionalCommandPalette(): CommandPaletteContextValue | null {
+    return useContext(CommandPaletteContext);
+}
