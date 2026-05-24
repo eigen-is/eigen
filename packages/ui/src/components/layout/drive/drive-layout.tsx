@@ -1,7 +1,7 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import { useConvertDocument, useDeletePaths, useExportDocument, useMovePath } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
 import { useLayout } from '../app/layout-context.tsx';
@@ -36,11 +36,8 @@ export type DriveLayoutProps = {
     allowShare?: boolean;
     showBreadcrumb?: boolean;
     allowUpload?: boolean;
-    allowCreateDoc?: boolean;
-    allowCreateStickies?: boolean;
-    allowCreateChat?: boolean;
-    allowCreateSlides?: boolean;
-    allowCreateSheets?: boolean;
+    // Omit to allow every EigenDocType; pass an empty set to disable create entirely.
+    allowedCreateTypes?: ReadonlySet<EigenDocType>;
     allowRename?: boolean;
     allowMove?: boolean;
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
@@ -66,11 +63,7 @@ export function DriveLayout({
     allowCreateFolder = true,
     allowDelete = true,
     allowShare = true,
-    allowCreateDoc = true,
-    allowCreateStickies = true,
-    allowCreateChat = true,
-    allowCreateSlides = true,
-    allowCreateSheets = true,
+    allowedCreateTypes,
     allowUpload = true,
     allowRename = true,
     allowMove = true,
@@ -217,6 +210,12 @@ export function DriveLayout({
         return <LoadingState />;
     }
 
+    const createTypes = allowedCreateTypes ?? new Set<EigenDocType>(EIGEN_DOC_TYPES);
+    const onCreateEigenDoc: Partial<Record<EigenDocType, () => void>> = {};
+    for (const type of EIGEN_DOC_TYPES) {
+        if (createTypes.has(type)) onCreateEigenDoc[type] = dialogs.create[type].openDialog;
+    }
+
     const listProps = {
         items: folderContents,
         isLoading,
@@ -230,11 +229,7 @@ export function DriveLayout({
         onDelete: allowDelete ? handleDeletePaths : undefined,
         onShareClick: allowShare ? handleShareClick : undefined,
         onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
-        onCreateDoc: allowCreateDoc ? dialogs.createDoc.openDialog : undefined,
-        onCreateStickies: allowCreateStickies ? dialogs.createStickies.openDialog : undefined,
-        onCreateChat: allowCreateChat ? dialogs.createChat.openDialog : undefined,
-        onCreateSlides: allowCreateSlides ? dialogs.createSlides.openDialog : undefined,
-        onCreateSheets: allowCreateSheets ? dialogs.createSheets.openDialog : undefined,
+        onCreateEigenDoc,
         currentPath,
         ownerId,
         mountId,
@@ -262,11 +257,7 @@ export function DriveLayout({
             onRowActivate={onRowActivate}
             onCreateFolder={allowCreateFolder ? dialogs.createFolder.openDialog : undefined}
             onUploadFile={allowUpload ? handleFileUpload : undefined}
-            onCreateDoc={allowCreateDoc ? dialogs.createDoc.openDialog : undefined}
-            onCreateStickies={allowCreateStickies ? dialogs.createStickies.openDialog : undefined}
-            onCreateChat={allowCreateChat ? dialogs.createChat.openDialog : undefined}
-            onCreateSlides={allowCreateSlides ? dialogs.createSlides.openDialog : undefined}
-            onCreateSheets={allowCreateSheets ? dialogs.createSheets.openDialog : undefined}
+            onCreateEigenDoc={onCreateEigenDoc}
         />
     );
 
@@ -326,56 +317,17 @@ export function DriveLayout({
                 />
             )}
 
-            {allowCreateDoc && (
+            {EIGEN_DOC_TYPES.filter((type) => createTypes.has(type)).map((type) => (
                 <DriveCreateEigenDoc
-                    type="doc"
-                    open={dialogs.createDoc.open}
-                    onOpenChange={dialogs.createDoc.setOpen}
+                    key={type}
+                    type={type}
+                    open={dialogs.create[type].open}
+                    onOpenChange={dialogs.create[type].setOpen}
                     defaultOwnerId={currentPath?.ownerId}
                     defaultFolderId={currentPath?.id}
                     defaultMountId={currentPath?.mountId}
                 />
-            )}
-            {allowCreateStickies && (
-                <DriveCreateEigenDoc
-                    type="stickies"
-                    open={dialogs.createStickies.open}
-                    onOpenChange={dialogs.createStickies.setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            )}
-            {allowCreateChat && (
-                <DriveCreateEigenDoc
-                    type="chat"
-                    open={dialogs.createChat.open}
-                    onOpenChange={dialogs.createChat.setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            )}
-            {allowCreateSlides && (
-                <DriveCreateEigenDoc
-                    type="slides"
-                    open={dialogs.createSlides.open}
-                    onOpenChange={dialogs.createSlides.setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            )}
-            {allowCreateSheets && (
-                <DriveCreateEigenDoc
-                    type="sheets"
-                    open={dialogs.createSheets.open}
-                    onOpenChange={dialogs.createSheets.setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            )}
+            ))}
 
             {allowUpload && currentPath && (
                 <DriveUploadFiles

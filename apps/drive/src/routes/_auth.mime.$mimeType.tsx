@@ -5,6 +5,8 @@ import { DEFAULT_MOUNT_ID, useMimeContent, usePathInfo } from '@workspace/lib/dr
 import {
     type DrivePath,
     type DriveSearchParams,
+    type EigenDocType,
+    getEigenDocInfoByMime,
     isDocumentType,
     isFolderType,
     isInlineEditable,
@@ -83,6 +85,11 @@ function DriveRoute() {
         return <NotFound />;
     }
 
+    // The mime route is keyed on the url-slug form (`application-eigendoc`); resolve it
+    // back to the matching EigenDocType so create is offered only for that kind.
+    const matchedType = getEigenDocInfoByMime(mimeType)?.type;
+    const allowedCreateTypes = new Set<EigenDocType>(matchedType ? [matchedType] : []);
+
     return (
         <DriveLayout
             pid={pid}
@@ -100,11 +107,7 @@ function DriveRoute() {
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
-            allowCreateDoc={mimeType === 'application-eigendoc'}
-            allowCreateStickies={mimeType === 'application-eigenstickies'}
-            allowCreateChat={mimeType === 'application-eigenchat'}
-            allowCreateSlides={mimeType === 'application-eigenslides'}
-            allowCreateSheets={mimeType === 'application-eigensheets'}
+            allowedCreateTypes={allowedCreateTypes}
             showBreadcrumb={false}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}
