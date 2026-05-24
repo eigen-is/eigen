@@ -1,13 +1,15 @@
 import { createFileRoute, useLocation } from '@tanstack/react-router';
+import { usePathInfos } from '@workspace/lib/drive';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
 import { useSpaceSettings } from '@workspace/lib/space';
-import type { Email } from '@workspace/lib/types/mail';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import type { Email, NewDraft } from '@workspace/lib/types/mail';
 import { isEmailDraft } from '@workspace/lib/types/mail';
 import { EmptyState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
 import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
 import { EmailList, EmailListToolbar } from '../components/mail/email-list';
@@ -17,7 +19,20 @@ export type MailSearchParams = {
     mailId?: string;
     mode?: string;
     to?: string;
+    attach?: string;
 };
+
+// `attach=<ownerId>/<mountId>/<pathId>,…` is the cross-app channel openMailComposeWith
+// uses to forward drive selections (e.g. palette "Mail to…"). Each tuple is enough to
+// re-fetch the DrivePath and build an AttachmentReference for the composer.
+function parseAttachRefs(attach: string | undefined): { ownerId: string; mountId: string; pathId: string }[] {
+    if (!attach) return [];
+    return attach
+        .split(',')
+        .map((entry) => entry.split('/'))
+        .filter((parts): parts is [string, string, string] => parts.length === 3 && parts.every(Boolean))
+        .map(([ownerId, mountId, pathId]) => ({ ownerId, mountId, pathId }));
+}
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: MailRoute,
@@ -27,19 +42,51 @@ export const Route = createFileRoute('/_auth/$filterType/$filterId')({
         // mode='compose' can coexist with mailId — when auto-save assigns an id to a fresh compose,
         // we keep mode so the composer session stays stable (key-identity, toolbar, etc.).
         const mode = typeof search.mode === 'string' ? search.mode : undefined;
+        const attach = typeof search.attach === 'string' ? search.attach : undefined;
 
-        return { mailId, mode, to } as MailSearchParams;
+        return { mailId, mode, to, attach } as MailSearchParams;
     },
 });
 
 function MailRoute() {
     const { filterId } = Route.useParams();
-    const { mailId, mode, to } = Route.useSearch();
+    const { mailId, mode, to, attach } = Route.useSearch();
     const { isTablet } = useLayout();
     // Reply/Forward/Compose all write to history state (see use-mail-actions.ts). prefillDraft
     // seeds the composer; composeSessionKey is a nonce that flips the EmailDraft remount key
     // each time a new compose session starts, so an in-progress composer is unmounted cleanly.
-    const { prefillDraft, composeSessionKey } = useLocation().state;
+    const { prefillDraft: statePrefillDraft, composeSessionKey } = useLocation().state;
+
+    // Cross-app drive attachments (e.g. palette "Mail to…") arrive via the URL.
+    // Re-fetch each DrivePath, build AttachmentReference[], and fold into prefillDraft
+    // so the composer's existing driveReferences path picks them up like a Reply would.
+    const attachRefs = useMemo(() => parseAttachRefs(attach), [attach]);
+    const pathQueries = usePathInfos(attachRefs);
+    const urlDriveReferences = useMemo<AttachmentReference[]>(() => {
+        const out: AttachmentReference[] = [];
+        for (const q of pathQueries) {
+            const path = q.data;
+            if (!path) continue;
+            out.push({
+                type: 'reference',
+                ownerId: path.ownerId,
+                mountId: path.mountId,
+                id: path.id,
+                name: path.name,
+                driveType: path.type,
+                mimeType: path.mimeType,
+            });
+        }
+        return out;
+    }, [pathQueries]);
+
+    const prefillDraft = useMemo<NewDraft | undefined>(() => {
+        if (urlDriveReferences.length === 0) return statePrefillDraft;
+        return {
+            ...statePrefillDraft,
+            driveReferences: [...(statePrefillDraft?.driveReferences ?? []), ...urlDriveReferences],
+        };
+    }, [statePrefillDraft, urlDriveReferences]);
 
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

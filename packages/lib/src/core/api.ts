@@ -112,10 +112,16 @@ const getSheetUrl = (ownerId: string, mountId: string, pathId: string) =>
 export const getMailComposeUrl = (address: string) =>
     getMailAppUrl(`box/inbox?mode=compose&to=${encodeURIComponent(address)}`);
 
+// Cross-app entry into the Mail composer. `to` prefills the recipient. `attachments`
+// passes the full `ownerId/mountId/pathId` tuple per item in the URL so the Mail
+// route can re-fetch each DrivePath, build an AttachmentReference, and seed the
+// composer with `driveReferences` — same flow Reply/Forward uses via history state.
 export function openMailComposeWith(opts: { to?: string; attachments?: DrivePath[] }): void {
     const params = new URLSearchParams({ mode: 'compose' });
     if (opts.to) params.set('to', opts.to);
-    if (opts.attachments?.length) params.set('attachments', opts.attachments.map((a) => a.id).join(','));
+    if (opts.attachments?.length) {
+        params.set('attach', opts.attachments.map((a) => `${a.ownerId}/${a.mountId}/${a.id}`).join(','));
+    }
     window.location.href = getMailAppUrl(`box/inbox?${params}`);
 }
 
