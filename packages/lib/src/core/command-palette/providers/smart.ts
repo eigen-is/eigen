@@ -1,11 +1,14 @@
 import type { CommandContext, PaletteResult } from '@workspace/lib/types/command-palette';
 import { ExternalLink, Mail } from 'lucide-react';
 import { useMemo } from 'react';
-import { useContacts } from '../../contacts/hooks/use-contacts';
+import { useContactSuggestions } from '../../contacts';
 import { parseSmartInput } from '../parse-smart-input';
 
 export function useSmartResults(ctx: CommandContext, input: string): PaletteResult[] {
-    const { data: contacts } = useContacts();
+    // Same shared hook the autosuggest UIs use — picks up personal contacts AND
+    // team members so typing a teammate's name also triggers the "Send mail to <email>"
+    // suggestion under Top Hit.
+    const { suggestions } = useContactSuggestions(input);
 
     return useMemo(() => {
         const out: PaletteResult[] = [];
@@ -56,33 +59,25 @@ export function useSmartResults(ctx: CommandContext, input: string): PaletteResu
             });
         }
 
-        // Contact name match → derived "Send mail to <email>". Not deterministic — the
-        // contact card itself still claims the Top Hit via structural match; this row
-        // sits in the Suggestions section directly under it so the user has both
-        // options at the top: open the contact, or jump straight to compose.
-        const needle = input.trim().toLowerCase();
-        if (needle.length > 0 && contacts) {
-            const matched = contacts.find((c) => {
-                const name = `${c.firstName} ${c.lastName}`.trim().toLowerCase();
-                return name.includes(needle) && c.email[0];
+        // Top contact suggestion → derived "Send mail to <email>" row. Non-deterministic
+        // so the contact card itself still claims the Top Hit via structural match; this
+        // row sits in the Suggestions section directly under it. Skip when the typed
+        // input is already the suggestion's email (the deterministic path covers it).
+        const top = suggestions[0];
+        if (top && parsed?.value !== top.email) {
+            out.push({
+                kind: 'smart',
+                id: `smart.mail-to-contact-${top.id}`,
+                title: `Send mail to ${top.email}`,
+                subtitle: top.displayName,
+                icon: Mail,
+                group: 'smart',
+                rank: 500,
+                deterministic: false,
+                run: (rctx) => rctx.openMailComposeWith({ to: top.email }),
             });
-            const email = matched?.email[0];
-            // Skip when the input itself is the email — parseSmartInput already covered that path.
-            if (matched && email && parsed?.value !== email) {
-                out.push({
-                    kind: 'smart',
-                    id: `smart.mail-to-contact-${matched.id}`,
-                    title: `Send mail to ${email}`,
-                    subtitle: `${matched.firstName} ${matched.lastName}`.trim(),
-                    icon: Mail,
-                    group: 'smart',
-                    rank: 500,
-                    deterministic: false,
-                    run: (rctx) => rctx.openMailComposeWith({ to: email }),
-                });
-            }
         }
 
         return out;
-    }, [ctx, input, contacts]);
+    }, [ctx, input, suggestions]);
 }

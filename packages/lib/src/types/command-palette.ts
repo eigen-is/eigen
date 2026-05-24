@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import type { Contact } from './contact';
+import type { ContactSuggestion } from './contact';
 import type { DrivePath, EigenDocType } from './drive';
 import type { EmailSummary } from './mail';
 
@@ -86,7 +86,7 @@ export type PaletteResult =
           icon: LucideIcon;
           group: ResultGroup;
           rank: number;
-          payload: Contact;
+          payload: ContactSuggestion;
           run: (ctx: CommandContext) => void;
       }
     | {

@@ -19,10 +19,3 @@ export type ContactAutosuggestProps = {
     inputRef?: Ref<HTMLInputElement>;
     onSubmit?: (value: string) => void;
 };
-
-export type ContactSuggestion = {
-    id: string;
-    displayName: string;
-    email: string;
-    allEmails: string[];
-};

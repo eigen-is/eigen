@@ -1,9 +1,13 @@
-import { useContacts } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import { usePublicConfig } from '@workspace/lib/public';
+import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { useMemo } from 'react';
-import type { ContactSuggestion } from './types';
+import { useContacts } from './use-contacts';
 
+// Single source for "match a typed string against personal contacts + team members
+// the user can reach." Consumed by ContactAutosuggest (mail/calendar/drive-share),
+// ChatPlayerSuggest, and the command palette providers. Team members are merged in
+// first (higher priority), personal contacts second; dedup is by lowercased email.
 export function useContactSuggestions(query: string, onlyInternalMails: boolean = false, excludeEmails: string[] = []) {
     const { data: contacts, isLoading: contactsLoading } = useContacts();
     const { data: myTeams } = useMyTeams();
@@ -42,6 +46,7 @@ export function useContactSuggestions(query: string, onlyInternalMails: boolean 
 
             seenEmails.add(emailKey);
             results.push({
+                kind: 'team',
                 id: member.email,
                 displayName: member.name || member.email,
                 email: member.email,
@@ -68,6 +73,7 @@ export function useContactSuggestions(query: string, onlyInternalMails: boolean 
 
                 seenEmails.add(bestEmail.toLowerCase());
                 results.push({
+                    kind: 'personal',
                     id: contact.id,
                     displayName: `${contact.firstName} ${contact.lastName}`,
                     email: bestEmail,
