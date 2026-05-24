@@ -26,15 +26,17 @@ const QUALITY_RANK: Record<NonNullable<ReturnType<typeof structuralMatchQuality>
 //
 // Section order top-to-bottom:
 //   1. Top Hit            — a deterministic smart parse, else strongest structural match
-//   2. Selection          — selection-aware actions (Share X, Preview X, …) when a
+//   2. Suggestions        — non-deterministic smart results (e.g. "Send mail to <email>"
+//                           derived from a contact name match), shown alongside Top Hit
+//   3. Selection          — selection-aware actions (Share X, Preview X, …) when a
 //                           selection is present
-//   3. Mail               — search results
-//   4. Contacts           — search results
-//   5. Actions            — catalog commands ("Go to Mail", "New doc", …)
+//   4. Mail               — search results
+//   5. Contacts           — search results
+//   6. Actions            — catalog commands ("Go to Mail", "New doc", …)
 //
 // Catalog actions live at the bottom because they're the least time-sensitive — the
 // user reaches them via type-to-match. Search results and selection-aware actions are
-// what the user is most likely opened the palette for and belong above.
+// what the user usually opens the palette for and belong above.
 export function buildSections(input: BuildInput): Sections {
     const actionList = input.action.filter((r) => r.group === 'actions');
     const selectionList = input.action.filter((r) => r.group === 'selection');
@@ -91,7 +93,16 @@ export function buildSections(input: BuildInput): Sections {
         }
     }
 
+    // Suggestions section: non-deterministic smart results that don't claim Top Hit
+    // but are still relevant to the query (e.g., "Send mail to <email>" derived from
+    // a matched contact name).
+    const suggestionsList = smartList
+        .filter((r) => r.kind === 'smart' && !r.deterministic)
+        .sort((a, b) => b.rank - a.rank)
+        .slice(0, SECTION_CAP);
+
     const groups: Sections['groups'] = [];
+    if (suggestionsList.length > 0) groups.push({ id: 'smart', heading: 'Suggestions', items: suggestionsList });
     if (scopedSelection.length > 0) groups.push({ id: 'selection', heading: 'Selection', items: scopedSelection });
     if (mailList.length > 0) groups.push({ id: 'mail', heading: 'Mail', items: mailList });
     if (contactList.length > 0) groups.push({ id: 'contacts', heading: 'Contacts', items: contactList });
