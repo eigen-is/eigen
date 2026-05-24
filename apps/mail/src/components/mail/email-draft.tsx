@@ -19,7 +19,7 @@ import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/dri
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { cn } from '@workspace/ui/lib/utils';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DraftAttachments } from './draft-attachments';
 import { useDraft } from './hooks/use-draft';
 
@@ -54,6 +54,11 @@ type EmailDraftProps = {
     // and seeds its fingerprint from it, so no save fires until the user actually edits.
     prefillDraft?: NewDraft;
     to?: string;
+    // Drive paths to attach when the composer opens (e.g. palette "Mail to…" passes the
+    // selection through the URL). Routed through the same handleDriveAttach the in-app
+    // picker uses, so containers become driveReferences and plain files are copied via
+    // useAttachFromDrive. Fired once per compose session.
+    initialDriveAttachments?: DrivePath[];
     signatureHtml?: string;
     sendDraft: (mail: NewDraft) => Promise<unknown>;
     onAutoSave?: (
@@ -72,6 +77,7 @@ export function EmailDraft({
     email,
     prefillDraft,
     to,
+    initialDriveAttachments,
     signatureHtml,
     sendDraft,
     onAutoSave,
@@ -170,6 +176,19 @@ export function EmailDraft({
             });
         }
     };
+
+    // Cross-app drive attachments (palette "Mail to…") arrive as DrivePath[] from the route
+    // once the URL refs resolve. Hand them to handleDriveAttach — same path the toolbar's
+    // Paperclip button uses — once per compose session, so a re-render of the route doesn't
+    // attach them twice (attachFromDriveMutation is not idempotent).
+    const didApplyInitialAttachmentsRef = useRef(false);
+    useEffect(() => {
+        if (didApplyInitialAttachmentsRef.current) return;
+        if (!initialDriveAttachments || initialDriveAttachments.length === 0) return;
+        didApplyInitialAttachmentsRef.current = true;
+        void handleDriveAttach(initialDriveAttachments);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- handleDriveAttach captures live state via useDraft's dispatch; the ref guard is what prevents re-firing
+    }, [initialDriveAttachments]);
 
     const sendWithFreshDraft = async () => {
         await sendDraft(await flushAndGetDraft());

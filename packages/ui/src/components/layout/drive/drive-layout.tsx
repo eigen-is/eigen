@@ -1,6 +1,7 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
+import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import { useConvertDocument, useDeletePaths, useExportDocument, useMovePath } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
 import { useLayout } from '../app/layout-context.tsx';
@@ -35,11 +36,8 @@ export type DriveLayoutProps = {
     allowShare?: boolean;
     showBreadcrumb?: boolean;
     allowUpload?: boolean;
-    allowCreateDoc?: boolean;
-    allowCreateStickies?: boolean;
-    allowCreateChat?: boolean;
-    allowCreateSlides?: boolean;
-    allowCreateSheets?: boolean;
+    // Omit to allow every EigenDocType; pass an empty set to disable create entirely.
+    allowedCreateTypes?: ReadonlySet<EigenDocType>;
     allowRename?: boolean;
     allowMove?: boolean;
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
@@ -65,11 +63,7 @@ export function DriveLayout({
     allowCreateFolder = true,
     allowDelete = true,
     allowShare = true,
-    allowCreateDoc = true,
-    allowCreateStickies = true,
-    allowCreateChat = true,
-    allowCreateSlides = true,
-    allowCreateSheets = true,
+    allowedCreateTypes,
     allowUpload = true,
     allowRename = true,
     allowMove = true,
@@ -98,27 +92,39 @@ export function DriveLayout({
         }
     };
 
-    const handleDeletePaths = (paths: DrivePath[]) => {
-        if (!allowDelete || paths.length === 0) return;
-        deletePathsMutation.mutate(paths, {
-            onSuccess: () => {
-                for (const path of paths) onAfterAction?.('delete', path);
-            },
-        });
-    };
+    // Memoized handlers below: stable identity is required because they're published
+    // to the command palette via usePaletteSelectionActions, and that effect refires
+    // whenever the action object's identity changes. Without memoization, the
+    // useCommandPalette context subscription combined with each re-render of
+    // DriveLayout produced an infinite setState loop.
+    const handleDeletePaths = useCallback(
+        (paths: DrivePath[]) => {
+            if (!allowDelete || paths.length === 0) return;
+            deletePathsMutation.mutate(paths, {
+                onSuccess: () => {
+                    for (const path of paths) onAfterAction?.('delete', path);
+                },
+            });
+        },
+        [allowDelete, deletePathsMutation, onAfterAction],
+    );
 
-    const handleRenamePath = (path: DrivePath) => {
-        if (allowRename) {
-            dialogs.rename.openDialog(path);
-        }
-    };
+    const handleRenamePath = useCallback(
+        (path: DrivePath) => {
+            if (allowRename) dialogs.rename.openDialog(path);
+        },
+        [allowRename, dialogs.rename.openDialog],
+    );
 
-    const handleMovePath = async (path: DrivePath, targetItemId: string) => {
-        if (!allowMove) return;
-        await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
-    };
+    const handleMovePath = useCallback(
+        async (path: DrivePath, targetItemId: string) => {
+            if (!allowMove) return;
+            await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
+        },
+        [allowMove, movePath],
+    );
 
-    const handleDownloadPath = (path: DrivePath) => {
+    const handleDownloadPath = useCallback((path: DrivePath) => {
         if (path?.type === 'file' && path.id) {
             const downloadUrl = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             const a = document.createElement('a');
@@ -128,36 +134,43 @@ export function DriveLayout({
             a.click();
             document.body.removeChild(a);
         }
-    };
+    }, []);
 
     const { exportDocument, isExporting } = useExportDocument();
 
-    const handleExportPath = (path: DrivePath, format: string) =>
-        exportDocument(path.ownerId, path.mountId, path.id, format);
+    const handleExportPath = useCallback(
+        (path: DrivePath, format: string) => exportDocument(path.ownerId, path.mountId, path.id, format),
+        [exportDocument],
+    );
 
-    const handleConvertPath = (path: DrivePath, targetType: 'eigensheets' | 'eigendoc') => {
-        if (!path.parentId) return;
-        convertMutation.mutate(
-            { pathId: path.id, targetType, parentId: path.parentId },
-            {
-                onSuccess: (newPath) => {
-                    openDocument(newPath);
+    const handleConvertPath = useCallback(
+        (path: DrivePath, targetType: 'eigensheets' | 'eigendoc') => {
+            if (!path.parentId) return;
+            convertMutation.mutate(
+                { pathId: path.id, targetType, parentId: path.parentId },
+                {
+                    onSuccess: (newPath) => {
+                        openDocument(newPath);
+                    },
                 },
-            },
-        );
-    };
+            );
+        },
+        [convertMutation],
+    );
 
-    const handleShareClick = (path: DrivePath) => {
-        if (allowShare) {
-            dialogs.share.openDialog(path);
-        }
-    };
+    const handleShareClick = useCallback(
+        (path: DrivePath) => {
+            if (allowShare) dialogs.share.openDialog(path);
+        },
+        [allowShare, dialogs.share.openDialog],
+    );
 
-    const handleEmailCollaborators = (path: DrivePath) => {
-        if (allowShare) {
-            dialogs.email.openDialog(path);
-        }
-    };
+    const handleEmailCollaborators = useCallback(
+        (path: DrivePath) => {
+            if (allowShare) dialogs.email.openDialog(path);
+        },
+        [allowShare, dialogs.email.openDialog],
+    );
 
     const sortedContents = useMemo(() => [...folderContents].sort(sortFn), [folderContents, sortFn]);
 
@@ -168,8 +181,39 @@ export function DriveLayout({
         [onQuickLook, sortedContents],
     );
 
+    // Publish the route-local dialog handlers to the palette. Quick preview is
+    // intentionally omitted — it goes via CommandContext.openPreview (a global, from
+    // the PreviewProvider that wraps the whole app), which keeps this object's
+    // identity from churning when an inline onQuickLook prop changes each render.
+    const paletteActions = useMemo(
+        () => ({
+            onDownload: handleDownloadPath,
+            onRename: allowRename ? handleRenamePath : undefined,
+            onShare: allowShare ? handleShareClick : undefined,
+            onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
+            onDelete: allowDelete ? handleDeletePaths : undefined,
+        }),
+        [
+            handleDownloadPath,
+            handleRenamePath,
+            handleShareClick,
+            handleEmailCollaborators,
+            handleDeletePaths,
+            allowRename,
+            allowShare,
+            allowDelete,
+        ],
+    );
+    usePaletteSelectionActions(paletteActions);
+
     if (isLoading) {
         return <LoadingState />;
+    }
+
+    const createTypes = allowedCreateTypes ?? new Set<EigenDocType>(EIGEN_DOC_TYPES);
+    const onCreateEigenDoc: Partial<Record<EigenDocType, () => void>> = {};
+    for (const type of EIGEN_DOC_TYPES) {
+        if (createTypes.has(type)) onCreateEigenDoc[type] = dialogs.create[type].openDialog;
     }
 
     const listProps = {
@@ -185,11 +229,7 @@ export function DriveLayout({
         onDelete: allowDelete ? handleDeletePaths : undefined,
         onShareClick: allowShare ? handleShareClick : undefined,
         onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
-        onCreateDoc: allowCreateDoc ? dialogs.createDoc.openDialog : undefined,
-        onCreateStickies: allowCreateStickies ? dialogs.createStickies.openDialog : undefined,
-        onCreateChat: allowCreateChat ? dialogs.createChat.openDialog : undefined,
-        onCreateSlides: allowCreateSlides ? dialogs.createSlides.openDialog : undefined,
-        onCreateSheets: allowCreateSheets ? dialogs.createSheets.openDialog : undefined,
+        onCreateEigenDoc,
         currentPath,
         ownerId,
         mountId,
@@ -217,11 +257,7 @@ export function DriveLayout({
             onRowActivate={onRowActivate}
             onCreateFolder={allowCreateFolder ? dialogs.createFolder.openDialog : undefined}
             onUploadFile={allowUpload ? handleFileUpload : undefined}
-            onCreateDoc={allowCreateDoc ? dialogs.createDoc.openDialog : undefined}
-            onCreateStickies={allowCreateStickies ? dialogs.createStickies.openDialog : undefined}
-            onCreateChat={allowCreateChat ? dialogs.createChat.openDialog : undefined}
-            onCreateSlides={allowCreateSlides ? dialogs.createSlides.openDialog : undefined}
-            onCreateSheets={allowCreateSheets ? dialogs.createSheets.openDialog : undefined}
+            onCreateEigenDoc={onCreateEigenDoc}
         />
     );
 
@@ -281,56 +317,17 @@ export function DriveLayout({
                 />
             )}
 
-            {allowCreateDoc && (
+            {EIGEN_DOC_TYPES.filter((type) => createTypes.has(type)).map((type) => (
                 <DriveCreateEigenDoc
-                    type="doc"
-                    open={dialogs.createDoc.open}
-                    onOpenChange={dialogs.createDoc.setOpen}
+                    key={type}
+                    type={type}
+                    open={dialogs.create[type].open}
+                    onOpenChange={dialogs.create[type].setOpen}
                     defaultOwnerId={currentPath?.ownerId}
                     defaultFolderId={currentPath?.id}
                     defaultMountId={currentPath?.mountId}
                 />
-            )}
-            {allowCreateStickies && (
-                <DriveCreateEigenDoc
-                    type="stickies"
-                    open={dialogs.createStickies.open}
-                    onOpenChange={dialogs.createStickies.setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            )}
-            {allowCreateChat && (
-                <DriveCreateEigenDoc
-                    type="chat"
-                    open={dialogs.createChat.open}
-                    onOpenChange={dialogs.createChat.setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            )}
-            {allowCreateSlides && (
-                <DriveCreateEigenDoc
-                    type="slides"
-                    open={dialogs.createSlides.open}
-                    onOpenChange={dialogs.createSlides.setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            )}
-            {allowCreateSheets && (
-                <DriveCreateEigenDoc
-                    type="sheets"
-                    open={dialogs.createSheets.open}
-                    onOpenChange={dialogs.createSheets.setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            )}
+            ))}
 
             {allowUpload && currentPath && (
                 <DriveUploadFiles

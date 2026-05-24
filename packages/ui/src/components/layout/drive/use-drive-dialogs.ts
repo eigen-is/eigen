@@ -1,19 +1,5 @@
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { useCallback, useState } from 'react';
-
-export type DriveDialogsState = {
-    createFolder: { open: boolean };
-    createDoc: { open: boolean };
-    createStickies: { open: boolean };
-    createChat: { open: boolean };
-    createSlides: { open: boolean };
-    createSheets: { open: boolean };
-    delete: { open: boolean; items: DrivePath[] };
-    rename: { open: boolean; item: DrivePath | null };
-    share: { open: boolean; item: DrivePath | null };
-    email: { open: boolean; item: DrivePath | null };
-    upload: { open: boolean; files: File[] };
-};
 
 function useDialogState() {
     const [open, setOpen] = useState(false);
@@ -22,13 +8,22 @@ function useDialogState() {
     return { open, setOpen, openDialog, closeDialog };
 }
 
+// One dialog-open state per EigenDocType. Each entry is its own useState pair (hooks
+// rules); the helper just buckets them under a single key so consumers don't have to
+// name each kind.
+function useEigenDocDialogs(): Record<EigenDocType, ReturnType<typeof useDialogState>> {
+    return {
+        doc: useDialogState(),
+        stickies: useDialogState(),
+        slides: useDialogState(),
+        sheets: useDialogState(),
+        chat: useDialogState(),
+    };
+}
+
 export function useDriveDialogs() {
     const createFolder = useDialogState();
-    const createDoc = useDialogState();
-    const createStickies = useDialogState();
-    const createChat = useDialogState();
-    const createSlides = useDialogState();
-    const createSheets = useDialogState();
+    const create = useEigenDocDialogs();
 
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteItems, setDeleteItems] = useState<DrivePath[]>([]);
@@ -92,11 +87,7 @@ export function useDriveDialogs() {
 
     return {
         createFolder,
-        createDoc,
-        createStickies,
-        createChat,
-        createSlides,
-        createSheets,
+        create,
         delete: {
             open: deleteOpen,
             items: deleteItems,

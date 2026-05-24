@@ -4,6 +4,7 @@ import { copyToClipboard } from '@workspace/lib/clipboard';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
+import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { parseContactInput } from '@workspace/lib/validation';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
@@ -22,7 +23,6 @@ import { cn } from '@workspace/ui/lib/utils';
 import { ClipboardCopy, Link, Lock, Mail, Unlock, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
-import type { ContactSuggestion } from '../contacts/types';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserItem } from '../user-item';
 
@@ -107,10 +107,10 @@ export function DriveAccessListEdit({
             }
 
             const suggestion: ContactSuggestion = {
+                kind: 'personal',
                 id: email,
                 email,
                 displayName,
-                allEmails: [email],
             };
 
             handleAddUser(suggestion);

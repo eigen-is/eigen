@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateHomeSize } from '../home';
+import { invalidateSearchOwner } from '../search';
 import {
     invalidateDraftUpdated,
     invalidateMailDeleted,
@@ -26,39 +27,48 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             invalidateMailReceived(queryClient, userId, mailbox);
             invalidateMailboxes(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
+            invalidateSearchOwner(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_DELETED:
             invalidateMailDeleted(queryClient, userId, mail.messageId, mailbox);
             invalidateMailboxes(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
+            invalidateSearchOwner(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_MOVED: {
             const toMailbox = mail.toMailbox != null ? normalizeMailbox(mail.toMailbox) : null;
             invalidateMailMoved(queryClient, userId, mail.messageId, mailbox, toMailbox);
             invalidateMailboxes(queryClient, userId);
+            invalidateSearchOwner(queryClient, userId);
             return true;
         }
 
         case SSEventType.MAIL_READ_CHANGED:
             invalidateMailReadChanged(queryClient, userId, mail.messageId, mailbox);
             invalidateMailboxes(queryClient, userId);
+            // Palette mail rows carry isRead on the EmailSummary and bold-on-unread —
+            // invalidate so the cached search response reflects the new flag.
+            invalidateSearchOwner(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_FLAGS_CHANGED:
             invalidateMailFlagsChanged(queryClient, userId, mail.messageId, mailbox);
+            invalidateSearchOwner(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_DRAFT_UPDATED:
             invalidateDraftUpdated(queryClient, userId, mail.messageId);
             invalidateMailboxes(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
+            invalidateSearchOwner(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_SENT:
             invalidateMailboxes(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
+            invalidateSearchOwner(queryClient, userId);
             return true;
 
         default:

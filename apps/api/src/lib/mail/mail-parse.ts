@@ -14,6 +14,15 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
             parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim();
         }
 
+        const toRecipients = parsedMail.to ? (Array.isArray(parsedMail.to) ? parsedMail.to : [parsedMail.to]) : [];
+        const ccRecipients = parsedMail.cc ? (Array.isArray(parsedMail.cc) ? parsedMail.cc : [parsedMail.cc]) : [];
+        const firstTo = toRecipients[0]?.value[0];
+        const allRecipients = [...toRecipients, ...ccRecipients].flatMap((o) => o.value);
+        const recipientsAll = allRecipients
+            .map((a) => `${a.name || ''} ${a.address || ''}`.trim())
+            .filter((s) => s.length > 0)
+            .join('\n');
+
         return {
             ...parsedMail,
             id: messageId,
@@ -26,6 +35,10 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
             isReplied: false,
             hasAttachments: parsedMail.attachments?.length > 0,
             fromShort: parsedMail.from?.value[0]?.name || parsedMail.from?.value[0]?.address || 'Unknown',
+            fromAddress: parsedMail.from?.value[0]?.address || '',
+            toShort: firstTo?.name || firstTo?.address || '',
+            toAddress: firstTo?.address || '',
+            recipientsAll,
             textShort: parsedMail.text || '',
         } as Email;
     } catch (error) {

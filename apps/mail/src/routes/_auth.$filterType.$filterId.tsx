@@ -1,13 +1,15 @@
-import { createFileRoute, useLocation } from '@tanstack/react-router';
+import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
+import { usePathInfos } from '@workspace/lib/drive';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
 import { useSpaceSettings } from '@workspace/lib/space';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
 import { isEmailDraft } from '@workspace/lib/types/mail';
 import { EmptyState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
 import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
 import { EmailList, EmailListToolbar } from '../components/mail/email-list';
@@ -17,7 +19,21 @@ export type MailSearchParams = {
     mailId?: string;
     mode?: string;
     to?: string;
+    // `attach=<ownerId>/<mountId>/<pathId>,…` — cross-app channel for palette "Mail to…" /
+    // Drive's "Mail to…" item menu. The route resolves each tuple to a DrivePath and hands
+    // them to the composer, which runs them through the same handleDriveAttach the in-app
+    // picker uses.
+    attach?: string;
 };
+
+function parseAttachRefs(attach: string | undefined): { ownerId: string; mountId: string; pathId: string }[] {
+    if (!attach) return [];
+    return attach
+        .split(',')
+        .map((entry) => entry.split('/'))
+        .filter((parts): parts is [string, string, string] => parts.length === 3 && parts.every(Boolean))
+        .map(([ownerId, mountId, pathId]) => ({ ownerId, mountId, pathId }));
+}
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: MailRoute,
@@ -27,19 +43,52 @@ export const Route = createFileRoute('/_auth/$filterType/$filterId')({
         // mode='compose' can coexist with mailId — when auto-save assigns an id to a fresh compose,
         // we keep mode so the composer session stays stable (key-identity, toolbar, etc.).
         const mode = typeof search.mode === 'string' ? search.mode : undefined;
+        const attach = typeof search.attach === 'string' ? search.attach : undefined;
 
-        return { mailId, mode, to } as MailSearchParams;
+        return { mailId, mode, to, attach } as MailSearchParams;
     },
 });
 
 function MailRoute() {
-    const { filterId } = Route.useParams();
-    const { mailId, mode, to } = Route.useSearch();
+    const { filterType, filterId } = Route.useParams();
+    const { mailId, mode, to, attach } = Route.useSearch();
+    const navigate = useNavigate();
     const { isTablet } = useLayout();
     // Reply/Forward/Compose all write to history state (see use-mail-actions.ts). prefillDraft
     // seeds the composer; composeSessionKey is a nonce that flips the EmailDraft remount key
     // each time a new compose session starts, so an in-progress composer is unmounted cleanly.
     const { prefillDraft, composeSessionKey } = useLocation().state;
+
+    // Cross-app drive attachments (palette "Mail to…") arrive via ?attach=. Resolve each
+    // tuple to a DrivePath via the shared driveKeys.path cache, then hand the resolved list
+    // to EmailDraft — which runs them through the same handleDriveAttach the toolbar's
+    // Paperclip button uses, copying plain files via useAttachFromDrive and adding
+    // containers as driveReferences. Wait until every query settles before publishing the
+    // list so the composer's one-shot apply sees the complete set.
+    const attachRefs = useMemo(() => parseAttachRefs(attach), [attach]);
+    const pathQueries = usePathInfos(attachRefs);
+    const allSettled = attachRefs.length > 0 && pathQueries.every((q) => !q.isPending);
+    const initialDriveAttachments = useMemo<DrivePath[] | undefined>(() => {
+        if (!allSettled) return undefined;
+        const paths = pathQueries.map((q) => q.data).filter((p): p is DrivePath => !!p);
+        return paths.length > 0 ? paths : undefined;
+    }, [allSettled, pathQueries]);
+
+    // Strip ?attach= from the URL after the queries settle, so a reload (or the auto-save's
+    // ?mailId rewrite that preserves prev params) doesn't re-trigger the attachment flow.
+    // The composer's prop snapshot already captured initialDriveAttachments — its one-shot
+    // effect runs on the same commit.
+    useEffect(() => {
+        if (!attach) return;
+        if (!allSettled) return;
+        navigate({
+            to: Route.fullPath,
+            params: { filterType, filterId },
+            search: (prev) => ({ ...prev, attach: undefined }),
+            state: true,
+            replace: true,
+        });
+    }, [attach, allSettled, navigate, filterType, filterId]);
 
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -173,6 +222,7 @@ function MailRoute() {
                                 email={isEmailDraft(selectedEmail) ? selectedEmail : null}
                                 prefillDraft={prefillDraft}
                                 to={to}
+                                initialDriveAttachments={initialDriveAttachments}
                                 signatureHtml={signatureHtml}
                                 sendDraft={actions.handleSendEmail}
                                 onAutoSave={actions.saveDraft}
