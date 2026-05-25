@@ -5,12 +5,24 @@ import { PATHS } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Home } from '../home';
 import { SEARCH_DB_CONFIG } from '../search/db-config';
-import { type SearchDoc, SearchIndex, type SearchQueryOptions } from '../search/search-index';
+import { type SearchDoc, SearchIndex } from '../search/search-index';
 import { MAIL_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
 // Mailboxes excluded from default mail search — users can still search them explicitly.
 const SEARCH_EXCLUDED_MAILBOXES = ['Trash', 'Junk'];
+
+// FTS5's query grammar treats " * ( ) : ^ - and similar punctuation as operators, so raw
+// user input cannot be passed through. Replace every non-letter/digit run with a space,
+// phrase-quote each token and append a prefix wildcard: 'q3 budget!' -> '"q3"* "budget"*'.
+function sanitizeFtsQuery(text: string): string {
+    return text
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .split(' ')
+        .filter((token) => token.length > 0)
+        .map((token) => `"${token}"*`)
+        .join(' ');
+}
 
 // Projection of an email into a generic search document. Sender, recipient and body are
 // joined into the indexed `body` so all three are searchable. `bucket` holds the mailbox so
@@ -192,10 +204,13 @@ export default class MailDB {
     }
 
     searchMail(opts: { q: string; limit: number; mailboxes?: string[]; from?: string; to?: string }): EmailSummary[] {
+        const match = sanitizeFtsQuery(opts.q);
+        if (!match) return [];
+
         // Filter-first: when a structured filter is present, narrow to candidate ids via
-        // mail.db's own indexed columns, then ask the search index to rank within that
+        // mail.db's own indexed columns, then ask the FTS index to rank within that
         // subset. Exact recall at any selectivity; no candidate-pool over-fetch.
-        let itemIds: string[] | undefined;
+        let candidateIds: string[] | undefined;
         if (opts.from || opts.to) {
             const conditions = [];
             if (opts.from) {
@@ -213,23 +228,50 @@ export default class MailDB {
                 .from(schema.emails)
                 .where(and(...conditions))
                 .all();
-            itemIds = rows.map((r) => r.id);
-            if (itemIds.length === 0) return [];
+            candidateIds = rows.map((r) => r.id);
+            if (candidateIds.length === 0) return [];
         }
 
-        const indexOpts: SearchQueryOptions = {};
-        if (itemIds) indexOpts.itemIds = itemIds;
+        let mailboxFilter = sql``;
         if (opts.mailboxes && opts.mailboxes.length > 0) {
-            indexOpts.buckets = opts.mailboxes;
+            const list = sql.join(
+                opts.mailboxes.map((m) => sql`${m}`),
+                sql`, `,
+            );
+            mailboxFilter = sql` AND e.mailbox IN (${list})`;
         } else {
-            // Default mailbox exclusion applies whether or not a structured filter is active —
-            // the user has not opted into searching Trash/Junk unless they pass `mailboxes`
-            // explicitly.
-            indexOpts.excludeBuckets = SEARCH_EXCLUDED_MAILBOXES;
+            const list = sql.join(
+                SEARCH_EXCLUDED_MAILBOXES.map((m) => sql`${m}`),
+                sql`, `,
+            );
+            mailboxFilter = sql` AND e.mailbox NOT IN (${list})`;
         }
 
-        const ids = this.searchIndex.query(opts.q, opts.limit, indexOpts);
-        if (ids.length === 0) return [];
+        let candidateFilter = sql``;
+        if (candidateIds) {
+            const list = sql.join(
+                candidateIds.map((id) => sql`${id}`),
+                sql`, `,
+            );
+            candidateFilter = sql` AND e.id IN (${list})`;
+        }
+
+        // Pass 1: rank via FTS5, return ordered ids only. No Drizzle column-mode conversion
+        // applies to raw `sql``` results, so we deliberately stay in id-space here.
+        const ranked = this.db.all(sql`
+            SELECT e.id AS id
+            FROM emails_fts
+            JOIN emails e ON e.rowid = emails_fts.rowid
+            WHERE emails_fts MATCH ${match}${mailboxFilter}${candidateFilter}
+            ORDER BY bm25(emails_fts), e.date DESC, e.id DESC
+            LIMIT ${opts.limit}
+        `) as { id: string }[];
+        if (ranked.length === 0) return [];
+
+        // Pass 2: re-fetch the ranked rows through Drizzle so `date` / `createdAt` /
+        // `updatedAt` come back as Date (mode: 'timestamp' applies). Order preserved via
+        // the id-keyed map; same pattern as the old searchMail.
+        const ids = ranked.map((r) => r.id);
         const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
         const byId = new Map(rows.map((r) => [r.id, r]));
         return ids.map((id) => byId.get(id)).filter((r): r is NonNullable<typeof r> => r !== undefined);
