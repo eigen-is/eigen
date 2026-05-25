@@ -277,17 +277,6 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         expect(home.mail.search({ q: 'glompy', limit: 20 })).toEqual([]);
     });
 
-    test('backfillSearchIndex re-runs cleanly and search still works', async () => {
-        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Wibblesome backfill subject', 'body');
-        const { getHome } = await import('../lib/home');
-        const home = await getHome(ctx.alice.user.id);
-
-        await home.mail.backfillSearchIndex();
-        expect(
-            home.mail.search({ q: 'wibblesome', limit: 20 }).some((h) => h.subject === 'Wibblesome backfill subject'),
-        ).toBe(true);
-    });
-
     test('search finds an email by sender address even when the sender has a display name', async () => {
         const eml = [
             'From: "Jane Doe" <jane.doe@example.com>',

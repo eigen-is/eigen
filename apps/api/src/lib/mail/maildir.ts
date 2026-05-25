@@ -108,10 +108,6 @@ export default class Maildir {
         return this.db.searchMail({ ...opts, mailboxes });
     }
 
-    backfillSearchIndex(): Promise<void> {
-        return this.db.backfillSearchIndex();
-    }
-
     // -- Mailbox operations --
 
     async mailboxesList(): Promise<MaildirMailbox[]> {
