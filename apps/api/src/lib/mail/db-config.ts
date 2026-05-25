@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mail',
-    currentVersion: 2,
+    currentVersion: 3,
     schema,
     migrations: [
         {
@@ -57,6 +57,41 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 ALTER TABLE emails ADD COLUMN toShort TEXT NOT NULL DEFAULT '';
                 ALTER TABLE emails ADD COLUMN toAddress TEXT NOT NULL DEFAULT '';
                 ALTER TABLE emails ADD COLUMN recipientsAll TEXT NOT NULL DEFAULT '';
+            `),
+        },
+        {
+            version: 3,
+            up: (db) =>
+                db.exec(`
+                CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
+                    subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort,
+                    content='emails',
+                    content_rowid='rowid',
+                    tokenize='porter unicode61'
+                );
+
+                CREATE TRIGGER IF NOT EXISTS emails_ai AFTER INSERT ON emails BEGIN
+                    INSERT INTO emails_fts(rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
+                    VALUES (new.rowid, new.subject, new.fromShort, new.fromAddress, new.toShort, new.toAddress, new.recipientsAll, new.textShort);
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS emails_ad AFTER DELETE ON emails BEGIN
+                    INSERT INTO emails_fts(emails_fts, rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
+                    VALUES ('delete', old.rowid, old.subject, old.fromShort, old.fromAddress, old.toShort, old.toAddress, old.recipientsAll, old.textShort);
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS emails_au AFTER UPDATE ON emails BEGIN
+                    INSERT INTO emails_fts(emails_fts, rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
+                    VALUES ('delete', old.rowid, old.subject, old.fromShort, old.fromAddress, old.toShort, old.toAddress, old.recipientsAll, old.textShort);
+                    INSERT INTO emails_fts(rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
+                    VALUES (new.rowid, new.subject, new.fromShort, new.fromAddress, new.toShort, new.toAddress, new.recipientsAll, new.textShort);
+                END;
+
+                -- Populate from existing rows. No-op on a fresh database; fills the index on
+                -- upgrade. Idempotent on re-run because the migration framework's version gate
+                -- prevents this block from running twice.
+                INSERT INTO emails_fts(rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
+                SELECT rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort FROM emails;
             `),
         },
     ],

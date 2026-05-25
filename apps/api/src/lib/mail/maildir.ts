@@ -103,13 +103,9 @@ export default class Maildir {
 
     search(opts: { q: string; limit: number; mailboxes?: string[]; from?: string; to?: string }): EmailSummary[] {
         // Canonicalise mailbox names here so callers can pass any case (e.g. `trash`,
-        // `Trash`, `inbox`) without knowing the canonical form stored in the index bucket.
+        // `Trash`, `inbox`) and the FTS mailbox filter matches the stored value exactly.
         const mailboxes = opts.mailboxes?.map(canonicalMailbox);
         return this.db.searchMail({ ...opts, mailboxes });
-    }
-
-    backfillSearchIndex(): Promise<void> {
-        return this.db.backfillSearchIndex();
     }
 
     // -- Mailbox operations --

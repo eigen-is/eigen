@@ -15,7 +15,6 @@ export const PATHS = {
         ROOT: 'eigen.mail',
         MAILDIR: 'Maildir',
         DB: 'eigen.mail/mail.db',
-        SEARCH_DB: 'eigen.mail/search.db',
         CUR: 'cur',
         NEW: 'new',
         TMP: 'tmp',
