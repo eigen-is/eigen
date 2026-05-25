@@ -18,9 +18,11 @@
 > + `useOptionalPreview` so the marketing routes in `apps/index` (which don't mount `EigenApp`'s
 > stack) don't crash.
 >
-> **Deferred (post-v1):** Sub-action sheet (`→`); `file:` / `event:` / `chat:` / `?` prefixes (no
-> backends yet); per-user recents (waits for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md));
-> per-user `commandPalette` opt-out setting; AI assist.
+> **Deferred (post-v1):** Sub-action sheet (`→`); `file:` / `event:` / `chat:` / `?` prefixes
+> (no backends yet); per-user recents (waits for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md));
+> per-user `commandPalette` opt-out setting; content-aware input (image-URL detection, file
+> paste/drop) — see [Content-aware input](#content-aware-input-later-phase); smart-parser
+> growth (natural-language datetime, math, unit conversion); pinned commands, per-command hotkeys, aliases; AI assist.
 >
 > **Documented divergence from the proposal:** the engine holds the entire merge during
 > `mail.isPending` rather than streaming sections as their providers resolve and waiting only the
@@ -35,8 +37,9 @@
 > contacts) are synchronous over already-cached data; **one** backend call per keystroke
 > returns mixed search results. Context-aware via apps publishing their current selection.
 > Reuses the already-shipped, currently-unused shadcn `Command` primitive (cmdk). Search is
-> served by the FTS5 index from [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md), built as a parallel
-> prerequisite track — **not** re-implemented as a throwaway stopgap. The palette's no-backend
+> served by per-domain inline FTS5 inside each canonical DB — see [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md);
+> mail search is live, drive/calendar/chat follow the same pattern. **Not** re-implemented as a
+> throwaway stopgap. The palette's no-backend
 > capabilities (actions, navigation, contacts, smart parsing, selection) ship independently
 > and don't wait on it. Recents wait for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md).
 
@@ -271,26 +274,28 @@ stale time, so typing into the palette never refetches contacts.
 ### Search
 
 The palette **does not own a search backend**. It consumes one endpoint — `/search/:ownerId`,
-described in [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md). That endpoint is backed by per-Home
-SQLite FTS5 search indexes that each domain keeps current by indexing on write. It returns
-results **grouped by kind** (files, mail, events, and — once chat indexing lands — chats) in a
-single call. The index storage layout (settled as one index per scope in PROPOSAL_SEARCH.md)
-does not affect the palette.
+described in [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md). That endpoint is backed by per-domain
+inline FTS5 virtual tables inside each canonical SQLite DB — `emails_fts` inside `mail.db`
+(v3), with drive, calendar, and chat following the same pattern as those domains are indexed.
+Each domain keeps its FTS table current via AFTER INSERT/DELETE/UPDATE triggers. Results are
+returned **grouped by kind** (files, mail, events, and — once chat indexing lands — chats) in a
+single call. The index storage layout (Option C, inline FTS in each canonical scope DB —
+see PROPOSAL_SEARCH.md) does not affect the palette.
 
-**Build the search backend as a prerequisite track, not as a phase inside the palette.**
-PROPOSAL_SEARCH's first phase (the index schema and service, the metadata indexing hooks for
-mail, calendar, and drive, and the search route) plus a one-time backfill of existing data is
-everything the palette needs to light up search. That track is independent of the palette's
-frontend work and can proceed in parallel with palette Phases 1–5.
+**The search prerequisite track is complete for mail.** PROPOSAL_SEARCH Phase 1 has shipped:
+the mail.db v3 FTS virtual table + triggers, `MailDB.searchMail`, and the `/search` route are
+live. Drive, calendar, and chat indexing follow as later phases, each additive and non-breaking
+for the palette — richer results arrive without a palette change.
 
 **No stopgap.** An earlier draft shipped a throwaway interim — three parallel SQL `LIKE` queries
 over filenames, mail subjects, and event titles, to be deleted once the real index landed. That
 is cut, for three reasons: it costs about the same to build as the index's first phase; it is
-explicitly thrown away afterwards; and a per-Home search index with versioned migrations is a
-routine, well-trodden pattern here — there is no migration cost to avoid. Doing it once is
-simpler and cheaper. Cutting the stopgap also means **no new search methods on the Drive, Mail,
-or Calendar classes** — so none of the Drive layering rules (the SharedDrive wrapper requirement)
-come into play. The search route only ever touches a dedicated search index.
+explicitly thrown away afterwards; and adding an FTS5 virtual table + triggers to a canonical
+DB via a versioned migration is a routine, well-trodden pattern here — there is no migration
+cost to avoid. Doing it once is simpler and cheaper. Cutting the stopgap also means **no new
+search methods on the Drive, Mail, or Calendar classes** — so none of the Drive layering rules
+(the SharedDrive wrapper requirement) come into play. The search route only ever queries the
+per-domain FTS tables inside each canonical DB.
 
 **The palette's search provider** is a single debounced query against the endpoint. The input is
 debounced before it becomes a query key, and the request forwards an abort signal so a superseded
@@ -501,8 +506,9 @@ command files, providers, and row components.
   require; the UI consumes typed results only.
 - **Reuses existing primitives**: the shadcn `Command` component (already shipped, currently
   unused), the global hotkey hook, the contact-suggestion logic, the API URL helpers.
-- **Search via the shared index**: the palette and any future per-app search page consume one
-  endpoint backed by one index. The palette does not fork its own search backend.
+- **Search via the per-domain FTS endpoint**: the palette and any future per-app search page
+  consume one `/search/:ownerId` endpoint backed by per-domain inline FTS5 tables inside each
+  canonical DB. The palette does not fork its own search backend.
 - **One module per domain**: each app contributes one command file. No central edits per feature.
 - **Per-Home model**: the palette honours the owner (personal vs team) so team contexts get team
   data — the same sharding boundary as everything else.
@@ -515,7 +521,7 @@ command files, providers, and row components.
 
 | Phase  | Scope                                                                                          | Effort | Depends on            |
 |--------|------------------------------------------------------------------------------------------------|--------|-----------------------|
-| **Prereq** | Search backend — FTS5 index, metadata indexing hooks, the `/search` route, one-time backfill (PROPOSAL_SEARCH) | M | runs in parallel |
+| **Prereq** | Search backend — inline FTS5 in each canonical DB + triggers, the `/search` route (PROPOSAL_SEARCH). **Mail shipped.** Drive/calendar/chat follow the same pattern. | M | runs in parallel |
 | 1      | Provider wiring, the `Command` primitive in the topbar, the `Mod+K` hotkey, curated empty state | S      | —                     |
 | 2      | Static actions catalog (create, navigate, view), per-app command files                          | M      | 1                     |
 | 3      | Contacts provider; smart parser for email + URL                                                 | S      | 2                     |
@@ -604,11 +610,11 @@ and consumes the endpoint.
 - **One backend call per keystroke** — the frontend-only providers (actions, smart, contacts) are
   synchronous over already-cached data; the only network call is the search query. No HTTP
   fan-out per source.
-- **No search stopgap** — the palette consumes the shared FTS5 index from PROPOSAL_SEARCH, built
-  as a parallel prerequisite track. A throwaway interim (parallel SQL `LIKE` queries) is *not*
-  built: it costs the same as the real index's first phase, gets deleted afterwards, and avoids
-  no real migration cost. Doing it once is simpler and removes any new search methods from the
-  Drive/Mail/Calendar classes.
+- **No search stopgap** — the palette consumes the per-domain inline FTS5 endpoint from
+  PROPOSAL_SEARCH, built as a parallel prerequisite track (now shipped for mail). A throwaway
+  interim (parallel SQL `LIKE` queries) is *not* built: it costs the same as the real index's
+  first phase, gets deleted afterwards, and avoids no real migration cost. Doing it once is
+  simpler and removes any new search methods from the Drive/Mail/Calendar classes.
 - **No frontend-local recents** — don't ship what we'll replace. Recents wait for
   PROPOSAL_HOME_RECENTS. The empty state shows curated suggested commands until then.
 - **One Cmd+K, not split** — a single dialog with sectioned results is easier to teach than

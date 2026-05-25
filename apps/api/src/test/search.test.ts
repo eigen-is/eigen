@@ -1,154 +1,7 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { join } from 'node:path';
 import type { SearchResponse } from '@workspace/lib/types/search';
-import { openLocalDatabase } from '../lib/core/managed-database';
-import { SEARCH_DB_CONFIG } from '../lib/search/db-config';
-import { type SearchDoc, SearchIndex } from '../lib/search/search-index';
-import { app, assertJson, authedRequest, getTestContext, TEST_DATA_DIR } from './setup';
-
-let indexCounter = 0;
-async function freshIndex(): Promise<SearchIndex> {
-    indexCounter += 1;
-    const managed = await openLocalDatabase(
-        SEARCH_DB_CONFIG,
-        join(TEST_DATA_DIR, `search-unit-${indexCounter}`, 'search.db'),
-    );
-    return new SearchIndex(managed.db);
-}
-
-function mailDoc(id: string, title: string, body: string, sortKey = Date.now(), bucket = ''): SearchDoc {
-    return {
-        kind: 'mail',
-        itemId: id,
-        bucket,
-        title,
-        body,
-        sortKey,
-    };
-}
-
-describe('SearchIndex', () => {
-    test('upsert then query finds a hit by a title word', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'Quarterly budget review', 'numbers inside'));
-        expect(index.query('budget', 10)).toEqual(['m1']);
-    });
-
-    test('query matches words in the body', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'Hello', 'the pangolin is asleep'));
-        expect(index.query('pangolin', 10)).toHaveLength(1);
-    });
-
-    test('query returns nothing for a non-matching term', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'Hello world', 'body text'));
-        expect(index.query('zzzznomatch', 10)).toEqual([]);
-    });
-
-    test('delete removes a hit from results', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'deletable subject', 'body'));
-        expect(index.query('deletable', 10)).toHaveLength(1);
-        index.delete('mail', 'm1');
-        expect(index.query('deletable', 10)).toEqual([]);
-    });
-
-    test('re-upsert with the same kind+itemId updates in place, no duplicate', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'first subject', 'body'));
-        index.upsert(mailDoc('m1', 'second subject', 'body'));
-        expect(index.query('first', 10)).toEqual([]);
-        expect(index.query('second', 10)).toEqual(['m1']);
-    });
-
-    test('punctuation-heavy input does not throw and still matches', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'Q3 results', 'body'));
-        expect(() => index.query('"q3"* (results):', 10)).not.toThrow();
-        expect(index.query('q3 results', 10)).toHaveLength(1);
-    });
-
-    test('an empty or all-punctuation query returns no results', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'something', 'body'));
-        expect(index.query('   ', 10)).toEqual([]);
-        expect(index.query('!@#$%', 10)).toEqual([]);
-    });
-
-    test('limit caps the number of hits', async () => {
-        const index = await freshIndex();
-        for (let i = 0; i < 5; i += 1) index.upsert(mailDoc(`m${i}`, `report ${i}`, 'body'));
-        expect(index.query('report', 3)).toHaveLength(3);
-    });
-
-    test('higher sortKey orders ahead of lower sortKey for equally ranked hits', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'glimflub equal', 'body', 1000));
-        index.upsert(mailDoc('m2', 'glimflub equal', 'body', 2000));
-        expect(index.query('glimflub', 10)).toEqual(['m2', 'm1']);
-    });
-
-    test('query with buckets filter returns only matching-bucket hits', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'blarptastic sent mail', 'body', Date.now(), 'Sent'));
-        index.upsert(mailDoc('m2', 'blarptastic inbox mail', 'body', Date.now(), ''));
-        expect(index.query('blarptastic', 10, { buckets: ['Sent'] })).toEqual(['m1']);
-    });
-
-    test('query with excludeBuckets drops excluded-bucket hits', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'quibberised inbox mail', 'body', Date.now(), ''));
-        index.upsert(mailDoc('m2', 'quibberised trash mail', 'body', Date.now(), 'Trash'));
-        expect(index.query('quibberised', 10, { excludeBuckets: ['Trash'] })).toEqual(['m1']);
-    });
-
-    test('isEmpty reflects whether the index has rows', async () => {
-        const index = await freshIndex();
-        expect(index.isEmpty()).toBe(true);
-        index.upsert(mailDoc('m1', 'subj', 'body'));
-        expect(index.isEmpty()).toBe(false);
-    });
-
-    test('upsertBatch indexes every doc in one transaction and is idempotent', async () => {
-        const index = await freshIndex();
-        index.upsertBatch([
-            mailDoc('m1', 'alpha report', 'body'),
-            mailDoc('m2', 'beta report', 'body'),
-            mailDoc('m3', 'gamma report', 'body'),
-        ]);
-        expect(index.query('report', 10)).toHaveLength(3);
-        index.upsertBatch([mailDoc('m1', 'alpha report', 'body')]);
-        expect(index.query('report', 10)).toHaveLength(3);
-    });
-
-    test('itemIds allowlist trims results to matching ids only', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'krimsonflux subject', 'body'));
-        index.upsert(mailDoc('m2', 'krimsonflux subject', 'body'));
-        index.upsert(mailDoc('m3', 'krimsonflux subject', 'body'));
-        const ids = index.query('krimsonflux', 10, { itemIds: ['m1', 'm3'] });
-        expect(ids.sort()).toEqual(['m1', 'm3']);
-    });
-
-    test('empty itemIds allowlist returns no results', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'verbosity', 'body'));
-        expect(index.query('verbosity', 10, { itemIds: [] })).toEqual([]);
-    });
-
-    test('itemIds composes with excludeBuckets', async () => {
-        const index = await freshIndex();
-        index.upsert(mailDoc('m1', 'flarmsplork mail', 'body', Date.now(), ''));
-        index.upsert(mailDoc('m2', 'flarmsplork mail', 'body', Date.now(), 'Trash'));
-        index.upsert(mailDoc('m3', 'flarmsplork mail', 'body', Date.now(), ''));
-        const ids = index.query('flarmsplork', 10, {
-            itemIds: ['m1', 'm2'],
-            excludeBuckets: ['Trash'],
-        });
-        expect(ids).toEqual(['m1']);
-    });
-});
+import { app, assertJson, authedRequest, getTestContext } from './setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -181,6 +34,34 @@ async function deliverMail(ownerId: string, to: string, subject: string, body: s
     }
     throw new Error(`deliverMail: '${subject}' was not indexed within the timeout`);
 }
+
+describe.skipIf(isWindows)('mail.db FTS5 schema', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('emails_fts virtual table exists and is populated after a mail delivery', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'FTS schema probe', 'body text');
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+
+        const raw = new Database(`${home.homeDir}/eigen.mail/mail.db`, { readonly: true });
+        try {
+            const tbl = raw
+                .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table' AND name='emails_fts'")
+                .get();
+            expect(tbl?.name).toBe('emails_fts');
+
+            const emails = raw.query<{ n: number }, []>('SELECT COUNT(*) AS n FROM emails').get()!.n;
+            const fts = raw.query<{ n: number }, []>('SELECT COUNT(*) AS n FROM emails_fts').get()!.n;
+            expect(emails).toBeGreaterThan(0);
+            expect(fts).toBe(emails);
+        } finally {
+            raw.close();
+        }
+    });
+});
 
 describe.skipIf(isWindows)('Mail search (Maildir)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -246,17 +127,6 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         expect([200, 204]).toContain(del.status);
 
         expect(home.mail.search({ q: 'glompy', limit: 20 })).toEqual([]);
-    });
-
-    test('backfillSearchIndex re-runs cleanly and search still works', async () => {
-        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Wibblesome backfill subject', 'body');
-        const { getHome } = await import('../lib/home');
-        const home = await getHome(ctx.alice.user.id);
-
-        await home.mail.backfillSearchIndex();
-        expect(
-            home.mail.search({ q: 'wibblesome', limit: 20 }).some((h) => h.subject === 'Wibblesome backfill subject'),
-        ).toBe(true);
     });
 
     test('search finds an email by sender address even when the sender has a display name', async () => {

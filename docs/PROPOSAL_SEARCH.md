@@ -1,49 +1,56 @@
 # Search Index
 
-> **Status — v1 (mail) shipped on `feat/search-index-mail`.** Code in
-> `apps/api/src/lib/search/search-index.ts` (the generic FTS5 service, kind-agnostic) +
-> `apps/api/src/lib/mail/maildb.ts` (mail-specific indexing on write) +
-> `apps/api/src/routes/search.ts` (the `/search/:ownerId` endpoint) +
-> `packages/lib/src/core/search/` (FE hook + keys + invalidate).
+> **Status — v1 (mail) shipped on `feat/search-index-mail`.** Search is implemented as inline
+> FTS5 directly inside `mail.db` (v3 schema) — no separate `search.db`, no `SearchIndex` service
+> abstraction. Code in `apps/api/src/lib/mail/maildb.ts` (the `searchMail` JOIN +
+> `sanitizeFtsQuery` helper) + `apps/api/src/lib/mail/db-config.ts` (the v3 migration creating
+> `emails_fts` + 3 sync triggers + initial populate) + `apps/api/src/routes/search.ts` (the
+> `/search/:ownerId` endpoint) + `packages/lib/src/core/search/` (FE hook + keys + invalidate).
 >
 > **Shipped:**
-> - `SearchIndex` SQLite FTS5 service: kind-agnostic columns (`itemId`, `bucket`, `title`, `body`,
->   `sortKey`), `query(text, limit, opts)` with `buckets` / `excludeBuckets` / `itemIds` allowlist
->   composition + empty-allowlist short-circuit, `bm25` + `sortKey` ranking, sanitised FTS query
->   grammar.
-> - Mail indexing: `MailDB.addEmail` / `updateDraftContent` index on write; index is best-effort
->   (failures never break mail delivery). Body row joins from/to/recipientsAll/textShort so all four
->   surfaces match.
-> - `searchMail` filter-first: `from` / `to` filters narrow the candidate id set via mail.db's own
->   indexed columns (`fromShort` / `fromAddress` / `recipientsAll`), then the FTS index ranks
->   within that subset. Exact recall at any selectivity.
-> - Default mailbox exclusion (`Trash`, `Junk`) applied whether or not a structured filter is
->   active.
+> - External-content FTS5 (`content='emails'`, `content_rowid='rowid'`) over the seven indexable
+>   email columns (`subject`, `fromShort`, `fromAddress`, `toShort`, `toAddress`, `recipientsAll`,
+>   `textShort`); three AFTER INSERT/DELETE/UPDATE triggers keep the index in sync atomically
+>   with mail writes — failure modes propagate via the same transaction (no silent index drift).
+> - `MailDB.searchMail`: a two-pass query — raw FTS5 JOIN returns ranked ids, then Drizzle
+>   hydrates rows so `mode: 'timestamp'` columns come back as `Date`. Filter-first narrowing on
+>   `from` / `to` via mail.db's own indexed columns, default mailbox exclusion (`Trash`, `Junk`),
+>   `bm25() + date DESC` ordering, and `sanitizeFtsQuery` prefix-wildcard tokenisation.
 > - Route: `GET /search/:ownerId?q&sources&mailbox&from&to&limit` returning canonical
->   `EmailSummary[]`. `from` / `to` capped at 256 chars.
-> - Frontend: `useSearch` hook with `searchKeys` query keys (includes `ownerId`), 30s `staleTime`,
->   `enabled` guard, AbortSignal threaded through Eden Treaty.
-> - SSE: `invalidateSearchOwner` wired into every mail mutation event (`MAIL_RECEIVED`,
->   `MAIL_DELETED`, `MAIL_MOVED`, `MAIL_READ_CHANGED`, `MAIL_FLAGS_CHANGED`,
->   `MAIL_DRAFT_UPDATED`, `MAIL_SENT`).
-> - Test coverage: 41 tests across the SearchIndex unit, Maildir integration, and endpoint blocks —
->   including `from` / `to` combinations, Trash exclusion, recipient + CC search, normalisation.
+>   `EmailSummary[]`.
+> - Frontend: `useSearch` hook with `searchKeys` query keys (includes `ownerId`), 30s
+>   `staleTime`, `enabled` guard, AbortSignal threaded through Eden Treaty.
+> - SSE: `invalidateSearchOwner` wired into every mail mutation event.
+> - Test coverage: 26 tests across the `mail.db FTS5 schema`, `Mail search (Maildir)` and
+>   `Search endpoint` blocks — including `from` / `to` combinations, Trash exclusion, recipient +
+>   CC search, case normalisation, and trigger-driven sync.
 >
-> **Index location:** **one index per Home** (`.eigen-storage/mail/search.db`), matching this
-> proposal's eventual "Option A" recommendation. Schema lives in
-> `apps/api/src/lib/search/db-config.ts`, reusable across kinds. Currently mail-only.
+> **Index location: Option C — inline FTS in the canonical per-scope DB.** Mail's FTS lives
+> inside `mail.db`; Drive mounts will get the same pattern (`metadata.db` gains a virtual table
+> over file rows, plus a separate `file_text` 1:1 table for extracted Yjs content); calendar
+> ditto on `calendar.db`. Cross-domain query fan-out is the route's job; same-kind ranking is
+> native `bm25()` within each scope.
 >
-> **Deferred (post-v1):** Drive indexing, calendar indexing, chat indexing; pre-shared index for
-> cross-Home search; vector / semantic search. The shared schema means each new kind is an
-> additive write-path + a route source rather than a schema change.
+> **Deferred (post-v1):** Drive indexing, calendar indexing, chat indexing; pre-shared index
+> for cross-Home search; vector / semantic search. The pattern (FTS5 virtual table + triggers
+> in the canonical DB) is replicated per domain — additive write-path + route source per kind.
+>
+> **Documented divergence from the original proposal:** Drafts are now indexed at `textShort`
+> granularity (the 200-char preview), matching received mail. The previous design indexed the
+> full draft body via a separate `search_content.body` column; with inline FTS that asymmetry
+> disappears. If full-body draft search becomes important, add a `bodyFull` column to
+> `emails` (NULL for non-drafts) and include it in the FTS column list — pure addition.
+>
+> **Known shortcomings:** `from:` / `to:` operators accept any token — no email-shape
+> validation, so a typo silently misses rather than warns.
 
 > **TLDR**: The **backend search infrastructure** consumed by the
-> [command palette](PROPOSAL_COMMAND_PALETTE.md). SQLite FTS5 full-text search, **one index per
-> scope** (per mount, plus mail and calendar). Each domain indexes its text on write; the
-> search endpoint returns results **grouped by kind** — the palette renders one section per
-> group. Each kind is ranked within itself by `bm25()`; cross-kind ordering is structural, not
-> a fused score. Future: optional hybrid keyword + vector search. **No UI here — the palette is
-> the only consumer.**
+> [command palette](PROPOSAL_COMMAND_PALETTE.md). SQLite FTS5 full-text search — **inline FTS5
+> virtual table inside each canonical scope DB** (mail.db for mail, metadata.db for drive,
+> etc.). Each domain indexes its text on write via triggers; the search endpoint returns results
+> **grouped by kind** — the palette renders one section per group. Each kind is ranked within
+> itself by `bm25()`; cross-kind ordering is structural, not a fused score. Future: optional
+> hybrid keyword + vector search. **No UI here — the palette is the only consumer.**
 
 ## Problem statement
 
@@ -90,12 +97,38 @@ FTS5 is SQLite's built-in full-text search module. It's the right fit:
 
 ## Search index location
 
-The index uses SQLite FTS5 (above). **Where it physically lives — and how many database files
-there are — is an open decision.** Two options are on the table; this section documents both.
-The rest of the proposal is drafted against Option B (the current lean), with the differences
-collected at the end of this section.
+**Option C — inline FTS in the canonical per-scope DB.** Each domain's primary SQLite file
+owns its own FTS5 virtual table. Mail's `emails_fts` lives inside `mail.db`; a Drive mount's
+file-name + extracted-text index will live inside `metadata.db`; calendar's inside
+`calendar.db`. There is no separate `search.db` file.
 
-### Option A — one index per Home
+This is the SQLite-native FTS5 pattern: external content (`content='<source-table>'`,
+`content_rowid='rowid'`) with three triggers maintaining the index synchronously, in the same
+transaction as the canonical write. The route fans out across enabled scopes and merges
+same-kind results; `bm25()` stays comparable within each scope (the unit it ranks against).
+
+**Why not one index per Home (Option A):** the storage unit would no longer match the access
+unit, kind discrimination would need a column in a multi-kind table, and the Home-level index
+would be the single point of failure for all of search.
+
+**Why not one separate `search.db` per scope (Option B):** the abstraction adds a service
+layer with no callers beyond a single domain each, the canonical DB and the index can drift, and lifecycle bookkeeping doubles. The original proposal leaned B; the
+mail v1 implementation initially shipped B before being collapsed to C.
+
+**Lifecycle:** the FTS table is part of the canonical DB's schema and versioning. Adding it is
+a normal `ManagedDatabase` migration step (one CREATE per FTS table + one CREATE per trigger
++ one INSERT to populate from existing rows). Deleting a scope (a mount, the mail directory)
+takes its index with it; there is no cleanup to remember.
+
+**Cross-scope queries:** the search route's coordinator calls each enabled scope's
+`searchX(opts)` method in parallel and assembles `{ mail, files, events, chats }`. Same-kind
+results from multiple mounts (files, chats) are combined by rank position; mail and calendar
+are single-scope and rank natively.
+
+The original Options A and B are documented below for the record — both were considered and
+both abandoned in favour of Option C.
+
+### Option A — one index per Home (rejected)
 
 A single `search.db` per Home — one per user, one per team — holding every domain's content in
 one FTS table, discriminated by a `kind` column.
@@ -119,7 +152,7 @@ one FTS table, discriminated by a `kind` column.
 - A corrupt index disables all search for that Home until it is rebuilt.
 - Every domain writes one file — mild write contention (WAL makes this minor).
 
-### Option B — one index per scope
+### Option B — one separate `search.db` per scope (rejected)
 
 One `search.db` per Drive mount (`mounts/{mountId}/search.db`), one for mail, one for calendar.
 All share a single `DatabaseConfig` — one schema and one migration definition, instantiated per
@@ -142,72 +175,41 @@ mounts, each self-versioning on open). Many database *files*, but one schema.
   results from different mounts must then be combined per query — `bm25()` is comparable only
   within one index, so the combine cannot just sort on score. Real recurring per-query work.
 - More open file handles per Home; a Home-level coordinator is needed to gather and merge.
-
-### How much it matters
-
-The gap is small at one mount — a typical solo user — where the two are nearly identical for
-Drive. It widens with multi-mount teams: Option A then avoids a cross-mount merge on every
-keystroke, while Option B avoids query-time filtering and lifecycle bookkeeping. The deciding
-factor is how mounts are expected to be used — as long-lived, enable/disable/archive-able
-project spaces (favours B) or as a mostly-static single space (A and B converge).
-
-### What the choice pins down downstream
-
-Whichever option is chosen, most of this proposal is identical — the FTS5 content-table
-structure, index-on-write, content extraction, the grouped response, and the wire types do not
-change. The decision only pins down:
-
-- **The `SearchIndex` service** — Option A: one instance on `Home`. Option B: one instance per
-  scope, plus a Home-level coordinator that merges.
-- **The query path** — Option A: per-kind queries against one database. Option B: fan-out
-  across scopes, then a per-query combine of same-kind results from different mounts.
-- **Lifecycle cleanup** — Option A: an explicit delete-by-mount on mount removal. Option B: the
-  mount's index is disposed with the mount.
-- **File count** — Option A: one `search.db` per Home. Option B: one per mount, plus mail and
-  calendar.
-
-### Status
-
-**Settled: Option B** — one index per scope. The mount-lifecycle fit decided it, and the
-ranking analysis ([Ranking and cross-kind merging](#ranking-and-cross-kind-merging)) reinforces
-it — per-scope indexes keep each kind's `bm25()` well-calibrated, where one shared index would
-not. The mail slice is implemented against Option B; the Option A pros and cons above are kept
-for the record. **Initial slice ships personal-mail only.** The route uses `requireSelf`, so
-team-owner search is deferred to the slice that adds mail to `TeamHome`. The wire shape is
-forward-compatible — adding a `mountId` source returns a `{ files: ... }` group without breaking
-existing consumers.
+- A service abstraction with no callers beyond a single domain each adds lifecycle bookkeeping
+  with no structural payoff; the canonical DB and its separate index can drift.
 
 ## Index structure
 
-Every `search.db` has the same structure, built on FTS5's **external-content-table** pattern:
+Each domain's canonical DB gains an FTS5 virtual table over the columns it wants searchable.
+For mail (the v1 implementation):
 
-- A **content table** — one row per indexed item: its kind (`file`, `chat`, `mail`, `event`),
-  the source item's id, a `bucket` facet (a generic per-kind filterable label — for mail, the
-  mailbox name), the searchable title and body text, and a numeric sort key. A uniqueness
-  constraint on kind + item id makes re-indexing an idempotent upsert.
-- An **FTS5 virtual table** indexing only the title and body.
-- **Triggers** keeping the FTS table in sync on every insert, update, and delete.
+```sql
+CREATE VIRTUAL TABLE emails_fts USING fts5(
+    subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort,
+    content='emails',
+    content_rowid='rowid',
+    tokenize='porter unicode61'
+);
+```
 
-Under Option B a mount's index holds `file` and `chat` rows (a chat room is a file in the
-mount), while the mail and calendar indexes hold a single kind each; under Option A all kinds
-share one table. Either way the `kind` column drives per-kind queries and the grouped response.
-Each database is versioned through the standard `ManagedDatabase` migration mechanism.
+Three triggers (`AFTER INSERT`, `AFTER DELETE`, `AFTER UPDATE`) keep the index in sync. The
+search method (`MailDB.searchMail`, future `Mount.searchFiles`, etc.) is a two-pass query —
+first the FTS5 JOIN returns ranked ids, then Drizzle hydrates the rows so `mode: 'timestamp'`
+column conversion runs:
 
-### The SearchIndex service
+```sql
+-- Pass 1: id-only, FTS-ranked
+SELECT e.id FROM emails_fts
+JOIN emails e ON e.rowid = emails_fts.rowid
+WHERE emails_fts MATCH ?
+ORDER BY bm25(emails_fts), e.date DESC LIMIT ?
+```
 
-`SearchIndex` wraps one `search.db`. It exposes **upsert**, **delete**, and **query**.
+Then in TS: `db.select().from(emails).where(inArray(id, rankedIds))` rebuilds the rows in
+rank order via an id-keyed Map.
 
-Under Option B it is instantiated **per scope** — a `Mount` owns its `SearchIndex`, the mailbox
-owns one, the calendar owns one — and a thin **Home-level coordinator** drives a search across
-scopes: it enumerates the Home's enabled mounts plus mail and calendar, queries each scope's
-index, and merges the results (see [Search API](#search-api)). Under Option A there is a single
-`SearchIndex` on `Home` and no coordinator. Either way the route handler stays thin.
-
-**Query sanitization matters.** FTS5 has its own query grammar (`AND`/`OR`/`NOT`, quoting,
-column qualifiers). Raw user input can't be passed through — stray punctuation falls through as
-a qualifier or an unbalanced quote and throws at the SQLite layer. The query method strips
-metacharacters, phrase-quotes each token, appends a prefix-match wildcard, and joins tokens —
-so arbitrary typed input is always a safe, sensible query.
+Query sanitisation (FTS5 grammar protection) is a small per-domain helper — `sanitizeFtsQuery`
+in `maildb.ts`. Extract to a shared util when a second domain needs the same pattern.
 
 ## Indexing strategy
 
@@ -222,15 +224,17 @@ after its own database write. The index stays current without a separate sync jo
 | A chat message is posted or edited               | the (host mount's) index           |
 | A doc / slides / sheets snapshot                 | the (host mount's) index           |
 
-(Under Option A, every row above writes the one per-Home index.) Each domain populates the index
-with the FTS text (title, body) plus the `bucket` for its kind (mail: mailbox; calendar:
-calendar id; files: TBD). Display data for a hit comes from the canonical store at query time,
-not from the index — the index stays small and the response uses the **canonical domain type**
-for each kind (e.g. an `EmailSummary` for a mail hit), exactly what the mail listing endpoint
-returns.
+Each domain populates the index with the FTS text plus any structured filter columns for its
+kind (mail: from/to/mailbox; calendar: calendar id; files: TBD). With inline FTS5 + triggers
+(Option C), writes to the canonical table automatically keep the index in sync — no separate
+index write in the mutation flow is needed. Display data for a hit comes from the canonical
+store at query time, not from the index — the index stays small and the response uses the
+**canonical domain type** for each kind (e.g. an `EmailSummary` for a mail hit), exactly what
+the mail listing endpoint returns.
 
-A **one-time backfill** populates the index by walking each domain's data. Under Option B it
-runs per scope, so it parallelizes naturally and a single corrupt scope can be rebuilt alone.
+For mail the v3 migration's closing `INSERT INTO emails_fts SELECT ... FROM emails` serves as
+the **one-time backfill** for pre-existing rows. New domains follow the same pattern — the
+migration step populates the FTS table from existing canonical rows on upgrade.
 
 ## Content extraction from collaborative documents
 
@@ -257,10 +261,10 @@ work for an index that only wants words.
 a stickies file contributes only its metadata (the file name) to the index.
 
 Extraction runs during **snapshot creation**, which already happens periodically (roughly every
-hundred edits) — acceptable staleness, and it avoids re-extracting on every keystroke. Under
-Option B the mount's own `SearchIndex` is reachable directly from the snapshot code; under
-Option A the Home's index reference must be threaded down to it. Extraction failures must never
-block the snapshot itself — they're caught and logged.
+hundred edits) — acceptable staleness, and it avoids re-extracting on every keystroke. With
+inline FTS5 (Option C), the mount's own FTS table is reachable directly from the snapshot code
+without threading a separate service reference. Extraction failures must never block the
+snapshot itself — they're caught and logged.
 
 ## Search API
 
@@ -271,13 +275,10 @@ A single owner-scoped endpoint:
   same way the Drive and Calendar routes do (owner is the caller, or the caller is a member of
   the team), then runs the query and returns the grouped response.
 
-Internally the query path depends on the storage option. Under Option B a Home-level coordinator
-queries every **enabled** mount index plus the mail and calendar indexes — one capped query per
-kind per scope — and combines the same-kind results from different mounts into one group per
-kind; mail and calendar are single-scope. How that combine and the cross-kind ordering work —
-and why neither uses a fused `bm25()` score — is set out in
-[Ranking and cross-kind merging](#ranking-and-cross-kind-merging). Under Option A the per-kind
-groups come straight from the one index.
+Internally the route fans out across enabled scopes — one capped query per kind per scope —
+and combines same-kind results from different mounts into one group per kind; mail and calendar
+are single-scope. How the combine and cross-kind ordering work — and why neither uses a fused
+`bm25()` score — is set out in [Ranking and cross-kind merging](#ranking-and-cross-kind-merging).
 
 When the user is browsing a team workspace, the owner is the team, so the same endpoint searches
 the team's data under the standard team-access check. (Phase: deferred — the initial mail slice
@@ -288,8 +289,7 @@ is personal-owner only.)
 The response is **grouped by kind** — a separate array for files, mail, events, and chats, each
 already ranked and capped. This mirrors how the palette renders search results: one fixed
 section per kind. The frontend drops each group straight into its section — no client-side
-bucketing — and only the cross-kind Top Hit needs logic that spans groups. This is identical
-under either storage option.
+bucketing — and only the cross-kind Top Hit needs logic that spans groups.
 
 Grouping by *kind* (not by mount) is deliberate: it stays stable as a user adds mounts, where a
 mount-keyed shape would not. Items shared with the user appear inside their kind's group, flagged
@@ -424,17 +424,16 @@ What not to do:
 
 | Phase | Scope                                                                                                   | Effort |
 |-------|---------------------------------------------------------------------------------------------------------|--------|
-| 1     | The `search.db` schema and `DatabaseConfig`, the `SearchIndex` service (per the chosen storage option), the `/search` route returning the grouped shape, index-on-write hooks indexing mail subjects, calendar event titles, and drive file names, and a one-time backfill — the milestone where the palette's search lights up | M–L |
+| 1     | The mail v3 migration (CREATE VIRTUAL TABLE + triggers + populate), `MailDB.searchMail` as a two-pass JOIN+hydrate, the `/search` route, index-on-write via FTS triggers (no separate sync job, no backfill code). **Shipped — see status block.** | M |
 | 2     | Content extraction for docs, slides, and sheets — a thin text collector over the export content loaders, hooked into snapshot creation | M |
 | 3     | Chat message indexing — index message content                                                            | S      |
 | 4     | Shared data — make items shared with the user searchable                                                 | S–M    |
 | 5     | Semantic / vector search (future, opt-in)                                                                | L      |
 
-Phase 1 is the **prerequisite track** the command palette depends on — see that proposal's phase
-table. It can be built in parallel with the palette's frontend-only phases. After Phase 1 the
-palette searches the indexed fields (filenames, subjects, titles); each later phase deepens what's
-searchable with no change to the palette's frontend. The storage-layout decision (above) should
-be settled before Phase 1 starts.
+Phase 1 is **shipped** — the inline FTS5 mail index is live and the `/search` route is active.
+The command palette now has a working search backend; see that proposal's phase table. Each
+later phase deepens what's searchable with no change to the palette's frontend. Phases 2–5
+follow the same inline-FTS pattern (Option C) — one virtual table + triggers per domain.
 
 **Stickies content** joins when stickies export ships and brings an `export/stickies/content.ts`
 loader — at that point the Phase 2 thin-collector approach extends to stickies. That work is
@@ -443,41 +442,54 @@ tracked with stickies export, not scoped here.
 ## File structure
 
 ```
-apps/api/src/lib/search/
-  schema.ts               # the content table (Drizzle)
-  db-config.ts            # the search DatabaseConfig — FTS5 virtual table + sync triggers
-  search-index.ts         # the SearchIndex service — upsert, delete, query
-  search-coordinator.ts   # Option B only — enumerate enabled scopes, query, combine, group
-  extract-text.ts         # thin text collector over the export content loaders (docs/slides/sheets)
+apps/api/src/lib/mail/
+  db-config.ts            # mail.db migrations including v3 (FTS5 virtual table + triggers)
+  maildb.ts               # MailDB.searchMail (JOIN against emails_fts) + sanitizeFtsQuery
+
+apps/api/src/lib/<domain>/   # future — drive, calendar, chat each follow the same shape
+  db-config.ts            # adds the domain's FTS5 virtual table + triggers in a migration
+  <domain>db.ts           # search<X> method joining the domain's canonical rows with FTS
 
 apps/api/src/routes/
-  search.ts               # the GET /search/:ownerId endpoint
+  search.ts               # GET /search/:ownerId — fans out across enabled domains
+
+packages/lib/src/core/search/
+  keys.ts                 # TanStack query keys
+  hooks/use-search.ts     # the debounced query hook + AbortSignal
+  hooks/invalidate.ts     # invalidateSearchOwner — used by SSE handlers
 
 packages/lib/src/types/
-  search.ts               # shared wire types — the grouped response shape that maps each kind to its canonical domain type
+  search.ts               # shared wire types — the grouped response shape
 ```
+
+Note: `apps/api/src/lib/search/` no longer exists. The previous `SearchIndex` service +
+`search_content` schema were collapsed into per-domain inline FTS.
 
 ## Key decisions
 
-- **Index storage layout — one index per scope (Option B).** Per mount, plus mail and calendar.
-  Chosen for the mount-lifecycle fit and because it keeps each kind's `bm25()` well-calibrated;
-  weighed in [Search index location](#search-index-location).
+- **Index storage layout — Option C, inline FTS in each canonical scope DB.** Each domain's
+  primary SQLite file owns its own FTS5 virtual table; no separate `search.db`. The previous
+  options A (one index per Home) and B (one separate `search.db` per scope) are kept in the
+  doc for the record — both were considered, both abandoned. Inline is the SQLite-native
+  pattern, removes a service abstraction, and eliminates the index-drift failure mode.
 - **Cross-kind ranking is structural, not score-fused.** Each kind is ranked within itself by
   `bm25()`; the cross-kind Top Hit is decided by structural match-quality (exact / prefix /
   all-query-terms-in-title), not a fused numeric score — `bm25()` is not cross-index comparable
   and RRF degenerates on disjoint result sets. No relevance score crosses the wire. See
   [Ranking and cross-kind merging](#ranking-and-cross-kind-merging).
-- **Content table + FTS5 virtual table** — kind, ids, bucket, and sort key stay in a regular
-  table; only title and body are full-text indexed; triggers keep them in sync.
-- **Index on write** — each domain indexes through its existing mutation flow; no separate sync
-  job. A one-time backfill covers pre-existing data.
+- **Inline FTS5 virtual table** — each domain's canonical DB gains a virtual FTS5 table over
+  its searchable columns, plus three AFTER INSERT/DELETE/UPDATE triggers to keep it in sync
+  atomically. No separate content table; the canonical rows are the content.
+- **Index on write via triggers** — AFTER INSERT/DELETE/UPDATE triggers on the canonical table
+  maintain the FTS index atomically; no separate index write in the mutation flow, no separate
+  sync job. The closing `INSERT INTO <fts> SELECT ... FROM <source>` in each migration is the
+  backfill for pre-existing rows — no separate backfill step.
 - **Content extraction reuses the export loaders** — collaborative text is pulled from the
   export pipeline's Yjs content loaders (not a separate Yjs walker) by a thin text collector,
   run at snapshot creation rather than per edit. Stickies wait for stickies export.
 - **Response grouped by kind** — a separate ranked, capped array per kind, mirroring the
   palette's sections; each group holds the canonical domain type for that kind (so per-app
   in-app search can reuse the endpoint); non-serialisable presentation stays off the wire.
-  Identical under either storage option.
 - **No cross-home search for v1** — items shared from other users are searchable in a later
   phase, via local metadata indexing and/or query federation.
 - **FTS5 first, vectors later** — keyword search is sufficient for v1; semantic search is an
