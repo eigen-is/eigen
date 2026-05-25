@@ -14,8 +14,7 @@
 | Mount metadata  | `{home}/mounts/{id}/metadata.db`                | Drive file/folder structure                              |
 | Shared paths    | `{home}/mounts/shared.db`                       | Files shared with this user                              |
 | Contacts        | `{home}/eigen.contacts/contacts.db`             | Contact data                                             |
-| Mail            | `{home}/eigen.mail/mail.db`                     | Email metadata                                           |
-| Mail search     | `{home}/eigen.mail/search.db`                   | FTS5 index over mail (subject + recipients + body snippet). Domain-agnostic schema, mail-only writer today. See [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) |
+| Mail            | `{home}/eigen.mail/mail.db`                     | Email metadata + FTS5 full-text index (`emails_fts`, v3). See [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) |
 | Calendar        | `{home}/eigen.calendar/calendar.db`             | Calendars, events, shared calendars                      |
 | Collab docs     | Via storage backend (`{dataDbPathId}`)           | Yjs snapshots + updates                                  |
 | Chat rooms      | Via storage backend (`{dataDbPathId}`)           | Messages + read state                                    |
@@ -68,7 +67,6 @@ Each domain defines its schema and migrations in `db-config.ts`:
 | `SHARE_REGISTRY_DB_CONFIG`      | `apps/api/src/lib/share/db-config.ts`                |
 | `CONTACTS_DB_CONFIG`            | `apps/api/src/lib/contacts/db-config.ts`             |
 | `MAIL_DB_CONFIG`                | `apps/api/src/lib/mail/db-config.ts`                 |
-| `SEARCH_DB_CONFIG`              | `apps/api/src/lib/search/db-config.ts`               |
 | `COLLAB_DB_CONFIG`              | `apps/api/src/lib/collab/db-config.ts`               |
 | `CHAT_ROOM_DB_CONFIG`           | `apps/api/src/lib/chat/db-config.ts`                 |
 | `COMMENT_INDEX_DB_CONFIG`       | `apps/api/src/lib/chat/comment-db-config.ts`         |
