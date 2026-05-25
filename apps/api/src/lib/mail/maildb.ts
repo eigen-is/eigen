@@ -227,7 +227,7 @@ export default class MailDB {
 
         // Pass 2: re-fetch the ranked rows through Drizzle so `date` / `createdAt` /
         // `updatedAt` come back as Date (mode: 'timestamp' applies). Order preserved via
-        // the id-keyed map; same pattern as the old searchMail.
+        // the id-keyed map.
         const ids = ranked.map((r) => r.id);
         const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
         const byId = new Map(rows.map((r) => [r.id, r]));
