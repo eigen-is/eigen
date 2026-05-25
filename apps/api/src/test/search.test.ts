@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import type { SearchResponse } from '@workspace/lib/types/search';
@@ -181,6 +182,34 @@ async function deliverMail(ownerId: string, to: string, subject: string, body: s
     }
     throw new Error(`deliverMail: '${subject}' was not indexed within the timeout`);
 }
+
+describe.skipIf(isWindows)('mail.db FTS5 schema', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('emails_fts virtual table exists and is populated after a mail delivery', async () => {
+        await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'FTS schema probe', 'body text');
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+
+        const raw = new Database(`${home.homeDir}/eigen.mail/mail.db`, { readonly: true });
+        try {
+            const tbl = raw
+                .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table' AND name='emails_fts'")
+                .get();
+            expect(tbl?.name).toBe('emails_fts');
+
+            const emails = raw.query<{ n: number }, []>('SELECT COUNT(*) AS n FROM emails').get()!.n;
+            const fts = raw.query<{ n: number }, []>('SELECT COUNT(*) AS n FROM emails_fts').get()!.n;
+            expect(emails).toBeGreaterThan(0);
+            expect(fts).toBe(emails);
+        } finally {
+            raw.close();
+        }
+    });
+});
 
 describe.skipIf(isWindows)('Mail search (Maildir)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
