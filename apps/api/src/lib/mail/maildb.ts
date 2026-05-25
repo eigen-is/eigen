@@ -4,8 +4,6 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Home } from '../home';
-import { SEARCH_DB_CONFIG } from '../search/db-config';
-import { type SearchDoc, SearchIndex } from '../search/search-index';
 import { MAIL_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
@@ -24,25 +22,10 @@ function sanitizeFtsQuery(text: string): string {
         .join(' ');
 }
 
-// Projection of an email into a generic search document. Sender, recipient and body are
-// joined into the indexed `body` so all three are searchable. `bucket` holds the mailbox so
-// the search index can filter by it without knowing mail concepts.
-function emailToSearchDoc(email: EmailSummary): SearchDoc {
-    return {
-        kind: 'mail',
-        itemId: email.id,
-        bucket: email.mailbox,
-        title: email.subject,
-        body: `${email.fromShort}\n${email.fromAddress}\n${email.toShort}\n${email.toAddress}\n${email.recipientsAll}\n${email.textShort}`,
-        sortKey: email.date.getTime(),
-    };
-}
-
 export default class MailDB {
     private home: Home;
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
-    private searchIndex!: SearchIndex;
 
     constructor(home: Home) {
         this.home = home;
@@ -51,28 +34,6 @@ export default class MailDB {
     async init() {
         this.managedDb = await this.home.getLocalDatabase(MAIL_DB_CONFIG, PATHS.MAIL.DB);
         this.db = this.managedDb.db;
-        const searchManaged = await this.home.getLocalDatabase(SEARCH_DB_CONFIG, PATHS.MAIL.SEARCH_DB);
-        this.searchIndex = new SearchIndex(searchManaged.db);
-        // Backfill only a fresh index — the write-hooks keep an existing one current, and the
-        // search.db file persists across Home recreates, so this runs at most once.
-        if (this.searchIndex.isEmpty()) {
-            this.backfillSearchIndex().catch((err) => console.error('mail search backfill failed:', err));
-        }
-    }
-
-    // Search-index writes are best-effort: the index is derived data, so a failure here must
-    // never break mail delivery or any mail mutation.
-    private safeIndex(action: () => void): void {
-        try {
-            action();
-        } catch (error) {
-            console.error('mail search index update failed:', error);
-        }
-    }
-
-    private reindexEmail(id: string): void {
-        const email = this.getEmail(id);
-        if (email) this.safeIndex(() => this.searchIndex.upsert(emailToSearchDoc(email)));
     }
 
     addEmail(email: EmailSummary): boolean {
@@ -110,7 +71,6 @@ export default class MailDB {
             this.db.insert(schema.emails).values(record).run();
             inserted = true;
         }
-        this.safeIndex(() => this.searchIndex.upsert(emailToSearchDoc(record)));
         return inserted;
     }
 
@@ -137,12 +97,10 @@ export default class MailDB {
 
     deleteEmail(id: string) {
         this.db.delete(schema.emails).where(eq(schema.emails.id, id)).run();
-        this.safeIndex(() => this.searchIndex.delete('mail', id));
     }
 
     moveEmail(id: string, mailbox: string) {
         this.db.update(schema.emails).set({ mailbox }).where(eq(schema.emails.id, id)).run();
-        this.reindexEmail(id);
     }
 
     setRead(id: string, isRead: boolean) {
@@ -173,8 +131,9 @@ export default class MailDB {
             .run();
     }
 
-    // `text` is the full draft body. emails.textShort stays a truncated preview for list
-    // views, but the search index gets the complete body.
+    // `text` is the full draft body, but emails.textShort stores a truncated preview for
+    // list views — the same shape as received mail. The FTS5 trigger on emails picks up
+    // whatever lands in textShort, so drafts get indexed at preview granularity.
     updateDraftContent(
         id: string,
         subject: string,
@@ -195,8 +154,6 @@ export default class MailDB {
             })
             .where(eq(schema.emails.id, id))
             .run();
-        const email = this.getEmail(id);
-        if (email) this.safeIndex(() => this.searchIndex.upsert(emailToSearchDoc({ ...email, textShort: text })));
     }
 
     getAllEmails(mailbox: string) {
@@ -275,38 +232,6 @@ export default class MailDB {
         const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
         const byId = new Map(rows.map((r) => [r.id, r]));
         return ids.map((id) => byId.get(id)).filter((r): r is NonNullable<typeof r> => r !== undefined);
-    }
-
-    // Idempotent full re-index of every email. Runs in transactional batches and yields the
-    // event loop between them (Bun.sleep(0)), so even a large mailbox never blocks concurrent
-    // requests for longer than a single batch.
-    //
-    // The id list is snapshotted up front, but each batch re-reads its rows fresh from
-    // mail.db — so a delete/move/draft-update that lands during a yield isn't overwritten
-    // by the stale snapshot the next batch would otherwise carry. Rows deleted mid-backfill
-    // simply drop out of the per-batch SELECT.
-    async backfillSearchIndex(): Promise<void> {
-        // 250 trades SQLite transaction overhead (one upsertBatch = one transaction)
-        // against per-batch latency. Not benchmarked; revisit if a huge mailbox shows
-        // noticeable read stalls during the one-time backfill.
-        const BATCH_SIZE = 250;
-        const ids = this.db
-            .select({ id: schema.emails.id })
-            .from(schema.emails)
-            .all()
-            .map((r) => r.id);
-        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-            const batchIds = ids.slice(i, i + BATCH_SIZE);
-            const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, batchIds)).all();
-            if (rows.length > 0) {
-                try {
-                    this.searchIndex.upsertBatch(rows.map(emailToSearchDoc));
-                } catch (error) {
-                    console.error(`mail search backfill failed for batch at offset ${i}:`, error);
-                }
-            }
-            await Bun.sleep(0);
-        }
     }
 
     async destruct(): Promise<void> {
