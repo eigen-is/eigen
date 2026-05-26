@@ -40,6 +40,23 @@ function validateName(name: string): void {
     }
 }
 
+// Subquery: ids of every eigendoc container (doc/stickies/slides/sheets/chat) and
+// every path descended from one. Embedded as `parentId NOT IN (…)` to filter out
+// container internals (data.db, media, embedded chats) — file rows the user
+// never sees in the drive UI and shouldn't see in search.
+const docContainerDescendantIds = sql`
+    WITH RECURSIVE doc_tree AS (
+        SELECT id FROM paths
+        WHERE type IN (${sql.join(
+            EIGEN_DOCUMENT_TYPES.map((t) => sql`${t}`),
+            sql`, `,
+        )}) AND trashedAt IS NULL
+        UNION ALL
+        SELECT child.id FROM paths child INNER JOIN doc_tree dt ON child.parentId = dt.id
+    )
+    SELECT id FROM doc_tree
+`;
+
 export function buildStorageKey(id: string, name: string): string {
     const dotIdx = name.lastIndexOf('.');
     if (dotIdx > 0) {
@@ -995,21 +1012,7 @@ export class Mount {
         }
         conditions.push(isNull(paths.trashedAt));
         if (options?.excludeDocumentChildren) {
-            const typeList = sql.join(
-                EIGEN_DOCUMENT_TYPES.map((t) => sql`${t}`),
-                sql`, `,
-            );
-            conditions.push(sql`${paths.parentId} NOT IN (
-                WITH RECURSIVE doc_tree AS (
-                    SELECT ${paths.id} FROM ${paths}
-                    WHERE ${paths.type} IN (${typeList})
-                    AND ${paths.trashedAt} IS NULL
-                    UNION ALL
-                    SELECT p.id FROM ${paths} p
-                    INNER JOIN doc_tree dt ON p.parentId = dt.id
-                )
-                SELECT id FROM doc_tree
-            )`);
+            conditions.push(sql`${paths.parentId} NOT IN (${docContainerDescendantIds})`);
         }
 
         const query = this.db
@@ -1025,7 +1028,10 @@ export class Mount {
         const match = sanitizeFtsQuery(opts.q);
         if (!match) return [];
 
-        // Pass 1: rank via FTS5, return ordered ids only.
+        // Pass 1: rank via FTS5, return ordered ids only. The docContainerDescendantIds
+        // exclusion keeps eigendoc internals (data.db, embedded media, embedded chats)
+        // out — the user only ever sees the container itself in the drive UI, so it
+        // shouldn't surface in search either.
         const ranked = this.db.all(sql`
             SELECT p.id AS id
             FROM paths_fts
@@ -1033,6 +1039,7 @@ export class Mount {
             WHERE paths_fts MATCH ${match}
               AND p.trashedAt IS NULL
               AND p.parentId IS NOT NULL
+              AND p.parentId NOT IN (${docContainerDescendantIds})
             ORDER BY bm25(paths_fts), p.updatedAt DESC, p.id DESC
             LIMIT ${opts.limit}
         `) as { id: string }[];
