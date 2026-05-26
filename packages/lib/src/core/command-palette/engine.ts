@@ -6,6 +6,7 @@ type BuildInput = {
     contact: PaletteResult[];
     smart: PaletteResult[];
     mail: PaletteResult[];
+    file: PaletteResult[];
     input: string;
     scope?: PaletteScope;
     suggestedCommandIds?: string[];
@@ -66,12 +67,14 @@ export function buildSections(input: BuildInput): Sections {
     const inActionsScope = !input.scope || input.scope === 'actions';
     let scopedActions = inActionsScope ? actionList : [];
     let mailList = input.scope && input.scope !== 'mail' ? [] : input.mail;
+    let fileList = input.scope && input.scope !== 'file' ? [] : input.file;
     let contactList = input.scope && input.scope !== 'contacts' ? [] : input.contact;
     const smartList = input.scope ? [] : input.smart;
 
     // Engine owns final ordering: sort by descending rank, then cap.
     scopedActions = [...scopedActions].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     mailList = [...mailList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
+    fileList = [...fileList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     contactList = [...contactList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     const scopedSelection = [...selectionList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
 
@@ -82,7 +85,13 @@ export function buildSections(input: BuildInput): Sections {
     if (deterministicSmart) {
         topHit = { ...deterministicSmart, group: 'top-hit' };
     } else {
-        const candidates: PaletteResult[] = [...scopedSelection, ...mailList, ...contactList, ...scopedActions];
+        const candidates: PaletteResult[] = [
+            ...scopedSelection,
+            ...fileList,
+            ...mailList,
+            ...contactList,
+            ...scopedActions,
+        ];
         let bestQuality = 0;
         for (const r of candidates) {
             const q = structuralMatchQuality(input.input, r.title);
@@ -104,6 +113,7 @@ export function buildSections(input: BuildInput): Sections {
     const groups: Sections['groups'] = [];
     if (suggestionsList.length > 0) groups.push({ id: 'smart', heading: 'Suggestions', items: suggestionsList });
     if (scopedSelection.length > 0) groups.push({ id: 'selection', heading: 'Selection', items: scopedSelection });
+    if (fileList.length > 0) groups.push({ id: 'file', heading: 'Files', items: fileList });
     if (mailList.length > 0) groups.push({ id: 'mail', heading: 'Mail', items: mailList });
     if (contactList.length > 0) groups.push({ id: 'contacts', heading: 'Contacts', items: contactList });
     if (scopedActions.length > 0) groups.push({ id: 'actions', heading: 'Actions', items: scopedActions });

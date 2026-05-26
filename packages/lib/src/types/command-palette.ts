@@ -3,9 +3,9 @@ import type { ContactSuggestion } from './contact';
 import type { DrivePath, EigenDocType } from './drive';
 import type { EmailSummary } from './mail';
 
-export type PaletteScope = 'mail' | 'actions' | 'contacts';
+export type PaletteScope = 'mail' | 'file' | 'actions' | 'contacts';
 
-export type ResultGroup = 'top-hit' | 'suggested' | 'smart' | 'selection' | 'mail' | 'contacts' | 'actions';
+export type ResultGroup = 'top-hit' | 'suggested' | 'smart' | 'selection' | 'mail' | 'file' | 'contacts' | 'actions';
 
 // A 1-item selection from an eigendoc viewer is identical in shape to a 1-item
 // Drive selection — both surface the same actions (Share, Mail to…, Copy link, …).
@@ -96,6 +96,16 @@ export type PaletteResult =
           group: ResultGroup;
           rank: number;
           payload: EmailSummary;
+          run: (ctx: CommandContext) => void;
+      }
+    | {
+          kind: 'file';
+          id: string;
+          title: string;
+          icon: LucideIcon;
+          group: ResultGroup;
+          rank: number;
+          payload: DrivePath;
           run: (ctx: CommandContext) => void;
       };
 
