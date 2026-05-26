@@ -2,7 +2,7 @@
 
 import type { BorderSide, CellBorderInfo, Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { parseA1Range } from '@workspace/sheet/engine';
-import type { Alignment, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
+import type { Alignment, Border, CellRichTextValue, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -246,7 +246,7 @@ function getCellTextContent(cell: XlsxCell): string | null {
     if (typeof raw === 'string') return raw;
     if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw);
     if (isRichText(raw)) return raw.richText.map((r) => r.text).join('');
-    if (isHyperlink(raw)) return raw.text;
+    if (isHyperlink(raw)) return hyperlinkText(raw);
     if (isFormulaValue(raw) || isSharedFormula(raw)) {
         const result = raw.result;
         if (typeof result === 'string') return result;
@@ -304,7 +304,8 @@ function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boo
     }
 
     if (isHyperlink(raw)) {
-        return { value: raw.text, display: raw.text };
+        const text = hyperlinkText(raw);
+        return { value: text, display: text };
     }
 
     if (isError(raw)) {
@@ -564,6 +565,18 @@ function isRichText(value: CellValue): value is Extract<CellValue, { richText: u
 
 function isHyperlink(value: CellValue): value is Extract<CellValue, { hyperlink: string }> {
     return typeof value === 'object' && value !== null && 'hyperlink' in value && 'text' in value;
+}
+
+// exceljs's CellHyperlinkValue declares `text: string`, but real-world xlsx files
+// (notably Google Sheets exports) put a CellRichTextValue here. Flatten both shapes
+// to a plain string so callers can rely on the return type.
+function hyperlinkText(raw: { text: unknown }): string {
+    const t = raw.text;
+    if (typeof t === 'string') return t;
+    if (t && typeof t === 'object' && 'richText' in t) {
+        return (t as CellRichTextValue).richText.map((r) => r.text).join('');
+    }
+    return '';
 }
 
 function isError(value: unknown): value is { error: string } {
