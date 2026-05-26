@@ -689,6 +689,18 @@ describe('Drive search', () => {
         expect(home.drive.search({ q: '!@#$%', limit: 20 })).toEqual([]);
     });
 
+    test('files inside an eigendoc container are excluded from search', async () => {
+        const container = await home.drive.create(mountId, rootId, 'zonkblat container', 'doc');
+        await home.drive.touchFile(mountId, container.id, 'zonkblat-internal.dat', 'application/octet-stream');
+
+        // The container itself is searchable by its own name…
+        expect(home.drive.search({ q: 'zonkblat container', limit: 20 }).some((h) => h.id === container.id)).toBe(true);
+
+        // …but its internal file row is hidden — search by the internal's unique name
+        // returns nothing, even though the row exists in the paths table.
+        expect(home.drive.search({ q: 'zonkblat-internal', limit: 20 })).toEqual([]);
+    });
+
     test('GET /search returns a created folder under file', async () => {
         const id = await createFolder('flibbertigibbet endpoint folder');
         const res = await authedRequest(ctx.alice.user.sessionToken, `/search/${ctx.alice.user.id}?q=flibbertigibbet`);
