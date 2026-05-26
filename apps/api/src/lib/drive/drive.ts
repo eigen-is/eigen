@@ -595,6 +595,17 @@ export default class Drive {
         return mount.getPathsByMimeType(mimeType, options);
     }
 
+    // Called by: GET /search/:ownerId — owner-only (route gates with requireSelf), no SharedDrive wrapper.
+    search(opts: { q: string; limit: number }): DrivePath[] {
+        const merged: DrivePath[] = [];
+        for (const mount of this.mounts.values()) {
+            merged.push(...mount.searchPaths({ q: opts.q, limit: opts.limit }));
+        }
+        // bm25 isn't comparable across mount indexes, so cross-mount tiebreak is recency.
+        merged.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        return merged.slice(0, opts.limit);
+    }
+
     async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         return await mount.getBreadcrumb(pathId);

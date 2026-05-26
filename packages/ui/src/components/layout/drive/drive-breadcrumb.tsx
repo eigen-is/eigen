@@ -1,4 +1,4 @@
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -28,7 +28,7 @@ export function DriveBreadcrumb({ paths, mountLabel, onNavigate, className, item
                     </BreadcrumbItem>
                 )}
                 {paths.map((path, index) => {
-                    const label = index === 0 ? mountLabel : path.name;
+                    const label = index === 0 ? mountLabel : stripEigenExtension(path.name);
                     return (
                         <Fragment key={path.id}>
                             {index > 0 && <BreadcrumbSeparator />}

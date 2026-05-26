@@ -1,8 +1,14 @@
-import type { SearchResponse } from '@workspace/lib/types/search';
+import type { SearchResponse, SearchSource } from '@workspace/lib/types/search';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
+
+const SOURCE_VALUES: SearchSource[] = ['mail', 'file'];
+
+function isSource(value: string): value is SearchSource {
+    return (SOURCE_VALUES as string[]).includes(value);
+}
 
 export const searchRouter = new Elysia({ name: 'search' })
     .use(betterAuth)
@@ -17,8 +23,10 @@ export const searchRouter = new Elysia({ name: 'search' })
             const sources = query.sources
                 ?.split(',')
                 .map((source) => source.trim())
-                .filter((source) => source.length > 0);
+                .filter(isSource);
             const searchMail = !sources || sources.includes('mail');
+            const searchFile = !sources || sources.includes('file');
+            const limit = query.limit ?? 20;
 
             // Pass user-typed names through verbatim; Maildir.search() owns the canonical
             // casing rules (Inbox -> '', case-insensitive match against STANDARD_MAILBOXES).
@@ -29,13 +37,14 @@ export const searchRouter = new Elysia({ name: 'search' })
             const mail = searchMail
                 ? home.mail.search({
                       q: query.q,
-                      limit: query.limit ?? 20,
+                      limit,
                       mailboxes,
                       from: query.from,
                       to: query.to,
                   })
                 : [];
-            return { mail };
+            const file = searchFile ? home.drive.search({ q: query.q, limit }) : [];
+            return { mail, file };
         },
         {
             auth: true,

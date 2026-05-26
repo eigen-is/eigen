@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { collabKeys } from '../collab/hooks/use-collab';
+import { invalidateSearchOwner } from '../search';
 import {
     invalidateAclSharedOrUnshared,
     invalidateAclUpdated,
@@ -30,15 +31,18 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
         case SSEventType.DRIVE_FILE_CREATED:
         case SSEventType.DRIVE_FILE_UPLOADED:
             invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
+            invalidateSearchOwner(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_FOLDER_DELETED:
         case SSEventType.DRIVE_FILE_DELETED:
             invalidateItemDeleted(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
+            invalidateSearchOwner(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_PATH_RENAMED:
             invalidatePathRenamed(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
+            invalidateSearchOwner(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_PATH_MOVED:
@@ -62,11 +66,13 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
                 );
             }
             invalidateTrash(queryClient, path.ownerId, path.mountId);
+            invalidateSearchOwner(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_PATH_RESTORED:
             invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
             invalidateTrash(queryClient, path.ownerId, path.mountId);
+            invalidateSearchOwner(queryClient, path.ownerId);
             return true;
 
         default:

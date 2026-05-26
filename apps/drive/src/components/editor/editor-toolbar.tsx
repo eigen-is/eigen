@@ -1,5 +1,5 @@
 import { useBreadcrumb } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Toolbar, TooltipButton } from '@workspace/ui';
 import {
     Breadcrumb,
@@ -33,14 +33,14 @@ export function ViewToolbar({ path, canWrite, onEdit, onClose }: ViewToolbarProp
                                 {index > 0 && <BreadcrumbSeparator />}
                                 <BreadcrumbItem>
                                     <BreadcrumbLink onClick={onClose} className="cursor-pointer">
-                                        {p.name}
+                                        {stripEigenExtension(p.name)}
                                     </BreadcrumbLink>
                                 </BreadcrumbItem>
                             </Fragment>
                         ))}
                         <BreadcrumbSeparator />
                         <BreadcrumbItem>
-                            <BreadcrumbPage>{path.name}</BreadcrumbPage>
+                            <BreadcrumbPage>{stripEigenExtension(path.name)}</BreadcrumbPage>
                         </BreadcrumbItem>
                     </BreadcrumbList>
                 </Breadcrumb>

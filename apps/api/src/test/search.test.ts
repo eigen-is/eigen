@@ -1,7 +1,17 @@
 import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { SearchResponse } from '@workspace/lib/types/search';
-import { app, assertJson, authedRequest, getTestContext } from './setup';
+import {
+    app,
+    assertJson,
+    authedRequest,
+    driveDelete,
+    driveGet,
+    drivePost,
+    drivePut,
+    driveUpload,
+    getTestContext,
+} from './setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -585,5 +595,134 @@ describe.skipIf(isWindows)('Search endpoint', () => {
             `/search/${ctx.alice.user.id}?q=anything&from=${encodeURIComponent(longFrom)}`,
         );
         expect(res.status).toBe(422);
+    });
+});
+
+// Drive tests run on Windows (unlike the mail blocks above) — drive ops bypass the
+// maildir filesystem-watcher races that force the mail tests' skipIf(isWindows).
+describe('Drive search', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let mountId: string;
+    let rootId: string;
+    let home: Awaited<ReturnType<typeof import('../lib/home').getHome>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const { data: mounts } = await ctx.alice.api.drive({ ownerId: ctx.alice.user.id }).mounts.get();
+        mountId = mounts![0].id;
+        const root = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        rootId = root.id;
+        const { getHome } = await import('../lib/home');
+        home = await getHome(ctx.alice.user.id);
+    });
+
+    async function createFolder(folderName: string): Promise<string> {
+        const folder = await drivePost<{ id: string }>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}`,
+            { folderName },
+        );
+        return folder.id;
+    }
+
+    test('paths_fts virtual table stays in sync with paths', async () => {
+        await createFolder('ftsschemaprobe folder');
+
+        const raw = new Database(`${home.homeDir}/mounts/${mountId}/metadata.db`, { readonly: true });
+        try {
+            const tbl = raw
+                .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table' AND name='paths_fts'")
+                .get();
+            expect(tbl?.name).toBe('paths_fts');
+
+            const total = raw.query<{ n: number }, []>('SELECT COUNT(*) AS n FROM paths').get()!.n;
+            const indexed = raw.query<{ n: number }, []>('SELECT COUNT(*) AS n FROM paths_fts').get()!.n;
+            expect(total).toBeGreaterThan(0);
+            expect(indexed).toBe(total);
+        } finally {
+            raw.close();
+        }
+    });
+
+    test('a created folder is found by Drive.search', async () => {
+        const id = await createFolder('zorptastic search folder');
+        expect(home.drive.search({ q: 'zorptastic', limit: 20 }).some((h) => h.id === id)).toBe(true);
+    });
+
+    test('an uploaded file is found by Drive.search', async () => {
+        const file = new File([new Uint8Array([1, 2, 3])], 'glompy-report.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+        expect(home.drive.search({ q: 'glompy', limit: 20 }).some((h) => h.id === uploaded.id)).toBe(true);
+    });
+
+    test('renaming a folder removes the old name and indexes the new one', async () => {
+        const id = await createFolder('frobnicate before');
+        expect(home.drive.search({ q: 'frobnicate', limit: 20 }).some((h) => h.id === id)).toBe(true);
+
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${id}/rename`, {
+            newName: 'snorkblat after',
+        });
+
+        expect(home.drive.search({ q: 'frobnicate', limit: 20 })).toEqual([]);
+        expect(home.drive.search({ q: 'snorkblat', limit: 20 }).some((h) => h.id === id)).toBe(true);
+    });
+
+    test('trashing a folder removes it from search', async () => {
+        const id = await createFolder('crinklepuff trash candidate');
+        expect(home.drive.search({ q: 'crinklepuff', limit: 20 }).some((h) => h.id === id)).toBe(true);
+
+        await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${id}`);
+
+        expect(home.drive.search({ q: 'crinklepuff', limit: 20 })).toEqual([]);
+    });
+
+    test('the root folder is not returned as a result', async () => {
+        const root = await home.drive.getRootFolder(mountId);
+        expect(root).not.toBeNull();
+        const hits = home.drive.search({ q: root!.name, limit: 20 });
+        expect(hits.some((h) => h.id === root!.id)).toBe(false);
+    });
+
+    test('a punctuation-only query returns no results', () => {
+        expect(home.drive.search({ q: '!@#$%', limit: 20 })).toEqual([]);
+    });
+
+    test('GET /search returns a created folder under file', async () => {
+        const id = await createFolder('flibbertigibbet endpoint folder');
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/search/${ctx.alice.user.id}?q=flibbertigibbet`);
+        const data = await assertJson<SearchResponse>(res);
+        expect(data.file.some((h) => h.id === id)).toBe(true);
+    });
+
+    test('sources=file searches drive; sources=mail returns an empty file array', async () => {
+        const id = await createFolder('splorbified sources folder');
+
+        const fileRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=splorbified&sources=file`,
+        );
+        const fileData = await assertJson<SearchResponse>(fileRes);
+        expect(fileData.file.some((h) => h.id === id)).toBe(true);
+
+        const mailRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?q=splorbified&sources=mail`,
+        );
+        const mailData = await assertJson<SearchResponse>(mailRes);
+        expect(mailData.file).toEqual([]);
+    });
+
+    test('default (no sources) returns both mail and file arrays', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/search/${ctx.alice.user.id}?q=anything`);
+        const data = await assertJson<SearchResponse>(res);
+        expect(Array.isArray(data.mail)).toBe(true);
+        expect(Array.isArray(data.file)).toBe(true);
+    });
+
+    test("searching another user's drive is rejected with 403", async () => {
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/search/${ctx.alice.user.id}?q=anything`);
+        expect(res.status).toBe(403);
     });
 });

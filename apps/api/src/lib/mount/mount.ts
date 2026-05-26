@@ -16,11 +16,11 @@ import {
 } from '@workspace/lib/types';
 import { type DriveVisibility, EIGEN_DOCUMENT_TYPES, isContainerType } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { getS3Config, getServerSettings } from '../config/server-settings';
-import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../core';
+import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, sanitizeFtsQuery } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
@@ -1019,6 +1019,35 @@ export class Mount {
 
         const results = await query.all();
         return results.map((r) => this.toDrivePath(r));
+    }
+
+    searchPaths(opts: { q: string; limit: number }): DrivePath[] {
+        const match = sanitizeFtsQuery(opts.q);
+        if (!match) return [];
+
+        // Pass 1: rank via FTS5, return ordered ids only.
+        const ranked = this.db.all(sql`
+            SELECT p.id AS id
+            FROM paths_fts
+            JOIN paths p ON p.rowid = paths_fts.rowid
+            WHERE paths_fts MATCH ${match}
+              AND p.trashedAt IS NULL
+              AND p.parentId IS NOT NULL
+            ORDER BY bm25(paths_fts), p.updatedAt DESC, p.id DESC
+            LIMIT ${opts.limit}
+        `) as { id: string }[];
+        if (ranked.length === 0) return [];
+
+        // Pass 2: re-fetch the ranked rows through Drizzle so `createdAt` / `updatedAt` /
+        // `trashedAt` come back as Date (mode: 'timestamp' applies). Order preserved via
+        // the id-keyed map.
+        const ids = ranked.map((r) => r.id);
+        const rows = this.db.select().from(paths).where(inArray(paths.id, ids)).all();
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        return ids
+            .map((id) => byId.get(id))
+            .filter((r): r is NonNullable<typeof r> => r !== undefined)
+            .map((r) => this.toDrivePath(r));
     }
 
     async getPathsWithACL(): Promise<DrivePath[]> {

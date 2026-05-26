@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 1,
+    currentVersion: 2,
     schema,
     migrations: [
         {
@@ -41,6 +41,38 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     ON paths(trashedFrom, trashedAt) WHERE trashedFrom IS NOT NULL;
                 CREATE INDEX IF NOT EXISTS idx_paths_parent_trash
                     ON paths(parentId, trashedAt);
+            `),
+        },
+        {
+            version: 2,
+            up: (db) =>
+                db.exec(`
+                CREATE VIRTUAL TABLE IF NOT EXISTS paths_fts USING fts5(
+                    name,
+                    content='paths',
+                    content_rowid='rowid',
+                    tokenize='porter unicode61'
+                );
+
+                CREATE TRIGGER IF NOT EXISTS paths_ai AFTER INSERT ON paths BEGIN
+                    INSERT INTO paths_fts(rowid, name) VALUES (new.rowid, new.name);
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS paths_ad AFTER DELETE ON paths BEGIN
+                    INSERT INTO paths_fts(paths_fts, rowid, name) VALUES ('delete', old.rowid, old.name);
+                END;
+
+                -- Gate on name change so trivial updates (size/hash/thumbnail/trashedAt/acl/details)
+                -- don't churn the FTS shadow tables. mail's draft updates rewrite multiple indexed
+                -- columns and can't usefully gate; drive only indexes name, so the gate is safe.
+                CREATE TRIGGER IF NOT EXISTS paths_au AFTER UPDATE ON paths
+                    WHEN old.name IS NOT new.name
+                BEGIN
+                    INSERT INTO paths_fts(paths_fts, rowid, name) VALUES ('delete', old.rowid, old.name);
+                    INSERT INTO paths_fts(rowid, name) VALUES (new.rowid, new.name);
+                END;
+
+                INSERT INTO paths_fts(rowid, name) SELECT rowid, name FROM paths;
             `),
         },
     ],

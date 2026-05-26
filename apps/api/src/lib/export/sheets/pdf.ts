@@ -1,4 +1,4 @@
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
 import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
@@ -10,7 +10,7 @@ const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
 
 export async function exportSheetsToPdf(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
-    const title = drivePath.name.replace(/\.eigensheets$/, '');
+    const title = stripEigenExtension(drivePath.name);
     const sheets = await readSheetsContent(mount, drivePath);
 
     let maxW = 0;

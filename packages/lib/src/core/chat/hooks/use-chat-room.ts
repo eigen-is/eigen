@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/chat';
 import { isAttachmentReference } from '../../../types/chat';
 import type { DrivePath } from '../../../types/drive';
-import { isContainerType } from '../../../types/drive';
+import { isContainerType, stripEigenExtension } from '../../../types/drive';
 import { validateEmailTarget } from '../../../validation';
 import { useAuth } from '../../auth';
 import {
@@ -50,7 +50,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         lastWhisperFromRef.current = null;
     }, [chatId]);
 
-    const chatName = chatPath?.name?.replace('.eigenchat', '') || 'Chat';
+    const chatName = chatPath ? stripEigenExtension(chatPath.name) : 'Chat';
 
     useAutoMarkChatRead(user?.id ?? '', chatId);
 

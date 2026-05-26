@@ -1,13 +1,12 @@
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { htmlToPdf } from '../weasyprint';
 import { generateExportHtml } from './html';
-import { stripEigendocExtension } from './render';
 
 export async function exportEigendocToPdf(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
     const html = await generateExportHtml(mount, drivePath);
-    const title = stripEigendocExtension(drivePath.name);
+    const title = stripEigenExtension(drivePath.name);
 
     return {
         data: await htmlToPdf(html),

@@ -19,13 +19,16 @@ const glob = new Glob('**/*.ts');
 const violations: string[] = [];
 
 for await (const path of glob.scan('apps/api/src/lib')) {
-    const filename = path.split('/').pop()!;
-    if (path.startsWith('home/')) continue;
+    // Bun.Glob yields platform-native separators on Windows — normalise so the basename
+    // extraction and the home/ prefix check work regardless of platform.
+    const normalized = path.replaceAll('\\', '/');
+    const filename = normalized.split('/').pop()!;
+    if (normalized.startsWith('home/')) continue;
     if (ALLOWED.has(filename)) continue;
 
     const content = await Bun.file(`apps/api/src/lib/${path}`).text();
     if (content.includes('getHome')) {
-        violations.push(`apps/api/src/lib/${path}`);
+        violations.push(`apps/api/src/lib/${normalized}`);
     }
 }
 

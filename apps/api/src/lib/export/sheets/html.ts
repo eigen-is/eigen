@@ -1,6 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import type { BorderInfo, Cell, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     type CellFormatStyle,
     type CellResolver,
@@ -57,7 +57,7 @@ const BORDER_STYLE_CSS: Record<number, string> = {
 
 export async function exportSheetsToHtml(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
     const html = await generateSheetsExportHtml(mount, drivePath);
-    const title = drivePath.name.replace(/\.eigensheets$/, '');
+    const title = stripEigenExtension(drivePath.name);
     return {
         data: Buffer.from(html, 'utf-8'),
         contentType: 'text/html; charset=utf-8',
@@ -66,7 +66,7 @@ export async function exportSheetsToHtml(mount: Mount, drivePath: DrivePath): Pr
 }
 
 export async function generateSheetsExportHtml(mount: Mount, drivePath: DrivePath): Promise<string> {
-    const title = drivePath.name.replace(/\.eigensheets$/, '');
+    const title = stripEigenExtension(drivePath.name);
     const sheets = await readSheetsContent(mount, drivePath);
     const bodyHtml = renderSheetsHtml(sheets);
     const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true });

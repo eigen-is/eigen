@@ -1,7 +1,7 @@
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
 import DOMPurify from 'isomorphic-dompurify';
@@ -11,7 +11,7 @@ import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import { buildDataUriMap } from '../media';
-import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode, stripEigendocExtension } from './render';
+import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
 
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
@@ -28,7 +28,7 @@ export async function exportEigendocToHtml(mount: Mount, drivePath: DrivePath): 
     return {
         data: Buffer.from(html, 'utf-8'),
         contentType: 'text/html; charset=utf-8',
-        fileName: `${stripEigendocExtension(drivePath.name)}.html`,
+        fileName: `${stripEigenExtension(drivePath.name)}.html`,
     };
 }
 

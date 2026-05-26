@@ -1,10 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import type { FigureImgSrcResolver } from '../render-types';
 
-export function stripEigendocExtension(name: string): string {
-    return name.replace(/\.eigendoc$/, '');
-}
-
 type Lowlight = {
     registered(lang: string): boolean;
     highlight(lang: string, code: string): HastNode;

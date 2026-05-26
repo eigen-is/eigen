@@ -152,7 +152,3 @@ export function renderDeckHtml(
         .filter(Boolean)
         .join('\n');
 }
-
-export function stripSlidesExtension(name: string): string {
-    return name.replace(/\.eigenslides$/, '');
-}
