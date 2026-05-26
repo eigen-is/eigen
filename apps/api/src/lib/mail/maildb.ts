@@ -1,7 +1,7 @@
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import { and, count, eq, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { PATHS } from '../core';
+import { PATHS, sanitizeFtsQuery } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Home } from '../home';
 import { MAIL_DB_CONFIG } from './db-config';
@@ -9,18 +9,6 @@ import * as schema from './schema';
 
 // Mailboxes excluded from default mail search — users can still search them explicitly.
 const SEARCH_EXCLUDED_MAILBOXES = ['Trash', 'Junk'];
-
-// FTS5's query grammar treats " * ( ) : ^ - and similar punctuation as operators, so raw
-// user input cannot be passed through. Replace every non-letter/digit run with a space,
-// phrase-quote each token and append a prefix wildcard: 'q3 budget!' -> '"q3"* "budget"*'.
-function sanitizeFtsQuery(text: string): string {
-    return text
-        .replace(/[^\p{L}\p{N}]+/gu, ' ')
-        .split(' ')
-        .filter((token) => token.length > 0)
-        .map((token) => `"${token}"*`)
-        .join(' ');
-}
 
 export default class MailDB {
     private home: Home;

@@ -1,13 +1,12 @@
 /// <reference path="../modules.d.ts" />
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { generateExportHtml } from './html';
-import { stripEigendocExtension } from './render';
 
 export async function exportEigendocToDocx(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
     const html = await generateExportHtml(mount, drivePath);
-    const title = stripEigendocExtension(drivePath.name);
+    const title = stripEigenExtension(drivePath.name);
 
     const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
     const docxBuffer = await HTMLtoDOCX(html, undefined, {

@@ -1,6 +1,6 @@
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useCheckPermissions, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
-import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import { type DriveACL, type DrivePath, type DriveVisibility, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { DriveAccessList } from '@workspace/ui/components/layout/drive/drive-access-list';
 import { DriveAccessListEdit } from '@workspace/ui/components/layout/drive/drive-access-list-edit';
@@ -57,8 +57,8 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
                 >
                     <DialogHeader>
                         <div className="sm:max-w-[600px]">
-                            <DialogTitle className="truncate overflow-visible" title={path.name}>
-                                Share '{path.name}'
+                            <DialogTitle className="truncate overflow-visible" title={stripEigenExtension(path.name)}>
+                                Share '{stripEigenExtension(path.name)}'
                             </DialogTitle>
                         </div>
                     </DialogHeader>

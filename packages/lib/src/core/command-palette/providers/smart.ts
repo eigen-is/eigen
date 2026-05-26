@@ -1,4 +1,5 @@
 import type { CommandContext, PaletteResult } from '@workspace/lib/types/command-palette';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { ExternalLink, Mail } from 'lucide-react';
 import { useMemo } from 'react';
 import { useContactSuggestions } from '../../contacts';
@@ -38,7 +39,7 @@ export function useSmartResults(ctx: CommandContext, input: string): PaletteResu
             if (items.length > 0) {
                 const title =
                     items.length === 1
-                        ? `Send ${items[0].name} to ${parsed.value}`
+                        ? `Send ${stripEigenExtension(items[0].name)} to ${parsed.value}`
                         : `Send ${items.length} files to ${parsed.value}`;
                 out.push({
                     kind: 'smart',
@@ -102,7 +103,7 @@ export function useSmartResults(ctx: CommandContext, input: string): PaletteResu
             if (items.length > 0) {
                 const title =
                     items.length === 1
-                        ? `Send ${items[0].name} to ${top.email}`
+                        ? `Send ${stripEigenExtension(items[0].name)} to ${top.email}`
                         : `Send ${items.length} files to ${top.email}`;
                 out.push({
                     kind: 'smart',

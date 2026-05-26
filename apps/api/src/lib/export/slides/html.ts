@@ -1,5 +1,5 @@
 import { escapeHtml } from '@workspace/lib/html';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import slideTextCSSRaw from '@workspace/ui/styles/slide-text.css' with { type: 'text' };
 import { readSlidesContent } from '../../document/slides';
@@ -8,7 +8,7 @@ import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import { buildDataUriMap } from '../media';
 import type { SizeUnit, SlideImgSrcResolver } from '../render-types';
-import { fixedSizeUnit, renderDeckHtml, responsiveSizeUnit, stripSlidesExtension } from './render';
+import { fixedSizeUnit, renderDeckHtml, responsiveSizeUnit } from './render';
 
 // 16:9 landscape page: 254mm x 142.875mm ~ 960 x 540 px at 96dpi
 const PAGE_WIDTH_PX = 960;
@@ -19,7 +19,7 @@ export async function exportSlidesToHtml(mount: Mount, drivePath: DrivePath): Pr
     return {
         data: Buffer.from(html, 'utf-8'),
         contentType: 'text/html; charset=utf-8',
-        fileName: `${stripSlidesExtension(drivePath.name)}.html`,
+        fileName: `${stripEigenExtension(drivePath.name)}.html`,
     };
 }
 
@@ -28,7 +28,7 @@ export async function generateSlidesExportHtml(
     drivePath: DrivePath,
     mode: 'html' | 'pdf',
 ): Promise<string> {
-    const title = stripSlidesExtension(drivePath.name);
+    const title = stripEigenExtension(drivePath.name);
     const { deck, mediaByName } = await readSlidesContent(mount, drivePath);
     const dataUriMap = await buildDataUriMap(mount, mediaByName);
     const resolveImgSrc: SlideImgSrcResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;

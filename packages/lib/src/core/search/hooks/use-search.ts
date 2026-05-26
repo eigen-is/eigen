@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { searchApi } from '@workspace/lib/api';
+import type { SearchSource } from '@workspace/lib/types/search';
 import { AppError } from '../../api-error';
 import { searchKeys } from '../keys';
 
-export type SearchSource = 'mail';
+export type { SearchSource };
 
 export type UseSearchOptions = {
     ownerId: string;

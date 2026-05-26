@@ -1,5 +1,5 @@
 import { DEFAULT_MOUNT_ID, useDeletePaths } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 
 export type DriveDeleteItemProps = {
@@ -35,7 +35,7 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
             onOpenChange={onOpenChange}
             title={isSingle ? 'Move to trash' : `Move ${paths.length} items to trash`}
             description={description}
-            itemName={isSingle ? first?.name : undefined}
+            itemName={isSingle && first ? stripEigenExtension(first.name) : undefined}
             onDelete={handleDelete}
             deleteText="Move to trash"
         />

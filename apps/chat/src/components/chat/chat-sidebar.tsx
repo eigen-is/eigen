@@ -4,7 +4,7 @@ import { useChats, useTeamsHaveChats, useUnreadChatIds } from '@workspace/lib/ch
 import { useDriveAccess } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
@@ -37,7 +37,7 @@ function ChatItem({ chat, condensed, hasUnread }: ChatItemProps) {
     // Empty preloadedBreadcrumb skips the (irrelevant) inherited-access fetch — sidebar
     // only cares about owner + direct ACL, never ancestor folders.
     const { allEntries } = useDriveAccess(chat, undefined, []);
-    const label = (chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '');
+    const label = stripEigenExtension(chat.name || 'Unnamed chat');
     const to = `/${chat.ownerId}/${chat.mountId}/${chat.id}`;
 
     return (

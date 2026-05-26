@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useCollabDocumentInfo } from '@workspace/lib/collab';
 import { usePaletteDocSelection } from '@workspace/lib/command-palette';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
@@ -22,7 +23,7 @@ function CollaborativeTextEditor() {
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
     useEffect(() => {
-        const title = docInfo?.path?.name?.replace(/\.eigen\w+$/, '') || '';
+        const title = docInfo?.path ? stripEigenExtension(docInfo.path.name) : '';
         setDocumentTitle(title);
         return () => setDocumentTitle('');
     }, [docInfo?.path?.name, setDocumentTitle]);

@@ -1,4 +1,5 @@
 import { parseOwnerId } from '@workspace/lib/types';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
 import { composeAccessRequestEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
@@ -21,7 +22,7 @@ export async function propagateAccessRequest(
         notification: {
             type: 'access-request',
             tag: `access-request:${home.user.id}:${mountId}:${pathId}:${requester.email}`,
-            title: `${requesterName} requested access to "${path.name}"`,
+            title: `${requesterName} requested access to "${stripEigenExtension(path.name)}"`,
             body: message,
             actorEmail: requester.email,
         },
