@@ -1,48 +1,85 @@
 # Search Index
 
-> **Status — v1 (mail) shipped on `feat/search-index-mail`.** Search is implemented as inline
-> FTS5 directly inside `mail.db` (v3 schema) — no separate `search.db`, no `SearchIndex` service
-> abstraction. Code in `apps/api/src/lib/mail/maildb.ts` (the `searchMail` JOIN +
-> `sanitizeFtsQuery` helper) + `apps/api/src/lib/mail/db-config.ts` (the v3 migration creating
-> `emails_fts` + 3 sync triggers + initial populate) + `apps/api/src/routes/search.ts` (the
-> `/search/:ownerId` endpoint) + `packages/lib/src/core/search/` (FE hook + keys + invalidate).
+> **Status — v1 (mail + drive name search) shipped on `main`.** Search is implemented as
+> inline FTS5 directly inside each canonical scope DB — no separate `search.db`, no
+> `SearchIndex` abstraction. Mail: `apps/api/src/lib/mail/maildb.ts` (`MailDB.searchMail`)
+> + `apps/api/src/lib/mail/db-config.ts` v3 (the `emails_fts` virtual table + 3 sync
+> triggers + initial populate). Drive: `apps/api/src/lib/mount/mount.ts`
+> (`Mount.searchPaths` + the `docContainerDescendantIds` recursive-CTE exclusion fragment)
+> + `apps/api/src/lib/mount/db-config.ts` v2 (the `paths_fts` virtual table + 3 sync
+> triggers + initial populate) + `apps/api/src/lib/drive/drive.ts` (`Drive.search` mount
+> fan-out). Shared: `apps/api/src/lib/core/fts.ts` (`sanitizeFtsQuery`) +
+> `apps/api/src/routes/search.ts` (`GET /search/:ownerId`) +
+> `packages/lib/src/core/search/` (FE hook + keys + invalidate) +
+> `packages/lib/src/types/search.ts` (`SearchSource` union shared with the BE).
 >
-> **Shipped:**
-> - External-content FTS5 (`content='emails'`, `content_rowid='rowid'`) over the seven indexable
->   email columns (`subject`, `fromShort`, `fromAddress`, `toShort`, `toAddress`, `recipientsAll`,
->   `textShort`); three AFTER INSERT/DELETE/UPDATE triggers keep the index in sync atomically
->   with mail writes — failure modes propagate via the same transaction (no silent index drift).
-> - `MailDB.searchMail`: a two-pass query — raw FTS5 JOIN returns ranked ids, then Drizzle
->   hydrates rows so `mode: 'timestamp'` columns come back as `Date`. Filter-first narrowing on
->   `from` / `to` via mail.db's own indexed columns, default mailbox exclusion (`Trash`, `Junk`),
->   `bm25() + date DESC` ordering, and `sanitizeFtsQuery` prefix-wildcard tokenisation.
-> - Route: `GET /search/:ownerId?q&sources&mailbox&from&to&limit` returning canonical
->   `EmailSummary[]`.
-> - Frontend: `useSearch` hook with `searchKeys` query keys (includes `ownerId`), 30s
->   `staleTime`, `enabled` guard, AbortSignal threaded through Eden Treaty.
-> - SSE: `invalidateSearchOwner` wired into every mail mutation event.
-> - Test coverage: 26 tests across the `mail.db FTS5 schema`, `Mail search (Maildir)` and
->   `Search endpoint` blocks — including `from` / `to` combinations, Trash exclusion, recipient +
->   CC search, case normalisation, and trigger-driven sync.
+> **Shipped — mail:**
+> - External-content FTS5 (`content='emails'`, `content_rowid='rowid'`) over the seven
+>   indexable email columns (`subject`, `fromShort`, `fromAddress`, `toShort`,
+>   `toAddress`, `recipientsAll`, `textShort`); three AFTER INSERT/DELETE/UPDATE triggers
+>   keep the index in sync atomically with mail writes.
+> - `MailDB.searchMail`: two-pass FTS5 JOIN+hydrate (raw `sql` JOIN returns ranked ids,
+>   Drizzle re-fetches the rows so `mode: 'timestamp'` columns come back as `Date`).
+>   Filter-first narrowing on `from` / `to` via mail.db's own indexed columns, default
+>   mailbox exclusion (`Trash`, `Junk`), `bm25() + date DESC` ordering, and
+>   `sanitizeFtsQuery` prefix-wildcard tokenisation.
 >
-> **Index location: Option C — inline FTS in the canonical per-scope DB.** Mail's FTS lives
-> inside `mail.db`; Drive mounts will get the same pattern (`metadata.db` gains a virtual table
-> over file rows, plus a separate `file_text` 1:1 table for extracted Yjs content); calendar
-> ditto on `calendar.db`. Cross-domain query fan-out is the route's job; same-kind ranking is
-> native `bm25()` within each scope.
+> **Shipped — drive:**
+> - `paths_fts` virtual table in `mounts/*/metadata.db` v2 over `name`; three triggers
+>   keep it in sync, with the UPDATE trigger **gated on `WHEN old.name IS NOT new.name`**
+>   so the common writes (size / hash / thumbnail / trashedAt / acl / details) don't
+>   churn the FTS shadow tables. Mail's UPDATE trigger fires unconditionally because
+>   drafts mutate multiple indexed columns; drive indexes only `name`, so the gate is
+>   safe.
+> - `Mount.searchPaths`: same two-pass JOIN+hydrate shape as `MailDB.searchMail`.
+>   Excludes trashed rows, the root folder (no useful result), and — via the shared
+>   `docContainerDescendantIds` recursive-CTE fragment — every path descended from a
+>   doc / stickies / slides / sheets / chat container. The same CTE fragment is reused
+>   by `Mount.getPathsByMimeType` for UI consistency: container internals (`data.db`,
+>   embedded media, embedded chats) are never shown in the drive UI and now never appear
+>   in search.
+> - `Drive.search` fans out across the home's mounts, sorts the merged set by
+>   `updatedAt DESC` (cross-mount tiebreak; `bm25()` is not comparable across different
+>   mount indexes), then slices to the requested limit.
+> - `sanitizeFtsQuery` lifted into `apps/api/src/lib/core/fts.ts` now that two domains
+>   share it.
 >
-> **Deferred (post-v1):** Drive indexing, calendar indexing, chat indexing; pre-shared index
-> for cross-Home search; vector / semantic search. The pattern (FTS5 virtual table + triggers
-> in the canonical DB) is replicated per domain — additive write-path + route source per kind.
+> **Shipped — endpoint + FE:**
+> - `GET /search/:ownerId?q&sources&mailbox&from&to&limit` returns
+>   `SearchResponse { mail: EmailSummary[]; file: DrivePath[] }`. `sources` is narrowed
+>   against the shared `SearchSource` union (`'mail' | 'file'`) so backend and frontend
+>   never drift.
+> - `useSearch` hook with `searchKeys` query keys (includes `ownerId`), 30s `staleTime`,
+>   `enabled` guard, AbortSignal threaded through Eden Treaty.
+> - SSE: `invalidateSearchOwner` wired into every mail mutation event AND every drive
+>   event that touches the indexed name (`DRIVE_FOLDER_CREATED`, `DRIVE_FILE_CREATED`,
+>   `DRIVE_FILE_UPLOADED`, `DRIVE_FOLDER_DELETED`, `DRIVE_FILE_DELETED`,
+>   `DRIVE_PATH_RENAMED`, `DRIVE_PATH_TRASHED`, `DRIVE_PATH_RESTORED`).
+>   `DRIVE_PATH_MOVED` is deliberately excluded — moves don't change `name`.
+> - Test coverage: 26 mail-side tests (Windows-skipped due to maildir watcher races) +
+>   12 drive-side tests covering the FTS5 schema, name find, rename re-index, trash
+>   removal, root exclusion, eigendoc-internals exclusion, and the endpoint surface.
 >
-> **Documented divergence from the original proposal:** Drafts are now indexed at `textShort`
-> granularity (the 200-char preview), matching received mail. The previous design indexed the
-> full draft body via a separate `search_content.body` column; with inline FTS that asymmetry
-> disappears. If full-body draft search becomes important, add a `bodyFull` column to
-> `emails` (NULL for non-drafts) and include it in the FTS column list — pure addition.
+> **Index location: Option C — inline FTS in the canonical per-scope DB.** Mail's FTS
+> lives inside `mail.db`; drive's lives inside each mount's `metadata.db`; calendar will
+> do the same on `calendar.db` when it ships. Cross-domain query fan-out is the route's
+> job; same-kind ranking is native `bm25()` within each scope; cross-mount (within-kind)
+> tiebreak is recency.
+>
+> **Deferred (post-v1):** Document body indexing (Yjs content extraction for docs /
+> slides / sheets / stickies via export loaders); chat message indexing; calendar event
+> indexing; shared-with-me search; vector / semantic search. Each later phase replicates
+> the inline-FTS pattern in its domain DB — additive write-path + route source per kind,
+> no palette change required.
+>
+> **Documented divergence from the original proposal:** Drafts are indexed at `textShort`
+> granularity (the 200-char preview), matching received mail. If full-body draft search
+> becomes important, add a `bodyFull` column to `emails` (NULL for non-drafts) and
+> include it in the FTS column list — pure addition.
 >
 > **Known shortcomings:** `from:` / `to:` operators accept any token — no email-shape
-> validation, so a typo silently misses rather than warns.
+> validation, so a typo silently misses rather than warns. Drive search has no
+> filter operators (e.g. `type:doc`, `in:folder`) — name-only ranked search.
 
 > **TLDR**: The **backend search infrastructure** consumed by the
 > [command palette](PROPOSAL_COMMAND_PALETTE.md). SQLite FTS5 full-text search — **inline FTS5
@@ -98,9 +135,10 @@ FTS5 is SQLite's built-in full-text search module. It's the right fit:
 ## Search index location
 
 **Option C — inline FTS in the canonical per-scope DB.** Each domain's primary SQLite file
-owns its own FTS5 virtual table. Mail's `emails_fts` lives inside `mail.db`; a Drive mount's
-file-name + extracted-text index will live inside `metadata.db`; calendar's inside
-`calendar.db`. There is no separate `search.db` file.
+owns its own FTS5 virtual table. Mail's `emails_fts` lives inside `mail.db`; drive's
+`paths_fts` lives inside each mount's `metadata.db` (file/folder names, with extracted Yjs
+content joining later — see Phase 2); calendar's will live inside `calendar.db`. There is
+no separate `search.db` file.
 
 This is the SQLite-native FTS5 pattern: external content (`content='<source-table>'`,
 `content_rowid='rowid'`) with three triggers maintaining the index synchronously, in the same
@@ -208,8 +246,9 @@ ORDER BY bm25(emails_fts), e.date DESC LIMIT ?
 Then in TS: `db.select().from(emails).where(inArray(id, rankedIds))` rebuilds the rows in
 rank order via an id-keyed Map.
 
-Query sanitisation (FTS5 grammar protection) is a small per-domain helper — `sanitizeFtsQuery`
-in `maildb.ts`. Extract to a shared util when a second domain needs the same pattern.
+Query sanitisation (FTS5 grammar protection) is shared: `sanitizeFtsQuery` lives in
+`apps/api/src/lib/core/fts.ts` and is used by both `MailDB.searchMail` and
+`Mount.searchPaths`.
 
 ## Indexing strategy
 
@@ -424,16 +463,19 @@ What not to do:
 
 | Phase | Scope                                                                                                   | Effort |
 |-------|---------------------------------------------------------------------------------------------------------|--------|
-| 1     | The mail v3 migration (CREATE VIRTUAL TABLE + triggers + populate), `MailDB.searchMail` as a two-pass JOIN+hydrate, the `/search` route, index-on-write via FTS triggers (no separate sync job, no backfill code). **Shipped — see status block.** | M |
-| 2     | Content extraction for docs, slides, and sheets — a thin text collector over the export content loaders, hooked into snapshot creation | M |
+| 1a    | Mail v3 migration (CREATE VIRTUAL TABLE + triggers + populate), `MailDB.searchMail` two-pass JOIN+hydrate, the `/search` route, index-on-write via FTS triggers. **Shipped — see status block.** | M |
+| 1b    | Drive name indexing — mount metadata.db v2 (`paths_fts` + 3 triggers, UPDATE gated on `name` change), `Mount.searchPaths`, `Drive.search` mount fan-out, `/search` route extended with a `file` source, eigendoc-internals exclusion. **Shipped — see status block.** | M |
+| 2     | Content extraction for docs, slides, and sheets — a thin text collector over the export content loaders, hooked into snapshot creation; lands inside the same `paths_fts` (additional column) or a sibling `paths_text` table. | M |
 | 3     | Chat message indexing — index message content                                                            | S      |
-| 4     | Shared data — make items shared with the user searchable                                                 | S–M    |
-| 5     | Semantic / vector search (future, opt-in)                                                                | L      |
+| 4     | Calendar event indexing — `calendar.db` gains an `events_fts` + same trigger shape                       | S      |
+| 5     | Shared data — make items shared with the user searchable                                                 | S–M    |
+| 6     | Semantic / vector search (future, opt-in)                                                                | L      |
 
-Phase 1 is **shipped** — the inline FTS5 mail index is live and the `/search` route is active.
-The command palette now has a working search backend; see that proposal's phase table. Each
-later phase deepens what's searchable with no change to the palette's frontend. Phases 2–5
-follow the same inline-FTS pattern (Option C) — one virtual table + triggers per domain.
+Phases 1a and 1b are **shipped** — the inline FTS5 mail index and the drive name index are
+both live, and the `/search` route returns `{ mail, file }`. The command palette consumes
+both. Each later phase deepens what's searchable with no change to the palette's frontend.
+Phases 2–6 follow the same inline-FTS pattern (Option C) — one virtual table + triggers per
+domain.
 
 **Stickies content** joins when stickies export ships and brings an `export/stickies/content.ts`
 loader — at that point the Phase 2 thin-collector approach extends to stickies. That work is
@@ -442,16 +484,28 @@ tracked with stickies export, not scoped here.
 ## File structure
 
 ```
-apps/api/src/lib/mail/
-  db-config.ts            # mail.db migrations including v3 (FTS5 virtual table + triggers)
-  maildb.ts               # MailDB.searchMail (JOIN against emails_fts) + sanitizeFtsQuery
+apps/api/src/lib/core/
+  fts.ts                  # shared sanitizeFtsQuery — used by both mail and drive
 
-apps/api/src/lib/<domain>/   # future — drive, calendar, chat each follow the same shape
+apps/api/src/lib/mail/
+  db-config.ts            # mail.db migrations including v3 (emails_fts + triggers)
+  maildb.ts               # MailDB.searchMail (JOIN against emails_fts)
+
+apps/api/src/lib/mount/
+  db-config.ts            # mount metadata.db migrations including v2 (paths_fts + triggers,
+                          #   UPDATE gated on name change)
+  mount.ts                # Mount.searchPaths (JOIN against paths_fts) + docContainerDescendantIds
+                          #   recursive-CTE fragment shared with getPathsByMimeType
+
+apps/api/src/lib/drive/
+  drive.ts                # Drive.search — fan out across mounts, recency tiebreak
+
+apps/api/src/lib/<future-domain>/   # calendar, chat each follow the same shape
   db-config.ts            # adds the domain's FTS5 virtual table + triggers in a migration
-  <domain>db.ts           # search<X> method joining the domain's canonical rows with FTS
+  <domain>db.ts           # search<X> method joining canonical rows with FTS
 
 apps/api/src/routes/
-  search.ts               # GET /search/:ownerId — fans out across enabled domains
+  search.ts               # GET /search/:ownerId — sources narrowed against SearchSource
 
 packages/lib/src/core/search/
   keys.ts                 # TanStack query keys
@@ -459,7 +513,7 @@ packages/lib/src/core/search/
   hooks/invalidate.ts     # invalidateSearchOwner — used by SSE handlers
 
 packages/lib/src/types/
-  search.ts               # shared wire types — the grouped response shape
+  search.ts               # SearchResponse { mail, file } + SearchSource union shared with BE
 ```
 
 Note: `apps/api/src/lib/search/` no longer exists. The previous `SearchIndex` service +
