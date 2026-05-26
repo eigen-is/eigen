@@ -1,21 +1,14 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
-import { isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
-import { File, Folder, type LucideIcon } from 'lucide-react';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { useMemo } from 'react';
-import { EIGEN_DOC_ICONS } from '../../eigendoc-icons';
+import { getFilePresentation } from '../../file-presentation';
 import { useSearch } from '../../search';
 import { useDebouncedValue } from '../hooks/use-debounced-value';
 import { parseQuery } from '../parse-query';
 
 // Same debounce as mail — short enough to feel live, long enough to coalesce typing.
 const FILE_SEARCH_DEBOUNCE_MS = 150;
-
-function iconForPath(type: string): LucideIcon {
-    if (type in EIGEN_DOC_ICONS) return EIGEN_DOC_ICONS[type as keyof typeof EIGEN_DOC_ICONS];
-    if (isFolderType(type as never)) return Folder;
-    return File;
-}
 
 export function useFileSearchResults(
     ctx: CommandContext,
@@ -41,20 +34,23 @@ export function useFileSearchResults(
 
     const results = useMemo<PaletteResult[]>(() => {
         if (!data) return [];
-        return data.file.map((path, i) => ({
-            kind: 'file' as const,
-            id: `file.${path.id}`,
-            title: stripEigenExtension(path.name),
-            icon: iconForPath(path.type),
-            group: 'file',
-            rank: -i,
-            payload: path,
-            run: (rctx) => {
-                const url = getDriveItemUrl(path);
-                if (url) rctx.navigate(url);
-                else rctx.openPreview(path);
-            },
-        }));
+        return data.file.map((path, i) => {
+            const presentation = getFilePresentation(path.mimeType, path.type);
+            return {
+                kind: 'file' as const,
+                id: `file.${path.id}`,
+                title: stripEigenExtension(path.name),
+                icon: presentation.icon,
+                group: 'file',
+                rank: -i,
+                payload: path,
+                run: (rctx) => {
+                    const url = getDriveItemUrl(path);
+                    if (url) rctx.navigate(url);
+                    else rctx.openPreview(path);
+                },
+            };
+        });
     }, [data]);
 
     const willSearch = !scopeBlocks && parsed.q.length > 0;
