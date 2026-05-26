@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CommandFooter } from './command-footer';
 import { CommandRowAction } from './command-row-action';
 import { CommandRowContact } from './command-row-contact';
+import { CommandRowFile } from './command-row-file';
 import { CommandRowMail } from './command-row-mail';
 import { CommandRowSmart } from './command-row-smart';
 
@@ -15,6 +16,7 @@ type Props = { ctx: CommandContext };
 
 const SCOPE_CHIPS: Record<PaletteScope, string> = {
     mail: 'Mail',
+    file: 'Files',
     actions: 'Actions',
     contacts: 'Contacts',
 };
@@ -22,7 +24,8 @@ const SCOPE_CHIPS: Record<PaletteScope, string> = {
 // Tab cycles through scopes. The lookup makes the order obvious at a glance and is
 // easier to maintain than a chained ternary.
 const NEXT_SCOPE: Record<PaletteScope | 'none', PaletteScope | undefined> = {
-    none: 'mail',
+    none: 'file',
+    file: 'mail',
     mail: 'actions',
     actions: 'contacts',
     contacts: undefined,
@@ -96,6 +99,8 @@ export function CommandPalette({ ctx }: Props) {
                 return <CommandRowContact key={r.id} result={r} onSelect={onSelect} />;
             case 'mail':
                 return <CommandRowMail key={r.id} result={r} onSelect={onSelect} />;
+            case 'file':
+                return <CommandRowFile key={r.id} result={r} onSelect={onSelect} />;
             default: {
                 // Exhaustiveness guard: if a new PaletteResult kind is added without a row
                 // component, TypeScript refuses to compile this assignment AND we fail loud
