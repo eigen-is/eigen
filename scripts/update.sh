@@ -58,10 +58,6 @@ bun run --sequential --filter './apps/*' build
 echo "Building API bundle..."
 bun --filter '@apps/api' buildfordocker
 
-echo "Setting data directory permissions..."
-mkdir -p data
-chown -R 1000:1000 data
-
 echo "Rebuilding containers..."
 docker compose --env-file .env.production up -d --build
 
