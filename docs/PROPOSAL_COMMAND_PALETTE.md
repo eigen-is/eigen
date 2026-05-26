@@ -1,34 +1,44 @@
 # Command Palette (⌘K)
 
-> **Status — v1 shipped on `feat/search-index-mail`.** Code in `packages/lib/src/core/command-palette/`
-> + `packages/ui/src/components/layout/app/command-palette/`, mounted by `AppShell.PaletteRunner`.
+> **Status — v1 shipped on `main` (now including drive file results).** Code in
+> `packages/lib/src/core/command-palette/` + `packages/ui/src/components/layout/app/command-palette/`,
+> mounted by `AppShell.PaletteRunner`.
 >
-> **Shipped:** `Mod+K` dialog with the typed result model (`action` / `smart` / `contact` / `mail`),
-> the four providers, the catalog (nav derived from the shared `apps` registry; creates derived from
-> `EIGEN_DOC_TYPE_INFO`; selection-aware drive actions), the engine (`buildSections` with Top Hit /
-> Suggestions / Selection / Mail / Contacts / Actions), scope prefixes (`mail:` / `>` / `@`) and the
-> scope chip via Tab. Smart parser for `email@…` (deterministic Top Hit) and `http(s)://…`
-> (deterministic with `noopener,noreferrer`). Smart contact-derived `Send mail to <email>` row.
-> Selection publication from DriveList + the four eigendoc viewers. Selection-aware actions
-> published from `DriveLayout` via `usePaletteSelectionActions` (Rename / Share / Delete / Quick
-> preview / Download / Email collaborators) plus the pure ones in the catalog (Open / Open in new
-> tab / Copy link / Mail to…). Cross-app `Mail to…` carries drive attachments via
-> `?attach=<owner>/<mount>/<path>,…`, routed through Mail's existing `handleDriveAttach`.
-> Search invalidation on every mail mutation SSE. The palette is gated by `useOptionalCommandPalette`
-> + `useOptionalPreview` so the marketing routes in `apps/index` (which don't mount `EigenApp`'s
-> stack) don't crash.
+> **Shipped:** `Mod+K` dialog with the typed result model
+> (`action` / `smart` / `contact` / `mail` / `file`), five providers
+> (`actions`, `contacts`, `smart`, `mail-search`, `file-search`), the catalog (nav derived from
+> the shared `apps` registry; creates derived from `EIGEN_DOC_TYPE_INFO`; selection-aware drive
+> actions), the engine (`buildSections` with Top Hit / Suggestions / Selection / Files / Mail /
+> Contacts / Actions), scope prefixes (`mail:` / `file:` / `>` / `@`) and the scope chip via
+> Tab (cycle: none → file → mail → actions → contacts → none). Smart parser for `email@…`
+> (deterministic Top Hit) and `http(s)://…` (deterministic with `noopener,noreferrer`). Smart
+> contact-derived `Send mail to <email>` row. Selection publication from DriveList + the four
+> eigendoc viewers. Selection-aware actions published from `DriveLayout` via
+> `usePaletteSelectionActions` (Rename / Share / Delete / Quick preview / Download / Email
+> collaborators) plus the pure ones in the catalog (Open / Open in new tab / Copy link /
+> Mail to…). Cross-app `Mail to…` carries drive attachments via
+> `?attach=<owner>/<mount>/<path>,…`, routed through Mail's existing `handleDriveAttach`. The
+> file row uses the same `getFilePresentation` helper as the Drive table — same mime-aware
+> icon (PDF / image / video / audio / archive / code / MS Office / eigendoc family / Folder)
+> and humanised label for the same file. Search invalidation on every mail mutation SSE AND
+> on every drive event that changes the indexed name. The palette is gated by
+> `useOptionalCommandPalette` + `useOptionalPreview` so the marketing routes in `apps/index`
+> (which don't mount `EigenApp`'s stack) don't crash.
 >
-> **Deferred (post-v1):** Sub-action sheet (`→`); `file:` / `event:` / `chat:` / `?` prefixes
-> (no backends yet); per-user recents (waits for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md));
-> per-user `commandPalette` opt-out setting; content-aware input (image-URL detection, file
-> paste/drop) — see [Content-aware input](#content-aware-input-later-phase); smart-parser
-> growth (natural-language datetime, math, unit conversion); pinned commands, per-command hotkeys, aliases; AI assist.
+> **Deferred (post-v1):** Sub-action sheet (`→`); `event:` / `chat:` / `?` prefixes (no backends
+> yet — calendar / chat indexing are PROPOSAL_SEARCH Phase 3-4); document body content search
+> (PROPOSAL_SEARCH Phase 2); per-user recents (waits for
+> [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md)); per-user `commandPalette` opt-out
+> setting; content-aware input (image-URL detection, file paste/drop) — see
+> [Content-aware input](#content-aware-input-later-phase); smart-parser growth
+> (natural-language datetime, math, unit conversion); pinned commands, per-command hotkeys,
+> aliases; AI assist.
 >
-> **Documented divergence from the proposal:** the engine holds the entire merge during
-> `mail.isPending` rather than streaming sections as their providers resolve and waiting only the
-> Top Hit. The behaviour was chosen to eliminate visible reorder/flicker as mail results join the
-> synchronously-rendered actions/contacts. Trade-off: first results appear after the debounce + RTT
-> window (~350ms) instead of immediately. See
+> **Documented divergence from the proposal:** the engine holds the entire merge while
+> *any* search provider (mail OR file) is pending, rather than streaming sections as each
+> resolves and waiting only the Top Hit. The behaviour eliminates visible reorder/flicker as
+> remote results join the synchronously-rendered actions / contacts. Trade-off: first results
+> appear after the debounce + RTT window (~350ms) instead of immediately. See
 > `packages/lib/src/core/command-palette/hooks/use-command-results.ts`.
 
 > **TLDR**: A single Cmd+K dialog mounted globally in the topbar that unifies **search**,
@@ -282,10 +292,12 @@ returned **grouped by kind** (files, mail, events, and — once chat indexing la
 single call. The index storage layout (Option C, inline FTS in each canonical scope DB —
 see PROPOSAL_SEARCH.md) does not affect the palette.
 
-**The search prerequisite track is complete for mail.** PROPOSAL_SEARCH Phase 1 has shipped:
-the mail.db v3 FTS virtual table + triggers, `MailDB.searchMail`, and the `/search` route are
-live. Drive, calendar, and chat indexing follow as later phases, each additive and non-breaking
-for the palette — richer results arrive without a palette change.
+**The search prerequisite track is complete for mail AND drive name search.** PROPOSAL_SEARCH
+Phases 1a + 1b have shipped: mail.db v3 FTS (emails_fts + triggers + `MailDB.searchMail`),
+mount metadata.db v2 FTS (paths_fts + triggers + `Mount.searchPaths` + `Drive.search` fan-out),
+and the `/search` route returning `{ mail, file }`. Calendar, chat, and document body content
+follow as later phases, each additive and non-breaking for the palette — richer results arrive
+without a palette change.
 
 **No stopgap.** An earlier draft shipped a throwaway interim — three parallel SQL `LIKE` queries
 over filenames, mail subjects, and event titles, to be deleted once the real index landed. That
@@ -521,23 +533,25 @@ command files, providers, and row components.
 
 | Phase  | Scope                                                                                          | Effort | Depends on            |
 |--------|------------------------------------------------------------------------------------------------|--------|-----------------------|
-| **Prereq** | Search backend — inline FTS5 in each canonical DB + triggers, the `/search` route (PROPOSAL_SEARCH). **Mail shipped.** Drive/calendar/chat follow the same pattern. | M | runs in parallel |
-| 1      | Provider wiring, the `Command` primitive in the topbar, the `Mod+K` hotkey, curated empty state | S      | —                     |
-| 2      | Static actions catalog (create, navigate, view), per-app command files                          | M      | 1                     |
-| 3      | Contacts provider; smart parser for email + URL                                                 | S      | 2                     |
-| 4      | Context publication; selection-aware actions across mail / drive / docs / sheets / slides / stickies / chat | M | 2          |
+| **Prereq** | Search backend — inline FTS5 in each canonical DB + triggers, the `/search` route (PROPOSAL_SEARCH). **Mail + drive name search shipped.** Calendar, chat, document body follow the same pattern. | M | runs in parallel |
+| 1      | Provider wiring, the `Command` primitive in the topbar, the `Mod+K` hotkey, curated empty state. **Shipped.** | S | —                     |
+| 2      | Static actions catalog (create, navigate, view), per-app command files. **Shipped.**            | M      | 1                     |
+| 3      | Contacts provider; smart parser for email + URL. **Shipped.**                                   | S      | 2                     |
+| 4      | Context publication; selection-aware actions across mail / drive / docs / sheets / slides / stickies / chat. **Shipped.** | M | 2          |
 | 5      | Sub-action sheet                                                                                | S      | 4                     |
-| 6      | Search provider — consume the `/search` endpoint                                                | S      | 3, Prereq             |
+| 6a     | Mail search provider — consume `/search` `sources=mail`. **Shipped.**                           | S      | 3, Prereq             |
+| 6b     | File search provider — consume `/search` `sources=file`, Files section above Mail, `file:` scope, command-row-file using shared `getFilePresentation`. **Shipped.** | S | 6a, Prereq 1b |
+| 6c     | Event / chat result kinds + sections — once calendar / chat indexing lands                      | S      | Prereq Phase 3/4      |
 | 7      | Prefix scopes and the help page                                                                 | S      | 5                     |
 | 8      | Recents provider — wires to `home.recents`                                                      | S      | PROPOSAL_HOME_RECENTS |
 | 9      | Content-aware input — image-URL suggestions and file paste/drop (global-helper actions first, then in-editor insert and send-by-mail) | M | 4, 6 |
 | 10     | Smart-parser growth — datetime, math, unit conversion                                           | M      | telemetry             |
 | 11     | Pinned commands, per-command hotkeys, aliases                                                   | L      | 10                    |
 
-Phases 1–5 and 7 are a **complete, useful palette with no backend at all** — jumps, creates,
-contacts, smart parses, selection actions, prefix scopes. Phase 6 lights up search whenever the
-prerequisite track is ready; the two don't block each other. The depth of search results grows
-on its own as the search-index track indexes more content — no palette change.
+Phases 1–4, 6a, 6b are **shipped**. The palette already does jumps, creates, contacts, smart
+parses, selection actions, mail search and drive file search. The depth of search results grows
+on its own as the search-index track indexes more content — no palette change beyond adding a
+new row component / provider per kind, mirroring the file kind.
 
 ## Open questions
 
@@ -576,27 +590,39 @@ packages/lib/src/types/
 
 packages/lib/src/core/command-palette/
   keys.ts                        # TanStack query keys
-  parse-query.ts                 # prefix-scope detection
-  smart-parser.ts                # query string → smart suggestions
-  rank.ts                        # cross-provider ranking
+  parse-query.ts                 # prefix-scope detection (mail: / file: / > / @)
+  parse-smart-input.ts           # email / URL detection
+  rank.ts                        # structural match quality for Top Hit
+  engine.ts                      # buildSections — merges per-kind into final groups
   commands/                      # one file per domain — drive, mail, calendar, docs,
                                  #   sheets, slides, stickies, chat, contacts, nav, view
   providers/
     actions.ts                   # frontend-only — filters the command catalog
     contacts.ts                  # frontend-only — composes cached contact + team data
     smart.ts                     # frontend-only — smart-parser output
-    search.ts                    # the single backend call
+    mail-search.ts               # debounced /search call with sources=['mail']
+    file-search.ts               # debounced /search call with sources=['file'];
+                                 #   icon via getFilePresentation (shared with Drive)
     recents.ts                   # wires to home.recents when it lands
   hooks/
     use-command-palette.ts       # open / close
-    use-command-results.ts       # the engine — merges providers
+    use-command-results.ts       # the engine — merges providers; holds during mail OR file pending
     use-palette-selection.ts     # apps publish their current selection
+    use-debounced-value.ts       # shared debounce primitive
+
+packages/lib/src/core/
+  file-presentation.ts           # shared getFileIconComponent / getFilePresentation —
+                                 #   used by both Drive table/preview/etc AND command-row-file
 
 packages/ui/src/components/layout/app/command-palette/
   command-palette.tsx
   command-palette-provider.tsx
   command-palette-trigger.tsx
-  command-row-*.tsx
+  command-row-action.tsx
+  command-row-contact.tsx
+  command-row-mail.tsx
+  command-row-file.tsx           # single-line icon + stripped filename
+  command-row-smart.tsx
   command-footer.tsx
   use-palette-shortcuts.ts
 ```
