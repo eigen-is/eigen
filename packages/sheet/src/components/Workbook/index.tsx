@@ -399,11 +399,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 api.initSheetData(draftCtx, index, sheet);
                             }
                         }
-                        // Recompute formulas so displayed values reflect current inputs
-                        // (imported sheets may arrive with stale cached results).
-                        // calcChain is populated as a side-effect, and formulaCellInfoMap
-                        // lazy-primes on the first edit via execFunctionGroup.
-                        api.calculateFormula(draftCtx);
+                        // Just seed calcChain (the list of formula cells) — don't
+                        // re-evaluate. Excel-imported sheets carry the last computed
+                        // values, persisted sheets were saved post-recompute, and an
+                        // edit lazily kicks the engine for the affected sub-graph.
+                        api.seedCalcChain(draftCtx);
                     }
                     if (mergedSettings.devicePixelRatio > 0) {
                         draftCtx.devicePixelRatio = mergedSettings.devicePixelRatio;

@@ -158,3 +158,24 @@ export function calculateFormula(ctx: Context, id?: string, range?: SingleRange)
         calculateSheetFromula(ctx, sheet_obj.id, range);
     });
 }
+
+// Walk each sheet's data once and rebuild calcChain from cells that carry a
+// formula — but don't evaluate anything. Edits trigger execFunctionGroup which
+// reads calcChain to lazy-prime formulaCellInfoMap and recomputes only the
+// affected sub-graph. Used at mount when the imported/persisted values are
+// already current and a full re-evaluation would waste a second on a large file.
+export function seedCalcChain(ctx: Context) {
+    for (const sheet of ctx.sheets) {
+        const { id, data } = sheet;
+        if (!id || !data) continue;
+        const chain: FormulaCell[] = [];
+        for (let r = 0; r < data.length; r += 1) {
+            const row = data[r];
+            if (!row) continue;
+            for (let c = 0; c < row.length; c += 1) {
+                if (row[c]?.f) chain.push({ r, c, id });
+            }
+        }
+        sheet.calcChain = chain;
+    }
+}
