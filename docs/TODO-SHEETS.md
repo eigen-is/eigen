@@ -27,6 +27,11 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    only remaining `export default` lines in the package live under
    `engine/parser/` and will be regenerated together.
 
+   ⚠️ Manual fix in `case 1` (top-level Formula production): undefined result
+   is coerced to `0` so Jison doesn't surface its `return true` accept-state
+   sentinel as the formula value for bare-ref formulas to empty cells (e.g.
+   `='Sheet'!B13`). Any regen must reapply this — see commit `e0fe9990`.
+
 ### Server-side features
 
 3. **xlsx CF export** — `apps/api/src/lib/export/sheets/xlsx.ts` doesn't write
@@ -78,6 +83,151 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 ---
 
+## Mount-cost reduction follow-up
+
+Branch `perf/sheets-mount` (4 commits, 2026-05-27) cut a 16-sheet/125k-formula
+xlsx import open from ~60 s to ~9 s in the browser by attacking the four
+slowest mount steps:
+
+1. `calculateSheetFromula` was O(formulas²) — `setCellValue` + `insertUpdateFunctionGroup`
+   each linear-scanned `calcChain` on every formula cell. Rewritten to rebuild
+   `calcChain` in one pass and write values via `setCellValueInternal`. ~33 s → ~1 s.
+2. `cloneDeep(originalData)` at `Workbook/index.tsx:389` deleted — Workbook takes
+   ownership; immer auto-freezes the result tree on finalize, no external mutator
+   survives. ~900 ms saved.
+3. Mount-time `api.calculateFormula(draftCtx)` replaced with `api.seedCalcChain(draftCtx)`
+   — same calcChain population, no engine eval. ~1 s saved on this file. Cached
+   values from the xlsx import (or the previous flush) are used as-is; first edit
+   triggers per-sub-graph recompute via `execFunctionGroup`.
+4. Grammar-parser `case 1` bug (above): bare-ref formulas to empty cross-sheet
+   cells were returning `true`. Surfaced once (3) stopped masking it. Coerce
+   undefined→0 at the top-level Formula production.
+
+### Where the remaining ~9 s sits (not yet measured in browser)
+
+Bun-side simulation has the post-step-3 produce body at ~870 ms. Browser is ~3–5×
+slower, plus React commit + canvas first paint. Suspects, no measurements yet:
+
+- `JSON.parse` on the 48 MB snapshot string (~600 ms projected in browser).
+- 48 MB `originalData` object held in memory until GC; allocations are not free.
+- Per-cell style attrs repeated everywhere — see size breakdown below.
+- `calcRowColSize` walks every row + every column once on first paint to build
+  cumulative size maps (Explore agent flagged this).
+- React commit on 16 SheetTabs + Workbook tree.
+
+`packages/sheet/probe-xlsx.ts` (untracked) does the produce-side bench end-to-end.
+`packages/sheet/probe-size.ts` (untracked) breaks down where the 48 MB go. Both
+expect `test.xlsx` at repo root. Keep around as a regression check.
+
+### Where the 48 MB JSON goes (from `probe-size.ts`)
+
+```
+xlsx (compressed):                       2.22 MB
+JSON snapshot:                          47.82 MB   (21.6× xlsx)
+gzipped JSON:                            1.98 MB   (already on the wire via
+                                                    perMessageDeflate at
+                                                    apps/api/src/routes/collab.ts:41)
+
+cells:                                  28.19 MB
+  of which per-cell style attrs:        17.29 MB   (ff/fc/bg/fs/ht/vt/...)
+  of which formula text:                 2.96 MB
+  of which redundant .m=.v:              0.31 MB
+borderInfo arrays:                      19.27 MB
+other config + sheet shells:             0.36 MB
+
+top 5 style signatures account for ~200k of 340k cells:
+  65 906 × {"ff":"Inter","fc":"#000000","fs":10,"ht":0,"vt":0}
+  36 252 × {"ff":"Inter","fc":"#000000","fs":10,"ht":2}
+  33 894 × {"ff":"Inter","fc":"#000000","ht":0,"vt":0}
+  31 504 × {"ff":"Inter","fc":"#000000","bg":"#F3F3F3","ht":0,"vt":0}
+  30 806 × {"ff":"Inter","fc":"#000000","bg":"#FFFFFF","fs":10,"ht":2}
+```
+
+### Next step (when this session resumes) — Option 1 + Option 2d combined
+
+The highest-leverage pairing for first-paint latency:
+
+- **Pool styles + borderInfo into per-sheet tables (Option 1).**
+  Build a `styles: CellStyle[]` and `borders: BorderBox[]` table per sheet at
+  xlsx-import time. Cells carry an `s: number` / `b: number` index instead of
+  inlined `ff/fc/bg/fs/ht/vt/...` and inlined border-corner objects. Style
+  mutation appends a new entry (no in-place compaction).
+
+- **Switch the Yjs snapshot to one entry per sheet (Option 2d).**
+  Replace `state.snapshot: string` (one 48 MB JSON) with
+  `state.snapshots: Y.Map<sheetId, string>` (one JSON per sheet). Editing one
+  sheet only rewrites that sheet's entry. Reduces flush churn dramatically.
+
+- **Hydrate only the active sheet on mount.**
+  With per-sheet snapshots, `use-sheet.ts` can lazy-parse only the currently
+  visible sheet on first sync; others parse on tab-switch. First paint becomes
+  bounded by active-sheet size, not total doc size.
+
+- **Result projection on `test.xlsx`:** active sheet (MASTER DATA) is 24 MB raw.
+  Pooled → ~7 MB. Parse cost → ~70 ms in browser. First paint should land
+  comfortably under 1 s.
+
+#### File list for Option 1 (where the diff lands)
+
+- `packages/lib/src/sheets/types.ts` — `Sheet` gains `styles?: CellStyle[]` and
+  `borders?: BorderBox[]`; `Cell` gains optional `s?: number`, `b?: number`.
+- `apps/api/src/lib/import/sheets/from-xlsx.ts` — build the tables during import;
+  emit indexes per cell. The `theme` palette concept already exists, fits the
+  same pattern.
+- `packages/sheet/src/state/canvas.ts` — every `cell.<styleAttr>` read becomes
+  `style[cell.s].<attr>` via a resolver. ~30–40 read sites.
+- `packages/sheet/src/state/modules/cell.ts` — `setCellValue`'s style-update
+  branches: append-and-repoint to the styles table instead of in-place attr write.
+- `packages/sheet/src/components/Workbook/index.tsx` — wire the resolver into
+  the context if needed.
+- Engine: zero changes (engine doesn't touch style attrs).
+- Tests: extend `state/test/api/cell.test.ts` for the new mutation pattern;
+  `from-xlsx` test for the new schema.
+
+#### File list for Option 2d (per-sheet snapshots)
+
+- `apps/api/src/lib/document/sheets.ts` — `readSheetsContent` reads each
+  `snapshots.get(sheetId)` instead of one `snapshot`. `writeSheetsToYjs` writes
+  one entry per sheet. Op format already has sheet id, no Op change needed.
+- `apps/sheets/src/components/sheets/hooks/use-sheet.ts` — initial sync hydrates
+  only the active sheet from `snapshots.get(activeId)`. Tab-switch reads on demand.
+  `stateMap.observe(...)` becomes a per-key observer.
+- `packages/sheet/src/components/Workbook/index.tsx` — accept a `hydrateSheet`
+  callback; render placeholder for un-hydrated sheets.
+- Migration: pre-release per
+  [project_eigen_pre_release_no_migrations.md](memory). Existing imports must
+  be re-imported; not a problem for dev.
+
+### Other levers considered (and why deferred)
+
+- **`Y.Map<Map<Cell>>` (Yjs-native cell tree)** — kills the snapshot+ops model,
+  but every canvas paint reading through Yjs proxies would be measurably slower.
+  Not the right tool for the sheet engine's hot path.
+- **Snapshot blob outside Yjs (in mount storage), Yjs only carries ops** —
+  cleanest architecturally, but the biggest single refactor (two-phase load,
+  versioned blob ↔ ops consistency). Defer until Option 1+2d isn't enough.
+- **Web Worker for the engine** — bigger win after first paint is fast. Engine
+  resolver currently has no DOM coupling so it could be worker-safe with effort.
+- **Stream-parse JSON** — niche. With pooling the JSON is small enough that
+  blocking JSON.parse is acceptable.
+
+### Before the next session
+
+- [ ] Browser instrumentation: drop `performance.mark` / `performance.measure`
+      calls into `use-sheet.ts` (WS sync → snapshot fetch → parse → setInitialData)
+      and `Workbook/index.tsx` (effect entry → seedCalcChain → exit) so we get
+      a real flame-graph breakdown of the ~9 s. Without it we're optimizing on
+      Bun-side estimates.
+- [ ] Decide whether Option 1 lands first as its own PR (independent win, doesn't
+      need 2d to ship), or in lockstep with 2d (smaller follow-up diff if the
+      data shape changes together).
+- [ ] Investigate the "89% no-cached-value from exceljs" finding in MASTER DATA
+      (probe-compare.ts). Independent of perf; affects correctness for
+      "lazy recompute after import" any future scenario where mount-time
+      recompute is fully removed for refreshes too.
+
+---
+
 ## Architecture & invariants
 
 ### Engine boundary
@@ -106,9 +256,12 @@ documented by the types:
    blanking the cell on recalc. Default to `'General'`.
 2. **`sheet.calcChain` must be populated when cells have `f`.**
    `setFormulaCellInfoMap` early-returns on null `calcChain`, leaving
-   `formulaCellInfoMap` empty. `Workbook/index.tsx` derives `calcChain` from
-   data on mount and runs `api.calculateFormula(draftCtx)` once to reconcile
-   imports — but importers should still populate it.
+   `formulaCellInfoMap` empty. `Workbook/index.tsx` calls
+   `api.seedCalcChain(draftCtx)` on mount to walk data and add `{r,c,id}` for
+   every cell with `.f` — but importers should still populate it directly to
+   avoid a per-mount scan. Mount no longer re-evaluates formulas (values come
+   from import/persistence); first edit triggers `execFunctionGroup` which
+   lazy-primes `formulaCellInfoMap` from the chain.
 3. **`api.calculateFormula` relies on `ctx.currentSheetId`.** Call
    `initSheetIndex(draftCtx)` first when calling it in the init produce.
 
