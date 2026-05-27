@@ -1,9 +1,9 @@
 import { cloneDeep, isUndefined } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import type { CellMatrix } from '../../engine/types';
-import { api, execfunction, insertUpdateFunctionGroup, locale } from '..';
+import { api, execfunction, locale, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
-import type { Sheet, SingleRange } from '../types';
+import type { FormulaCell, Sheet, SingleRange } from '../types';
 import { getSheetIndex } from '../utils';
 import { celldataToData, dataToCelldata, getSheet } from './common';
 
@@ -116,31 +116,36 @@ export function copySheet(ctx: Context, sheetId: string) {
 function calculateSheetFromula(ctx: Context, id: string, range?: SingleRange) {
     const index = getSheetIndex(ctx, id);
     if (index == null) return;
-    if (!ctx.sheets[index].data) return;
+    const sheet = ctx.sheets[index];
+    if (!sheet.data) return;
+    const data = sheet.data;
 
-    if (!range) {
-        range = {
-            row: [0, ctx.sheets[index].data!.length - 1],
-            column: [0, ctx.sheets[index].data![0].length - 1],
-        };
-    }
-    const rowCount = range.row[1] - range.row[0] + 1;
-    const columnCount = range.column[1] - range.column[0] + 1;
+    const rStart = range?.row[0] ?? 0;
+    const rEnd = range?.row[1] ?? data.length - 1;
+    const cStart = range?.column[0] ?? 0;
+    const cEnd = range?.column[1] ?? data[0].length - 1;
 
-    for (let _r = 0; _r < rowCount; _r += 1) {
-        for (let _c = 0; _c < columnCount; _c += 1) {
-            const r = range.row[0] + _r;
-            const c = range.column[0] + _c;
+    // The public setCellValue + insertUpdateFunctionGroup pair each linear-scan
+    // calcChain to dedupe, so batch recompute used to be quadratic per sheet
+    // (78k formulas → 25s on import). We're visiting every formula cell in the
+    // range exactly once, so we can rebuild calcChain in one pass and write
+    // values via the underlying setCellValueInternal (which doesn't touch the
+    // chain at all). Entries outside the range are preserved.
+    const newChain: FormulaCell[] = (sheet.calcChain ?? []).filter(
+        (cc) => cc.id !== id || cc.r < rStart || cc.r > rEnd || cc.c < cStart || cc.c > cEnd,
+    );
 
-            const formula = ctx.sheets[index].data![r][c]?.f;
-            if (!formula) {
-                continue;
-            }
-            const result = execfunction(ctx, formula, r, c, id);
-            api.setCellValue(ctx, r, c, result[1], null, { id });
-            insertUpdateFunctionGroup(ctx, r, c, id);
+    for (let r = rStart; r <= rEnd; r += 1) {
+        for (let c = cStart; c <= cEnd; c += 1) {
+            const cell = data[r][c];
+            if (!cell?.f) continue;
+            const [, value] = execfunction(ctx, cell.f, r, c, id, undefined, false, true);
+            setCellValueInternal(ctx, r, c, data, value);
+            newChain.push({ r, c, id });
         }
     }
+
+    sheet.calcChain = newChain;
 }
 
 export function calculateFormula(ctx: Context, id?: string, range?: SingleRange) {
