@@ -8,9 +8,30 @@
 .fortune-cell-area {
     border-collapse: collapse;
     position: relative;
-    overflow: hidden;
+    overflow: auto;
     outline-style: none;
     cursor: default;
+    scrollbar-width: thin;
+    scrollbar-color: #babac0 transparent;
+}
+
+.fortune-cell-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    background-color: transparent;
+}
+
+.fortune-cell-area::-webkit-scrollbar-track {
+    background-color: transparent;
+}
+
+.fortune-cell-area::-webkit-scrollbar-thumb {
+    background-color: #babac0;
+    border-radius: 16px;
+}
+
+.fortune-cell-area::-webkit-scrollbar-button {
+    display: none;
 }
 
 .fortune-row-body {
