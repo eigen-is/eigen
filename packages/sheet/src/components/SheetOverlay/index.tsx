@@ -720,11 +720,9 @@ export const SheetOverlay: React.FC = () => {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => {
-                                            refs.globalCache.scrollTop = 0;
-                                            refs.globalCache.notifyScrollListeners();
-                                            setContext((ctx) => {
-                                                ctx.scrollTop = 0;
-                                            });
+                                            // cellArea is the scroll source; its native scroll
+                                            // event syncs globalCache and triggers the redraw.
+                                            refs.cellArea.current!.scrollTop = 0;
                                         }}
                                     >
                                         {info.backTop}
