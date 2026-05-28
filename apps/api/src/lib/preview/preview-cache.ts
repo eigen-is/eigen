@@ -9,121 +9,69 @@ import { generateEigendocPreview } from './eigendoc-preview';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateTextPreview, type TextPreviewResult } from './text-preview';
 
-type PreviewResult = { type: 'image'; data: Buffer; contentType: string } | { type: 'redirect'; url: string } | null;
+type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
+type PreviewResult = ImagePreview | { type: 'redirect'; url: string } | null;
 
-function getScreenCacheKey(pathId: string, updatedAt: Date | string): string {
-    const ts = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
-    return `${pathId}-${ts}.screen.webp`;
+function versionStamp(updatedAt: Date | string): number {
+    return updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
 }
 
-function getTextCacheKey(pathId: string, updatedAt: Date | string): string {
-    const ts = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
-    return `${pathId}-${ts}.json`;
+// Cache filenames are content-addressed by updatedAt: a new version writes a new file
+// instead of overwriting, so HTTP responses can use a long max-age (the URL carries the
+// same stamp). Prior versions are pruned on write — see pruneOldVersions.
+function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
+    return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.screen.${ext}`;
 }
 
-export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embedUrl: string): Promise<PreviewResult> {
-    const mime = drivePath.mimeType || '';
-
-    // Video/audio/PDF → redirect to embed
-    if (mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf') {
-        return { type: 'redirect', url: embedUrl };
-    }
-
-    // SVG → serve as-is (no rasterisation to WebP), cached locally for S3 mounts
-    if (mime === 'image/svg+xml') {
-        const cacheFile = path.join(
-            mount.previewsDir,
-            getScreenCacheKey(drivePath.id, drivePath.updatedAt).replace('.webp', '.svg'),
-        );
-
-        if (fs.existsSync(cacheFile)) {
-            return {
-                type: 'image',
-                data: Buffer.from(await Bun.file(cacheFile).arrayBuffer()),
-                contentType: 'image/svg+xml',
-            };
-        }
-
-        const file = await mount.readFile(drivePath.id);
-        if (!file) return null;
-        const data = Buffer.from(await file.arrayBuffer());
-        await Bun.write(cacheFile, data);
-        return { type: 'image', data, contentType: 'image/svg+xml' };
-    }
-
-    // Image (any format — sharp first, exiftool fallback)
-    if (isExiftoolCandidate(mime, drivePath.name)) {
-        const cacheFile = path.join(mount.previewsDir, getScreenCacheKey(drivePath.id, drivePath.updatedAt));
-
-        // Cache hit
-        if (fs.existsSync(cacheFile)) {
-            return {
-                type: 'image',
-                data: Buffer.from(await Bun.file(cacheFile).arrayBuffer()),
-                contentType: 'image/webp',
-            };
-        }
-
-        // Pass the storage file reference directly to avoid an extra copy
-        const file = await mount.readFile(drivePath.id);
-        if (!file) return null;
-
-        const result = await generateImagePreview(file, mime, drivePath.name, mount.previewsDir, drivePath.id, {
-            maxSize: 2560,
-            quality: 85,
-        });
-        if (!result) return null;
-
-        await Bun.write(cacheFile, result.data);
-        return { type: 'image', data: result.data, contentType: 'image/webp' };
-    }
-
-    return null;
+function textCacheName(drivePath: DrivePath): string {
+    return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.json`;
 }
 
-export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
-    if (drivePath.type === 'doc' || drivePath.type === 'slides' || drivePath.type === 'sheets')
-        return getCollabPreviewData(mount, drivePath);
-    return getTextPreviewData(mount, drivePath);
+// Delete previously-cached versions of this path (older updatedAt stamps) so previewsDir
+// doesn't accumulate one file per edit. Run fire-and-forget after a cache write: it scans
+// the dir off the response path and never removes the just-written `keep` file, so an
+// in-flight prune can't race a concurrent read. The 7-day init sweep covers paths that
+// are written once and never again.
+export async function pruneOldVersions(previewsDir: string, pathId: string, keep: string): Promise<void> {
+    const prefix = `${pathId}-`;
+    const files = await fs.promises.readdir(previewsDir);
+    await Promise.all(
+        files
+            .filter((name) => name !== keep && name.startsWith(prefix))
+            .map((name) => fs.promises.unlink(path.join(previewsDir, name)).catch(() => {})),
+    );
 }
 
-async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
-    const mode = getTextPreviewMode(drivePath.mimeType || '', drivePath.name);
-    if (mode === null) return null;
-
-    const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
-
-    // Cache hit
+// Read-through cache for a binary preview artifact (screen-res webp / raw svg).
+async function getOrCacheImage(
+    previewsDir: string,
+    pathId: string,
+    cacheName: string,
+    contentType: string,
+    generate: () => Promise<Buffer | null>,
+): Promise<ImagePreview | null> {
+    const cacheFile = path.join(previewsDir, cacheName);
     if (fs.existsSync(cacheFile)) {
-        return (await Bun.file(cacheFile).json()) as TextPreviewResult;
+        return { type: 'image', data: Buffer.from(await Bun.file(cacheFile).arrayBuffer()), contentType };
     }
 
-    // Read file as text directly — no intermediate ArrayBuffer
-    const file = await mount.readFile(drivePath.id);
-    if (!file) return null;
+    const data = await generate();
+    if (!data) return null;
 
-    let content: string;
-    try {
-        content = await file.text();
-    } catch {
-        return null;
-    }
-
-    const result = await generateTextPreview(content, mode, drivePath.name);
-
-    // Write to cache
-    await Bun.write(cacheFile, JSON.stringify(result));
-    return result;
+    await Bun.write(cacheFile, data);
+    pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
+    return { type: 'image', data, contentType };
 }
 
-async function getOrCachePreview(
-    mount: Mount,
-    drivePath: DrivePath,
+// Read-through cache for a text preview artifact (the JSON { body, mode } envelope).
+async function getOrCacheText(
+    previewsDir: string,
+    pathId: string,
+    cacheName: string,
     mode: TextPreviewResult['mode'],
-    generate: () => Promise<string>,
+    generate: () => Promise<string | null>,
 ): Promise<TextPreviewResult | null> {
-    const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
-
+    const cacheFile = path.join(previewsDir, cacheName);
     if (fs.existsSync(cacheFile)) {
         return (await Bun.file(cacheFile).json()) as TextPreviewResult;
     }
@@ -133,31 +81,104 @@ async function getOrCachePreview(
         if (!body) return null;
         const result: TextPreviewResult = { body, mode };
         await Bun.write(cacheFile, JSON.stringify(result));
+        pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
         return result;
     } catch (err) {
-        console.error(`[preview] Failed to generate ${mode} preview for ${drivePath.id}:`, err);
+        console.error(`[preview] Failed to generate ${mode} preview for ${pathId}:`, err);
         return null;
     }
 }
 
-async function getCollabPreviewData(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
+export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embedUrl: string): Promise<PreviewResult> {
     const mime = drivePath.mimeType || '';
 
+    // Video/audio/PDF → redirect to embed for native playback
+    if (mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf') {
+        return { type: 'redirect', url: embedUrl };
+    }
+
+    // SVG → serve as-is (no rasterisation to WebP), cached locally for S3 mounts
+    if (mime === 'image/svg+xml') {
+        return getOrCacheImage(
+            mount.previewsDir,
+            drivePath.id,
+            screenCacheName(drivePath, 'svg'),
+            'image/svg+xml',
+            async () => {
+                const file = await mount.readFile(drivePath.id);
+                return file ? Buffer.from(await file.arrayBuffer()) : null;
+            },
+        );
+    }
+
+    // Image (any format — sharp first, exiftool fallback)
+    if (isExiftoolCandidate(mime, drivePath.name)) {
+        return getOrCacheImage(
+            mount.previewsDir,
+            drivePath.id,
+            screenCacheName(drivePath, 'webp'),
+            'image/webp',
+            async () => {
+                // Pass the storage file reference directly to avoid an extra copy
+                const file = await mount.readFile(drivePath.id);
+                if (!file) return null;
+                const result = await generateImagePreview(file, mime, drivePath.name, mount.previewsDir, drivePath.id, {
+                    maxSize: 2560,
+                    quality: 85,
+                });
+                return result?.data ?? null;
+            },
+        );
+    }
+
+    return null;
+}
+
+export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
+    if (drivePath.type === 'doc' || drivePath.type === 'slides' || drivePath.type === 'sheets')
+        return getCollabPreview(mount, drivePath);
+    return getFileTextPreview(mount, drivePath);
+}
+
+async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
+    const mode = getTextPreviewMode(drivePath.mimeType || '', drivePath.name);
+    if (mode === null) return null;
+
+    return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), mode, async () => {
+        // Read file as text directly — no intermediate ArrayBuffer
+        const file = await mount.readFile(drivePath.id);
+        if (!file) return null;
+        let content: string;
+        try {
+            content = await file.text();
+        } catch {
+            return null;
+        }
+        return (await generateTextPreview(content, mode, drivePath.name)).body;
+    });
+}
+
+async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
+    const mime = drivePath.mimeType || '';
+    const cacheName = textCacheName(drivePath);
+
     if (mime === DRIVE_MIME_DOC) {
-        return getOrCachePreview(mount, drivePath, 'eigendoc', () => generateEigendocPreview(mount, drivePath));
+        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigendoc', () =>
+            generateEigendocPreview(mount, drivePath),
+        );
     }
 
     if (mime === DRIVE_MIME_SLIDES) {
-        return getOrCachePreview(mount, drivePath, 'eigenslides', async () => {
-            // Dynamic import: eigenslides-preview imports tiptap-adjacent code that references DOM
-            // globals at module level. --splitting keeps it in a separate chunk loaded on demand.
+        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigenslides', async () => {
+            // Dynamic import: eigenslides-preview pulls in tiptap-adjacent code that touches DOM
+            // globals at module load. --splitting keeps it in a chunk loaded on demand.
             const { generateEigenslidesPreview } = await import('./eigenslides-preview');
             return generateEigenslidesPreview(mount, drivePath);
         });
     }
 
     if (mime === DRIVE_MIME_SHEETS) {
-        return getOrCachePreview(mount, drivePath, 'eigensheets', async () => {
+        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigensheets', async () => {
             const { generateEigensheetsPreview } = await import('./eigensheets-preview');
             return generateEigensheetsPreview(mount, drivePath);
         });
