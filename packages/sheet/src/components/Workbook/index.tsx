@@ -382,11 +382,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.defaultrowNum = mergedSettings.row;
                     draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
                     if (draftCtx.sheets.length === 0) {
-                        // Take ownership of originalData rather than cloning (~900ms on a
-                        // 48MB xlsx import). Workbook is the only consumer once mount runs,
-                        // and the prop is only read inside `sheets.length === 0` — subsequent
-                        // updates to the prop are ignored by design.
-                        draftCtx.sheets = originalData;
+                        // Shallow-clone the sheet wrappers — NOT the heavy celldata/data,
+                        // which stay shared by reference (avoids the ~900ms deep clone on a
+                        // 48MB xlsx import). The init below mutates only top-level props
+                        // (id/status/data/celldata/config/calcChain), so fresh wrappers keep
+                        // those writable. Crucially it also keeps the `data` prop itself out
+                        // of the Immer draft, so it never gets frozen — a Workbook remount
+                        // (key={snapshotVersion}) can safely re-run this init instead of
+                        // crashing on now-frozen objects.
+                        draftCtx.sheets = originalData.map((sheet) => ({ ...sheet }));
                         ensureSheetIndex(draftCtx.sheets, mergedSettings.generateSheetId);
                         for (const newDatum of draftCtx.sheets) {
                             const index = getSheetIndex(draftCtx, newDatum.id!) as number;
