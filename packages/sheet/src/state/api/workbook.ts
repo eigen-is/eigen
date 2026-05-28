@@ -53,8 +53,7 @@ export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {
 
 export function scroll(
     ctx: Context,
-    scrollbarX: HTMLDivElement | null,
-    scrollbarY: HTMLDivElement | null,
+    scrollEl: HTMLDivElement | null,
     options: {
         scrollLeft?: number;
         scrollTop?: number;
@@ -66,16 +65,16 @@ export function scroll(
         if (!isNumber(options.scrollLeft)) {
             throw invalidParams();
         }
-        if (scrollbarX) {
-            scrollbarX.scrollLeft = options.scrollLeft;
+        if (scrollEl) {
+            scrollEl.scrollLeft = options.scrollLeft;
         }
     } else if (options.targetColumn != null) {
         if (!isNumber(options.targetColumn)) {
             throw invalidParams();
         }
         const col_pre = options.targetColumn <= 0 ? 0 : ctx.visibledatacolumn[options.targetColumn - 1];
-        if (scrollbarX) {
-            scrollbarX.scrollLeft = col_pre;
+        if (scrollEl) {
+            scrollEl.scrollLeft = col_pre;
         }
     }
 
@@ -83,8 +82,8 @@ export function scroll(
         if (!isNumber(options.scrollTop)) {
             throw invalidParams();
         }
-        if (scrollbarY) {
-            scrollbarY.scrollTop = options.scrollTop;
+        if (scrollEl) {
+            scrollEl.scrollTop = options.scrollTop;
         }
     } else if (options.targetRow != null) {
         if (!isNumber(options.targetRow)) {
@@ -92,8 +91,8 @@ export function scroll(
         }
         const row_pre = options.targetRow <= 0 ? 0 : ctx.visibledatarow[options.targetRow - 1];
 
-        if (scrollbarY) {
-            scrollbarY.scrollTop = row_pre;
+        if (scrollEl) {
+            scrollEl.scrollTop = row_pre;
         }
     }
 }

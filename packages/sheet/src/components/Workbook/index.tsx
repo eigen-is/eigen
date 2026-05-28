@@ -130,8 +130,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const cellInput = useRef<HTMLDivElement>(null);
         const fxInput = useRef<HTMLDivElement>(null);
         const canvas = useRef<HTMLCanvasElement>(null);
-        const scrollbarX = useRef<HTMLDivElement>(null);
-        const scrollbarY = useRef<HTMLDivElement>(null);
         const cellArea = useRef<HTMLDivElement>(null);
         const workbookContainer = useRef<HTMLDivElement>(null);
 
@@ -141,21 +139,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 cellInput,
                 fxInput,
                 canvas,
-                scrollbarX,
-                scrollbarY,
                 cellArea,
                 workbookContainer,
             }),
             [],
         );
-
-        // TRANSITIONAL (removed in native-scroll Task 2): cellArea is now the one
-        // native scroll surface. Existing consumers still read scrollbarX.scrollLeft /
-        // scrollbarY.scrollTop, which map exactly onto cellArea's; point both at it.
-        useEffect(() => {
-            scrollbarX.current = cellArea.current;
-            scrollbarY.current = cellArea.current;
-        });
 
         const [context, setContext] = useState(defaultContext(refs));
         const { info, formula } = locale(context);
@@ -690,8 +678,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     handleRedo,
                     mergedSettings,
                     cellInput.current,
-                    scrollbarX.current,
-                    scrollbarY.current,
+                    cellArea.current,
                 ),
             [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings],
         );

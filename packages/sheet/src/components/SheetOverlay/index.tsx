@@ -186,8 +186,8 @@ export const SheetOverlay: React.FC = () => {
                                 refs.globalCache,
                                 ev,
                                 containerRef.current!,
-                                refs.scrollbarX.current!,
-                                refs.scrollbarY.current!,
+                                refs.cellArea.current!,
+                                refs.cellArea.current!,
                             );
                         }
                         handleOverlayMouseMove(
@@ -195,8 +195,7 @@ export const SheetOverlay: React.FC = () => {
                             refs.globalCache,
                             ev,
                             refs.cellInput.current!,
-                            refs.scrollbarX.current!,
-                            refs.scrollbarY.current!,
+                            refs.cellArea.current!,
                             containerRef.current!,
                             refs.fxInput.current,
                         );
@@ -205,15 +204,7 @@ export const SheetOverlay: React.FC = () => {
                 );
             });
         },
-        [
-            overShowLinkCard,
-            refs.cellInput,
-            refs.fxInput,
-            refs.globalCache,
-            refs.scrollbarX,
-            refs.scrollbarY,
-            setContext,
-        ],
+        [overShowLinkCard, refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext],
     );
 
     const onMouseUp = useCallback(
@@ -225,8 +216,7 @@ export const SheetOverlay: React.FC = () => {
                         refs.globalCache,
                         settings,
                         nativeEvent,
-                        refs.scrollbarX.current!,
-                        refs.scrollbarY.current!,
+                        refs.cellArea.current!,
                         containerRef.current!,
                         refs.cellInput.current,
                         refs.fxInput.current,
@@ -236,16 +226,7 @@ export const SheetOverlay: React.FC = () => {
                 }
             });
         },
-        [
-            refs.cellInput,
-            refs.fxInput,
-            refs.globalCache,
-            refs.scrollbarX,
-            refs.scrollbarY,
-            setContext,
-            settings,
-            showAlert,
-        ],
+        [refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext, settings, showAlert],
     );
 
     const onTouchStart = useCallback(
@@ -258,9 +239,9 @@ export const SheetOverlay: React.FC = () => {
 
     const onTouchMove = useCallback(
         (e: React.TouchEvent<HTMLDivElement>) => {
-            handleOverlayTouchMove(e.nativeEvent, refs.globalCache, refs.scrollbarX.current!, refs.scrollbarY.current!);
+            handleOverlayTouchMove(e.nativeEvent, refs.globalCache, refs.cellArea.current!);
         },
-        [refs.globalCache, refs.scrollbarX, refs.scrollbarY],
+        [refs.cellArea, refs.globalCache],
     );
 
     const onTouchEnd = useCallback(() => {
@@ -604,8 +585,7 @@ export const SheetOverlay: React.FC = () => {
                                                 draftCtx,
                                                 refs.globalCache,
                                                 nativeEvent,
-                                                refs.scrollbarX.current!,
-                                                refs.scrollbarY.current!,
+                                                refs.cellArea.current!,
                                                 containerRef.current!,
                                             );
                                         });
