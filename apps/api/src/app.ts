@@ -41,7 +41,16 @@ const WEBDAV_CAPABILITY_HEADERS = {
     Allow: 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, MOVE, COPY, LOCK, UNLOCK',
 };
 
-export const app = new Elysia()
+export const app = new Elysia({
+    // WebSocket server options MUST live on the root instance: Elysia builds
+    // Bun.serve's `websocket` handler from `app.config.websocket` (+ listen
+    // options) only — `websocket` config set on a `.use()`d plugin (e.g.
+    // collabRouter) is silently ignored. perMessageDeflate compresses the large
+    // Yjs sync frames (the ~48MB sheets snapshot) on the wire.
+    websocket: {
+        perMessageDeflate: true,
+    },
+})
     .use(serverTiming())
     .use(swagger())
     // Handle CalDAV/WebDAV OPTIONS before CORS intercepts them — DAV clients need capability headers
