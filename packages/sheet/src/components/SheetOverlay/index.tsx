@@ -42,7 +42,6 @@ import { SearchReplace } from '../SearchReplace';
 import { ColumnHeader } from './ColumnHeader';
 import { InputBox } from './InputBox';
 import { RowHeader } from './RowHeader';
-import { ScrollBar } from './ScrollBar';
 
 export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
@@ -113,6 +112,18 @@ export const SheetOverlay: React.FC = () => {
         },
         [refs.cellArea, refs.globalCache, setContext, settings],
     );
+
+    // cellArea is the native scroll surface; its scroll event is the single
+    // source of truth for scroll position. Write globalCache (read by mouse
+    // hit-testing and the canvas redraw) and fire the bus — never setContext,
+    // which would re-render every context consumer on each scroll tick.
+    const onCellAreaScroll = useCallback(() => {
+        const el = refs.cellArea.current;
+        if (!el) return;
+        refs.globalCache.scrollLeft = el.scrollLeft;
+        refs.globalCache.scrollTop = el.scrollTop;
+        refs.globalCache.notifyScrollListeners();
+    }, [refs.cellArea, refs.globalCache]);
 
     const onLeftTopClick = useCallback(() => {
         setContext((draftCtx) => {
@@ -310,26 +321,12 @@ export const SheetOverlay: React.FC = () => {
         }
     }, [context.warnDialog]);
 
+    // Apply programmatic scroll (api.scroll, "back to top") to the native
+    // scroll surface. User scrolling flows the other way, via onCellAreaScroll.
     useEffect(() => {
         refs.cellArea.current!.scrollLeft = context.scrollLeft;
         refs.cellArea.current!.scrollTop = context.scrollTop;
     }, [context.scrollLeft, context.scrollTop, refs.cellArea]);
-
-    // Sync cellArea scroll position imperatively from globalCache,
-    // bypassing React state to avoid re-rendering 20+ context consumers.
-    useEffect(() => {
-        const syncScroll = () => {
-            const { globalCache } = refs;
-            if (refs.cellArea.current) {
-                refs.cellArea.current.scrollLeft = globalCache.scrollLeft;
-                refs.cellArea.current.scrollTop = globalCache.scrollTop;
-            }
-        };
-        refs.globalCache.scrollListeners.add(syncScroll);
-        return () => {
-            refs.globalCache.scrollListeners.delete(syncScroll);
-        };
-    }, [refs]);
 
     useEffect(() => {
         document.addEventListener('mousemove', onMouseMove);
@@ -423,14 +420,13 @@ export const SheetOverlay: React.FC = () => {
             </div>
             <div className="fortune-row-body">
                 <RowHeader />
-                <ScrollBar axis="x" />
-                <ScrollBar axis="y" />
                 <div
                     ref={refs.cellArea}
                     className="fortune-cell-area"
                     onMouseDown={cellAreaMouseDown}
                     onDoubleClick={cellAreaDoubleClick}
                     onContextMenu={cellAreaContextMenu}
+                    onScroll={onCellAreaScroll}
                     style={{
                         width: context.cellmainWidth,
                         height: context.cellmainHeight,

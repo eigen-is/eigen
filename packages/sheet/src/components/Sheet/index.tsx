@@ -6,7 +6,6 @@ import {
     type Context,
     type Freezen,
     type FreezenAxisData,
-    handleGlobalWheel,
     initFreeze,
     type Sheet as SheetType,
     updateContextWithCanvas,
@@ -246,27 +245,6 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     useEffect(() => {
         return () => cancelAnimationFrame(rafIdRef.current);
     }, []);
-
-    // Wheel handler — reads from contextRef, writes to scrollbar DOM + cache.
-    // Does NOT call setContext. Scroll state flows through globalCache.
-    const onWheel = useCallback(
-        (e: WheelEvent) => {
-            handleGlobalWheel(
-                contextRef.current,
-                e,
-                refs.globalCache,
-                refs.scrollbarX.current!,
-                refs.scrollbarY.current!,
-            );
-        },
-        [refs.globalCache, refs.scrollbarX, refs.scrollbarY],
-    );
-
-    useEffect(() => {
-        const container = containerRef.current;
-        container?.addEventListener('wheel', onWheel, { passive: false });
-        return () => container?.removeEventListener('wheel', onWheel);
-    }, [onWheel]);
 
     return (
         <div ref={containerRef} className="flex flex-1 flex-col min-h-0 relative">
