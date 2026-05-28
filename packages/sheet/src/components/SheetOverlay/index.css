@@ -9,6 +9,9 @@
     border-collapse: collapse;
     position: relative;
     overflow: auto;
+    /* No rubber-band overscroll: the canvas repaints on rAF and can't follow an
+       elastic bounce, which would briefly tear the grid away from the overlays. */
+    overscroll-behavior: none;
     outline-style: none;
     cursor: default;
     scrollbar-width: thin;
