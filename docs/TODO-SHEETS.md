@@ -14,11 +14,10 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 ### Core technical debt
 
-1. **CSS migrations** — 3 files remain (size verified 2026-04-28); then delete
+1. **CSS migrations** — 2 files remain (size verified 2026-04-28); then delete
    `src/css.d.ts`:
-   - `SheetOverlay/index.css` (812 LOC, largest — split into multiple PRs).
+   - `SheetOverlay/index.css` (largest — split into multiple PRs).
    - `SheetTab/index.css` (272 LOC).
-   - `SheetOverlay/ScrollBar/index.css` (40 LOC).
    Before removing any class, grep `state/` for `luckysheet-*` selectors — see
    [DOM Selector Coupling](#dom-selector-coupling).
 
@@ -80,6 +79,24 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    formula reference `A1` → `$A$1` → `A$1` → `$A1` → `A1`. Treated as feature
    work (DOM-walk the formula editor, parse the reference under the caret,
    cycle `$` markers, restore selection), not a bug fix — separate effort.
+
+9. **Body overlays drift from the canvas during fast scroll** — the selection box,
+   cell editor (`InputBox`), presence cursors, and fill handle are children of
+   `cellArea` (the native scroll surface), so they scroll at compositor speed (120 Hz /
+   ProMotion) while the canvas repaints on rAF — they slip ~1 frame from the grid during
+   a fast scroll. The headers do *not* drift: the native-scroll work moved them to a
+   `transform` driven by the scroll bus, locked to the redraw. Fix: drive the
+   body-overlay layer the same way (read the offset from `globalCache`, `transform` in
+   lockstep with the canvas) instead of letting it ride the scroll div. Requires
+   restructuring the in-`cellArea` overlay layer (a `sticky` wrapper, or hoisting the
+   layer out like the headers) and re-checking hit-testing, the editor, presence, and
+   fill-handle positioning. Medium-sized. `overscroll-behavior: none` already removed the
+   worst of it (boundary rubber-band tearing).
+
+10. **Verify touch scrolling on a real device** — the hand-rolled `mobile.ts`
+    touch-scroll handler was removed (it double-drove native scroll now that `cellArea`
+    is `overflow:auto`). Native touch scroll should fully replace it, but this was not
+    verified on a touch device — confirm one-finger drag + momentum feel right.
 
 ---
 
