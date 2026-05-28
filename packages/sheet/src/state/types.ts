@@ -279,16 +279,12 @@ export type Freezen = {
 };
 
 export type GlobalCache = {
-    verticalScrollLock?: boolean;
-    horizontalScrollLock?: boolean;
     overwriteCell?: boolean;
     ignoreWriteCell?: boolean;
     doNotFocus?: boolean;
     doNotUpdateCell?: boolean;
     recentTextColor?: string;
     recentBackgroundColor?: string;
-    visibleColumnsUnique?: number[];
-    visibleRowsUnique?: number[];
     undoList: History[];
     redoList: History[];
     freezen?: Record<string, Freezen>;

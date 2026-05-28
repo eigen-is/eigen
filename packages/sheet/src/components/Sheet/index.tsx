@@ -207,7 +207,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     //
     // Two triggers:
     //   1. context changes (cell edits, selection, etc.) → useEffect
-    //   2. scroll changes (wheel/scrollbar) → globalCache scroll listener
+    //   2. scroll changes (native cellArea scroll) → globalCache scroll listener
     // Both call scheduleRedraw which coalesces to one paint per frame.
     // -----------------------------------------------------------------------
 

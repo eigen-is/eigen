@@ -118,8 +118,7 @@ export const SheetOverlay: React.FC = () => {
     // hit-testing and the canvas redraw) and fire the bus — never setContext,
     // which would re-render every context consumer on each scroll tick.
     const onCellAreaScroll = useCallback(() => {
-        const el = refs.cellArea.current;
-        if (!el) return;
+        const el = refs.cellArea.current!;
         refs.globalCache.scrollLeft = el.scrollLeft;
         refs.globalCache.scrollTop = el.scrollTop;
         refs.globalCache.notifyScrollListeners();
