@@ -86,8 +86,10 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 ## Mount-cost reduction follow-up
 
 Branch `perf/sheets-mount` (4 commits, 2026-05-27) cut a 16-sheet/125k-formula
-xlsx import open from ~60 s to ~9 s in the browser by attacking the four
-slowest mount steps:
+xlsx import open from ~60 s to **~1.4 s on localhost** by attacking the four
+slowest mount steps. (The "~9 s" previously quoted here was a Bun-side projection
+never confirmed in-browser. ⚠️ localhost ≠ prod for transfer — see "WS compression
+is NOT active in prod" below.)
 
 1. `calculateSheetFromula` was O(formulas²) — `setCellValue` + `insertUpdateFunctionGroup`
    each linear-scanned `calcChain` on every formula cell. Rewritten to rebuild
@@ -103,17 +105,47 @@ slowest mount steps:
    cells were returning `true`. Surfaced once (3) stopped masking it. Coerce
    undefined→0 at the top-level Formula production.
 
-### Where the remaining ~9 s sits (not yet measured in browser)
+### Measured browser breakdown (2026-05-28, localhost)
 
-Bun-side simulation has the post-step-3 produce body at ~870 ms. Browser is ~3–5×
-slower, plus React commit + canvas first paint. Suspects, no measurements yet:
+`performance.mark`/`measure` instrumentation (since reverted) on `test.xlsx`
+(47.82 MB snapshot, 16 sheets, active sheet 100×26). First canvas paint **~1.4 s**
+on localhost, tiling cleanly to the total:
 
-- `JSON.parse` on the 48 MB snapshot string (~600 ms projected in browser).
-- 48 MB `originalData` object held in memory until GC; allocations are not free.
-- Per-cell style attrs repeated everywhere — see size breakdown below.
-- `calcRowColSize` walks every row + every column once on first paint to build
-  cumulative size maps (Explore agent flagged this).
-- React commit on 16 SheetTabs + Workbook tree.
+| Stage | ms | Note |
+|-------|-----|------|
+| WS + Yjs sync | ~410 | localhost loopback; see prod caveat below |
+| `JSON.parse` (+ setState) | ~220 | parsing the full 47.82 MB |
+| React first render → effect | ~120 | |
+| Workbook mount effect | ~430–650 | our init logic is only ~30 ms; the rest is immer drafting + the one-time auto-freeze of the 47 MB tree |
+| post-mount (Sheet effects + first draw) | ~290 | |
+
+Findings:
+
+- **`calcRowColSize` is 0.5 ms — exonerated.** O(rows+cols), and the active sheet
+  is tiny (100×26). The earlier suspicion was wrong; drop it as a lever.
+- **The cost is loading *all* 16 sheets** (parse + immer-freeze the 47 MB), not
+  rendering the visible one → the argument for lazy active-sheet hydration (Option 2d).
+- **`setAutoFreeze(false)` is a 4.5× REGRESSION — do NOT retry.** It cut the mount
+  effect ~290 ms (the freeze) but blew up the post-mount phase 294 ms → 6.6 s
+  (total 1.4 s → 7.7 s). immer's auto-freeze is load-bearing: the many post-mount
+  produces over the same large tree rely on a frozen base to skip re-scanning
+  unchanged subtrees. The only way to cut the freeze cost is to shrink the tree
+  (Option 1 / 2d), not to disable freezing.
+
+### ⚠️ WS compression is NOT active in prod (2026-05-28)
+
+`collab.ts:41` sets `perMessageDeflate: true`, but that configures the **origin**
+bun server. Prod runs behind Caddy, and the `wss://eigen.is` handshake response
+has **no `Sec-WebSocket-Extensions`** header → permessage-deflate is not negotiated
+→ the browser receives **uncompressed** frames. Caddy's `encode gzip zstd`
+(Caddyfile:19) is HTTP-body only, not WS. **Consequence:** the 47.82 MB snapshot
+likely crosses the wire uncompressed in prod, so prod open is gated by downlink —
+the ~1.4 s above is localhost-only. Reducing real payload bytes is the prod lever:
+Option 1 pooling, or **app-layer gzip of the snapshot string before the Y.Map**
+(~24:1, proxy-independent; gunzip 2→48 MB is ~tens of ms). Confirm via DevTools →
+Messages (first server→client sync frame ≈48 MB = uncompressed). Also:
+`maxPayloadLength: 4 MB` on that WS caps client→server messages — big snapshot
+flushes *up* may be getting rejected in prod.
 
 `packages/sheet/probe-xlsx.ts` (untracked) does the produce-side bench end-to-end.
 `packages/sheet/probe-size.ts` (untracked) breaks down where the 48 MB go. Both
@@ -124,9 +156,9 @@ expect `test.xlsx` at repo root. Keep around as a regression check.
 ```
 xlsx (compressed):                       2.22 MB
 JSON snapshot:                          47.82 MB   (21.6× xlsx)
-gzipped JSON:                            1.98 MB   (already on the wire via
-                                                    perMessageDeflate at
-                                                    apps/api/src/routes/collab.ts:41)
+gzipped JSON:                            1.98 MB   (what it WOULD be if compressed;
+                                                    NOT active in prod — see
+                                                    "WS compression" note above)
 
 cells:                                  28.19 MB
   of which per-cell style attrs:        17.29 MB   (ff/fc/bg/fs/ht/vt/...)
@@ -213,14 +245,16 @@ The highest-leverage pairing for first-paint latency:
 
 ### Before the next session
 
-- [ ] Browser instrumentation: drop `performance.mark` / `performance.measure`
-      calls into `use-sheet.ts` (WS sync → snapshot fetch → parse → setInitialData)
-      and `Workbook/index.tsx` (effect entry → seedCalcChain → exit) so we get
-      a real flame-graph breakdown of the ~9 s. Without it we're optimizing on
-      Bun-side estimates.
-- [ ] Decide whether Option 1 lands first as its own PR (independent win, doesn't
-      need 2d to ship), or in lockstep with 2d (smaller follow-up diff if the
-      data shape changes together).
+- [x] Browser instrumentation done (2026-05-28, reverted) — see "Measured browser
+      breakdown". Open is ~1.4 s on localhost (not ~9 s); immer auto-freeze is
+      load-bearing (`setAutoFreeze(false)` is a 4.5× regression).
+- [ ] **Confirm + fix prod WS compression** (see ⚠️ note) — likely the biggest
+      *real* (prod) lever now, since the snapshot crosses the wire uncompressed.
+      App-layer gzip of the snapshot is proxy-independent.
+- [ ] Only pursue Option 1 / 2d for open-time if prod transfer / memory / flush
+      churn proves to be a problem; localhost open no longer justifies them.
+      Measure the edit/flush path first. If pursued, decide whether Option 1 lands
+      as its own PR (independent win) or in lockstep with 2d.
 - [ ] Investigate the "89% no-cached-value from exceljs" finding in MASTER DATA
       (probe-compare.ts). Independent of perf; affects correctness for
       "lazy recompute after import" any future scenario where mount-time
