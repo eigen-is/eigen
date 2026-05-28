@@ -25,9 +25,6 @@ import {
     handleContextMenu,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
-    handleOverlayTouchEnd,
-    handleOverlayTouchMove,
-    handleOverlayTouchStart,
     insertRowCol,
     locale,
     onCellsMoveStart,
@@ -147,10 +144,9 @@ export const SheetOverlay: React.FC = () => {
             globalCache: GlobalCache,
             e: MouseEvent,
             container: HTMLDivElement,
-            scrollX: HTMLDivElement,
-            scrollY: HTMLDivElement,
+            scrollEl: HTMLDivElement,
         ) => {
-            const rc = getCellRowColumn(ctx, e, container, scrollX, scrollY);
+            const rc = getCellRowColumn(ctx, e, container, scrollEl);
             if (rc == null) return;
             const link = getCellHyperlink(ctx, rc.r, rc.c);
             if (link == null) {
@@ -186,7 +182,6 @@ export const SheetOverlay: React.FC = () => {
                                 refs.globalCache,
                                 ev,
                                 containerRef.current!,
-                                refs.cellArea.current!,
                                 refs.cellArea.current!,
                             );
                         }
@@ -228,25 +223,6 @@ export const SheetOverlay: React.FC = () => {
         },
         [refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext, settings, showAlert],
     );
-
-    const onTouchStart = useCallback(
-        (e: React.TouchEvent<HTMLDivElement>) => {
-            handleOverlayTouchStart(e.nativeEvent, refs.globalCache);
-            e.stopPropagation();
-        },
-        [refs.globalCache],
-    );
-
-    const onTouchMove = useCallback(
-        (e: React.TouchEvent<HTMLDivElement>) => {
-            handleOverlayTouchMove(e.nativeEvent, refs.globalCache, refs.cellArea.current!);
-        },
-        [refs.cellArea, refs.globalCache],
-    );
-
-    const onTouchEnd = useCallback(() => {
-        handleOverlayTouchEnd(refs.globalCache);
-    }, [refs.globalCache]);
 
     const handleBottomAddRow = useCallback(() => {
         const valueStr = bottomAddRowInputRef.current?.value || context.addDefaultRows.toString();
@@ -377,9 +353,6 @@ export const SheetOverlay: React.FC = () => {
         <main
             className="fortune-sheet-overlay"
             ref={containerRef}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
             tabIndex={-1}
             style={{
                 width: context.tableContentSize[0],

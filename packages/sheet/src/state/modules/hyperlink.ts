@@ -9,17 +9,10 @@ import { colLocation, rowLocation } from './location';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
-export function getCellRowColumn(
-    ctx: Context,
-    e: MouseEvent,
-    container: HTMLDivElement,
-    scrollX: HTMLDivElement,
-    scrollY: HTMLDivElement,
-) {
+export function getCellRowColumn(ctx: Context, e: MouseEvent, container: HTMLDivElement, scrollEl: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return undefined;
-    const { scrollLeft } = scrollX;
-    const { scrollTop } = scrollY;
+    const { scrollLeft, scrollTop } = scrollEl;
     const rect = container.getBoundingClientRect();
     let x = e.pageX - rect.left - ctx.rowHeaderWidth;
     let y = e.pageY - rect.top - ctx.columnHeaderHeight;

@@ -424,15 +424,8 @@ export function createDropCellRange(ctx: Context, e: MouseEvent, container: HTML
     );
 }
 
-export function onDropCellSelect(
-    ctx: Context,
-    e: MouseEvent,
-    scrollX: HTMLDivElement,
-    scrollY: HTMLDivElement,
-    container: HTMLDivElement,
-) {
-    const { scrollLeft } = scrollX;
-    const { scrollTop } = scrollY;
+export function onDropCellSelect(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
+    const { scrollLeft, scrollTop } = scrollEl;
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft;
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
