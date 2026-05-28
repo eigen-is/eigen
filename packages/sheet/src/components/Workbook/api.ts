@@ -34,8 +34,7 @@ export function generateAPIs(
     handleRedo: () => void,
     settings: Required<Settings>,
     cellInput: HTMLDivElement | null,
-    scrollbarX: HTMLDivElement | null,
-    scrollbarY: HTMLDivElement | null,
+    scrollEl: HTMLDivElement | null,
 ) {
     type ApiCall = {
         name: string;
@@ -232,7 +231,7 @@ export function generateAPIs(
             setContext((draftCtx) => api.setSheetOrder(draftCtx, orderList)),
 
         scroll: (options: { scrollLeft?: number; scrollTop?: number; targetRow?: number; targetColumn?: number }) =>
-            api.scroll(context, scrollbarX, scrollbarY, options),
+            api.scroll(context, scrollEl, options),
 
         addPresences: (newPresences: Presence[]) => {
             setContext((draftCtx) => {

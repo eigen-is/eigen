@@ -145,15 +145,7 @@ export function LinkEditCard({
                     className="mr-1.5 cursor-pointer hover:text-primary"
                     onClick={() => {
                         setContext((draftCtx) =>
-                            goToLink(
-                                draftCtx,
-                                r,
-                                c,
-                                linkType,
-                                linkAddress,
-                                refs.scrollbarX.current!,
-                                refs.scrollbarY.current!,
-                            ),
+                            goToLink(draftCtx, r, c, linkType, linkAddress, refs.cellArea.current!),
                         );
                     }}
                 >

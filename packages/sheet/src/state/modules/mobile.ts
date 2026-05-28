@@ -11,12 +11,7 @@ export function handleOverlayTouchStart(e: TouchEvent, globalCache: GlobalCache)
     };
 }
 
-export function handleOverlayTouchMove(
-    e: TouchEvent,
-    globalCache: GlobalCache,
-    scrollbarX: HTMLDivElement,
-    scrollbarY: HTMLDivElement,
-) {
+export function handleOverlayTouchMove(e: TouchEvent, globalCache: GlobalCache, scrollEl: HTMLDivElement) {
     if (e.targetTouches.length > 1) return;
     const touch = e.targetTouches[0];
     if (globalCache.touchMoveStatus) {
@@ -27,12 +22,12 @@ export function handleOverlayTouchMove(
         let scrollTop = globalCache.scrollTop;
         scrollLeft -= slideX;
         scrollTop -= slideY;
-        scrollbarY.scrollTop = scrollTop;
+        scrollEl.scrollTop = scrollTop;
 
         globalCache.touchMoveStartPos.vy_y = slideY;
         globalCache.touchMoveStartPos.scrollTop = scrollTop;
 
-        scrollbarX.scrollLeft = scrollLeft;
+        scrollEl.scrollLeft = scrollLeft;
 
         globalCache.touchMoveStartPos.vy_x = slideX;
         globalCache.touchMoveStartPos.scrollLeft = scrollLeft;
