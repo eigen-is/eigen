@@ -88,8 +88,8 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 Branch `perf/sheets-mount` (4 commits, 2026-05-27) cut a 16-sheet/125k-formula
 xlsx import open from ~60 s to **~1.4 s on localhost** by attacking the four
 slowest mount steps. (The "~9 s" previously quoted here was a Bun-side projection
-never confirmed in-browser. ⚠️ localhost ≠ prod for transfer — see "WS compression
-is NOT active in prod" below.)
+never confirmed in-browser. WS compression — once broken — is now enabled in prod
+too, so the wire transfer is compressed; see "WS compression" below.)
 
 1. `calculateSheetFromula` was O(formulas²) — `setCellValue` + `insertUpdateFunctionGroup`
    each linear-scanned `calcChain` on every formula cell. Rewritten to rebuild
@@ -113,7 +113,7 @@ on localhost, tiling cleanly to the total:
 
 | Stage | ms | Note |
 |-------|-----|------|
-| WS + Yjs sync | ~410 | localhost loopback; see prod caveat below |
+| WS + Yjs sync | ~410 | localhost loopback; prod now compresses the wire — see WS compression |
 | `JSON.parse` (+ setState) | ~220 | parsing the full 47.82 MB |
 | React first render → effect | ~120 | |
 | Workbook mount effect | ~430–650 | our init logic is only ~30 ms; the rest is immer drafting + the one-time auto-freeze of the 47 MB tree |
@@ -132,20 +132,30 @@ Findings:
   unchanged subtrees. The only way to cut the freeze cost is to shrink the tree
   (Option 1 / 2d), not to disable freezing.
 
-### ⚠️ WS compression is NOT active in prod (2026-05-28)
+### WS compression — fixed + verified in prod (2026-05-28)
 
-`collab.ts:41` sets `perMessageDeflate: true`, but that configures the **origin**
-bun server. Prod runs behind Caddy, and the `wss://eigen.is` handshake response
-has **no `Sec-WebSocket-Extensions`** header → permessage-deflate is not negotiated
-→ the browser receives **uncompressed** frames. Caddy's `encode gzip zstd`
-(Caddyfile:19) is HTTP-body only, not WS. **Consequence:** the 47.82 MB snapshot
-likely crosses the wire uncompressed in prod, so prod open is gated by downlink —
-the ~1.4 s above is localhost-only. Reducing real payload bytes is the prod lever:
-Option 1 pooling, or **app-layer gzip of the snapshot string before the Y.Map**
-(~24:1, proxy-independent; gunzip 2→48 MB is ~tens of ms). Confirm via DevTools →
-Messages (first server→client sync frame ≈48 MB = uncompressed). Also:
-`maxPayloadLength: 4 MB` on that WS caps client→server messages — big snapshot
-flushes *up* may be getting rejected in prod.
+The collab WebSocket now negotiates `permessage-deflate`, so the ~48 MB Yjs sheets
+snapshot crosses the wire compressed (~2 MB).
+
+**It was broken:** `perMessageDeflate: true` was set on the `collabRouter` *plugin*,
+but Elysia only honors `websocket` config on the **root** app instance — the Bun
+adapter (`adapter/bun/index.js`) builds `Bun.serve`'s websocket handler from
+`app.config.websocket` (+ `.listen()` options) only, and never merges a `.use()`d
+plugin's `websocket` config. So compression was never negotiated anywhere (not just
+prod). **Fix:** moved `perMessageDeflate: true` to the root `new Elysia({ websocket })`
+in `apps/api/src/app.ts` (commit `447810f0`). **Verified in prod:** the `eigen.is`
+handshake `101` now returns
+`Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover; server_no_context_takeover`
+— Caddy forwards the extension fine, no Caddy change was needed. (Caddy's
+`encode gzip zstd` is HTTP-body only and never touched WS.)
+
+> DevTools note: the Messages tab shows the ~50 MB *decompressed* logical payload,
+> not the wire bytes — the negotiated extension guarantees the frames travel compressed.
+
+**Still open (separate, pre-existing):** `maxPayloadLength` is back at Bun's 16 MB
+default (the plugin's dead `4 MB` was removed with the broken config). That caps
+**client→server** messages only, so a client flushing a ~48 MB snapshot *up* may be
+rejected — only matters if big-sheet *saves* misbehave.
 
 `packages/sheet/probe-xlsx.ts` (untracked) does the produce-side bench end-to-end.
 `packages/sheet/probe-size.ts` (untracked) breaks down where the 48 MB go. Both
@@ -156,9 +166,9 @@ expect `test.xlsx` at repo root. Keep around as a regression check.
 ```
 xlsx (compressed):                       2.22 MB
 JSON snapshot:                          47.82 MB   (21.6× xlsx)
-gzipped JSON:                            1.98 MB   (what it WOULD be if compressed;
-                                                    NOT active in prod — see
-                                                    "WS compression" note above)
+gzipped JSON:                            1.98 MB   (now on the wire via permessage-
+                                                    deflate — see "WS compression"
+                                                    note above)
 
 cells:                                  28.19 MB
   of which per-cell style attrs:        17.29 MB   (ff/fc/bg/fs/ht/vt/...)
@@ -248,9 +258,12 @@ The highest-leverage pairing for first-paint latency:
 - [x] Browser instrumentation done (2026-05-28, reverted) — see "Measured browser
       breakdown". Open is ~1.4 s on localhost (not ~9 s); immer auto-freeze is
       load-bearing (`setAutoFreeze(false)` is a 4.5× regression).
-- [ ] **Confirm + fix prod WS compression** (see ⚠️ note) — likely the biggest
-      *real* (prod) lever now, since the snapshot crosses the wire uncompressed.
-      App-layer gzip of the snapshot is proxy-independent.
+- [x] **Prod WS compression fixed + verified** (2026-05-28) — `permessage-deflate`
+      moved to the root Elysia config (commit `447810f0`); the ~48 MB snapshot now
+      crosses the wire as ~2 MB. See "WS compression" above.
+- [ ] **Big-sheet snapshot flush (client→server) may exceed Bun's 16 MB default
+      `maxPayloadLength`** — set an explicit limit on the root `websocket` config if
+      saving large sheets misbehaves. Separate from the read-path compression above.
 - [ ] Only pursue Option 1 / 2d for open-time if prod transfer / memory / flush
       churn proves to be a problem; localhost open no longer justifies them.
       Measure the edit/flush path first. If pursued, decide whether Option 1 lands
