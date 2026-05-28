@@ -161,9 +161,9 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     scrollToFrozenRowCol(ctx, globalCache.freezen?.[ctx.currentSheetId]);
 }
 
-function renderColResize(ctx: Context, e: MouseEvent, scrollX: HTMLDivElement, container: HTMLDivElement) {
+function renderColResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
-    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollX.scrollLeft - window.scrollX;
+    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollEl.scrollLeft - window.scrollX;
     if (x < rect.width + ctx.scrollLeft - 100) {
         const changeSizeLine = container.querySelector('.fortune-change-size-line');
         if (changeSizeLine) {
@@ -176,9 +176,9 @@ function renderColResize(ctx: Context, e: MouseEvent, scrollX: HTMLDivElement, c
     }
 }
 
-function renderRowResize(ctx: Context, e: MouseEvent, scrollY: HTMLDivElement, container: HTMLDivElement) {
+function renderRowResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
-    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollY.scrollTop - window.scrollY;
+    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollEl.scrollTop - window.scrollY;
     if (y < rect.height + ctx.scrollTop - 20) {
         const changeSizeLine = container.querySelector('.fortune-change-size-line');
         if (changeSizeLine) {
@@ -306,7 +306,7 @@ function mouseRender(
     } else if (ctx.cellSelectMoving) {
         // Cell move drag — not yet implemented
     } else if (ctx.cellSelectExtending) {
-        onDropCellSelect(ctx, e, scrollEl, scrollEl, container);
+        onDropCellSelect(ctx, e, scrollEl, container);
     } else if (ctx.colsResizing) {
         // Column width resize drag
         renderColResize(ctx, e, scrollEl, container);
