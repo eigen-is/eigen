@@ -151,7 +151,6 @@ type Props = {
 
 export const Sheet: React.FC<Props> = ({ sheet }) => {
     const { data } = sheet;
-    const containerRef = useRef<HTMLDivElement>(null);
     const placeholderRef = useRef<HTMLDivElement>(null);
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
 
@@ -247,7 +246,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     }, []);
 
     return (
-        <div ref={containerRef} className="flex flex-1 flex-col min-h-0 relative">
+        <div className="flex flex-1 flex-col min-h-0 relative">
             <div ref={placeholderRef} className="w-full h-full block" />
             <canvas className="w-full h-full block absolute" ref={refs.canvas} aria-hidden="true" />
             <MemoizedSheetOverlay />

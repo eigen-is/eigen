@@ -277,12 +277,33 @@ export const SheetOverlay: React.FC = () => {
         }
     }, [context.warnDialog]);
 
-    // Apply programmatic scroll (api.scroll, "back to top") to the native
-    // scroll surface. User scrolling flows the other way, via onCellAreaScroll.
+    // Apply explicit programmatic scrolls (selection-follow, freeze reset, sheet-switch
+    // restore) to the native scroll surface, post-commit so layout is settled. Keyed on
+    // scrollRequest (a fresh object per request) — NOT on the scrollLeft/scrollTop mirror,
+    // which syncScroll updates every recipe and would otherwise rewind an in-progress scroll.
     useEffect(() => {
-        refs.cellArea.current!.scrollLeft = context.scrollLeft;
-        refs.cellArea.current!.scrollTop = context.scrollTop;
-    }, [context.scrollLeft, context.scrollTop, refs.cellArea]);
+        const req = context.scrollRequest;
+        const el = refs.cellArea.current;
+        if (!req || !el) return;
+        if (req.left != null) el.scrollLeft = req.left;
+        if (req.top != null) el.scrollTop = req.top;
+    }, [context.scrollRequest, refs.cellArea]);
+
+    // The filter dropdown is position:fixed, positioned once from globalCache scroll
+    // offsets, so it detaches from its column icon once the grid scrolls. Close it on
+    // any scroll (standard dropdown behavior) — only subscribe while it is open.
+    useEffect(() => {
+        if (!context.filterContextMenu) return;
+        const close = () => {
+            setContext((d) => {
+                d.filterContextMenu = undefined;
+            });
+        };
+        refs.globalCache.scrollListeners.add(close);
+        return () => {
+            refs.globalCache.scrollListeners.delete(close);
+        };
+    }, [context.filterContextMenu, refs.globalCache, setContext]);
 
     useEffect(() => {
         document.addEventListener('mousemove', onMouseMove);

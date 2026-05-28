@@ -127,6 +127,10 @@ export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) 
     const verticalData = freeze?.vertical?.freezenverticaldata;
     const horizontalData = freeze?.horizontal?.freezenhorizontaldata;
 
+    // Accumulate both axes into one scrollRequest so a freeze reset that snaps
+    // both back to 0 produces a single programmatic-scroll intent.
+    const request: { left?: number; top?: number } = {};
+
     if (verticalData != null && column != null) {
         let freezen_colindex = verticalData.boundary + sortedIndex(verticalData.cumulative, ctx.scrollLeft);
 
@@ -142,7 +146,7 @@ export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) 
         const freezen_px = ctx.visibledatacolumn[freezen_colindex];
 
         if (column_px <= freezen_px + verticalData.edge) {
-            ctx.scrollLeft = 0;
+            request.left = 0;
         }
     }
 
@@ -161,8 +165,12 @@ export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) 
         const freezen_px = ctx.visibledatarow[freezen_rowindex];
 
         if (row_px <= freezen_px + horizontalData.edge) {
-            ctx.scrollTop = 0;
+            request.top = 0;
         }
+    }
+
+    if (request.left != null || request.top != null) {
+        ctx.scrollRequest = request;
     }
 }
 
