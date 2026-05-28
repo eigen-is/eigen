@@ -54,6 +54,10 @@ export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
 
     const frozen = sheet?.frozen;
 
+    // Accumulate both axes into one scrollRequest so a single keyboard-follow
+    // produces one programmatic-scroll intent applied to the native surface.
+    const request: { left?: number; top?: number } = {};
+
     if (r >= 0) {
         const row_focus = sheet?.frozen?.range?.row_focus || 0;
         const freezeH = frozen && r > row_focus ? ctx.visibledatarow[row_focus] : 0;
@@ -61,10 +65,10 @@ export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
         const row_pre = r - 1 === -1 ? 0 : ctx.visibledatarow[r - 1];
 
         if (row - scrollTop - winH + 20 > 0) {
-            ctx.scrollTop = row - winH + 20;
+            request.top = row - winH + 20;
         } else if (row_pre - scrollTop - freezeH < 0) {
             const scrollAmount = Math.max(20, freezeH);
-            ctx.scrollTop = row_pre - scrollAmount;
+            request.top = row_pre - scrollAmount;
         }
     }
 
@@ -75,11 +79,15 @@ export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
         const col_pre = c - 1 === -1 ? 0 : ctx.visibledatacolumn[c - 1];
 
         if (col - scrollLeft - winW + 20 > 0) {
-            ctx.scrollLeft = col - winW + 20;
+            request.left = col - winW + 20;
         } else if (col_pre - scrollLeft - freezeW < 0) {
             const scrollAmount = Math.max(20, freezeW);
-            ctx.scrollLeft = col_pre - scrollAmount;
+            request.left = col_pre - scrollAmount;
         }
+    }
+
+    if (request.left != null || request.top != null) {
+        ctx.scrollRequest = request;
     }
 }
 

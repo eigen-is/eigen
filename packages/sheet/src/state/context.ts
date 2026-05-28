@@ -112,6 +112,12 @@ export type Context = {
     scrollLeft: number;
     scrollTop: number;
 
+    // Explicit programmatic-scroll intent (selection-follow, freeze reset,
+    // sheet-switch restore), distinct from scrollLeft/scrollTop which is the
+    // live-position mirror that syncScroll updates every recipe for hit-testing.
+    // A fresh object per request lets the apply effect fire only when set.
+    scrollRequest?: { left?: number; top?: number };
+
     sheetScrollRecord: Record<
         string,
         {
@@ -309,6 +315,7 @@ export function defaultContext(refs: RefValues): Context {
 
         scrollLeft: 0,
         scrollTop: 0,
+        scrollRequest: undefined,
 
         sheetScrollRecord: {},
 

@@ -60,13 +60,11 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         setContext((draftCtx) => {
             const r = context.sheetScrollRecord[draftCtx?.currentSheetId];
             if (r) {
-                draftCtx.scrollLeft = r.scrollLeft ?? 0;
-                draftCtx.scrollTop = r.scrollTop ?? 0;
+                draftCtx.scrollRequest = { left: r.scrollLeft ?? 0, top: r.scrollTop ?? 0 };
                 draftCtx.selectionActive = r.selectionActive ?? false;
                 draftCtx.selections = r.selections ?? undefined;
             } else {
-                draftCtx.scrollLeft = 0;
-                draftCtx.scrollTop = 0;
+                draftCtx.scrollRequest = { left: 0, top: 0 };
                 draftCtx.selectionActive = false;
                 draftCtx.selections = undefined;
             }
