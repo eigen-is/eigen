@@ -5,6 +5,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useMemo, useRef } from 'react';
+import { boundingBox } from './arrange';
 import { useMarqueeSelect } from './hooks/use-marquee-select';
 import { type DragMode, useObjectDrag } from './hooks/use-object-drag';
 import { useSnapTargets } from './hooks/use-snap-lines';
@@ -77,10 +78,7 @@ export function SlideCanvas({
 
     const multiSelectBounds = useMemo(() => {
         if (selectedObjects.length < 2) return null;
-        const minX = Math.min(...selectedObjects.map((o) => o.x));
-        const minY = Math.min(...selectedObjects.map((o) => o.y));
-        const maxX = Math.max(...selectedObjects.map((o) => o.x + o.w));
-        const maxY = Math.max(...selectedObjects.map((o) => o.y + o.h));
+        const { minX, minY, maxX, maxY } = boundingBox(selectedObjects);
         return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
     }, [selectedObjects]);
 
