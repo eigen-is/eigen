@@ -144,47 +144,40 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }:
 
 function ArrangeProperties({ count, onArrange }: { count: number; onArrange: (op: ArrangeOp) => void }) {
     const canDistribute = count >= 3;
-    const distributeTip = canDistribute ? 'Distribute' : 'Select 3+ objects to distribute';
     return (
         <PropertySection title="Arrange">
             <div className="flex items-center gap-1">
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={AlignHorizontalJustifyStart}
                     tooltipText="Align left"
                     onClick={() => onArrange('align-left')}
                 />
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={AlignHorizontalJustifyCenter}
                     tooltipText="Align horizontal center"
                     onClick={() => onArrange('align-h-center')}
                 />
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={AlignHorizontalJustifyEnd}
                     tooltipText="Align right"
                     onClick={() => onArrange('align-right')}
                 />
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={AlignVerticalJustifyStart}
                     tooltipText="Align top"
                     onClick={() => onArrange('align-top')}
                 />
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={AlignVerticalJustifyCenter}
                     tooltipText="Align vertical center"
                     onClick={() => onArrange('align-v-center')}
                 />
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={AlignVerticalJustifyEnd}
                     tooltipText="Align bottom"
@@ -193,30 +186,26 @@ function ArrangeProperties({ count, onArrange }: { count: number; onArrange: (op
             </div>
             <div className="flex items-center gap-1">
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={AlignHorizontalDistributeCenter}
-                    tooltipText={`${distributeTip}${canDistribute ? ' horizontally' : ''}`}
+                    tooltipText={canDistribute ? 'Distribute horizontally' : 'Select 3+ objects to distribute'}
                     disabled={!canDistribute}
                     onClick={() => onArrange('distribute-h')}
                 />
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={AlignVerticalDistributeCenter}
-                    tooltipText={`${distributeTip}${canDistribute ? ' vertically' : ''}`}
+                    tooltipText={canDistribute ? 'Distribute vertically' : 'Select 3+ objects to distribute'}
                     disabled={!canDistribute}
                     onClick={() => onArrange('distribute-v')}
                 />
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={MoveHorizontal}
                     tooltipText="Match width"
                     onClick={() => onArrange('match-width')}
                 />
                 <TooltipButton
-                    size="sm"
                     className="h-7 w-7"
                     icon={MoveVertical}
                     tooltipText="Match height"
