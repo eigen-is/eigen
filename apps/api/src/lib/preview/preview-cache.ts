@@ -6,6 +6,8 @@ import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { generateEigendocPreview } from './eigendoc-preview';
+import { generateEigensheetsPreview } from './eigensheets-preview';
+import { generateEigenslidesPreview } from './eigenslides-preview';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateTextPreview, type TextPreviewResult } from './text-preview';
 
@@ -169,19 +171,15 @@ async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<Tex
     }
 
     if (mime === DRIVE_MIME_SLIDES) {
-        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigenslides', async () => {
-            // Dynamic import: eigenslides-preview pulls in tiptap-adjacent code that touches DOM
-            // globals at module load. --splitting keeps it in a chunk loaded on demand.
-            const { generateEigenslidesPreview } = await import('./eigenslides-preview');
-            return generateEigenslidesPreview(mount, drivePath);
-        });
+        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigenslides', () =>
+            generateEigenslidesPreview(mount, drivePath),
+        );
     }
 
     if (mime === DRIVE_MIME_SHEETS) {
-        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigensheets', async () => {
-            const { generateEigensheetsPreview } = await import('./eigensheets-preview');
-            return generateEigensheetsPreview(mount, drivePath);
-        });
+        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigensheets', () =>
+            generateEigensheetsPreview(mount, drivePath),
+        );
     }
 
     return null;
