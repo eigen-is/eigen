@@ -82,7 +82,7 @@ describe('computeArrange - align', () => {
         ]);
     });
 
-    test('rounds half up', () => {
+    test('rounds to nearest integer', () => {
         // bbox maxX = 5, cx = 2.5; B width 2 → 2.5 - 1 = 1.5 → 2
         const p = obj('p', 0, 0, 5, 10);
         const q = obj('q', 0, 0, 2, 10);
