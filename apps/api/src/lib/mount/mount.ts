@@ -919,8 +919,10 @@ export class Mount {
         const tempPath = this.getTempPath(tempId);
         const tempFile = Bun.file(tempPath);
         if (!(await tempFile.exists())) {
-            console.warn(`[Mount] uploadFromTemp ${storageKey}: tempfile missing, skipping upload`);
-            return;
+            // Invariant violation: caller must have written tempPath before sync. A missing
+            // tempfile here used to silently no-op, masking data loss when the live session
+            // had unflushed writes. Throw so close-time sync failures alarm.
+            throw new Error(`[Mount] uploadFromTemp ${storageKey}: tempfile missing at ${tempPath}`);
         }
         const start = Bun.nanoseconds();
         await this.storage.write(storageKey, tempFile);
@@ -1075,13 +1077,15 @@ export class Mount {
     }
 
     async closeAllDatabases(): Promise<void> {
-        const entries = [...this.documentDbs.values()];
+        const entries = [...this.documentDbs.entries()];
         this.documentDbs.clear();
-        for (const getter of entries) {
+        for (const [pathId, getter] of entries) {
             try {
                 const db = await getter();
                 await db.close();
-            } catch {}
+            } catch (err) {
+                console.error(`[Mount] closeAllDatabases close failed for ${pathId}:`, err);
+            }
         }
     }
 
