@@ -828,6 +828,15 @@ export default class Drive {
         return mount.openDatabase(config, pathId);
     }
 
+    async createDatabase<S extends SchemaType>(
+        mountId: string,
+        config: DatabaseConfig<S>,
+        pathId: string,
+    ): Promise<ManagedDatabase<S>> {
+        const mount = this.getMount(mountId);
+        return mount.createDatabase(config, pathId);
+    }
+
     async closeDatabase(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         await mount.closeDatabase(pathId);

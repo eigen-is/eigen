@@ -950,65 +950,117 @@ export class Mount {
         return this.isRemote || this.isPathBased;
     }
 
+    // Open an EXISTING managed document database. Throws ApiError(503) if the
+    // backing storage object isn't there — never silently creates fresh.
+    // Use createDatabase for the first-time provisioning instead.
     async openDatabase<S extends SchemaType>(config: DatabaseConfig<S>, pathId: string): Promise<ManagedDatabase<S>> {
+        return this.openDocumentDb(config, pathId, 'open');
+    }
+
+    // Provision a NEW managed document database. Asserts the storage object
+    // does not already exist, creates fresh schema, and flushes to storage
+    // before returning so subsequent openDatabase calls (incl. after API
+    // restart) find a real object. Caller must touchFile() the path first.
+    async createDatabase<S extends SchemaType>(config: DatabaseConfig<S>, pathId: string): Promise<ManagedDatabase<S>> {
+        if (this.documentDbs.has(pathId)) {
+            throw new Error(`Mount.createDatabase ${pathId}: already in cache`);
+        }
+        return this.openDocumentDb(config, pathId, 'create');
+    }
+
+    private async openDocumentDb<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+        mode: 'open' | 'create',
+    ): Promise<ManagedDatabase<S>> {
         if (!this.documentDbs.has(pathId)) {
             this.documentDbs.set(
                 pathId,
                 createAsyncSingleton(async () => {
-                    const localPath = this.needsTempCopy
-                        ? this.getTempPath(pathId)
-                        : this.storage.getPath!(await this.getStorageKey(pathId));
-
-                    const db = new ManagedDatabase(
-                        config,
-                        localPath,
-                        this.needsTempCopy
-                            ? {
-                                  onOpen: async () => {
-                                      const tempPath = this.getTempPath(pathId);
-                                      if (fs.existsSync(tempPath)) {
-                                          console.log(
-                                              `[Mount] Recovering from crash: using existing tmp file for ${pathId}`,
-                                          );
-                                          return;
-                                      }
-                                      const key = await this.getStorageKey(pathId);
-                                      if (await this.storage.exists(key)) {
-                                          await this.downloadToTemp(key, pathId);
-                                      } else {
-                                          console.warn(
-                                              `[Mount] onOpen ${pathId}: storage.exists(${key}) returned false — opening fresh empty DB`,
-                                          );
-                                      }
-                                  },
-                                  onSync: async () => {
-                                      const key = await this.getStorageKey(pathId);
-                                      await this.uploadFromTemp(key, pathId);
-                                      await this.syncDocumentDbSize(pathId, localPath);
-                                  },
-                                  // onClose runs after wal_checkpoint(TRUNCATE), so the
-                                  // final stat captures any pages PASSIVE left in WAL.
-                                  onClose: async () => {
-                                      await this.syncDocumentDbSize(pathId, localPath);
-                                      await this.cleanupTemp(pathId);
-                                  },
-                              }
-                            : {
-                                  onSync: async () => {
-                                      await this.syncDocumentDbSize(pathId, localPath);
-                                  },
-                                  onClose: async () => {
-                                      await this.syncDocumentDbSize(pathId, localPath);
-                                  },
-                              },
-                    );
-
-                    await db.open();
-                    return db;
+                    // Clean up the map entry if the factory throws — otherwise a
+                    // failed createDatabase leaves a getter behind whose closed-over
+                    // `mode` would silently steer the next openDatabase down the
+                    // create path.
+                    try {
+                        return await this.buildDocumentDb(config, pathId, mode);
+                    } catch (err) {
+                        this.documentDbs.delete(pathId);
+                        throw err;
+                    }
                 }),
             );
         }
         return this.documentDbs.get(pathId)!() as Promise<ManagedDatabase<S>>;
+    }
+
+    private async buildDocumentDb<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+        mode: 'open' | 'create',
+    ): Promise<ManagedDatabase<S>> {
+        const storageKey = await this.getStorageKey(pathId);
+        const localPath = this.needsTempCopy ? this.getTempPath(pathId) : this.storage.getPath!(storageKey);
+
+        if (mode === 'create') {
+            if (await this.storage.exists(storageKey)) {
+                throw new Error(`Mount.createDatabase ${pathId}: storage object ${storageKey} already exists`);
+            }
+        } else if (!this.needsTempCopy && !(await this.storage.exists(storageKey))) {
+            throw new ApiError(503, `Storage object for ${pathId} not available`);
+        }
+
+        const db = new ManagedDatabase(
+            config,
+            localPath,
+            this.needsTempCopy
+                ? {
+                      onOpen: async () => {
+                          if (mode === 'create') return;
+                          const tempPath = this.getTempPath(pathId);
+                          if (fs.existsSync(tempPath)) {
+                              console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
+                              return;
+                          }
+                          if (!(await this.storage.exists(storageKey))) {
+                              throw new ApiError(503, `Storage object for ${pathId} not available`);
+                          }
+                          await this.downloadToTemp(storageKey, pathId);
+                      },
+                      onSync: async () => {
+                          await this.uploadFromTemp(storageKey, pathId);
+                          await this.syncDocumentDbSize(pathId, localPath);
+                      },
+                      // onClose runs after wal_checkpoint(TRUNCATE), so the
+                      // final stat captures any pages PASSIVE left in WAL.
+                      onClose: async () => {
+                          await this.syncDocumentDbSize(pathId, localPath);
+                          await this.cleanupTemp(pathId);
+                      },
+                  }
+                : {
+                      onSync: async () => {
+                          await this.syncDocumentDbSize(pathId, localPath);
+                      },
+                      onClose: async () => {
+                          await this.syncDocumentDbSize(pathId, localPath);
+                      },
+                  },
+        );
+
+        await db.open();
+
+        // For temp-copy backends (s3, path-based local), push the
+        // freshly-created schema to storage before returning.
+        // Local-key writes go straight to the backing file so no
+        // flush is needed. Without this, the storage object only
+        // appears on the next 30s sync — and an API restart in
+        // that window would make subsequent strict openDatabase
+        // calls throw.
+        if (mode === 'create' && this.needsTempCopy) {
+            await db.flush();
+        }
+
+        return db;
     }
 
     async closeDatabase(pathId: string): Promise<void> {

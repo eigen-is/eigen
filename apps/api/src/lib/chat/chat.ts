@@ -33,8 +33,12 @@ export class ChatRoom {
     }
 
     static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
-        await drive.touchFile(mountId, roomId, 'data.db', 'application/x-sqlite3');
+        const dataDbId = await drive.touchFile(mountId, roomId, 'data.db', 'application/x-sqlite3');
         await drive.createFolder(mountId, roomId, 'media');
+        // Provision the data.db storage object up front so subsequent
+        // openDatabase calls find an existing object — under strict mode
+        // they'd otherwise throw.
+        await drive.createDatabase(mountId, CHAT_ROOM_DB_CONFIG, dataDbId);
     }
 
     async init(): Promise<ChatRoom> {

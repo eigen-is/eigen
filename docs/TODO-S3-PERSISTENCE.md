@@ -217,6 +217,44 @@ This isn't *the* data-loss bug, but:
    AND size < 40000` as a one-line scan to spot suspiciously-empty
    containers across a mount.
 
+## Open: rearchitecture
+
+### A — Versioning as a ManagedDatabase property (file-level snapshots)
+
+Today eigendoc versioning lives inside `data.db` (Yjs-specific, embedded
+in the doc's own state). Move it out: snapshot the entire `data.db` to a
+sibling `versioning/data-<timestamp>.db` file in the same container.
+Restore is a file copy back.
+
+Wins:
+
+- Generalises to any `ManagedDatabase`, not just Yjs documents (chat
+  history, sheets state, etc. all get versioning for free).
+- Working `data.db` stays small (no version-log bloat in the live DB).
+- Snapshot/restore is a `StorageBackend` copy primitive — cheap across
+  backends (S3 `CopyObject` is server-side O(1); LocalStorage and
+  LocalKeyStorage are plain file copies). Should be added as a
+  `StorageBackend.copy(src, dst)` method so the snapshot code stays
+  storage-agnostic.
+- Combined with the strict `openDatabase` from proposal 1, gives a real
+  recovery path: when `openDatabase` throws (storage object missing /
+  unreachable / suspiciously empty), we can prompt "restore from latest
+  snapshot".
+
+Design questions to pin down before coding:
+
+- **Snapshot trigger.** On close-if-dirty plus an hourly tick while
+  open. Close-only loses snapshots for long-lived sessions. Retention:
+  keep last N per container + daily for D days; prune older.
+- **Restore semantics.** Explicit user action only. Close live DB →
+  storage-backend copy `versioning/data-<ts>.db` → `data.db` → reopen.
+  Not an automatic fallback (would mask real bugs).
+- **Yjs versioning migration.** Drop in-DB Yjs versioning once
+  file-level snapshots exist. One-way migration; needs careful
+  rollout.
+- **Sheet retention.** Sheet `data.db` files can be large; cap
+  retention more aggressively than chat.
+
 ## Open: recoverability posture
 
 Document and configure expected S3 setup so we don't end up unable to

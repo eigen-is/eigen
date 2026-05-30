@@ -1247,7 +1247,7 @@ describe('Folder sizes', () => {
         const containerId = await mount.createFolder(rootId, 'DocContainer', 'doc');
         const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
 
-        const managed = await mount.openDatabase(testDocConfig, dataDbId);
+        const managed = await mount.createDatabase(testDocConfig, dataDbId);
         for (let i = 0; i < 50; i++) {
             managed.db
                 .insert(testDocSchema.items)
@@ -1263,6 +1263,78 @@ describe('Folder sizes', () => {
         // Container's only child is data.db, so the container's lazy-recomputed
         // size should match the data.db row's size.
         expect(container!.size).toBe(dataRow!.size);
+    });
+});
+
+describe('Managed-db open vs create', () => {
+    const minimalSchema = {
+        items: sqliteTable('items', {
+            id: integer('id').primaryKey(),
+        }),
+    };
+    const minimalConfig: DatabaseConfig<typeof minimalSchema> = {
+        name: 'open-create-test',
+        currentVersion: 1,
+        schema: minimalSchema,
+        migrations: [
+            {
+                version: 1,
+                up: (db) => {
+                    db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
+                },
+            },
+        ],
+    };
+
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-open-create', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        rootId = (await mount.getRootFolder())!.id;
+    });
+
+    test('openDatabase throws when the storage object is missing', async () => {
+        const containerId = await mount.createFolder(rootId, 'StrictOpenMissing', 'doc');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        // touchFile created the metadata row but no actual storage object — the
+        // exact state the old openDatabase would have masked by silently
+        // creating a fresh DB.
+        expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('not available');
+    });
+
+    test('createDatabase provisions a real storage object', async () => {
+        const containerId = await mount.createFolder(rootId, 'CreateProvisions', 'doc');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+
+        // Pre-condition: touchFile creates the metadata row but no storage
+        // object — openDatabase must reject.
+        expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('not available');
+
+        await mount.createDatabase(minimalConfig, dataDbId);
+        await mount.closeDatabase(dataDbId);
+
+        // After close, syncDocumentDbSize stats the now-populated storage
+        // object and writes the size into the metadata row. A non-zero size
+        // proves a real SQLite file was created and persisted — i.e. that
+        // openDatabase on the same path from a fresh process (after a restart)
+        // would find a real object. We don't reopen in-process because Bun +
+        // Drizzle's cached prepared statements keep file refs alive past
+        // rawDb.close() and trip SQLITE_IOERR_VNODE; production doesn't hit
+        // this since a real restart drops all handles.
+        const dataRow = await mount.getPath(dataDbId);
+        expect(dataRow!.size).toBeGreaterThan(0);
+    });
+
+    test('createDatabase twice for the same path throws on the second call', async () => {
+        const containerId = await mount.createFolder(rootId, 'DoubleCreate', 'doc');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+
+        await mount.createDatabase(minimalConfig, dataDbId);
+        expect(mount.createDatabase(minimalConfig, dataDbId)).rejects.toThrow('already in cache');
+        await mount.closeDatabase(dataDbId);
     });
 });
 

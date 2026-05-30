@@ -149,10 +149,14 @@ export default class CollabDocument {
     }
 
     static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
-        await drive.touchFile(mountId, docId, 'data.db', 'application/x-sqlite3');
-        await drive.touchFile(mountId, docId, 'comments.db', 'application/x-sqlite3');
+        const dataDbId = await drive.touchFile(mountId, docId, 'data.db', 'application/x-sqlite3');
+        const commentsDbId = await drive.touchFile(mountId, docId, 'comments.db', 'application/x-sqlite3');
         await drive.createFolder(mountId, docId, 'media');
         await drive.createFolder(mountId, docId, 'chat');
+        // Provision both managed-db storage objects up front so subsequent
+        // openDatabase calls (incl. openCommentIndex) find existing objects.
+        await drive.createDatabase(mountId, COLLAB_DB_CONFIG, dataDbId);
+        await drive.createDatabase(mountId, COMMENT_INDEX_DB_CONFIG, commentsDbId);
     }
 
     public async init() {
