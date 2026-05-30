@@ -918,9 +918,14 @@ export class Mount {
     private async uploadFromTemp(storageKey: string, tempId: string): Promise<void> {
         const tempPath = this.getTempPath(tempId);
         const tempFile = Bun.file(tempPath);
-        if (await tempFile.exists()) {
-            await this.storage.write(storageKey, tempFile);
+        if (!(await tempFile.exists())) {
+            console.warn(`[Mount] uploadFromTemp ${storageKey}: tempfile missing, skipping upload`);
+            return;
         }
+        const start = Bun.nanoseconds();
+        await this.storage.write(storageKey, tempFile);
+        const ms = (Bun.nanoseconds() - start) / 1_000_000;
+        console.log(`[timing] Mount.upload ${storageKey} ${(tempFile.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
     }
 
     async cleanupTemp(tempId: string): Promise<void> {
@@ -970,6 +975,10 @@ export class Mount {
                                       const key = await this.getStorageKey(pathId);
                                       if (await this.storage.exists(key)) {
                                           await this.downloadToTemp(key, pathId);
+                                      } else {
+                                          console.warn(
+                                              `[Mount] onOpen ${pathId}: storage.exists(${key}) returned false — opening fresh empty DB`,
+                                          );
                                       }
                                   },
                                   onSync: async () => {
@@ -1170,9 +1179,13 @@ export class Mount {
     // Update paths.size for a ManagedDatabase row from disk, then invalidate
     // ancestors — eigendoc containers stay in sync with data.db growth.
     private async syncDocumentDbSize(pathId: string, localPath: string): Promise<void> {
-        if (!fs.existsSync(localPath)) return;
+        if (!fs.existsSync(localPath)) {
+            console.warn(`[Mount] syncDocumentDbSize ${pathId}: localPath missing at ${localPath}`);
+            return;
+        }
         const size = fs.statSync(localPath).size;
         await this.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, pathId));
+        console.log(`[Mount] syncDocumentDbSize ${pathId} size=${size}`);
         await this.invalidateAncestorsOf(pathId);
     }
 
