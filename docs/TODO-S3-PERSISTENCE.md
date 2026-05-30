@@ -49,14 +49,14 @@ Find what overwrites a non-empty S3 `data.db` with an empty schema.
 Hypotheses to verify or rule out:
 
 1. **`storage.exists(key)` returning false transiently** during S3 hiccups.
-   In `mount.ts:962–974 onOpen`, a `false` from `exists()` skips the
-   download and `BunDatabase(..., { create: true })` creates a fresh
-   empty file. Next sync uploads that empty file over the good S3 object.
-   - Reproduce: stub `exists()` to return false once, open a chat with
-     existing S3 data, post a message, wait for sync, check S3 object.
-   - Fix shape: throw on `exists()` failure rather than silently skipping
-     the download. Distinguish "404, object truly missing" from
-     "request failed."
+   **DESTRUCTIVE PATH ELIMINATED** in commit `09500015` — `Mount.openDatabase`
+   is now strict and throws `ApiError(503)` instead of falling through to
+   `BunDatabase(..., { create: true })`. A transient `exists() === false`
+   now surfaces as a loud 503 to the user instead of a silent empty-schema
+   upload. Whether this hypothesis was the actual cause of the 2026-05-30
+   wipe is separately still TBD — the next time it happens we'll see the
+   503 and the `[Mount] onOpen ... opening fresh empty DB` warn from the
+   pre-09500015 instrumentation commit.
 
 2. **`downloadToTemp` short-writing**. `Bun.write(tempPath, file)` is not
    verified. If the S3 read returns 0 bytes (304, redirect, partial), the
@@ -141,22 +141,14 @@ in `documentDbs` until cleanup is fully done.
 
 ### 3. Silent upload skip
 
-`mount.ts:918–924 uploadFromTemp`:
+`Mount.uploadFromTemp`. If tempFile doesn't exist when sync fires (race
+in #2, or manual cleanup, or any unexpected disk state), this silently
+does nothing. No log, no error, no telemetry. Writes that were visible
+to the live session are silently lost on next download.
 
-```typescript
-if (await tempFile.exists()) {
-    await this.storage.write(storageKey, tempFile);
-}
-```
-
-If tempFile doesn't exist when sync fires (race in #2, or manual cleanup,
-or any unexpected disk state), this silently does nothing. No log, no
-error, no telemetry. Writes that were visible to the live session are
-silently lost on next download.
-
-**Fix shape:** treat missing tempFile as an invariant violation — log
-loudly with `pathId`/`storageKey`/`size-on-open` and throw. The caller
-in `ManagedDatabase.sync` should not swallow.
+**Partially addressed:** commit `525c43d3` added a `console.warn` on
+the skip path so it's visible in logs. The behavioural fix — treat
+missing tempFile as an invariant violation and throw — is still TBD.
 
 ### 4. `closeAllDatabases` swallows close errors
 
@@ -179,15 +171,9 @@ request.
 
 ### 5. `Mount.upload` is not logged
 
-`Mount.download` has a `[timing] Mount.download ...` log line.
-`uploadFromTemp` does not. Today's investigation showed 17 downloads
-and 0 uploads in 24h not because uploads were missing, but because
-uploads aren't logged at all. The first thing we needed to know
-("are uploads even being attempted for this object?") was unanswerable
-from logs.
-
-**Fix shape:** add the matching `[timing] Mount.upload <key> <KB>
-<ms>ms` log.
+**DONE** in commit `525c43d3`. `[timing] Mount.upload <key> <KB> <ms>ms`
+now mirrors `Mount.download` on every successful upload, and a
+`console.warn` fires on the silent-skip path (see hardening #3).
 
 ### 6. `paths.size` AND `paths.updatedAt` are stuck at creation values for every chat `data.db`
 
@@ -204,13 +190,17 @@ either:
   own ManagedDatabase isn't being checkpointed, or the writes are
   clobbered by another path that resets `size/updatedAt`).
 
-Find which by tracing every call to `syncDocumentDbSize` and adding a
-log at entry/exit. If it's not even being invoked for chats, check the
-chat-specific sync flow (does ChatRoom open via `drive.openDatabase` or
-something that uses different callbacks?).
+**Instrumented** in commit `525c43d3`: `[Mount] syncDocumentDbSize <pathId>
+size=<n>` log on every call, plus a `console.warn` on the
+`!fs.existsSync(localPath)` skip path. ChatRoom DOES route through
+`drive.openDatabase → mount.openDatabase`, so the callbacks ARE wired —
+which means the function should be firing. **Root cause still pending**
+prod log inspection: either the log doesn't fire (callback bug we missed)
+or it fires but the write to metadata.db is being clobbered by something
+else.
 
 This isn't *the* data-loss bug, but:
-1. It broke today's triage — `size: 0` made us think files were empty
+1. It broke initial triage — `size: 0` made us think files were empty
    when they weren't.
 2. It removes an obvious "is the chat persisting?" health-check signal.
 3. Fixing it gives us `SELECT name, size FROM paths WHERE name='data.db'
@@ -274,4 +264,36 @@ recover from incidents like this one:
 
 ## Done
 
-Nothing yet — opened during 2026-05-30 incident.
+- **`525c43d3` — Instrumentation.** Hardening #5 (Mount.upload timing
+  log), partial #3 (warn on uploadFromTemp silent-skip), partial #6
+  (syncDocumentDbSize entry log + missing-localPath warn), and an
+  `onOpen` warn when `storage.exists()` returns false (the smoking-gun
+  signal for hypothesis #1 if it happens again).
+- **`09500015` — Proposal 1: split openDatabase into strict open +
+  explicit create.** `Mount.openDatabase` no longer silently creates
+  fresh on `storage.exists() === false` — it throws `ApiError(503)`.
+  New `Mount.createDatabase` is the explicit first-time provisioning
+  path (asserts no existing storage object, runs migrations, flushes
+  to storage before returning). `ManagedDatabase.flush()` exposed so
+  the create path can guarantee the storage object exists before
+  returning instead of waiting on the 30s sync timer. Callers
+  migrated: `ChatRoom.create`, `CollabDocument.create`. Factory
+  wrapped in try/catch + `documentDbs.delete` on failure so a thrown
+  factory can't leave a poisoned singleton getter that would steer a
+  subsequent open down the closed-over create-mode path. Eliminates
+  hypothesis #1's destructive failure mode entirely.
+- **`31777e62` — Atomic provisioning with rollback.**
+  `drive.provisionManagedDbs(mountId, parentId, dbs[])` is the new
+  shared helper that bundles touchFile + createDatabase with
+  hard-delete rollback (via `mount.deletePath` direct, not
+  `Drive.deletePath` which trashes and runs ACL/SSE side effects).
+  Closes the dead-letter window where a transient storage failure
+  during `createDatabase` would leave an orphan metadata row that
+  makes every subsequent open throw 503 forever. Rollback errors are
+  warned, not silently swallowed.
+
+**Recoverability posture, partial:** S3 bucket versioning + 90-day
+noncurrent-version lifecycle were enabled during the original
+2026-05-30 incident response (out of band, not via a commit). Host
+backups documentation and the admin-UI warning when versioning is off
+on a configured bucket remain open.
