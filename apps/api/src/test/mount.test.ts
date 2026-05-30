@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { buildStorageKey, createDefaultMountConfig, Mount } from '../lib/mount/mount';
@@ -1045,6 +1046,223 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
 
     test('permanentlyDeleteFromTrash on non-existent item is a no-op', async () => {
         await expect(mount.permanentlyDeleteFromTrash('nonexistent-id-xyz')).resolves.toBeUndefined();
+    });
+});
+
+describe('Folder sizes', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-folder-sizes', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        const root = await mount.getRootFolder();
+        rootId = root!.id;
+    });
+
+    test('empty folder reports size 0', async () => {
+        const folderId = await mount.createFolder(rootId, 'EmptySize');
+        const folder = await mount.getPath(folderId);
+        expect(folder!.size).toBe(0);
+    });
+
+    test('folder size sums file children', async () => {
+        const folderId = await mount.createFolder(rootId, 'SumChildren');
+        await mount.createFile(folderId, 'a.txt', 'text/plain', 5, Buffer.from('aaaaa'));
+        await mount.createFile(folderId, 'b.txt', 'text/plain', 7, Buffer.from('bbbbbbb'));
+
+        const folder = await mount.getPath(folderId);
+        expect(folder!.size).toBe(12);
+    });
+
+    test('folder size cascades through subfolders', async () => {
+        const topId = await mount.createFolder(rootId, 'CascadeTop');
+        const midId = await mount.createFolder(topId, 'CascadeMid');
+        const leafId = await mount.createFolder(midId, 'CascadeLeaf');
+        await mount.createFile(leafId, 'deep.txt', 'text/plain', 10, Buffer.from('1234567890'));
+
+        expect((await mount.getPath(leafId))!.size).toBe(10);
+        expect((await mount.getPath(midId))!.size).toBe(10);
+        expect((await mount.getPath(topId))!.size).toBe(10);
+    });
+
+    test('createFile invalidates ancestor sizes', async () => {
+        const folderId = await mount.createFolder(rootId, 'InvalidateOnCreate');
+        await mount.createFile(folderId, 'first.txt', 'text/plain', 3, Buffer.from('xxx'));
+        expect((await mount.getPath(folderId))!.size).toBe(3);
+
+        await mount.createFile(folderId, 'second.txt', 'text/plain', 4, Buffer.from('yyyy'));
+        expect((await mount.getPath(folderId))!.size).toBe(7);
+    });
+
+    test('writeFile propagates new size to ancestors', async () => {
+        const folderId = await mount.createFolder(rootId, 'WriteFilePropagate');
+        const fileId = await mount.createFile(folderId, 'grow.txt', 'text/plain', 5, Buffer.from('small'));
+        expect((await mount.getPath(folderId))!.size).toBe(5);
+
+        await mount.writeFile(fileId, Buffer.from('much-bigger-content'));
+        expect((await mount.getPath(folderId))!.size).toBe(19);
+    });
+
+    test('deletePath decreases ancestor sizes', async () => {
+        const folderId = await mount.createFolder(rootId, 'DeletePropagate');
+        const f1 = await mount.createFile(folderId, '1.txt', 'text/plain', 4, Buffer.from('1234'));
+        await mount.createFile(folderId, '2.txt', 'text/plain', 6, Buffer.from('567890'));
+        expect((await mount.getPath(folderId))!.size).toBe(10);
+
+        await mount.deletePath(f1);
+        expect((await mount.getPath(folderId))!.size).toBe(6);
+    });
+
+    test('move file between folders updates both ancestor chains', async () => {
+        const aId = await mount.createFolder(rootId, 'MoveFromA');
+        const bId = await mount.createFolder(rootId, 'MoveToB');
+        const fileId = await mount.createFile(aId, 'movable.txt', 'text/plain', 7, Buffer.from('payload'));
+
+        expect((await mount.getPath(aId))!.size).toBe(7);
+        expect((await mount.getPath(bId))!.size).toBe(0);
+
+        await mount.updatePath(fileId, { parentId: bId });
+
+        expect((await mount.getPath(aId))!.size).toBe(0);
+        expect((await mount.getPath(bId))!.size).toBe(7);
+    });
+
+    test('copyPath grows destination ancestor sizes', async () => {
+        const srcFolder = await mount.createFolder(rootId, 'CopySrc');
+        const dstFolder = await mount.createFolder(rootId, 'CopyDst');
+        const fileId = await mount.createFile(srcFolder, 'orig.txt', 'text/plain', 7, Buffer.from('copy-me'));
+
+        expect((await mount.getPath(srcFolder))!.size).toBe(7);
+        expect((await mount.getPath(dstFolder))!.size).toBe(0);
+
+        await mount.copyPath(fileId, dstFolder, 'copied.txt');
+
+        expect((await mount.getPath(srcFolder))!.size).toBe(7);
+        expect((await mount.getPath(dstFolder))!.size).toBe(7);
+    });
+
+    test('trashPath removes file size from old parent', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashShrink');
+        const fileId = await mount.createFile(folderId, 'trash.txt', 'text/plain', 5, Buffer.from('bytes'));
+        expect((await mount.getPath(folderId))!.size).toBe(5);
+
+        await mount.trashPath(fileId);
+        expect((await mount.getPath(folderId))!.size).toBe(0);
+    });
+
+    test('trashed file at root does not inflate root size', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashRootExclude');
+        const fileId = await mount.createFile(folderId, 'trashed.txt', 'text/plain', 5, Buffer.from('XXXXX'));
+        const rootBefore = (await mount.getPath(rootId))!.size;
+
+        await mount.trashPath(fileId);
+        // Folder size dropped to 0; the file is now under root with trashedFrom set,
+        // and the trash-boundary filter must exclude it from root's recomputed size.
+        const rootAfter = (await mount.getPath(rootId))!.size;
+        expect(rootAfter).toBe(rootBefore - 5);
+    });
+
+    test('restorePath adds size back to restored parent', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreGrow');
+        const fileId = await mount.createFile(folderId, 'restore.txt', 'text/plain', 4, Buffer.from('back'));
+        expect((await mount.getPath(folderId))!.size).toBe(4);
+
+        await mount.trashPath(fileId);
+        expect((await mount.getPath(folderId))!.size).toBe(0);
+
+        await mount.restorePath(fileId);
+        expect((await mount.getPath(folderId))!.size).toBe(4);
+    });
+
+    test('peeking inside a trashed folder still shows its descendant sizes', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedFolderInternals');
+        await mount.createFile(folderId, 'inside.txt', 'text/plain', 6, Buffer.from('hidden'));
+        expect((await mount.getPath(folderId))!.size).toBe(6);
+
+        await mount.trashPath(folderId);
+
+        // The trashed folder itself still reports its real content size — useful for
+        // showing "what you'd recover / free" in a trash listing.
+        const trashed = await mount.getPath(folderId);
+        expect(trashed!.trashedAt).not.toBeNull();
+        expect(trashed!.size).toBe(6);
+    });
+
+    test('listFolder returns folders with computed sizes', async () => {
+        const parentId = await mount.createFolder(rootId, 'ListSized');
+        const child1 = await mount.createFolder(parentId, 'Child1');
+        const child2 = await mount.createFolder(parentId, 'Child2');
+        await mount.createFile(child1, 'c1.txt', 'text/plain', 2, Buffer.from('aa'));
+        await mount.createFile(child2, 'c2.txt', 'text/plain', 4, Buffer.from('bbbb'));
+
+        const children = await mount.listFolder(parentId);
+        const c1 = children.find((c) => c.id === child1)!;
+        const c2 = children.find((c) => c.id === child2)!;
+        expect(c1.size).toBe(2);
+        expect(c2.size).toBe(4);
+    });
+
+    test('path-based move invalidates both chains', async () => {
+        const config = createDefaultMountConfig('test-folder-sizes-local', 'local');
+        const m = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await m.init();
+        const root = (await m.getRootFolder())!;
+
+        const aId = await m.createFolder(root.id, 'PathMoveA');
+        const bId = await m.createFolder(root.id, 'PathMoveB');
+        const fileId = await m.createFile(aId, 'movable.txt', 'text/plain', 7, Buffer.from('payload'));
+
+        expect((await m.getPath(aId))!.size).toBe(7);
+        expect((await m.getPath(bId))!.size).toBe(0);
+
+        await m.updatePath(fileId, { parentId: bId });
+
+        expect((await m.getPath(aId))!.size).toBe(0);
+        expect((await m.getPath(bId))!.size).toBe(7);
+    });
+
+    test('managed-db growth updates container size on sync', async () => {
+        const testDocSchema = {
+            items: sqliteTable('items', {
+                id: integer('id').primaryKey(),
+                data: text('data'),
+            }),
+        };
+        const testDocConfig: DatabaseConfig<typeof testDocSchema> = {
+            name: 'test-doc',
+            currentVersion: 1,
+            schema: testDocSchema,
+            migrations: [
+                {
+                    version: 1,
+                    up: (db) => {
+                        db.exec(`CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)`);
+                    },
+                },
+            ],
+        };
+
+        const containerId = await mount.createFolder(rootId, 'DocContainer', 'doc');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+
+        const managed = await mount.openDatabase(testDocConfig, dataDbId);
+        for (let i = 0; i < 50; i++) {
+            managed.db
+                .insert(testDocSchema.items)
+                .values({ id: i, data: 'x'.repeat(200) })
+                .run();
+        }
+        await managed.close();
+
+        const dataRow = await mount.getPath(dataDbId);
+        expect(dataRow!.size).toBeGreaterThan(0);
+
+        const container = await mount.getPath(containerId);
+        // Container's only child is data.db, so the container's lazy-recomputed
+        // size should match the data.db row's size.
+        expect(container!.size).toBe(dataRow!.size);
     });
 });
 

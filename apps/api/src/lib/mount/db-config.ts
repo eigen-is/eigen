@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 2,
+    currentVersion: 3,
     schema,
     migrations: [
         {
@@ -73,6 +73,15 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 END;
 
                 INSERT INTO paths_fts(rowid, name) SELECT rowid, name FROM paths;
+            `),
+        },
+        {
+            // Non-file rows (folders + eigendoc containers) shift from "always 0" to
+            // lazy-computed: NULL = needs recompute, populated on first read.
+            version: 3,
+            up: (db) =>
+                db.exec(`
+                UPDATE paths SET size = NULL WHERE type != 'file';
             `),
         },
     ],
