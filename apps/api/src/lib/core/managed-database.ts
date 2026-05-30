@@ -129,6 +129,13 @@ export class ManagedDatabase<S extends SchemaType> {
         console.log(`[${this.config.name}] Synced`);
     }
 
+    // Public sync entry point — callers (e.g. Mount.createDatabase) use this
+    // to guarantee the current state has been pushed through the configured
+    // sync callback before returning, instead of waiting for the 30s timer.
+    async flush(): Promise<void> {
+        await this.sync();
+    }
+
     async close(): Promise<void> {
         if (!this.rawDb) return;
 
