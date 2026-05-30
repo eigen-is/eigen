@@ -141,63 +141,60 @@ in `documentDbs` until cleanup is fully done.
 
 ### 3. Silent upload skip
 
-`Mount.uploadFromTemp`. If tempFile doesn't exist when sync fires (race
-in #2, or manual cleanup, or any unexpected disk state), this silently
-does nothing. No log, no error, no telemetry. Writes that were visible
-to the live session are silently lost on next download.
-
-**Partially addressed:** commit `525c43d3` added a `console.warn` on
-the skip path so it's visible in logs. The behavioural fix — treat
-missing tempFile as an invariant violation and throw — is still TBD.
+**DONE** in commit `4253e3ac`. `Mount.uploadFromTemp` now throws when
+the tempfile is missing instead of `warn`-ing and returning. The throw
+surfaces as an unhandled rejection from the 30s sync timer (Bun default
+logs to stderr) or propagates through `db.close()` → `Mount.closeDatabase`
+/ `closeAllDatabases` (which now logs per #4). Writes that were visible
+to the live session no longer disappear silently when the upload path
+breaks.
 
 ### 4. `closeAllDatabases` swallows close errors
 
-`mount.ts:1019–1024`:
-
-```typescript
-try {
-    const db = await getter();
-    await db.close();
-} catch {}
-```
-
-If `close()` throws (e.g., S3 unreachable during sync), the error
-disappears. The map entry is already cleared, so the next open creates
-fresh — possibly empty — state. No way to know an upload failed.
-
-**Fix shape:** at minimum, `console.error('[Mount] close failed for',
-pathId, err)`. Consider keeping the entry around for retry on next
-request.
+**DONE** in commit `4253e3ac`. `closeAllDatabases` iterates `entries()`
+instead of `values()` and logs `[Mount] closeAllDatabases close failed
+for <pathId>: <err>` instead of swallowing with `catch {}`. The map
+entry is still cleared before close runs, so the recovery semantics
+(next open creates fresh state) are unchanged — but the failure is now
+observable. Keeping the entry around for retry remains a possible
+future change.
 
 ### 5. `Mount.upload` is not logged
 
 **DONE** in commit `525c43d3`. `[timing] Mount.upload <key> <KB> <ms>ms`
-now mirrors `Mount.download` on every successful upload, and a
-`console.warn` fires on the silent-skip path (see hardening #3).
+now mirrors `Mount.download` on every successful upload. (525c43d3 also
+added a `console.warn` on the silent-skip path; that warn was later
+replaced with a `throw` in `4253e3ac` — see hardening #3.)
 
-### 6. `paths.size` AND `paths.updatedAt` are stuck at creation values for every chat `data.db`
+### 6. `paths.size` AND `paths.updatedAt` stuck at creation values for chat `data.db` — expected resolved by `d3c47fe8`, verify post-deploy
 
-Confirmed on prod: every chat row in the affected mount shows
-`size = 0` AND `updatedAt = createdAt` in metadata.db — including chats
-with confirmed message rows on S3 (`chat_met_robbie` has 63 rows but
-metadata says size 0 / never updated). `syncDocumentDbSize` is wired
-into `onSync` and `onClose` and should be writing both columns. So
-either:
+Confirmed on prod (pre-deploy state): every chat row in the affected
+mount shows `size = 0` AND `updatedAt = createdAt` in metadata.db —
+including chats with confirmed message rows on S3 (`chat_met_robbie`
+has 63 rows but metadata says size 0 / never updated).
 
-- It's never running for chats (but their S3 objects DO change — so
-  uploads happen via a path that bypasses `syncDocumentDbSize`); OR
-- It runs but the writes to mount metadata don't stick (e.g. the mount's
-  own ManagedDatabase isn't being checkpointed, or the writes are
-  clobbered by another path that resets `size/updatedAt`).
+`d3c47fe8` ("feat(mount): lazy folder sizes with ancestor invalidation",
+landed 2026-05-30 15:25 — the first commit of incident day, before
+the instrumentation in `525c43d3`) wired `syncDocumentDbSize` into
+`onSync` and `onClose` for both temp-copy and direct-path storage
+backends, and added folder-size invalidation upstream. The prod
+observation of size=0-across-the-board was made against code that
+predated `d3c47fe8`, so the hypothesis "wired but mysteriously not
+running" is most likely wrong — the older deployed code didn't have
+the wiring at all.
 
-**Instrumented** in commit `525c43d3`: `[Mount] syncDocumentDbSize <pathId>
-size=<n>` log on every call, plus a `console.warn` on the
-`!fs.existsSync(localPath)` skip path. ChatRoom DOES route through
-`drive.openDatabase → mount.openDatabase`, so the callbacks ARE wired —
-which means the function should be firing. **Root cause still pending**
-prod log inspection: either the log doesn't fire (callback bug we missed)
-or it fires but the write to metadata.db is being clobbered by something
-else.
+**Action:** once `d3c47fe8` + `525c43d3` reach prod, verify:
+- `[Mount] syncDocumentDbSize <pathId> size=<n>` log fires on chat
+  writes (sync timer + close).
+- `metadata.db` rows for chat `data.db` files start showing realistic
+  sizes within ~30s of a write, and `updatedAt` advances on close.
+- The one-line scan `SELECT name, size FROM paths WHERE name='data.db'
+  AND size < 40000` returns only chats that genuinely have no content,
+  not all chats.
+
+If sizes still show 0 after the deploy, the "wired but not running" /
+"writes clobbered" hypotheses come back into play and need
+investigation.
 
 This isn't *the* data-loss bug, but:
 1. It broke initial triage — `size: 0` made us think files were empty
@@ -291,6 +288,12 @@ recover from incidents like this one:
   during `createDatabase` would leave an orphan metadata row that
   makes every subsequent open throw 503 forever. Rollback errors are
   warned, not silently swallowed.
+- **`4253e3ac` — Close-time sync failures audible.** Hardening #3
+  (`uploadFromTemp` throws on missing tempfile instead of silent
+  warn+return) and #4 (`closeAllDatabases` logs per-pathId close errors
+  instead of `catch {}`). Doesn't prevent loss; makes it investigable
+  by routing failures to logs (unhandled rejection from sync timer,
+  `[Mount] closeAllDatabases close failed for <pathId>` from shutdown).
 
 **Recoverability posture, partial:** S3 bucket versioning + 90-day
 noncurrent-version lifecycle were enabled during the original
