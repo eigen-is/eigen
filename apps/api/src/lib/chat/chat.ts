@@ -33,12 +33,11 @@ export class ChatRoom {
     }
 
     static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
-        const dataDbId = await drive.touchFile(mountId, roomId, 'data.db', 'application/x-sqlite3');
+        // Atomic provision so a transient storage failure can't leave a
+        // dead-letter data.db row that would make every subsequent
+        // ChatRoom.init throw 503.
+        await drive.provisionManagedDbs(mountId, roomId, [{ name: 'data.db', config: CHAT_ROOM_DB_CONFIG }]);
         await drive.createFolder(mountId, roomId, 'media');
-        // Provision the data.db storage object up front so subsequent
-        // openDatabase calls find an existing object — under strict mode
-        // they'd otherwise throw.
-        await drive.createDatabase(mountId, CHAT_ROOM_DB_CONFIG, dataDbId);
     }
 
     async init(): Promise<ChatRoom> {

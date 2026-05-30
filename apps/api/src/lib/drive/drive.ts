@@ -837,6 +837,38 @@ export default class Drive {
         return mount.createDatabase(config, pathId);
     }
 
+    // Atomic touchFile + createDatabase for managed-db backing files (chat
+    // data.db, doc data.db, comments.db, …). On any failure across the list,
+    // hard-deletes every metadata row already created — without this, a
+    // transient storage hiccup during create would leave a dead-letter row
+    // that makes every subsequent open() throw 503. Uses mount.deletePath
+    // (not Drive.deletePath, which trashes via mount.trashPath and runs
+    // canWrite/ACL/SSE side effects that don't apply to a never-opened
+    // brand-new metadata row).
+    async provisionManagedDbs(
+        mountId: string,
+        parentId: string,
+        dbs: ReadonlyArray<{ name: string; config: DatabaseConfig<SchemaType> }>,
+    ): Promise<string[]> {
+        const mount = this.getMount(mountId);
+        const createdIds: string[] = [];
+        try {
+            for (const { name, config } of dbs) {
+                const pathId = await mount.touchFile(parentId, name, 'application/x-sqlite3');
+                createdIds.push(pathId);
+                await mount.createDatabase(config, pathId);
+            }
+            return createdIds;
+        } catch (err) {
+            for (const pathId of createdIds) {
+                await mount.deletePath(pathId).catch((rollbackErr) => {
+                    console.warn(`provisionManagedDbs rollback failed for ${pathId}:`, rollbackErr);
+                });
+            }
+            throw err;
+        }
+    }
+
     async closeDatabase(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         await mount.closeDatabase(pathId);
