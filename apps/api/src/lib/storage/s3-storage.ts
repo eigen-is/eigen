@@ -1,3 +1,4 @@
+import { createHash, createHmac } from 'node:crypto';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
@@ -18,10 +19,66 @@ export async function checkS3Connection(config: S3Config): Promise<S3CheckResult
         const exists = await testFile.exists();
         await testFile.delete();
         if (!exists) throw new Error('Write verification failed');
-        return { ok: true, message: 'Connection successful' };
+        const versioning = await checkS3Versioning(config);
+        return { ok: true, message: 'Connection successful', versioning };
     } catch (err) {
         return { ok: false, message: err instanceof Error ? err.message : 'Connection failed' };
     }
+}
+
+// Hash of an empty body. SHA256("") — used as x-amz-content-sha256 for GET requests.
+const EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+async function checkS3Versioning(config: S3Config): Promise<'enabled' | 'suspended' | 'disabled' | 'unknown'> {
+    try {
+        const endpoint = config.endpoint.replace(/\/$/, '');
+        const path = `/${config.bucket}`;
+        const url = `${endpoint}${path}?versioning=`;
+        const host = new URL(endpoint).host;
+        const region = config.region || 'us-east-1';
+        const now = new Date();
+        const amzDate = `${now.toISOString().replace(/[-:]|\.\d{3}/g, '')}`;
+        const dateStamp = amzDate.slice(0, 8);
+        const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
+        const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+        const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${EMPTY_SHA256}\nx-amz-date:${amzDate}\n`;
+        const canonicalRequest = `GET\n${path}\nversioning=\n${canonicalHeaders}\n${signedHeaders}\n${EMPTY_SHA256}`;
+        const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${sha256Hex(canonicalRequest)}`;
+        const kDate = hmac(`AWS4${config.secretAccessKey}`, dateStamp);
+        const kRegion = hmac(kDate, region);
+        const kService = hmac(kRegion, 's3');
+        const kSigning = hmac(kService, 'aws4_request');
+        const signature = createHmac('sha256', kSigning).update(stringToSign).digest('hex');
+        const authorization =
+            `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${credentialScope}, ` +
+            `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+        const res = await fetch(url, {
+            method: 'GET',
+            headers: {
+                host,
+                'x-amz-content-sha256': EMPTY_SHA256,
+                'x-amz-date': amzDate,
+                authorization,
+            },
+        });
+        if (!res.ok) return 'unknown';
+        const body = await res.text();
+        const match = body.match(/<Status>\s*(Enabled|Suspended)\s*<\/Status>/);
+        if (match?.[1] === 'Enabled') return 'enabled';
+        if (match?.[1] === 'Suspended') return 'suspended';
+        return 'disabled';
+    } catch {
+        return 'unknown';
+    }
+}
+
+function sha256Hex(data: string): string {
+    return createHash('sha256').update(data).digest('hex');
+}
+
+function hmac(key: string | Buffer, data: string): Buffer {
+    return createHmac('sha256', key).update(data).digest();
 }
 
 export class S3Storage implements StorageBackend {

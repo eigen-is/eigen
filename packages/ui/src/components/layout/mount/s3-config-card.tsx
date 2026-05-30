@@ -131,6 +131,18 @@ export function S3ConfigCard({ value, onChange, onCheck, isEdit, onCheckResult }
                     </span>
                 )}
             </div>
+
+            {result?.ok && (result.versioning === 'disabled' || result.versioning === 'suspended') && (
+                <Alert className="border-amber-500/50 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                        Bucket versioning is <strong>{result.versioning === 'suspended' ? 'suspended' : 'off'}</strong>.
+                        Without it, accidental overwrites of database files (e.g. chat or document <code>data.db</code>)
+                        are permanent. Enable bucket versioning and a noncurrent-version lifecycle policy in your S3
+                        provider.
+                    </AlertDescription>
+                </Alert>
+            )}
         </div>
     );
 }
