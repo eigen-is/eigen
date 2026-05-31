@@ -26,18 +26,15 @@ export async function checkS3Connection(config: S3Config): Promise<S3CheckResult
     }
 }
 
-// Hash of an empty body. SHA256("") — used as x-amz-content-sha256 for GET requests.
 const EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
 async function checkS3Versioning(config: S3Config): Promise<'enabled' | 'suspended' | 'disabled' | 'unknown'> {
     try {
         const endpoint = config.endpoint.replace(/\/$/, '');
         const path = `/${config.bucket}`;
-        const url = `${endpoint}${path}?versioning=`;
         const host = new URL(endpoint).host;
         const region = config.region || 'us-east-1';
-        const now = new Date();
-        const amzDate = `${now.toISOString().replace(/[-:]|\.\d{3}/g, '')}`;
+        const amzDate = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '');
         const dateStamp = amzDate.slice(0, 8);
         const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
         const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
@@ -53,14 +50,14 @@ async function checkS3Versioning(config: S3Config): Promise<'enabled' | 'suspend
             `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${credentialScope}, ` +
             `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-        const res = await fetch(url, {
+        const res = await fetch(`${endpoint}${path}?versioning`, {
             method: 'GET',
             headers: {
-                host,
                 'x-amz-content-sha256': EMPTY_SHA256,
                 'x-amz-date': amzDate,
                 authorization,
             },
+            signal: AbortSignal.timeout(5000),
         });
         if (!res.ok) return 'unknown';
         const body = await res.text();
