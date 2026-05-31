@@ -30,7 +30,8 @@ const EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b78
 
 async function checkS3Versioning(config: S3Config): Promise<'enabled' | 'suspended' | 'disabled' | 'unknown'> {
     try {
-        const endpoint = config.endpoint.replace(/\/$/, '');
+        const rawEndpoint = config.endpoint.replace(/\/$/, '');
+        const endpoint = /^https?:\/\//.test(rawEndpoint) ? rawEndpoint : `https://${rawEndpoint}`;
         const path = `/${config.bucket}`;
         const host = new URL(endpoint).host;
         const region = config.region || 'us-east-1';
