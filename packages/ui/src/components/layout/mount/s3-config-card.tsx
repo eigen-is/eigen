@@ -133,7 +133,7 @@ export function S3ConfigCard({ value, onChange, onCheck, isEdit, onCheckResult }
             </div>
 
             {result?.ok && (result.versioning === 'disabled' || result.versioning === 'suspended') && (
-                <Alert className="border-amber-500/50 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+                <Alert variant="warning">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>
                         Bucket versioning is <strong>{result.versioning === 'suspended' ? 'suspended' : 'off'}</strong>.

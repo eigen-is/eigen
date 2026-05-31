@@ -542,6 +542,7 @@ describe('S3 Config Persistence', () => {
         const spy = spyOn(s3Storage, 'checkS3Connection').mockResolvedValueOnce({
             ok: true,
             message: 'Connection successful',
+            versioning: 'enabled',
         });
 
         const config: S3Config = {
