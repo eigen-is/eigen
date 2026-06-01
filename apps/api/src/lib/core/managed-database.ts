@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
 import { time } from '../../utils/timing';
 import { isTest } from '../config/env';
+import type { RetentionPolicy } from '../versioning/retention';
 
 export type SchemaType = Record<string, unknown>;
 
@@ -18,12 +19,18 @@ export type DatabaseConfig<S extends SchemaType> = {
     currentVersion: number;
     schema: S;
     migrations: Migration[];
+    snapshot?: {
+        policy: RetentionPolicy;
+        /** Trigger a snapshot when at least this many writes have accumulated. */
+        writesPerSnapshot: number;
+    };
 };
 
 export type SyncCallbacks = {
     onOpen?: () => Promise<void>;
     onSync?: () => Promise<void>;
     onClose?: () => Promise<void>;
+    onSnapshot?: () => Promise<void>;
 };
 
 export class ManagedDatabase<S extends SchemaType> {
@@ -34,6 +41,7 @@ export class ManagedDatabase<S extends SchemaType> {
     private drizzleDb: BunSQLiteDatabase<S> | null = null;
     private syncTimer: Timer | null = null;
     private lastSyncedChanges = 0;
+    private lastSnapshotChanges = 0;
 
     constructor(config: DatabaseConfig<S>, localPath: string, callbacks: SyncCallbacks = {}) {
         this.config = config;
@@ -116,17 +124,41 @@ export class ManagedDatabase<S extends SchemaType> {
         return row?.tc ?? 0;
     }
 
-    private get isDirty(): boolean {
+    public get isDirty(): boolean {
         return this.getTotalChanges() !== this.lastSyncedChanges;
     }
 
-    private async sync(): Promise<void> {
-        if (!this.isDirty || !this.callbacks.onSync) return;
+    public changesSinceLastSnapshot(): number {
+        return this.getTotalChanges() - this.lastSnapshotChanges;
+    }
 
-        this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
-        await this.callbacks.onSync();
-        this.lastSyncedChanges = this.getTotalChanges();
-        console.log(`[${this.config.name}] Synced`);
+    public markSnapshotTaken(): void {
+        this.lastSnapshotChanges = this.getTotalChanges();
+    }
+
+    private async sync(opts: { forceSnapshot?: boolean } = {}): Promise<void> {
+        if (!this.isDirty && !opts.forceSnapshot) return;
+        if (this.isDirty) {
+            this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
+            await this.callbacks.onSync?.();
+            this.lastSyncedChanges = this.getTotalChanges();
+            console.log(`[${this.config.name}] Synced`);
+        }
+        if (this.config.snapshot && this.callbacks.onSnapshot) {
+            const unsnapshotted = this.changesSinceLastSnapshot();
+            // Force only triggers when there's something new to snapshot. Without
+            // this guard, close() during restore fires a redundant snapshot that
+            // races with the deletePath(data.db) coming up next.
+            const due =
+                unsnapshotted > 0 && (opts.forceSnapshot || unsnapshotted >= this.config.snapshot.writesPerSnapshot);
+            if (due) {
+                this.markSnapshotTaken();
+                // Fire-and-forget: snapshot failures must not block sync or close.
+                this.callbacks
+                    .onSnapshot()
+                    .catch((err) => console.error(`[${this.config.name}] snapshot failed:`, err));
+            }
+        }
     }
 
     // Public sync entry point — callers (e.g. Mount.createDatabase) use this
@@ -144,7 +176,7 @@ export class ManagedDatabase<S extends SchemaType> {
             this.syncTimer = null;
         }
 
-        await this.sync();
+        await this.sync({ forceSnapshot: true });
         this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
         this.rawDb?.close();
         this.rawDb = null;
