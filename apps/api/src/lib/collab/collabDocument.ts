@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
-import { desc, eq, lt, lte } from 'drizzle-orm';
+import { desc, lt, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
@@ -101,26 +101,6 @@ class DbProvider {
         } catch (error) {
             console.error(`[DbProvider] Error creating snapshot for ${this.docId}:`, error);
         }
-    }
-
-    getRevisions(): { id: number; createdAt: Date | null }[] {
-        return this.db
-            .select({
-                id: schema.docSnapshots.id,
-                createdAt: schema.docSnapshots.createdAt,
-            })
-            .from(schema.docSnapshots)
-            .orderBy(desc(schema.docSnapshots.id))
-            .all();
-    }
-
-    getRevisionState(revisionId: number): Uint8Array | null {
-        const snapshot = this.db
-            .select({ stateData: schema.docSnapshots.stateData })
-            .from(schema.docSnapshots)
-            .where(eq(schema.docSnapshots.id, revisionId))
-            .get();
-        return snapshot ? (snapshot.stateData as Uint8Array) : null;
     }
 
     destroy(): void {
@@ -229,14 +209,6 @@ export default class CollabDocument {
         );
 
         return this;
-    }
-
-    public getRevisions(): { id: number; createdAt: Date | null }[] {
-        return this.provider.getRevisions();
-    }
-
-    public getRevisionState(revisionId: number): Uint8Array | null {
-        return this.provider.getRevisionState(revisionId);
     }
 
     private throttledTouchUpdatedAt() {
