@@ -938,7 +938,21 @@ export default class Drive {
         // this.connections and persists via DbProvider — so disconnected
         // sessions also catch up via the next sync handshake.
         const collabDoc = await this.getCollabDocument(mountId, containerId);
-        restoreYjsDoc(collabDoc.doc, snapshotState);
+        let updates = 0;
+        let bytes = 0;
+        const tap = (update: Uint8Array) => {
+            updates += 1;
+            bytes += update.byteLength;
+        };
+        collabDoc.doc.on('update', tap);
+        try {
+            restoreYjsDoc(collabDoc.doc, snapshotState);
+        } finally {
+            collabDoc.doc.off('update', tap);
+        }
+        console.log(
+            `[restore] yjs surgery on ${snapshotPath.name}: ${updates} update(s), ${bytes}B → ${collabDoc.connectionCount} client(s)`,
+        );
     }
 
     async openDatabase<S extends SchemaType>(

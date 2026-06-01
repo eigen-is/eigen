@@ -120,6 +120,10 @@ export default class CollabDocument {
     private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;
     private connections: Set<ServerWebSocket<undefined>> = new Set();
+
+    public get connectionCount(): number {
+        return this.connections.size;
+    }
     private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
     private closed: boolean = false;
     private lastTouchedAt = 0;
