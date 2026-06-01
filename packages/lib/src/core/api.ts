@@ -161,8 +161,6 @@ export const getMailAttachmentUrl = (ownerId: string, messageId: string, attachm
     `${API_HOST}/mail/${ownerId}/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
 export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/access`;
-export const getCollabRevisionUrl = (ownerId: string, mountId: string, pathId: string, revisionId: number) =>
-    `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/revisions/${revisionId}`;
 
 function getDocumentUrl(path: DriveItemRef): string | undefined {
     if (path.type === DRIVE_TYPE_DOC) return getDocUrl(path.ownerId, path.mountId, path.id);
