@@ -119,6 +119,7 @@ bun run check          # lint + typecheck + test
 | **Singleton factory** | `apps/api/src/utils/singleton.ts`            | `createAsyncSingleton()` for Home/DB instances                                                             |
 | **Home relay**        | `apps/api/src/lib/home/home-relay.ts`        | Cross-home messaging via `sendToHome()`; reads via `pull*()`. See [SCALABILITY.md](docs/SCALABILITY.md)    |
 | **Scheduler**         | `apps/api/src/lib/scheduler/`                | `scheduleInterval(name, ms, fn)` for in-process periodic jobs; register in `jobs.ts`                       |
+| **Versioning**        | `apps/api/src/lib/versioning/`               | File-level snapshots in `<container>/versions/<iso-ts>.db`. Trigger lives in `ManagedDatabase.sync()` via opt-in `snapshot` config; mechanic (`snapshotContainerDataDb` / `restoreContainerDataDb`) in `Mount`; orchestration (pre-restore + Yjs surgery vs chat file-replace) in `Drive`. Routes: `/drive/:o/:m/:p/versions[/save | /:name/restore]` |
 
 #### Drive Architecture
 
@@ -156,7 +157,7 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 | **Shared types**   | `packages/lib/src/types/[domain].ts`                  | Used by both FE and BE                                     |
 | **Validation**     | `packages/lib/src/validation/`                        | Shared FE/BE validation                                    |
 | **Colors**         | `packages/lib/src/constants/colors.ts`                | `EIGEN_COLORS`, `EIGEN_ACCENT_COLORS`                      |
-| **Yjs utilities**  | `packages/lib/src/core/collab/yjs-utils.ts`           | `jsonToYType`, `restoreYjsDoc` — shared across collab apps |
+| **Yjs utilities**  | `packages/lib/src/core/collab/yjs-utils.ts`           | `jsonToYType`, `restoreYjsDoc` — `restoreYjsDoc` is server-side only (used by `Drive.restoreYjsContainer` to surgery the live Y.Doc inside a transaction; handles Y.Map and Y.Array, not Y.XmlFragment / Tiptap docs) |
 | **App shell**      | `packages/ui/src/components/layout/app/app-shell.tsx` | Wraps every app (Topbar + sidebar + content)               |
 | **Provider stack** | `packages/ui/src/components/layout/app/eigen-app.tsx` | Auth → SSE → Upload → Preview → CommandPalette → Toaster   |
 | **Layout**         | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching |
