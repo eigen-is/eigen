@@ -46,7 +46,7 @@ export function SheetEditor({
     const workbookRef = useRef<WorkbookInstance>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
-    const { initialData, snapshotVersion, synced, handleOp, onDataChange, handleRestore, docRef } = useSheet(
+    const { initialData, snapshotVersion, synced, handleOp, onDataChange, docRef } = useSheet(
         ownerId,
         path.mountId,
         path.id,
@@ -169,15 +169,8 @@ export function SheetEditor({
     );
 
     const leftItems = useMemo(
-        () => (
-            <ToolbarLeftItems
-                path={path}
-                canWrite={canWrite}
-                onAccessDialogOpen={onAccessDialogOpen}
-                onRestore={handleRestore}
-            />
-        ),
-        [path, canWrite, onAccessDialogOpen, handleRestore],
+        () => <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} />,
+        [path, canWrite, onAccessDialogOpen],
     );
 
     const rightItems = useMemo(
