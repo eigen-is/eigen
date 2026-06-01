@@ -30,7 +30,10 @@ export function VersionHistoryMenu({ path }: Props) {
                             <DropdownMenuItem
                                 key={snap.id}
                                 className="flex items-center justify-between gap-4"
-                                onSelect={() => setPending(snap)}
+                                // Defer until after the dropdown finishes closing — otherwise Radix
+                                // restores focus to the trigger, the dialog sees focus leaving its
+                                // tree, and dismisses itself immediately.
+                                onSelect={() => setTimeout(() => setPending(snap), 0)}
                             >
                                 <span>{formatDateTime(snap.createdAt)}</span>
                                 <span className="text-xs text-muted-foreground">Restore</span>
