@@ -69,9 +69,9 @@ export function RestoreVersionDialog({
             description={
                 snapshot
                     ? `Replace current contents with the ${formatDateTime(snapshot.createdAt)} version. ` +
-                      `Anyone with this open will be reconnected; any local unsynced edits they had at that moment ` +
-                      `may be re-applied on top. Comments and attachments are not rolled back. The current state ` +
-                      `is saved as a new version first, so you can undo this by restoring it.`
+                      `The page will reload to load the restored state. Any local edits you haven't synced ` +
+                      `will be lost. Comments and attachments are not rolled back. The current state is ` +
+                      `saved as a new version first, so you can undo this by restoring it.`
                     : ''
             }
             confirmText="Restore"
@@ -79,6 +79,13 @@ export function RestoreVersionDialog({
                 if (!snapshot) return;
                 await restore.mutateAsync(snapshot.name);
                 onClose();
+                // Yjs in-memory state survives WebSocket reconnects (it's a CRDT —
+                // the client's state-vector handshake replays local updates back
+                // onto the server, undoing the restore for connected editors).
+                // Hard-reload to discard the in-memory Y.Doc and pick up the
+                // restored server state cleanly. Harmless for chat too: TanStack
+                // Query refetches the same data either way.
+                window.location.reload();
             }}
         />
     );
