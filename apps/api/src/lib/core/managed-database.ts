@@ -124,35 +124,30 @@ export class ManagedDatabase<S extends SchemaType> {
         return row?.tc ?? 0;
     }
 
-    public get isDirty(): boolean {
+    private get isDirty(): boolean {
         return this.getTotalChanges() !== this.lastSyncedChanges;
     }
 
-    public changesSinceLastSnapshot(): number {
+    private get changesSinceLastSnapshot(): number {
         return this.getTotalChanges() - this.lastSnapshotChanges;
     }
 
-    public markSnapshotTaken(): void {
-        this.lastSnapshotChanges = this.getTotalChanges();
-    }
-
     private async sync(opts: { forceSnapshot?: boolean } = {}): Promise<void> {
-        if (!this.isDirty && !opts.forceSnapshot) return;
-        if (this.isDirty) {
+        if (this.isDirty && this.callbacks.onSync) {
             this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
-            await this.callbacks.onSync?.();
+            await this.callbacks.onSync();
             this.lastSyncedChanges = this.getTotalChanges();
             console.log(`[${this.config.name}] Synced`);
         }
         if (this.config.snapshot && this.callbacks.onSnapshot) {
-            const unsnapshotted = this.changesSinceLastSnapshot();
+            const unsnapshotted = this.changesSinceLastSnapshot;
             // Force only triggers when there's something new to snapshot. Without
             // this guard, close() during restore fires a redundant snapshot that
             // races with the deletePath(data.db) coming up next.
             const due =
                 unsnapshotted > 0 && (opts.forceSnapshot || unsnapshotted >= this.config.snapshot.writesPerSnapshot);
             if (due) {
-                this.markSnapshotTaken();
+                this.lastSnapshotChanges = this.getTotalChanges();
                 // Fire-and-forget: snapshot failures must not block sync or close.
                 this.callbacks
                     .onSnapshot()
