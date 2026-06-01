@@ -20,7 +20,7 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 
 const SNAPSHOT_INTERVAL = 100;
-const MAX_REVISIONS = 50;
+const MAX_REVISIONS = 1;
 const TOUCH_THROTTLE_MS = 60_000;
 
 class DbProvider {
