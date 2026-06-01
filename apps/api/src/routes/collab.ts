@@ -63,50 +63,6 @@ export const collabRouter = new Elysia({
     )
 
     .get(
-        '/collab/:ownerId/:mountId/:pathId/revisions',
-        async ({ params, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            if (!(await drive.canRead(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No read permission');
-            }
-            const document = await drive.getCollabDocument(params.mountId, params.pathId);
-            return { revisions: document.getRevisions() };
-        },
-        { auth: true },
-    )
-
-    .get(
-        '/collab/:ownerId/:mountId/:pathId/revisions/:revisionId',
-        async ({ params, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            if (!(await drive.canRead(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No read permission');
-            }
-            const document = await drive.getCollabDocument(params.mountId, params.pathId);
-            const revisionId = Number(params.revisionId);
-            if (!Number.isInteger(revisionId) || revisionId <= 0) {
-                throw new ApiError(400, 'Invalid revision ID');
-            }
-            const state = document.getRevisionState(revisionId);
-            if (!state) {
-                throw new ApiError(404, 'Revision not found');
-            }
-            return new Response(Buffer.from(state), {
-                headers: { 'Content-Type': 'application/octet-stream' },
-            });
-        },
-        {
-            auth: true,
-            params: t.Object({
-                ownerId: t.String(),
-                mountId: t.String(),
-                pathId: t.String(),
-                revisionId: t.String({ pattern: '^[0-9]+$' }),
-            }),
-        },
-    )
-
-    .get(
         '/collab/:ownerId/:mountId/:pathId/comments',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
