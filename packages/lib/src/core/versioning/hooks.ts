@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
-import type { Snapshot } from '@workspace/lib/types/versioning';
 import { AppError, onMutationError } from '../api-error';
 import { invalidateVersions, versionsKeys } from './keys';
 
 export function useVersions(ownerId: string, mountId: string, pathId: string) {
-    return useQuery<Snapshot[]>({
+    return useQuery({
         queryKey: versionsKeys.container(ownerId, mountId, pathId),
         queryFn: async () => {
             const response = await driveApi({ ownerId })({ mountId })({ pathId }).versions.get();
@@ -18,28 +17,28 @@ export function useVersions(ownerId: string, mountId: string, pathId: string) {
 }
 
 export function useSaveVersion(ownerId: string, mountId: string, pathId: string) {
-    const qc = useQueryClient();
-    return useMutation<Snapshot, Error, void>({
+    const queryClient = useQueryClient();
+    return useMutation({
         mutationFn: async () => {
             const response = await driveApi({ ownerId })({ mountId })({ pathId }).versions.save.post();
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateVersions(qc, ownerId, mountId, pathId),
+        onSuccess: () => invalidateVersions(queryClient, ownerId, mountId, pathId),
         onError: onMutationError,
     });
 }
 
 export function useRestoreVersion(ownerId: string, mountId: string, pathId: string) {
-    const qc = useQueryClient();
-    return useMutation<void, Error, string>({
+    const queryClient = useQueryClient();
+    return useMutation({
         mutationFn: async (snapshotName: string) => {
             const response = await driveApi({ ownerId })({ mountId })({ pathId })
                 .versions({ snapshotName })
                 .restore.post();
             if (response.error) throw new AppError(response);
         },
-        onSuccess: () => invalidateVersions(qc, ownerId, mountId, pathId),
+        onSuccess: () => invalidateVersions(queryClient, ownerId, mountId, pathId),
         onError: onMutationError,
     });
 }
