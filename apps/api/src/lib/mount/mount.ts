@@ -25,6 +25,8 @@ import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
+import { type RetentionPolicy, selectSnapshotsToPrune } from '../versioning/retention';
+import { formatSnapshotTimestamp } from '../versioning/timestamp';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type * as schema from './schema';
 import { paths } from './schema';
@@ -435,11 +437,68 @@ export class Mount {
         }
     }
 
+    /**
+     * Copy this container's `data.db` to `versions/<ISO-ts>.db`, then prune per policy.
+     * Flushes the managed DB first if it's cached, so the snapshot reflects the latest writes.
+     */
+    async snapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
+        const dataDb = await this.getChildByName(containerId, 'data.db');
+        if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
+
+        // Flush any cached managedDb so the on-storage data.db reflects pending writes.
+        // No-op if not cached, or if cached and not dirty.
+        const cached = this.documentDbs.get(dataDb.id);
+        if (cached) await (await cached()).flush();
+
+        let versions = await this.getChildByName(containerId, 'versions');
+        if (!versions) {
+            const newId = await this.createFolder(containerId, 'versions');
+            const created = await this.getPath(newId);
+            if (!created) throw new ApiError(500, 'Failed to create versions folder');
+            versions = created;
+        }
+
+        const snapshotName = formatSnapshotTimestamp(new Date());
+        const copy = await this.copyPath(dataDb.id, versions.id, snapshotName);
+
+        // Prune. Exclude the snapshot we just wrote — with a stale `now` it could
+        // land in an already-full slot and be selected for its own deletion.
+        const existing = await this.listFolder(versions.id);
+        const toPrune = selectSnapshotsToPrune(
+            existing.filter((e) => e.id !== copy.id).map((e) => ({ id: e.id, name: e.name })),
+            policy,
+        );
+        for (const item of toPrune) await this.deletePath(item.id);
+
+        return copy;
+    }
+
+    /**
+     * Replace this container's `data.db` with `versions/<snapshotName>`. Caller MUST
+     * have closed every cached handle (see Drive.evictContainer) and acquired
+     * withPathLock on the container.
+     */
+    async restoreContainerDataDb(containerId: string, snapshotName: string): Promise<void> {
+        const dataDb = await this.getChildByName(containerId, 'data.db');
+        if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
+        const versions = await this.getChildByName(containerId, 'versions');
+        if (!versions) throw new ApiError(404, 'No versions folder');
+        const snapshot = await this.getChildByName(versions.id, snapshotName);
+        if (!snapshot) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
+
+        // Guard: caller should have closed the cached managedDb already.
+        // Calling closeDatabase again is idempotent.
+        await this.closeDatabase(dataDb.id);
+
+        await this.deletePath(dataDb.id);
+        await this.copyPath(snapshot.id, containerId, 'data.db');
+    }
+
     async touchFile(parentId: string, name: string, mimeType: string) {
         return this.createFile(parentId, name, mimeType, 0, undefined);
     }
 
-    private async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
+    async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);
         }
