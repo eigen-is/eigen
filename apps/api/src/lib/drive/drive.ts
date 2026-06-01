@@ -889,8 +889,16 @@ export default class Drive {
     ): Promise<void> {
         await this.withContainerLock(mountId, containerId, async () => {
             const mount = this.getMount(mountId);
+            // Look up the target up front so the pre-restore snapshot's pruning
+            // can preserve it — otherwise the new pre-restore would push the
+            // target out of its retention slot and the restore step 404s.
+            const versions = await mount.getChildByName(containerId, 'versions');
+            if (!versions) throw new ApiError(404, 'No versions folder');
+            const target = await mount.getChildByName(versions.id, snapshotName);
+            if (!target) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
+
             // 1. Pre-restore snapshot so the operation is reversible.
-            await mount.snapshotContainerDataDb(containerId, policy);
+            await mount.snapshotContainerDataDb(containerId, policy, target.id);
             // 2. Close every in-process handle.
             await this.evictContainer(mountId, containerId);
             // 3. Replace data.db.

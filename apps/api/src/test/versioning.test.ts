@@ -190,6 +190,29 @@ describe('versions HTTP routes', () => {
         expect(new Date(list[0].createdAt).getTime()).toBeGreaterThan(0);
     });
 
+    test('eigendoc: restoring an older snapshot when a newer one shares its retention slot', async () => {
+        // Regression: with default retention every snapshot taken within the same
+        // hour falls in slot 0 of every bucket, so only the newest survives. The
+        // pre-restore snapshot taken by restoreContainer becomes that newest entry
+        // — and without the preserve hook the target the user clicked gets pruned
+        // *before* restoreContainerDataDb reads it. The route then 404s on the
+        // very snapshot that listVersions just returned.
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+
+        const doc = await drivePost<DrivePath>(token, ownerId, aliceMountId, `folder/${aliceRootId}/create/sheets`, {
+            fileName: 'versions-restore-older',
+        });
+
+        const older = await saveVersion(token, ownerId, aliceMountId, doc.id);
+        // A second save survives the first one's prune (the freshly-written one is
+        // excluded) but puts both snapshots in slot 0 — the configuration that
+        // would otherwise sacrifice `older` on the next snapshot.
+        await saveVersion(token, ownerId, aliceMountId, doc.id);
+
+        await restoreVersion(token, ownerId, aliceMountId, doc.id, older.name);
+    });
+
     test('versions list is empty for a brand-new container with no save', async () => {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
