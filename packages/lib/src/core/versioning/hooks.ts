@@ -13,7 +13,7 @@ export function useVersions(ownerId: string, mountId: string, pathId: string) {
             return response.data || [];
         },
         enabled: !!ownerId && !!mountId && !!pathId,
-        staleTime: 30_000,
+        staleTime: 60_000,
     });
 }
 

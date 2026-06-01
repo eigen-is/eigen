@@ -11,6 +11,7 @@ import {
 } from '@workspace/lib/types';
 import {
     DRIVE_EXTENSIONS,
+    DRIVE_TYPE_DOC,
     type DriveACL,
     type DrivePath,
     type DrivePathDetails,
@@ -909,15 +910,22 @@ export default class Drive {
             // 1. Pre-restore snapshot so the operation is reversible.
             await mount.snapshotContainerDataDb(containerId, policy, target.id);
 
-            if (isCollabType(container.type)) {
-                // Yjs: surgery on the live Y.Doc. The transaction's updates ride
-                // the existing WebSocket broadcast path, so every connected
-                // editor converges to the restored state without reconnecting —
-                // file-replacement + reconnect would lose to CRDT merge (see
-                // known limitation 5 in the plan).
+            // Sheets/slides/stickies store state in Y.Map / Y.Array — restoreYjsDoc
+            // can clear and re-insert from the snapshot, riding the existing Yjs
+            // broadcast so every connected editor converges live, no disconnect.
+            //
+            // Docs use Y.XmlFragment (Tiptap/ProseMirror), which can't round-trip
+            // through restoreYjsDoc's Map/Array surgery — `XmlElement.toJSON()`
+            // returns serialized strings rather than live Y types, and pushing
+            // those back corrupts the fragment. Until we add an XmlFragment-aware
+            // path (see Known Limitation #5), docs fall through to file-level
+            // restore; the client reloads the page to discard its in-memory Y.Doc
+            // and pick up the restored state cleanly. Chat (no Yjs) takes the same
+            // file-level path — TanStack Query refetches the messages.
+            const useSurgery = isCollabType(container.type) && container.type !== DRIVE_TYPE_DOC;
+            if (useSurgery) {
                 await this.restoreYjsContainer(mountId, containerId, target);
             } else {
-                // Chat: no Yjs, no merge concern. Evict + replace data.db.
                 await this.evictContainer(mountId, containerId);
                 await mount.restoreContainerDataDb(containerId, snapshotName);
             }

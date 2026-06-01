@@ -620,11 +620,8 @@ export class Mount {
         return this.resolveStoragePath(pathId);
     }
 
-    /**
-     * Resolve a path id to its absolute on-disk file path. Local mounts only —
-     * S3 throws. Used by server-side read-only consumers (Yjs restore) that
-     * need to open a file directly without going through ManagedDatabase.
-     */
+    // Local mounts only — S3 throws. Used by server-side read-only consumers
+    // (Yjs restore) that open a file directly without going through ManagedDatabase.
     async resolveLocalPath(pathId: string): Promise<string> {
         const storageKey = await this.getStorageKey(pathId);
         const localPath = this.storage.getPath?.(storageKey);

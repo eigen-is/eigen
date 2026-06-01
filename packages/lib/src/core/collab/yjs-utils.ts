@@ -1,9 +1,8 @@
 import * as Y from 'yjs';
 
-/**
- * Recursively converts a plain JSON value into the corresponding Yjs shared type.
- * Arrays become Y.Array, objects become Y.Map, and primitives pass through.
- */
+// Recursively wraps a plain JSON value into Y.Map / Y.Array. Primitives pass
+// through. Used as the default value converter for restoreYjsDoc — apps whose
+// Y.Map values are scalars / JSON strings can pass `(v) => v` to skip wrapping.
 export function jsonToYType(value: unknown): unknown {
     if (Array.isArray(value)) {
         const arr = new Y.Array();
@@ -20,20 +19,14 @@ export function jsonToYType(value: unknown): unknown {
     return value;
 }
 
-/**
- * Restores a Y.Doc from a serialised state snapshot.
- *
- * 1. Creates a temporary Y.Doc and applies the state update to it.
- * 2. For every top-level shared type in either doc, clears the live entry and
- *    re-inserts the snapshot's content inside a single transaction. The
- *    transaction's update flows through the doc's normal 'update' event, so
- *    connected clients converge through the existing Yjs broadcast path.
- * 3. Destroys the temp doc.
- *
- * @param mapValueConverter — called on each Map entry value before inserting it
- *   into the target doc. Defaults to `jsonToYType` (deep conversion). Pass
- *   `(v) => v` if your values are already plain scalars / JSON strings.
- */
+// Replaces a Y.Doc's top-level Y.Map / Y.Array contents with the contents of a
+// snapshot update, inside a single transaction. The transaction's update fires
+// through the doc's normal 'update' event so connected clients converge through
+// the existing Yjs broadcast path — no reconnect, no merge fight.
+//
+// Y.XmlFragment (Tiptap docs) is NOT supported — its items round-trip through
+// `toJSON()` as XML strings rather than live Y types, which would corrupt the
+// fragment on push. Callers gate XmlFragment containers out before reaching here.
 export function restoreYjsDoc(
     yjsDoc: Y.Doc,
     state: Uint8Array,
