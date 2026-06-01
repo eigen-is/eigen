@@ -80,13 +80,12 @@ export function FileMenu({
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [emailOpen, setEmailOpen] = useState(false);
-    const [menuOpen, setMenuOpen] = useState(false);
     const openConfig = OPEN_LABELS[createType];
     const navigate = useNavigate();
 
     return (
         <>
-            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost">File</Button>
                 </DropdownMenuTrigger>
@@ -136,12 +135,8 @@ export function FileMenu({
                     )}
 
                     {/* Section 4: Version history & Print */}
-                    {canWrite && (
-                        <>
-                            <DropdownMenuSeparator />
-                            <VersionHistoryMenu path={path} />
-                        </>
-                    )}
+                    {(canWrite || children) && <DropdownMenuSeparator />}
+                    {canWrite && <VersionHistoryMenu path={path} />}
                     {children}
 
                     {/* Section 5: Move to trash */}
