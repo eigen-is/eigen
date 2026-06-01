@@ -444,10 +444,6 @@ export class Mount {
         }
     }
 
-    /**
-     * Copy this container's `data.db` to `versions/<ISO-ts>.db`, then prune per policy.
-     * Flushes the managed DB first if it's cached, so the snapshot reflects the latest writes.
-     */
     async snapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
         const dataDb = await this.getChildByName(containerId, 'data.db');
         if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
@@ -480,11 +476,9 @@ export class Mount {
         return copy;
     }
 
-    /**
-     * Replace this container's `data.db` with `versions/<snapshotName>`. Caller MUST
-     * have closed every cached handle (see Drive.evictContainer) and acquired
-     * withPathLock on the container.
-     */
+    // Caller MUST hold withPathLock on the container so concurrent writers
+    // can't open data.db between the close below and the copyPath that
+    // re-creates it. Drive.restoreContainer handles that orchestration.
     async restoreContainerDataDb(containerId: string, snapshotName: string): Promise<void> {
         const dataDb = await this.getChildByName(containerId, 'data.db');
         if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
@@ -493,8 +487,9 @@ export class Mount {
         const snapshot = await this.getChildByName(versions.id, snapshotName);
         if (!snapshot) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
 
-        // Guard: caller should have closed the cached managedDb already.
-        // Calling closeDatabase again is idempotent.
+        // Drop the cached managedDb (if any) before overwriting the file.
+        // closeDatabase is idempotent, so it's safe whether or not the caller
+        // also ran evictContainer.
         await this.closeDatabase(dataDb.id);
 
         await this.deletePath(dataDb.id);
