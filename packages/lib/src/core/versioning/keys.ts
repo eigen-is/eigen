@@ -7,6 +7,6 @@ export const versionsKeys = {
         [...versionsKeys.owner(ownerId), mountId, pathId] as const,
 };
 
-export function invalidateVersions(qc: QueryClient, ownerId: string, mountId: string, pathId: string) {
-    return qc.invalidateQueries({ queryKey: versionsKeys.container(ownerId, mountId, pathId) });
+export function invalidateVersions(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string): void {
+    queryClient.invalidateQueries({ queryKey: versionsKeys.container(ownerId, mountId, pathId) });
 }
