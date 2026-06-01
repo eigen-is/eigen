@@ -859,10 +859,13 @@ export default class Drive {
         mountId: string,
         containerId: string,
         policy: RetentionPolicy = DEFAULT_RETENTION,
-    ): Promise<DrivePath> {
-        return this.withContainerLock(mountId, containerId, () =>
+    ): Promise<Snapshot> {
+        const created = await this.withContainerLock(mountId, containerId, () =>
             this.getMount(mountId).snapshotContainerDataDb(containerId, policy),
         );
+        const createdAt = parseSnapshotTimestamp(created.name);
+        if (!createdAt) throw new ApiError(500, `snapshot name ${created.name} unparseable`);
+        return { id: created.id, name: created.name, createdAt, size: created.size };
     }
 
     async listVersions(mountId: string, containerId: string): Promise<Snapshot[]> {

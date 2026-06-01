@@ -405,7 +405,7 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, containerId, () => this.sharedDrive.listVersions(mountId, containerId));
     }
 
-    public async saveVersion(mountId: string, containerId: string): Promise<DrivePath> {
+    public async saveVersion(mountId: string, containerId: string): Promise<Snapshot> {
         return this.withWritePermission(mountId, containerId, () => this.sharedDrive.saveVersion(mountId, containerId));
     }
 
