@@ -444,7 +444,15 @@ export class Mount {
         }
     }
 
-    async snapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
+    async snapshotContainerDataDb(
+        containerId: string,
+        policy: RetentionPolicy,
+        // Drive.restoreContainer takes a pre-restore snapshot before reading the
+        // target snapshot. Without this hook the new pre-restore would push the
+        // target out of its retention slot and prune it — leaving the restore step
+        // with a 404 on the snapshot the user actually clicked.
+        preservePathId?: string,
+    ): Promise<DrivePath> {
         const dataDb = await this.getChildByName(containerId, 'data.db');
         if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
 
@@ -468,7 +476,9 @@ export class Mount {
         // land in an already-full slot and be selected for its own deletion.
         const existing = await this.listFolder(versions.id);
         const toPrune = selectSnapshotsToPrune(
-            existing.filter((e) => e.id !== copy.id).map((e) => ({ id: e.id, name: e.name })),
+            existing
+                .filter((e) => e.id !== copy.id && e.id !== preservePathId)
+                .map((e) => ({ id: e.id, name: e.name })),
             policy,
         );
         for (const item of toPrune) await this.deletePath(item.id);
