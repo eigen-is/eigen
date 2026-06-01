@@ -3,7 +3,6 @@ import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortabl
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useComments } from '@workspace/lib/chat';
-import { restoreYjsDoc } from '@workspace/lib/collab';
 import {
     useCardIdFromChatName,
     useCommentCards,
@@ -190,14 +189,6 @@ export function StickiesBoard({
         setIsColumnSettingsOpen(true);
     };
 
-    const handleRestore = useCallback(
-        (state: Uint8Array) => {
-            if (!yjsDoc) return;
-            restoreYjsDoc(yjsDoc, state);
-        },
-        [yjsDoc],
-    );
-
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: { distance: 5 },
@@ -258,7 +249,6 @@ export function StickiesBoard({
                             canWrite={canWrite}
                             undoManager={undoManager}
                             onAccessDialogOpen={onAccessDialogOpen}
-                            onRestore={handleRestore}
                             onAddColumn={() => setIsAddColumnDialogOpen(true)}
                             colorFilter={colorFilter}
                             onColorFilterChange={setColorFilter}

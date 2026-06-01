@@ -10,7 +10,6 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
-import { restoreYjsDoc } from '@workspace/lib/collab';
 import {
     useCardIdFromChatName,
     useCommentCards,
@@ -615,16 +614,6 @@ function SlideEditorInner({
         }
     }, []);
 
-    const handleRestore = useCallback(
-        (state: Uint8Array) => {
-            if (!yjsDoc) return;
-            setEditingObjectId(null);
-            setSelectedObjectIds([]);
-            restoreYjsDoc(yjsDoc, state);
-        },
-        [yjsDoc],
-    );
-
     const handleAddComment = useCallback(
         (objId: string) => {
             const obj = deck.objects[objId];
@@ -713,7 +702,6 @@ function SlideEditorInner({
                         canWrite={canWrite}
                         undoManager={undoManager}
                         onAccessDialogOpen={onAccessDialogOpen}
-                        onRestore={handleRestore}
                         onAddText={handleAddText}
                         onAddImage={() => setImagePickerOpen(true)}
                         onAddSlide={() => addSlide()}

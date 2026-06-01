@@ -11,11 +11,10 @@ import { useState } from 'react';
 type ToolbarLeftProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
-    onRestore: (state: Uint8Array) => void;
     path: DrivePath;
 };
 
-export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite }: ToolbarLeftProps) {
+export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: ToolbarLeftProps) {
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
     const { exportDocument, isExporting } = useExportDocument();
@@ -47,7 +46,6 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite
                 path={path}
                 canWrite={canWrite}
                 onAccessDialogOpen={onAccessDialogOpen}
-                onRestore={onRestore}
                 onImport={handleImport}
                 importLabel="Import xlsx file…"
                 onExport={handleExport}
