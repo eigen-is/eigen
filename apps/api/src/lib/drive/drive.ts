@@ -479,7 +479,7 @@ export default class Drive {
     // Bare passthrough that skips the permission check + container-type filtering
     // `getFolderContents` does — versioning code is already inside SharedDrive's
     // permission gate and shouldn't double-check or re-filter.
-    listFolder(mountId: string, folderId: string): Promise<DrivePath[]> {
+    async listFolder(mountId: string, folderId: string): Promise<DrivePath[]> {
         return this.getMount(mountId).listFolder(folderId);
     }
 
@@ -851,7 +851,7 @@ export default class Drive {
     }
 
     // Thin wrapper around Mount.withPathLock keyed on the container's pathId.
-    withContainerLock<T>(mountId: string, containerId: string, fn: () => Promise<T>): Promise<T> {
+    async withContainerLock<T>(mountId: string, containerId: string, fn: () => Promise<T>): Promise<T> {
         return this.getMount(mountId).withPathLock(containerId, fn);
     }
 
