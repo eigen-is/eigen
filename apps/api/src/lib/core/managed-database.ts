@@ -163,7 +163,11 @@ export class ManagedDatabase<S extends SchemaType> {
         await this.sync();
     }
 
-    async close(): Promise<void> {
+    // skipFinalSnapshot: callers that are about to discard the on-disk file
+    // (eviction inside Drive.restoreContainer) opt out so the fire-and-forget
+    // close-time snapshot can't race with the imminent delete + replace and
+    // prune the snapshot the restore is about to read from.
+    async close(opts: { skipFinalSnapshot?: boolean } = {}): Promise<void> {
         if (!this.rawDb) return;
 
         if (this.syncTimer) {
@@ -171,7 +175,7 @@ export class ManagedDatabase<S extends SchemaType> {
             this.syncTimer = null;
         }
 
-        await this.sync({ forceSnapshot: true });
+        await this.sync({ forceSnapshot: !opts.skipFinalSnapshot });
         this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
         this.rawDb?.close();
         this.rawDb = null;

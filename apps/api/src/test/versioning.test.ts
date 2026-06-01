@@ -213,6 +213,43 @@ describe('versions HTTP routes', () => {
         await restoreVersion(token, ownerId, aliceMountId, doc.id, older.name);
     });
 
+    test('chat: restore survives the close-time snapshot fire during evict', async () => {
+        // Regression: evictContainer used to call closeDatabase without
+        // skipFinalSnapshot, so ManagedDatabase.close fired its
+        // fire-and-forget onSnapshot. That async snapshot ran with no
+        // preserve hint and could prune the target between
+        // restoreContainerDataDb's lookup and copy — leaving data.db
+        // deleted but not replaced, bricking the container.
+        //
+        // Triggering the close-time fire requires unsnapshotted writes at
+        // close time (forceSnapshot only fires the snapshot block when
+        // changesSinceLastSnapshot > 0). The trailing chatPost provides
+        // those writes; the prior save + save pair puts the target in the
+        // same hourly slot as a newer snapshot so retention WOULD prune it
+        // if the fire-and-forget reached the prune step ahead of
+        // restoreContainerDataDb.
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+
+        const chat = await drivePost<DrivePath>(token, ownerId, aliceMountId, `folder/${aliceRootId}/create/chat`, {
+            fileName: 'versions-restore-evict-race',
+        });
+
+        await chatPost(token, ownerId, aliceMountId, `${chat.id}/messages`, { content: 'v1' });
+        const target = await saveVersion(token, ownerId, aliceMountId, chat.id);
+        await chatPost(token, ownerId, aliceMountId, `${chat.id}/messages`, { content: 'v2' });
+        await saveVersion(token, ownerId, aliceMountId, chat.id);
+        await chatPost(token, ownerId, aliceMountId, `${chat.id}/messages`, { content: 'v3' });
+
+        await restoreVersion(token, ownerId, aliceMountId, chat.id, target.name);
+
+        // Container must still hold a data.db row and the restored content.
+        const contents = await driveGet<DrivePath[]>(token, ownerId, aliceMountId, `folder/${chat.id}`);
+        expect(contents.filter((c) => c.name === 'data.db')).toHaveLength(1);
+        const messages = await chatGet<{ content: string }[]>(token, ownerId, aliceMountId, `${chat.id}/messages`);
+        expect(messages.map((m) => m.content)).toEqual(['v1']);
+    });
+
     test('versions list is empty for a brand-new container with no save', async () => {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;

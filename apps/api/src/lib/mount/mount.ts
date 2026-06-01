@@ -487,8 +487,12 @@ export class Mount {
     }
 
     // Caller MUST hold withPathLock on the container so concurrent writers
-    // can't open data.db between the close below and the copyPath that
-    // re-creates it. Drive.restoreContainer handles that orchestration.
+    // can't open data.db between the close below and the rename that
+    // replaces it. Drive.restoreContainer handles that orchestration.
+    //
+    // Copy first, then delete and rename — so any failure (storage error,
+    // snapshot pruned mid-flight) leaves the original data.db intact rather
+    // than bricking the container.
     async restoreContainerDataDb(containerId: string, snapshotName: string): Promise<void> {
         const dataDb = await this.getChildByName(containerId, 'data.db');
         if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
@@ -502,8 +506,15 @@ export class Mount {
         // also ran evictContainer.
         await this.closeDatabase(dataDb.id);
 
-        await this.deletePath(dataDb.id);
-        await this.copyPath(snapshot.id, containerId, 'data.db');
+        const stagingName = `.restore-tmp-${randomUUID()}.db`;
+        const staged = await this.copyPath(snapshot.id, containerId, stagingName);
+        try {
+            await this.deletePath(dataDb.id);
+            await this.updatePath(staged.id, { name: 'data.db' });
+        } catch (err) {
+            await this.deletePath(staged.id).catch(() => {});
+            throw err;
+        }
     }
 
     async touchFile(parentId: string, name: string, mimeType: string) {
@@ -1146,14 +1157,14 @@ export class Mount {
         return db;
     }
 
-    async closeDatabase(pathId: string): Promise<void> {
+    async closeDatabase(pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
         const getter = this.documentDbs.get(pathId);
         if (getter) {
             // Delete BEFORE closing — a concurrent openDatabase() during the async
             // close must create a fresh ManagedDatabase, not reuse the closing one.
             this.documentDbs.delete(pathId);
             const db = await getter();
-            await db.close();
+            await db.close(opts);
         }
     }
 
