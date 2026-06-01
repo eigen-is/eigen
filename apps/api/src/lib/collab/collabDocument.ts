@@ -20,6 +20,11 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 
 const SNAPSHOT_INTERVAL = 100;
+// Sheets' flushSnapshot dumps the whole sheet JSON into one update row on tab
+// close; a count-only threshold lets data.db balloon to ~100× the doc size
+// before consolidation. Trigger on bytes too so a single fat update collapses
+// straight away. Bounds steady-state data.db to ~2× the doc.
+const SNAPSHOT_BYTES = 1_000_000;
 // In-DB checkpoint kept inside data.db so cold-open can hydrate from one row + tail updates.
 // Long-term history lives under the container's `versions/` folder (see versioning routes).
 const MAX_DOC_SNAPSHOTS = 1;
@@ -30,6 +35,7 @@ class DbProvider {
     private doc: Y.Doc;
     private docId: string;
     private updatesSinceSnapshot = 0;
+    private bytesSinceSnapshot = 0;
     private updateHandler: (update: Uint8Array) => void;
 
     constructor(doc: Y.Doc, docId: string, managedDb: ManagedDatabase<typeof schema>) {
@@ -37,8 +43,9 @@ class DbProvider {
         this.doc = doc;
         this.docId = docId;
 
-        const { updatesApplied } = loadYjsState(managedDb, this.doc, docId);
+        const { updatesApplied, bytesApplied } = loadYjsState(managedDb, this.doc, docId);
         this.updatesSinceSnapshot = updatesApplied;
+        this.bytesSinceSnapshot = bytesApplied;
 
         this.updateHandler = (update: Uint8Array) => {
             this.storeUpdate(update);
@@ -55,8 +62,9 @@ class DbProvider {
                 })
                 .run();
             this.updatesSinceSnapshot++;
+            this.bytesSinceSnapshot += update.byteLength;
 
-            if (this.updatesSinceSnapshot >= SNAPSHOT_INTERVAL) {
+            if (this.updatesSinceSnapshot >= SNAPSHOT_INTERVAL || this.bytesSinceSnapshot >= SNAPSHOT_BYTES) {
                 this.createSnapshot();
             }
         } catch (error) {
@@ -100,6 +108,7 @@ class DbProvider {
             });
 
             this.updatesSinceSnapshot = 0;
+            this.bytesSinceSnapshot = 0;
         } catch (error) {
             console.error(`[DbProvider] Error creating snapshot for ${this.docId}:`, error);
         }
