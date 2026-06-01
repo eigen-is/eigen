@@ -3,17 +3,22 @@ import { formatDateTime } from '@workspace/lib/date';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { History, Save } from 'lucide-react';
-import { useState } from 'react';
 import { ConfirmDialog } from '../../confirm-dialog';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dropdown-menu';
 
-type Props = { path: DrivePath };
-
-export function VersionHistoryMenu({ path }: Props) {
-    const [pending, setPending] = useState<Snapshot | null>(null);
+// VersionHistoryMenu renders only the dropdown rows. Pair it with
+// RestoreVersionDialog rendered OUTSIDE the parent <DropdownMenuContent>.
+// If the dialog lives inside the dropdown's React subtree, Radix unmounts it
+// the moment the dropdown closes — the dialog flashes and disappears.
+export function VersionHistoryMenu({
+    path,
+    onRequestRestore,
+}: {
+    path: DrivePath;
+    onRequestRestore: (snap: Snapshot) => void;
+}) {
     const { data } = useVersions(path.ownerId, path.mountId, path.id);
     const save = useSaveVersion(path.ownerId, path.mountId, path.id);
-    const restore = useRestoreVersion(path.ownerId, path.mountId, path.id);
 
     return (
         <>
@@ -30,10 +35,7 @@ export function VersionHistoryMenu({ path }: Props) {
                             <DropdownMenuItem
                                 key={snap.id}
                                 className="flex items-center justify-between gap-4"
-                                // Defer until after the dropdown finishes closing — otherwise Radix
-                                // restores focus to the trigger, the dialog sees focus leaving its
-                                // tree, and dismisses itself immediately.
-                                onSelect={() => setTimeout(() => setPending(snap), 0)}
+                                onSelect={() => onRequestRestore(snap)}
                             >
                                 <span>{formatDateTime(snap.createdAt)}</span>
                                 <span className="text-xs text-muted-foreground">Restore</span>
@@ -44,26 +46,40 @@ export function VersionHistoryMenu({ path }: Props) {
                     )}
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
-
-            <ConfirmDialog
-                open={!!pending}
-                onOpenChange={(open) => !open && setPending(null)}
-                title="Restore this version?"
-                description={
-                    pending
-                        ? `Replace current contents with the ${formatDateTime(pending.createdAt)} version. ` +
-                          `Anyone with this open will be reconnected; any local unsynced edits they had at that moment ` +
-                          `may be re-applied on top. Comments and attachments are not rolled back. The current state ` +
-                          `is saved as a new version first, so you can undo this by restoring it.`
-                        : ''
-                }
-                confirmText="Restore"
-                onConfirm={async () => {
-                    if (!pending) return;
-                    await restore.mutateAsync(pending.name);
-                    setPending(null);
-                }}
-            />
         </>
+    );
+}
+
+export function RestoreVersionDialog({
+    path,
+    snapshot,
+    onClose,
+}: {
+    path: DrivePath;
+    snapshot: Snapshot | null;
+    onClose: () => void;
+}) {
+    const restore = useRestoreVersion(path.ownerId, path.mountId, path.id);
+
+    return (
+        <ConfirmDialog
+            open={!!snapshot}
+            onOpenChange={(open) => !open && onClose()}
+            title="Restore this version?"
+            description={
+                snapshot
+                    ? `Replace current contents with the ${formatDateTime(snapshot.createdAt)} version. ` +
+                      `Anyone with this open will be reconnected; any local unsynced edits they had at that moment ` +
+                      `may be re-applied on top. Comments and attachments are not rolled back. The current state ` +
+                      `is saved as a new version first, so you can undo this by restoring it.`
+                    : ''
+            }
+            confirmText="Restore"
+            onConfirm={async () => {
+                if (!snapshot) return;
+                await restore.mutateAsync(snapshot.name);
+                onClose();
+            }}
+        />
     );
 }
