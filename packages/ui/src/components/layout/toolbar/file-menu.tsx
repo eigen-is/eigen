@@ -8,6 +8,7 @@ import {
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
 } from '@workspace/lib/types/drive';
+import type { Snapshot } from '@workspace/lib/types/versioning';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -26,7 +27,7 @@ import { DriveDeleteItem } from '../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../drive/drive-email-collaborators';
 import { DriveFilePicker } from '../drive/drive-file-picker';
 import { DriveRenameItem } from '../drive/drive-rename-item';
-import { VersionHistoryMenu } from './version-history-menu';
+import { RestoreVersionDialog, VersionHistoryMenu } from './version-history-menu';
 
 const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
     doc: { mime: DRIVE_MIME_DOC, title: 'Open doc' },
@@ -80,6 +81,8 @@ export function FileMenu({
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [emailOpen, setEmailOpen] = useState(false);
+    // Lifted out of VersionHistoryMenu so the dialog survives the dropdown's unmount-on-close.
+    const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
     const openConfig = OPEN_LABELS[createType];
     const navigate = useNavigate();
 
@@ -136,7 +139,7 @@ export function FileMenu({
 
                     {/* Section 4: Version history & Print */}
                     {(canWrite || children) && <DropdownMenuSeparator />}
-                    {canWrite && <VersionHistoryMenu path={path} />}
+                    {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
                     {children}
 
                     {/* Section 5: Move to trash */}
@@ -179,6 +182,7 @@ export function FileMenu({
                     if (actionType === 'delete') navigate({ to: `/` });
                 }}
             />
+            <RestoreVersionDialog path={path} snapshot={pendingSnapshot} onClose={() => setPendingSnapshot(null)} />
         </>
     );
 }
