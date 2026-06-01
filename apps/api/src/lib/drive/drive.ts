@@ -815,7 +815,7 @@ export default class Drive {
     }
 
     // Called by: collab/collabDocument cleanup. Not route-callable.
-    async closeCollabDocument(mountId: string, pathId: string): Promise<void> {
+    async closeCollabDocument(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
         const mount = this.getMount(mountId);
         const key = `${this.owner.id}.${mountId}.${pathId}`;
         const documentFn = this.documents.get(key);
@@ -824,7 +824,7 @@ export default class Drive {
             doc.destruct();
             this.documents.delete(key);
             if (doc.dataDbPathId) {
-                await mount.closeDatabase(doc.dataDbPathId);
+                await mount.closeDatabase(doc.dataDbPathId, opts);
             }
         }
     }
@@ -834,17 +834,22 @@ export default class Drive {
     // `comments.db`). Chat does NOT have a singleton — Drive.getChat returns a
     // fresh ChatRoom per call — so closing the managed DB is sufficient.
     // Caller MUST hold withContainerLock to serialise concurrent restore/save.
+    //
+    // skipFinalSnapshot: we already took the pre-restore snapshot before calling
+    // here; the close-time forceSnapshot would be fire-and-forget, run with no
+    // preserve hint, and could prune the target between
+    // restoreContainerDataDb's lookup and copy.
     async evictContainer(mountId: string, containerId: string): Promise<void> {
         const key = `${this.owner.id}.${mountId}.${containerId}`;
         if (this.documents.has(key)) {
-            await this.closeCollabDocument(mountId, containerId);
+            await this.closeCollabDocument(mountId, containerId, { skipFinalSnapshot: true });
         }
         // Named explicitly so a future eigendoc type with extra sidecar DBs has
         // to opt in here on purpose, not by directory walk.
         for (const name of ['data.db', 'comments.db']) {
             const child = await this.getChildByName(mountId, containerId, name);
             if (!child) continue;
-            await this.closeDatabase(mountId, child.id).catch((err) =>
+            await this.closeDatabase(mountId, child.id, { skipFinalSnapshot: true }).catch((err) =>
                 console.warn(`[drive] evictContainer: closeDatabase(${name}) failed:`, err),
             );
         }
@@ -958,9 +963,9 @@ export default class Drive {
         }
     }
 
-    async closeDatabase(mountId: string, pathId: string): Promise<void> {
+    async closeDatabase(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
         const mount = this.getMount(mountId);
-        await mount.closeDatabase(pathId);
+        await mount.closeDatabase(pathId, opts);
     }
 
     async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
