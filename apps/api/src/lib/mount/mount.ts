@@ -620,6 +620,23 @@ export class Mount {
         return this.resolveStoragePath(pathId);
     }
 
+    /**
+     * Resolve a path id to its absolute on-disk file path. Local mounts only —
+     * S3 throws. Used by server-side read-only consumers (Yjs restore) that
+     * need to open a file directly without going through ManagedDatabase.
+     */
+    async resolveLocalPath(pathId: string): Promise<string> {
+        const storageKey = await this.getStorageKey(pathId);
+        const localPath = this.storage.getPath?.(storageKey);
+        if (!localPath) {
+            throw new ApiError(
+                501,
+                `Local path lookup not supported for mount '${this.id}' (storage: ${this.config.storageType})`,
+            );
+        }
+        return localPath;
+    }
+
     private async resolveStoragePath(pathId: string): Promise<string> {
         const rows = await this.db
             .select({
