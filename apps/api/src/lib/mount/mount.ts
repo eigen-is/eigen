@@ -20,7 +20,14 @@ import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { getS3Config, getServerSettings } from '../config/server-settings';
-import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, sanitizeFtsQuery } from '../core';
+import {
+    ApiError,
+    type DatabaseConfig,
+    ManagedDatabase,
+    type SchemaType,
+    type SyncCallbacks,
+    sanitizeFtsQuery,
+} from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
@@ -1070,6 +1077,14 @@ export class Mount {
             throw new ApiError(503, `Storage object for ${pathId} not available`);
         }
 
+        const onSnapshot: SyncCallbacks['onSnapshot'] = config.snapshot
+            ? async () => {
+                  const path = await this.getPath(pathId);
+                  if (!path?.parentId) return; // standalone or already-deleted; skip
+                  await this.snapshotContainerDataDb(path.parentId, config.snapshot!.policy);
+              }
+            : undefined;
+
         const db = new ManagedDatabase(
             config,
             localPath,
@@ -1097,6 +1112,7 @@ export class Mount {
                           await this.syncDocumentDbSize(pathId, localPath);
                           await this.cleanupTemp(pathId);
                       },
+                      onSnapshot,
                   }
                 : {
                       onSync: async () => {
@@ -1105,6 +1121,7 @@ export class Mount {
                       onClose: async () => {
                           await this.syncDocumentDbSize(pathId, localPath);
                       },
+                      onSnapshot,
                   },
         );
 
