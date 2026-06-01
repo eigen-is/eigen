@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { AppError, onMutationError } from '../api-error';
+import { chatKeys } from '../chat/hooks/use-chat';
 import { invalidateVersions, versionsKeys } from './keys';
 
 export function useVersions(ownerId: string, mountId: string, pathId: string) {
@@ -38,7 +39,13 @@ export function useRestoreVersion(ownerId: string, mountId: string, pathId: stri
                 .restore.post();
             if (response.error) throw new AppError(response);
         },
-        onSuccess: () => invalidateVersions(queryClient, ownerId, mountId, pathId),
+        onSuccess: () => {
+            invalidateVersions(queryClient, ownerId, mountId, pathId);
+            // Chat replaces data.db wholesale; refetch messages so the UI doesn't
+            // keep showing the pre-restore conversation. No-op for Yjs containers
+            // — the Y.Doc surgery on the server broadcasts the new state directly.
+            queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, pathId) });
+        },
         onError: onMutationError,
     });
 }

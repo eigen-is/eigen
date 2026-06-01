@@ -213,6 +213,40 @@ describe('versions HTTP routes', () => {
         await restoreVersion(token, ownerId, aliceMountId, doc.id, older.name);
     });
 
+    test('eigendoc: restore applies snapshot to the live Y.Doc — no data.db swap', async () => {
+        // Yjs restore should NOT replace data.db (that approach loses to CRDT merge
+        // when clients reconnect). Instead the server reads the snapshot's Yjs
+        // state and applies it to the live CollabDocument's Y.Doc — the
+        // transaction's single update broadcasts to all connected WebSockets
+        // and persists via DbProvider. This test drives Drive directly (no WS)
+        // and asserts that:
+        //   1. The live Y.Doc's state matches the snapshot's content after restore.
+        //   2. data.db retains its identity (same path id) — only doc_updates grows.
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        const drive = home.drive;
+
+        const sheetsPath = await drive.create(aliceMountId, aliceRootId, 'versions-yjs-surgery', 'sheets');
+
+        const collab = await drive.getCollabDocument(aliceMountId, sheetsPath.id);
+        collab.doc.getMap('state').set('marker', 'V1');
+
+        const savedV1 = await drive.saveVersion(aliceMountId, sheetsPath.id);
+        const dataDbBefore = await drive.getChildByName(aliceMountId, sheetsPath.id, 'data.db');
+
+        collab.doc.getMap('state').set('marker', 'V2');
+        expect(collab.doc.getMap('state').get('marker')).toBe('V2');
+
+        await drive.restoreContainer(aliceMountId, sheetsPath.id, savedV1.name);
+
+        // Same live Y.Doc instance, now with V1's content — no eviction.
+        expect(collab.doc.getMap('state').get('marker')).toBe('V1');
+
+        // data.db row identity preserved (no file swap).
+        const dataDbAfter = await drive.getChildByName(aliceMountId, sheetsPath.id, 'data.db');
+        expect(dataDbAfter?.id).toBe(dataDbBefore?.id);
+    });
+
     test('chat: restore survives the close-time snapshot fire during evict', async () => {
         // Regression: evictContainer used to call closeDatabase without
         // skipFinalSnapshot, so ManagedDatabase.close fired its

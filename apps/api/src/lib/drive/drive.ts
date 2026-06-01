@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { restoreYjsDoc } from '@workspace/lib/core/collab/yjs-utils';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
@@ -29,6 +30,7 @@ import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
 import { openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
+import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { contentDisposition } from '../core/http';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
@@ -901,16 +903,42 @@ export default class Drive {
             if (!versions) throw new ApiError(404, 'No versions folder');
             const target = await mount.getChildByName(versions.id, snapshotName);
             if (!target) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
+            const container = await mount.getPath(containerId);
+            if (!container) throw new ApiError(404, `Container ${containerId} not found`);
 
             // 1. Pre-restore snapshot so the operation is reversible.
             await mount.snapshotContainerDataDb(containerId, policy, target.id);
-            // 2. Close every in-process handle.
-            await this.evictContainer(mountId, containerId);
-            // 3. Replace data.db.
-            await mount.restoreContainerDataDb(containerId, snapshotName);
-            // Next request opens a fresh managedDb + (for Yjs) a fresh CollabDocument.
-            // Yjs clients reconnect via their existing WebSocket reconnect logic.
+
+            if (isCollabType(container.type)) {
+                // Yjs: surgery on the live Y.Doc. The transaction's updates ride
+                // the existing WebSocket broadcast path, so every connected
+                // editor converges to the restored state without reconnecting —
+                // file-replacement + reconnect would lose to CRDT merge (see
+                // known limitation 5 in the plan).
+                await this.restoreYjsContainer(mountId, containerId, target);
+            } else {
+                // Chat: no Yjs, no merge concern. Evict + replace data.db.
+                await this.evictContainer(mountId, containerId);
+                await mount.restoreContainerDataDb(containerId, snapshotName);
+            }
         });
+    }
+
+    private async restoreYjsContainer(mountId: string, containerId: string, snapshotPath: DrivePath): Promise<void> {
+        const mount = this.getMount(mountId);
+
+        // Read the snapshot's Yjs state directly off disk — no migrations,
+        // no cache pollution in Mount.documentDbs.
+        const snapshotLocalPath = await mount.resolveLocalPath(snapshotPath.id);
+        const snapshotState = readYjsStateFromFile(snapshotLocalPath, `restore:${snapshotPath.name}`);
+
+        // Open the live CollabDocument (creates the singleton if no one is
+        // connected). restoreYjsDoc emits a single Yjs update that the doc's
+        // existing 'update' handler broadcasts to every WebSocket in
+        // this.connections and persists via DbProvider — so disconnected
+        // sessions also catch up via the next sync handshake.
+        const collabDoc = await this.getCollabDocument(mountId, containerId);
+        restoreYjsDoc(collabDoc.doc, snapshotState);
     }
 
     async openDatabase<S extends SchemaType>(
