@@ -20,7 +20,9 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 
 const SNAPSHOT_INTERVAL = 100;
-const MAX_REVISIONS = 1;
+// In-DB checkpoint kept inside data.db so cold-open can hydrate from one row + tail updates.
+// Long-term history lives under the container's `versions/` folder (see versioning routes).
+const MAX_DOC_SNAPSHOTS = 1;
 const TOUCH_THROTTLE_MS = 60_000;
 
 class DbProvider {
@@ -91,8 +93,8 @@ class DbProvider {
                     .orderBy(desc(schema.docSnapshots.id))
                     .all();
 
-                if (allSnapshots.length > MAX_REVISIONS) {
-                    const cutoffId = allSnapshots[MAX_REVISIONS - 1].id;
+                if (allSnapshots.length > MAX_DOC_SNAPSHOTS) {
+                    const cutoffId = allSnapshots[MAX_DOC_SNAPSHOTS - 1].id;
                     tx.delete(schema.docSnapshots).where(lt(schema.docSnapshots.id, cutoffId)).run();
                 }
             });
