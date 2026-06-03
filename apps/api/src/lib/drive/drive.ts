@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { restoreYjsDoc } from '@workspace/lib/core/collab/yjs-utils';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
@@ -11,7 +10,6 @@ import {
 } from '@workspace/lib/types';
 import {
     DRIVE_EXTENSIONS,
-    DRIVE_TYPE_DOC,
     type DriveACL,
     type DrivePath,
     type DrivePathDetails,
@@ -31,7 +29,6 @@ import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
 import { openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
-import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { contentDisposition } from '../core/http';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
@@ -43,8 +40,9 @@ import type { StorageFile } from '../storage';
 import { getTeamMembers } from '../team';
 import type { User } from '../user';
 import { getMemberships, type Memberships } from '../user/';
-import { DEFAULT_RETENTION, type RetentionPolicy } from '../versioning/retention';
-import { parseSnapshotTimestamp } from '../versioning/timestamp';
+import { listVersions } from '../versioning/list';
+import { restoreContainer } from '../versioning/restore';
+import { saveVersion } from '../versioning/save';
 import {
     canReadFromAncestors,
     canWriteFromAncestors,
@@ -479,13 +477,6 @@ export default class Drive {
         return this.getMount(mountId).copyPath(srcPathId, destParentId, name);
     }
 
-    // Bare passthrough that skips the permission check + container-type filtering
-    // `getFolderContents` does — versioning code is already inside SharedDrive's
-    // permission gate and shouldn't double-check or re-filter.
-    async listFolder(mountId: string, folderId: string): Promise<DrivePath[]> {
-        return this.getMount(mountId).listFolder(folderId);
-    }
-
     async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId);
@@ -832,135 +823,19 @@ export default class Drive {
         }
     }
 
-    // Evict every in-process artefact of an open container: the collab singleton
-    // (if cached in `this.documents`) and the canonical managed DBs (`data.db`,
-    // `comments.db`). Chat does NOT have a singleton — Drive.getChat returns a
-    // fresh ChatRoom per call — so closing the managed DB is sufficient.
-    // Caller MUST hold withContainerLock to serialise concurrent restore/save.
-    //
-    // skipFinalSnapshot: we already took the pre-restore snapshot before calling
-    // here; the close-time forceSnapshot would be fire-and-forget, run with no
-    // preserve hint, and could prune the target between
-    // restoreContainerDataDb's lookup and copy.
-    async evictContainer(mountId: string, containerId: string): Promise<void> {
-        const key = `${this.owner.id}.${mountId}.${containerId}`;
-        if (this.documents.has(key)) {
-            await this.closeCollabDocument(mountId, containerId, { skipFinalSnapshot: true });
-        }
-        // Named explicitly so a future eigendoc type with extra sidecar DBs has
-        // to opt in here on purpose, not by directory walk.
-        for (const name of ['data.db', 'comments.db']) {
-            const child = await this.getChildByName(mountId, containerId, name);
-            if (!child) continue;
-            await this.closeDatabase(mountId, child.id, { skipFinalSnapshot: true }).catch((err) =>
-                console.warn(`[drive] evictContainer: closeDatabase(${name}) failed:`, err),
-            );
-        }
-    }
-
-    // Thin wrapper around Mount.withPathLock keyed on the container's pathId.
-    async withContainerLock<T>(mountId: string, containerId: string, fn: () => Promise<T>): Promise<T> {
-        return this.getMount(mountId).withPathLock(containerId, fn);
-    }
-
-    async saveVersion(
-        mountId: string,
-        containerId: string,
-        policy: RetentionPolicy = DEFAULT_RETENTION,
-    ): Promise<Snapshot> {
-        const created = await this.withContainerLock(mountId, containerId, () =>
-            this.getMount(mountId).snapshotContainerDataDb(containerId, policy),
-        );
-        const createdAt = parseSnapshotTimestamp(created.name);
-        if (!createdAt) throw new ApiError(500, `snapshot name ${created.name} unparseable`);
-        return { id: created.id, name: created.name, createdAt, size: created.size };
+    async saveVersion(mountId: string, containerId: string): Promise<Snapshot> {
+        return saveVersion(this.getMount(mountId), containerId);
     }
 
     async listVersions(mountId: string, containerId: string): Promise<Snapshot[]> {
-        const versions = await this.getChildByName(mountId, containerId, 'versions');
-        if (!versions) return [];
-        const files = await this.listFolder(mountId, versions.id);
-        return files
-            .map((f) => {
-                const ts = parseSnapshotTimestamp(f.name);
-                return ts ? { id: f.id, name: f.name, createdAt: ts, size: f.size } : null;
-            })
-            .filter((s): s is Snapshot => s !== null)
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return listVersions(this.getMount(mountId), containerId);
     }
 
-    async restoreContainer(
-        mountId: string,
-        containerId: string,
-        snapshotName: string,
-        policy: RetentionPolicy = DEFAULT_RETENTION,
-    ): Promise<void> {
-        await this.withContainerLock(mountId, containerId, async () => {
-            const mount = this.getMount(mountId);
-            // Look up the target up front so the pre-restore snapshot's pruning
-            // can preserve it — otherwise the new pre-restore would push the
-            // target out of its retention slot and the restore step 404s.
-            const versions = await mount.getChildByName(containerId, 'versions');
-            if (!versions) throw new ApiError(404, 'No versions folder');
-            const target = await mount.getChildByName(versions.id, snapshotName);
-            if (!target) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
-            const container = await mount.getPath(containerId);
-            if (!container) throw new ApiError(404, `Container ${containerId} not found`);
-
-            // 1. Pre-restore snapshot so the operation is reversible.
-            await mount.snapshotContainerDataDb(containerId, policy, target.id);
-
-            // Sheets/slides/stickies store state in Y.Map / Y.Array — restoreYjsDoc
-            // can clear and re-insert from the snapshot, riding the existing Yjs
-            // broadcast so every connected editor converges live, no disconnect.
-            //
-            // Docs use Y.XmlFragment (Tiptap/ProseMirror), which can't round-trip
-            // through restoreYjsDoc's Map/Array surgery — `XmlElement.toJSON()`
-            // returns serialized strings rather than live Y types, and pushing
-            // those back corrupts the fragment. Until we add an XmlFragment-aware
-            // path (see Known Limitation #5), docs fall through to file-level
-            // restore; the client reloads the page to discard its in-memory Y.Doc
-            // and pick up the restored state cleanly. Chat (no Yjs) takes the same
-            // file-level path — TanStack Query refetches the messages.
-            const useSurgery = isCollabType(container.type) && container.type !== DRIVE_TYPE_DOC;
-            if (useSurgery) {
-                await this.restoreYjsContainer(mountId, containerId, target);
-            } else {
-                await this.evictContainer(mountId, containerId);
-                await mount.restoreContainerDataDb(containerId, snapshotName);
-            }
-        });
-    }
-
-    private async restoreYjsContainer(mountId: string, containerId: string, snapshotPath: DrivePath): Promise<void> {
+    async restoreContainer(mountId: string, containerId: string, snapshotName: string): Promise<void> {
         const mount = this.getMount(mountId);
-
-        // Read the snapshot's Yjs state directly off disk — no migrations,
-        // no cache pollution in Mount.documentDbs.
-        const snapshotLocalPath = await mount.resolveLocalPath(snapshotPath.id);
-        const snapshotState = readYjsStateFromFile(snapshotLocalPath, `restore:${snapshotPath.name}`);
-
-        // Open the live CollabDocument (creates the singleton if no one is
-        // connected). restoreYjsDoc emits a single Yjs update that the doc's
-        // existing 'update' handler broadcasts to every WebSocket in
-        // this.connections and persists via DbProvider — so disconnected
-        // sessions also catch up via the next sync handshake.
-        const collabDoc = await this.getCollabDocument(mountId, containerId);
-        let updates = 0;
-        let bytes = 0;
-        const tap = (update: Uint8Array) => {
-            updates += 1;
-            bytes += update.byteLength;
-        };
-        collabDoc.doc.on('update', tap);
-        try {
-            restoreYjsDoc(collabDoc.doc, snapshotState);
-        } finally {
-            collabDoc.doc.off('update', tap);
-        }
-        console.log(
-            `[restore] yjs surgery on ${snapshotPath.name}: ${updates} update(s), ${bytes}B → ${collabDoc.connectionCount} client(s)`,
-        );
+        const container = await mount.getPath(containerId);
+        if (!container) throw new ApiError(404, `Container ${containerId} not found`);
+        return restoreContainer(this, mount, container, snapshotName);
     }
 
     async openDatabase<S extends SchemaType>(

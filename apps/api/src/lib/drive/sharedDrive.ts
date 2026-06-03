@@ -218,10 +218,6 @@ export default class SharedDrive {
         );
     }
 
-    public async listFolder(mountId: string, folderId: string): Promise<DrivePath[]> {
-        return this.withReadPermission(mountId, folderId, () => this.sharedDrive.listFolder(mountId, folderId));
-    }
-
     public async getEffectiveMembers(mountId: string, pathId: string) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getEffectiveMembers(mountId, pathId));
     }
