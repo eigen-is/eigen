@@ -65,6 +65,15 @@ async function getOrCacheImage(
     return { type: 'image', data, contentType };
 }
 
+// A served text preview plus whether it's the current version. `stale` previews are the
+// previous version, returned immediately while the current one regenerates in the
+// background — the route marks them no-store so the client refetches the fresh copy.
+type ServedTextPreview = { value: TextPreviewResult; stale: boolean };
+
+// In-flight background regenerations keyed by cache filename, so a folder grid of N tiles
+// for one just-edited doc triggers a single regeneration instead of N.
+const inFlightText = new Map<string, Promise<void>>();
+
 // Read-through cache for a text preview artifact (the JSON { body, mode } envelope).
 async function getOrCacheText(
     previewsDir: string,
@@ -72,23 +81,94 @@ async function getOrCacheText(
     cacheName: string,
     mode: TextPreviewResult['mode'],
     generate: () => Promise<string | null>,
-): Promise<TextPreviewResult | null> {
+): Promise<ServedTextPreview | null> {
     const cacheFile = path.join(previewsDir, cacheName);
     if (fs.existsSync(cacheFile)) {
-        return (await Bun.file(cacheFile).json()) as TextPreviewResult;
+        try {
+            return { value: (await Bun.file(cacheFile).json()) as TextPreviewResult, stale: false };
+        } catch {
+            // File is mid-write or corrupt — fall through to serve a prior version / regenerate.
+        }
     }
 
+    // Current version missing. If a previous version is cached, serve it immediately and
+    // regenerate the current one in the background (stale-while-revalidate).
+    const stale = await readNewestStaleText(previewsDir, pathId, cacheName);
+    if (stale) {
+        regenerateTextInBackground(previewsDir, pathId, cacheName, mode, generate);
+        return { value: stale, stale: true };
+    }
+
+    // First-ever preview for this path: nothing to serve, so generate synchronously.
     try {
         const body = await generate();
         if (!body) return null;
         const result: TextPreviewResult = { body, mode };
         await Bun.write(cacheFile, JSON.stringify(result));
         pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
-        return result;
+        return { value: result, stale: false };
     } catch (err) {
         console.error(`[preview] Failed to generate ${mode} preview for ${pathId}:`, err);
         return null;
     }
+}
+
+// Find and read the newest previously-cached version of this path's text preview. Returns
+// null if none exists (first preview) or every candidate was pruned mid-read by a concurrent
+// regeneration — callers then fall back to synchronous generation.
+async function readNewestStaleText(
+    previewsDir: string,
+    pathId: string,
+    cacheName: string,
+): Promise<TextPreviewResult | null> {
+    const prefix = `${pathId}-`;
+    let files: string[];
+    try {
+        files = await fs.promises.readdir(previewsDir);
+    } catch {
+        return null;
+    }
+
+    const candidates = files
+        .filter((name) => name !== cacheName && name.startsWith(prefix) && name.endsWith('.json'))
+        .map((name) => ({ name, stamp: Number(name.slice(prefix.length, -'.json'.length)) }))
+        .filter((c) => Number.isFinite(c.stamp))
+        .sort((a, b) => b.stamp - a.stamp);
+
+    for (const { name } of candidates) {
+        try {
+            return (await Bun.file(path.join(previewsDir, name)).json()) as TextPreviewResult;
+        } catch {
+            // Pruned between readdir and read — try the next-newest version.
+        }
+    }
+    return null;
+}
+
+// Fire-and-forget regeneration of the current-version text preview, deduped on cacheName so
+// concurrent requests for the same stale path share one generation.
+function regenerateTextInBackground(
+    previewsDir: string,
+    pathId: string,
+    cacheName: string,
+    mode: TextPreviewResult['mode'],
+    generate: () => Promise<string | null>,
+): void {
+    if (inFlightText.has(cacheName)) return;
+    const task = (async () => {
+        try {
+            const body = await generate();
+            if (!body) return;
+            const result: TextPreviewResult = { body, mode };
+            await Bun.write(path.join(previewsDir, cacheName), JSON.stringify(result));
+            pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
+        } catch (err) {
+            console.error(`[preview] Background regeneration failed for ${mode} preview ${pathId}:`, err);
+        } finally {
+            inFlightText.delete(cacheName);
+        }
+    })();
+    inFlightText.set(cacheName, task);
 }
 
 export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embedUrl: string): Promise<PreviewResult> {
@@ -136,13 +216,13 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
     return null;
 }
 
-export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
+export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
     if (drivePath.type === 'doc' || drivePath.type === 'slides' || drivePath.type === 'sheets')
         return getCollabPreview(mount, drivePath);
     return getFileTextPreview(mount, drivePath);
 }
 
-async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
+async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
     const mode = getTextPreviewMode(drivePath.mimeType || '', drivePath.name);
     if (mode === null) return null;
 
@@ -160,7 +240,7 @@ async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<T
     });
 }
 
-async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
+async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
     const mime = drivePath.mimeType || '';
     const cacheName = textCacheName(drivePath);
 

@@ -273,10 +273,17 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const result = await getTextPreview(mount, path);
             if (!result) throw new ApiError(404, 'No preview available');
-            // 1 day, matching image previews: the URL carries `updatedAt` (see below), so a
-            // content change yields a new URL rather than relying on a short max-age to expire.
-            setCacheHeaders(set, 86400);
-            return result;
+            if (result.stale) {
+                // Stale-while-revalidate: this is the previous version, served instantly while
+                // the current one regenerates in the background. no-store keeps the browser from
+                // persisting it under the updatedAt URL, so the next refetch gets the fresh copy.
+                set.headers['Cache-Control'] = 'no-store';
+            } else {
+                // 1 day, matching image previews: the URL carries `updatedAt` (see below), so a
+                // content change yields a new URL rather than relying on a short max-age to expire.
+                setCacheHeaders(set, 86400);
+            }
+            return result.value;
         },
         // updatedAt is a cache-buster — browser HTTP cache and TanStack queryKey both key
         // off the URL, so a stale URL serves stale content after an inline edit.

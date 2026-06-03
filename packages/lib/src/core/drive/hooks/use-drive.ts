@@ -595,7 +595,9 @@ export function useTextPreview(
             return response.data;
         },
         enabled: enabled && !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5,
+        // Short window so a stale-while-revalidate preview (the previous version, served while
+        // the current one regenerates server-side) self-heals on the next refetch within ~30s.
+        staleTime: 1000 * 30,
     });
 }
 
