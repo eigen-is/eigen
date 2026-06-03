@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
@@ -59,6 +59,46 @@ describe('buildStorageKey', () => {
 
     test('handles empty name', () => {
         expect(buildStorageKey('abc-123', '')).toBe('abc-123');
+    });
+});
+
+describe('withLocalCopy', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-with-local-copy', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        rootId = (await mount.getRootFolder())!.id;
+    });
+
+    test('reads the stored file in place when the backend exposes a local path', async () => {
+        const data = Buffer.from('snapshot-bytes-in-place');
+        const fileId = await mount.createFile(rootId, 'snap.db', 'application/octet-stream', data.length, data);
+        const got = await mount.withLocalCopy(fileId, (p) => readFileSync(p));
+        expect(Buffer.from(got).toString()).toBe('snapshot-bytes-in-place');
+    });
+
+    test('downloads to a temp copy for backends without a local path (S3-style), then cleans up', async () => {
+        const data = Buffer.from('snapshot-bytes-via-temp');
+        const fileId = await mount.createFile(rootId, 'snap2.db', 'application/octet-stream', data.length, data);
+
+        // Simulate a remote backend (S3) whose storage has no getPath.
+        const storage = (mount as unknown as { storage: { getPath?: (key: string) => string } }).storage;
+        const originalGetPath = storage.getPath;
+        storage.getPath = undefined;
+        let observedPath = '';
+        try {
+            const got = await mount.withLocalCopy(fileId, (p) => {
+                observedPath = p;
+                return readFileSync(p);
+            });
+            expect(Buffer.from(got).toString()).toBe('snapshot-bytes-via-temp');
+        } finally {
+            storage.getPath = originalGetPath;
+        }
+        expect(existsSync(observedPath)).toBe(false);
     });
 });
 

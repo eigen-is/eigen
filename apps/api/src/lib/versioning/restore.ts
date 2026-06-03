@@ -67,10 +67,11 @@ async function restoreYjsContainer(
     containerId: string,
     snapshotPath: DrivePath,
 ): Promise<void> {
-    // Read the snapshot's Yjs state directly off disk — no migrations,
-    // no cache pollution in Mount.documentDbs.
-    const snapshotLocalPath = await mount.resolveLocalPath(snapshotPath.id);
-    const snapshotState = readYjsStateFromFile(snapshotLocalPath, `restore:${snapshotPath.name}`);
+    // Read the snapshot's Yjs state from a local copy (S3 backends download it
+    // to a temp file) — no migrations, no cache pollution in Mount.documentDbs.
+    const snapshotState = await mount.withLocalCopy(snapshotPath.id, (localPath) =>
+        readYjsStateFromFile(localPath, `restore:${snapshotPath.name}`),
+    );
 
     // getCollabDocument creates the singleton if no one is connected.
     // applySnapshotState runs the surgery inside one transaction; the resulting
