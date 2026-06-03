@@ -2,6 +2,7 @@ import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useCreateChat } from '@workspace/lib/chat';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
@@ -15,6 +16,19 @@ const WELCOME_CARD = {
     description:
         'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
 };
+
+// Reuse the previous card object when its fields are unchanged, so memoized
+// cards skip re-rendering when an edit elsewhere on the board rebuilds state.
+function sameCard(a: CommentCard, b: CommentCard): boolean {
+    return (
+        a.title === b.title &&
+        a.description === b.description &&
+        a.color === b.color &&
+        a.chatName === b.chatName &&
+        a.creator === b.creator &&
+        a.createdAt === b.createdAt
+    );
+}
 
 export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
     const [board, setBoard] = useState<BoardData>({ tasks: {}, columns: {}, columnOrder: [] });
@@ -106,42 +120,43 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         providerRef.current = wsProvider;
 
         const updateReactState = () => {
-            const newState: BoardData = {
-                tasks: {},
-                columns: {},
-                columnOrder: columnOrderArray.toArray() as string[],
-            };
-            for (const [taskId, taskMapValue] of tasksMap) {
-                const taskMap = taskMapValue as Y.Map<unknown>;
-                const title = taskMap.get('title');
-                const description = taskMap.get('description');
-                const color = taskMap.get('color');
-                const chatName = taskMap.get('chatName');
-                const creator = taskMap.get('creator');
-                const createdAt = taskMap.get('createdAt');
-                newState.tasks[taskId] = {
-                    id: taskId,
-                    title: typeof title === 'string' ? title : '',
-                    description: typeof description === 'string' ? description : '',
-                    color: typeof color === 'string' ? color : undefined,
-                    chatName: typeof chatName === 'string' ? chatName : undefined,
-                    creator: typeof creator === 'string' ? creator : undefined,
-                    createdAt: typeof createdAt === 'number' ? createdAt : undefined,
-                };
-            }
-            for (const [columnId, columnMapValue] of columnsMap) {
-                const columnMap = columnMapValue as Y.Map<unknown>;
-                const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
-                const taskIds = taskIdsArray ? (taskIdsArray.toArray() as string[]) : [];
-                newState.columns[columnId] = {
-                    id: columnId,
-                    title: (columnMap.get('title') as string) || '',
-                    taskIds,
-                    creator: (columnMap.get('creator') as string) || '',
-                    createdAt: (columnMap.get('createdAt') as number) || Date.now(),
-                };
-            }
-            setBoard(newState);
+            setBoard((prev) => {
+                const tasks: Record<string, CommentCard> = {};
+                for (const [taskId, taskMapValue] of tasksMap) {
+                    const taskMap = taskMapValue as Y.Map<unknown>;
+                    const title = taskMap.get('title');
+                    const description = taskMap.get('description');
+                    const color = taskMap.get('color');
+                    const chatName = taskMap.get('chatName');
+                    const creator = taskMap.get('creator');
+                    const createdAt = taskMap.get('createdAt');
+                    const next: CommentCard = {
+                        id: taskId,
+                        title: typeof title === 'string' ? title : '',
+                        description: typeof description === 'string' ? description : '',
+                        color: typeof color === 'string' ? color : undefined,
+                        chatName: typeof chatName === 'string' ? chatName : undefined,
+                        creator: typeof creator === 'string' ? creator : undefined,
+                        createdAt: typeof createdAt === 'number' ? createdAt : undefined,
+                    };
+                    const prevTask = prev.tasks[taskId];
+                    tasks[taskId] = prevTask && sameCard(prevTask, next) ? prevTask : next;
+                }
+                const columns: Record<string, ColumnItem> = {};
+                for (const [columnId, columnMapValue] of columnsMap) {
+                    const columnMap = columnMapValue as Y.Map<unknown>;
+                    const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
+                    const taskIds = taskIdsArray ? (taskIdsArray.toArray() as string[]) : [];
+                    columns[columnId] = {
+                        id: columnId,
+                        title: (columnMap.get('title') as string) || '',
+                        taskIds,
+                        creator: (columnMap.get('creator') as string) || '',
+                        createdAt: (columnMap.get('createdAt') as number) || Date.now(),
+                    };
+                }
+                return { tasks, columns, columnOrder: columnOrderArray.toArray() as string[] };
+            });
         };
 
         tasksMap.observeDeep(updateReactState);

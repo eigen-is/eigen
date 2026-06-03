@@ -5,7 +5,6 @@ import { getDriveItemUrl } from '@workspace/lib/api';
 import { useComments } from '@workspace/lib/chat';
 import {
     useCardIdFromChatName,
-    useCommentCards,
     useCreateCommentCard,
     useOpenCommentCard,
     useUpdateCommentCard,
@@ -76,7 +75,6 @@ export function StickiesBoard({
     }, [commentList]);
 
     // Shared comment-card hooks for the new dialog path
-    const cards = useCommentCards(yjsDoc ?? null, 'tasks');
     const createCard = useCreateCommentCard(ownerId, path.mountId, chatFolderId, yjsDoc ?? null, 'tasks');
     const updateCard = useUpdateCommentCard(yjsDoc ?? null, 'tasks');
 
@@ -126,7 +124,7 @@ export function StickiesBoard({
         onChatNotFound: onClearInitialChat,
     });
 
-    const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, commentList, openCardId);
+    const { card: openCard, entry: openEntry } = useOpenCommentCard(board.tasks, commentList, openCardId);
 
     const handleAddCard = (columnId: string) => {
         setAddTargetColumn(columnId);
