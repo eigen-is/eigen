@@ -101,11 +101,11 @@ describe('retention pruning (time-bucketed)', () => {
 // than getting promoted into setup.ts until a second test file needs them.
 
 async function listVersions(token: string, ownerId: string, mountId: string, pathId: string): Promise<Snapshot[]> {
-    return driveGet<Snapshot[]>(token, ownerId, mountId, `${pathId}/versions`);
+    return driveGet<Snapshot[]>(token, ownerId, mountId, `file/${pathId}/versions`);
 }
 
 async function saveVersion(token: string, ownerId: string, mountId: string, pathId: string): Promise<Snapshot> {
-    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/${pathId}/versions/save`, {
+    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/versions/save`, {
         method: 'POST',
     });
     if (res.status !== 200) throw new Error(`saveVersion failed: ${res.status} ${await res.text()}`);
@@ -121,7 +121,7 @@ async function restoreVersion(
 ): Promise<void> {
     const res = await authedRequest(
         token,
-        `/drive/${ownerId}/${mountId}/${pathId}/versions/${encodeURIComponent(snapshotName)}/restore`,
+        `/drive/${ownerId}/${mountId}/file/${pathId}/versions/${encodeURIComponent(snapshotName)}/restore`,
         { method: 'POST' },
     );
     if (res.status !== 200) throw new Error(`restoreVersion failed: ${res.status} ${await res.text()}`);
@@ -373,7 +373,7 @@ describe('versions HTTP routes', () => {
         );
 
         // Bob has no permission to alice's chat.
-        const res = await authedRequest(bobToken, `/drive/${aliceId}/${aliceMountId}/${chat.id}/versions/save`, {
+        const res = await authedRequest(bobToken, `/drive/${aliceId}/${aliceMountId}/file/${chat.id}/versions/save`, {
             method: 'POST',
         });
         expect(res.status).toBe(403);

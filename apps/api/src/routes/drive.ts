@@ -281,6 +281,33 @@ export const driveRouter = new Elysia({ name: 'drive' })
         // off the URL, so a stale URL serves stale content after an inline edit.
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
+    // Version history (file-level snapshots; see lib/versioning). Access flows
+    // through getSharedDrive() → SharedDrive ACL, like every other drive route.
+    .get(
+        '/drive/:ownerId/:mountId/file/:pathId/versions',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            return drive.listVersions(params.mountId, params.pathId);
+        },
+        { auth: true },
+    )
+    .post(
+        '/drive/:ownerId/:mountId/file/:pathId/versions/save',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            return drive.saveVersion(params.mountId, params.pathId);
+        },
+        { auth: true },
+    )
+    .post(
+        '/drive/:ownerId/:mountId/file/:pathId/versions/:snapshotName/restore',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            await drive.restoreContainer(params.mountId, params.pathId, params.snapshotName);
+            return { success: true };
+        },
+        { auth: true },
+    )
     // Path operations (rename, move, delete, acl, breadcrumb)
     .get(
         '/drive/:ownerId/:mountId/path/:pathId',

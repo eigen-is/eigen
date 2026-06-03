@@ -119,7 +119,7 @@ bun run check          # lint + typecheck + test
 | **Singleton factory** | `apps/api/src/utils/singleton.ts`            | `createAsyncSingleton()` for Home/DB instances                                                             |
 | **Home relay**        | `apps/api/src/lib/home/home-relay.ts`        | Cross-home messaging via `sendToHome()`; reads via `pull*()`. See [SCALABILITY.md](docs/SCALABILITY.md)    |
 | **Scheduler**         | `apps/api/src/lib/scheduler/`                | `scheduleInterval(name, ms, fn)` for in-process periodic jobs; register in `jobs.ts`                       |
-| **Versioning**        | `apps/api/src/lib/versioning/`               | File-level snapshots in `<container>/versions/<iso-ts>.db`. Trigger lives in `ManagedDatabase.sync()` via opt-in `snapshot` config; mechanic (`snapshotContainerDataDb` / `restoreContainerDataDb`) in `Mount`; orchestration (pre-restore + Yjs surgery vs chat file-replace) in `Drive`. Routes: `/drive/:o/:m/:p/versions[/save | /:name/restore]` |
+| **Versioning**        | `apps/api/src/lib/versioning/`               | File-level snapshots in `<container>/versions/<iso-ts>.db`. Trigger lives in `ManagedDatabase.sync()` via opt-in `snapshot` config; mechanic (`snapshotContainerDataDb` / `restoreContainerDataDb`) in `Mount`; orchestration (pre-restore + Yjs surgery vs chat file-replace) in `Drive`. Routes live in the drive router (`routes/drive.ts`): `/drive/:o/:m/file/:p/versions[/save | /:name/restore]` |
 
 #### Drive Architecture
 
