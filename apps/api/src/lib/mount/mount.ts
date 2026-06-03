@@ -620,22 +620,6 @@ export class Mount {
         return this.resolveStoragePath(pathId);
     }
 
-    // Run `fn` against a local, SQLite-openable copy of an existing stored file.
-    // Local backends open the object in place; remote backends (S3) have no local
-    // path, so the object is downloaded to a temp file first and cleaned up after.
-    // Used by the Yjs version restore to read a snapshot data.db on any backend.
-    async withLocalCopy<T>(pathId: string, fn: (localPath: string) => T): Promise<T> {
-        const storageKey = await this.getStorageKey(pathId);
-        const directPath = this.storage.getPath?.(storageKey);
-        if (directPath) return fn(directPath);
-        const tempPath = await this.downloadToTemp(storageKey, pathId);
-        try {
-            return fn(tempPath);
-        } finally {
-            await this.cleanupTemp(pathId);
-        }
-    }
-
     private async resolveStoragePath(pathId: string): Promise<string> {
         const rows = await this.db
             .select({
@@ -1001,7 +985,14 @@ export class Mount {
         return path.join(this.tmpDir, pathId.replace(/\//g, '_'));
     }
 
-    private async downloadToTemp(storageKey: string, tempId: string): Promise<string> {
+    // Download a stored file to a local temp path the caller can open directly
+    // (e.g. reading a SQLite snapshot on any storage backend). Caller owns
+    // cleanupTemp(pathId).
+    async downloadToTemp(pathId: string): Promise<string> {
+        return this.downloadKeyToTemp(await this.getStorageKey(pathId), pathId);
+    }
+
+    private async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
         const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
         const file = this.storage.read(storageKey);
@@ -1132,7 +1123,7 @@ export class Mount {
                           if (!(await this.storage.exists(storageKey))) {
                               throw new ApiError(503, `Storage object for ${pathId} not available`);
                           }
-                          await this.downloadToTemp(storageKey, pathId);
+                          await this.downloadKeyToTemp(storageKey, pathId);
                       },
                       onSync: async () => {
                           await this.uploadFromTemp(storageKey, pathId);

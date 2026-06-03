@@ -50,11 +50,17 @@ async function restoreYjsContainer(
     containerId: string,
     snapshotPath: DrivePath,
 ): Promise<void> {
-    // Read the snapshot's Yjs state from a local copy (S3 backends download it
-    // to a temp file) — no migrations, no cache pollution in Mount.documentDbs.
-    const snapshotState = await mount.withLocalCopy(snapshotPath.id, (localPath) =>
-        readYjsStateFromFile(localPath, `restore:${snapshotPath.name}`),
-    );
+    // Read the snapshot's Yjs state from a temp copy of the archive. Opened raw
+    // (readYjsStateFromFile) rather than via Mount.openDatabase, which would run
+    // migrations on, cache, and arm sync/snapshot timers against what should stay
+    // an immutable archive. downloadToTemp works on every storage backend.
+    const tempPath = await mount.downloadToTemp(snapshotPath.id);
+    let snapshotState: Uint8Array;
+    try {
+        snapshotState = readYjsStateFromFile(tempPath, `restore:${snapshotPath.name}`);
+    } finally {
+        await mount.cleanupTemp(snapshotPath.id);
+    }
 
     // getCollabDocument creates the singleton if no one is connected.
     // applySnapshotState runs the surgery inside one transaction; the resulting
