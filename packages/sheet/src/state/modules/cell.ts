@@ -878,7 +878,10 @@ export function getOrigincell(ctx: Context, r: number, c: number, i: string) {
 
 export function getcellFormula(ctx: Context, r: number, c: number, i: string, data?: CellMatrix) {
     let cell: Cell | null;
-    if (isNil(data)) {
+    // `data` is a fast path for the current sheet. A calc-chain entry can belong
+    // to another sheet (getAllFunctionGroup spans the whole workbook), whose rows
+    // may be absent here — resolve those against their own sheet's data via `i`.
+    if (isNil(data) || isNil(data[r])) {
         cell = getOrigincell(ctx, r, c, i);
     } else {
         cell = data[r][c];
