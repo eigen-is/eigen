@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
+import { toast } from 'sonner';
 import { AppError, onMutationError } from '../api-error';
 import { chatKeys } from '../chat/hooks/use-chat';
 import { invalidateVersions, versionsKeys } from './keys';
@@ -25,7 +26,10 @@ export function useSaveVersion(ownerId: string, mountId: string, pathId: string)
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateVersions(queryClient, ownerId, mountId, pathId),
+        onSuccess: () => {
+            invalidateVersions(queryClient, ownerId, mountId, pathId);
+            toast.success('Version saved');
+        },
         onError: onMutationError,
     });
 }
@@ -45,6 +49,7 @@ export function useRestoreVersion(ownerId: string, mountId: string, pathId: stri
             // keep showing the pre-restore conversation. No-op for Yjs containers
             // — the Y.Doc surgery on the server broadcasts the new state directly.
             queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, pathId) });
+            toast.success('Version restored');
         },
         onError: onMutationError,
     });

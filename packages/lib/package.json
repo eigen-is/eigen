@@ -44,6 +44,7 @@
     "./space": "./src/core/space/index.ts",
     "./sse": "./src/core/sse/index.ts",
     "./team": "./src/core/team/index.ts",
+    "./versioning": "./src/core/versioning/index.ts",
     "./types": "./src/types/index.ts",
     "./types/*": "./src/types/*",
     "./constants": "./src/constants/index.ts",
