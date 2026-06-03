@@ -21,7 +21,7 @@ export type DatabaseConfig<S extends SchemaType> = {
     migrations: Migration[];
     snapshot?: {
         policy: RetentionPolicy;
-        /** Trigger a snapshot when at least this many writes have accumulated. */
+        // Trigger a snapshot once at least this many writes have accumulated.
         writesPerSnapshot: number;
     };
 };
@@ -81,7 +81,9 @@ export class ManagedDatabase<S extends SchemaType> {
         this.lastSyncedChanges = 0;
 
         if (this.callbacks.onSync && autoSyncMs > 0) {
-            this.syncTimer = setInterval(() => this.sync(), autoSyncMs);
+            this.syncTimer = setInterval(() => {
+                this.tick().catch((err) => console.error(`[${this.config.name}] sync tick failed:`, err));
+            }, autoSyncMs);
         }
 
         return this.drizzleDb;
@@ -128,32 +130,37 @@ export class ManagedDatabase<S extends SchemaType> {
         return this.getTotalChanges() !== this.lastSyncedChanges;
     }
 
-    private get changesSinceLastSnapshot(): number {
-        return this.getTotalChanges() - this.lastSnapshotChanges;
-    }
-
-    private async sync(opts: { forceSnapshot?: boolean } = {}): Promise<void> {
+    // Push pending writes to storage. Snapshots are handled separately by
+    // snapshotIfDue() so that an explicit flush() (e.g. from a snapshot callback
+    // that flushes the cached db first) can't re-enter the snapshot trigger.
+    private async sync(): Promise<void> {
         if (this.isDirty && this.callbacks.onSync) {
             this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
             await this.callbacks.onSync();
             this.lastSyncedChanges = this.getTotalChanges();
             console.log(`[${this.config.name}] Synced`);
         }
-        if (this.config.snapshot && this.callbacks.onSnapshot) {
-            const unsnapshotted = this.changesSinceLastSnapshot;
-            // Force only triggers when there's something new to snapshot. Without
-            // this guard, close() during restore fires a redundant snapshot that
-            // races with the deletePath(data.db) coming up next.
-            const due =
-                unsnapshotted > 0 && (opts.forceSnapshot || unsnapshotted >= this.config.snapshot.writesPerSnapshot);
-            if (due) {
-                this.lastSnapshotChanges = this.getTotalChanges();
-                // Fire-and-forget: snapshot failures must not block sync or close.
-                this.callbacks
-                    .onSnapshot()
-                    .catch((err) => console.error(`[${this.config.name}] snapshot failed:`, err));
-            }
-        }
+    }
+
+    // Take a version snapshot when enough writes have accumulated since the last
+    // one (or `force`, used at close, for any unsnapshotted change). The snapshot
+    // callback copies the on-disk db, so the caller must have the latest state
+    // checkpointed to the main file first (sync() runs PASSIVE; close() TRUNCATEs).
+    // Awaited — a fire-and-forget snapshot would race close()'s file teardown and,
+    // during restore eviction, the imminent data.db replace.
+    private async snapshotIfDue(force = false): Promise<void> {
+        if (!this.config.snapshot || !this.callbacks.onSnapshot) return;
+        const total = this.getTotalChanges();
+        const unsnapshotted = total - this.lastSnapshotChanges;
+        if (unsnapshotted <= 0 || (!force && unsnapshotted < this.config.snapshot.writesPerSnapshot)) return;
+        await this.callbacks.onSnapshot();
+        this.lastSnapshotChanges = total;
+    }
+
+    // Periodic auto-sync: push writes, then snapshot if the threshold is crossed.
+    private async tick(): Promise<void> {
+        await this.sync();
+        await this.snapshotIfDue();
     }
 
     // Public sync entry point — callers (e.g. Mount.createDatabase) use this
@@ -163,9 +170,8 @@ export class ManagedDatabase<S extends SchemaType> {
         await this.sync();
     }
 
-    // skipFinalSnapshot: callers that are about to discard the on-disk file
-    // (eviction inside Drive.restoreContainer) opt out so the fire-and-forget
-    // close-time snapshot can't race with the imminent delete + replace and
+    // skipFinalSnapshot: callers about to discard the on-disk file (eviction
+    // inside Drive.restoreContainer) opt out so the close-time snapshot can't
     // prune the snapshot the restore is about to read from.
     async close(opts: { skipFinalSnapshot?: boolean } = {}): Promise<void> {
         if (!this.rawDb) return;
@@ -175,8 +181,16 @@ export class ManagedDatabase<S extends SchemaType> {
             this.syncTimer = null;
         }
 
-        await this.sync({ forceSnapshot: !opts.skipFinalSnapshot });
+        await this.sync();
+        // TRUNCATE before snapshotting so the copied .db file is complete, then
+        // snapshot (awaited) before tearing the handle down. A snapshot failure
+        // must not block close, so it's caught rather than propagated.
         this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
+        if (!opts.skipFinalSnapshot) {
+            await this.snapshotIfDue(true).catch((err) =>
+                console.error(`[${this.config.name}] close snapshot failed:`, err),
+            );
+        }
         this.rawDb?.close();
         this.rawDb = null;
         this.drizzleDb = null;
