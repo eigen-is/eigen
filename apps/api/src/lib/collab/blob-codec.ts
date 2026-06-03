@@ -4,11 +4,15 @@
 // ~1MB at ~28ms encode / ~18ms decode. Compression is at the SQLite storage boundary only;
 // the live WebSocket sync protocol still exchanges raw Yjs updates.
 //
-// Backward compatible: legacy blobs were raw Yjs updates, which start with 0x00 or 0x01 (the
-// lib0 update format bytes) — never 0x28. zstd frames start with the 4-byte magic 28 b5 2f fd,
-// so decompressBlob sniffs the magic and passes legacy/raw blobs through untouched (the < 4
-// guard also covers the 2-byte empty-doc update [0, 0]). No schema migration — the BLOB column
-// stores either form, and old/new rows coexist because each row is decoded independently.
+// Backward compatible: legacy blobs are raw Yjs updates. The full 4-byte zstd frame magic
+// (28 b5 2f fd) cannot plausibly arise from lib0-encoded Yjs data — a V1 update opens with the
+// state-vector client count (so byte 0 is 0x28 only with exactly 40 clients) and V2 opens with
+// 0x00, after which the three trailing magic bytes would have to match an improbable struct
+// sequence. decompressBlob sniffs the 4-byte magic and passes legacy/raw blobs through untouched
+// (the < 4 guard also covers the 2-byte empty-doc update [0, 0]); a false positive would throw
+// in the caller's existing try/catch and be skipped, never silently corrupted. No schema
+// migration — the BLOB column stores either form, and old/new rows coexist because each row is
+// decoded independently.
 
 // zstd standard frame magic (little-endian 0xFD2FB528).
 const ZSTD_MAGIC = [0x28, 0xb5, 0x2f, 0xfd] as const;

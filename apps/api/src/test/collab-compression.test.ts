@@ -5,18 +5,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as Y from 'yjs';
 import { compressBlob } from '../lib/collab/blob-codec';
+import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import { readYjsStateFromFile } from '../lib/collab/yjs-loader';
 
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
-const DDL = `
-CREATE TABLE doc_updates (id INTEGER PRIMARY KEY AUTOINCREMENT, updateData BLOB NOT NULL, createdAt INTEGER DEFAULT (unixepoch()));
-CREATE TABLE doc_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, stateData BLOB NOT NULL, lastUpdateId INTEGER NOT NULL, createdAt INTEGER DEFAULT (unixepoch()));
-`;
 
+// Build a real collab data.db by running the actual migrations, so the test schema stays in
+// lockstep with db-config.ts instead of drifting from a hand-rolled DDL copy.
 function makeDataDb(): { path: string; db: Database } {
     const path = join(tmpdir(), `collab-test-${crypto.randomUUID()}.db`);
     const db = new Database(path);
-    db.exec(DDL);
+    for (const migration of COLLAB_DB_CONFIG.migrations) migration.up(db);
     return { path, db };
 }
 
