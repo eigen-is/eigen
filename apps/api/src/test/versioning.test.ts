@@ -388,4 +388,19 @@ describe('versions HTTP routes', () => {
         });
         expect(res.status).toBe(403);
     });
+
+    test('restore rejects a malformed snapshot name', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const doc = await drivePost<DrivePath>(token, ownerId, aliceMountId, `folder/${aliceRootId}/create/doc`, {
+            fileName: 'versions-badname',
+        });
+        // Not a snapshot filename → rejected by the route's param schema, not a deep 404.
+        const res = await authedRequest(
+            token,
+            `/drive/${ownerId}/${aliceMountId}/file/${doc.id}/versions/not-a-snapshot/restore`,
+            { method: 'POST' },
+        );
+        expect(res.status).toBe(422);
+    });
 });

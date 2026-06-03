@@ -11,6 +11,7 @@ import { getHome } from '../lib/home';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
+import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
 
 // Drive routes allow cross-owner access (shared drives, team drives).
@@ -306,7 +307,17 @@ export const driveRouter = new Elysia({ name: 'drive' })
             await drive.restoreContainer(params.mountId, params.pathId, params.snapshotName);
             return { success: true };
         },
-        { auth: true },
+        // Constrain the user-supplied snapshot name to the snapshot filename shape so
+        // a bogus value 422s here instead of falling through to a deep 404.
+        {
+            auth: true,
+            params: t.Object({
+                ownerId: t.String(),
+                mountId: t.String(),
+                pathId: t.String(),
+                snapshotName: t.String({ pattern: SNAPSHOT_NAME_FORMAT.source }),
+            }),
+        },
     )
     // Path operations (rename, move, delete, acl, breadcrumb)
     .get(
