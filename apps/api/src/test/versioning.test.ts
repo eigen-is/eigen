@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
+import * as Y from 'yjs';
 import {
     DAY_MS,
     DEFAULT_RETENTION,
@@ -277,6 +278,39 @@ describe('versions HTTP routes', () => {
 
         expect(drive.hasCollabDocument(aliceMountId, sheets.id)).toBe(false);
         expect(documents.size).toBe(openBefore);
+    });
+
+    test('eigendoc: doc (Tiptap XmlFragment) restore applies to the live Y.Doc', async () => {
+        // The headline "docs no longer reload" path: a doc restores by replaying
+        // the snapshot into the live Y.Doc's XmlFragment root, not a data.db swap.
+        // Sheets (Y.Map) is covered above; this exercises the XmlFragment root —
+        // the type the pre-surgery restore couldn't handle — end to end.
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        const drive = home.drive;
+
+        const docPath = await drive.create(aliceMountId, aliceRootId, 'versions-doc-surgery', 'doc');
+        const collab = await drive.getCollabDocument(aliceMountId, docPath.id);
+
+        const fragment = () => collab.doc.getXmlFragment('default');
+        const paragraph = (text: string) => {
+            const p = new Y.XmlElement('paragraph');
+            p.insert(0, [new Y.XmlText(text)]);
+            return p;
+        };
+
+        fragment().insert(0, [paragraph('V1')]);
+        const savedV1 = await drive.saveVersion(aliceMountId, docPath.id);
+
+        fragment().insert(fragment().length, [paragraph('V2')]);
+        expect(fragment().toString()).toContain('V2');
+
+        await drive.restoreContainer(aliceMountId, docPath.id, savedV1.name);
+
+        // Same live Y.Doc instance, back to V1's XML, V2 gone — no reload.
+        const restored = fragment().toString();
+        expect(restored).toContain('V1');
+        expect(restored).not.toContain('V2');
     });
 
     test('chat: restore survives the close-time snapshot fire during evict', async () => {
