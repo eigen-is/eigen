@@ -32,33 +32,23 @@ export async function restoreContainer(
         if (isCollabType(container.type)) {
             await restoreYjsContainer(drive, mount, container.id, target);
         } else {
-            await evictContainer(drive, mount, container.id);
+            await evictContainer(mount, container.id);
             await mount.restoreContainerDataDb(container.id, snapshotName);
         }
     });
 }
 
-// Evict every in-process artefact of an open container: the collab singleton
-// (if cached in Drive.documents) and the canonical managed DBs (`data.db`,
-// `comments.db`). Chat does NOT have a singleton — Drive.getChat returns a
-// fresh ChatRoom per call — so closing the managed DB is sufficient.
-// Caller MUST hold withPathLock to serialise concurrent restore/save.
+// Close the chat container's cached data.db before restoreContainerDataDb swaps
+// the file on storage. Chat is the only caller (it's the non-Yjs branch): it has
+// no collab singleton (getCollabDocument rejects non-collab types) and no sidecar
+// DBs, so closing data.db is all that needs evicting. Caller MUST hold
+// withPathLock to serialise concurrent restore/save.
 //
-// skipFinalSnapshot: we already took the pre-restore snapshot before calling
-// here; the close-time forceSnapshot would be fire-and-forget, run with no
-// preserve hint, and could prune the target between
-// restoreContainerDataDb's lookup and copy.
-async function evictContainer(drive: Drive, mount: Mount, containerId: string): Promise<void> {
-    await drive.closeCollabDocument(mount.id, containerId, { skipFinalSnapshot: true });
-    // Named explicitly so a future eigendoc type with extra sidecar DBs has
-    // to opt in here on purpose, not by directory walk.
-    for (const name of ['data.db', 'comments.db']) {
-        const child = await mount.getChildByName(containerId, name);
-        if (!child) continue;
-        await mount
-            .closeDatabase(child.id, { skipFinalSnapshot: true })
-            .catch((err) => console.warn(`[restore] evictContainer: closeDatabase(${name}) failed:`, err));
-    }
+// skipFinalSnapshot: the pre-restore snapshot already ran; a close-time snapshot
+// would race the imminent data.db delete + replace and could prune the target.
+async function evictContainer(mount: Mount, containerId: string): Promise<void> {
+    const dataDb = await mount.getChildByName(containerId, 'data.db');
+    if (dataDb) await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
 }
 
 async function restoreYjsContainer(

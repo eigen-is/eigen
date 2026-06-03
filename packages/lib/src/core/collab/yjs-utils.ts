@@ -1,24 +1,6 @@
 import type { YjsRootKind } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
 
-// Recursively wraps a plain JSON value into Y.Map / Y.Array. Primitives pass
-// through. Kept for legacy callers that seed a doc from plain JSON.
-export function jsonToYType(value: unknown): unknown {
-    if (Array.isArray(value)) {
-        const arr = new Y.Array();
-        arr.push(value.map(jsonToYType));
-        return arr;
-    }
-    if (value !== null && typeof value === 'object') {
-        const map = new Y.Map();
-        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-            map.set(k, jsonToYType(v));
-        }
-        return map;
-    }
-    return value;
-}
-
 // Replaces a Y.Doc's declared root types with the contents of a snapshot
 // update, inside a single transaction. The transaction's update fires through
 // the doc's normal 'update' event so connected clients converge through the
@@ -67,6 +49,10 @@ function forceTypeRoot(doc: Y.Doc, name: string, kind: YjsRootKind): void {
         case 'xmlfragment':
             doc.getXmlFragment(name);
             return;
+        default: {
+            const _exhaustive: never = kind;
+            throw new Error(`forceTypeRoot: unhandled root kind ${_exhaustive}`);
+        }
     }
 }
 
