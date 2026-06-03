@@ -314,20 +314,18 @@ describe('versions HTTP routes', () => {
     });
 
     test('chat: restore survives the close-time snapshot fire during evict', async () => {
-        // Regression: evictContainer used to call closeDatabase without
-        // skipFinalSnapshot, so ManagedDatabase.close fired its
-        // fire-and-forget onSnapshot. That async snapshot ran with no
-        // preserve hint and could prune the target between
-        // restoreContainerDataDb's lookup and copy — leaving data.db
-        // deleted but not replaced, bricking the container.
+        // Regression: evictContainer used to close data.db without
+        // skipFinalSnapshot, so ManagedDatabase.close took its close-time
+        // snapshot during eviction. That snapshot ran with no preserve hint
+        // and could prune the target between restoreContainerDataDb's lookup
+        // and copy — leaving data.db deleted but not replaced, bricking the
+        // container.
         //
-        // Triggering the close-time fire requires unsnapshotted writes at
-        // close time (forceSnapshot only fires the snapshot block when
-        // changesSinceLastSnapshot > 0). The trailing chatPost provides
-        // those writes; the prior save + save pair puts the target in the
-        // same hourly slot as a newer snapshot so retention WOULD prune it
-        // if the fire-and-forget reached the prune step ahead of
-        // restoreContainerDataDb.
+        // The close-time snapshot only fires when there are unsnapshotted
+        // writes, so the trailing chatPost provides them; the prior save + save
+        // pair puts the target in the same hourly slot as a newer snapshot, so
+        // retention WOULD prune it if the eviction snapshot reached the prune
+        // step. evictContainer now passes skipFinalSnapshot to prevent that.
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
 

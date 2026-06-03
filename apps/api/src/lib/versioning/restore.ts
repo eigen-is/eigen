@@ -77,6 +77,8 @@ async function restoreYjsContainer(
     // A restore from the file list opens the doc with no subscriber; close it so
     // it doesn't leak. If it was already open (live editor, import/export), that
     // owner manages its lifecycle — closing would yank it out from under them.
+    // (subscribe doesn't take the path lock, so a client connecting during this
+    // close is simply bounced and reconnects to the restored state.)
     if (!wasOpen && collabDoc.connectionCount === 0) {
         await drive.closeCollabDocument(mount.id, containerId);
     }
