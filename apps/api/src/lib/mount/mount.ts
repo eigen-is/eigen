@@ -503,7 +503,7 @@ export class Mount {
 
         // Drop the cached managedDb (if any) before overwriting the file.
         // closeDatabase is idempotent, so it's safe whether or not the caller
-        // also ran evictContainer.
+        // already closed data.db (the chat restore path does).
         await this.closeDatabase(dataDb.id);
 
         const stagingName = `.restore-tmp-${randomUUID()}.db`;

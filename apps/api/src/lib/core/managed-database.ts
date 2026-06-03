@@ -182,11 +182,9 @@ export class ManagedDatabase<S extends SchemaType> {
         }
 
         await this.sync();
-        // Fold the WAL into the main file, then snapshot. Local backends copy
-        // this on-disk file, so the TRUNCATE makes it complete; remote backends
-        // copy the object sync() just uploaded. Awaited (a fire-and-forget
-        // snapshot would race the teardown below), but a snapshot failure must
-        // not block close, so it's caught rather than propagated.
+        // Fold the WAL into the main file before snapshotting: local backends copy
+        // this on-disk file (TRUNCATE makes it complete), remote backends copy the
+        // object sync() uploaded. A snapshot failure is caught so it can't block close.
         this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
         if (!opts.skipFinalSnapshot) {
             await this.snapshotIfDue(true).catch((err) =>
