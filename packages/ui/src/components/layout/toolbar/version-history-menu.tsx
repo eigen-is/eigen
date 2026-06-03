@@ -1,7 +1,7 @@
-import { useRestoreVersion, useSaveVersion, useVersions } from '@workspace/lib/core/versioning/hooks';
 import { formatDateTime } from '@workspace/lib/date';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
+import { useRestoreVersion, useSaveVersion, useVersions } from '@workspace/lib/versioning';
 import { History, Save } from 'lucide-react';
 import { ConfirmDialog } from '../../confirm-dialog';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dropdown-menu';
@@ -74,10 +74,13 @@ export function RestoreVersionDialog({
                     : ''
             }
             confirmText="Restore"
-            onConfirm={async () => {
+            onConfirm={() => {
                 if (!snapshot) return;
-                await restore.mutateAsync(snapshot.name);
+                // Close before firing so a double-click can't trigger a second
+                // restore (ConfirmDialog has no in-flight disable). Errors surface
+                // through the mutation's onMutationError toast.
                 onClose();
+                restore.mutate(snapshot.name);
             }}
         />
     );
