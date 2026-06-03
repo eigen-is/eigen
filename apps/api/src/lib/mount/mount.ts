@@ -620,18 +620,20 @@ export class Mount {
         return this.resolveStoragePath(pathId);
     }
 
-    // Local mounts only — S3 throws. Used by server-side read-only consumers
-    // (Yjs restore) that open a file directly without going through ManagedDatabase.
-    async resolveLocalPath(pathId: string): Promise<string> {
+    // Run `fn` against a local, SQLite-openable copy of an existing stored file.
+    // Local backends open the object in place; remote backends (S3) have no local
+    // path, so the object is downloaded to a temp file first and cleaned up after.
+    // Used by the Yjs version restore to read a snapshot data.db on any backend.
+    async withLocalCopy<T>(pathId: string, fn: (localPath: string) => T): Promise<T> {
         const storageKey = await this.getStorageKey(pathId);
-        const localPath = this.storage.getPath?.(storageKey);
-        if (!localPath) {
-            throw new ApiError(
-                501,
-                `Local path lookup not supported for mount '${this.id}' (storage: ${this.config.storageType})`,
-            );
+        const directPath = this.storage.getPath?.(storageKey);
+        if (directPath) return fn(directPath);
+        const tempPath = await this.downloadToTemp(storageKey, pathId);
+        try {
+            return fn(tempPath);
+        } finally {
+            await this.cleanupTemp(pathId);
         }
-        return localPath;
     }
 
     private async resolveStoragePath(pathId: string): Promise<string> {
