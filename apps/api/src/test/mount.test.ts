@@ -62,43 +62,43 @@ describe('buildStorageKey', () => {
     });
 });
 
-describe('withLocalCopy', () => {
+describe('downloadToTemp', () => {
     let mount: Mount;
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-with-local-copy', 'local-key');
+        const config = createDefaultMountConfig('test-download-to-temp', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;
     });
 
-    test('reads the stored file in place when the backend exposes a local path', async () => {
-        const data = Buffer.from('snapshot-bytes-in-place');
+    test('copies a stored file to a temp path, then cleanupTemp removes it', async () => {
+        const data = Buffer.from('snapshot-bytes');
         const fileId = await mount.createFile(rootId, 'snap.db', 'application/octet-stream', data.length, data);
-        const got = await mount.withLocalCopy(fileId, (p) => readFileSync(p));
-        expect(Buffer.from(got).toString()).toBe('snapshot-bytes-in-place');
+        const tempPath = await mount.downloadToTemp(fileId);
+        expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes');
+        await mount.cleanupTemp(fileId);
+        expect(existsSync(tempPath)).toBe(false);
     });
 
-    test('downloads to a temp copy for backends without a local path (S3-style), then cleans up', async () => {
-        const data = Buffer.from('snapshot-bytes-via-temp');
+    test('works on backends without a local path (S3-style: no getPath)', async () => {
+        // The version-restore read path must not depend on storage.getPath — that
+        // was the original S3 bug. downloadToTemp goes through storage.read, which
+        // every backend implements.
+        const data = Buffer.from('snapshot-bytes-no-getpath');
         const fileId = await mount.createFile(rootId, 'snap2.db', 'application/octet-stream', data.length, data);
 
-        // Simulate a remote backend (S3) whose storage has no getPath.
         const storage = (mount as unknown as { storage: { getPath?: (key: string) => string } }).storage;
         const originalGetPath = storage.getPath;
         storage.getPath = undefined;
-        let observedPath = '';
         try {
-            const got = await mount.withLocalCopy(fileId, (p) => {
-                observedPath = p;
-                return readFileSync(p);
-            });
-            expect(Buffer.from(got).toString()).toBe('snapshot-bytes-via-temp');
+            const tempPath = await mount.downloadToTemp(fileId);
+            expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes-no-getpath');
+            await mount.cleanupTemp(fileId);
         } finally {
             storage.getPath = originalGetPath;
         }
-        expect(existsSync(observedPath)).toBe(false);
     });
 });
 
