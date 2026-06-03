@@ -9,7 +9,9 @@ export type RetentionBucket = { intervalMs: number; count: number };
 export type RetentionPolicy = { buckets: RetentionBucket[] };
 export type SnapshotEntry = { id: string; name: string };
 
-// ~1 year coverage at ≤47 snapshots regardless of write rate.
+// ≤47 snapshots: hourly for the last 24 edited hours, then daily (7), weekly (4),
+// monthly (12). Granularity tracks editing time, not wall-clock, so a file worked on
+// in bursts keeps an hourly trail of its actual sessions.
 export const DEFAULT_RETENTION: RetentionPolicy = {
     buckets: [
         { intervalMs: HOUR_MS, count: 24 },
@@ -19,30 +21,29 @@ export const DEFAULT_RETENTION: RetentionPolicy = {
     ],
 };
 
-export function selectSnapshotsToPrune<T extends SnapshotEntry>(
-    items: T[],
-    policy: RetentionPolicy,
-    now: Date = new Date(),
-): T[] {
+// Keep the newest snapshot in each of the `count` most recent buckets per tier,
+// where a bucket is floor(timestamp / intervalMs). Buckets are keyed by the
+// snapshot's own time, so they never shift: "newest per bucket" stays stable under
+// the incremental pruning snapshotContainerDataDb runs after every snapshot, and a
+// completed hour's representative is locked in instead of being displaced by the next
+// edit. (The borg/restic keep-hourly/daily/… model, anchored to the most recent
+// snapshots rather than wall-clock now. See scripts/version-retention-sim.ts.)
+export function selectSnapshotsToPrune<T extends SnapshotEntry>(items: T[], policy: RetentionPolicy): T[] {
     const parsed = items
-        .map((item) => ({ item, ts: parseSnapshotTimestamp(item.name) }))
-        .filter((x): x is { item: T; ts: Date } => x.ts !== null);
+        .map((item) => ({ item, ts: parseSnapshotTimestamp(item.name)?.getTime() }))
+        .filter((x): x is { item: T; ts: number } => x.ts !== undefined);
 
-    const nowMs = now.getTime();
     const kept = new Set<T>();
-
-    for (const bucket of policy.buckets) {
-        const newestPerSlot = new Map<number, { item: T; ts: Date }>();
+    for (const { intervalMs, count } of policy.buckets) {
+        const newestPerBucket = new Map<number, { item: T; ts: number }>();
         for (const p of parsed) {
-            const ageMs = Math.max(0, nowMs - p.ts.getTime());
-            const slot = Math.floor(ageMs / bucket.intervalMs);
-            if (slot >= bucket.count) continue;
-            const existing = newestPerSlot.get(slot);
-            if (!existing || p.ts.getTime() > existing.ts.getTime()) {
-                newestPerSlot.set(slot, p);
-            }
+            const bucket = Math.floor(p.ts / intervalMs);
+            const existing = newestPerBucket.get(bucket);
+            if (!existing || p.ts > existing.ts) newestPerBucket.set(bucket, p);
         }
-        for (const { item } of newestPerSlot.values()) kept.add(item);
+        for (const bucket of [...newestPerBucket.keys()].sort((a, b) => b - a).slice(0, count)) {
+            kept.add(newestPerBucket.get(bucket)!.item);
+        }
     }
 
     return parsed.filter((p) => !kept.has(p.item)).map((p) => p.item);

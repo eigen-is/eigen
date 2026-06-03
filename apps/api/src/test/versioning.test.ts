@@ -28,72 +28,85 @@ describe('snapshot timestamp', () => {
     });
 });
 
-describe('retention pruning (time-bucketed)', () => {
-    const now = new Date('2026-05-31T12:00:00.000Z');
-    const ago = (ms: number) => new Date(now.getTime() - ms);
-    const mk = (offsets: number[]) => offsets.map((ms, i) => ({ id: `s${i}`, name: formatSnapshotTimestamp(ago(ms)) }));
+describe('retention pruning (absolute time buckets)', () => {
+    // Absolute bucketing is now-independent, so tests use concrete timestamps.
+    const at = (iso: string, id: string) => ({ id, name: formatSnapshotTimestamp(new Date(iso)) });
+    const prune = (items: { id: string; name: string }[], policy: RetentionPolicy) =>
+        selectSnapshotsToPrune(items, policy)
+            .map((s) => s.id)
+            .sort();
 
-    test('hourly bucket: keep newest per hour slot', () => {
-        const items = mk([10 * 60_000, 20 * 60_000, 30 * 60_000]);
-        const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 24 }] };
-        expect(
-            selectSnapshotsToPrune(items, policy, now)
-                .map((p) => p.id)
-                .sort(),
-        ).toEqual(['s1', 's2']);
-    });
-
-    test('multi-bucket: hourly + daily', () => {
-        const items = mk([30 * 60_000, 90 * 60_000, 25 * HOUR_MS, 2 * DAY_MS, 8 * DAY_MS]);
-        const policy: RetentionPolicy = {
-            buckets: [
-                { intervalMs: HOUR_MS, count: 24 },
-                { intervalMs: DAY_MS, count: 7 },
-            ],
-        };
-        expect(selectSnapshotsToPrune(items, policy, now).map((p) => p.id)).toEqual(['s4']);
-    });
-
-    test('overlap: same snapshot kept by multiple buckets, stored once', () => {
-        const items = mk([30 * 60_000, 4 * HOUR_MS]);
-        const policy: RetentionPolicy = {
-            buckets: [
-                { intervalMs: HOUR_MS, count: 24 },
-                { intervalMs: DAY_MS, count: 7 },
-            ],
-        };
-        expect(selectSnapshotsToPrune(items, policy, now)).toEqual([]);
-    });
-
-    test('default policy keeps 300d-old, prunes 400d-old', () => {
-        expect(selectSnapshotsToPrune(mk([300 * DAY_MS]), DEFAULT_RETENTION, now)).toEqual([]);
-        expect(selectSnapshotsToPrune(mk([400 * DAY_MS]), DEFAULT_RETENTION, now)).toHaveLength(1);
-    });
-
-    test('sparse: 1/week is fully kept', () => {
-        const items = mk([1 * DAY_MS, 7 * DAY_MS, 14 * DAY_MS, 21 * DAY_MS]);
-        expect(selectSnapshotsToPrune(items, DEFAULT_RETENTION, now)).toEqual([]);
-    });
-
-    test('dense: 50 in last hour → 1 kept', () => {
-        const items = Array.from({ length: 50 }, (_, i) => ({
-            id: `s${i}`,
-            name: formatSnapshotTimestamp(ago(i * 60_000)),
-        }));
-        const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 24 }] };
-        const pruned = selectSnapshotsToPrune(items, policy, now);
-        expect(pruned).toHaveLength(49);
-        expect(pruned.map((p) => p.id)).not.toContain('s0');
-    });
-
-    test('ignores non-snapshot files', () => {
+    test('same hour bucket: keep only the newest', () => {
         const items = [
-            { id: 'a', name: formatSnapshotTimestamp(ago(30 * 60_000)) },
-            { id: 'b', name: 'garbage.db' },
-            { id: 'c', name: formatSnapshotTimestamp(ago(2 * HOUR_MS)) },
+            at('2026-05-31T10:05:00.000Z', 'a'),
+            at('2026-05-31T10:35:00.000Z', 'b'),
+            at('2026-05-31T10:55:00.000Z', 'c'),
         ];
-        const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 1 }] };
-        expect(selectSnapshotsToPrune(items, policy, now).map((p) => p.id)).toEqual(['c']);
+        const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 24 }] };
+        expect(prune(items, policy)).toEqual(['a', 'b']); // keep c
+    });
+
+    test('distinct hour buckets: keep the newest of each', () => {
+        const items = [
+            at('2026-05-31T08:30:00.000Z', 'a'),
+            at('2026-05-31T08:50:00.000Z', 'b'),
+            at('2026-05-31T09:10:00.000Z', 'c'),
+            at('2026-05-31T09:40:00.000Z', 'd'),
+        ];
+        const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 24 }] };
+        expect(prune(items, policy)).toEqual(['a', 'c']); // keep b (08:00), d (09:00)
+    });
+
+    test('keeps only the `count` most recent buckets', () => {
+        const items = [
+            at('2026-05-31T08:30:00.000Z', 'a'),
+            at('2026-05-31T09:30:00.000Z', 'b'),
+            at('2026-05-31T10:30:00.000Z', 'c'),
+        ];
+        const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 2 }] };
+        expect(prune(items, policy)).toEqual(['a']); // keep the two newest hours (b, c)
+    });
+
+    test('rolls off beyond the `count` most recent buckets', () => {
+        const base = Date.parse('2026-05-31T00:00:00.000Z');
+        const items = Array.from({ length: 13 }, (_, i) => at(new Date(base + i * HOUR_MS).toISOString(), `h${i}`));
+        const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 12 }] };
+        expect(selectSnapshotsToPrune(items, policy).map((p) => p.id)).toEqual(['h0']); // oldest hour drops
+    });
+
+    test('multi-tier union: daily keeps what the hourly window dropped', () => {
+        const items = [
+            at('2026-05-30T12:00:00.000Z', 'yesterday'),
+            at('2026-05-31T09:00:00.000Z', 'today-am'),
+            at('2026-05-31T10:00:00.000Z', 'today-late'),
+        ];
+        // hourly keeps only the most recent hour (today-late); daily keeps the newest
+        // of each day (today-late + yesterday). Union drops today-am.
+        const policy: RetentionPolicy = {
+            buckets: [
+                { intervalMs: HOUR_MS, count: 1 },
+                { intervalMs: DAY_MS, count: 7 },
+            ],
+        };
+        expect(prune(items, policy)).toEqual(['today-am']);
+    });
+
+    test('default policy: a dense hour collapses to one snapshot', () => {
+        const base = Date.parse('2026-05-31T10:00:00.000Z');
+        const items = Array.from({ length: 50 }, (_, i) => at(new Date(base + i * 60_000).toISOString(), `s${i}`));
+        const pruned = selectSnapshotsToPrune(items, DEFAULT_RETENTION);
+        expect(pruned).toHaveLength(49);
+        expect(pruned.map((p) => p.id)).not.toContain('s49'); // s49 (newest) is kept
+    });
+
+    test('ignores names that are not snapshots', () => {
+        const items = [
+            at('2026-05-31T10:05:00.000Z', 'a'),
+            { id: 'junk', name: 'garbage.db' },
+            at('2026-05-31T10:55:00.000Z', 'b'),
+        ];
+        const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 24 }] };
+        expect(prune(items, policy)).toEqual(['a']); // junk ignored; keep b (newest)
     });
 });
 
