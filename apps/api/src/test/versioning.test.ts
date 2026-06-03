@@ -247,6 +247,36 @@ describe('versions HTTP routes', () => {
         expect(dataDbAfter?.id).toBe(dataDbBefore?.id);
     });
 
+    test('eigendoc: restore from the file list does not leak an open collab doc', async () => {
+        // Restoring from the drive file list (editor closed) opens the
+        // CollabDocument singleton purely to run the surgery. With no subscriber,
+        // nothing calls unsubscribe → closeCollabDocument, so the doc + its
+        // data.db would leak in Drive.documents until the Home is destructed.
+        // restoreYjsContainer must close the doc it opened. Observe Drive.documents
+        // directly (private — no production accessor exists just for this).
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        const drive = home.drive;
+        const documents = (drive as unknown as { documents: Map<string, unknown> }).documents;
+
+        // Create + save through the HTTP surface so no CollabDocument is opened
+        // in-process before the restore — restore is the first (and only) opener.
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const sheets = await drivePost<DrivePath>(token, ownerId, aliceMountId, `folder/${aliceRootId}/create/sheets`, {
+            fileName: 'versions-no-leak',
+        });
+        const saved = await saveVersion(token, ownerId, aliceMountId, sheets.id);
+
+        expect(drive.hasCollabDocument(aliceMountId, sheets.id)).toBe(false);
+        const openBefore = documents.size;
+
+        await restoreVersion(token, ownerId, aliceMountId, sheets.id, saved.name);
+
+        expect(drive.hasCollabDocument(aliceMountId, sheets.id)).toBe(false);
+        expect(documents.size).toBe(openBefore);
+    });
+
     test('chat: restore survives the close-time snapshot fire during evict', async () => {
         // Regression: evictContainer used to call closeDatabase without
         // skipFinalSnapshot, so ManagedDatabase.close fired its

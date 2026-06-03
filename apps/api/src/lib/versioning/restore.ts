@@ -78,20 +78,16 @@ async function restoreYjsContainer(
     // update fires CollabDocument's existing 'update' handler → DbProvider
     // persists to data.db AND every connected WebSocket receives the diff.
     // Disconnected sessions catch up via the next sync handshake.
+    // Did a live editor session already hold this doc open, or are we opening it
+    // purely for the surgery? Checked BEFORE getCollabDocument creates it.
+    const wasOpen = drive.hasCollabDocument(mount.id, containerId);
     const collabDoc = await drive.getCollabDocument(mount.id, containerId);
-    let updates = 0;
-    let bytes = 0;
-    const tap = (update: Uint8Array) => {
-        updates += 1;
-        bytes += update.byteLength;
-    };
-    collabDoc.doc.on('update', tap);
-    try {
-        collabDoc.applySnapshotState(snapshotState);
-    } finally {
-        collabDoc.doc.off('update', tap);
+    collabDoc.applySnapshotState(snapshotState);
+
+    // A restore from the file list opens the doc with no subscriber; close it so
+    // it doesn't leak. If it was already open (live editor, import/export), that
+    // owner manages its lifecycle — closing would yank it out from under them.
+    if (!wasOpen && collabDoc.connectionCount === 0) {
+        await drive.closeCollabDocument(mount.id, containerId);
     }
-    console.log(
-        `[restore] yjs surgery on ${snapshotPath.name}: ${updates} update(s), ${bytes}B → ${collabDoc.connectionCount} client(s)`,
-    );
 }
