@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { NoteCard } from '@workspace/ui';
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
 
 type SortableNoteCardProps = {
     card: CommentCard;
@@ -12,7 +12,13 @@ type SortableNoteCardProps = {
     onContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
 };
 
-export function SortableNoteCard({ card, replyCount, canWrite = true, onOpen, onContextMenu }: SortableNoteCardProps) {
+export const SortableNoteCard = memo(function SortableNoteCard({
+    card,
+    replyCount,
+    canWrite = true,
+    onOpen,
+    onContextMenu,
+}: SortableNoteCardProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
         data: { type: 'task', task: card },
@@ -53,4 +59,4 @@ export function SortableNoteCard({ card, replyCount, canWrite = true, onOpen, on
             {...(canWrite ? { ...attributes, ...listeners } : {})}
         />
     );
-}
+});
