@@ -498,12 +498,17 @@ export class Mount {
     // stale vnode (SQLITE_IOERR_VNODE) when the db is reopened.
     async replaceContainerDataDb(containerId: string, sourcePath: string): Promise<void> {
         return this.withPathLock(containerId, async () => {
-            const dataDb = await this.getChildByName(containerId, 'data.db');
-            if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
             const file = Bun.file(sourcePath);
-            await this.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
-            await this.deletePath(dataDb.id);
-            await this.createFile(containerId, 'data.db', dataDb.mimeType, file.size, file);
+            // data.db is normally present, but a prior restore that crashed between the
+            // delete and recreate below would leave it absent; tolerate that so simply
+            // re-running restore self-heals instead of 404-ing forever. The fallback
+            // mime matches provisionManagedDbs.
+            const dataDb = await this.getChildByName(containerId, 'data.db');
+            if (dataDb) {
+                await this.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+                await this.deletePath(dataDb.id);
+            }
+            await this.createFile(containerId, 'data.db', dataDb?.mimeType ?? 'application/x-sqlite3', file.size, file);
         });
     }
 
