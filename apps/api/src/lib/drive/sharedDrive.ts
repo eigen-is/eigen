@@ -1,6 +1,7 @@
 import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
+import type { Snapshot } from '@workspace/lib/types/versioning';
 import type { ChatRoom } from '../chat';
 import type CollabDocument from '../collab/collabDocument.ts';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
@@ -394,6 +395,20 @@ export default class SharedDrive {
 
     public async closeDatabase(mountId: string, pathId: string): Promise<void> {
         return this.sharedDrive.closeDatabase(mountId, pathId);
+    }
+
+    public async listVersions(mountId: string, containerId: string): Promise<Snapshot[]> {
+        return this.withReadPermission(mountId, containerId, () => this.sharedDrive.listVersions(mountId, containerId));
+    }
+
+    public async saveVersion(mountId: string, containerId: string): Promise<Snapshot> {
+        return this.withWritePermission(mountId, containerId, () => this.sharedDrive.saveVersion(mountId, containerId));
+    }
+
+    public async restoreContainer(mountId: string, containerId: string, snapshotName: string): Promise<void> {
+        return this.withWritePermission(mountId, containerId, () =>
+            this.sharedDrive.restoreContainer(mountId, containerId, snapshotName),
+        );
     }
 
     // Team members always go through SharedDrive (no team user logs in),

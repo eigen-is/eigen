@@ -20,11 +20,20 @@ import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { getS3Config, getServerSettings } from '../config/server-settings';
-import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, sanitizeFtsQuery } from '../core';
+import {
+    ApiError,
+    type DatabaseConfig,
+    ManagedDatabase,
+    type SchemaType,
+    type SyncCallbacks,
+    sanitizeFtsQuery,
+} from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
+import { type RetentionPolicy, selectSnapshotsToPrune } from '../versioning/retention';
+import { formatSnapshotTimestamp } from '../versioning/timestamp';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type * as schema from './schema';
 import { paths } from './schema';
@@ -433,6 +442,69 @@ export class Mount {
         } finally {
             await this.cleanupTemp(tempId);
         }
+    }
+
+    // Snapshots the container's data.db into versions/<iso-ts>.db, then prunes per
+    // the retention policy. Self-locked on the container: the timer, close, manual
+    // save and a restore's pre-restore snapshot all call this directly and serialize
+    // here — no caller has to remember to lock, and nothing holds the lock across
+    // another snapshot, so there is no deadlock to reason about.
+    async snapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
+        return this.withPathLock(containerId, async () => {
+            const dataDb = await this.getChildByName(containerId, 'data.db');
+            if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
+
+            // Flush any cached managedDb so the on-storage data.db reflects pending
+            // writes. No-op if not cached, or cached and not dirty.
+            const cached = this.documentDbs.get(dataDb.id);
+            if (cached) await (await cached()).flush();
+
+            let versions = await this.getChildByName(containerId, 'versions');
+            if (!versions) {
+                const newId = await this.createFolder(containerId, 'versions');
+                const created = await this.getPath(newId);
+                if (!created) throw new ApiError(500, 'Failed to create versions folder');
+                versions = created;
+            }
+
+            const snapshotName = formatSnapshotTimestamp(new Date());
+            // Two snapshots in the same millisecond capture the same instant — reuse
+            // the existing one rather than failing on the duplicate name.
+            const existing = await this.getChildByName(versions.id, snapshotName);
+            if (existing) return existing;
+            const copy = await this.copyPath(dataDb.id, versions.id, snapshotName);
+
+            // Prune. Exclude the just-written copy: retention keeps the newest per
+            // hour bucket, and excluding the fresh one lets a second snapshot taken
+            // within the same hour preserve the first until the hour rolls over.
+            const toPrune = selectSnapshotsToPrune(
+                (await this.listFolder(versions.id))
+                    .filter((e) => e.id !== copy.id)
+                    .map((e) => ({ id: e.id, name: e.name })),
+                policy,
+            );
+            for (const item of toPrune) await this.deletePath(item.id);
+
+            return copy;
+        });
+    }
+
+    // Replaces the container's data.db with the file at `sourcePath` — a snapshot the
+    // caller grabbed into the OS temp dir (downloadToTemp) before the pre-restore
+    // snapshot could prune it. Self-locked so a concurrent snapshot can't read a
+    // half-written data.db. Closes the live db with skipFinalSnapshot (we're
+    // discarding it, and snapshotting here would re-enter this lock), then deletes and
+    // recreates — a fresh inode, because overwriting the file in place hands SQLite a
+    // stale vnode (SQLITE_IOERR_VNODE) when the db is reopened.
+    async replaceContainerDataDb(containerId: string, sourcePath: string): Promise<void> {
+        return this.withPathLock(containerId, async () => {
+            const dataDb = await this.getChildByName(containerId, 'data.db');
+            if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
+            const file = Bun.file(sourcePath);
+            await this.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+            await this.deletePath(dataDb.id);
+            await this.createFile(containerId, 'data.db', dataDb.mimeType, file.size, file);
+        });
     }
 
     async touchFile(parentId: string, name: string, mimeType: string) {
@@ -903,7 +975,14 @@ export class Mount {
         return path.join(this.tmpDir, pathId.replace(/\//g, '_'));
     }
 
-    private async downloadToTemp(storageKey: string, tempId: string): Promise<string> {
+    // Download a stored file to a local temp path the caller can open directly
+    // (e.g. reading a SQLite snapshot on any storage backend). Caller owns
+    // cleanupTemp(pathId).
+    async downloadToTemp(pathId: string): Promise<string> {
+        return this.downloadKeyToTemp(await this.getStorageKey(pathId), pathId);
+    }
+
+    private async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
         const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
         const file = this.storage.read(storageKey);
@@ -1011,6 +1090,14 @@ export class Mount {
             throw new ApiError(503, `Storage object for ${pathId} not available`);
         }
 
+        const onSnapshot: SyncCallbacks['onSnapshot'] = config.snapshot
+            ? async () => {
+                  const path = await this.getPath(pathId);
+                  if (!path?.parentId) return; // standalone or already-deleted; skip
+                  await this.snapshotContainerDataDb(path.parentId, config.snapshot!.policy);
+              }
+            : undefined;
+
         const db = new ManagedDatabase(
             config,
             localPath,
@@ -1026,7 +1113,7 @@ export class Mount {
                           if (!(await this.storage.exists(storageKey))) {
                               throw new ApiError(503, `Storage object for ${pathId} not available`);
                           }
-                          await this.downloadToTemp(storageKey, pathId);
+                          await this.downloadKeyToTemp(storageKey, pathId);
                       },
                       onSync: async () => {
                           await this.uploadFromTemp(storageKey, pathId);
@@ -1038,6 +1125,7 @@ export class Mount {
                           await this.syncDocumentDbSize(pathId, localPath);
                           await this.cleanupTemp(pathId);
                       },
+                      onSnapshot,
                   }
                 : {
                       onSync: async () => {
@@ -1046,6 +1134,7 @@ export class Mount {
                       onClose: async () => {
                           await this.syncDocumentDbSize(pathId, localPath);
                       },
+                      onSnapshot,
                   },
         );
 
@@ -1065,14 +1154,14 @@ export class Mount {
         return db;
     }
 
-    async closeDatabase(pathId: string): Promise<void> {
+    async closeDatabase(pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
         const getter = this.documentDbs.get(pathId);
         if (getter) {
             // Delete BEFORE closing — a concurrent openDatabase() during the async
             // close must create a fresh ManagedDatabase, not reuse the closing one.
             this.documentDbs.delete(pathId);
             const db = await getter();
-            await db.close();
+            await db.close(opts);
         }
     }
 

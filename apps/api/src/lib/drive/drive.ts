@@ -21,6 +21,7 @@ import {
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
+import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -39,6 +40,9 @@ import type { StorageFile } from '../storage';
 import { getTeamMembers } from '../team';
 import type { User } from '../user';
 import { getMemberships, type Memberships } from '../user/';
+import { listVersions } from '../versioning/list';
+import { restoreContainer } from '../versioning/restore';
+import { saveVersion } from '../versioning/save';
 import {
     canReadFromAncestors,
     canWriteFromAncestors,
@@ -785,9 +789,19 @@ export default class Drive {
         return canWriteFromAncestors(ancestors, user, resolved);
     }
 
+    private documentKey(mountId: string, pathId: string): string {
+        return `${this.owner.id}.${mountId}.${pathId}`;
+    }
+
+    // Called by: versioning/restore (to decide whether a restore opened the doc
+    // itself, and so must close it). Not route-callable.
+    hasCollabDocument(mountId: string, pathId: string): boolean {
+        return this.documents.has(this.documentKey(mountId, pathId));
+    }
+
     async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
         const mount = this.getMount(mountId);
-        const key = `${this.owner.id}.${mountId}.${pathId}`;
+        const key = this.documentKey(mountId, pathId);
         if (!this.documents.has(key)) {
             this.documents.set(
                 key,
@@ -804,19 +818,34 @@ export default class Drive {
         return (await this.documents.get(key)!()) as CollabDocument;
     }
 
-    // Called by: collab/collabDocument cleanup. Not route-callable.
-    async closeCollabDocument(mountId: string, pathId: string): Promise<void> {
+    // Called by: collab/collabDocument cleanup, versioning/restore. Not route-callable.
+    async closeCollabDocument(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
         const mount = this.getMount(mountId);
-        const key = `${this.owner.id}.${mountId}.${pathId}`;
+        const key = this.documentKey(mountId, pathId);
         const documentFn = this.documents.get(key);
         if (documentFn) {
             const doc = await documentFn();
             doc.destruct();
             this.documents.delete(key);
             if (doc.dataDbPathId) {
-                await mount.closeDatabase(doc.dataDbPathId);
+                await mount.closeDatabase(doc.dataDbPathId, opts);
             }
         }
+    }
+
+    async saveVersion(mountId: string, containerId: string): Promise<Snapshot> {
+        return saveVersion(this.getMount(mountId), containerId);
+    }
+
+    async listVersions(mountId: string, containerId: string): Promise<Snapshot[]> {
+        return listVersions(this.getMount(mountId), containerId);
+    }
+
+    async restoreContainer(mountId: string, containerId: string, snapshotName: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const container = await mount.getPath(containerId);
+        if (!container) throw new ApiError(404, `Container ${containerId} not found`);
+        return restoreContainer(this, mount, container, snapshotName);
     }
 
     async openDatabase<S extends SchemaType>(
@@ -869,9 +898,9 @@ export default class Drive {
         }
     }
 
-    async closeDatabase(mountId: string, pathId: string): Promise<void> {
+    async closeDatabase(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
         const mount = this.getMount(mountId);
-        await mount.closeDatabase(pathId);
+        await mount.closeDatabase(pathId, opts);
     }
 
     async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
