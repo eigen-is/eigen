@@ -26,7 +26,6 @@ import { setupRouter } from './routes/setup';
 import { spaceRouter } from './routes/space';
 import { sseRouter } from './routes/sse';
 import { teamRouter } from './routes/team';
-import { versionsRouter } from './routes/versions';
 import { waitlistRouter } from './routes/waitlist';
 
 const SLOW_REQUEST_MS = 200;
@@ -110,7 +109,6 @@ export const app = new Elysia({
     .use(spaceRouter)
     .use(publicRouter)
     .use(driveRouter)
-    .use(versionsRouter)
     .use(homeRouter)
     .use(collabRouter)
     .use(chatRouter)

@@ -9,7 +9,7 @@ export function useVersions(ownerId: string, mountId: string, pathId: string) {
     return useQuery({
         queryKey: versionsKeys.container(ownerId, mountId, pathId),
         queryFn: async () => {
-            const response = await driveApi({ ownerId })({ mountId })({ pathId }).versions.get();
+            const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).versions.get();
             if (response.error) throw new AppError(response);
             return response.data || [];
         },
@@ -22,7 +22,7 @@ export function useSaveVersion(ownerId: string, mountId: string, pathId: string)
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async () => {
-            const response = await driveApi({ ownerId })({ mountId })({ pathId }).versions.save.post();
+            const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).versions.save.post();
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -38,7 +38,8 @@ export function useRestoreVersion(ownerId: string, mountId: string, pathId: stri
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (snapshotName: string) => {
-            const response = await driveApi({ ownerId })({ mountId })({ pathId })
+            const response = await driveApi({ ownerId })({ mountId })
+                .file({ pathId })
                 .versions({ snapshotName })
                 .restore.post();
             if (response.error) throw new AppError(response);
