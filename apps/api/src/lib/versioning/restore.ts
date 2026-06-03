@@ -32,23 +32,16 @@ export async function restoreContainer(
         if (isCollabType(container.type)) {
             await restoreYjsContainer(drive, mount, container.id, target);
         } else {
-            await evictContainer(mount, container.id);
+            // Chat (the only non-Yjs branch) has no collab singleton
+            // (getCollabDocument rejects non-collab types) and no sidecar DBs, so
+            // closing the cached data.db is all that needs evicting before the
+            // file is swapped. skipFinalSnapshot: the pre-restore snapshot already
+            // ran; a close-time snapshot would race the imminent delete + replace.
+            const dataDb = await mount.getChildByName(container.id, 'data.db');
+            if (dataDb) await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
             await mount.restoreContainerDataDb(container.id, snapshotName);
         }
     });
-}
-
-// Close the chat container's cached data.db before restoreContainerDataDb swaps
-// the file on storage. Chat is the only caller (it's the non-Yjs branch): it has
-// no collab singleton (getCollabDocument rejects non-collab types) and no sidecar
-// DBs, so closing data.db is all that needs evicting. Caller MUST hold
-// withPathLock to serialise concurrent restore/save.
-//
-// skipFinalSnapshot: the pre-restore snapshot already ran; a close-time snapshot
-// would race the imminent data.db delete + replace and could prune the target.
-async function evictContainer(mount: Mount, containerId: string): Promise<void> {
-    const dataDb = await mount.getChildByName(containerId, 'data.db');
-    if (dataDb) await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
 }
 
 async function restoreYjsContainer(
