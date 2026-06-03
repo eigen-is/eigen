@@ -11,6 +11,7 @@ import { describe, expect, it } from 'bun:test';
 import type { Context } from '../../context';
 import { jfrefreshgrid } from '../../modules/refresh';
 import { deleteSelectedCellText, selectAll } from '../../modules/selection';
+import type { Cell } from '../../types';
 import { contextFactory } from '../factories/context';
 
 // 11 rows x 5 cols, with a formula in column E (c=4) at row 10.
@@ -55,5 +56,35 @@ describe('jfrefreshgrid across a multi-sheet calc chain', () => {
         // The other sheet's formula must still be resolved against *its own*
         // data, not silently dropped.
         expect(ctx.formulaCache.formulaCellInfoMap?.['r10c4iid_2']).toBeDefined();
+    });
+});
+
+describe('delete refreshes only the cells it actually changed', () => {
+    it('tracks content cells (not the whole selection) and still recomputes dependents outside the range', () => {
+        // 1000-row sheet, but only A1 holds a value; C1 (column C, not selected)
+        // is a formula that depends on A1.
+        const data: (Cell | null)[][] = Array.from({ length: 1000 }, () => [null, null, null, null]);
+        data[0][0] = { v: 5, m: '5' };
+        data[0][2] = { f: '=A1*2', v: 10, m: '10' };
+
+        const ctx = contextFactory({
+            currentSheetId: 'id_1',
+            // Select all of column A (rows 0..999); C1 in column C stays unselected.
+            selections: [{ row: [0, 999], column: [0, 0], row_focus: 0, column_focus: 0 }],
+            sheets: [{ name: 'active', id: 'id_1', order: 0, data, calcChain: [{ r: 0, c: 2, id: 'id_1' }] }],
+        }) as Context;
+
+        deleteSelectedCellText(ctx);
+
+        // 1000 cells were selected, but only A1 had content — that's all we track.
+        expect(ctx.formulaCache.pendingChangedCells).toEqual([{ r: 0, c: 0, id: 'id_1' }]);
+
+        // Same call the keyboard handler makes after a delete.
+        jfrefreshgrid(ctx, null, undefined);
+
+        // C1 (=A1*2) lives outside the deleted column yet must recompute to 0.
+        const c1 = ctx.groupValuesRefreshData.find((e) => e.r === 0 && e.c === 2 && e.id === 'id_1');
+        expect(c1).toBeDefined();
+        expect(c1?.v).toBe(0);
     });
 });

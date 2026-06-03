@@ -4,7 +4,7 @@ import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine';
 import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
-import type { Cell, Freezen, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
+import type { CalcChainEntry, Cell, Freezen, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
 import { type ComputedBorderEntry, getBorderInfoCompute } from './border';
 import {
@@ -1721,6 +1721,12 @@ export function copy(ctx: Context) {
 }
 
 export function deleteSelectedCellText(ctx: Context): string {
+    // Record the cells we actually clear so the formula refresh recomputes only
+    // those, not every cell in the selection (which is the whole matrix for
+    // select-all). Reset up front so an aborted delete never leaves a stale set.
+    const changed: CalcChainEntry[] = [];
+    ctx.formulaCache.pendingChangedCells = changed;
+
     const allowEdit = isAllowEdit(ctx);
     if (allowEdit === false) {
         return 'allowEdit';
@@ -1766,6 +1772,7 @@ export function deleteSelectedCellText(ctx: Context): string {
 
                         // Replace the entire cell with an empty object
                         if (data[r]?.[c]) {
+                            changed.push({ r, c, id: ctx.currentSheetId });
                             data[r][c] = {}; // Fully replace cell with empty object
                         }
 

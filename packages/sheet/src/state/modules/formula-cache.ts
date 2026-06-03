@@ -135,6 +135,11 @@ export class FormulaCache {
 
     execFunctionExist?: CalcChainEntry[];
 
+    // Cells an edit actually changed (set by deleteSelectedCellText). When present,
+    // runExecFunction recomputes only these instead of every cell in the selection
+    // rectangle — so clearing a huge, mostly-empty selection stays cheap.
+    pendingChangedCells?: CalcChainEntry[];
+
     engine: FormulaEngine;
 
     constructor() {
