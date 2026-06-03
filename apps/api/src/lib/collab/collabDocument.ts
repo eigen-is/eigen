@@ -13,6 +13,7 @@ import type { ManagedDatabase } from '../core';
 import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import type { User } from '../user';
+import { compressBlob } from './blob-codec';
 import { COLLAB_DB_CONFIG } from './db-config';
 import * as schema from './schema.ts';
 import { loadYjsState } from './yjs-loader';
@@ -59,7 +60,7 @@ class DbProvider {
             this.db
                 .insert(schema.docUpdates)
                 .values({
-                    updateData: Buffer.from(update),
+                    updateData: compressBlob(update),
                 })
                 .run();
             this.updatesSinceSnapshot++;
@@ -75,7 +76,7 @@ class DbProvider {
 
     private createSnapshot(): void {
         try {
-            const stateData = Buffer.from(Y.encodeStateAsUpdate(this.doc));
+            const stateData = compressBlob(Y.encodeStateAsUpdate(this.doc));
 
             this.db.transaction((tx) => {
                 const lastUpdate = tx

@@ -4,6 +4,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
+import * as collabSchema from '../lib/collab/schema';
 import { loadYjsState } from '../lib/collab/yjs-loader';
 import { getHome } from '../lib/home/get-home';
 import { assertJson, authedRequest, driveGet, driveUpload, getTestContext } from './setup';
@@ -269,6 +270,55 @@ describe('Sheets xlsx import/convert', () => {
         const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
         const formulaCell = (sheets[0].celldata ?? []).find((c) => c.r === 3 && c.c === 0);
         expect(formulaCell?.v?.f).toBe('=SUM(A1:A3)');
+    });
+
+    test('large sheet import stores a zstd-compressed blob and reads back intact', async () => {
+        const cells = Array.from({ length: 300 }, (_, i) => ({ a1: `A${i + 1}`, value: `value-${i}` }));
+        const buffer = await buildXlsxBuffer(cells);
+        const xlsxFile = new File([buffer], 'large.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+
+        // Write path: at least one stored blob (update or snapshot) must be a zstd frame.
+        const home = await getHome(ctx.alice.user.id);
+        const dataDbPath = await home.drive.getChildByName(mountId, converted.id, 'data.db');
+        if (!dataDbPath) throw new Error('data.db not found');
+        const managedDb = await home.drive.openDatabase(mountId, COLLAB_DB_CONFIG, dataDbPath.id);
+        const updateBlobs = managedDb.db
+            .select()
+            .from(collabSchema.docUpdates)
+            .all()
+            .map((r) => r.updateData as Uint8Array);
+        const snapshotBlobs = managedDb.db
+            .select()
+            .from(collabSchema.docSnapshots)
+            .all()
+            .map((r) => r.stateData as Uint8Array);
+        const allBlobs = [...updateBlobs, ...snapshotBlobs];
+        expect(allBlobs.length).toBeGreaterThan(0);
+        const anyZstd = allBlobs.some(
+            (b) => b.byteLength >= 4 && b[0] === 0x28 && b[1] === 0xb5 && b[2] === 0x2f && b[3] === 0xfd,
+        );
+        expect(anyZstd).toBe(true);
+
+        // Read path: content round-trips through decompression.
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const cellMap = Object.fromEntries((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v?.v]));
+        expect(cellMap['0:0']).toBe('value-0');
+        expect(cellMap['299:0']).toBe('value-299');
     });
 
     test('import with a non-xlsx body returns 400, not 500', async () => {
