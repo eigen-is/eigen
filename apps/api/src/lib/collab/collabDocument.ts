@@ -1,4 +1,5 @@
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { restoreYjsDoc } from '@workspace/lib/core/collab/yjs-utils';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
 import { desc, lt, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -244,6 +245,23 @@ export default class CollabDocument {
         this.provider.destroy();
         this.awareness.destroy();
         this.doc.destroy();
+    }
+
+    // Replaces the live Y.Doc's state with the snapshot's. Runs as one
+    // transaction → one update → existing 'update' handler persists to data.db
+    // and broadcasts to every connected WebSocket. Connected editors converge
+    // live; disconnected sessions pick up the new state via the next sync
+    // handshake. Caller (versioning/restore.ts) holds the container lock.
+    public applySnapshotState(state: Uint8Array): void {
+        if (this.closed) throw new ApiError(500, 'CollabDocument is closed');
+        if (!isCollabType(this.path.type)) {
+            throw new ApiError(500, `applySnapshotState called on non-collab path ${this.path.type}`);
+        }
+        const roots = EIGEN_DOC_TYPE_INFO[this.path.type].yjsRoots;
+        if (!roots) {
+            throw new ApiError(500, `No yjsRoots schema declared for ${this.path.type}`);
+        }
+        restoreYjsDoc(this.doc, state, roots);
     }
 
     public subscribe(_user: User, conn: ServerWebSocket<undefined>) {

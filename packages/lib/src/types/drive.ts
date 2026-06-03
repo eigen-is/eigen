@@ -43,6 +43,12 @@ export type EigenDocType = (typeof EIGEN_DOC_TYPES)[number];
 // `mime` is the real mime (`application/eigendoc`); `urlSlug` is the route-safe
 // form (`application-eigendoc`) used by `/drive/.../mime/:slug` — the server
 // route reverses dash→slash at handler time.
+//
+// `yjsRoots` declares the Y.Doc root-type schema for collab containers. Used by
+// the version-restore walker to force-type both the live doc and the snapshot
+// doc before pair-walking them — needed because Y.applyUpdate hydrates as
+// AbstractType, so `instanceof` checks would otherwise fail. Omitted for chat.
+export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
 export type EigenDocTypeInfo = {
     type: EigenDocType;
     mime: string;
@@ -53,6 +59,7 @@ export type EigenDocTypeInfo = {
     colorVar: string;
     softColorVar: string;
     appName: string;
+    yjsRoots?: Record<string, YjsRootKind>;
 };
 
 export const EIGEN_DOC_TYPE_INFO = {
@@ -66,6 +73,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         colorVar: '--app-docs-color',
         softColorVar: '--app-docs-color-soft',
         appName: 'docs',
+        yjsRoots: { default: 'xmlfragment' },
     },
     stickies: {
         type: DRIVE_TYPE_STICKIES,
@@ -77,6 +85,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         colorVar: '--app-stickies-color',
         softColorVar: '--app-stickies-color-soft',
         appName: 'stickies',
+        yjsRoots: { columns: 'map', tasks: 'map', columnOrder: 'array' },
     },
     slides: {
         type: DRIVE_TYPE_SLIDES,
@@ -88,6 +97,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         colorVar: '--app-slides-color',
         softColorVar: '--app-slides-color-soft',
         appName: 'slides',
+        yjsRoots: { slides: 'map', objects: 'map', slideOrder: 'array' },
     },
     sheets: {
         type: DRIVE_TYPE_SHEETS,
@@ -99,6 +109,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         colorVar: '--app-sheets-color',
         softColorVar: '--app-sheets-color-soft',
         appName: 'sheets',
+        yjsRoots: { state: 'map', ops: 'array' },
     },
     chat: {
         type: DRIVE_TYPE_CHAT,

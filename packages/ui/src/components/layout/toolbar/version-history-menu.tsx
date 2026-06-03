@@ -1,6 +1,6 @@
 import { useRestoreVersion, useSaveVersion, useVersions } from '@workspace/lib/core/versioning/hooks';
 import { formatDateTime } from '@workspace/lib/date';
-import { DRIVE_TYPE_DOC, type DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { History, Save } from 'lucide-react';
 import { ConfirmDialog } from '../../confirm-dialog';
@@ -61,13 +61,6 @@ export function RestoreVersionDialog({
 }) {
     const restore = useRestoreVersion(path.ownerId, path.mountId, path.id);
 
-    // Sheets/slides/stickies receive the restored state via a live Yjs update
-    // (server-side surgery) — no reload needed. Docs and chat use file-level
-    // restore on the server; for docs the in-memory Y.Doc would re-merge its
-    // local state on reconnect and undo the restore, so we reload to start
-    // from a clean Y.Doc. Chat refetches via TanStack invalidation.
-    const needsReload = path.type === DRIVE_TYPE_DOC;
-
     return (
         <ConfirmDialog
             open={!!snapshot}
@@ -85,7 +78,6 @@ export function RestoreVersionDialog({
                 if (!snapshot) return;
                 await restore.mutateAsync(snapshot.name);
                 onClose();
-                if (needsReload) window.location.reload();
             }}
         />
     );
