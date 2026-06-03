@@ -3,6 +3,7 @@ import { asc, desc, gt } from 'drizzle-orm';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
 import * as Y from 'yjs';
 import type { ManagedDatabase, SchemaType } from '../core/managed-database';
+import { decompressBlob } from './blob-codec';
 import * as schema from './schema';
 
 type DocDb = BunSQLiteDatabase<typeof schema>;
@@ -20,7 +21,7 @@ function replayYjsState(db: DocDb, doc: Y.Doc, label?: string): { updatesApplied
         let loadedSnapshot = false;
         if (snapshot) {
             try {
-                Y.applyUpdate(doc, snapshot.stateData as Uint8Array);
+                Y.applyUpdate(doc, decompressBlob(snapshot.stateData as Uint8Array));
                 loadedSnapshot = true;
             } catch {
                 console.error(`[yjs-loader] Skipping corrupted snapshot${label ? ` for ${label}` : ''}`);
@@ -38,8 +39,8 @@ function replayYjsState(db: DocDb, doc: Y.Doc, label?: string): { updatesApplied
                 : tx.select().from(schema.docUpdates).orderBy(asc(schema.docUpdates.id)).all();
 
         for (const update of updates) {
-            const data = update.updateData as Uint8Array;
             try {
+                const data = decompressBlob(update.updateData as Uint8Array);
                 Y.applyUpdate(doc, data);
                 bytesApplied += data.byteLength;
             } catch {
