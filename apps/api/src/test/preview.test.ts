@@ -332,3 +332,30 @@ describe('isExiftoolCandidate', () => {
         expect(isExiftoolCandidate('application/pdf', 'doc.pdf')).toBe(false);
     });
 });
+
+describe('pruneOldVersions', () => {
+    test('removes prior versions of a path, keeps the current file and other paths', async () => {
+        const { pruneOldVersions } = await import('../lib/preview/preview-cache');
+        const { existsSync, mkdirSync } = await import('node:fs');
+
+        const dir = `/tmp/eigen-prune-test-${Date.now()}`;
+        mkdirSync(dir, { recursive: true });
+
+        // pathIds are UUIDs (contain dashes) — the prefix match must not bleed across paths.
+        const id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+        const other = '00000000-0000-0000-0000-000000000000';
+        const keep = `${id}-200.json`;
+
+        await Bun.write(`${dir}/${id}-100.json`, '{}'); // older text version
+        await Bun.write(`${dir}/${id}-150.screen.webp`, 'x'); // older image version
+        await Bun.write(`${dir}/${keep}`, '{}'); // current version
+        await Bun.write(`${dir}/${other}-100.json`, '{}'); // a different path
+
+        await pruneOldVersions(dir, id, keep);
+
+        expect(existsSync(`${dir}/${id}-100.json`)).toBe(false);
+        expect(existsSync(`${dir}/${id}-150.screen.webp`)).toBe(false);
+        expect(existsSync(`${dir}/${keep}`)).toBe(true);
+        expect(existsSync(`${dir}/${other}-100.json`)).toBe(true);
+    });
+});

@@ -37,6 +37,7 @@ import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ArrangeOp, computeArrange } from './arrange';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
 import { useSlideDnd } from './hooks/use-slide-dnd';
@@ -259,6 +260,26 @@ function SlideEditorInner({
                     if (!objMap) continue;
                     objMap.set('x', obj.x + dx);
                     objMap.set('y', obj.y + dy);
+                }
+            });
+        },
+        [selectedObjectIds, deck.objects, yjsDoc],
+    );
+    const arrangeSelected = useCallback(
+        (op: ArrangeOp) => {
+            if (!yjsDoc) return;
+            const objects = selectedObjectIds.map((id) => deck.objects[id]).filter(Boolean);
+            const patches = computeArrange(objects, op);
+            if (patches.length === 0) return;
+            yjsDoc.transact(() => {
+                const objectsMap = yjsDoc.getMap('objects');
+                for (const patch of patches) {
+                    const objMap = objectsMap.get(patch.id) as import('yjs').Map<unknown> | undefined;
+                    if (!objMap) continue;
+                    if (patch.x !== undefined) objMap.set('x', patch.x);
+                    if (patch.y !== undefined) objMap.set('y', patch.y);
+                    if (patch.w !== undefined) objMap.set('w', patch.w);
+                    if (patch.h !== undefined) objMap.set('h', patch.h);
                 }
             });
         },
@@ -788,6 +809,7 @@ function SlideEditorInner({
                                         objects={selectedObjects}
                                         onUpdate={updateObjects}
                                         onDelete={handleDeleteSelectedObjects}
+                                        onArrange={arrangeSelected}
                                     />
                                 ) : canWrite && activeSlideId ? (
                                     <SlideBackgroundPanel

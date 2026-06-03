@@ -361,6 +361,8 @@ export class Mount {
             updatedAt: new Date(),
         });
 
+        await this.invalidateSizesFrom(parentId);
+
         return fileId;
     }
 
@@ -396,6 +398,8 @@ export class Mount {
             createdAt: new Date(),
             updatedAt: new Date(),
         });
+
+        await this.invalidateSizesFrom(parentId);
 
         return fileId;
     }
@@ -462,6 +466,17 @@ export class Mount {
         if (updates.name !== undefined) {
             validateName(updates.name);
         }
+
+        let oldParentId: string | null | undefined;
+        if (updates.parentId !== undefined) {
+            const old = await this.db
+                .select({ parentId: paths.parentId })
+                .from(paths)
+                .where(eq(paths.id, pathId))
+                .get();
+            oldParentId = old?.parentId;
+        }
+
         if (updates.name !== undefined || updates.parentId !== undefined) {
             const current = await this.getPath(pathId);
             if (current) {
@@ -483,6 +498,13 @@ export class Mount {
                                 .update(paths)
                                 .set({ ...dbUpdates, updatedAt: new Date() })
                                 .where(eq(paths.id, pathId));
+                            // Invalidate before the storage rename — a rename failure
+                            // here still leaves the DB updated, so the size caches must
+                            // already reflect the new parent.
+                            if (updates.parentId !== undefined) {
+                                await this.invalidateSizesFrom(oldParentId ?? null);
+                                await this.invalidateSizesFrom(updates.parentId);
+                            }
                             const newPath = await this.resolveStoragePath(pathId);
                             if (oldPath !== newPath) {
                                 await renameFn.call(this.storage, oldPath, newPath);
@@ -501,6 +523,11 @@ export class Mount {
                 updatedAt: new Date(),
             })
             .where(eq(paths.id, pathId));
+
+        if (updates.parentId !== undefined) {
+            await this.invalidateSizesFrom(oldParentId ?? null);
+            await this.invalidateSizesFrom(updates.parentId);
+        }
     }
 
     private async getStorageKey(pathId: string): Promise<string> {
@@ -581,6 +608,8 @@ export class Mount {
             }
             await this.db.delete(paths).where(eq(paths.id, pathId));
         }
+
+        await this.invalidateSizesFrom(pathEntry.parentId);
     }
 
     private collectDescendantFileIds(parentId: string): string[] {
@@ -654,6 +683,8 @@ export class Mount {
                 this.trashDescendants(pathId, now);
             }
 
+            await this.invalidateSizesFrom(item.parentId);
+
             const updated = await this.getPath(pathId);
             return updated!;
         });
@@ -726,6 +757,8 @@ export class Mount {
             if (row.type !== 'file') {
                 this.restoreDescendants(pathId, now);
             }
+
+            await this.invalidateSizesFrom(targetParentId);
 
             const updated = await this.getPath(pathId);
             return updated!;
@@ -853,6 +886,7 @@ export class Mount {
 
         const hash = await this.computeHash(data);
         await this.db.update(paths).set({ size, hash, updatedAt: new Date() }).where(eq(paths.id, pathId));
+        await this.invalidateAncestorsOf(pathId);
         return written;
     }
 
@@ -862,6 +896,7 @@ export class Mount {
         const storageKey = await this.getStorageKey(pathId);
         await this.uploadFromTemp(storageKey, tempId);
         await this.db.update(paths).set({ size, hash, updatedAt: new Date() }).where(eq(paths.id, pathId));
+        await this.invalidateAncestorsOf(pathId);
     }
 
     getTempPath(pathId: string): string {
@@ -883,9 +918,16 @@ export class Mount {
     private async uploadFromTemp(storageKey: string, tempId: string): Promise<void> {
         const tempPath = this.getTempPath(tempId);
         const tempFile = Bun.file(tempPath);
-        if (await tempFile.exists()) {
-            await this.storage.write(storageKey, tempFile);
+        if (!(await tempFile.exists())) {
+            // Invariant violation: caller must have written tempPath before sync. A missing
+            // tempfile here used to silently no-op, masking data loss when the live session
+            // had unflushed writes. Throw so close-time sync failures alarm.
+            throw new Error(`[Mount] uploadFromTemp ${storageKey}: tempfile missing at ${tempPath}`);
         }
+        const start = Bun.nanoseconds();
+        await this.storage.write(storageKey, tempFile);
+        const ms = (Bun.nanoseconds() - start) / 1_000_000;
+        console.log(`[timing] Mount.upload ${storageKey} ${(tempFile.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
     }
 
     async cleanupTemp(tempId: string): Promise<void> {
@@ -910,48 +952,117 @@ export class Mount {
         return this.isRemote || this.isPathBased;
     }
 
+    // Open an EXISTING managed document database. Throws ApiError(503) if the
+    // backing storage object isn't there — never silently creates fresh.
+    // Use createDatabase for the first-time provisioning instead.
     async openDatabase<S extends SchemaType>(config: DatabaseConfig<S>, pathId: string): Promise<ManagedDatabase<S>> {
+        return this.openDocumentDb(config, pathId, 'open');
+    }
+
+    // Provision a NEW managed document database. Asserts the storage object
+    // does not already exist, creates fresh schema, and flushes to storage
+    // before returning so subsequent openDatabase calls (incl. after API
+    // restart) find a real object. Caller must touchFile() the path first.
+    async createDatabase<S extends SchemaType>(config: DatabaseConfig<S>, pathId: string): Promise<ManagedDatabase<S>> {
+        if (this.documentDbs.has(pathId)) {
+            throw new Error(`Mount.createDatabase ${pathId}: already in cache`);
+        }
+        return this.openDocumentDb(config, pathId, 'create');
+    }
+
+    private async openDocumentDb<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+        mode: 'open' | 'create',
+    ): Promise<ManagedDatabase<S>> {
         if (!this.documentDbs.has(pathId)) {
             this.documentDbs.set(
                 pathId,
                 createAsyncSingleton(async () => {
-                    const localPath = this.needsTempCopy
-                        ? this.getTempPath(pathId)
-                        : this.storage.getPath!(await this.getStorageKey(pathId));
-
-                    const db = new ManagedDatabase(
-                        config,
-                        localPath,
-                        this.needsTempCopy
-                            ? {
-                                  onOpen: async () => {
-                                      const tempPath = this.getTempPath(pathId);
-                                      if (fs.existsSync(tempPath)) {
-                                          console.log(
-                                              `[Mount] Recovering from crash: using existing tmp file for ${pathId}`,
-                                          );
-                                          return;
-                                      }
-                                      const key = await this.getStorageKey(pathId);
-                                      if (await this.storage.exists(key)) {
-                                          await this.downloadToTemp(key, pathId);
-                                      }
-                                  },
-                                  onSync: async () => {
-                                      const key = await this.getStorageKey(pathId);
-                                      await this.uploadFromTemp(key, pathId);
-                                  },
-                                  onClose: () => this.cleanupTemp(pathId),
-                              }
-                            : {},
-                    );
-
-                    await db.open();
-                    return db;
+                    // Clean up the map entry if the factory throws — otherwise a
+                    // failed createDatabase leaves a getter behind whose closed-over
+                    // `mode` would silently steer the next openDatabase down the
+                    // create path.
+                    try {
+                        return await this.buildDocumentDb(config, pathId, mode);
+                    } catch (err) {
+                        this.documentDbs.delete(pathId);
+                        throw err;
+                    }
                 }),
             );
         }
         return this.documentDbs.get(pathId)!() as Promise<ManagedDatabase<S>>;
+    }
+
+    private async buildDocumentDb<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+        mode: 'open' | 'create',
+    ): Promise<ManagedDatabase<S>> {
+        const storageKey = await this.getStorageKey(pathId);
+        const localPath = this.needsTempCopy ? this.getTempPath(pathId) : this.storage.getPath!(storageKey);
+
+        if (mode === 'create') {
+            if (await this.storage.exists(storageKey)) {
+                throw new Error(`Mount.createDatabase ${pathId}: storage object ${storageKey} already exists`);
+            }
+        } else if (!this.needsTempCopy && !(await this.storage.exists(storageKey))) {
+            throw new ApiError(503, `Storage object for ${pathId} not available`);
+        }
+
+        const db = new ManagedDatabase(
+            config,
+            localPath,
+            this.needsTempCopy
+                ? {
+                      onOpen: async () => {
+                          if (mode === 'create') return;
+                          const tempPath = this.getTempPath(pathId);
+                          if (fs.existsSync(tempPath)) {
+                              console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
+                              return;
+                          }
+                          if (!(await this.storage.exists(storageKey))) {
+                              throw new ApiError(503, `Storage object for ${pathId} not available`);
+                          }
+                          await this.downloadToTemp(storageKey, pathId);
+                      },
+                      onSync: async () => {
+                          await this.uploadFromTemp(storageKey, pathId);
+                          await this.syncDocumentDbSize(pathId, localPath);
+                      },
+                      // onClose runs after wal_checkpoint(TRUNCATE), so the
+                      // final stat captures any pages PASSIVE left in WAL.
+                      onClose: async () => {
+                          await this.syncDocumentDbSize(pathId, localPath);
+                          await this.cleanupTemp(pathId);
+                      },
+                  }
+                : {
+                      onSync: async () => {
+                          await this.syncDocumentDbSize(pathId, localPath);
+                      },
+                      onClose: async () => {
+                          await this.syncDocumentDbSize(pathId, localPath);
+                      },
+                  },
+        );
+
+        await db.open();
+
+        // For temp-copy backends (s3, path-based local), push the
+        // freshly-created schema to storage before returning.
+        // Local-key writes go straight to the backing file so no
+        // flush is needed. Without this, the storage object only
+        // appears on the next 30s sync — and an API restart in
+        // that window would make subsequent strict openDatabase
+        // calls throw.
+        if (mode === 'create' && this.needsTempCopy) {
+            await db.flush();
+        }
+
+        return db;
     }
 
     async closeDatabase(pathId: string): Promise<void> {
@@ -966,13 +1077,15 @@ export class Mount {
     }
 
     async closeAllDatabases(): Promise<void> {
-        const entries = [...this.documentDbs.values()];
+        const entries = [...this.documentDbs.entries()];
         this.documentDbs.clear();
-        for (const getter of entries) {
+        for (const [pathId, getter] of entries) {
             try {
                 const db = await getter();
                 await db.close();
-            } catch {}
+            } catch (err) {
+                console.error(`[Mount] closeAllDatabases close failed for ${pathId}:`, err);
+            }
         }
     }
 
@@ -1094,6 +1207,10 @@ export class Mount {
     }
 
     private toDrivePath(row: typeof paths.$inferSelect): DrivePath {
+        let size = row.size;
+        if (row.type !== 'file' && size === null) {
+            size = this.computeAndCacheFolderSize(row.id);
+        }
         return {
             id: row.id,
             mountId: this.id,
@@ -1102,7 +1219,7 @@ export class Mount {
             parentId: row.parentId,
             ownerId: row.ownerId,
             mimeType: row.mimeType,
-            size: row.size ?? 0,
+            size: size ?? 0,
             hash: row.hash,
             thumbnail: row.thumbnail,
             acl: row.acl,
@@ -1113,6 +1230,75 @@ export class Mount {
             createdAt: row.createdAt ?? new Date(),
             updatedAt: row.updatedAt ?? new Date(),
         };
+    }
+
+    // Update paths.size for a ManagedDatabase row from disk, then invalidate
+    // ancestors — eigendoc containers stay in sync with data.db growth.
+    private async syncDocumentDbSize(pathId: string, localPath: string): Promise<void> {
+        if (!fs.existsSync(localPath)) {
+            console.warn(`[Mount] syncDocumentDbSize ${pathId}: localPath missing at ${localPath}`);
+            return;
+        }
+        const size = fs.statSync(localPath).size;
+        await this.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, pathId));
+        console.log(`[Mount] syncDocumentDbSize ${pathId} size=${size}`);
+        await this.invalidateAncestorsOf(pathId);
+    }
+
+    private async invalidateAncestorsOf(pathId: string): Promise<void> {
+        const row = await this.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, pathId)).get();
+        if (row) await this.invalidateSizesFrom(row.parentId);
+    }
+
+    // NULL the cached size on `parentId` and every ancestor up to the mount root.
+    private async invalidateSizesFrom(parentId: string | null): Promise<void> {
+        if (!parentId) return;
+        await this.db.run(sql`
+            WITH RECURSIVE ancestors(id) AS (
+                SELECT ${parentId} AS id
+                UNION ALL
+                SELECT p.parentId FROM paths p
+                    JOIN ancestors a ON p.id = a.id
+                    WHERE p.parentId IS NOT NULL
+            )
+            UPDATE paths SET size = NULL WHERE id IN (SELECT id FROM ancestors)
+        `);
+    }
+
+    // Trash-boundary filter (trashedFrom IS NULL) excludes the top-level trashed
+    // item but includes its cascade-trashed descendants — matches Google Drive.
+    private computeAndCacheFolderSize(folderId: string): number {
+        return this.db.transaction((tx) => this.computeFolderSizeInTx(tx, folderId));
+    }
+
+    private computeFolderSizeInTx(
+        tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+        folderId: string,
+    ): number {
+        const row = tx.select({ size: paths.size, type: paths.type }).from(paths).where(eq(paths.id, folderId)).get();
+        if (!row) return 0;
+        if (row.type === 'file') return row.size ?? 0;
+        if (row.size !== null) return row.size;
+
+        const children = tx
+            .select({ id: paths.id, size: paths.size, type: paths.type })
+            .from(paths)
+            .where(and(eq(paths.parentId, folderId), isNull(paths.trashedFrom)))
+            .all();
+
+        let total = 0;
+        for (const c of children) {
+            if (c.type === 'file') {
+                total += c.size ?? 0;
+            } else if (c.size !== null) {
+                total += c.size;
+            } else {
+                total += this.computeFolderSizeInTx(tx, c.id);
+            }
+        }
+
+        tx.update(paths).set({ size: total }).where(eq(paths.id, folderId)).run();
+        return total;
     }
 }
 

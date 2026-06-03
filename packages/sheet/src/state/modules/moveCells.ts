@@ -16,16 +16,10 @@ import { hasPartMC } from './validation';
 
 const dragCellThreshold = 8;
 
-function getCellLocationByMouse(
-    ctx: Context,
-    e: MouseEvent,
-    scrollbarX: HTMLDivElement,
-    scrollbarY: HTMLDivElement,
-    container: HTMLDivElement,
-) {
+function getCellLocationByMouse(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
-    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollbarX.scrollLeft;
-    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollbarY.scrollTop;
+    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollEl.scrollLeft;
+    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollEl.scrollTop;
 
     return {
         row: rowLocation(y, ctx.visibledatarow),
@@ -37,8 +31,7 @@ export function onCellsMoveStart(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    scrollbarX: HTMLDivElement,
-    scrollbarY: HTMLDivElement,
+    scrollEl: HTMLDivElement,
     container: HTMLDivElement,
 ) {
     // if (isEditMode() || ctx.allowEdit === false) {
@@ -55,7 +48,7 @@ export function onCellsMoveStart(
     let {
         row: [row_pre, row, row_index],
         column: [col_pre, col, col_index],
-    } = getCellLocationByMouse(ctx, e, scrollbarX, scrollbarY, container);
+    } = getCellLocationByMouse(ctx, e, scrollEl, container);
 
     const range = ctx.selections?.at(-1);
     if (range == null) return;
@@ -86,8 +79,7 @@ export function onCellsMove(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    scrollbarX: HTMLDivElement,
-    scrollbarY: HTMLDivElement,
+    scrollEl: HTMLDivElement,
     container: HTMLDivElement,
 ) {
     if (!ctx.cellSelectMoving) return;
@@ -105,7 +97,7 @@ export function onCellsMove(
     const winH = rect.height - 20;
     const winW = rect.width - 60;
 
-    const { row: rowL, column } = getCellLocationByMouse(ctx, e, scrollbarX, scrollbarY, container);
+    const { row: rowL, column } = getCellLocationByMouse(ctx, e, scrollEl, container);
     let [row_pre, row] = rowL;
     let [col_pre, col] = column;
     const row_index = rowL[2];
@@ -158,8 +150,7 @@ export function onCellsMoveEnd(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    scrollbarX: HTMLDivElement,
-    scrollbarY: HTMLDivElement,
+    scrollEl: HTMLDivElement,
     container: HTMLDivElement,
 ) {
     // Change selection box position and replace target cells
@@ -181,7 +172,7 @@ export function onCellsMoveEnd(
     const {
         row: [, , row_index],
         column: [, , col_index],
-    } = getCellLocationByMouse(ctx, e, scrollbarX, scrollbarY, container);
+    } = getCellLocationByMouse(ctx, e, scrollEl, container);
 
     const allowEdit = isAllowEdit(ctx, [
         {

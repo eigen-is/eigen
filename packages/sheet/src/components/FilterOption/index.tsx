@@ -37,14 +37,14 @@ export function FilterOptions() {
             setContext((draftCtx) => {
                 if (draftCtx.filterContextMenu?.col === filterOptions.startCol + i) return;
                 draftCtx.filterContextMenu = {
-                    x: v.left + draftCtx.rowHeaderWidth - refs.scrollbarX.current!.scrollLeft,
+                    x: v.left + draftCtx.rowHeaderWidth - refs.globalCache.scrollLeft,
                     y:
                         v.top +
                         23 +
                         draftCtx.toolbarHeight +
                         draftCtx.calculatebarHeight +
                         draftCtx.columnHeaderHeight -
-                        refs.scrollbarY.current!.scrollTop,
+                        refs.globalCache.scrollTop,
                     col: filterOptions.startCol + i,
                     startRow: filterOptions.startRow,
                     endRow: filterOptions.endRow,
@@ -55,7 +55,7 @@ export function FilterOptions() {
                 };
             });
         },
-        [filterOptions, refs.scrollbarX, refs.scrollbarY, setContext],
+        [filterOptions, refs.globalCache, setContext],
     );
 
     const freezeType = frozen?.type;

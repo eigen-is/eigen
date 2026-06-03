@@ -13,8 +13,6 @@
         <SheetOverlay>                          SheetOverlay/index.tsx     (React DOM overlays)
           <ColumnHeader>                        SheetOverlay/ColumnHeader.tsx
           <RowHeader>                           SheetOverlay/RowHeader.tsx
-          <ScrollBar x>                         SheetOverlay/ScrollBar/index.tsx
-          <ScrollBar y>
           selection divs                                                    (blue rectangles)
           resize handles
           freeze lines
@@ -87,7 +85,10 @@ React divs, NOT canvas. They render:
 - Freeze drag handle at the freeze boundary
 - Filter dropdown arrow icon (ColumnHeader only, lucide `CircleChevronDown`)
 
-Scroll position is synced imperatively (not via React state) for performance.
+Headers are NOT scroll containers. Their content sits in a wrapper that is translated
+(`transform: translateX(-scrollLeft)` / `translateY(-scrollTop)`) from the scroll bus, in
+lockstep with the canvas redraw — so the labels/highlights can never drift from the grid.
+The hit-test reads the live offset from `globalCache`.
 
 ### 3. Cell Selection — The Blue Rectangle (React DOM)
 
@@ -117,7 +118,7 @@ When you double-click or type into a cell, InputBox appears:
   (post-commit signature/argument help). Both wrap `SheetOverlay/FormulaPopup`,
   which uses Radix `Popover` with a virtual anchor at the input's bounding rect
   to portal out of InputBox's `z-19` stacking context — landing at `z-1010`
-  above the scrollbars (`z-1003`).
+  above the overlay stack.
 - The autocomplete keyboard + insertion path (Enter/Tab commit, ArrowUp/Down
   navigation, Escape dismiss, click-to-insert) lives in
   `hooks/useFormulaAutocomplete`, shared with FxEditor. It composes
@@ -211,14 +212,31 @@ Bottom bar:
 
 ## Scrolling
 
-**File**: `SheetOverlay/ScrollBar/index.tsx`
+**File**: `SheetOverlay/index.tsx` — the `.fortune-cell-area` element
 
-Uses native browser scroll:
-- Two scrollbar divs (x-axis and y-axis) with inner divs sized to full content
-- `onScroll` event updates `globalCache.scrollLeft` / `globalCache.scrollTop`
-- Scroll state lives in `globalCache` (NOT React context) to avoid re-rendering
-- Canvas redraws triggered via `globalCache.notifyScrollListeners()`
-- Headers sync scroll position imperatively
+Native browser scroll. `cellArea` (`overflow:auto`, holding a full-size `ch_width × rh_height`
+spacer) is the single scroll surface — the browser handles wheel, trackpad (momentum),
+keyboard (PageUp/Down, arrows, Home/End), touch, and the scrollbar. There is no custom wheel
+or touch handler.
+
+- `cellArea`'s `onScroll` writes `globalCache.scrollLeft` / `globalCache.scrollTop` and calls
+  `globalCache.notifyScrollListeners()`. Scroll state lives in `globalCache` (NOT React
+  context) to avoid re-rendering every consumer on each tick.
+- Bus subscribers: the rAF-coalesced canvas redraw (`Sheet`) and the header `transform`
+  updates (`ColumnHeader` / `RowHeader`).
+- Programmatic scroll (back-to-top, sheet-switch restore, selection auto-follow, freeze reset)
+  writes `cellArea.scrollLeft/scrollTop`; the native `scroll` event then re-syncs the bus.
+- `overscroll-behavior: none` disables the macOS rubber-band bounce (the rAF canvas can't
+  follow an elastic overscroll) and stops scroll-chaining to the page.
+- Mouse hit-testing reads `ctx.scrollLeft/scrollTop`, which `setContextWithProduce` lazily
+  syncs from `globalCache` at the top of every recipe.
+
+**Known limitation**: the body overlays (selection box, cell editor, presence, fill handle)
+are children of `cellArea`, so they scroll *natively* (compositor speed) while the canvas
+repaints on rAF — during a fast / ProMotion scroll they can drift ~1 frame from the grid. The
+headers do NOT drift (they transform from the bus, locked to the redraw). Locking the body
+overlays the same way is a tracked follow-up — see
+[`docs/TODO-SHEETS.md`](../../docs/TODO-SHEETS.md).
 
 ## Z-Index Stack
 
@@ -243,5 +261,5 @@ Uses native browser scroll:
 1. **Canvas for cells**: Thousands of cells rendered efficiently on canvas, not as DOM nodes
 2. **rAF coalescing**: Multiple state changes in one frame produce a single canvas repaint
 3. **Scroll in globalCache**: Scroll position stored outside React to avoid full tree re-renders
-4. **Imperative header sync**: Column/row headers sync scroll via listeners, not React state
+4. **Header transform**: Column/row headers translate from the scroll bus, locked to the canvas redraw (not a separate scroll container)
 5. **Overlay architecture**: Only interactive elements (selection, editing, images) are React DOM

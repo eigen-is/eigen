@@ -3,6 +3,55 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.0.4] - 2026-05-28
+
+Search release. A Mod+K command palette with full-text search across Drive and mail, native
+spreadsheet scrolling, a big spreadsheet-open speedup, compact file previews, and rich-text
+sticky cards.
+
+### Added
+
+- **Command palette** — press `Mod+K` (or the topbar search pill) anywhere to search files,
+  mail, and contacts, jump between apps, create documents, and act on the current selection
+  (open, share, rename, download, mail to…); smart suggestions turn a typed email/URL or a
+  matched contact name into a one-press "Send mail to…" action
+- **Search** — full-text search across Drive files and mail, scoped per kind (`file:`, `mail:`,
+  or the Tab scope chip); mail search filters by mailbox and by `from:`/`to:`, excluding
+  trash and spam by default
+- **Stickies** — card descriptions are now rich text with checkable task lists; toggling a
+  checkbox on a board card or in the card dialog persists, and cards show a task-progress strip
+- **Support** — new searchable Eigen Support help center on the marketing site, including a
+  WebDAV drive-mount guide
+- **Drive** — "Mail to…" in the item context menu opens a mail composer with the file attached
+
+### Changed
+
+- **Sheets** — spreadsheet scrolling is now native: wheel, trackpad, keyboard, touch, and the
+  browser scrollbar all work directly, replacing the old wheel-hijack and thin custom scrollbars;
+  overscroll bounce is suppressed so the grid no longer tears at the edges
+- **Sheets** — opening a large imported spreadsheet is dramatically faster (a 16-sheet xlsx that
+  took ~60s now paints in a couple of seconds); the collab snapshot is also compressed on the
+  wire, so opening big sheets over a remote connection is much quicker
+- **Previews** — in-app quick-look previews are capped for large files (sheets show the first
+  sheet, slides the first 8, documents the first 20 blocks) with an "open to see everything"
+  marker; downloads and exports stay complete. Text previews cache longer and stale preview
+  files are pruned
+
+### Fixed
+
+- **Sheets (XLSX import)** — files with rich-text hyperlink cells (e.g. Google Sheets exports)
+  no longer fail to import with a spurious "not a valid xlsx file" error
+- **Sheets** — a bare reference to an empty cell (e.g. `='Sheet'!B13`) now evaluates to `0`
+  instead of `true`
+- **Calendar & UI** — month and weekday names render in English instead of leaking the
+  browser's locale (e.g. Dutch) in the otherwise English-only UI
+- **Space** — the 2FA setup QR code renders again instead of crashing the setup step
+- **Setup** — the first-run wizard is re-runnable after a partial failure instead of getting
+  stuck on "user already exists"
+- **Admin** — team and member action errors show the real message instead of `[object Object]`
+- **Sidebar** — long chat and folder names truncate with an ellipsis instead of forcing a
+  horizontal scrollbar
+
 ## [0.0.3] - 2026-05-18
 
 Quality release. Video thumbnails, optimistic image insert across collab apps, unified comments

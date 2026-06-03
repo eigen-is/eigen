@@ -82,14 +82,18 @@ export function handleCellAreaMouseDown(
     // Data verification: cell focus
     cellFocus(ctx, row_index, col_index, true);
 
-    // If clicked cell is not in viewport
+    // If clicked cell is not in viewport, request a programmatic scroll to reveal
+    // it (one request for both axes); the read compares against the live mirror.
     if (!inHorizontalFreeze && !inVerticalFreeze) {
+        const request: { left?: number; top?: number } = {};
         if (col_pre < ctx.scrollLeft) {
-            ctx.scrollLeft = col_pre;
+            request.left = col_pre;
         }
-
         if (row_pre < ctx.scrollTop) {
-            ctx.scrollTop = row_pre;
+            request.top = row_pre;
+        }
+        if (request.left != null || request.top != null) {
+            ctx.scrollRequest = request;
         }
     }
 

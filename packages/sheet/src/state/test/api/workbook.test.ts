@@ -77,17 +77,16 @@ describe('sheet/core/api/workbook', () => {
 
     test('scroll', () => {
         const ctx = getContext();
-        const scrollbarX = document.createElement('div');
-        scrollbarX.scrollLeft = 0;
-        const scrollbarY = document.createElement('div');
-        scrollbarY.scrollTop = 0;
-        scroll(ctx, scrollbarX, scrollbarY, { targetRow: 2 });
-        expect(scrollbarY.scrollTop).toBe(40);
-        scroll(ctx, scrollbarX, scrollbarY, { targetColumn: 2 });
-        expect(scrollbarX.scrollLeft).toBe(148);
-        scroll(ctx, scrollbarX, scrollbarY, { scrollTop: 100 });
-        expect(scrollbarY.scrollTop).toBe(100);
-        scroll(ctx, scrollbarX, scrollbarY, { scrollLeft: 99 });
-        expect(scrollbarX.scrollLeft).toBe(99);
+        const scrollEl = document.createElement('div');
+        scrollEl.scrollLeft = 0;
+        scrollEl.scrollTop = 0;
+        scroll(ctx, scrollEl, { targetRow: 2 });
+        expect(scrollEl.scrollTop).toBe(40);
+        scroll(ctx, scrollEl, { targetColumn: 2 });
+        expect(scrollEl.scrollLeft).toBe(148);
+        scroll(ctx, scrollEl, { scrollTop: 100 });
+        expect(scrollEl.scrollTop).toBe(100);
+        scroll(ctx, scrollEl, { scrollLeft: 99 });
+        expect(scrollEl.scrollLeft).toBe(99);
     });
 });

@@ -7,15 +7,23 @@ import { readEigendocContent } from '../document/doc';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from '../export/doc/render';
 import { buildPreviewUrl } from '../export/media';
 import type { Mount } from '../mount';
+import { renderPreviewTruncatedMarker } from './preview-marker';
 
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
 
+const PREVIEW_MAX_BLOCKS = 20;
+
 export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath): Promise<string> {
     const { json, mediaByName } = await readEigendocContent(mount, drivePath);
 
+    // Cap the preview at the first N top-level blocks — a glance, not the full doc.
+    const blocks = json.content ?? [];
+    const truncated = blocks.length > PREVIEW_MAX_BLOCKS;
+    const content = truncated ? { ...json, content: blocks.slice(0, PREVIEW_MAX_BLOCKS) } : json;
+
     const html = renderToHTMLString({
-        content: json,
+        content,
         extensions,
         options: {
             nodeMapping: {
@@ -37,5 +45,6 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
         },
     });
 
-    return DOMPurify.sanitize(html, { FORCE_BODY: true });
+    const sanitized = DOMPurify.sanitize(html, { FORCE_BODY: true });
+    return truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized;
 }

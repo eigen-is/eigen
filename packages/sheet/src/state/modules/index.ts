@@ -15,7 +15,6 @@ export * from './image';
 export * from './inline-string';
 export * from './location';
 export * from './merge';
-export * from './mobile';
 export * from './moveCells';
 export * from './protection';
 export * from './refresh';

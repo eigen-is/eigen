@@ -25,9 +25,6 @@ import {
     handleContextMenu,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
-    handleOverlayTouchEnd,
-    handleOverlayTouchMove,
-    handleOverlayTouchStart,
     insertRowCol,
     locale,
     onCellsMoveStart,
@@ -42,7 +39,6 @@ import { SearchReplace } from '../SearchReplace';
 import { ColumnHeader } from './ColumnHeader';
 import { InputBox } from './InputBox';
 import { RowHeader } from './RowHeader';
-import { ScrollBar } from './ScrollBar';
 
 export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
@@ -114,6 +110,17 @@ export const SheetOverlay: React.FC = () => {
         [refs.cellArea, refs.globalCache, setContext, settings],
     );
 
+    // cellArea is the native scroll surface; its scroll event is the single
+    // source of truth for scroll position. Write globalCache (read by mouse
+    // hit-testing and the canvas redraw) and fire the bus — never setContext,
+    // which would re-render every context consumer on each scroll tick.
+    const onCellAreaScroll = useCallback(() => {
+        const el = refs.cellArea.current!;
+        refs.globalCache.scrollLeft = el.scrollLeft;
+        refs.globalCache.scrollTop = el.scrollTop;
+        refs.globalCache.notifyScrollListeners();
+    }, [refs.cellArea, refs.globalCache]);
+
     const onLeftTopClick = useCallback(() => {
         setContext((draftCtx) => {
             selectAll(draftCtx);
@@ -137,10 +144,9 @@ export const SheetOverlay: React.FC = () => {
             globalCache: GlobalCache,
             e: MouseEvent,
             container: HTMLDivElement,
-            scrollX: HTMLDivElement,
-            scrollY: HTMLDivElement,
+            scrollEl: HTMLDivElement,
         ) => {
-            const rc = getCellRowColumn(ctx, e, container, scrollX, scrollY);
+            const rc = getCellRowColumn(ctx, e, container, scrollEl);
             if (rc == null) return;
             const link = getCellHyperlink(ctx, rc.r, rc.c);
             if (link == null) {
@@ -176,8 +182,7 @@ export const SheetOverlay: React.FC = () => {
                                 refs.globalCache,
                                 ev,
                                 containerRef.current!,
-                                refs.scrollbarX.current!,
-                                refs.scrollbarY.current!,
+                                refs.cellArea.current!,
                             );
                         }
                         handleOverlayMouseMove(
@@ -185,8 +190,7 @@ export const SheetOverlay: React.FC = () => {
                             refs.globalCache,
                             ev,
                             refs.cellInput.current!,
-                            refs.scrollbarX.current!,
-                            refs.scrollbarY.current!,
+                            refs.cellArea.current!,
                             containerRef.current!,
                             refs.fxInput.current,
                         );
@@ -195,15 +199,7 @@ export const SheetOverlay: React.FC = () => {
                 );
             });
         },
-        [
-            overShowLinkCard,
-            refs.cellInput,
-            refs.fxInput,
-            refs.globalCache,
-            refs.scrollbarX,
-            refs.scrollbarY,
-            setContext,
-        ],
+        [overShowLinkCard, refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext],
     );
 
     const onMouseUp = useCallback(
@@ -215,8 +211,7 @@ export const SheetOverlay: React.FC = () => {
                         refs.globalCache,
                         settings,
                         nativeEvent,
-                        refs.scrollbarX.current!,
-                        refs.scrollbarY.current!,
+                        refs.cellArea.current!,
                         containerRef.current!,
                         refs.cellInput.current,
                         refs.fxInput.current,
@@ -226,36 +221,8 @@ export const SheetOverlay: React.FC = () => {
                 }
             });
         },
-        [
-            refs.cellInput,
-            refs.fxInput,
-            refs.globalCache,
-            refs.scrollbarX,
-            refs.scrollbarY,
-            setContext,
-            settings,
-            showAlert,
-        ],
+        [refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext, settings, showAlert],
     );
-
-    const onTouchStart = useCallback(
-        (e: React.TouchEvent<HTMLDivElement>) => {
-            handleOverlayTouchStart(e.nativeEvent, refs.globalCache);
-            e.stopPropagation();
-        },
-        [refs.globalCache],
-    );
-
-    const onTouchMove = useCallback(
-        (e: React.TouchEvent<HTMLDivElement>) => {
-            handleOverlayTouchMove(e.nativeEvent, refs.globalCache, refs.scrollbarX.current!, refs.scrollbarY.current!);
-        },
-        [refs.globalCache, refs.scrollbarX, refs.scrollbarY],
-    );
-
-    const onTouchEnd = useCallback(() => {
-        handleOverlayTouchEnd(refs.globalCache);
-    }, [refs.globalCache]);
 
     const handleBottomAddRow = useCallback(() => {
         const valueStr = bottomAddRowInputRef.current?.value || context.addDefaultRows.toString();
@@ -310,26 +277,33 @@ export const SheetOverlay: React.FC = () => {
         }
     }, [context.warnDialog]);
 
+    // Apply explicit programmatic scrolls (selection-follow, freeze reset, sheet-switch
+    // restore) to the native scroll surface, post-commit so layout is settled. Keyed on
+    // scrollRequest (a fresh object per request) — NOT on the scrollLeft/scrollTop mirror,
+    // which syncScroll updates every recipe and would otherwise rewind an in-progress scroll.
     useEffect(() => {
-        refs.cellArea.current!.scrollLeft = context.scrollLeft;
-        refs.cellArea.current!.scrollTop = context.scrollTop;
-    }, [context.scrollLeft, context.scrollTop, refs.cellArea]);
+        const req = context.scrollRequest;
+        const el = refs.cellArea.current;
+        if (!req || !el) return;
+        if (req.left != null) el.scrollLeft = req.left;
+        if (req.top != null) el.scrollTop = req.top;
+    }, [context.scrollRequest, refs.cellArea]);
 
-    // Sync cellArea scroll position imperatively from globalCache,
-    // bypassing React state to avoid re-rendering 20+ context consumers.
+    // The filter dropdown is position:fixed, positioned once from globalCache scroll
+    // offsets, so it detaches from its column icon once the grid scrolls. Close it on
+    // any scroll (standard dropdown behavior) — only subscribe while it is open.
     useEffect(() => {
-        const syncScroll = () => {
-            const { globalCache } = refs;
-            if (refs.cellArea.current) {
-                refs.cellArea.current.scrollLeft = globalCache.scrollLeft;
-                refs.cellArea.current.scrollTop = globalCache.scrollTop;
-            }
+        if (!context.filterContextMenu) return;
+        const close = () => {
+            setContext((d) => {
+                d.filterContextMenu = undefined;
+            });
         };
-        refs.globalCache.scrollListeners.add(syncScroll);
+        refs.globalCache.scrollListeners.add(close);
         return () => {
-            refs.globalCache.scrollListeners.delete(syncScroll);
+            refs.globalCache.scrollListeners.delete(close);
         };
-    }, [refs]);
+    }, [context.filterContextMenu, refs.globalCache, setContext]);
 
     useEffect(() => {
         document.addEventListener('mousemove', onMouseMove);
@@ -400,9 +374,6 @@ export const SheetOverlay: React.FC = () => {
         <main
             className="fortune-sheet-overlay"
             ref={containerRef}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
             tabIndex={-1}
             style={{
                 width: context.tableContentSize[0],
@@ -423,14 +394,13 @@ export const SheetOverlay: React.FC = () => {
             </div>
             <div className="fortune-row-body">
                 <RowHeader />
-                <ScrollBar axis="x" />
-                <ScrollBar axis="y" />
                 <div
                     ref={refs.cellArea}
                     className="fortune-cell-area"
                     onMouseDown={cellAreaMouseDown}
                     onDoubleClick={cellAreaDoubleClick}
                     onContextMenu={cellAreaContextMenu}
+                    onScroll={onCellAreaScroll}
                     style={{
                         width: context.cellmainWidth,
                         height: context.cellmainHeight,
@@ -609,8 +579,7 @@ export const SheetOverlay: React.FC = () => {
                                                 draftCtx,
                                                 refs.globalCache,
                                                 nativeEvent,
-                                                refs.scrollbarX.current!,
-                                                refs.scrollbarY.current!,
+                                                refs.cellArea.current!,
                                                 containerRef.current!,
                                             );
                                         });
@@ -745,11 +714,9 @@ export const SheetOverlay: React.FC = () => {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => {
-                                            refs.globalCache.scrollTop = 0;
-                                            refs.globalCache.notifyScrollListeners();
-                                            setContext((ctx) => {
-                                                ctx.scrollTop = 0;
-                                            });
+                                            // cellArea is the scroll source; its native scroll
+                                            // event syncs globalCache and triggers the redraw.
+                                            refs.cellArea.current!.scrollTop = 0;
                                         }}
                                     >
                                         {info.backTop}

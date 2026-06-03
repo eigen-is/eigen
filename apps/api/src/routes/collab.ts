@@ -35,12 +35,11 @@ function cleanupSession(data: CollabWsData, ws: ServerWebSocket<undefined>) {
 
 // Collab routes allow cross-owner access (collaborative editing on shared/team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks.
+// WebSocket server options (perMessageDeflate, maxPayloadLength) can't live here —
+// Elysia only honors `websocket` config on the root app instance, so it's set in
+// app.ts. (The block previously here was a silent no-op.)
 export const collabRouter = new Elysia({
     name: 'collab',
-    websocket: {
-        perMessageDeflate: true,
-        maxPayloadLength: 4 * 1024 * 1024,
-    },
 })
     .use(betterAuth)
 
