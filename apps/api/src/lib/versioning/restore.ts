@@ -12,73 +12,54 @@ export async function restoreContainer(
     snapshotName: string,
     policy: RetentionPolicy = DEFAULT_RETENTION,
 ): Promise<void> {
-    await mount.withPathLock(container.id, async () => {
-        // Look up the target up front so the pre-restore snapshot's pruning
-        // can preserve it — otherwise the new pre-restore would push the
-        // target out of its retention slot and the restore step 404s.
-        const versions = await mount.getChildByName(container.id, 'versions');
-        if (!versions) throw new ApiError(404, 'No versions folder');
-        const target = await mount.getChildByName(versions.id, snapshotName);
-        if (!target) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
+    const versions = await mount.getChildByName(container.id, 'versions');
+    if (!versions) throw new ApiError(404, 'No versions folder');
+    const target = await mount.getChildByName(versions.id, snapshotName);
+    if (!target) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
 
-        // 1. Pre-restore snapshot so the operation is reversible.
-        await mount.snapshotContainerDataDb(container.id, policy, target.id);
-
-        // Every Yjs container (doc/sheets/slides/stickies) restores by replaying
-        // the snapshot's state into the live Y.Doc inside a single transaction;
-        // the resulting update flows through CollabDocument's normal broadcast
-        // path so connected editors converge live. Chat has no Y.Doc — close
-        // cached managedDbs and swap data.db on storage.
+    // Grab the target into the OS temp dir BEFORE the pre-restore snapshot runs — that
+    // snapshot prunes old versions and could otherwise drop the very snapshot we're
+    // restoring. Read raw (downloadToTemp works on every backend); opening via
+    // Mount.openDatabase would migrate and cache an immutable archive. Every step
+    // self-serializes on the container lock; we never hold a lock across them.
+    const tempPath = await mount.downloadToTemp(target.id);
+    try {
+        await mount.snapshotContainerDataDb(container.id, policy);
         if (isCollabType(container.type)) {
-            await restoreYjsContainer(drive, mount, container.id, target);
+            // Yjs (doc/sheets/slides/stickies): replay the snapshot's state into the
+            // live Y.Doc so connected editors converge with no reload.
+            const state = readYjsStateFromFile(tempPath, `restore:${target.name}`);
+            await restoreYjsContainer(drive, mount, container.id, state);
         } else {
-            // Chat (the only non-Yjs branch) has no collab singleton
-            // (getCollabDocument rejects non-collab types) and no sidecar DBs, so
-            // closing the cached data.db is all that needs evicting before the
-            // file is swapped. skipFinalSnapshot: the pre-restore snapshot already
-            // ran; a close-time snapshot would race the imminent delete + replace.
-            const dataDb = await mount.getChildByName(container.id, 'data.db');
-            if (dataDb) await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
-            await mount.restoreContainerDataDb(container.id, snapshotName);
+            // Chat has no live Y.Doc: overwrite data.db's bytes with the snapshot's.
+            await mount.replaceContainerDataDb(container.id, tempPath);
         }
-    });
+    } finally {
+        await mount.cleanupTemp(target.id);
+    }
 }
 
 async function restoreYjsContainer(
     drive: Drive,
     mount: Mount,
     containerId: string,
-    snapshotPath: DrivePath,
+    snapshotState: Uint8Array,
 ): Promise<void> {
-    // Read the snapshot's Yjs state from a temp copy of the archive. Opened raw
-    // (readYjsStateFromFile) rather than via Mount.openDatabase, which would run
-    // migrations on, cache, and arm sync/snapshot timers against what should stay
-    // an immutable archive. downloadToTemp works on every storage backend.
-    const tempPath = await mount.downloadToTemp(snapshotPath.id);
-    let snapshotState: Uint8Array;
-    try {
-        snapshotState = readYjsStateFromFile(tempPath, `restore:${snapshotPath.name}`);
-    } finally {
-        await mount.cleanupTemp(snapshotPath.id);
-    }
-
     // getCollabDocument creates the singleton if no one is connected.
     // applySnapshotState runs the surgery inside one transaction; the resulting
-    // update fires CollabDocument's existing 'update' handler → DbProvider
-    // persists to data.db AND every connected WebSocket receives the diff.
-    // Disconnected sessions catch up via the next sync handshake.
-    // Did a live editor session already hold this doc open, or are we opening it
-    // purely for the surgery? Checked BEFORE getCollabDocument creates it.
+    // update fires CollabDocument's existing 'update' handler → DbProvider persists
+    // to data.db AND every connected WebSocket receives the diff. Disconnected
+    // sessions catch up via the next sync handshake. Check whether an editor session
+    // already held the doc open BEFORE getCollabDocument creates it.
     const wasOpen = drive.hasCollabDocument(mount.id, containerId);
     const collabDoc = await drive.getCollabDocument(mount.id, containerId);
     collabDoc.applySnapshotState(snapshotState);
 
-    // A restore from the file list opens the doc with no subscriber; close it so
-    // it doesn't leak. If it was already open (live editor, import/export), that
-    // owner manages its lifecycle — closing would yank it out from under them.
-    // (subscribe doesn't take the path lock, so a client connecting during this
-    // close is simply bounced and reconnects to the restored state.)
+    // A restore from the file list opens the doc with no subscriber; close it so it
+    // doesn't leak. If it was already open (live editor), that owner manages its
+    // lifecycle. skipFinalSnapshot: we don't snapshot a doc opened only to run
+    // surgery — the pre-restore snapshot already captured the prior state.
     if (!wasOpen && collabDoc.connectionCount === 0) {
-        await drive.closeCollabDocument(mount.id, containerId);
+        await drive.closeCollabDocument(mount.id, containerId, { skipFinalSnapshot: true });
     }
 }

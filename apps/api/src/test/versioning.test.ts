@@ -195,11 +195,11 @@ describe('versions HTTP routes', () => {
 
     test('eigendoc: restoring an older snapshot when a newer one shares its retention slot', async () => {
         // Regression: with default retention every snapshot taken within the same
-        // hour falls in slot 0 of every bucket, so only the newest survives. The
-        // pre-restore snapshot taken by restoreContainer becomes that newest entry
-        // — and without the preserve hook the target the user clicked gets pruned
-        // *before* restoreContainerDataDb reads it. The route then 404s on the
-        // very snapshot that listVersions just returned.
+        // hour falls in slot 0, so the pre-restore snapshot taken during restore
+        // becomes the newest entry and prunes the older snapshot the user clicked.
+        // restoreContainer reads the target's content out up front (before the
+        // pre-restore snapshot), so the restore still succeeds even though that
+        // prune removes the target from versions/.
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
 
@@ -314,18 +314,15 @@ describe('versions HTTP routes', () => {
     });
 
     test('chat: restore survives the close-time snapshot fire during evict', async () => {
-        // Regression: the chat restore path used to close data.db without
-        // skipFinalSnapshot, so ManagedDatabase.close took its close-time
-        // snapshot during eviction. That snapshot ran with no preserve hint
-        // and could prune the target between restoreContainerDataDb's lookup
-        // and copy — leaving data.db deleted but not replaced, bricking the
-        // container.
+        // Regression: a chat restore overwrites data.db's bytes from the snapshot.
+        // replaceContainerDataDb closes the live db with skipFinalSnapshot — without
+        // it ManagedDatabase.close would take a close-time snapshot during eviction
+        // which, sharing replaceContainerDataDb's container lock, would deadlock.
         //
-        // The close-time snapshot only fires when there are unsnapshotted
-        // writes, so the trailing chatPost provides them; the prior save + save
-        // pair puts the target in the same hourly slot as a newer snapshot, so
-        // retention WOULD prune it if the eviction snapshot reached the prune
-        // step. The restore now closes data.db with skipFinalSnapshot to prevent it.
+        // The close-time snapshot only fires when there are unsnapshotted writes, so
+        // the trailing chatPost provides them; save + save puts the target in the same
+        // hourly slot as a newer snapshot, so retention would prune it if that
+        // eviction snapshot reached the prune step.
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
 
