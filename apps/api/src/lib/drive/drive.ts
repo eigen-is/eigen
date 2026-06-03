@@ -789,9 +789,19 @@ export default class Drive {
         return canWriteFromAncestors(ancestors, user, resolved);
     }
 
+    private documentKey(mountId: string, pathId: string): string {
+        return `${this.owner.id}.${mountId}.${pathId}`;
+    }
+
+    // Called by: versioning/restore (to decide whether a restore opened the doc
+    // itself, and so must close it). Not route-callable.
+    hasCollabDocument(mountId: string, pathId: string): boolean {
+        return this.documents.has(this.documentKey(mountId, pathId));
+    }
+
     async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
         const mount = this.getMount(mountId);
-        const key = `${this.owner.id}.${mountId}.${pathId}`;
+        const key = this.documentKey(mountId, pathId);
         if (!this.documents.has(key)) {
             this.documents.set(
                 key,
@@ -808,10 +818,10 @@ export default class Drive {
         return (await this.documents.get(key)!()) as CollabDocument;
     }
 
-    // Called by: collab/collabDocument cleanup. Not route-callable.
+    // Called by: collab/collabDocument cleanup, versioning/restore. Not route-callable.
     async closeCollabDocument(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
         const mount = this.getMount(mountId);
-        const key = `${this.owner.id}.${mountId}.${pathId}`;
+        const key = this.documentKey(mountId, pathId);
         const documentFn = this.documents.get(key);
         if (documentFn) {
             const doc = await documentFn();
