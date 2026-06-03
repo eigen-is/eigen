@@ -130,8 +130,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const cellInput = useRef<HTMLDivElement>(null);
         const fxInput = useRef<HTMLDivElement>(null);
         const canvas = useRef<HTMLCanvasElement>(null);
-        const scrollbarX = useRef<HTMLDivElement>(null);
-        const scrollbarY = useRef<HTMLDivElement>(null);
         const cellArea = useRef<HTMLDivElement>(null);
         const workbookContainer = useRef<HTMLDivElement>(null);
 
@@ -141,8 +139,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 cellInput,
                 fxInput,
                 canvas,
-                scrollbarX,
-                scrollbarY,
                 cellArea,
                 workbookContainer,
             }),
@@ -386,7 +382,16 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.defaultrowNum = mergedSettings.row;
                     draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
                     if (draftCtx.sheets.length === 0) {
-                        draftCtx.sheets = cloneDeep(originalData);
+                        // Shallow-clone the sheet wrappers — NOT the heavy celldata/data,
+                        // which stay shared by reference (avoids the ~900ms deep clone on a
+                        // 48MB xlsx import). The init below only sets top-level props
+                        // (id/status/data/celldata/config/calcChain), and fresh wrappers keep
+                        // those writable — so a Workbook remount (key={snapshotVersion}) can
+                        // safely re-run this init. Immer still freezes the shared data/celldata
+                        // (auto-freeze copies their refs into the draft), but that's fine: for
+                        // already-populated sheets initSheetData is skipped (guarded below by
+                        // !sheet.data || length === 0), so their frozen contents are never mutated.
+                        draftCtx.sheets = originalData.map((sheet) => ({ ...sheet }));
                         ensureSheetIndex(draftCtx.sheets, mergedSettings.generateSheetId);
                         for (const newDatum of draftCtx.sheets) {
                             const index = getSheetIndex(draftCtx, newDatum.id!) as number;
@@ -395,11 +400,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 api.initSheetData(draftCtx, index, sheet);
                             }
                         }
-                        // Recompute formulas so displayed values reflect current inputs
-                        // (imported sheets may arrive with stale cached results).
-                        // calcChain is populated as a side-effect, and formulaCellInfoMap
-                        // lazy-primes on the first edit via execFunctionGroup.
-                        api.calculateFormula(draftCtx);
+                        // Just seed calcChain (the list of formula cells) — don't
+                        // re-evaluate. Excel-imported sheets carry the last computed
+                        // values, persisted sheets were saved post-recompute, and an
+                        // edit lazily kicks the engine for the affected sub-graph.
+                        api.seedCalcChain(draftCtx);
                     }
                     if (mergedSettings.devicePixelRatio > 0) {
                         draftCtx.devicePixelRatio = mergedSettings.devicePixelRatio;
@@ -678,8 +683,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     handleRedo,
                     mergedSettings,
                     cellInput.current,
-                    scrollbarX.current,
-                    scrollbarY.current,
+                    cellArea.current,
                 ),
             [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings],
         );

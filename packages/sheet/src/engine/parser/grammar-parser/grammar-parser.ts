@@ -849,8 +849,15 @@ export class Parser {
     ): any {
         const $0 = $$.length - 1;
         switch (yystate) {
-            case 1:
-                return $$[$0 - 1];
+            case 1: {
+                // Top-level Formula production. A bare reference to an empty cell
+                // (e.g. `='Sheet'!B13` when B13 has no value) produces `undefined`
+                // here; if we returned that, Jison would fall through to the
+                // accept-state below and surface its `return true` sentinel as the
+                // formula's value. Excel treats empty cells as 0 in value context.
+                const v = $$[$0 - 1];
+                return v === undefined ? 0 : v;
+            }
             case 2:
                 this.$ = yy.callVariable($$[$0][0]);
                 break;

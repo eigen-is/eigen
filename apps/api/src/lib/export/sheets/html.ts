@@ -17,6 +17,7 @@ import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
+import type { RenderMode } from '../render-types';
 import { resolveFontFamily } from './fonts';
 
 const DEFAULT_COL_WIDTH = 73;
@@ -73,7 +74,7 @@ export async function generateSheetsExportHtml(mount: Mount, drivePath: DrivePat
     return wrapInDocument(title, sanitized);
 }
 
-export function renderSheetsHtml(sheets: Sheet[]): string {
+export function renderSheetsHtml(sheets: Sheet[], mode: RenderMode = 'export'): string {
     // One engine + resolver per export, shared across sheets so cross-sheet refs in
     // formula CF rules (e.g. `=Sheet2!A1>10`) resolve correctly. The resolver reads
     // saved `cell.v` values from the snapshot — formulas are not recomputed, only the
@@ -88,7 +89,11 @@ export function renderSheetsHtml(sheets: Sheet[]): string {
             dynamicArrayCompute: [],
         })),
     );
-    return sheets.map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver)).join('\n');
+    // Preview is a glance, not a document — render only the first sheet to keep the
+    // cached body small. The resolver above still spans every sheet, so cross-sheet
+    // CF formula refs in the first sheet resolve correctly.
+    const rendered = mode === 'preview' ? sheets.slice(0, 1) : sheets;
+    return rendered.map((sheet, i) => renderSheet(sheet, i === rendered.length - 1, engine, resolver)).join('\n');
 }
 
 // Builds the `evaluateFormula` callback for a single sheet's CF formula rules. The

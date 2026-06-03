@@ -279,16 +279,12 @@ export type Freezen = {
 };
 
 export type GlobalCache = {
-    verticalScrollLock?: boolean;
-    horizontalScrollLock?: boolean;
     overwriteCell?: boolean;
     ignoreWriteCell?: boolean;
     doNotFocus?: boolean;
     doNotUpdateCell?: boolean;
     recentTextColor?: string;
     recentBackgroundColor?: string;
-    visibleColumnsUnique?: number[];
-    visibleRowsUnique?: number[];
     undoList: History[];
     redoList: History[];
     freezen?: Record<string, Freezen>;
@@ -322,18 +318,6 @@ export type GlobalCache = {
     dragCellStartPos?: {
         x: number;
         y: number;
-    };
-    touchMoveStatus?: boolean;
-    touchHandleStatus?: boolean;
-    touchMoveStartPos?: {
-        x: number;
-        y: number;
-        vy: number;
-        moveType: string;
-        vy_x?: number;
-        vy_y?: number;
-        scrollTop?: number;
-        scrollLeft?: number;
     };
 };
 

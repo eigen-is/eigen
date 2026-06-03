@@ -272,7 +272,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const result = await getTextPreview(mount, path);
             if (!result) throw new ApiError(404, 'No preview available');
-            setCacheHeaders(set, 60);
+            // 1 day, matching image previews: the URL carries `updatedAt` (see below), so a
+            // content change yields a new URL rather than relying on a short max-age to expire.
+            setCacheHeaders(set, 86400);
             return result;
         },
         // updatedAt is a cache-buster — browser HTTP cache and TanStack queryKey both key

@@ -583,6 +583,44 @@ describe('Sheets xlsx import/convert', () => {
         expect(getVal(sheets[2])).toBe('Gamma');
     });
 
+    test('convert handles hyperlinks whose .text is a rich-text wrapper', async () => {
+        // Google Sheets-exported xlsx files emit hyperlinks where the .text is a CellRichTextValue
+        // rather than a plain string — exceljs's types claim string but the runtime allows both.
+        // Combined with wrapText=true, this used to crash the auto-fit-height path in
+        // from-xlsx.ts (`text.split('\n')` on an object).
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Links');
+        const cell = ws.getCell('A1');
+        cell.value = {
+            text: { richText: [{ text: 'GSV Assets\n' }, { text: 'Canva' }] },
+            hyperlink: 'https://example.com',
+        } as unknown as ExcelJS.CellHyperlinkValue;
+        cell.alignment = { wrapText: true };
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'richlinks.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+        expect(a1?.v?.v).toBe('GSV Assets\nCanva');
+    });
+
     test('import into another user document without write permission returns 403', async () => {
         const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
         const initialFile = new File([initial], 'alice.xlsx', {

@@ -9,6 +9,9 @@ fonts, base64 images, and flattened eigen-prose CSS. DOCX and PDF are derived fr
 - **DOCX**: HTML fed to `@turbodocx/html-to-docx`
 - **PDF**: HTML fed to WeasyPrint subprocess
 
+Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX) — see their
+sections below.
+
 ## File Structure
 
 ```
@@ -16,12 +19,17 @@ apps/api/src/lib/export/
   export-document.ts             # Entry point: dispatches by mime type + format
   weasyprint.ts                  # Generic: htmlToPdf(html) -> Buffer via subprocess
   modules.d.ts                   # Type declarations for untyped npm packages
+  render-types.ts                # Shared contracts: RenderMode, SizeUnit, *ImgSrcResolver
+  fonts.ts                       # Embedded WOFF2 @font-face CSS (Inter, Source Serif 4, JetBrains Mono, Excalifont)
+  media.ts                       # buildDataUriMap (base64 images) + buildPreviewUrl (embed URLs)
   doc/
-    render.ts                    # Pure functions: escapeHtml, renderFigureNode, renderCodeBlockNode, renderTaskItemNode, ExportResult type
-    content.ts                   # Load eigendoc Yjs -> PM JSON + media map (shared with preview)
+    render.ts                    # Pure node renderers: renderFigureNode, renderCodeBlockNode, renderTaskItemNode
     html.ts                      # PM JSON -> standalone HTML (fonts, CSS, base64 images)
     docx.ts                      # DOCX export via html-to-docx
     pdf.ts                       # PDF export via WeasyPrint
+
+# Content loaders (Yjs -> PM JSON / DeckData / Sheet[] + media map) live in
+# apps/api/src/lib/document/{doc,slides,sheets}.ts — shared by export AND preview.
 ```
 
 ### Architecture
@@ -29,7 +37,9 @@ apps/api/src/lib/export/
 - **`render.ts`**: pure utility functions with zero side effects — no imports from tiptap, lowlight, or
   any heavy library. Callers pass their own lowlight instance. Shared by both `html.ts` (export) and
   `eigendoc-preview.ts` (quick preview)
-- **`content.ts`**: shared Yjs -> PM JSON + media map loader, used by both export and preview
+- **content loaders** (`apps/api/src/lib/document/{doc,slides,sheets}.ts`): shared Yjs -> PM JSON / DeckData /
+  `Sheet[]` + media map loaders (`readEigendocContent`, `readSlidesContent`, `readSheetsContent`), used by both
+  export and preview
 - **`export-document.ts`**: thin dispatcher that routes `(mount, path, format)` to the right export
   function. Imported by the drive route, NOT by Drive class — export is not Drive's responsibility
 - **`html.ts`**: standalone HTML with base64 data URIs, embedded WOFF2 fonts (via Bun `import ... with
@@ -60,7 +70,7 @@ Returns 400 for unsupported format, 501 if WeasyPrint not installed (PDF only).
 ## HTML Pipeline
 
 ```
-loadEigendocContent() -> PM JSON + media map
+readEigendocContent() -> PM JSON + media map
         |
         v
 renderToHTMLString() with custom nodeMappings:
@@ -126,7 +136,7 @@ Export submenu for eigendoc, eigenslides, and eigensheets files, driven by `onEx
 ## Edge Cases
 
 - **Empty documents**: return minimal empty HTML wrapped in the target format
-- **Missing media**: skip image (readFileAsDataUri returns null, no img tag emitted)
+- **Missing media**: skip image (`buildDataUriMap` omits the entry, so `renderFigureNode` emits no img tag)
 - **WeasyPrint not installed**: return 501 with install instructions
 - **Corrupt Yjs state**: `loadYjsState()` handles this with try/catch
 - **Large docs with many images**: images loaded in parallel via `Promise.all`
@@ -162,30 +172,36 @@ are imported via `with { type: 'text' }` from `html.ts` so canvas and export ren
 
 ```
 apps/api/src/lib/export/slides/
-  content.ts     # Yjs → DeckData + media map
   render.ts      # Slide/object → HTML strings (SizeUnit abstraction)
   html.ts        # Standalone HTML export
   pdf.ts         # PDF via WeasyPrint
+# content loader: apps/api/src/lib/document/slides.ts (Yjs → DeckData + media map)
 ```
 
 ## Sheets Export
 
-Eigensheets (`.eigensheets`) support XLSX export via the same route:
+Eigensheets (`.eigensheets`) support XLSX, PDF, and HTML export via the same route:
 
 | Format | Pipeline |
 |--------|----------|
 | `xlsx`  | Yjs snapshot → `Sheet[]` → ExcelJS workbook |
+| `pdf`   | `Sheet[]` → `renderSheetsHtml` → WeasyPrint (page sized to the widest/tallest sheet) |
+| `html`  | `Sheet[]` → `renderSheetsHtml` standalone HTML |
 
-The conversion reverses the XLSX import pipeline (`apps/api/src/lib/import/sheets/from-xlsx.ts`), using the
+The XLSX conversion reverses the XLSX import pipeline (`apps/api/src/lib/import/sheets/from-xlsx.ts`), using the
 same ExcelJS library. Cell values, formulas, styles (font, fill, alignment), borders, merged cells, column
-widths, and row heights are all round-tripped.
+widths, and row heights are all round-tripped. `renderSheetsHtml` (`sheets/html.ts`) is shared with the quick
+preview and takes a `RenderMode` so the preview renders only the first sheet (see PREVIEWS.md).
 
 ### File Structure
 
 ```
 apps/api/src/lib/export/sheets/
-  content.ts     # Yjs snapshot → Sheet[]
+  html.ts        # Sheet[] → HTML table (renderSheetsHtml — shared with preview, RenderMode-aware)
   xlsx.ts        # Sheet[] → XLSX buffer via ExcelJS
+  pdf.ts         # Sheet[] → HTML → WeasyPrint
+  fonts.ts       # FONT_ARRAY + resolveFontFamily (numeric/string ff → family name)
+# content loader: apps/api/src/lib/document/sheets.ts (Yjs snapshot → Sheet[])
 ```
 
 ## Sheets Import
@@ -194,13 +210,13 @@ Eigensheets import XLSX via the same shape, reversed:
 
 ```
 apps/api/src/lib/import/sheets/
-  from-xlsx.ts   # Buffer → Sheet[] (ExcelJS Workbook → sheet cells)
-  writer.ts      # Sheet[] → Yjs snapshot (JSON in state map)
+  from-xlsx.ts   # xlsxToSheets(buffer) → Sheet[] (ExcelJS Workbook → sheet cells)
 ```
 
-The importer only needs to emit `celldata` (with `f` for formula cells) and `config`. `calcChain` and
-initial computed values are filled in by the Workbook's mount-time bootstrap — see
-[SHEETS.md § Mount-time Bootstrap](SHEETS.md#mount-time-bootstrap).
+`from-xlsx.ts` only produces `Sheet[]`; `import/import-document.ts` writes it into the Yjs state map via
+`writeSheetsToYjs` (`apps/api/src/lib/document/sheets.ts`). The importer only needs to emit `celldata` (with
+`f` for formula cells) and `config`. `calcChain` and initial computed values are filled in by the Workbook's
+mount-time bootstrap — see [SHEETS.md § Mount-time Bootstrap](SHEETS.md#mount-time-bootstrap).
 
 Invariants the importer must uphold:
 - **`ct.fa` paired with `ct.t`** — when setting cell type (`t`), always set format assignment (`fa`), defaulting

@@ -384,6 +384,14 @@ export default class SharedDrive {
         return this.sharedDrive.openDatabase(mountId, config, pathId);
     }
 
+    public async createDatabase<S extends SchemaType>(
+        mountId: string,
+        config: DatabaseConfig<S>,
+        pathId: string,
+    ): Promise<ManagedDatabase<S>> {
+        return this.sharedDrive.createDatabase(mountId, config, pathId);
+    }
+
     public async closeDatabase(mountId: string, pathId: string): Promise<void> {
         return this.sharedDrive.closeDatabase(mountId, pathId);
     }

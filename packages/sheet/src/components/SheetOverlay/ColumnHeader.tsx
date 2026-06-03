@@ -22,6 +22,7 @@ import {
 export const ColumnHeader: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const containerRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
     const colChangeSizeRef = useRef<HTMLDivElement>(null);
     const [hoverLocation, setHoverLocation] = useState({
         col: -1,
@@ -51,13 +52,14 @@ export const ColumnHeader: React.FC = () => {
         return context.scrollLeft;
     }, [context.visibledatacolumn, sheet?.frozen, context.scrollLeft]);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: globalCache.scrollLeft is the live scroll value read fresh off a stable ref, never a React dependency
     const onMouseMove = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             if (context.colsResizing) {
                 return;
             }
             const mouseX = e.pageX - containerRef.current!.getBoundingClientRect().left - window.scrollX;
-            const _x = mouseX + containerRef.current!.scrollLeft;
+            const _x = mouseX + refs.globalCache.scrollLeft;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
             const { x, inVerticalFreeze } = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
             const col_location = colLocation(x, context.visibledatacolumn);
@@ -192,20 +194,20 @@ export const ColumnHeader: React.FC = () => {
         setSelectedLocation(selects);
     }, [context.selections, context.visibledatacolumn]);
 
+    // The header is no longer its own scroll surface; it tracks the single
+    // scroll offset on the bus by translating its content. notifyScrollListeners
+    // runs synchronously, so this stays in lockstep with the canvas labels for
+    // both user and programmatic scroll. Applied once on mount for the initial offset.
     useEffect(() => {
-        containerRef.current!.scrollLeft = context.scrollLeft;
-    }, [context.scrollLeft]);
-
-    // Sync column header scroll position imperatively from globalCache
-    useEffect(() => {
-        const syncScroll = () => {
-            if (containerRef.current) {
-                containerRef.current.scrollLeft = refs.globalCache.scrollLeft;
+        const applyOffset = () => {
+            if (contentRef.current) {
+                contentRef.current.style.transform = `translateX(${-refs.globalCache.scrollLeft}px)`;
             }
         };
-        refs.globalCache.scrollListeners.add(syncScroll);
+        applyOffset();
+        refs.globalCache.scrollListeners.add(applyOffset);
         return () => {
-            refs.globalCache.scrollListeners.delete(syncScroll);
+            refs.globalCache.scrollListeners.delete(applyOffset);
         };
     }, [refs.globalCache]);
 
@@ -221,89 +223,81 @@ export const ColumnHeader: React.FC = () => {
             onMouseLeave={onMouseLeave}
             onContextMenu={onContextMenu}
         >
-            <div
-                className="fortune-cols-freeze-handle"
-                onMouseDown={onColFreezeHandleMouseDown}
-                style={{
-                    left: freezeHandleLeft || 0,
-                }}
-            />
-            <div
-                className="fortune-cols-change-size"
-                ref={colChangeSizeRef}
-                id="fortune-cols-change-size"
-                onMouseDown={onColSizeHandleMouseDown}
-                onDoubleClick={onColSizeHandleDoubleClick}
-                style={{
-                    left: hoverLocation.col - 5 + (hoverInFreeze ? context.scrollLeft : 0),
-                    opacity: context.colsResizing ? 1 : 0,
-                }}
-            />
-            {!context.colsResizing && hoverLocation.col_index >= 0 ? (
+            <div ref={contentRef} style={{ position: 'absolute', inset: 0 }}>
                 <div
-                    className="fortune-col-header-hover"
-                    style={Object.assign(
-                        {
-                            left: hoverLocation.col_pre,
-                            width: hoverLocation.col - hoverLocation.col_pre - 1,
-                            display: 'block',
-                        },
-                        fixColumnStyleOverflowInFreeze(
-                            context,
-                            hoverLocation.col_index,
-                            hoverLocation.col_index,
-                            refs.globalCache.freezen?.[context.currentSheetId],
-                        ),
-                    )}
-                >
-                    {allowEditRef.current && (
-                        <span
-                            className="header-arrow"
-                            onClick={(e) => {
-                                setContext((ctx) => {
-                                    ctx.contextMenu = {
-                                        x: e.pageX,
-                                        y: 90,
-                                        headerMenu: true,
-                                    };
-                                });
-                            }}
-                            tabIndex={0}
-                        >
-                            <CircleChevronDown width={12} height={12} aria-hidden="true" />
-                        </span>
-                    )}
-                </div>
-            ) : null}
-            {selectedLocation.map(({ col, col_pre, c1, c2 }) => (
-                <div
-                    className="fortune-col-header-selected"
-                    key={`${c1}-${c2}`}
-                    style={Object.assign(
-                        {
-                            left: col_pre,
-                            width: col - col_pre - 1,
-                            display: 'block',
-                            backgroundColor: 'rgba(76, 76, 76, 0.1)',
-                        },
-                        fixColumnStyleOverflowInFreeze(
-                            context,
-                            c1,
-                            c2,
-                            refs.globalCache.freezen?.[context.currentSheetId],
-                        ),
-                    )}
+                    className="fortune-cols-freeze-handle"
+                    onMouseDown={onColFreezeHandleMouseDown}
+                    style={{
+                        left: freezeHandleLeft || 0,
+                    }}
                 />
-            ))}
-            {/* placeholder to overflow the container, making the container scrollable */}
-            <div
-                className="luckysheet-cols-h-cells luckysheetsheetchange"
-                id="luckysheet-cols-h-cells_0"
-                style={{ width: context.ch_width, height: 1 }}
-            >
-                <div className="luckysheet-cols-h-cells-c">
-                    <div className="luckysheet-grdblkpush" />
-                </div>
+                <div
+                    className="fortune-cols-change-size"
+                    ref={colChangeSizeRef}
+                    id="fortune-cols-change-size"
+                    onMouseDown={onColSizeHandleMouseDown}
+                    onDoubleClick={onColSizeHandleDoubleClick}
+                    style={{
+                        left: hoverLocation.col - 5 + (hoverInFreeze ? context.scrollLeft : 0),
+                        opacity: context.colsResizing ? 1 : 0,
+                    }}
+                />
+                {!context.colsResizing && hoverLocation.col_index >= 0 ? (
+                    <div
+                        className="fortune-col-header-hover"
+                        style={Object.assign(
+                            {
+                                left: hoverLocation.col_pre,
+                                width: hoverLocation.col - hoverLocation.col_pre - 1,
+                                display: 'block',
+                            },
+                            fixColumnStyleOverflowInFreeze(
+                                context,
+                                hoverLocation.col_index,
+                                hoverLocation.col_index,
+                                refs.globalCache.freezen?.[context.currentSheetId],
+                            ),
+                        )}
+                    >
+                        {allowEditRef.current && (
+                            <span
+                                className="header-arrow"
+                                onClick={(e) => {
+                                    setContext((ctx) => {
+                                        ctx.contextMenu = {
+                                            x: e.pageX,
+                                            y: 90,
+                                            headerMenu: true,
+                                        };
+                                    });
+                                }}
+                                tabIndex={0}
+                            >
+                                <CircleChevronDown width={12} height={12} aria-hidden="true" />
+                            </span>
+                        )}
+                    </div>
+                ) : null}
+                {selectedLocation.map(({ col, col_pre, c1, c2 }) => (
+                    <div
+                        className="fortune-col-header-selected"
+                        key={`${c1}-${c2}`}
+                        style={Object.assign(
+                            {
+                                left: col_pre,
+                                width: col - col_pre - 1,
+                                display: 'block',
+                                backgroundColor: 'rgba(76, 76, 76, 0.1)',
+                            },
+                            fixColumnStyleOverflowInFreeze(
+                                context,
+                                c1,
+                                c2,
+                                refs.globalCache.freezen?.[context.currentSheetId],
+                            ),
+                        )}
+                    />
+                ))}
             </div>
         </div>
     );

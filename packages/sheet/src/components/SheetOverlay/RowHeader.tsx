@@ -19,6 +19,7 @@ export const RowHeader: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const rowChangeSizeRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
     const [hoverLocation, setHoverLocation] = useState({
         row: -1,
         row_pre: -1,
@@ -44,13 +45,14 @@ export const RowHeader: React.FC = () => {
         return context.scrollTop;
     }, [context.visibledatarow, sheet?.frozen, context.scrollTop]);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: globalCache.scrollTop is the live scroll value read fresh off a stable ref, never a React dependency
     const onMouseMove = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             if (context.rowsResizing) {
                 return;
             }
             const mouseY = e.pageY - containerRef.current!.getBoundingClientRect().top - window.scrollY;
-            const _y = mouseY + containerRef.current!.scrollTop;
+            const _y = mouseY + refs.globalCache.scrollTop;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
             const { y, inHorizontalFreeze } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
             const row_location = rowLocation(y, context.visibledatarow);
@@ -169,20 +171,20 @@ export const RowHeader: React.FC = () => {
         setSelectedLocation(selects);
     }, [context.selections, context.visibledatarow]);
 
+    // The header is no longer its own scroll surface; it tracks the single
+    // scroll offset on the bus by translating its content. notifyScrollListeners
+    // runs synchronously, so this stays in lockstep with the canvas labels for
+    // both user and programmatic scroll. Applied once on mount for the initial offset.
     useEffect(() => {
-        containerRef.current!.scrollTop = context.scrollTop;
-    }, [context.scrollTop]);
-
-    // Sync row header scroll position imperatively from globalCache
-    useEffect(() => {
-        const syncScroll = () => {
-            if (containerRef.current) {
-                containerRef.current.scrollTop = refs.globalCache.scrollTop;
+        const applyOffset = () => {
+            if (contentRef.current) {
+                contentRef.current.style.transform = `translateY(${-refs.globalCache.scrollTop}px)`;
             }
         };
-        refs.globalCache.scrollListeners.add(syncScroll);
+        applyOffset();
+        refs.globalCache.scrollListeners.add(applyOffset);
         return () => {
-            refs.globalCache.scrollListeners.delete(syncScroll);
+            refs.globalCache.scrollListeners.delete(applyOffset);
         };
     }, [refs.globalCache]);
 
@@ -199,66 +201,62 @@ export const RowHeader: React.FC = () => {
             onMouseLeave={onMouseLeave}
             onContextMenu={onContextMenu}
         >
-            <div
-                className="fortune-rows-freeze-handle"
-                onMouseDown={onRowFreezeHandleMouseDown}
-                style={{
-                    top: freezeHandleTop || 0,
-                }}
-            />
-            <div
-                className="fortune-rows-change-size"
-                ref={rowChangeSizeRef}
-                onMouseDown={onRowSizeHandleMouseDown}
-                style={{
-                    top: hoverLocation.row - 3 + (hoverInFreeze ? context.scrollTop : 0),
-                    opacity: context.rowsResizing ? 1 : 0,
-                }}
-            />
-            {!context.rowsResizing && hoverLocation.row_index >= 0 ? (
+            <div ref={contentRef} style={{ position: 'absolute', inset: 0 }}>
                 <div
-                    className="fortune-row-header-hover"
-                    style={Object.assign(
-                        {
-                            top: hoverLocation.row_pre,
-                            height: hoverLocation.row - hoverLocation.row_pre - 1,
-                            display: 'block',
-                        },
-                        fixRowStyleOverflowInFreeze(
-                            context,
-                            hoverLocation.row_index,
-                            hoverLocation.row_index,
-                            refs.globalCache.freezen?.[context.currentSheetId],
-                        ),
-                    )}
+                    className="fortune-rows-freeze-handle"
+                    onMouseDown={onRowFreezeHandleMouseDown}
+                    style={{
+                        top: freezeHandleTop || 0,
+                    }}
                 />
-            ) : null}
-            {selectedLocation.map(({ row, row_pre, r1, r2 }) => (
                 <div
-                    className="fortune-row-header-selected"
-                    key={`${r1}-${r2}`}
-                    style={Object.assign(
-                        {
-                            top: row_pre,
-                            height: row - row_pre - 1,
-                            display: 'block',
-                            backgroundColor: 'rgba(76, 76, 76, 0.1)',
-                        },
-                        fixRowStyleOverflowInFreeze(
-                            context,
-                            r1,
-                            r2,
-                            refs.globalCache.freezen?.[context.currentSheetId],
-                        ),
-                    )}
+                    className="fortune-rows-change-size"
+                    ref={rowChangeSizeRef}
+                    onMouseDown={onRowSizeHandleMouseDown}
+                    style={{
+                        top: hoverLocation.row - 3 + (hoverInFreeze ? context.scrollTop : 0),
+                        opacity: context.rowsResizing ? 1 : 0,
+                    }}
                 />
-            ))}
-            {/* placeholder to overflow the container, making the container scrollable */}
-            <div
-                style={{ height: context.rh_height, width: 1 }}
-                id="luckysheetrowHeader_0"
-                className="luckysheetsheetchange"
-            />
+                {!context.rowsResizing && hoverLocation.row_index >= 0 ? (
+                    <div
+                        className="fortune-row-header-hover"
+                        style={Object.assign(
+                            {
+                                top: hoverLocation.row_pre,
+                                height: hoverLocation.row - hoverLocation.row_pre - 1,
+                                display: 'block',
+                            },
+                            fixRowStyleOverflowInFreeze(
+                                context,
+                                hoverLocation.row_index,
+                                hoverLocation.row_index,
+                                refs.globalCache.freezen?.[context.currentSheetId],
+                            ),
+                        )}
+                    />
+                ) : null}
+                {selectedLocation.map(({ row, row_pre, r1, r2 }) => (
+                    <div
+                        className="fortune-row-header-selected"
+                        key={`${r1}-${r2}`}
+                        style={Object.assign(
+                            {
+                                top: row_pre,
+                                height: row - row_pre - 1,
+                                display: 'block',
+                                backgroundColor: 'rgba(76, 76, 76, 0.1)',
+                            },
+                            fixRowStyleOverflowInFreeze(
+                                context,
+                                r1,
+                                r2,
+                                refs.globalCache.freezen?.[context.currentSheetId],
+                            ),
+                        )}
+                    />
+                ))}
+            </div>
         </div>
     );
 };

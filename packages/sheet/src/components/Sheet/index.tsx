@@ -6,7 +6,6 @@ import {
     type Context,
     type Freezen,
     type FreezenAxisData,
-    handleGlobalWheel,
     initFreeze,
     type Sheet as SheetType,
     updateContextWithCanvas,
@@ -152,7 +151,6 @@ type Props = {
 
 export const Sheet: React.FC<Props> = ({ sheet }) => {
     const { data } = sheet;
-    const containerRef = useRef<HTMLDivElement>(null);
     const placeholderRef = useRef<HTMLDivElement>(null);
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
 
@@ -208,7 +206,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     //
     // Two triggers:
     //   1. context changes (cell edits, selection, etc.) → useEffect
-    //   2. scroll changes (wheel/scrollbar) → globalCache scroll listener
+    //   2. scroll changes (native cellArea scroll) → globalCache scroll listener
     // Both call scheduleRedraw which coalesces to one paint per frame.
     // -----------------------------------------------------------------------
 
@@ -247,29 +245,8 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         return () => cancelAnimationFrame(rafIdRef.current);
     }, []);
 
-    // Wheel handler — reads from contextRef, writes to scrollbar DOM + cache.
-    // Does NOT call setContext. Scroll state flows through globalCache.
-    const onWheel = useCallback(
-        (e: WheelEvent) => {
-            handleGlobalWheel(
-                contextRef.current,
-                e,
-                refs.globalCache,
-                refs.scrollbarX.current!,
-                refs.scrollbarY.current!,
-            );
-        },
-        [refs.globalCache, refs.scrollbarX, refs.scrollbarY],
-    );
-
-    useEffect(() => {
-        const container = containerRef.current;
-        container?.addEventListener('wheel', onWheel, { passive: false });
-        return () => container?.removeEventListener('wheel', onWheel);
-    }, [onWheel]);
-
     return (
-        <div ref={containerRef} className="flex flex-1 flex-col min-h-0 relative">
+        <div className="flex flex-1 flex-col min-h-0 relative">
             <div ref={placeholderRef} className="w-full h-full block" />
             <canvas className="w-full h-full block absolute" ref={refs.canvas} aria-hidden="true" />
             <MemoizedSheetOverlay />

@@ -1,8 +1,9 @@
 # File Preview System
 
 > **TLDR**: Server-side preview generation with tmp-dir cache. Images served as screen-res WebP (max 2560px), text/code/markdown
-> as JSON body snippets rendered client-side with shared `eigen-prose` styles. Video/audio/PDF redirect to embed URL for native
-> playback. Preview overlay in `packages/ui` with keyboard nav and sibling browsing.
+> and eigen-native files (eigendoc/slides/sheets, a compact HTML slice) as JSON body snippets rendered client-side with shared
+> `eigen-prose` styles. Video/audio/PDF redirect to embed URL for native playback. Preview overlay in `packages/ui` with keyboard
+> nav and sibling browsing.
 
 ## Route Structure
 
@@ -34,13 +35,36 @@ Everything in `mount.previewsDir` (`tmpDir/previews/`). Cache key: `{pathId}-{up
 | `markdown`     | `markdown-it` → HTML, sanitized with DOMPurify |
 | `code`         | `lowlight` syntax highlighting → HTML spans     |
 | `plaintext`    | `<pre>` wrapped, HTML-escaped                   |
-| `eigenslides`  | Server-side HTML: positioned divs with container query sizing |
+| `eigendoc`     | Yjs → PM JSON (first 20 blocks) → tiptap static renderer → HTML |
+| `eigenslides`  | Yjs → first 8 slides → positioned divs with container-query sizing |
+| `eigensheets`  | Yjs snapshot → first sheet → HTML table (`renderSheetsHtml`, preview mode) |
+
+The `eigendoc`/`eigenslides`/`eigensheets` modes load the file's Yjs document (via `getCollabPreviewData` in
+`preview-cache.ts`) rather than raw file text, and render only a compact slice — see Compact Previews below.
 
 Body is consumed via `useTextPreview()` hook (TanStack Query, 5min staleTime) and rendered with
 `dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM.
 
 Shared `eigen-prose.css` in `packages/ui/src/styles/` provides prose typography + Catppuccin code highlighting,
 used by both previews and the docs editor.
+
+## Compact Previews vs Full Export
+
+In-app quick-look previews render a **compact** slice of eigen-native files; downloads/exports render the whole
+document. The cap keeps the cached preview body small. Each type compacts by its natural unit:
+
+| Type        | Preview cap               | Mechanism                                                                 |
+|-------------|---------------------------|---------------------------------------------------------------------------|
+| eigensheets | first sheet               | `renderSheetsHtml(sheets, 'preview')` — the CF resolver still spans every sheet so cross-sheet formula refs resolve |
+| eigenslides | first 8 slides            | `eigenslides-preview.ts` slices `deck.slideOrder` (slides/objects maps stay whole) |
+| eigendoc    | first 20 top-level blocks | `eigendoc-preview.ts` slices `json.content` before rendering              |
+
+`RenderMode = 'export' | 'preview'` (`apps/api/src/lib/export/render-types.ts`) is threaded as a parameter (not
+module state) so concurrent requests stay isolated. Only the sheets renderer reads it — slides and eigendoc
+instead slice their input in the preview generator, leaving `renderDeckHtml` / the tiptap renderer signatures
+untouched. When content is actually dropped, each generator appends a shared `renderPreviewTruncatedMarker()`
+(`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the
+document `<head>`.
 
 ## Image Previews
 
@@ -123,7 +147,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `apps/api/src/lib/shared/video-thumbnail.ts`                              | ffmpeg-based video frame extractor + `isFfmpegAvailable`   |
 | `apps/api/src/lib/preview/video-preview.ts`                               | `isVideoCandidate` MIME gate                               |
 | `packages/lib/src/constants/preview.ts`                                   | `TextPreviewMode`, `getTextPreviewMode()`, `isExiftoolExtension()` |
-| `apps/api/src/lib/drive/drive.ts`                                         | `getPreview()` + `getTextPreview()` methods      |
+| `apps/api/src/lib/drive/drive.ts`                                         | `resolveFile()` → ACL-checked `{ mount, path }` for preview/export/thumb routes |
 | `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` routes              |
 | `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |
 | `packages/ui/src/components/layout/drive/file-preview.tsx`                | Preview overlay component                        |
@@ -131,12 +155,16 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `packages/lib/src/core/drive/hooks/use-drive.ts`                          | `useTextPreview()` hook                          |
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
 | `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |
-| `apps/api/src/lib/preview/eigenslides-preview.ts`                         | Slides Yjs → positioned HTML divs                |
+| `apps/api/src/lib/preview/eigendoc-preview.ts`                            | Eigendoc Yjs → tiptap static HTML (first 20 blocks) |
+| `apps/api/src/lib/preview/eigenslides-preview.ts`                         | Slides Yjs → positioned HTML divs (first 8 slides)  |
+| `apps/api/src/lib/preview/eigensheets-preview.ts`                         | Sheets Yjs → HTML table (first sheet)               |
+| `apps/api/src/lib/preview/preview-marker.ts`                              | `renderPreviewTruncatedMarker()` appended on truncation |
+| `apps/api/src/lib/export/render-types.ts`                                 | `RenderMode` toggle (export vs preview)             |
 
 ## Future
 
-- CSV table rendering (currently treated as plaintext)
-- Eigen native type previews (eigendoc, eigenslides, eigensheets, eigenstickies)
+- CSV table rendering (currently treated as code/plaintext)
+- Eigenstickies preview (eigendoc, eigenslides, eigensheets are done)
 - DOCX/XLSX/PPTX preview
 
 ---
@@ -151,17 +179,17 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 
 ---
 
-### Phase — Eigen Native Types (eigendoc, eigenslides, eigensheets, eigenstickies)
+### Phase — Eigen Native Types (eigenstickies remaining)
 
-**Goal:** Preview Eigen native files without opening them. Shares heavy infrastructure with import/export Phase 2.
+**Goal:** Preview Eigen native files without opening them. eigendoc/eigenslides/eigensheets are done — each
+preview reuses the export render functions (`doc/render.ts`, `slides/render.ts`, `sheets/html.ts`) over the
+shared content loaders in `apps/api/src/lib/document/`.
 
-| Type | Server approach | Prerequisite |
-|------|----------------|--------------|
-| eigendoc | Load Y.Doc (same as `DbProvider.loadState()`), `yDocToProsemirrorJSON()`, `generateHTML(json, serverExtensions)`, cache as HTML | `packages/lib/src/core/docs/server-extensions.ts` from import/export Phase 2; `y-prosemirror` in API |
-| eigenslides | Load slides JSON, render each slide as styled HTML div | **Done** |
-| eigensheets | Load sheet JSON, render as HTML table | None |
-| eigenstickies | Load stickies JSON, render simplified kanban columns as HTML | None |
-
-eigendoc preview HTML generation is **identical** to eigendoc HTML export (PROPOSAL_DOC_IMPORT_EXPORT.md Phase 2). Build export first, then the preview endpoint calls the same function and caches the result.
+| Type | Status | Approach |
+|------|--------|----------|
+| eigendoc | **Done** | `readEigendocContent` (Yjs → PM JSON) → tiptap static renderer with `doc/render.ts` node mappings, first 20 blocks |
+| eigenslides | **Done** | `readSlidesContent` → `renderDeckHtml`, first 8 slides |
+| eigensheets | **Done** | `readSheetsContent` → `renderSheetsHtml(…, 'preview')`, first sheet |
+| eigenstickies | Future | Load stickies JSON, render simplified kanban columns as HTML |
 
 ---

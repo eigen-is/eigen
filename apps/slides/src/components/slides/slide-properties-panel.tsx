@@ -2,6 +2,7 @@ import { isSameFill } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
@@ -18,16 +19,24 @@ import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Toggle } from '@workspace/ui/components/toggle';
 import {
+    AlignHorizontalDistributeCenter,
+    AlignHorizontalJustifyCenter,
+    AlignHorizontalJustifyEnd,
+    AlignHorizontalJustifyStart,
+    AlignVerticalDistributeCenter,
     AlignVerticalJustifyCenter,
     AlignVerticalJustifyEnd,
     AlignVerticalJustifyStart,
     Bold,
     Italic,
+    MoveHorizontal,
+    MoveVertical,
     Strikethrough,
     Trash2,
     Underline,
 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
+import type { ArrangeOp } from './arrange';
 import type { ApplyTo, ImageObject, SlideObject, TextObject } from './types';
 import { BORDER_RADIUS_ROUND } from './types';
 
@@ -49,9 +58,10 @@ type SlidePropertiesPanelProps = {
     objects: SlideObject[];
     onUpdate: (ids: string[], updates: Partial<SlideObject>) => void;
     onDelete?: (ids: string[]) => void;
+    onArrange?: (op: ArrangeOp) => void;
 };
 
-export function SlidePropertiesPanel({ objects, onUpdate, onDelete }: SlidePropertiesPanelProps) {
+export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }: SlidePropertiesPanelProps) {
     const ids = useMemo(() => objects.map((o) => o.id), [objects]);
 
     const allText = objects.every((o) => o.type === 'text');
@@ -108,6 +118,8 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete }: SlidePrope
                 </PropertyRow>
             </PropertySection>
 
+            {onArrange && objects.length >= 2 && <ArrangeProperties count={objects.length} onArrange={onArrange} />}
+
             {allText && (
                 <TextProperties objects={objects as (SlideObject & { type: 'text' })[]} onUpdate={handleUpdate} />
             )}
@@ -127,6 +139,80 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete }: SlidePrope
                 </div>
             )}
         </PropertiesPanel>
+    );
+}
+
+function ArrangeProperties({ count, onArrange }: { count: number; onArrange: (op: ArrangeOp) => void }) {
+    const canDistribute = count >= 3;
+    return (
+        <PropertySection title="Arrange">
+            <div className="flex items-center gap-1">
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={AlignHorizontalJustifyStart}
+                    tooltipText="Align left"
+                    onClick={() => onArrange('align-left')}
+                />
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={AlignHorizontalJustifyCenter}
+                    tooltipText="Align horizontal center"
+                    onClick={() => onArrange('align-h-center')}
+                />
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={AlignHorizontalJustifyEnd}
+                    tooltipText="Align right"
+                    onClick={() => onArrange('align-right')}
+                />
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={AlignVerticalJustifyStart}
+                    tooltipText="Align top"
+                    onClick={() => onArrange('align-top')}
+                />
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={AlignVerticalJustifyCenter}
+                    tooltipText="Align vertical center"
+                    onClick={() => onArrange('align-v-center')}
+                />
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={AlignVerticalJustifyEnd}
+                    tooltipText="Align bottom"
+                    onClick={() => onArrange('align-bottom')}
+                />
+            </div>
+            <div className="flex items-center gap-1">
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={AlignHorizontalDistributeCenter}
+                    tooltipText={canDistribute ? 'Distribute horizontally' : 'Select 3+ objects to distribute'}
+                    disabled={!canDistribute}
+                    onClick={() => onArrange('distribute-h')}
+                />
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={AlignVerticalDistributeCenter}
+                    tooltipText={canDistribute ? 'Distribute vertically' : 'Select 3+ objects to distribute'}
+                    disabled={!canDistribute}
+                    onClick={() => onArrange('distribute-v')}
+                />
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={MoveHorizontal}
+                    tooltipText="Match width"
+                    onClick={() => onArrange('match-width')}
+                />
+                <TooltipButton
+                    className="h-7 w-7"
+                    icon={MoveVertical}
+                    tooltipText="Match height"
+                    onClick={() => onArrange('match-height')}
+                />
+            </div>
+        </PropertySection>
     );
 }
 

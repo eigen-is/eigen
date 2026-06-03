@@ -9,17 +9,10 @@ import { colLocation, rowLocation } from './location';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
-export function getCellRowColumn(
-    ctx: Context,
-    e: MouseEvent,
-    container: HTMLDivElement,
-    scrollX: HTMLDivElement,
-    scrollY: HTMLDivElement,
-) {
+export function getCellRowColumn(ctx: Context, e: MouseEvent, container: HTMLDivElement, scrollEl: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return undefined;
-    const { scrollLeft } = scrollX;
-    const { scrollTop } = scrollY;
+    const { scrollLeft, scrollTop } = scrollEl;
     const rect = container.getBoundingClientRect();
     let x = e.pageX - rect.left - ctx.rowHeaderWidth;
     let y = e.pageY - rect.top - ctx.columnHeaderHeight;
@@ -131,8 +124,7 @@ export function goToLink(
     c: number,
     linkType: string,
     linkAddress: string,
-    scrollbarX: HTMLDivElement,
-    scrollbarY: HTMLDivElement,
+    scrollEl: HTMLDivElement,
 ) {
     const currSheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (currSheetIndex == null) return;
@@ -157,8 +149,8 @@ export function goToLink(
         if (range == null) return;
         const row_pre = range.row[0] - 1 === -1 ? 0 : ctx.visibledatarow[range.row[0] - 1];
         const col_pre = range.column[0] - 1 === -1 ? 0 : ctx.visibledatacolumn[range.column[0] - 1];
-        scrollbarX.scrollLeft = col_pre;
-        scrollbarY.scrollLeft = row_pre;
+        scrollEl.scrollLeft = col_pre;
+        scrollEl.scrollTop = row_pre;
         ctx.selections = normalizeSelection(ctx, [range]);
         changeSheet(ctx, range.sheetId || ctx.currentSheetId);
     }
