@@ -28,6 +28,7 @@ import {
     patchToOp,
     type Settings,
     type Sheet as SheetType,
+    warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { ContextMenu } from '../ContextMenu';
@@ -179,6 +180,24 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 setCalInfo(re);
             }
         }, [context.selections]);
+
+        // Build the formula dependency map off the interaction path once the sheet
+        // has loaded, so the first edit on a large workbook doesn't pay the
+        // multi-second inline rebuild. One-shot per mount; no-op if an edit already
+        // built the map.
+        const warmSheetIdx = getSheetIndex(context, context.currentSheetId);
+        const dataReady = warmSheetIdx != null && (context.sheets?.[warmSheetIdx]?.data?.length ?? 0) > 0;
+        // biome-ignore lint/correctness/useExhaustiveDependencies: warm once when data first loads; depending on `context` would re-run and cancel the scheduled idle build on every selection change
+        useEffect(() => {
+            if (!dataReady) return;
+            const run = () => warmFormulaCellInfoMap(context);
+            if (typeof requestIdleCallback === 'function') {
+                const id = requestIdleCallback(run, { timeout: 2000 });
+                return () => cancelIdleCallback(id);
+            }
+            const id = setTimeout(run, 200);
+            return () => clearTimeout(id);
+        }, [dataReady]);
 
         const emitOp = useCallback(
             (ctx: Context, patches: Patch[], options?: SetContextOptions, undo: boolean = false) => {

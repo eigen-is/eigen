@@ -450,24 +450,22 @@ export function isFunctionRange(
 
 export function getAllFunctionGroup(ctx: Context): FormulaCell[] {
     const { sheets } = ctx;
-    let ret: FormulaCell[] = [];
+    // Push into one array; `ret.concat` per sheet copies the whole accumulator
+    // each time — O(formulas × sheets) on workbooks with many formulas.
+    const ret: FormulaCell[] = [];
     for (let i = 0; i < sheets.length; i += 1) {
         const file = sheets[i];
-        let { calcChain } = file;
+        const { calcChain, dynamicArray_compute } = file;
 
-        let { dynamicArray_compute } = file;
-        if (calcChain == null) {
-            calcChain = [];
+        if (calcChain != null) {
+            for (const c of calcChain) {
+                ret.push(c);
+            }
         }
-
-        if (dynamicArray_compute == null) {
-            dynamicArray_compute = [];
-        }
-
-        ret = ret.concat(calcChain);
-
-        for (const d of dynamicArray_compute) {
-            ret.push({ r: d.r, c: d.c, id: d.id });
+        if (dynamicArray_compute != null) {
+            for (const d of dynamicArray_compute) {
+                ret.push({ r: d.r, c: d.c, id: d.id });
+            }
         }
     }
 
@@ -627,6 +625,18 @@ export function setFormulaCellInfoMap(ctx: Context, calcChains?: FormulaCell[], 
         const formulaCell = calcChains[i];
         setFormulaCellInfo(ctx, formulaCell, data ?? undefined);
     }
+}
+
+// Build the formula dependency map up front (e.g. from an idle callback after
+// load) so the first edit doesn't pay the full O(all formulas) rebuild inline.
+// On large workbooks this rebuild is multi-second; running it off the
+// interaction path keeps the first edit responsive. No-op if already built.
+export function warmFormulaCellInfoMap(ctx: Context): void {
+    if (ctx.formulaCache.formulaCellInfoMap && !isEmpty(ctx.formulaCache.formulaCellInfoMap)) {
+        return;
+    }
+    ctx.formulaCache.formulaCellInfoMap = {};
+    setFormulaCellInfoMap(ctx, getAllFunctionGroup(ctx), getFlowdata(ctx));
 }
 
 export function execFunctionGroup(
