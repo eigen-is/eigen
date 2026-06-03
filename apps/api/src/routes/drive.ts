@@ -11,6 +11,7 @@ import { getHome } from '../lib/home';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
+import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
 
 // Drive routes allow cross-owner access (shared drives, team drives).
@@ -280,6 +281,43 @@ export const driveRouter = new Elysia({ name: 'drive' })
         // updatedAt is a cache-buster — browser HTTP cache and TanStack queryKey both key
         // off the URL, so a stale URL serves stale content after an inline edit.
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+    )
+    // Version history (file-level snapshots; see lib/versioning). Access flows
+    // through getSharedDrive() → SharedDrive ACL, like every other drive route.
+    .get(
+        '/drive/:ownerId/:mountId/file/:pathId/versions',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            return drive.listVersions(params.mountId, params.pathId);
+        },
+        { auth: true },
+    )
+    .post(
+        '/drive/:ownerId/:mountId/file/:pathId/versions/save',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            return drive.saveVersion(params.mountId, params.pathId);
+        },
+        { auth: true },
+    )
+    .post(
+        '/drive/:ownerId/:mountId/file/:pathId/versions/:snapshotName/restore',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            await drive.restoreContainer(params.mountId, params.pathId, params.snapshotName);
+            return { success: true };
+        },
+        // Constrain the user-supplied snapshot name to the snapshot filename shape so
+        // a bogus value 422s here instead of falling through to a deep 404.
+        {
+            auth: true,
+            params: t.Object({
+                ownerId: t.String(),
+                mountId: t.String(),
+                pathId: t.String(),
+                snapshotName: t.String({ pattern: SNAPSHOT_NAME_FORMAT.source }),
+            }),
+        },
     )
     // Path operations (rename, move, delete, acl, breadcrumb)
     .get(

@@ -1,8 +1,5 @@
-import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
-import { fetchRevisionState, useCollabRevisions } from '@workspace/lib/collab';
-import { formatDateTime } from '@workspace/lib/date';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
@@ -11,8 +8,8 @@ import {
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
 } from '@workspace/lib/types/drive';
+import type { Snapshot } from '@workspace/lib/types/versioning';
 import { Button } from '@workspace/ui/components/button';
-import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -23,24 +20,14 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {
-    Download,
-    FileText,
-    Folder,
-    History,
-    type LucideIcon,
-    Mail,
-    Pencil,
-    Trash2,
-    Upload,
-    UserRoundPlus,
-} from 'lucide-react';
+import { Download, FileText, Folder, type LucideIcon, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc';
 import { DriveDeleteItem } from '../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../drive/drive-email-collaborators';
 import { DriveFilePicker } from '../drive/drive-file-picker';
 import { DriveRenameItem } from '../drive/drive-rename-item';
+import { RestoreVersionDialog, VersionHistoryMenu } from './version-history-menu';
 
 const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
     doc: { mime: DRIVE_MIME_DOC, title: 'Open doc' },
@@ -66,7 +53,6 @@ type FileMenuProps = {
     path: DrivePath;
     canWrite: boolean;
     onAccessDialogOpen: () => void;
-    onRestore?: (state: Uint8Array) => void;
     onImport?: () => void;
     importLabel?: string;
     onExport?: (format: string) => void;
@@ -81,7 +67,6 @@ export function FileMenu({
     path,
     canWrite,
     onAccessDialogOpen,
-    onRestore,
     onImport,
     importLabel,
     onExport,
@@ -96,31 +81,14 @@ export function FileMenu({
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [emailOpen, setEmailOpen] = useState(false);
-    const [menuOpen, setMenuOpen] = useState(false);
-    const [confirmOpen, setConfirmOpen] = useState(false);
-    const [pendingRevisionId, setPendingRevisionId] = useState<number | null>(null);
+    // Lifted out of VersionHistoryMenu so the dialog survives the dropdown's unmount-on-close.
+    const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
     const openConfig = OPEN_LABELS[createType];
-    const { data: revisions } = useCollabRevisions(path.ownerId, path.mountId, path.id, menuOpen && !!onRestore);
     const navigate = useNavigate();
-
-    const handleRevisionClick = (revisionId: number) => {
-        setPendingRevisionId(revisionId);
-        setMenuOpen(false);
-        setConfirmOpen(true);
-    };
-
-    const handleConfirmRestore = async () => {
-        if (pendingRevisionId === null || !onRestore) return;
-        const state = await fetchRevisionState(path.ownerId, path.mountId, path.id, pendingRevisionId);
-        if (!state) return;
-        onRestore(state);
-        setConfirmOpen(false);
-        setPendingRevisionId(null);
-    };
 
     return (
         <>
-            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost">File</Button>
                 </DropdownMenuTrigger>
@@ -170,34 +138,8 @@ export function FileMenu({
                     )}
 
                     {/* Section 4: Version history & Print */}
-                    {(onRestore || children) && <DropdownMenuSeparator />}
-                    {onRestore && (
-                        <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
-                                <History className="h-4 w-4 mr-2" /> Version history
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-[240px]">
-                                {revisions && revisions.length > 0 ? (
-                                    revisions.map((rev) => (
-                                        <DropdownMenuItem
-                                            key={rev.id}
-                                            className="flex items-center justify-between gap-4"
-                                            onClick={() => handleRevisionClick(rev.id)}
-                                        >
-                                            <span>
-                                                {rev.createdAt
-                                                    ? formatDateTime(new Date(rev.createdAt))
-                                                    : `Revision #${rev.id}`}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground">Restore</span>
-                                        </DropdownMenuItem>
-                                    ))
-                                ) : (
-                                    <DropdownMenuItem disabled>No revisions yet</DropdownMenuItem>
-                                )}
-                            </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                    )}
+                    {(canWrite || children) && <DropdownMenuSeparator />}
+                    {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
                     {children}
 
                     {/* Section 5: Move to trash */}
@@ -240,19 +182,7 @@ export function FileMenu({
                     if (actionType === 'delete') navigate({ to: `/` });
                 }}
             />
-            {onRestore && (
-                <ConfirmDialog
-                    open={confirmOpen}
-                    onOpenChange={(value) => {
-                        setConfirmOpen(value);
-                        if (!value) setPendingRevisionId(null);
-                    }}
-                    title="Restore revision"
-                    description={`This will replace the current document content with the selected revision for all collaborators. Use ${formatForDisplay('Mod+Z')} to undo after restoring.`}
-                    confirmText="Restore"
-                    onConfirm={handleConfirmRestore}
-                />
-            )}
+            <RestoreVersionDialog path={path} snapshot={pendingSnapshot} onClose={() => setPendingSnapshot(null)} />
         </>
     );
 }

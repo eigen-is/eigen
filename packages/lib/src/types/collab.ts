@@ -6,8 +6,3 @@ export type CollabDocumentInfo = {
     path: DrivePath | null;
     folderContents: DrivePath[] | null;
 };
-
-export type CollabRevision = {
-    id: number;
-    createdAt: string | null;
-};

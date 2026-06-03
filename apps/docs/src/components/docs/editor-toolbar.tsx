@@ -1,6 +1,5 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
-import { yDocToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useExportDocument, useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
@@ -70,7 +69,6 @@ import {
     Undo,
 } from 'lucide-react';
 import { useState } from 'react';
-import * as Y from 'yjs';
 
 type EditorToolbarProps = {
     editor: Editor;
@@ -111,14 +109,6 @@ export const EditorToolbar = ({
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
     const isMobile = useMediaQuery('(max-width: 1200px)');
-
-    const handleRestore = (state: Uint8Array) => {
-        const tempDoc = new Y.Doc();
-        Y.applyUpdate(tempDoc, state);
-        const json = yDocToProsemirrorJSON(tempDoc, 'default');
-        editor.commands.setContent(json);
-        tempDoc.destroy();
-    };
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -190,7 +180,6 @@ export const EditorToolbar = ({
                     path={path}
                     canWrite={canWrite}
                     onAccessDialogOpen={onAccessDialogOpen}
-                    onRestore={handleRestore}
                     onExport={handleExport}
                     onImport={handleImport}
                     importLabel="Import docx file…"

@@ -1,6 +1,7 @@
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { restoreYjsDoc } from '@workspace/lib/core/collab/yjs-utils';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
-import { desc, eq, lt, lte } from 'drizzle-orm';
+import { desc, lt, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
@@ -20,7 +21,14 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 
 const SNAPSHOT_INTERVAL = 100;
-const MAX_REVISIONS = 50;
+// Sheets' flushSnapshot dumps the whole sheet JSON into one update row on tab
+// close; a count-only threshold lets data.db balloon to ~100× the doc size
+// before consolidation. Trigger on bytes too so a single fat update collapses
+// straight away. Bounds steady-state data.db to ~2× the doc.
+const SNAPSHOT_BYTES = 1_000_000;
+// In-DB checkpoint kept inside data.db so cold-open can hydrate from one row + tail updates.
+// Long-term history lives under the container's `versions/` folder (see versioning routes).
+const MAX_DOC_SNAPSHOTS = 1;
 const TOUCH_THROTTLE_MS = 60_000;
 
 class DbProvider {
@@ -28,6 +36,7 @@ class DbProvider {
     private doc: Y.Doc;
     private docId: string;
     private updatesSinceSnapshot = 0;
+    private bytesSinceSnapshot = 0;
     private updateHandler: (update: Uint8Array) => void;
 
     constructor(doc: Y.Doc, docId: string, managedDb: ManagedDatabase<typeof schema>) {
@@ -35,8 +44,9 @@ class DbProvider {
         this.doc = doc;
         this.docId = docId;
 
-        const { updatesApplied } = loadYjsState(managedDb, this.doc, docId);
+        const { updatesApplied, bytesApplied } = loadYjsState(managedDb, this.doc, docId);
         this.updatesSinceSnapshot = updatesApplied;
+        this.bytesSinceSnapshot = bytesApplied;
 
         this.updateHandler = (update: Uint8Array) => {
             this.storeUpdate(update);
@@ -53,8 +63,9 @@ class DbProvider {
                 })
                 .run();
             this.updatesSinceSnapshot++;
+            this.bytesSinceSnapshot += update.byteLength;
 
-            if (this.updatesSinceSnapshot >= SNAPSHOT_INTERVAL) {
+            if (this.updatesSinceSnapshot >= SNAPSHOT_INTERVAL || this.bytesSinceSnapshot >= SNAPSHOT_BYTES) {
                 this.createSnapshot();
             }
         } catch (error) {
@@ -91,36 +102,17 @@ class DbProvider {
                     .orderBy(desc(schema.docSnapshots.id))
                     .all();
 
-                if (allSnapshots.length > MAX_REVISIONS) {
-                    const cutoffId = allSnapshots[MAX_REVISIONS - 1].id;
+                if (allSnapshots.length > MAX_DOC_SNAPSHOTS) {
+                    const cutoffId = allSnapshots[MAX_DOC_SNAPSHOTS - 1].id;
                     tx.delete(schema.docSnapshots).where(lt(schema.docSnapshots.id, cutoffId)).run();
                 }
             });
 
             this.updatesSinceSnapshot = 0;
+            this.bytesSinceSnapshot = 0;
         } catch (error) {
             console.error(`[DbProvider] Error creating snapshot for ${this.docId}:`, error);
         }
-    }
-
-    getRevisions(): { id: number; createdAt: Date | null }[] {
-        return this.db
-            .select({
-                id: schema.docSnapshots.id,
-                createdAt: schema.docSnapshots.createdAt,
-            })
-            .from(schema.docSnapshots)
-            .orderBy(desc(schema.docSnapshots.id))
-            .all();
-    }
-
-    getRevisionState(revisionId: number): Uint8Array | null {
-        const snapshot = this.db
-            .select({ stateData: schema.docSnapshots.stateData })
-            .from(schema.docSnapshots)
-            .where(eq(schema.docSnapshots.id, revisionId))
-            .get();
-        return snapshot ? (snapshot.stateData as Uint8Array) : null;
     }
 
     destroy(): void {
@@ -138,6 +130,10 @@ export default class CollabDocument {
     private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;
     private connections: Set<ServerWebSocket<undefined>> = new Set();
+
+    public get connectionCount(): number {
+        return this.connections.size;
+    }
     private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
     private closed: boolean = false;
     private lastTouchedAt = 0;
@@ -231,14 +227,6 @@ export default class CollabDocument {
         return this;
     }
 
-    public getRevisions(): { id: number; createdAt: Date | null }[] {
-        return this.provider.getRevisions();
-    }
-
-    public getRevisionState(revisionId: number): Uint8Array | null {
-        return this.provider.getRevisionState(revisionId);
-    }
-
     private throttledTouchUpdatedAt() {
         const now = Date.now();
         if (now - this.lastTouchedAt < TOUCH_THROTTLE_MS) return;
@@ -257,6 +245,25 @@ export default class CollabDocument {
         this.provider.destroy();
         this.awareness.destroy();
         this.doc.destroy();
+    }
+
+    // Replaces the live Y.Doc's state with the snapshot's. Runs as one
+    // transaction → one update → existing 'update' handler persists to data.db
+    // and broadcasts to every connected WebSocket. Connected editors converge
+    // live; disconnected sessions pick up the new state via the next sync
+    // handshake. Caller (versioning/restore.ts) holds the container lock.
+    public applySnapshotState(state: Uint8Array): void {
+        // Internal invariants — the only caller (versioning/restore) already
+        // branched on isCollabType, and every Yjs type declares yjsRoots.
+        if (this.closed) throw new Error('applySnapshotState: CollabDocument is closed');
+        if (!isCollabType(this.path.type)) {
+            throw new Error(`applySnapshotState called on non-collab path ${this.path.type}`);
+        }
+        const roots = EIGEN_DOC_TYPE_INFO[this.path.type].yjsRoots;
+        if (!roots) {
+            throw new Error(`No yjsRoots schema declared for ${this.path.type}`);
+        }
+        restoreYjsDoc(this.doc, state, roots);
     }
 
     public subscribe(_user: User, conn: ServerWebSocket<undefined>) {

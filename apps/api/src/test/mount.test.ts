@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { buildStorageKey, createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import { LocalStorage } from '../lib/storage/local-storage';
+import { DEFAULT_RETENTION } from '../lib/versioning/retention';
+import { parseSnapshotTimestamp } from '../lib/versioning/timestamp';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-mount-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -59,6 +61,82 @@ describe('buildStorageKey', () => {
 
     test('handles empty name', () => {
         expect(buildStorageKey('abc-123', '')).toBe('abc-123');
+    });
+});
+
+describe('downloadToTemp', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-download-to-temp', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        rootId = (await mount.getRootFolder())!.id;
+    });
+
+    test('copies a stored file to a temp path, then cleanupTemp removes it', async () => {
+        const data = Buffer.from('snapshot-bytes');
+        const fileId = await mount.createFile(rootId, 'snap.db', 'application/octet-stream', data.length, data);
+        const tempPath = await mount.downloadToTemp(fileId);
+        expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes');
+        await mount.cleanupTemp(fileId);
+        expect(existsSync(tempPath)).toBe(false);
+    });
+
+    test('works on backends without a local path (S3-style: no getPath)', async () => {
+        // The version-restore read path must not depend on storage.getPath — that
+        // was the original S3 bug. downloadToTemp goes through storage.read, which
+        // every backend implements.
+        const data = Buffer.from('snapshot-bytes-no-getpath');
+        const fileId = await mount.createFile(rootId, 'snap2.db', 'application/octet-stream', data.length, data);
+
+        const storage = (mount as unknown as { storage: { getPath?: (key: string) => string } }).storage;
+        const originalGetPath = storage.getPath;
+        storage.getPath = undefined;
+        try {
+            const tempPath = await mount.downloadToTemp(fileId);
+            expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes-no-getpath');
+            await mount.cleanupTemp(fileId);
+        } finally {
+            storage.getPath = originalGetPath;
+        }
+    });
+});
+
+describe('snapshotContainerDataDb concurrency', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-snapshot-concurrency', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        rootId = (await mount.getRootFolder())!.id;
+    });
+
+    test('concurrent snapshots serialize: one versions folder, no clobbered files', async () => {
+        const container = await mount.createFolder(rootId, 'snap-container');
+        const data = Buffer.from('container-data-db-bytes');
+        await mount.createFile(container, 'data.db', 'application/octet-stream', data.length, data);
+
+        // Without the container lock these race on createFolder('versions') and the
+        // timestamped copy, producing duplicate 'versions' folders or a duplicate-name
+        // insert. snapshotContainerDataDb self-locks, so they serialize cleanly.
+        const results = await Promise.all(
+            Array.from({ length: 5 }, () => mount.snapshotContainerDataDb(container, DEFAULT_RETENTION)),
+        );
+
+        const children = await mount.listFolder(container);
+        expect(children.filter((c) => c.name === 'versions')).toHaveLength(1);
+
+        const versionsId = children.find((c) => c.name === 'versions')!.id;
+        const snaps = await mount.listFolder(versionsId);
+        expect(snaps.length).toBeGreaterThanOrEqual(1);
+        // Everything left in versions/ is a real, parseable snapshot — no garbage.
+        for (const s of snaps) expect(parseSnapshotTimestamp(s.name)).not.toBeNull();
+        // Every call returned a usable snapshot path.
+        for (const r of results) expect(parseSnapshotTimestamp(r.name)).not.toBeNull();
     });
 });
 

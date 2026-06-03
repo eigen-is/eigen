@@ -15,7 +15,6 @@ type ToolbarProps = {
     canWrite: boolean;
     undoManager: Y.UndoManager | null;
     onAccessDialogOpen: () => void;
-    onRestore: (state: Uint8Array) => void;
     path: DrivePath;
     onAddText: () => void;
     onAddImage: () => void;
@@ -30,7 +29,6 @@ export function Toolbar({
     canWrite,
     undoManager,
     onAccessDialogOpen,
-    onRestore,
     path,
     onAddText,
     onAddImage,
@@ -53,7 +51,6 @@ export function Toolbar({
                         path={path}
                         canWrite={canWrite}
                         onAccessDialogOpen={onAccessDialogOpen}
-                        onRestore={onRestore}
                         onExport={handleExport}
                         exportFormats={['pdf', 'html']}
                         createLabel="New slide"

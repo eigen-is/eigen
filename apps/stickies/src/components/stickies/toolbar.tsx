@@ -25,7 +25,6 @@ type ToolbarProps = {
     canWrite: boolean;
     undoManager: Y.UndoManager | null;
     onAccessDialogOpen: () => void;
-    onRestore: (state: Uint8Array) => void;
     onAddColumn: () => void;
     path: DrivePath;
     colorFilter: Set<string>;
@@ -36,7 +35,6 @@ export function Toolbar({
     canWrite,
     undoManager,
     onAccessDialogOpen,
-    onRestore,
     onAddColumn,
     path,
     colorFilter,
@@ -52,7 +50,6 @@ export function Toolbar({
                     path={path}
                     canWrite={canWrite}
                     onAccessDialogOpen={onAccessDialogOpen}
-                    onRestore={onRestore}
                     createLabel="New stickies"
                     createIcon={SquareKanban}
                     createType="stickies"
