@@ -1,5 +1,4 @@
-import { restoreYjsDoc } from '@workspace/lib/core/collab/yjs-utils';
-import { DRIVE_TYPE_DOC, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import { type DrivePath, isCollabType } from '@workspace/lib/types/drive';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
 import type Drive from '../drive/drive';
@@ -25,20 +24,12 @@ export async function restoreContainer(
         // 1. Pre-restore snapshot so the operation is reversible.
         await mount.snapshotContainerDataDb(container.id, policy, target.id);
 
-        // Sheets/slides/stickies store state in Y.Map / Y.Array — restoreYjsDoc
-        // can clear and re-insert from the snapshot, riding the existing Yjs
-        // broadcast so every connected editor converges live, no disconnect.
-        //
-        // Docs use Y.XmlFragment (Tiptap/ProseMirror), which can't round-trip
-        // through restoreYjsDoc's Map/Array surgery — `XmlElement.toJSON()`
-        // returns serialized strings rather than live Y types, and pushing
-        // those back corrupts the fragment. Until we add an XmlFragment-aware
-        // path, docs fall through to file-level restore; the client reloads
-        // the page to discard its in-memory Y.Doc and pick up the restored
-        // state cleanly. Chat (no Yjs) takes the same file-level path —
-        // TanStack Query refetches the messages.
-        const useSurgery = isCollabType(container.type) && container.type !== DRIVE_TYPE_DOC;
-        if (useSurgery) {
+        // Every Yjs container (doc/sheets/slides/stickies) restores by replaying
+        // the snapshot's state into the live Y.Doc inside a single transaction;
+        // the resulting update flows through CollabDocument's normal broadcast
+        // path so connected editors converge live. Chat has no Y.Doc — close
+        // cached managedDbs and swap data.db on storage.
+        if (isCollabType(container.type)) {
             await restoreYjsContainer(drive, mount, container.id, target);
         } else {
             await evictContainer(drive, mount, container.id);
@@ -81,11 +72,11 @@ async function restoreYjsContainer(
     const snapshotLocalPath = await mount.resolveLocalPath(snapshotPath.id);
     const snapshotState = readYjsStateFromFile(snapshotLocalPath, `restore:${snapshotPath.name}`);
 
-    // Open the live CollabDocument (creates the singleton if no one is
-    // connected). restoreYjsDoc emits a single Yjs update that the doc's
-    // existing 'update' handler broadcasts to every WebSocket in
-    // this.connections and persists via DbProvider — so disconnected
-    // sessions also catch up via the next sync handshake.
+    // getCollabDocument creates the singleton if no one is connected.
+    // applySnapshotState runs the surgery inside one transaction; the resulting
+    // update fires CollabDocument's existing 'update' handler → DbProvider
+    // persists to data.db AND every connected WebSocket receives the diff.
+    // Disconnected sessions catch up via the next sync handshake.
     const collabDoc = await drive.getCollabDocument(mount.id, containerId);
     let updates = 0;
     let bytes = 0;
@@ -95,7 +86,7 @@ async function restoreYjsContainer(
     };
     collabDoc.doc.on('update', tap);
     try {
-        restoreYjsDoc(collabDoc.doc, snapshotState);
+        collabDoc.applySnapshotState(snapshotState);
     } finally {
         collabDoc.doc.off('update', tap);
     }
