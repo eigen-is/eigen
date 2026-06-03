@@ -253,13 +253,15 @@ export default class CollabDocument {
     // live; disconnected sessions pick up the new state via the next sync
     // handshake. Caller (versioning/restore.ts) holds the container lock.
     public applySnapshotState(state: Uint8Array): void {
-        if (this.closed) throw new ApiError(500, 'CollabDocument is closed');
+        // Internal invariants — the only caller (versioning/restore) already
+        // branched on isCollabType, and every Yjs type declares yjsRoots.
+        if (this.closed) throw new Error('applySnapshotState: CollabDocument is closed');
         if (!isCollabType(this.path.type)) {
-            throw new ApiError(500, `applySnapshotState called on non-collab path ${this.path.type}`);
+            throw new Error(`applySnapshotState called on non-collab path ${this.path.type}`);
         }
         const roots = EIGEN_DOC_TYPE_INFO[this.path.type].yjsRoots;
         if (!roots) {
-            throw new ApiError(500, `No yjsRoots schema declared for ${this.path.type}`);
+            throw new Error(`No yjsRoots schema declared for ${this.path.type}`);
         }
         restoreYjsDoc(this.doc, state, roots);
     }

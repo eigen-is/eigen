@@ -30,8 +30,7 @@ describe('snapshot timestamp', () => {
 describe('retention pruning (time-bucketed)', () => {
     const now = new Date('2026-05-31T12:00:00.000Z');
     const ago = (ms: number) => new Date(now.getTime() - ms);
-    const fmt = (d: Date) => `${d.toISOString().replace(/[:.]/g, '-')}.db`;
-    const mk = (offsets: number[]) => offsets.map((ms, i) => ({ id: `s${i}`, name: fmt(ago(ms)) }));
+    const mk = (offsets: number[]) => offsets.map((ms, i) => ({ id: `s${i}`, name: formatSnapshotTimestamp(ago(ms)) }));
 
     test('hourly bucket: keep newest per hour slot', () => {
         const items = mk([10 * 60_000, 20 * 60_000, 30 * 60_000]);
@@ -76,7 +75,10 @@ describe('retention pruning (time-bucketed)', () => {
     });
 
     test('dense: 50 in last hour → 1 kept', () => {
-        const items = Array.from({ length: 50 }, (_, i) => ({ id: `s${i}`, name: fmt(ago(i * 60_000)) }));
+        const items = Array.from({ length: 50 }, (_, i) => ({
+            id: `s${i}`,
+            name: formatSnapshotTimestamp(ago(i * 60_000)),
+        }));
         const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 24 }] };
         const pruned = selectSnapshotsToPrune(items, policy, now);
         expect(pruned).toHaveLength(49);
@@ -85,9 +87,9 @@ describe('retention pruning (time-bucketed)', () => {
 
     test('ignores non-snapshot files', () => {
         const items = [
-            { id: 'a', name: fmt(ago(30 * 60_000)) },
+            { id: 'a', name: formatSnapshotTimestamp(ago(30 * 60_000)) },
             { id: 'b', name: 'garbage.db' },
-            { id: 'c', name: fmt(ago(2 * HOUR_MS)) },
+            { id: 'c', name: formatSnapshotTimestamp(ago(2 * HOUR_MS)) },
         ];
         const policy: RetentionPolicy = { buckets: [{ intervalMs: HOUR_MS, count: 1 }] };
         expect(selectSnapshotsToPrune(items, policy, now).map((p) => p.id)).toEqual(['c']);

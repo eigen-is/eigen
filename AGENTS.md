@@ -157,7 +157,7 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 | **Shared types**   | `packages/lib/src/types/[domain].ts`                  | Used by both FE and BE                                     |
 | **Validation**     | `packages/lib/src/validation/`                        | Shared FE/BE validation                                    |
 | **Colors**         | `packages/lib/src/constants/colors.ts`                | `EIGEN_COLORS`, `EIGEN_ACCENT_COLORS`                      |
-| **Yjs utilities**  | `packages/lib/src/core/collab/yjs-utils.ts`           | `jsonToYType`, `restoreYjsDoc` — `restoreYjsDoc` is server-side only (used by `Drive.restoreYjsContainer` to surgery the live Y.Doc inside a transaction; handles Y.Map and Y.Array, not Y.XmlFragment / Tiptap docs) |
+| **Yjs utilities**  | `packages/lib/src/core/collab/yjs-utils.ts`           | `restoreYjsDoc` — server-side only (used by `CollabDocument.applySnapshotState` during version restore to replace the live Y.Doc's declared roots inside one transaction, so connected editors converge with no reload). Handles Y.Map, Y.Array, Y.Text, and Y.XmlFragment/Tiptap, with arbitrary nesting |
 | **App shell**      | `packages/ui/src/components/layout/app/app-shell.tsx` | Wraps every app (Topbar + sidebar + content)               |
 | **Provider stack** | `packages/ui/src/components/layout/app/eigen-app.tsx` | Auth → SSE → Upload → Preview → CommandPalette → Toaster   |
 | **Layout**         | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching |
