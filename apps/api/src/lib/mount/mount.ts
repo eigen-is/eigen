@@ -474,8 +474,9 @@ export class Mount {
             if (existing) return existing;
             const copy = await this.copyPath(dataDb.id, versions.id, snapshotName);
 
-            // Prune. Exclude the snapshot we just wrote so it can't be selected for
-            // its own deletion.
+            // Prune. Exclude the just-written copy: retention keeps the newest per
+            // hour bucket, and excluding the fresh one lets a second snapshot taken
+            // within the same hour preserve the first until the hour rolls over.
             const toPrune = selectSnapshotsToPrune(
                 (await this.listFolder(versions.id))
                     .filter((e) => e.id !== copy.id)
