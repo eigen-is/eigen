@@ -9,7 +9,7 @@ export async function saveVersion(
     containerId: string,
     policy: RetentionPolicy = DEFAULT_RETENTION,
 ): Promise<Snapshot> {
-    const created = await mount.withPathLock(containerId, () => mount.snapshotContainerDataDb(containerId, policy));
+    const created = await mount.snapshotContainerDataDb(containerId, policy);
     const createdAt = parseSnapshotTimestamp(created.name);
     if (!createdAt) throw new ApiError(500, `snapshot name ${created.name} unparseable`);
     return { id: created.id, name: created.name, createdAt, size: created.size };

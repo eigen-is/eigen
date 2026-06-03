@@ -444,84 +444,73 @@ export class Mount {
         }
     }
 
-    async snapshotContainerDataDb(
-        containerId: string,
-        policy: RetentionPolicy,
-        // Drive.restoreContainer takes a pre-restore snapshot before reading the
-        // target snapshot. Without this hook the new pre-restore would push the
-        // target out of its retention slot and prune it — leaving the restore step
-        // with a 404 on the snapshot the user actually clicked.
-        preservePathId?: string,
-    ): Promise<DrivePath> {
-        const dataDb = await this.getChildByName(containerId, 'data.db');
-        if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
+    // Snapshots the container's data.db into versions/<iso-ts>.db, then prunes per
+    // the retention policy. Self-locked on the container: the timer, close, manual
+    // save and a restore's pre-restore snapshot all call this directly and serialize
+    // here — no caller has to remember to lock, and nothing holds the lock across
+    // another snapshot, so there is no deadlock to reason about.
+    async snapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
+        return this.withPathLock(containerId, async () => {
+            const dataDb = await this.getChildByName(containerId, 'data.db');
+            if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
 
-        // Flush any cached managedDb so the on-storage data.db reflects pending writes.
-        // No-op if not cached, or if cached and not dirty.
-        const cached = this.documentDbs.get(dataDb.id);
-        if (cached) await (await cached()).flush();
+            // Flush any cached managedDb so the on-storage data.db reflects pending
+            // writes. No-op if not cached, or cached and not dirty.
+            const cached = this.documentDbs.get(dataDb.id);
+            if (cached) await (await cached()).flush();
 
-        let versions = await this.getChildByName(containerId, 'versions');
-        if (!versions) {
-            const newId = await this.createFolder(containerId, 'versions');
-            const created = await this.getPath(newId);
-            if (!created) throw new ApiError(500, 'Failed to create versions folder');
-            versions = created;
-        }
+            let versions = await this.getChildByName(containerId, 'versions');
+            if (!versions) {
+                const newId = await this.createFolder(containerId, 'versions');
+                const created = await this.getPath(newId);
+                if (!created) throw new ApiError(500, 'Failed to create versions folder');
+                versions = created;
+            }
 
-        const snapshotName = formatSnapshotTimestamp(new Date());
-        const copy = await this.copyPath(dataDb.id, versions.id, snapshotName);
+            const snapshotName = formatSnapshotTimestamp(new Date());
+            // Two snapshots in the same millisecond capture the same instant — reuse
+            // the existing one rather than failing on the duplicate name.
+            const existing = await this.getChildByName(versions.id, snapshotName);
+            if (existing) return existing;
+            const copy = await this.copyPath(dataDb.id, versions.id, snapshotName);
 
-        // Prune. Exclude the snapshot we just wrote — with a stale `now` it could
-        // land in an already-full slot and be selected for its own deletion.
-        const existing = await this.listFolder(versions.id);
-        const toPrune = selectSnapshotsToPrune(
-            existing
-                .filter((e) => e.id !== copy.id && e.id !== preservePathId)
-                .map((e) => ({ id: e.id, name: e.name })),
-            policy,
-        );
-        for (const item of toPrune) await this.deletePath(item.id);
+            // Prune. Exclude the snapshot we just wrote so it can't be selected for
+            // its own deletion.
+            const toPrune = selectSnapshotsToPrune(
+                (await this.listFolder(versions.id))
+                    .filter((e) => e.id !== copy.id)
+                    .map((e) => ({ id: e.id, name: e.name })),
+                policy,
+            );
+            for (const item of toPrune) await this.deletePath(item.id);
 
-        return copy;
+            return copy;
+        });
     }
 
-    // Caller MUST hold withPathLock on the container so concurrent writers
-    // can't open data.db between the close below and the rename that
-    // replaces it. Drive.restoreContainer handles that orchestration.
-    //
-    // Copy first, then delete and rename — so any failure (storage error,
-    // snapshot pruned mid-flight) leaves the original data.db intact rather
-    // than bricking the container.
-    async restoreContainerDataDb(containerId: string, snapshotName: string): Promise<void> {
-        const dataDb = await this.getChildByName(containerId, 'data.db');
-        if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
-        const versions = await this.getChildByName(containerId, 'versions');
-        if (!versions) throw new ApiError(404, 'No versions folder');
-        const snapshot = await this.getChildByName(versions.id, snapshotName);
-        if (!snapshot) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
-
-        // Drop the cached managedDb (if any) before overwriting the file.
-        // closeDatabase is idempotent, so it's safe whether or not the caller
-        // already closed data.db (the chat restore path does).
-        await this.closeDatabase(dataDb.id);
-
-        const stagingName = `.restore-tmp-${randomUUID()}.db`;
-        const staged = await this.copyPath(snapshot.id, containerId, stagingName);
-        try {
+    // Replaces the container's data.db with the file at `sourcePath` — a snapshot the
+    // caller grabbed into the OS temp dir (downloadToTemp) before the pre-restore
+    // snapshot could prune it. Self-locked so a concurrent snapshot can't read a
+    // half-written data.db. Closes the live db with skipFinalSnapshot (we're
+    // discarding it, and snapshotting here would re-enter this lock), then deletes and
+    // recreates — a fresh inode, because overwriting the file in place hands SQLite a
+    // stale vnode (SQLITE_IOERR_VNODE) when the db is reopened.
+    async replaceContainerDataDb(containerId: string, sourcePath: string): Promise<void> {
+        return this.withPathLock(containerId, async () => {
+            const dataDb = await this.getChildByName(containerId, 'data.db');
+            if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
+            const file = Bun.file(sourcePath);
+            await this.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
             await this.deletePath(dataDb.id);
-            await this.updatePath(staged.id, { name: 'data.db' });
-        } catch (err) {
-            await this.deletePath(staged.id).catch(() => {});
-            throw err;
-        }
+            await this.createFile(containerId, 'data.db', dataDb.mimeType, file.size, file);
+        });
     }
 
     async touchFile(parentId: string, name: string, mimeType: string) {
         return this.createFile(parentId, name, mimeType, 0, undefined);
     }
 
-    async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
+    private async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);
         }
