@@ -1,6 +1,23 @@
+import type { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { type Static, t } from 'elysia';
+
+// Explicit tuple — t.Union(arr.map(t.Literal)) loses the tuple and breaks
+// Elysia's EigenDocType param narrowing. Kept here (not in packages/lib) so
+// the Elysia dependency stays BE-only. Drift is caught by tsc.
+export const eigenDocTypeSchema = t.Union([
+    t.Literal('doc'),
+    t.Literal('stickies'),
+    t.Literal('slides'),
+    t.Literal('sheets'),
+    t.Literal('chat'),
+]);
+// Compile-time guard: fails if EIGEN_DOC_TYPES gains or loses a member without updating the schema above.
+type _EigenDocSchemaCoversAll =
+    (typeof EIGEN_DOC_TYPES)[number] extends Static<typeof eigenDocTypeSchema> ? true : never;
+const _eigenDocSchemaCheck: _EigenDocSchemaCoversAll = true;
+void _eigenDocSchemaCheck;
 
 export const attachmentReferenceSchema = t.Object({
     type: t.Literal('reference'),

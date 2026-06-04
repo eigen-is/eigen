@@ -13,6 +13,7 @@ import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
+import { eigenDocTypeSchema } from './shared-schemas';
 
 // Drive routes allow cross-owner access (shared drives, team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks, not by ownerId === user.id.
@@ -92,19 +93,11 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         {
             body: t.Object({ fileName: t.String() }),
-            // Literal list mirrors EIGEN_DOC_TYPES — kept explicit so Elysia preserves the
-            // tuple in `params.type`'s inferred type for Drive.create's EigenDocType argument.
             params: t.Object({
                 ownerId: t.String(),
                 mountId: t.String(),
                 pathId: t.String(),
-                type: t.Union([
-                    t.Literal('doc'),
-                    t.Literal('stickies'),
-                    t.Literal('slides'),
-                    t.Literal('sheets'),
-                    t.Literal('chat'),
-                ]),
+                type: eigenDocTypeSchema,
             }),
             auth: true,
         },

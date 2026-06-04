@@ -1,4 +1,4 @@
-import type { ChatAttachment } from '@workspace/lib/types/chat';
+import type { ChatAttachment, ChatMessageType } from '@workspace/lib/types/chat';
 import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
@@ -6,7 +6,7 @@ export const messages = sqliteTable('messages', {
     id: text('id').primaryKey(),
     authorId: text('authorId').notNull(),
     authorEmail: text('authorEmail').notNull(),
-    type: text('type').notNull().$type<'message' | 'emote' | 'whisper' | 'system'>(),
+    type: text('type').notNull().$type<ChatMessageType>(),
     content: text('content').notNull(),
     attachments: text('attachments', { mode: 'json' }).$type<ChatAttachment[] | null>(),
     whisperTo: text('whisperTo'),
