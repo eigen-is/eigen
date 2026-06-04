@@ -31,7 +31,6 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const [color, setColor] = useState<string>('');
-    const [isLoading, setIsLoading] = useState(false);
 
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
     const deleteSharedCalendar = useDeleteSharedCalendar(ownerId);
@@ -52,13 +51,11 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
     const isTeamCalendar = parseOwnerId(sharedCalendar.ownerUserId).type === 'team';
 
     const handleSave = async () => {
-        setIsLoading(true);
         await updateSharedCalendar.mutateAsync({
             id: sharedCalendar.id,
             color: color !== sharedCalendar.calendarColor ? color : null,
         });
         onOpenChange(false);
-        setTimeout(() => setIsLoading(false), 350);
     };
 
     const handleDelete = async () => {
@@ -87,7 +84,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                                         type="button"
                                         className="h-9 w-9 rounded-md border border-input shrink-0"
                                         style={{ backgroundColor: color }}
-                                        disabled={isLoading}
+                                        disabled={updateSharedCalendar.isPending}
                                     />
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-3" align="start">
@@ -136,7 +133,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                                 type="button"
                                 variant="destructive"
                                 onClick={() => setShowDeleteConfirmation(true)}
-                                disabled={isLoading}
+                                disabled={updateSharedCalendar.isPending}
                                 className="mr-auto"
                             >
                                 Remove
@@ -146,12 +143,12 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                             type="button"
                             variant="outline"
                             onClick={() => onOpenChange(false)}
-                            disabled={isLoading}
+                            disabled={updateSharedCalendar.isPending}
                         >
                             Cancel
                         </Button>
-                        <Button onClick={handleSave} disabled={isLoading}>
-                            {isLoading ? 'Saving...' : 'Save'}
+                        <Button onClick={handleSave} disabled={updateSharedCalendar.isPending}>
+                            {updateSharedCalendar.isPending ? 'Saving...' : 'Save'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

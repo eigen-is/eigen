@@ -1,5 +1,4 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Notification } from '@workspace/lib/types/notification';
 import { notificationApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 
@@ -10,16 +9,12 @@ export const notificationKeys = {
     unreadCount: (ownerId: string) => [...notificationKeys.owner(ownerId), 'unread-count'] as const,
 };
 
-function parseNotification(n: Record<string, unknown>): Notification {
-    return { ...n, createdAt: new Date(n.createdAt as string | number) } as Notification;
-}
-
 export function useNotifications(ownerId: string, enabled: boolean = true) {
     return useQuery({
         queryKey: notificationKeys.list(ownerId),
         queryFn: async () => {
             const response = await notificationApi({ ownerId }).get({ query: { limit: 50 } });
-            return (response.data ?? []).map(parseNotification);
+            return response.data ?? [];
         },
         enabled: !!ownerId && enabled,
         staleTime: 60_000,

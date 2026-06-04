@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCalendars, useCreateEvent, useSharedCalendars } from '@workspace/lib/calendar';
+import { toISODateString, useCalendars, useCreateEvent, useSharedCalendars } from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
@@ -13,7 +13,7 @@ import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
 import type { CalendarOption } from './calendar-utils';
-import { resolveCalendarName, toLocalDateString } from './calendar-utils';
+import { resolveCalendarName } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes } from './time-select';
 
@@ -61,7 +61,6 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
     const [endTime, setEndTime] = useState('09:30');
     const [rruleString, setRruleString] = useState<string | null>(null);
     const [attendees, setAttendees] = useState<Attendee[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
 
     const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
     const createEvent = useCreateEvent(selectedCal?.ownerId || ownerId);
@@ -74,7 +73,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
             const targetDate = defaultDate ? new Date(defaultDate) : rounded;
             targetDate.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
 
-            const dateStr = toLocalDateString(targetDate);
+            const dateStr = toISODateString(targetDate);
             const start = toTimeString(targetDate);
             const end = addMinutes(start, 30);
 
@@ -108,7 +107,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
             const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
             const d = new Date(`${startDate}T00:00`);
             if (wraps) d.setDate(d.getDate() + 1);
-            setEndDate(toLocalDateString(d));
+            setEndDate(toISODateString(d));
         }
     };
 
@@ -116,7 +115,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
         setEndTime(newEnd);
         const d = new Date(`${startDate}T00:00`);
         if (dayOffset > 0) d.setDate(d.getDate() + dayOffset);
-        setEndDate(toLocalDateString(d));
+        setEndDate(toISODateString(d));
     };
 
     const getMinEndTime = () => {
@@ -126,36 +125,31 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
     const handleSubmit = async () => {
         if (!title.trim() || !selectedCal) return;
 
-        setIsLoading(true);
-        try {
-            let start: Date;
-            let end: Date;
+        let start: Date;
+        let end: Date;
 
-            if (allDay) {
-                start = new Date(`${startDate}T00:00:00Z`);
-                end = new Date(`${endDate}T00:00:00Z`);
-                end.setUTCDate(end.getUTCDate() + 1);
-            } else {
-                start = new Date(`${startDate}T${startTime}`);
-                end = new Date(`${endDate}T${endTime}`);
-            }
-
-            await createEvent.mutateAsync({
-                calendarId: selectedCal.id,
-                title: title.trim(),
-                startTime: start,
-                endTime: end,
-                allDay,
-                description: description.trim() || null,
-                location: location.trim() || null,
-                rrule: rruleString,
-                timezone: allDay ? null : Intl.DateTimeFormat().resolvedOptions().timeZone,
-                data: attendees.length > 0 ? { attendees } : undefined,
-            });
-            onOpenChange(false);
-        } finally {
-            setTimeout(() => setIsLoading(false), 350);
+        if (allDay) {
+            start = new Date(`${startDate}T00:00:00Z`);
+            end = new Date(`${endDate}T00:00:00Z`);
+            end.setUTCDate(end.getUTCDate() + 1);
+        } else {
+            start = new Date(`${startDate}T${startTime}`);
+            end = new Date(`${endDate}T${endTime}`);
         }
+
+        await createEvent.mutateAsync({
+            calendarId: selectedCal.id,
+            title: title.trim(),
+            startTime: start,
+            endTime: end,
+            allDay,
+            description: description.trim() || null,
+            location: location.trim() || null,
+            rrule: rruleString,
+            timezone: allDay ? null : Intl.DateTimeFormat().resolvedOptions().timeZone,
+            data: attendees.length > 0 ? { attendees } : undefined,
+        });
+        onOpenChange(false);
     };
 
     return (
@@ -311,11 +305,11 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={createEvent.isPending}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSubmit} disabled={isLoading || !title.trim()}>
-                        {isLoading ? 'Saving...' : 'Save'}
+                    <Button onClick={handleSubmit} disabled={createEvent.isPending || !title.trim()}>
+                        {createEvent.isPending ? 'Saving...' : 'Save'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

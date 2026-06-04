@@ -8,7 +8,7 @@ export function canReadFromAncestors(ancestors: DrivePath[], user: User, members
         if (path.ownerId === user.id) return true;
 
         const parsed = parseOwnerId(path.ownerId);
-        if (parsed && parsed.type === 'team') {
+        if (parsed.type === 'team') {
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
 
@@ -27,7 +27,7 @@ export function canWriteFromAncestors(ancestors: DrivePath[], user: User, member
         if (path.ownerId === user.id) return true;
 
         const parsed = parseOwnerId(path.ownerId);
-        if (parsed && parsed.type === 'team') {
+        if (parsed.type === 'team') {
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
 
@@ -53,11 +53,11 @@ export function matchesACL(
 
         const parsed = parseOwnerId(entry.id);
 
-        if (parsed && parsed.type === 'user' && entry.id.toLowerCase() === user.email.toLowerCase()) {
+        if (parsed.type === 'user' && entry.id.toLowerCase() === user.email.toLowerCase()) {
             return true;
         }
 
-        if (parsed && parsed.type === 'team') {
+        if (parsed.type === 'team') {
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
     }
@@ -73,7 +73,7 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
         const parsed = parseOwnerId(a.id);
         return {
             ...a,
-            id: parsed && parsed.type === 'user' ? a.id.toLowerCase() : a.id,
+            id: parsed.type === 'user' ? a.id.toLowerCase() : a.id,
         };
     });
 }
@@ -124,13 +124,7 @@ export function filterRedundantACL(
         const entryParsed = parseOwnerId(entry.id);
 
         // Team ACL on a path owned by the same team is always redundant
-        if (
-            entryParsed &&
-            ownerParsed &&
-            ownerParsed.type === 'team' &&
-            entryParsed.type === 'team' &&
-            entryParsed.id === ownerParsed.id
-        ) {
+        if (ownerParsed.type === 'team' && entryParsed.type === 'team' && entryParsed.id === ownerParsed.id) {
             isRedundant = true;
         }
 

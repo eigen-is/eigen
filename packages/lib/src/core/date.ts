@@ -65,17 +65,29 @@ export function formatEventWhen(start: Date, end: Date, allDay: boolean, timezon
         year: 'numeric',
         timeZone: tz,
     };
-    const timeOpts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', timeZone: tz };
-    const sameDay =
-        start.toLocaleDateString('en-GB', { timeZone: tz }) === end.toLocaleDateString('en-GB', { timeZone: tz });
+    const timeOpts: Intl.DateTimeFormatOptions = {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: tz,
+    };
 
     if (allDay) {
-        const startStr = start.toLocaleDateString('en-GB', dateOpts);
-        if (sameDay) return startStr;
-        return `${startStr} – ${end.toLocaleDateString('en-GB', dateOpts)}`;
+        // All-day endTime is exclusive (midnight after the last day), so the displayed
+        // end date is one day earlier than the stored value.
+        const displayEnd = new Date(end.getTime() - 86400_000);
+        const startStr = start.toLocaleDateString('en', dateOpts);
+        if (
+            start.toLocaleDateString('en', { timeZone: tz }) === displayEnd.toLocaleDateString('en', { timeZone: tz })
+        ) {
+            return startStr;
+        }
+        return `${startStr} – ${displayEnd.toLocaleDateString('en', dateOpts)}`;
     }
+
+    const sameDay = start.toLocaleDateString('en', { timeZone: tz }) === end.toLocaleDateString('en', { timeZone: tz });
     if (sameDay) {
-        return `${start.toLocaleDateString('en-GB', dateOpts)} · ${start.toLocaleTimeString('en-GB', timeOpts)} – ${end.toLocaleTimeString('en-GB', timeOpts)}`;
+        return `${start.toLocaleDateString('en', dateOpts)} · ${start.toLocaleTimeString('en', timeOpts)} – ${end.toLocaleTimeString('en', timeOpts)}`;
     }
-    return `${start.toLocaleString('en-GB', { ...dateOpts, ...timeOpts })} – ${end.toLocaleString('en-GB', { ...dateOpts, ...timeOpts })}`;
+    return `${start.toLocaleString('en', { ...dateOpts, ...timeOpts })} – ${end.toLocaleString('en', { ...dateOpts, ...timeOpts })}`;
 }

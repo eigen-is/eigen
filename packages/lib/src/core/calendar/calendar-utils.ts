@@ -1,3 +1,4 @@
+import { RRule } from 'rrule';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '../../types/calendar';
 import { formatTime } from '../date';
 
@@ -79,6 +80,9 @@ export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): C
     });
 }
 
+// Local-time calendar day (YYYY-MM-DD). Used for <input type="date"> values where the
+// user's local calendar day is what's shown/edited. Contrast with occurrenceDateToString,
+// which derives the UTC day for occurrence/wire values (all-day events are midnight UTC).
 export function toISODateString(date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -137,4 +141,15 @@ export function occurrenceDateToString(value: unknown): string {
         return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`;
     }
     return String(value).substring(0, 10);
+}
+
+export function truncateRRule(rruleStr: string, beforeDate: Date): string {
+    const options = RRule.parseString(rruleStr);
+    const until = new Date(beforeDate);
+    until.setUTCDate(until.getUTCDate() - 1);
+    until.setUTCHours(23, 59, 59, 0);
+    options.until = until;
+    delete options.count;
+    const result = new RRule(options).toString();
+    return result.replace(/^RRULE:/, '');
 }

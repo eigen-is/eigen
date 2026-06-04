@@ -5,7 +5,6 @@ import { useCopyFiles, useFolderLookup } from '@workspace/lib/drive';
 import { usePublicUser } from '@workspace/lib/public';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
-import type { Contact } from '@workspace/lib/types/contact';
 import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { URL_REGEX } from '@workspace/ui/components/layout/linked-text';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
@@ -115,7 +114,7 @@ function RichContent({ text, className }: { text: string; className?: string }) 
 
 function InspectCard({ target }: { target: string }) {
     const { data: contacts = [] } = useContacts();
-    const contact = (contacts as Contact[]).find((c) => c.email?.some((e) => e.toLowerCase() === target.toLowerCase()));
+    const contact = contacts.find((c) => c.email?.some((e) => e.toLowerCase() === target.toLowerCase()));
 
     return (
         <div className="flex gap-4 p-4 rounded-lg border bg-card max-w-sm">

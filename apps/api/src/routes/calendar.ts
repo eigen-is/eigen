@@ -1,4 +1,4 @@
-import type { CalendarItem, FreeBusyBlock } from '@workspace/lib/types/calendar';
+import type { CalendarItem, CalendarShare, FreeBusyBlock } from '@workspace/lib/types/calendar';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError } from '../lib/core';
@@ -238,7 +238,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .get(
         '/calendar/:ownerId/calendars/:calId/access',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<{ ownerUserId: string; shares: CalendarShare[] }> => {
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             const calData = await pullCalendarById(params.ownerId, params.calId);
