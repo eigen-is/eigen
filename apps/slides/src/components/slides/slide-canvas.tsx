@@ -97,19 +97,37 @@ export function SlideCanvas({
     });
 
     const handleDragStart = useCallback(
-        (e: React.MouseEvent, objId: string, mode: 'move', x: number, y: number, w: number, h: number) => {
+        (
+            e: React.MouseEvent,
+            objId: string,
+            mode: 'move',
+            x: number,
+            y: number,
+            w: number,
+            h: number,
+            rotation: number,
+        ) => {
             if (mode === 'move' && multiSelectBounds && selectedObjectIds.includes(objId)) {
                 startGroupDrag(e, selectedObjects, multiSelectBounds);
             } else {
-                startDrag(e, objId, mode, x, y, w, h);
+                startDrag(e, objId, mode, x, y, w, h, rotation);
             }
         },
         [startDrag, startGroupDrag, selectedObjectIds, selectedObjects, multiSelectBounds],
     );
 
     const handleResizeStart = useCallback(
-        (e: React.MouseEvent, objId: string, mode: string, x: number, y: number, w: number, h: number) => {
-            startDrag(e, objId, mode as DragMode, x, y, w, h);
+        (
+            e: React.MouseEvent,
+            objId: string,
+            mode: string,
+            x: number,
+            y: number,
+            w: number,
+            h: number,
+            rotation: number,
+        ) => {
+            startDrag(e, objId, mode as DragMode, x, y, w, h, rotation);
         },
         [startDrag],
     );

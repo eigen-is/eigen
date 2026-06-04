@@ -134,7 +134,16 @@ type SlideObjectViewProps = {
     onSelect: (objId: string, additive?: boolean) => void;
     onStartEditing: (objId: string) => void;
     onUpdate: (objId: string, updates: Partial<SlideObject>) => void;
-    onDragStart: (e: React.MouseEvent, objId: string, mode: 'move', x: number, y: number, w: number, h: number) => void;
+    onDragStart: (
+        e: React.MouseEvent,
+        objId: string,
+        mode: 'move',
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+        rotation: number,
+    ) => void;
     onCopy?: (objId: string) => void;
     onDelete?: (objId: string) => void;
     onMoveUp?: (objId: string) => void;
@@ -191,7 +200,7 @@ export const SlideObjectView = memo(function SlideObjectView({
             onSelect(obj.id, true);
         }
         if (editable && !additive) {
-            onDragStart(e, obj.id, 'move', obj.x, obj.y, obj.w, obj.h);
+            onDragStart(e, obj.id, 'move', obj.x, obj.y, obj.w, obj.h, obj.rotation);
         }
     };
 
