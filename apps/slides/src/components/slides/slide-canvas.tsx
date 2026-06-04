@@ -11,6 +11,7 @@ import { type DragMode, useObjectDrag } from './hooks/use-object-drag';
 import { useSnapTargets } from './hooks/use-snap-lines';
 import { SlideObjectView } from './slide-object';
 import { SelectionChrome } from './slide-selection-chrome';
+import { normalizeAngle } from './transform-geometry';
 import { pxToPercent, SLIDE_ASPECT_RATIO, type SlideItem, type SlideObject } from './types';
 
 type SlideCanvasProps = {
@@ -181,12 +182,19 @@ export function SlideCanvas({
     );
 
     const dragPreviewMap = useMemo(() => {
-        const map = new Map<string, { x: number; y: number; w: number; h: number }>();
+        const map = new Map<string, { x: number; y: number; w: number; h: number; rotation?: number }>();
         for (const p of dragPreviews) {
             map.set(p.objId, p);
         }
         return map;
     }, [dragPreviews]);
+
+    const handleRotateStart = useCallback(
+        (e: React.MouseEvent, objId: string, x: number, y: number, w: number, h: number, rotation: number) => {
+            startDrag(e, objId, 'rotate', x, y, w, h, rotation);
+        },
+        [startDrag],
+    );
 
     return (
         <div
@@ -210,7 +218,14 @@ export function SlideCanvas({
                 {objects.map((obj) => {
                     const preview = dragPreviewMap.get(obj.id);
                     const displayObj = preview
-                        ? { ...obj, x: preview.x, y: preview.y, w: preview.w, h: preview.h }
+                        ? {
+                              ...obj,
+                              x: preview.x,
+                              y: preview.y,
+                              w: preview.w,
+                              h: preview.h,
+                              rotation: preview.rotation ?? obj.rotation,
+                          }
                         : obj;
                     const commentItems: Array<{ card: CommentCard; entry: CommentEntry | undefined }> = [];
                     for (const cardId of obj.commentCardIds ?? []) {
@@ -259,16 +274,40 @@ export function SlideCanvas({
                         .map((obj) => {
                             const preview = dragPreviewMap.get(obj.id);
                             const displayObj = preview
-                                ? { ...obj, x: preview.x, y: preview.y, w: preview.w, h: preview.h }
+                                ? {
+                                      ...obj,
+                                      x: preview.x,
+                                      y: preview.y,
+                                      w: preview.w,
+                                      h: preview.h,
+                                      rotation: preview.rotation ?? obj.rotation,
+                                  }
                                 : obj;
                             return (
                                 <SelectionChrome
                                     key={`chrome-${obj.id}`}
                                     obj={displayObj}
+                                    showRotate={selectedObjectIds.length === 1}
                                     onResizeStart={handleResizeStart}
+                                    onRotateStart={handleRotateStart}
                                 />
                             );
                         })}
+                {dragPreviews.map((p) =>
+                    p.rotation === undefined ? null : (
+                        <div
+                            key={`angle-${p.objId}`}
+                            className="absolute z-50 pointer-events-none rounded bg-foreground px-1.5 py-0.5 text-xs text-background"
+                            style={{
+                                left: `${pxToPercent(p.x + p.w / 2, 'x')}%`,
+                                top: `${pxToPercent(p.y, 'y')}%`,
+                                transform: 'translate(-50%, -150%)',
+                            }}
+                        >
+                            {Math.round(normalizeAngle(p.rotation))}°
+                        </div>
+                    ),
+                )}
                 {activeSnapLines.map((line, i) => (
                     <div
                         key={i}

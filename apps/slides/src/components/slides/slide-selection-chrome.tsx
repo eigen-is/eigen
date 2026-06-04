@@ -1,4 +1,5 @@
 import { cn } from '@workspace/ui/lib/utils';
+import { RotateCw } from 'lucide-react';
 import { pxToPercent, type SlideObject } from './types';
 
 const RESIZE_HANDLES = [
@@ -14,10 +15,20 @@ const RESIZE_HANDLES = [
 
 type SelectionChromeProps = {
     obj: SlideObject;
+    showRotate: boolean;
     onResizeStart: (
         e: React.MouseEvent,
         objId: string,
         mode: string,
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+        rotation: number,
+    ) => void;
+    onRotateStart: (
+        e: React.MouseEvent,
+        objId: string,
         x: number,
         y: number,
         w: number,
@@ -31,7 +42,7 @@ type SelectionChromeProps = {
 // hidden behind overlapping objects. Container is pointer-events-none so clicks on
 // the object body fall through to the object (move / double-click-to-edit); only
 // the handles capture events.
-export function SelectionChrome({ obj, onResizeStart }: SelectionChromeProps) {
+export function SelectionChrome({ obj, showRotate, onResizeStart, onRotateStart }: SelectionChromeProps) {
     return (
         <div
             className="absolute pointer-events-none ring-1 ring-selection-handle"
@@ -57,6 +68,20 @@ export function SelectionChrome({ obj, onResizeStart }: SelectionChromeProps) {
                     }}
                 />
             ))}
+            {showRotate && (
+                <>
+                    <div className="absolute left-1/2 -translate-x-1/2 -top-6 h-6 w-px bg-selection-handle pointer-events-none" />
+                    <div
+                        className="absolute left-1/2 -translate-x-1/2 -top-9 flex h-4 w-4 items-center justify-center rounded-full bg-background border border-selection-handle pointer-events-auto cursor-grab"
+                        onMouseDown={(e) => {
+                            e.stopPropagation();
+                            onRotateStart(e, obj.id, obj.x, obj.y, obj.w, obj.h, obj.rotation);
+                        }}
+                    >
+                        <RotateCw className="h-2.5 w-2.5 text-selection-handle" />
+                    </div>
+                </>
+            )}
         </div>
     );
 }
