@@ -44,6 +44,50 @@
       }
     }
   },
+  // Architectural seams that tsc can't catch: a React import pulled into the
+  // backend-shared layers explodes at module-eval, not at typecheck. See AGENTS.md.
+  "overrides": [
+    {
+      // The sheet engine is imported by apps/api — it MUST stay React-free.
+      "includes": ["packages/sheet/src/engine/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "react": { "message": "engine/ is imported by the backend and must stay React-free." },
+                  "react-dom": { "message": "engine/ is imported by the backend and must stay React-free." }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // Dependency direction is one-way: sheet -> lib, never the reverse (would pull React into the backend).
+      "includes": ["packages/lib/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@workspace/sheet", "@workspace/sheet/**"],
+                    "message": "lib must not import sheet (would pull React into the backend). Put shared sheet types in packages/lib/src/sheets/types.ts."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "javascript": {
     "formatter": {
       "quoteStyle": "single",
