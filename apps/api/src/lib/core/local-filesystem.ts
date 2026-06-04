@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BunFile } from 'bun';
+import { resolveWithinBase } from './path-utils';
 
 export class LocalFilesystem {
     private baseDir: string;
@@ -14,11 +15,7 @@ export class LocalFilesystem {
     }
 
     private getFilePath(filePath: string): string {
-        const resolved = path.resolve(this.baseDir, filePath);
-        if (!resolved.startsWith(this.baseDir + path.sep) && resolved !== this.baseDir) {
-            throw new Error(`Path traversal blocked: ${filePath}`);
-        }
-        return resolved;
+        return resolveWithinBase(this.baseDir, filePath);
     }
 
     async write(filePath: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile | string): Promise<number> {
