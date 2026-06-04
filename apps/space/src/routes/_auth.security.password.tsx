@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useChangePassword } from '@workspace/lib/auth';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { ChangePassword } from '../components/space/change-password';
 
 export const Route = createFileRoute('/_auth/security/password')({
@@ -22,11 +23,7 @@ function PasswordComponent() {
 
     return (
         <ColumnLayout>
-            <Column
-                id="detail"
-                width="flex"
-                toolbar={<span className="text-sm text-foreground font-normal">Change Password</span>}
-            >
+            <Column id="detail" width="flex" toolbar={<ToolbarTitle>Change Password</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
                     <div className="w-full max-w-3xl p-8">
                         <ChangePassword onPasswordChange={handlePasswordChange} />

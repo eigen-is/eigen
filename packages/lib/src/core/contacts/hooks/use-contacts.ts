@@ -46,6 +46,7 @@ export function useContact(id: string) {
             return response.data;
         },
         enabled: !!id && !!ownerId,
+        staleTime: 5 * 60 * 1000, // 5 minutes
     });
 }
 
@@ -111,6 +112,7 @@ export function useMeContact() {
             return response.data ?? null;
         },
         enabled: !!ownerId,
+        staleTime: 5 * 60 * 1000, // 5 minutes
     });
 }
 

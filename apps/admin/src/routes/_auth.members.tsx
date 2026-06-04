@@ -51,7 +51,7 @@ function MembersRoute() {
         />
     );
 
-    const detailToolbar = member ? <MemberDetailToolbar member={member} organizationId={config?.orgId} /> : null;
+    const detailToolbar = member ? <MemberDetailToolbar member={member} /> : null;
 
     return (
         <ColumnLayout mobileColumn={memberId ? 'detail' : 'list'}>

@@ -18,6 +18,7 @@ import { LoadingState } from '@workspace/ui/components/layout/app/loading-state'
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { getFileIcon } from '@workspace/ui/components/layout/drive';
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { cn } from '@workspace/ui/lib/utils';
 import { RotateCcw, Trash2 } from 'lucide-react';
@@ -30,7 +31,7 @@ export const Route = createFileRoute('/_auth/trash')({
 function TrashToolbar({ itemCount, onEmptyTrash }: { itemCount: number; onEmptyTrash: () => void }) {
     return (
         <div className="flex items-center justify-between w-full">
-            <span className="text-sm text-foreground font-normal">Trash</span>
+            <ToolbarTitle>Trash</ToolbarTitle>
             {itemCount > 0 && (
                 <Button variant="outline" size="sm" onClick={onEmptyTrash}>
                     <Trash2 className="h-4 w-4 mr-2" />

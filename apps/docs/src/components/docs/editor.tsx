@@ -5,18 +5,10 @@ import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
-import { getCollabWebSocketUrl, getDriveItemUrl } from '@workspace/lib/api';
+import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { useComments, useResolveComment } from '@workspace/lib/chat';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import {
-    useCardIdFromChatName,
-    useCommentCards,
-    useCreateCommentCard,
-    useOpenCommentCard,
-    useUnresolvedCommentCount,
-    useUpdateCommentCard,
-} from '@workspace/lib/comments';
+import { useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
@@ -32,10 +24,9 @@ import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib
 import type { ActiveComments, CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    AddCardDialog,
-    CardDialog,
+    CardFormDialog,
     Column,
-    CommentContextMenu,
+    CommentLifecycleDialogs,
     CommentMenuItems,
     CommentPanel,
     LoadingState,
@@ -46,6 +37,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
@@ -230,7 +222,6 @@ const TiptapEditor = ({
     const { resolveMediaPath, startUpload } = useMediaResolver();
     const [addOpen, setAddOpen] = useState(false);
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
-    const [openCardId, setOpenCardId] = useState<string | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const [docHeight, setDocHeight] = useState(0);
     const needsScale = canvasScale < 1;
@@ -562,23 +553,27 @@ const TiptapEditor = ({
 
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
     const activeComments = useActiveComments(editor);
-    const resolveComment = useResolveComment(path.ownerId, path.mountId, path.id);
-    const { data: allComments = [] } = useComments(path.ownerId, path.mountId, path.id);
+    const lifecycle = useCommentLifecycle({
+        ownerId: path.ownerId,
+        mountId: path.mountId,
+        pathId: path.id,
+        chatFolderId,
+        doc: yDoc,
+        activeCardIds: activeComments.ids,
+        initialChatName,
+    });
+    const { allComments, cards, createCard, unresolvedCount, setOpenCardId } = lifecycle;
     allCommentsRef.current = allComments;
-
-    const cards = useCommentCards(yDoc, 'comments');
     cardsRef.current = cards;
-    const createCard = useCreateCommentCard(path.ownerId, path.mountId, chatFolderId, yDoc, 'comments');
-    const updateCard = useUpdateCommentCard(yDoc, 'comments');
 
-    const commentContextMenu = useContextMenu<{ card: CommentCard; entry: CommentEntry | undefined }>();
+    const commentContextMenu = useContextMenu<CommentContextMenuItem>();
     const selectionContextMenu = useContextMenu<boolean>();
 
     const handleSaveNew = useCallback(
-        async ({ title, description, color }: { title: string; description: string; color?: string }) => {
+        async (patch: { title?: string; description?: string; color?: string }) => {
             if (!editor || !pendingMarkRange) return;
             const range = pendingMarkRange;
-            await createCard({ title, description, color }, (card) => {
+            await createCard({ title: pendingMarkRange.text.slice(0, 100), ...patch }, (card) => {
                 editor.chain().focus().setTextSelection({ from: range.from, to: range.to }).setComment(card.id).run();
             });
             setPendingMarkRange(null);
@@ -586,9 +581,6 @@ const TiptapEditor = ({
         },
         [editor, pendingMarkRange, createCard],
     );
-
-    const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeComments.ids);
-    const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, allComments, openCardId);
 
     // Sync resolved IDs + colors into the ProseMirror decoration plugin
     useEffect(() => {
@@ -606,8 +598,6 @@ const TiptapEditor = ({
         }
         updateCommentDecorations(editor, resolved, colorMap);
     }, [editor, cards, allComments, activeComments.ids]);
-
-    useCardIdFromChatName(cards, initialChatName, setOpenCardId);
 
     useEffect(() => {
         if (!editor) return;
@@ -751,7 +741,7 @@ const TiptapEditor = ({
                 </div>
             </Column>
 
-            <AddCardDialog
+            <CardFormDialog
                 open={addOpen}
                 onOpenChange={(o) => {
                     setAddOpen(o);
@@ -759,35 +749,15 @@ const TiptapEditor = ({
                 }}
                 initialTitle={pendingMarkRange ? pendingMarkRange.text.slice(0, 100) : ''}
                 onSave={handleSaveNew}
-                titleLabel="New comment"
+                dialogTitle="New comment"
                 submitLabel="Add comment"
             />
 
-            <CardDialog
-                open={!!openCard}
-                onOpenChange={(o) => {
-                    if (!o) setOpenCardId(null);
-                }}
-                card={openCard}
-                entry={openEntry}
-                ownerId={path.ownerId}
-                mountId={path.mountId}
+            <CommentLifecycleDialogs
+                lifecycle={lifecycle}
+                path={path}
                 canWrite={access.canWrite}
-                copyLinkUrl={
-                    openCard?.chatName
-                        ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
-                        : undefined
-                }
-                showResolveAction
-                onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
-                onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
-            />
-
-            <CommentContextMenu
-                contextMenu={commentContextMenu}
-                onOpen={setOpenCardId}
-                onUpdateCard={updateCard}
-                onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                commentContextMenu={commentContextMenu}
                 onDelete={(cardId) => {
                     if (!editor) return;
                     const { tr } = editor.state;

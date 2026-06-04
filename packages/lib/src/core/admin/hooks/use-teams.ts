@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
@@ -46,7 +46,7 @@ export function useCreateTeam(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId ?? '') });
+            invalidateAdminTeams(queryClient, organizationId ?? '');
             invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
@@ -65,7 +65,7 @@ export function useRemoveTeam(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId ?? '') });
+            invalidateAdminTeams(queryClient, organizationId ?? '');
             invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
@@ -122,9 +122,13 @@ export function useUpdateTeam(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId ?? '') });
+            invalidateAdminTeams(queryClient, organizationId ?? '');
             invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
     });
+}
+
+export function invalidateAdminTeams(queryClient: QueryClient, organizationId: string): void {
+    queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId) });
 }

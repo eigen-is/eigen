@@ -205,7 +205,7 @@ export function ServerSettingsPage() {
                                 saving || (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3))
                             }
                         >
-                            {saving ? 'Saving...' : 'Save Changes'}
+                            {saving ? 'Saving...' : 'Save'}
                         </Button>
                     </div>
                 </>

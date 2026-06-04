@@ -183,7 +183,7 @@ export function OnboardingSettingsPage() {
                             Reset
                         </Button>
                         <Button onClick={handleSave} disabled={updateSettings.isPending}>
-                            {updateSettings.isPending ? 'Saving...' : 'Save Changes'}
+                            {updateSettings.isPending ? 'Saving...' : 'Save'}
                         </Button>
                     </div>
                 </>

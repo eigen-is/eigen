@@ -1,21 +1,16 @@
-import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { useComments, useResolveComment } from '@workspace/lib/chat';
-import {
-    useCardIdFromChatName,
-    useCommentCards,
-    useCreateCommentCard,
-    useOpenCommentCard,
-    useUnresolvedCommentCount,
-    useUpdateCommentCard,
-} from '@workspace/lib/comments';
+import { useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
-import { isPendingMediaName, useCopyToMediaFolder, useMediaResolver } from '@workspace/lib/drive';
-import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { CommentCard } from '@workspace/lib/types/comments';
+import {
+    isPendingMediaName,
+    MediaResolverProvider,
+    useCopyToMediaFolder,
+    useMediaResolver,
+} from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { AddCardDialog, CardDialog, CommentContextMenu, CommentPanel, LoadingState } from '@workspace/ui';
+import { CardFormDialog, CommentLifecycleDialogs, CommentPanel, LoadingState } from '@workspace/ui';
+import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
@@ -34,7 +29,20 @@ type SheetEditorProps = {
     initialChatName?: string;
 };
 
-export function SheetEditor({
+export function SheetEditor(props: SheetEditorProps) {
+    return (
+        <MediaResolverProvider
+            ownerId={props.ownerId}
+            mountId={props.path.mountId}
+            mediaFolderId={props.mediaFolderId}
+            chatFolderId={props.chatFolderId}
+        >
+            <SheetEditorInner {...props} />
+        </MediaResolverProvider>
+    );
+}
+
+function SheetEditorInner({
     ownerId,
     path,
     canWrite,
@@ -60,19 +68,19 @@ export function SheetEditor({
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
-    const [openCardId, setOpenCardId] = useState<string | null>(null);
     const [flowdata, setFlowdata] = useState<(import('@workspace/sheet').Cell | null)[][] | undefined>();
     const activeComments = useActiveComments(flowdata);
-    const { data: allComments = [] } = useComments(ownerId, path.mountId, path.id);
-    const resolveComment = useResolveComment(ownerId, path.mountId, path.id);
-    const cards = useCommentCards(docRef.current, 'comments');
-    const createCard = useCreateCommentCard(ownerId, path.mountId, chatFolderId, docRef.current, 'comments');
-    const updateCard = useUpdateCommentCard(docRef.current, 'comments');
-    const commentContextMenu = useContextMenu<{ card: CommentCard; entry: CommentEntry | undefined }>();
-
-    const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeComments.ids);
-    const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, allComments, openCardId);
-    useCardIdFromChatName(cards, initialChatName, setOpenCardId);
+    const lifecycle = useCommentLifecycle({
+        ownerId,
+        mountId: path.mountId,
+        pathId: path.id,
+        chatFolderId,
+        doc: docRef.current,
+        activeCardIds: activeComments.ids,
+        initialChatName,
+    });
+    const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
+    const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const addCommentRef = useRef<(r: number, c: number) => void>(null);
     addCommentRef.current = useCallback((r: number, c: number) => {
@@ -154,10 +162,10 @@ export function SheetEditor({
     );
 
     const handleSaveNew = useCallback(
-        async ({ title, description, color }: { title: string; description: string; color?: string }) => {
+        async (patch: { title?: string; description?: string; color?: string }) => {
             if (!addTargetCell || !workbookRef.current) return;
             const cell = addTargetCell;
-            await createCard({ title, description, color }, (card) => {
+            await createCard({ title: addInitialTitle, ...patch }, (card) => {
                 const fd = workbookRef.current?.getFlowdata();
                 const existing = fd?.[cell.r]?.[cell.c]?.commentCardIds ?? [];
                 workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, card.id]);
@@ -165,7 +173,7 @@ export function SheetEditor({
             setAddTargetCell(null);
             setAddOpen(false);
         },
-        [addTargetCell, createCard],
+        [addTargetCell, addInitialTitle, createCard],
     );
 
     const leftItems = useMemo(
@@ -298,7 +306,7 @@ export function SheetEditor({
                 )}
             </div>
 
-            <AddCardDialog
+            <CardFormDialog
                 open={addOpen}
                 onOpenChange={(o) => {
                     setAddOpen(o);
@@ -306,35 +314,15 @@ export function SheetEditor({
                 }}
                 initialTitle={addInitialTitle}
                 onSave={handleSaveNew}
-                titleLabel="New comment"
+                dialogTitle="New comment"
                 submitLabel="Add comment"
             />
 
-            <CardDialog
-                open={!!openCard}
-                onOpenChange={(o) => {
-                    if (!o) setOpenCardId(null);
-                }}
-                card={openCard}
-                entry={openEntry}
-                ownerId={ownerId}
-                mountId={path.mountId}
+            <CommentLifecycleDialogs
+                lifecycle={lifecycle}
+                path={path}
                 canWrite={canWrite}
-                copyLinkUrl={
-                    openCard?.chatName
-                        ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
-                        : undefined
-                }
-                showResolveAction
-                onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
-                onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
-            />
-
-            <CommentContextMenu
-                contextMenu={commentContextMenu}
-                onOpen={setOpenCardId}
-                onUpdateCard={updateCard}
-                onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                commentContextMenu={commentContextMenu}
                 onDelete={(cardId) => {
                     const fd = workbookRef.current?.getFlowdata();
                     if (!fd) return;

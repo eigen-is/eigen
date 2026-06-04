@@ -13,7 +13,7 @@ import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { AddCardDialog, CardDialog, CommentMenuItems, LoadingState, NoteCard } from '@workspace/ui';
+import { CardDialog, CardFormDialog, CommentMenuItems, LoadingState, NoteCard } from '@workspace/ui';
 import {
     DropdownMenuItem,
     DropdownMenuSub,
@@ -132,10 +132,10 @@ export function StickiesBoard({
     };
 
     const onSaveNew = useCallback(
-        async ({ title, description, color }: { title: string; description: string; color?: string }) => {
+        async (patch: { title?: string; description?: string; color?: string }) => {
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
-            await createCard({ title, description, color }, (card) => {
+            await createCard(patch, (card) => {
                 const col = yjsDoc.getMap('columns').get(targetColumnId) as Y.Map<unknown> | undefined;
                 if (!col) return;
                 let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
@@ -318,14 +318,14 @@ export function StickiesBoard({
                                 <DragOverlay adjustScale={false}>{getActiveComponent()}</DragOverlay>
                             </DndContext>
 
-                            <AddCardDialog
+                            <CardFormDialog
                                 open={addOpen}
                                 onOpenChange={(o) => {
                                     setAddOpen(o);
                                     if (!o) setAddTargetColumn(null);
                                 }}
                                 onSave={onSaveNew}
-                                titleLabel="Add Sticky"
+                                dialogTitle="Add Sticky"
                                 submitLabel="Add Sticky"
                             />
 

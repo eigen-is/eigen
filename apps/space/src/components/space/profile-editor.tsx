@@ -207,7 +207,7 @@ export function ProfileEditor() {
                 </div>
                 <div className="flex justify-end">
                     <Button type="submit" disabled={updateContactMutation.isPending} className="w-full sm:w-auto">
-                        {updateContactMutation.isPending ? 'Saving...' : 'Save Changes'}
+                        {updateContactMutation.isPending ? 'Saving...' : 'Save'}
                     </Button>
                 </div>
             </form>

@@ -5,6 +5,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -85,7 +86,7 @@ function TwoFaComponent() {
 
     if (twoFactorEnabled === null) return null;
 
-    const toolbar = <span className="text-sm text-foreground font-normal">Two-Factor Authentication</span>;
+    const toolbar = <ToolbarTitle>Two-Factor Authentication</ToolbarTitle>;
 
     if (twoFactorEnabled) {
         return (

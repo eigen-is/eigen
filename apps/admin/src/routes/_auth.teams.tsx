@@ -36,7 +36,7 @@ function TeamsRoute() {
                 {team ? (
                     <TeamDetail team={team} organizationId={config?.orgId} />
                 ) : (
-                    <EmptyState message="Select a team from the sidebar to view details" />
+                    <EmptyState message="Select a team to view details" />
                 )}
             </Column>
         </ColumnLayout>

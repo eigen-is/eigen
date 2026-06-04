@@ -34,7 +34,7 @@ export function useResolveComment(ownerId: string, mountId: string, containerId:
             return response.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: commentKeys.container(ownerId, mountId, containerId) });
+            invalidateComments(queryClient, ownerId, mountId, containerId);
         },
         onError: onMutationError,
     });

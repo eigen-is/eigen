@@ -1,19 +1,13 @@
-import {
-    type QueryClient,
-    useInfiniteQuery,
-    useMutation,
-    useQueries,
-    useQuery,
-    useQueryClient,
-} from '@tanstack/react-query';
+import { type QueryClient, useInfiniteQuery, useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { chatApi, driveApi } from '@workspace/lib/api';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
-import { DRIVE_MIME_CHAT, type DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { AppError, onMutationError } from '../../api-error';
-import { driveKeys, invalidateItemCreated } from '../../drive/hooks/use-drive';
+import { driveKeys, invalidateItemCreated, mimeContentQueryConfig, useMimeContent } from '../../drive/hooks/use-drive';
 
 const MESSAGE_PAGE_SIZE = 50;
+const CHAT_MIME_SLUG = EIGEN_DOC_TYPE_INFO.chat.urlSlug; // 'application-eigenchat'
 
 export const chatKeys = {
     all: ['chat'] as const,
@@ -23,31 +17,12 @@ export const chatKeys = {
 };
 
 export function useChats(ownerId: string) {
-    return useQuery<DrivePath[]>({
-        queryKey: driveKeys.mime(ownerId, 'application-eigenchat'),
-        queryFn: async () => {
-            const response = await driveApi({ ownerId }).mime({ mimeType: 'application-eigenchat' }).get();
-            return response.data || [];
-        },
-        enabled: !!ownerId,
-        staleTime: 60_000,
-    });
+    return useMimeContent(ownerId, CHAT_MIME_SLUG);
 }
 
 export function useTeamsHaveChats(teamIds: string[]): boolean {
     const results = useQueries({
-        queries: teamIds.map((id) => {
-            const ownerId = teamOwnerId(id);
-            return {
-                queryKey: driveKeys.mime(ownerId, 'application-eigenchat'),
-                queryFn: async (): Promise<DrivePath[]> => {
-                    const response = await driveApi({ ownerId }).mime({ mimeType: 'application-eigenchat' }).get();
-                    return response.data || [];
-                },
-                enabled: !!id,
-                staleTime: 60_000,
-            };
-        }),
+        queries: teamIds.map((id) => mimeContentQueryConfig(teamOwnerId(id), CHAT_MIME_SLUG)),
     });
     return results.some((q) => (q.data?.length ?? 0) > 0);
 }
@@ -87,7 +62,7 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
             return response.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
+            invalidateMessages(queryClient, ownerId, mountId, chatId);
         },
         onError: onMutationError,
     });
@@ -137,7 +112,7 @@ export function useEditMessage(ownerId: string, mountId: string, chatId: string)
             return response.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
+            invalidateMessages(queryClient, ownerId, mountId, chatId);
         },
         onError: onMutationError,
     });
@@ -152,7 +127,7 @@ export function useDeleteMessage(ownerId: string, mountId: string, chatId: strin
             return response.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
+            invalidateMessages(queryClient, ownerId, mountId, chatId);
         },
         onError: onMutationError,
     });

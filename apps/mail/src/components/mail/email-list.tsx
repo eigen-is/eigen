@@ -1,6 +1,6 @@
 import { formatDateTime } from '@workspace/lib/date';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
-import { EmptyState, LoadingState } from '@workspace/ui';
+import { EmptyState, LoadingState, Toolbar } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
@@ -18,13 +18,15 @@ type EmailListToolbarProps = {
 
 export function EmailListToolbar({ searchQuery, onSearchChange }: EmailListToolbarProps) {
     return (
-        <SearchBar
-            placeholder="Search emails..."
-            value={searchQuery}
-            onChange={onSearchChange}
-            maxWidth="full"
-            inputClassName="h-8 bg-background"
-        />
+        <Toolbar>
+            <SearchBar
+                placeholder="Search emails..."
+                value={searchQuery}
+                onChange={onSearchChange}
+                maxWidth="full"
+                inputClassName="h-8 bg-background"
+            />
+        </Toolbar>
     );
 }
 
@@ -174,7 +176,7 @@ export function EmailList({
                             })}
                         </div>
                     ) : (
-                        <EmptyState message="No emails found." />
+                        <EmptyState message="No emails found" />
                     )}
                 </div>
             </div>
