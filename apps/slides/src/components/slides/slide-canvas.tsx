@@ -40,6 +40,7 @@ type SlideCanvasProps = {
     onCommentReopen?: (chatName: string) => void;
     onCommentChangeColor?: (cardId: string, color: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
+    onDuplicateObjects?: (placements: { id: string; x: number; y: number }[]) => void;
 };
 
 export function SlideCanvas({
@@ -68,6 +69,7 @@ export function SlideCanvas({
     onCommentReopen,
     onCommentChangeColor,
     onCommentDelete,
+    onDuplicateObjects,
 }: SlideCanvasProps) {
     const { resolveMediaUrl } = useMediaResolver();
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -86,6 +88,7 @@ export function SlideCanvas({
 
     const { startDrag, startGroupDrag, activeSnapLines, dragPreviews } = useObjectDrag({
         onUpdate: onUpdateObject,
+        onDuplicate: onDuplicateObjects,
         canvasRef,
         vSnaps,
         hSnaps,
