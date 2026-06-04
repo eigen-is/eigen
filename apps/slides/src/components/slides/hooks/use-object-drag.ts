@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
-import { resizeRotatedRect } from '../transform-geometry';
+import { normalizeAngle, resizeRotatedRect, snapAngle } from '../transform-geometry';
 import { SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from '../types';
 import { type SnapLine, snapRect } from './use-snap-lines';
 
 export type DragMode =
     | 'move'
+    | 'rotate'
     | 'resize-se'
     | 'resize-sw'
     | 'resize-ne'
@@ -40,10 +41,11 @@ type DragPreview = {
     y: number;
     w: number;
     h: number;
+    rotation?: number;
 };
 
 type UseObjectDragProps = {
-    onUpdate: (objId: string, updates: { x?: number; y?: number; w?: number; h?: number }) => void;
+    onUpdate: (objId: string, updates: { x?: number; y?: number; w?: number; h?: number; rotation?: number }) => void;
     canvasRef: React.RefObject<HTMLDivElement | null>;
     vSnaps?: number[];
     hSnaps?: number[];
@@ -54,6 +56,8 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
     const [dragPreviews, setDragPreviews] = useState<DragPreview[]>([]);
     const lastSnappedRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
     const lastGroupDeltaRef = useRef<{ dx: number; dy: number } | null>(null);
+    const lastRotationRef = useRef<number | null>(null);
+    const rotateRef = useRef<{ centerX: number; centerY: number; startAngle: number } | null>(null);
     const snapsRef = useRef({ vSnaps, hSnaps });
     snapsRef.current = { vSnaps, hSnaps };
     const stateRef = useRef<ObjectDragState>({
@@ -99,6 +103,18 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 startObjH: objH,
                 startRotation: objRotation,
             };
+            if (mode === 'rotate') {
+                const rect = canvasRef.current?.getBoundingClientRect();
+                if (rect) {
+                    const centerX = rect.left + ((objX + objW / 2) / SLIDE_BASE_WIDTH) * rect.width;
+                    const centerY = rect.top + ((objY + objH / 2) / SLIDE_BASE_HEIGHT) * rect.height;
+                    rotateRef.current = {
+                        centerX,
+                        centerY,
+                        startAngle: Math.atan2(e.clientY - centerY, e.clientX - centerX),
+                    };
+                }
+            }
             groupStateRef.current = null;
             const cursor = {
                 clientX: e.clientX,
@@ -110,6 +126,29 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
             const update = () => {
                 const s = stateRef.current;
                 if (!s.objId || !s.mode) return;
+
+                if (s.mode === 'rotate') {
+                    const r = rotateRef.current;
+                    if (!r) return;
+                    const angle = Math.atan2(cursor.clientY - r.centerY, cursor.clientX - r.centerX);
+                    const deltaDeg = ((angle - r.startAngle) * 180) / Math.PI;
+                    let next = s.startRotation + deltaDeg;
+                    if (cursor.shiftKey) next = snapAngle(next);
+                    if (lastRotationRef.current === next) return;
+                    lastRotationRef.current = next;
+                    setDragPreviews([
+                        {
+                            objId: s.objId,
+                            x: s.startObjX,
+                            y: s.startObjY,
+                            w: s.startObjW,
+                            h: s.startObjH,
+                            rotation: next,
+                        },
+                    ]);
+                    return;
+                }
+
                 const canvas = getCanvasSize();
                 const dx = ((cursor.clientX - s.startX) / canvas.w) * SLIDE_BASE_WIDTH;
                 const dy = ((cursor.clientY - s.startY) / canvas.h) * SLIDE_BASE_HEIGHT;
@@ -180,7 +219,9 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
 
             const endDrag = () => {
                 const s = stateRef.current;
-                if (s.objId && lastSnappedRef.current) {
+                if (s.objId && s.mode === 'rotate' && lastRotationRef.current !== null) {
+                    onUpdate(s.objId, { rotation: normalizeAngle(lastRotationRef.current) });
+                } else if (s.objId && lastSnappedRef.current) {
                     onUpdate(s.objId, lastSnappedRef.current);
                 }
                 cleanup();
@@ -279,6 +320,8 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
         setDragPreviews([]);
         lastSnappedRef.current = null;
         lastGroupDeltaRef.current = null;
+        lastRotationRef.current = null;
+        rotateRef.current = null;
         groupStateRef.current = null;
         stateRef.current = {
             objId: null,
