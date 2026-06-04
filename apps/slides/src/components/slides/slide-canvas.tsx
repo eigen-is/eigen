@@ -10,6 +10,7 @@ import { useMarqueeSelect } from './hooks/use-marquee-select';
 import { type DragMode, useObjectDrag } from './hooks/use-object-drag';
 import { useSnapTargets } from './hooks/use-snap-lines';
 import { SlideObjectView } from './slide-object';
+import { SelectionChrome } from './slide-selection-chrome';
 import { pxToPercent, SLIDE_ASPECT_RATIO, type SlideItem, type SlideObject } from './types';
 
 type SlideCanvasProps = {
@@ -213,7 +214,6 @@ export function SlideCanvas({
                             onStartEditing={onStartEditing}
                             onUpdate={onUpdateObject}
                             onDragStart={handleDragStart}
-                            onResizeStart={handleResizeStart}
                             onCopy={onCopyObject}
                             onDelete={onDeleteObject}
                             onMoveUp={onMoveUp}
@@ -235,6 +235,22 @@ export function SlideCanvas({
                         />
                     );
                 })}
+                {canWrite &&
+                    objects
+                        .filter((o) => selectedObjectIds.includes(o.id) && o.id !== editingObjectId)
+                        .map((obj) => {
+                            const preview = dragPreviewMap.get(obj.id);
+                            const displayObj = preview
+                                ? { ...obj, x: preview.x, y: preview.y, w: preview.w, h: preview.h }
+                                : obj;
+                            return (
+                                <SelectionChrome
+                                    key={`chrome-${obj.id}`}
+                                    obj={displayObj}
+                                    onResizeStart={handleResizeStart}
+                                />
+                            );
+                        })}
                 {activeSnapLines.map((line, i) => (
                     <div
                         key={i}

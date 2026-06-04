@@ -135,15 +135,6 @@ type SlideObjectViewProps = {
     onStartEditing: (objId: string) => void;
     onUpdate: (objId: string, updates: Partial<SlideObject>) => void;
     onDragStart: (e: React.MouseEvent, objId: string, mode: 'move', x: number, y: number, w: number, h: number) => void;
-    onResizeStart: (
-        e: React.MouseEvent,
-        objId: string,
-        mode: string,
-        x: number,
-        y: number,
-        w: number,
-        h: number,
-    ) => void;
     onCopy?: (objId: string) => void;
     onDelete?: (objId: string) => void;
     onMoveUp?: (objId: string) => void;
@@ -161,17 +152,6 @@ type SlideObjectViewProps = {
     onCommentDelete?: (objId: string, cardId: string) => void;
 };
 
-const HANDLE_POSITIONS = [
-    { mode: 'resize-nw', className: '-top-1.5 -left-1.5 cursor-nwse-resize' },
-    { mode: 'resize-ne', className: '-top-1.5 -right-1.5 cursor-nesw-resize' },
-    { mode: 'resize-sw', className: '-bottom-1.5 -left-1.5 cursor-nesw-resize' },
-    { mode: 'resize-se', className: '-bottom-1.5 -right-1.5 cursor-nwse-resize' },
-    { mode: 'resize-n', className: '-top-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize' },
-    { mode: 'resize-s', className: '-bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize' },
-    { mode: 'resize-w', className: 'top-1/2 -left-1.5 -translate-y-1/2 cursor-ew-resize' },
-    { mode: 'resize-e', className: 'top-1/2 -right-1.5 -translate-y-1/2 cursor-ew-resize' },
-] as const;
-
 export const SlideObjectView = memo(function SlideObjectView({
     obj,
     selected,
@@ -182,7 +162,6 @@ export const SlideObjectView = memo(function SlideObjectView({
     onStartEditing,
     onUpdate,
     onDragStart,
-    onResizeStart,
     onCopy,
     onDelete,
     onMoveUp,
@@ -231,7 +210,7 @@ export const SlideObjectView = memo(function SlideObjectView({
         <div
             className={cn(
                 'absolute',
-                selected ? 'ring-1 ring-selection-handle' : obj.type === 'text' && 'border border-dashed border-border',
+                !selected && obj.type === 'text' && 'border border-dashed border-border',
                 editable && !editing ? 'cursor-move' : 'cursor-default',
             )}
             style={getObjectPositionStyle(obj)}
@@ -275,22 +254,6 @@ export const SlideObjectView = memo(function SlideObjectView({
                 <SlideImage obj={obj} url={imageUrl} className="w-full h-full select-none pointer-events-none" />
             )}
 
-            {selected &&
-                editable &&
-                !editing &&
-                HANDLE_POSITIONS.map(({ mode, className }) => (
-                    <div
-                        key={mode}
-                        className={cn(
-                            'absolute h-3 w-3 bg-background border border-selection-handle rounded-sm',
-                            className,
-                        )}
-                        onMouseDown={(e) => {
-                            e.stopPropagation();
-                            onResizeStart(e, obj.id, mode, obj.x, obj.y, obj.w, obj.h);
-                        }}
-                    />
-                ))}
             {firstCommentCardId && commentColor && (
                 <div
                     className="absolute top-0 right-0 cursor-pointer z-10"
