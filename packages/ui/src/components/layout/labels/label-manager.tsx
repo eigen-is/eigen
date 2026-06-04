@@ -1,3 +1,4 @@
+import { useAddLabel, useDeleteLabel, useUpdateLabel } from '@workspace/lib/contacts';
 import type { Label } from '@workspace/lib/types/label';
 import { TooltipButton } from '@workspace/ui';
 import { Pencil, Plus } from 'lucide-react';
@@ -6,7 +7,6 @@ import { cn } from '../../../lib/utils';
 import { SidebarItem } from '../sidebar';
 import { DroppableSidebarItem } from '../sidebar/droppable-sidebar-item';
 import { LabelDialog } from './label-dialog';
-import { useLabels } from './label-provider';
 import type { LabelManagerProps } from './types';
 
 export function LabelManager({
@@ -19,7 +19,9 @@ export function LabelManager({
 }: LabelManagerProps) {
     const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const { addLabel, updateLabel, deleteLabel } = useLabels();
+    const { mutateAsync: addLabel } = useAddLabel();
+    const { mutateAsync: updateLabel } = useUpdateLabel();
+    const { mutateAsync: deleteLabel } = useDeleteLabel();
 
     const handleAddLabel = () => {
         setSelectedLabel(null);
