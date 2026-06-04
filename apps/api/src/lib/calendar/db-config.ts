@@ -57,6 +57,8 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_events_parent ON events(parentEventId);
                 CREATE INDEX IF NOT EXISTS idx_events_linked ON events(organizerEventId, organizerUserId);
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_events_uri_calendar ON events(calendarId, uri);
+                CREATE INDEX IF NOT EXISTS idx_events_uid_calendar ON events(calendarId, uid);
+                CREATE INDEX IF NOT EXISTS idx_events_uid ON events(uid);
 
                 CREATE TABLE IF NOT EXISTS event_tombstones (
                     uri TEXT NOT NULL,
