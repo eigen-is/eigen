@@ -328,7 +328,8 @@ export class ChatRoom {
             mountId: this.path.mountId,
         });
         this.home.broadcast(event);
-        this.notifySharedUsers(event);
+        const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
+        this.notifySharedUsers(event, members);
 
         if (this.containerPath && existing.type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
@@ -336,7 +337,7 @@ export class ChatRoom {
                 for (const email of extractMentionedEmails(content)) {
                     await index.addMention(this.path.name, email);
                 }
-            });
+            }, members);
         }
 
         return updated;
@@ -371,12 +372,13 @@ export class ChatRoom {
             mountId: this.path.mountId,
         });
         this.home.broadcast(event);
-        this.notifySharedUsers(event);
+        const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
+        this.notifySharedUsers(event, members);
 
         if (this.containerPath && existing.type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
                 await index.decrementCount(this.path.name);
-            });
+            }, members);
         }
     }
 
@@ -397,7 +399,7 @@ export class ChatRoom {
         }
     }
 
-    private async updateCommentIndex(fn: (index: CommentIndex) => Promise<void>) {
+    private async updateCommentIndex(fn: (index: CommentIndex) => Promise<void>, members?: EffectiveMember[]) {
         if (!this.containerPath) return;
         try {
             const index = await openCommentIndex(this.drive, this.containerPath);
@@ -405,7 +407,7 @@ export class ChatRoom {
 
             const event = buildCommentIndexUpdatedEvent(this.containerPath.id, this.path.ownerId, this.path.mountId);
             this.home.broadcast(event);
-            this.notifySharedUsers(event);
+            this.notifySharedUsers(event, members);
         } catch (error) {
             console.error('Failed to update comment index:', error);
         }
@@ -416,15 +418,18 @@ export class ChatRoom {
     // Pass pre-resolved members to avoid a redundant ACL walk when postMessage has already fetched them.
     private async notifySharedUsers(event: SSEvent, members?: EffectiveMember[]) {
         const resolved = members ?? (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id));
-        for (const member of resolved) {
-            const user = await getUserByEmail(member.email);
-            if (!user) continue;
-            try {
-                await sendToHome(user.id, { type: 'broadcast', event });
-            } catch {
-                // user home may not exist
-            }
-        }
+        // Fan out the per-member lookup + relay concurrently rather than serially.
+        await Promise.all(
+            resolved.map(async (member) => {
+                try {
+                    const user = await getUserByEmail(member.email);
+                    if (!user) return;
+                    await sendToHome(user.id, { type: 'broadcast', event });
+                } catch {
+                    // user or home may not exist
+                }
+            }),
+        );
     }
 
     private toMessage(row: typeof schema.messages.$inferSelect): ChatMessage {
