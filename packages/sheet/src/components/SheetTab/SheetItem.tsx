@@ -50,7 +50,6 @@ type MenuItemComponents = {
 export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const [editing, setEditing] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
     const editable = useRef<HTMLSpanElement>(null);
     const [dragOver, setDragOver] = useState(false);
     const { showAlert, hideAlert } = useAlert();
@@ -325,7 +324,6 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             onDragStart={onDragStart}
             draggable={context.allowEdit && !editing}
             key={sheet.id}
-            ref={containerRef}
             className={cn(
                 'relative flex shrink-0 items-center outline-hidden',
                 isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-sm transition-colors',
