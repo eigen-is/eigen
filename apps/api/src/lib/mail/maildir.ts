@@ -31,6 +31,12 @@ import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
 
+export type DraftUpdateOptions = {
+    tempAttachmentIds?: string[];
+    keepAttachmentIndexes?: number[];
+    forceFullSave?: boolean;
+};
+
 type DraftMeta = {
     subject: string;
     to?: AddressObject;
@@ -285,10 +291,7 @@ export default class Maildir {
 
     // -- Draft & Send --
 
-    async messageHandleDraft(
-        email: NewDraft | EmailDraft,
-        options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[]; forceFullSave?: boolean } = {},
-    ): Promise<EmailDraft> {
+    async messageHandleDraft(email: NewDraft | EmailDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
         const existingId = email.id?.trim() || undefined;
         const hasNewTemps = !!options.tempAttachmentIds?.length;
 
