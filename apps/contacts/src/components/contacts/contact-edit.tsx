@@ -121,6 +121,9 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
         },
     });
 
+    // `email`/`phone` are primitive string[] in the schema; react-hook-form v7's useFieldArray
+    // generic expects array-of-objects, so the field name needs `as never`. Runtime-safe — kept
+    // as string[] (not wrapped in {value} objects) to avoid changing the contact data shape.
     const {
         fields: emailFields,
         append: appendEmail,

@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { toISODateString, useCalendars, useCreateEvent, useSharedCalendars } from '@workspace/lib/calendar';
+import { toLocalDateString, useCalendars, useCreateEvent, useSharedCalendars } from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
@@ -73,7 +73,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
             const targetDate = defaultDate ? new Date(defaultDate) : rounded;
             targetDate.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
 
-            const dateStr = toISODateString(targetDate);
+            const dateStr = toLocalDateString(targetDate);
             const start = toTimeString(targetDate);
             const end = addMinutes(start, 30);
 
@@ -107,7 +107,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
             const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
             const d = new Date(`${startDate}T00:00`);
             if (wraps) d.setDate(d.getDate() + 1);
-            setEndDate(toISODateString(d));
+            setEndDate(toLocalDateString(d));
         }
     };
 
@@ -115,7 +115,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
         setEndTime(newEnd);
         const d = new Date(`${startDate}T00:00`);
         if (dayOffset > 0) d.setDate(d.getDate() + dayOffset);
-        setEndDate(toISODateString(d));
+        setEndDate(toLocalDateString(d));
     };
 
     const getMinEndTime = () => {

@@ -80,10 +80,11 @@ export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): C
     });
 }
 
-// Local-time calendar day (YYYY-MM-DD). Used for <input type="date"> values where the
-// user's local calendar day is what's shown/edited. Contrast with occurrenceDateToString,
-// which derives the UTC day for occurrence/wire values (all-day events are midnight UTC).
-export function toISODateString(date: Date): string {
+// Returns the local calendar day as YYYY-MM-DD. Used for <input type="date"> values where
+// the user's local calendar day is what's shown/edited — not UTC. Contrast with
+// occurrenceDateToString, which derives the UTC day for occurrence/wire values (all-day
+// events are midnight UTC).
+export function toLocalDateString(date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');

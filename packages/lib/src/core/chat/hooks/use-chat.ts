@@ -17,7 +17,8 @@ export const chatKeys = {
 };
 
 export function useChats(ownerId: string) {
-    return useMimeContent(ownerId, CHAT_MIME_SLUG);
+    // Why: chat sidebar needs fresher data than drive-folder browsing; use 1 min instead of the 5-min default.
+    return useMimeContent(ownerId, CHAT_MIME_SLUG, 60_000);
 }
 
 export function useTeamsHaveChats(teamIds: string[]): boolean {

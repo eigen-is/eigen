@@ -217,12 +217,7 @@ export class Home {
     }
 
     public async size(teamIds: string[] = []): Promise<HomeSizeResponse> {
-        const [mail, contacts, driveDefault] = await Promise.all([
-            this._mail?.size(),
-            this._contacts?.size(),
-            this._drive?.size('default') ?? 0,
-        ]);
-
+        // Org homes have no drive — nothing to size, return early before touching subsystems.
         if (!this._drive) {
             return {
                 mailAndContacts: { used: 0, max: 0 },
@@ -230,6 +225,12 @@ export class Home {
                 total: { used: 0, max: 0 },
             };
         }
+
+        const [mail, contacts, driveDefault] = await Promise.all([
+            this._mail?.size(),
+            this._contacts?.size(),
+            this._drive.size('default'),
+        ]);
 
         const mountConfig = this._drive.getMountConfig('default');
         const quotas = await resolveUserQuotas(mountConfig, teamIds);

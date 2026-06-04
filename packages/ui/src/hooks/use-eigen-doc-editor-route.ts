@@ -31,7 +31,7 @@ export function useEigenDocEditorRoute(ownerId: string, mountId: string, pathId:
         const title = docInfo?.path ? stripEigenExtension(docInfo.path.name) : '';
         setDocumentTitle(title);
         return () => setDocumentTitle('');
-    }, [docInfo?.path, setDocumentTitle]);
+    }, [docInfo?.path?.name, setDocumentTitle]);
 
     // Publish the open document as a 1-item palette selection so item-aware commands
     // (Mail to…, Copy link, …) surface from anywhere. DrivePath already carries mountId.
