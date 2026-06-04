@@ -1,6 +1,6 @@
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import type { Attendee } from '@workspace/lib/types/calendar';
-import { validateEmailAddress } from '@workspace/lib/validation';
+import { parseContactInput } from '@workspace/lib/validation';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { CollapsibleUserList } from '@workspace/ui/components/layout/collapsible-user-list';
@@ -8,7 +8,7 @@ import { ContactAutosuggest } from '@workspace/ui/components/layout/contacts/con
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Check, CircleDashed, ClipboardCopy, HelpCircle, Plus, X as XIcon } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 type AttendeeEditorProps = {
@@ -33,7 +33,6 @@ const statusLabel: Record<Attendee['status'], string> = {
 
 export function AttendeeEditor({ attendees, onChange, currentUserEmail }: AttendeeEditorProps) {
     const [input, setInput] = useState('');
-    const inputRef = useRef<HTMLInputElement>(null);
 
     const addAttendee = useCallback(
         (email: string, name?: string) => {
@@ -50,17 +49,10 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
 
     const processInput = useCallback(
         (value: string) => {
-            const emailMatch = value.match(/<(.+)>/);
-            if (emailMatch) {
-                const nameMatch = value.match(/^(.+?)\s*</);
-                addAttendee(emailMatch[1], nameMatch?.[1]);
-                return true;
-            }
-            if (validateEmailAddress(value.trim())) {
-                addAttendee(value.trim());
-                return true;
-            }
-            return false;
+            const parsed = parseContactInput(value);
+            if (!parsed) return false;
+            addAttendee(parsed.email, parsed.displayName !== parsed.email ? parsed.displayName : undefined);
+            return true;
         },
         [addAttendee],
     );
@@ -98,7 +90,6 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
                         onChange={handleContactSelected}
                         onlyInternalMails={false}
                         placeholder="Add guests"
-                        inputRef={inputRef}
                         onSubmit={handleAddClick}
                     />
                 </div>
