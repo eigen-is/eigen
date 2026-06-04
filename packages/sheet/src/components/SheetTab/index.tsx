@@ -15,8 +15,6 @@ import { SheetItem } from './SheetItem';
 export const SheetTab: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const tabContainerRef = useRef<HTMLDivElement>(null);
-    const leftScrollRef = useRef<HTMLDivElement>(null);
-    const rightScrollRef = useRef<HTMLDivElement>(null);
     const [isShowScrollBtn, setIsShowScrollBtn] = useState<boolean>(false);
     const [isShowBoundary, setIsShowBoundary] = useState<boolean>(true);
     const { info } = locale(context);
@@ -91,7 +89,7 @@ export const SheetTab: React.FC = () => {
                     <div className="sheet-list-container">
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <div id="all-sheets" className="fortune-sheettab-button" ref={tabContainerRef}>
+                                <div id="all-sheets" className="fortune-sheettab-button">
                                     <LayoutGrid width={16} height={16} aria-hidden="true" />
                                 </div>
                             </DropdownMenuTrigger>
@@ -154,7 +152,6 @@ export const SheetTab: React.FC = () => {
                     <div
                         id="fortune-sheettab-leftscroll"
                         className="fortune-sheettab-scroll"
-                        ref={leftScrollRef}
                         onClick={() => {
                             scrollBy(-scrollDelta);
                         }}
@@ -167,7 +164,6 @@ export const SheetTab: React.FC = () => {
                     <div
                         id="fortune-sheettab-rightscroll"
                         className="fortune-sheettab-scroll"
-                        ref={rightScrollRef}
                         onClick={() => {
                             scrollBy(scrollDelta);
                         }}
