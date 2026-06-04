@@ -2,12 +2,13 @@ import { useAuth } from '@workspace/lib/auth';
 import {
     occurrenceDateToString,
     parseOccurrenceDate,
+    truncateRRule,
     useCreateEvent,
     useDeleteEvent,
     useRsvp,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
-import { formatTime } from '@workspace/lib/date';
+import { formatEventWhen } from '@workspace/lib/date';
 import { useMyTeams } from '@workspace/lib/home';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
@@ -29,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { AttendeeList } from './attendee-editor';
-import { resolveCalendarName, truncateRRule } from './calendar-utils';
+import { resolveCalendarName } from './calendar-utils';
 import { EditEventDialog } from './edit-event-dialog';
 import { rruleToText } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
@@ -42,33 +43,6 @@ type EventDetailDialogProps = {
     calendar?: CalendarItem | null;
     sharedCalendar?: SharedCalendar | null;
 };
-
-function formatFullDate(date: Date): string {
-    return date.toLocaleDateString('en', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        timeZone: 'UTC',
-    });
-}
-
-function formatTimeRange(event: CalendarEventOccurrence): string {
-    if (event.allDay) {
-        const start = formatFullDate(event.startTime);
-        const endDate = new Date(event.endTime.getTime() - 86400_000);
-        if (event.startTime.toDateString() === endDate.toDateString()) {
-            return start;
-        }
-        return `${start} — ${formatFullDate(endDate)}`;
-    }
-    const startStr = event.startTime.toLocaleString('en', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-    });
-    return `${startStr} · ${formatTime(event.startTime)} – ${formatTime(event.endTime)}`;
-}
 
 export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedCalendar }: EventDetailDialogProps) {
     const { user } = useAuth();
@@ -236,7 +210,9 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                         <div className="flex items-start gap-3 text-sm">
                             <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                             <div className="flex flex-grow justify-between items-start">
-                                <span>{formatTimeRange(event)}</span>
+                                <span>
+                                    {formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone)}
+                                </span>
                                 {event.timezone && (
                                     <span className="text-xs text-muted-foreground">
                                         {event.timezone.split('/').pop()?.replace(/_/g, ' ')} time zone

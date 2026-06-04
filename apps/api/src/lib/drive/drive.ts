@@ -696,7 +696,7 @@ export default class Drive {
         // Team-owned drives: all team members have implicit full access
         // (same logic as canRead/canWrite in acl.ts)
         const parsed = parseOwnerId(this.owner.id);
-        if (parsed?.type === 'team') {
+        if (parsed.type === 'team') {
             const teamMembers = await getTeamMembers(parsed.id);
             for (const m of teamMembers) {
                 addMember(m.user.email);

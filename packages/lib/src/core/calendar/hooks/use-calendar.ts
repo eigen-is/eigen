@@ -11,7 +11,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateHomeSize } from '../../home';
-import { formatFreeBusyTitle, toISODateString } from '../calendar-utils';
+import { formatFreeBusyTitle, occurrenceDateToString } from '../calendar-utils';
 
 export const calendarKeys = {
     all: ['calendar'] as const,
@@ -165,12 +165,10 @@ export function useDeleteEvent(ownerId: string) {
 export function useCalendarAccess(ownerId: string, calendarId: string, enabled = true) {
     return useQuery({
         queryKey: calendarKeys.access(ownerId, calendarId),
-        queryFn: async (): Promise<{
-            ownerUserId: string;
-            shares: Array<{ targetId: string; permission: string }>;
-        }> => {
+        queryFn: async () => {
             const response = await calendarApi({ ownerId }).calendars({ calId: calendarId }).access.get();
-            return response.data as { ownerUserId: string; shares: Array<{ targetId: string; permission: string }> };
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!ownerId && !!calendarId && enabled,
@@ -213,7 +211,7 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
                             createByUserId: null,
                             createdAt: new Date(0),
                             updatedAt: new Date(0),
-                            occurrenceDate: toISODateString(block.startTime),
+                            occurrenceDate: occurrenceDateToString(block.startTime),
                         }),
                     );
                 }

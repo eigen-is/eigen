@@ -2,6 +2,8 @@ import { useAuth } from '@workspace/lib/auth';
 import {
     occurrenceDateToString,
     parseOccurrenceDate,
+    toISODateString,
+    truncateRRule,
     useCalendars,
     useCreateEvent,
     useDeleteEvent,
@@ -27,7 +29,7 @@ import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AttendeeEditor, AttendeeList } from './attendee-editor';
 import type { CalendarOption } from './calendar-utils';
-import { resolveCalendarName, toLocalDateString, truncateRRule } from './calendar-utils';
+import { resolveCalendarName } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
@@ -92,7 +94,6 @@ export function EditEventDialog({
     const [rruleString, setRruleString] = useState<string | null>(null);
     const [attendees, setAttendees] = useState<Attendee[]>([]);
     const [selectedCalKey, setSelectedCalKey] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
 
     const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
@@ -103,6 +104,7 @@ export function EditEventDialog({
     const updateEvent = useUpdateEvent(eventOwnerId);
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
     const deleteEventOnSource = useDeleteEvent(eventOwnerId);
+    const saving = updateEvent.isPending || createEvent.isPending || deleteEventOnSource.isPending;
 
     useEffect(() => {
         if (event && open) {
@@ -125,14 +127,14 @@ export function EditEventDialog({
             if (event.allDay) {
                 const sd = event.startTime;
                 const ed = new Date(event.endTime.getTime() - 86400_000);
-                setStartDate(toLocalDateString(new Date(sd.getUTCFullYear(), sd.getUTCMonth(), sd.getUTCDate())));
-                setEndDate(toLocalDateString(new Date(ed.getUTCFullYear(), ed.getUTCMonth(), ed.getUTCDate())));
+                setStartDate(toISODateString(new Date(sd.getUTCFullYear(), sd.getUTCMonth(), sd.getUTCDate())));
+                setEndDate(toISODateString(new Date(ed.getUTCFullYear(), ed.getUTCMonth(), ed.getUTCDate())));
                 setStartTime('00:00');
                 setEndTime('00:00');
             } else {
-                setStartDate(toLocalDateString(event.startTime));
+                setStartDate(toISODateString(event.startTime));
                 setStartTime(toLocalTimeString(event.startTime));
-                setEndDate(toLocalDateString(event.endTime));
+                setEndDate(toISODateString(event.endTime));
                 setEndTime(toLocalTimeString(event.endTime));
             }
         }
@@ -168,66 +170,61 @@ export function EditEventDialog({
     };
 
     const doSave = async (action: RecurringAction) => {
-        setIsLoading(true);
-        try {
-            let start: Date;
-            let end: Date;
+        let start: Date;
+        let end: Date;
 
-            if (allDay) {
-                start = new Date(`${startDate}T00:00:00Z`);
-                end = new Date(`${endDate}T00:00:00Z`);
-                end.setUTCDate(end.getUTCDate() + 1);
-            } else {
-                start = new Date(`${startDate}T${startTime}`);
-                end = new Date(`${endDate}T${endTime}`);
-            }
-
-            const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
-            const timezone = allDay ? null : (event.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
-            const updates = {
-                title: title.trim(),
-                startTime: start,
-                endTime: end,
-                allDay,
-                description: description.trim() || null,
-                location: location.trim() || null,
-                rrule: rruleString,
-                timezone,
-                data: Object.values(data).some((v) => v !== undefined) ? data : null,
-            };
-
-            if (calendarChanged) {
-                await moveEvent(updates);
-            } else if (action === 'all') {
-                const targetId = event.parentEventId || event.id;
-                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
-            } else if (action === 'this') {
-                await createEvent.mutateAsync({
-                    calendarId: event.calendarId,
-                    ...updates,
-                    allDay: Boolean(allDay),
-                    rrule: null,
-                    parentEventId: event.parentEventId || event.id,
-                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                });
-            } else if (action === 'this-and-following') {
-                const parentId = event.parentEventId || event.id;
-                const occDate = parseOccurrenceDate(event.occurrenceDate);
-                if (event.rrule) {
-                    const truncated = truncateRRule(event.rrule, occDate);
-                    await updateEvent.mutateAsync({ id: parentId, calendarId: event.calendarId, rrule: truncated });
-                }
-                await createEvent.mutateAsync({
-                    calendarId: event.calendarId,
-                    ...updates,
-                    allDay: Boolean(allDay),
-                });
-            }
-
-            onOpenChange(false);
-        } finally {
-            setTimeout(() => setIsLoading(false), 350);
+        if (allDay) {
+            start = new Date(`${startDate}T00:00:00Z`);
+            end = new Date(`${endDate}T00:00:00Z`);
+            end.setUTCDate(end.getUTCDate() + 1);
+        } else {
+            start = new Date(`${startDate}T${startTime}`);
+            end = new Date(`${endDate}T${endTime}`);
         }
+
+        const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
+        const timezone = allDay ? null : (event.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+        const updates = {
+            title: title.trim(),
+            startTime: start,
+            endTime: end,
+            allDay,
+            description: description.trim() || null,
+            location: location.trim() || null,
+            rrule: rruleString,
+            timezone,
+            data: Object.values(data).some((v) => v !== undefined) ? data : null,
+        };
+
+        if (calendarChanged) {
+            await moveEvent(updates);
+        } else if (action === 'all') {
+            const targetId = event.parentEventId || event.id;
+            await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
+        } else if (action === 'this') {
+            await createEvent.mutateAsync({
+                calendarId: event.calendarId,
+                ...updates,
+                allDay: Boolean(allDay),
+                rrule: null,
+                parentEventId: event.parentEventId || event.id,
+                recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+            });
+        } else if (action === 'this-and-following') {
+            const parentId = event.parentEventId || event.id;
+            const occDate = parseOccurrenceDate(event.occurrenceDate);
+            if (event.rrule) {
+                const truncated = truncateRRule(event.rrule, occDate);
+                await updateEvent.mutateAsync({ id: parentId, calendarId: event.calendarId, rrule: truncated });
+            }
+            await createEvent.mutateAsync({
+                calendarId: event.calendarId,
+                ...updates,
+                allDay: Boolean(allDay),
+            });
+        }
+
+        onOpenChange(false);
     };
 
     const handleStartTimeChange = (newStart: string) => {
@@ -237,14 +234,14 @@ export function EditEventDialog({
         const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
         const d = new Date(`${startDate}T00:00`);
         if (wraps) d.setDate(d.getDate() + 1);
-        setEndDate(toLocalDateString(d));
+        setEndDate(toISODateString(d));
     };
 
     const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
         setEndTime(newEnd);
         const d = new Date(`${startDate}T00:00`);
         if (dayOffset > 0) d.setDate(d.getDate() + dayOffset);
-        setEndDate(toLocalDateString(d));
+        setEndDate(toISODateString(d));
     };
 
     return (
@@ -417,11 +414,11 @@ export function EditEventDialog({
                     </div>
 
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+                        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSaveClick} disabled={isLoading || !title.trim()}>
-                            {isLoading ? 'Saving...' : 'Save'}
+                        <Button onClick={handleSaveClick} disabled={saving || !title.trim()}>
+                            {saving ? 'Saving...' : 'Save'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

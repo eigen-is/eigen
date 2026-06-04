@@ -42,13 +42,13 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
     const ownerId = user?.id || '';
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
     const [shares, setShares] = useState<CalendarShare[] | null>(null);
 
     const isEditMode = !!calendar;
     const createCalendar = useCreateCalendar(ownerId);
     const updateCalendar = useUpdateCalendar(ownerId);
     const deleteCalendar = useDeleteCalendar(ownerId);
+    const saving = createCalendar.isPending || updateCalendar.isPending;
 
     const form = useForm<CalendarFormValues>({
         resolver: zodResolver(calendarFormSchema),
@@ -73,7 +73,6 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
     }, [calendar, form, open, defaultColor]);
 
     const handleSubmit = async (data: CalendarFormValues) => {
-        setIsLoading(true);
         if (isEditMode) {
             await updateCalendar.mutateAsync({
                 id: calendar.id,
@@ -88,7 +87,6 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
             });
         }
         onOpenChange(false);
-        setTimeout(() => setIsLoading(false), 350);
     };
 
     const handleDelete = async () => {
@@ -125,7 +123,7 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
                                                             type="button"
                                                             className="h-9 w-9 rounded-md border border-input shrink-0"
                                                             style={{ backgroundColor: field.value }}
-                                                            disabled={isLoading}
+                                                            disabled={saving}
                                                         />
                                                     </PopoverTrigger>
                                                     <PopoverContent className="w-auto p-3" align="start">
@@ -154,7 +152,7 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
                                                     placeholder="Enter calendar name"
                                                     autoFocus
                                                     {...field}
-                                                    disabled={isLoading}
+                                                    disabled={saving}
                                                 />
                                             </FormControl>
                                             <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -176,7 +174,7 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
                                         type="button"
                                         variant="destructive"
                                         onClick={() => setShowDeleteConfirmation(true)}
-                                        disabled={isLoading}
+                                        disabled={saving}
                                         className="mr-auto"
                                     >
                                         Delete
@@ -186,12 +184,12 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
                                     type="button"
                                     variant="outline"
                                     onClick={() => onOpenChange(false)}
-                                    disabled={isLoading}
+                                    disabled={saving}
                                 >
                                     Cancel
                                 </Button>
-                                <Button type="submit" disabled={isLoading || form.formState.isSubmitting}>
-                                    {isLoading ? 'Saving...' : 'Save'}
+                                <Button type="submit" disabled={saving || form.formState.isSubmitting}>
+                                    {saving ? 'Saving...' : 'Save'}
                                 </Button>
                             </DialogFooter>
                         </form>

@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+// Import from the calendar-utils module directly (NOT the @workspace/lib/calendar barrel,
+// which re-exports React-query hooks) so the API stays free of React in its module graph.
+import { occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type {
     Attendee,
@@ -9,7 +12,7 @@ import type {
     EventData,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import { isExternalOwnerId } from '@workspace/lib/types/owner';
+import { isExternalOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, count, eq, gt, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -797,7 +800,7 @@ export class Calendar {
             const evt = dbEventToCalendarEvent(row);
             results.push({
                 ...evt,
-                occurrenceDate: formatOccurrenceDate(evt.startTime),
+                occurrenceDate: occurrenceDateToString(evt.startTime),
             });
         }
 
@@ -827,7 +830,7 @@ export class Calendar {
                     const modEvt = dbEventToCalendarEvent(modified);
                     results.push({
                         ...modEvt,
-                        occurrenceDate: formatOccurrenceDate(modEvt.startTime),
+                        occurrenceDate: occurrenceDateToString(modEvt.startTime),
                     });
                 } else {
                     results.push(occ);
@@ -1043,9 +1046,9 @@ export class Calendar {
             let matches = false;
             if (share.targetId.toLowerCase() === userEmail.toLowerCase()) {
                 matches = true;
-            } else if (share.targetId.startsWith('team_')) {
-                const teamId = share.targetId.substring(5);
-                if (teamIds.includes(teamId)) matches = true;
+            } else {
+                const parsedTarget = parseOwnerId(share.targetId);
+                if (parsedTarget.type === 'team' && teamIds.includes(parsedTarget.id)) matches = true;
             }
 
             if (matches) {
@@ -1524,7 +1527,7 @@ function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEnd: Date
                     ...event,
                     startTime,
                     endTime: new Date(startTime.getTime() + durationMs),
-                    occurrenceDate: formatOccurrenceDate(date),
+                    occurrenceDate: occurrenceDateToString(date),
                 });
             }
         }
@@ -1543,15 +1546,8 @@ function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEnd: Date
         ...event,
         startTime: date,
         endTime: new Date(date.getTime() + durationMs),
-        occurrenceDate: formatOccurrenceDate(date),
+        occurrenceDate: occurrenceDateToString(date),
     }));
-}
-
-function formatOccurrenceDate(date: Date): string {
-    const y = date.getUTCFullYear();
-    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(date.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
 }
 
 function constrainRRule(incoming: string | null, local: string | null): string | null {
@@ -1561,17 +1557,6 @@ function constrainRRule(incoming: string | null, local: string | null): string |
     const incomingUntil = RRule.parseString(incoming).until ?? null;
     if (incomingUntil && incomingUntil <= localUntil) return incoming;
     return truncateRRule(incoming, new Date(localUntil.getTime() + 86400_000));
-}
-
-function truncateRRule(rruleStr: string, beforeDate: Date): string {
-    const options = RRule.parseString(rruleStr);
-    const until = new Date(beforeDate);
-    until.setUTCDate(until.getUTCDate() - 1);
-    until.setUTCHours(23, 59, 59, 0);
-    options.until = until;
-    delete options.count;
-    const result = new RRule(options).toString();
-    return result.replace(/^RRULE:/, '');
 }
 
 function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): { startTime: Date; endTime: Date } {
