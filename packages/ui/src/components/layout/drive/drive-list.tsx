@@ -1,7 +1,6 @@
 import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb } from '@workspace/lib/drive';
-import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
-import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     ContextMenu,
@@ -17,46 +16,15 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
 import { cn } from '@workspace/ui/lib/utils';
-import { FolderPlus, type LucideIcon, Plus, UploadIcon } from 'lucide-react';
+import { Plus, UploadIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
+import { type CreateCallbacks, getCreateMenuItems } from './create-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { useMountLabel } from './drive-mount-list';
-
-type CreateCallbacks = {
-    onCreateFolder?: () => void;
-    onCreateEigenDoc?: Partial<Record<EigenDocType, () => void>>;
-    onUploadFile?: () => void;
-};
-
-type CreateMenuKind = 'folder' | 'upload' | EigenDocType;
-type CreateMenuDef = { kind: CreateMenuKind; icon: LucideIcon; label: string; buttonLabel: string };
-
-// Derive each eigendoc entry from the shared registries so adding a doc type is a
-// single-source edit (EIGEN_DOC_TYPE_INFO + EIGEN_DOC_ICONS), not a copy here.
-const CREATE_MENU_DEFS: CreateMenuDef[] = [
-    { kind: 'folder', icon: FolderPlus, label: 'New folder', buttonLabel: 'New folder' },
-    ...Object.values(EIGEN_DOC_TYPE_INFO).map((info): CreateMenuDef => {
-        const label = `New ${info.label.toLowerCase()}`;
-        return { kind: info.type, icon: EIGEN_DOC_ICONS[info.type], label, buttonLabel: label };
-    }),
-    { kind: 'upload', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload' },
-];
-
-function getCreateMenuItems(cb: CreateCallbacks) {
-    return CREATE_MENU_DEFS.flatMap((def) => {
-        const onSelect =
-            def.kind === 'folder'
-                ? cb.onCreateFolder
-                : def.kind === 'upload'
-                  ? cb.onUploadFile
-                  : cb.onCreateEigenDoc?.[def.kind];
-        return onSelect ? [{ ...def, onSelect }] : [];
-    });
-}
 
 type DriveListToolbarProps = CreateCallbacks & {
     ownerId: string;
