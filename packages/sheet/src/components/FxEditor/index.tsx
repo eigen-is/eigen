@@ -1,4 +1,3 @@
-import { FunctionSquare } from 'lucide-react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
@@ -205,17 +204,14 @@ export function FxEditor() {
 
     return (
         <aside>
-            <div className="flex flex-row h-7 border-b border-border">
+            <div className="flex flex-row h-7 border-b border-border bg-muted">
                 <NameBox />
-                <div className="flex items-center  pl-2 pr-2">
-                    <FunctionSquare width={18} height={18} aria-hidden="true" />
-                </div>
-                <div className="overflow-visible p-0 flex-1 flex items-center relative border-l border-border">
+                <div className="overflow-visible p-0 flex-1 flex items-center relative">
                     <ContentEditable
                         innerRef={(e) => {
                             refs.fxInput.current = e;
                         }}
-                        className="flex-1 h-full overflow-y-auto pl-0.5 text-xs leading-[14px] m-0 outline-none cursor-text whitespace-pre-wrap break-words bg-background pt-[7px] box-border text-foreground text-left"
+                        className="flex-1 max-h-full overflow-y-auto pl-0.5 text-xs m-0 outline-none cursor-text whitespace-pre-wrap break-words box-border text-foreground text-left"
                         role="textbox"
                         id="luckysheet-functionbox-cell"
                         aria-label={info.currentCellInput}
