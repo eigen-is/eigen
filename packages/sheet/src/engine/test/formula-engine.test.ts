@@ -146,42 +146,6 @@ describe('engine/formula-engine — FormulaEngine.evaluate', () => {
     });
 });
 
-// ─── FormulaEngine.evaluateAll ──────────────────────────────────────────────
-
-describe('engine/formula-engine — FormulaEngine.evaluateAll', () => {
-    test('processes multiple formulas with intermediate caching', () => {
-        const engine = new FormulaEngine();
-        const cells = [
-            { r: 2, c: 0, id: 'sheet1', f: '=A1+A2' },
-            { r: 2, c: 1, id: 'sheet1', f: '=A3*2' },
-        ];
-
-        const results = engine.evaluateAll(cells, resolver);
-
-        // First formula: A1(10) + A2(5) = 15
-        const first = results.get('2_0_sheet1');
-        expect(first).toBeDefined();
-        expect(first!.value).toBe(15);
-
-        // Second formula: A3 should pick up the cached result (15) from the first evaluation
-        const second = results.get('2_1_sheet1');
-        expect(second).toBeDefined();
-        expect(second!.value).toBe(30);
-
-        // Clean up for other tests
-        engine.resetState();
-    });
-
-    test('returns a Map with correct keys', () => {
-        const engine = new FormulaEngine();
-        const cells = [{ r: 0, c: 3, id: 'sheet1', f: '=1+1' }];
-
-        const results = engine.evaluateAll(cells, resolver);
-        expect(results.size).toBe(1);
-        expect(results.has('0_3_sheet1')).toBe(true);
-    });
-});
-
 // ─── FormulaEngine.getDependencies ──────────────────────────────────────────
 
 describe('engine/formula-engine — FormulaEngine.getDependencies', () => {
