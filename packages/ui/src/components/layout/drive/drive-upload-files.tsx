@@ -6,9 +6,12 @@ import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { useUpload } from '../../layout/upload-provider/upload-provider';
 import { uploadWithProgress } from '../upload-provider/upload-with-progress';
-import type { UploadResult } from './file-upload';
 
-export type { UploadResult };
+export type UploadResult = {
+    success: boolean;
+    fileName: string;
+    error?: unknown;
+};
 
 export type DriveUploadFilesProps = {
     path: DrivePath;
@@ -67,15 +70,10 @@ export function DriveUploadFiles({
                 formData.append('file', file);
             }
 
-            const headers = {
-                credentials: 'include',
-            };
-
             // Upload with progress tracking
             await uploadWithProgress({
                 url,
                 formData,
-                headers,
                 onProgress: (progress: number) => {
                     uploadHandler.updateProgress(progress);
                 },
