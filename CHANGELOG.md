@@ -3,6 +3,56 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.0.5] - 2026-06-04
+
+Version history release. Automatic, restorable version snapshots for every collaborative app
+and chat, new slide-editing tools (rotate, Alt-drag duplicate, align & distribute), a
+spreadsheet visual refresh, and storage, preview, and kanban-board performance work.
+
+### Added
+
+- **Version history** — Docs, Sheets, Slides, Stickies, and Chat now keep automatic version
+  snapshots. A "Version history" entry in the File menu lets you browse earlier versions and
+  restore any of them. For collaborative documents the restore applies live — everyone with the
+  document open converges to the restored content immediately, with no reload. Retention follows
+  an hourly/daily/weekly/monthly model, keeping fine-grained recent history while thinning older
+  snapshots
+- **Slides** — rotate objects with a dedicated rotate handle (hold Shift to snap to common
+  angles, with a live angle readout); resizing is now rotation-aware
+- **Slides** — hold Alt and drag an object to drop a duplicate
+- **Slides** — a new Arrange section in the properties sidebar aligns and distributes the
+  selected objects
+- **Admin** — when a configured S3 bucket has object versioning disabled or suspended, the
+  storage settings (setup wizard, server settings, and per-team mount create/edit) show a
+  warning recommending you enable versioning and a noncurrent-version lifecycle policy
+
+### Changed
+
+- **Drive** — folders and document containers now report their real size instead of always
+  showing 0; sizes are computed on demand, cached, and invalidated up the tree on writes
+- **Sheets** — visual refresh of the formula bar, column/row headers, the area around the grid,
+  and the bottom bar: theme colors throughout, an accent-tinted header highlight, and a single
+  compact bar combining the sheet tabs with the Count/Sum/Average selection stats. The all-sheets
+  switcher now shows a clear colour dot for colour-tagged sheets
+- **Slides, Stickies, Sheets** — canvas and toolbar styling aligned with Docs (rounded canvas
+  corners, consistent toolbar height)
+- **Stickies** — large boards stay smooth: cards are memoized and reused across updates, so
+  editing one card no longer re-renders the whole board
+- **Previews** — document, sheet, and slide previews appear instantly from the last cached
+  version and refresh in the background, instead of blocking on regeneration the first time you
+  view them after an edit
+- **Storage** — collaborative-document snapshots and updates are zstd-compressed on disk,
+  reducing the on-disk growth of Yjs documents
+
+### Fixed
+
+- **Sheets** — a formula referencing a cell in another sheet now refreshes correctly even when
+  that row has not been loaded into the grid yet
+- **Calendar** — attendee email addresses are validated when added to an event
+- **Reliability** — hardened collab- and chat-document storage (atomic backing-file creation;
+  sync failures are no longer silent) to reduce the risk of data loss, following a storage
+  incident investigation
+
 ## [0.0.4] - 2026-05-28
 
 Search release. A Mod+K command palette with full-text search across Drive and mail, native
