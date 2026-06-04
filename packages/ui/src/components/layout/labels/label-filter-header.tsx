@@ -1,9 +1,9 @@
+import { useDeleteLabel, useUpdateLabel } from '@workspace/lib/contacts';
 import type { Label } from '@workspace/lib/types/label';
 import { TooltipButton } from '@workspace/ui';
 import { Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { LabelDialog } from './label-dialog';
-import { useLabels } from './label-provider';
 
 export type LabelFilterHeaderProps = {
     labels: Label[];
@@ -13,7 +13,8 @@ export type LabelFilterHeaderProps = {
 export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
     const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const { updateLabel, deleteLabel } = useLabels();
+    const { mutateAsync: updateLabel } = useUpdateLabel();
+    const { mutateAsync: deleteLabel } = useDeleteLabel();
 
     const label = labels.find((l) => l.id === labelId);
 
@@ -33,9 +34,8 @@ export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
                 });
             }
             setDialogOpen(false);
-        } catch (error) {
-            console.error('Error updating label:', error);
-            // Keep dialog open on error so user can try again
+        } catch {
+            // Mutation's onError handles the toast; keep dialog open for retry
         }
     };
 
@@ -45,9 +45,8 @@ export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
                 await deleteLabel(selectedLabel.id);
                 setDialogOpen(false);
             }
-        } catch (error) {
-            console.error('Error deleting label:', error);
-            // Keep dialog open on error so user can try again
+        } catch {
+            // Mutation's onError handles the toast; keep dialog open for retry
         }
     };
 
