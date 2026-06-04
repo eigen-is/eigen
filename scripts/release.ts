@@ -44,6 +44,6 @@ Next steps:
   3. Commit and tag:
        git add package.json CHANGELOG.md
        git commit -m "chore: release v${next}"
-       git tag v${next}
+       git tag -a v${next} -m "v${next}"
        git push --follow-tags
 `);
