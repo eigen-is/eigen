@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { useLabels } from '@workspace/lib/contacts';
+import { formatDateWithYear } from '@workspace/lib/date';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
@@ -100,27 +101,12 @@ type ContactDetailProps = {
 export function ContactDetail({ contact }: ContactDetailProps) {
     const { data: labels = [], isLoading: labelsLoading, error: labelsError } = useLabels();
 
-    const formatPhoneNumber = (phone: string) => {
-        return phone;
-    };
-
     const formatAddress = (address: Address) => {
         if (!address) return '';
 
         const parts = [address.street, address.city, address.state, address.zipCode, address.country].filter(Boolean);
 
         return parts.join(', ');
-    };
-
-    const formatDate = (dateString?: string) => {
-        if (!dateString) return '';
-
-        const date = new Date(dateString);
-        return new Intl.DateTimeFormat('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-        }).format(date);
     };
 
     const contactLabels = contact.labels ? labels.filter((label) => contact.labels?.includes(label.id)) : [];
@@ -187,7 +173,7 @@ export function ContactDetail({ contact }: ContactDetailProps) {
                                     {contact.phone.map((phone: string, index: number) => (
                                         <div key={index} className="pl-6">
                                             <a href={`tel:${phone}`} className="text-primary hover:underline">
-                                                {formatPhoneNumber(phone)}
+                                                {phone}
                                             </a>
                                         </div>
                                     ))}
@@ -213,9 +199,7 @@ export function ContactDetail({ contact }: ContactDetailProps) {
                                         <Calendar className="h-4 w-4" />
                                         Birthday
                                     </h4>
-                                    <div className="pl-6">
-                                        {formatDate(new Date(contact.birthday || '').toISOString())}
-                                    </div>
+                                    <div className="pl-6">{formatDateWithYear(contact.birthday!)}</div>
                                 </div>
                             )}
                         </div>
