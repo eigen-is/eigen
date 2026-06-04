@@ -48,8 +48,8 @@ export const publicRouter = new Elysia({ name: 'public' })
         return {
             valid: true,
             email: entry.email,
-            orgName: config?.orgName ?? '',
-            mailDomain: config?.mailDomain ?? '',
+            orgName: config.orgName,
+            mailDomain: config.mailDomain,
         };
     })
     .post(
@@ -69,7 +69,7 @@ export const publicRouter = new Elysia({ name: 'public' })
         },
     )
     .get('/p/config', async () => {
-        const config = await getPublicConfig();
+        const config = getPublicConfig();
         const settings = getServerSettings();
         return { ...config, waitlistEnabled: settings.onboarding?.waitlist?.enabled ?? false };
     });

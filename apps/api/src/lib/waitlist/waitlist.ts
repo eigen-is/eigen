@@ -162,7 +162,7 @@ export async function registerFromInvite(
     if (usernameErr) throw new ApiError(400, usernameErr);
 
     const config = getPublicConfig();
-    const email = `${username.toLowerCase()}@${config?.mailDomain ?? 'localhost'}`;
+    const email = `${username.toLowerCase()}@${config.mailDomain}`;
 
     // Create user first — if it fails (e.g., username taken), the token stays valid
     const { auth } = await import('../auth/auth');
