@@ -326,7 +326,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             key={sheet.id}
             className={cn(
                 'relative flex shrink-0 items-center outline-hidden',
-                isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-sm transition-colors',
+                isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-xs transition-colors',
                 !isDropPlaceholder &&
                     (isActive
                         ? 'bg-background text-foreground'
