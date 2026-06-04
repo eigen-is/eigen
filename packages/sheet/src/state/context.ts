@@ -102,8 +102,6 @@ export type Context = {
     rowHeaderWidth: number;
     columnHeaderHeight: number;
     cellMainSrollBarSize: number;
-    sheetBarHeight: number;
-    statisticBarHeight: number;
     tableContentSize: number[];
 
     defaultcollen: number;
@@ -306,8 +304,6 @@ export function defaultContext(refs: RefValues): Context {
         rowHeaderWidth: 46,
         columnHeaderHeight: 20,
         cellMainSrollBarSize: 12,
-        sheetBarHeight: 31,
-        statisticBarHeight: 23,
         tableContentSize: [0, 0],
 
         defaultcollen: 73,

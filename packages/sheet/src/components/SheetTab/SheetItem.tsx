@@ -18,6 +18,7 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -49,10 +50,8 @@ type MenuItemComponents = {
 export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const [editing, setEditing] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
     const editable = useRef<HTMLSpanElement>(null);
     const [dragOver, setDragOver] = useState(false);
-    const [svgColor, setSvgColor] = useState<string>('#c3c3c3');
     const { showAlert, hideAlert } = useAlert();
     const { info, sheetconfig } = locale(context);
 
@@ -300,6 +299,8 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         });
     }, [isDropPlaceholder, setContext, sheet, refs.globalCache]);
 
+    const isActive = !isDropPlaceholder && context.currentSheetId === sheet.id;
+
     const tabDiv = (
         <div
             role="button"
@@ -323,21 +324,24 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             onDragStart={onDragStart}
             draggable={context.allowEdit && !editing}
             key={sheet.id}
-            ref={containerRef}
-            className={
-                isDropPlaceholder
-                    ? 'fortune-sheettab-placeholder'
-                    : `luckysheet-sheets-item${context.currentSheetId === sheet.id ? ' luckysheet-sheets-item-active' : ''}`
-            }
+            className={cn(
+                'relative flex shrink-0 items-center outline-hidden',
+                isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-sm transition-colors',
+                !isDropPlaceholder &&
+                    (isActive
+                        ? 'bg-background text-foreground'
+                        : 'text-muted-foreground hover:bg-background hover:text-foreground'),
+                dragOver && 'border-l-2 border-primary',
+                sheet.hide === 1 && 'hidden',
+            )}
             onClick={selectSheet}
             tabIndex={0}
-            style={{
-                borderLeft: dragOver ? '2px solid #0188fb' : '',
-                display: sheet.hide === 1 ? 'none' : '',
-            }}
         >
             <span
-                className="luckysheet-sheets-item-name"
+                className={cn(
+                    'px-0.5 outline-hidden',
+                    editing && 'min-w-2 select-text rounded-sm border border-input bg-background focus:border-ring',
+                )}
                 spellCheck="false"
                 suppressContentEditableWarning
                 contentEditable={isDropPlaceholder ? false : editing}
@@ -345,7 +349,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                 onBlur={onBlur}
                 onKeyDown={onKeyDown}
                 ref={editable}
-                style={dragOver ? { pointerEvents: 'none' } : {}}
+                style={dragOver ? { pointerEvents: 'none' } : undefined}
             >
                 {sheet.name}
             </span>
@@ -353,14 +357,12 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <span
-                            className="luckysheet-sheets-item-function"
-                            onMouseEnter={() => setSvgColor('#5c5c5c')}
-                            onMouseLeave={() => setSvgColor('#c3c3c3')}
+                            className="ml-0.5 inline-flex text-muted-foreground hover:text-foreground"
                             onClick={(e) => e.stopPropagation()}
                             tabIndex={0}
                             aria-label={info.sheetOptions}
                         >
-                            <ChevronDown width={12} height={12} style={{ color: svgColor }} aria-hidden="true" />
+                            <ChevronDown width={12} height={12} aria-hidden="true" />
                         </span>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="top" align="start" collisionPadding={8}>
@@ -368,7 +370,13 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
-            {!!sheet.color && <div className="luckysheet-sheets-item-color" style={{ background: sheet.color }} />}
+            {!!sheet.color && (
+                <span
+                    className="absolute inset-x-0 bottom-0 h-1"
+                    style={{ backgroundColor: sheet.color }}
+                    aria-hidden="true"
+                />
+            )}
         </div>
     );
 
