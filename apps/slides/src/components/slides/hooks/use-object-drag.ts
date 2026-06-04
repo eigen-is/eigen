@@ -1,9 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
+import { normalizeAngle, resizeRotatedRect, snapAngle } from '../transform-geometry';
 import { SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from '../types';
 import { type SnapLine, snapRect } from './use-snap-lines';
 
 export type DragMode =
     | 'move'
+    | 'rotate'
     | 'resize-se'
     | 'resize-sw'
     | 'resize-ne'
@@ -23,6 +25,7 @@ type ObjectDragState = {
     startObjY: number;
     startObjW: number;
     startObjH: number;
+    startRotation: number;
 };
 
 type GroupDragState = {
@@ -38,20 +41,24 @@ type DragPreview = {
     y: number;
     w: number;
     h: number;
+    rotation?: number;
 };
 
 type UseObjectDragProps = {
-    onUpdate: (objId: string, updates: { x?: number; y?: number; w?: number; h?: number }) => void;
+    onUpdate: (objId: string, updates: { x?: number; y?: number; w?: number; h?: number; rotation?: number }) => void;
+    onDuplicate?: (placements: { id: string; x: number; y: number }[]) => void;
     canvasRef: React.RefObject<HTMLDivElement | null>;
     vSnaps?: number[];
     hSnaps?: number[];
 };
 
-export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }: UseObjectDragProps) => {
+export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], hSnaps = [] }: UseObjectDragProps) => {
     const [activeSnapLines, setActiveSnapLines] = useState<SnapLine[]>([]);
     const [dragPreviews, setDragPreviews] = useState<DragPreview[]>([]);
     const lastSnappedRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
     const lastGroupDeltaRef = useRef<{ dx: number; dy: number } | null>(null);
+    const lastRotationRef = useRef<number | null>(null);
+    const rotateRef = useRef<{ centerX: number; centerY: number; startAngle: number } | null>(null);
     const snapsRef = useRef({ vSnaps, hSnaps });
     snapsRef.current = { vSnaps, hSnaps };
     const stateRef = useRef<ObjectDragState>({
@@ -63,6 +70,7 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
         startObjY: 0,
         startObjW: 0,
         startObjH: 0,
+        startRotation: 0,
     });
     const groupStateRef = useRef<GroupDragState | null>(null);
 
@@ -81,6 +89,7 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
             objY: number,
             objW: number,
             objH: number,
+            objRotation = 0,
         ) => {
             e.preventDefault();
             e.stopPropagation();
@@ -93,7 +102,20 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 startObjY: objY,
                 startObjW: objW,
                 startObjH: objH,
+                startRotation: objRotation,
             };
+            if (mode === 'rotate') {
+                const rect = canvasRef.current?.getBoundingClientRect();
+                if (rect) {
+                    const centerX = rect.left + ((objX + objW / 2) / SLIDE_BASE_WIDTH) * rect.width;
+                    const centerY = rect.top + ((objY + objH / 2) / SLIDE_BASE_HEIGHT) * rect.height;
+                    rotateRef.current = {
+                        centerX,
+                        centerY,
+                        startAngle: Math.atan2(e.clientY - centerY, e.clientX - centerX),
+                    };
+                }
+            }
             groupStateRef.current = null;
             const cursor = {
                 clientX: e.clientX,
@@ -105,6 +127,29 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
             const update = () => {
                 const s = stateRef.current;
                 if (!s.objId || !s.mode) return;
+
+                if (s.mode === 'rotate') {
+                    const r = rotateRef.current;
+                    if (!r) return;
+                    const angle = Math.atan2(cursor.clientY - r.centerY, cursor.clientX - r.centerX);
+                    const deltaDeg = ((angle - r.startAngle) * 180) / Math.PI;
+                    let next = s.startRotation + deltaDeg;
+                    if (cursor.shiftKey) next = snapAngle(next);
+                    if (lastRotationRef.current === next) return;
+                    lastRotationRef.current = next;
+                    setDragPreviews([
+                        {
+                            objId: s.objId,
+                            x: s.startObjX,
+                            y: s.startObjY,
+                            w: s.startObjW,
+                            h: s.startObjH,
+                            rotation: next,
+                        },
+                    ]);
+                    return;
+                }
+
                 const canvas = getCanvasSize();
                 const dx = ((cursor.clientX - s.startX) / canvas.w) * SLIDE_BASE_WIDTH;
                 const dy = ((cursor.clientY - s.startY) / canvas.h) * SLIDE_BASE_HEIGHT;
@@ -121,11 +166,12 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                     x = s.startObjX + dx;
                     y = s.startObjY + dy;
                 } else {
-                    const resized = applyResize(
+                    const resized = resizeRotatedRect(
                         s.mode,
                         dx,
                         dy,
                         { x: s.startObjX, y: s.startObjY, w: s.startObjW, h: s.startObjH },
+                        s.startRotation,
                         { fromCenter, keepAspect },
                     );
                     x = resized.x;
@@ -134,9 +180,10 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                     h = resized.h;
                 }
 
-                // Snapping per-edge would break the center mirror / aspect lock, so skip it while modifiers are held.
+                // Skip snapping while modifiers are held (center mirror / aspect lock) or when the object is
+                // rotated — the axis-aligned snap rect doesn't match a rotated object's visual box.
                 const snapped =
-                    fromCenter || keepAspect
+                    fromCenter || keepAspect || s.startRotation !== 0
                         ? { x, y, w, h, lines: [] as SnapLine[] }
                         : snapRect({ x, y, w, h }, snapsRef.current.vSnaps, snapsRef.current.hSnaps, s.mode);
 
@@ -173,8 +220,14 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
 
             const endDrag = () => {
                 const s = stateRef.current;
-                if (s.objId && lastSnappedRef.current) {
-                    onUpdate(s.objId, lastSnappedRef.current);
+                if (s.objId && s.mode === 'rotate' && lastRotationRef.current !== null) {
+                    onUpdate(s.objId, { rotation: normalizeAngle(lastRotationRef.current) });
+                } else if (s.objId && lastSnappedRef.current) {
+                    if (s.mode === 'move' && cursor.altKey && onDuplicate) {
+                        onDuplicate([{ id: s.objId, x: lastSnappedRef.current.x, y: lastSnappedRef.current.y }]);
+                    } else {
+                        onUpdate(s.objId, lastSnappedRef.current);
+                    }
                 }
                 cleanup();
                 document.removeEventListener('mousemove', handleMouseMove);
@@ -191,7 +244,7 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
             // Commit and tear down on focus loss (alt-tab, devtools opening) — browsers can drop mouseup.
             window.addEventListener('blur', endDrag);
         },
-        [getCanvasSize, onUpdate],
+        [getCanvasSize, onUpdate, onDuplicate],
     );
 
     const startGroupDrag = useCallback(
@@ -217,9 +270,17 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 startObjY: 0,
                 startObjW: 0,
                 startObjH: 0,
+                startRotation: 0,
+            };
+
+            const cursor = { altKey: e.altKey };
+            const handleKey = (ke: KeyboardEvent) => {
+                if (ke.key !== 'Alt') return;
+                cursor.altKey = ke.altKey;
             };
 
             const handleMouseMove = (me: MouseEvent) => {
+                cursor.altKey = me.altKey;
                 const g = groupStateRef.current;
                 if (!g) return;
                 const canvas = getCanvasSize();
@@ -251,19 +312,30 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 const g = groupStateRef.current;
                 const delta = lastGroupDeltaRef.current;
                 if (g && delta) {
-                    for (const o of g.objects) {
-                        onUpdate(o.id, { x: o.x + delta.dx, y: o.y + delta.dy });
+                    if (cursor.altKey && onDuplicate) {
+                        onDuplicate(g.objects.map((o) => ({ id: o.id, x: o.x + delta.dx, y: o.y + delta.dy })));
+                    } else {
+                        for (const o of g.objects) {
+                            onUpdate(o.id, { x: o.x + delta.dx, y: o.y + delta.dy });
+                        }
                     }
                 }
                 cleanup();
                 document.removeEventListener('mousemove', handleMouseMove);
                 document.removeEventListener('mouseup', handleMouseUp);
+                document.removeEventListener('keydown', handleKey);
+                document.removeEventListener('keyup', handleKey);
+                window.removeEventListener('blur', handleMouseUp);
             };
 
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
+            document.addEventListener('keydown', handleKey);
+            document.addEventListener('keyup', handleKey);
+            // Commit and tear down on focus loss (alt-tab, devtools opening) — browsers can drop mouseup.
+            window.addEventListener('blur', handleMouseUp);
         },
-        [getCanvasSize, onUpdate],
+        [getCanvasSize, onUpdate, onDuplicate],
     );
 
     const cleanup = useCallback(() => {
@@ -271,6 +343,8 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
         setDragPreviews([]);
         lastSnappedRef.current = null;
         lastGroupDeltaRef.current = null;
+        lastRotationRef.current = null;
+        rotateRef.current = null;
         groupStateRef.current = null;
         stateRef.current = {
             objId: null,
@@ -281,63 +355,9 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
             startObjY: 0,
             startObjW: 0,
             startObjH: 0,
+            startRotation: 0,
         };
     }, []);
 
     return { startDrag, startGroupDrag, activeSnapLines, dragPreviews };
 };
-
-const MIN_SIZE = 30;
-
-function applyResize(
-    mode: DragMode,
-    dx: number,
-    dy: number,
-    { x: ox, y: oy, w: ow, h: oh }: { x: number; y: number; w: number; h: number },
-    { fromCenter, keepAspect }: { fromCenter: boolean; keepAspect: boolean },
-) {
-    // Strip the 'resize-' prefix first — 'resize' itself contains 'e' and 's', poisoning the substring check.
-    const dir = mode?.split('-')[1] ?? '';
-    const xDir = dir.includes('e') ? 1 : dir.includes('w') ? -1 : 0;
-    const yDir = dir.includes('s') ? 1 : dir.includes('n') ? -1 : 0;
-    // Aspect lock only applies to corners — on edges only one axis is intentional.
-    const aspectLocked = keepAspect && xDir !== 0 && yDir !== 0 && ow > 0 && oh > 0;
-
-    let dw = xDir * dx;
-    let dh = yDir * dy;
-
-    if (aspectLocked) {
-        const aspect = ow / oh;
-        if (Math.abs(dw / ow) >= Math.abs(dh / oh)) {
-            dh = dw / aspect;
-        } else {
-            dw = dh * aspect;
-        }
-    }
-
-    const sizeFactor = fromCenter ? 2 : 1;
-    let w = ow + sizeFactor * dw;
-    let h = oh + sizeFactor * dh;
-
-    if (aspectLocked) {
-        // Clamp both dimensions through a single scale so the ratio survives the MIN_SIZE floor.
-        const scale = Math.max(w / ow, MIN_SIZE / ow, MIN_SIZE / oh);
-        w = ow * scale;
-        h = oh * scale;
-    } else {
-        w = Math.max(MIN_SIZE, w);
-        h = Math.max(MIN_SIZE, h);
-    }
-
-    let x: number;
-    let y: number;
-    if (fromCenter) {
-        x = ox + (ow - w) / 2;
-        y = oy + (oh - h) / 2;
-    } else {
-        x = xDir === -1 ? ox + ow - w : ox;
-        y = yDir === -1 ? oy + oh - h : oy;
-    }
-
-    return { x, y, w, h };
-}

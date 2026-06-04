@@ -10,6 +10,8 @@ import { useMarqueeSelect } from './hooks/use-marquee-select';
 import { type DragMode, useObjectDrag } from './hooks/use-object-drag';
 import { useSnapTargets } from './hooks/use-snap-lines';
 import { SlideObjectView } from './slide-object';
+import { SelectionChrome } from './slide-selection-chrome';
+import { normalizeAngle } from './transform-geometry';
 import { pxToPercent, SLIDE_ASPECT_RATIO, type SlideItem, type SlideObject } from './types';
 
 type SlideCanvasProps = {
@@ -38,6 +40,7 @@ type SlideCanvasProps = {
     onCommentReopen?: (chatName: string) => void;
     onCommentChangeColor?: (cardId: string, color: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
+    onDuplicateObjects?: (placements: { id: string; x: number; y: number }[]) => void;
 };
 
 export function SlideCanvas({
@@ -66,6 +69,7 @@ export function SlideCanvas({
     onCommentReopen,
     onCommentChangeColor,
     onCommentDelete,
+    onDuplicateObjects,
 }: SlideCanvasProps) {
     const { resolveMediaUrl } = useMediaResolver();
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -84,6 +88,7 @@ export function SlideCanvas({
 
     const { startDrag, startGroupDrag, activeSnapLines, dragPreviews } = useObjectDrag({
         onUpdate: onUpdateObject,
+        onDuplicate: onDuplicateObjects,
         canvasRef,
         vSnaps,
         hSnaps,
@@ -96,19 +101,37 @@ export function SlideCanvas({
     });
 
     const handleDragStart = useCallback(
-        (e: React.MouseEvent, objId: string, mode: 'move', x: number, y: number, w: number, h: number) => {
+        (
+            e: React.MouseEvent,
+            objId: string,
+            mode: 'move',
+            x: number,
+            y: number,
+            w: number,
+            h: number,
+            rotation: number,
+        ) => {
             if (mode === 'move' && multiSelectBounds && selectedObjectIds.includes(objId)) {
                 startGroupDrag(e, selectedObjects, multiSelectBounds);
             } else {
-                startDrag(e, objId, mode, x, y, w, h);
+                startDrag(e, objId, mode, x, y, w, h, rotation);
             }
         },
         [startDrag, startGroupDrag, selectedObjectIds, selectedObjects, multiSelectBounds],
     );
 
     const handleResizeStart = useCallback(
-        (e: React.MouseEvent, objId: string, mode: string, x: number, y: number, w: number, h: number) => {
-            startDrag(e, objId, mode as DragMode, x, y, w, h);
+        (
+            e: React.MouseEvent,
+            objId: string,
+            mode: string,
+            x: number,
+            y: number,
+            w: number,
+            h: number,
+            rotation: number,
+        ) => {
+            startDrag(e, objId, mode as DragMode, x, y, w, h, rotation);
         },
         [startDrag],
     );
@@ -162,12 +185,19 @@ export function SlideCanvas({
     );
 
     const dragPreviewMap = useMemo(() => {
-        const map = new Map<string, { x: number; y: number; w: number; h: number }>();
+        const map = new Map<string, { x: number; y: number; w: number; h: number; rotation?: number }>();
         for (const p of dragPreviews) {
             map.set(p.objId, p);
         }
         return map;
     }, [dragPreviews]);
+
+    const handleRotateStart = useCallback(
+        (e: React.MouseEvent, objId: string, x: number, y: number, w: number, h: number, rotation: number) => {
+            startDrag(e, objId, 'rotate', x, y, w, h, rotation);
+        },
+        [startDrag],
+    );
 
     return (
         <div
@@ -191,7 +221,14 @@ export function SlideCanvas({
                 {objects.map((obj) => {
                     const preview = dragPreviewMap.get(obj.id);
                     const displayObj = preview
-                        ? { ...obj, x: preview.x, y: preview.y, w: preview.w, h: preview.h }
+                        ? {
+                              ...obj,
+                              x: preview.x,
+                              y: preview.y,
+                              w: preview.w,
+                              h: preview.h,
+                              rotation: preview.rotation ?? obj.rotation,
+                          }
                         : obj;
                     const commentItems: Array<{ card: CommentCard; entry: CommentEntry | undefined }> = [];
                     for (const cardId of obj.commentCardIds ?? []) {
@@ -213,7 +250,6 @@ export function SlideCanvas({
                             onStartEditing={onStartEditing}
                             onUpdate={onUpdateObject}
                             onDragStart={handleDragStart}
-                            onResizeStart={handleResizeStart}
                             onCopy={onCopyObject}
                             onDelete={onDeleteObject}
                             onMoveUp={onMoveUp}
@@ -235,6 +271,46 @@ export function SlideCanvas({
                         />
                     );
                 })}
+                {canWrite &&
+                    selectedObjects
+                        .filter((o) => o.id !== editingObjectId)
+                        .map((obj) => {
+                            const preview = dragPreviewMap.get(obj.id);
+                            const displayObj = preview
+                                ? {
+                                      ...obj,
+                                      x: preview.x,
+                                      y: preview.y,
+                                      w: preview.w,
+                                      h: preview.h,
+                                      rotation: preview.rotation ?? obj.rotation,
+                                  }
+                                : obj;
+                            return (
+                                <SelectionChrome
+                                    key={`chrome-${obj.id}`}
+                                    obj={displayObj}
+                                    showRotate={selectedObjectIds.length === 1}
+                                    onResizeStart={handleResizeStart}
+                                    onRotateStart={handleRotateStart}
+                                />
+                            );
+                        })}
+                {dragPreviews.map((p) =>
+                    p.rotation === undefined ? null : (
+                        <div
+                            key={`angle-${p.objId}`}
+                            className="absolute z-50 pointer-events-none rounded bg-foreground px-1.5 py-0.5 text-xs text-background"
+                            style={{
+                                left: `${pxToPercent(p.x + p.w / 2, 'x')}%`,
+                                top: `${pxToPercent(p.y, 'y')}%`,
+                                transform: 'translate(-50%, -150%)',
+                            }}
+                        >
+                            {Math.round(normalizeAngle(p.rotation))}°
+                        </div>
+                    ),
+                )}
                 {activeSnapLines.map((line, i) => (
                     <div
                         key={i}
