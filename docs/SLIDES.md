@@ -47,6 +47,14 @@ Background color and image can be applied to a single slide, all following slide
 - `getVerticalAlignStyle(verticalAlign)` — flexbox alignment for text vertical positioning
 - `ReadOnlySlideObject` — read-only object renderer (used in presentation mode)
 
+Selection chrome (ring + resize handles + rotate handle) is drawn by
+`slide-selection-chrome.tsx` as a canvas-level overlay above all objects, so it
+never clips on rounded objects. The rotate handle drags to rotate around the
+object's center, Shift snaps to 15°, and a live degree readout shows during the
+drag; resizing a rotated object is rotation-aware (the opposite corner stays
+pinned). Alt/Opt-drag an object (or a multi-selection) drops a duplicate and
+leaves the original in place.
+
 ## File Structure
 
 ```
@@ -60,11 +68,13 @@ apps/slides/src/components/slides/
 ├── slide-object.tsx              # Object rendering + shared style helpers
 ├── slide-thumbnail.tsx           # Thumbnail preview
 ├── slide-properties-panel.tsx    # Right panel (transform, text, image, border, slide background)
+├── slide-selection-chrome.tsx    # Canvas-level overlay: ring + resize handles + rotate handle
+├── transform-geometry.ts         # Pure: rotated-resize math + angle helpers
 ├── hooks/
 │   ├── use-deck.ts               # Yjs document management (incl. addCommentToObject/removeCommentFromObject)
 │   ├── use-active-comments.ts    # Scan objects for comment IDs + anchor texts
 │   ├── use-slide-dnd.ts          # Slide reorder (dnd-kit)
-│   ├── use-object-drag.ts        # Canvas drag/resize
+│   ├── use-object-drag.ts        # Canvas drag/resize/rotate (+ alt-drag duplicate)
 │   ├── use-snap-lines.ts         # Alignment snapping
 │   └── use-marquee-select.ts     # Drag-to-select multiple objects
 ```
