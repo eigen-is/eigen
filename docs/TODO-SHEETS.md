@@ -14,10 +14,11 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 ### Core technical debt
 
-1. **CSS migrations** — 2 files remain (size verified 2026-04-28); then delete
+1. **CSS migrations** — 1 file remains (size verified 2026-04-28); then delete
    `src/css.d.ts`:
    - `SheetOverlay/index.css` (largest — split into multiple PRs).
-   - `SheetTab/index.css` (272 LOC).
+   - ~~`SheetTab/index.css` (272 LOC)~~ — **done**: migrated to Tailwind/shadcn
+     with the unified bottom-bar work and deleted.
    Before removing any class, grep `state/` for `luckysheet-*` selectors — see
    [DOM Selector Coupling](#dom-selector-coupling).
 
@@ -57,15 +58,14 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 ### Polish
 
-6. **`SheetTab` shadcn migration** — bottom tab bar
-   (`components/SheetTab/index.tsx` + `SheetItem.tsx`, ~580 LOC TSX) still
-   has its own ~272 LOC `index.css` (also part of TODO #1's CSS migration —
-   tackle them together). Add/delete/rename/hide/color all use bespoke
-   styling and dropdowns; should adopt shadcn `DropdownMenu` (rename, color,
-   hide, etc.) and `Tailwind` for layout. Drag-and-drop reorder + scroll
-   buttons can stay as plain buttons. `ContextMenu/SheetTab.tsx` (the
-   right-click on a tab) already uses shadcn — only the tab bar itself needs
-   the pass.
+6. ~~**`SheetTab` shadcn migration**~~ — **done.** The bottom tab bar and the
+   selection-stats readout were merged into one compact flat bar
+   (`components/SheetTab/index.tsx` + `SheetItem.tsx`), rebuilt in Tailwind +
+   theme tokens; `SheetTab/index.css` deleted; `calInfo` (Count/Sum/Average/
+   Max/Min) moved out of `Workbook/index.tsx` into `SheetTab`. The tab strip
+   collapses below the `sm` breakpoint to the add / all-sheets buttons + stats.
+   (The per-tab right-click menu already lived inline in `SheetItem.tsx` via
+   shadcn `ContextMenu`.)
 
 7. **`applyInsert` / `applyDelete` deep-clone the full target sheet** —
    `cloneDeep(target)` at `engine/rowcol.ts:187,393` clones every field
