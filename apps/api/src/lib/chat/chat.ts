@@ -8,6 +8,7 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Drive } from '../drive';
+import type { EffectiveMember } from '../drive/acl-propagation';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
 import { getUserByEmail } from '../user/';
@@ -140,7 +141,6 @@ export class ChatRoom {
             mountId: this.path.mountId,
         });
         this.home.broadcast(event);
-        this.notifySharedUsers(event);
 
         // Update comment index if this chat is embedded in a container document
         if (this.containerPath && type !== 'whisper') {
@@ -153,16 +153,17 @@ export class ChatRoom {
             });
         }
 
-        // Notifications: mentions + activity
+        // Notifications: mentions + activity. This guard also gates the cross-home
+        // SSE relay (notifySharedUsers) — harmless today since 'system' messages aren't
+        // postable via any route; revisit if that changes so the relay still fires for them.
         if (type !== 'system') {
+            const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
+            this.notifySharedUsers(event, members); // fire-and-forget, members already resolved
+
             const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
             const targetPath = this.containerPath ?? this.path;
             const body = content.length > 100 ? `${content.slice(0, 100)}...` : content;
-            const memberEmails = new Set(
-                (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id)).map((m) =>
-                    m.email.toLowerCase(),
-                ),
-            );
+            const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
 
             // Mention notifications (non-whisper only)
             const mentionedEmailSet = new Set<string>();
@@ -412,9 +413,10 @@ export class ChatRoom {
 
     // Uses getEffectiveMembers to resolve all users with access — handles inherited
     // ACL from parent folders, team membership, and container document ACL.
-    private async notifySharedUsers(event: SSEvent) {
-        const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
-        for (const member of members) {
+    // Pass pre-resolved members to avoid a redundant ACL walk when postMessage has already fetched them.
+    private async notifySharedUsers(event: SSEvent, members?: EffectiveMember[]) {
+        const resolved = members ?? (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id));
+        for (const member of resolved) {
             const user = await getUserByEmail(member.email);
             if (!user) continue;
             try {
