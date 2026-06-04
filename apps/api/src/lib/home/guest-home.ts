@@ -1,3 +1,4 @@
+import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { getGuestHomePath } from '../config/paths.ts';
 import { JsonStore, LocalFilesystem } from '../core';
 import { Drive } from '../drive';
@@ -20,7 +21,7 @@ export class GuestHome extends Home {
         return super.init(false);
     }
 
-    override async size() {
+    override async size(): Promise<HomeSizeResponse> {
         return {
             mailAndContacts: { used: 0, max: 0 },
             drive: { default: { used: 0, max: 0 } },

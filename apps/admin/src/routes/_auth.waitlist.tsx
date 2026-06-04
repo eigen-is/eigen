@@ -231,7 +231,7 @@ function WaitlistDetail({ entry }: { entry: WaitlistEntry }) {
                 {entry.inviteExpiresAt && (
                     <p>
                         Invite expires: {formatDateTime(entry.inviteExpiresAt)}
-                        {new Date(entry.inviteExpiresAt) < new Date() && (
+                        {entry.inviteExpiresAt < new Date() && (
                             <Badge variant="destructive" className="ml-2 text-xs">
                                 Expired
                             </Badge>

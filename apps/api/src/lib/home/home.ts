@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { time } from '../../utils/timing';
@@ -215,7 +216,7 @@ export class Home {
         });
     }
 
-    public async size(teamIds: string[] = []) {
+    public async size(teamIds: string[] = []): Promise<HomeSizeResponse> {
         const [mail, contacts, driveDefault] = await Promise.all([
             this._mail?.size(),
             this._contacts?.size(),
