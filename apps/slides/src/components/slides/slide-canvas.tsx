@@ -206,7 +206,7 @@ export function SlideCanvas({
         >
             <div
                 ref={canvasRef}
-                className="relative w-full shadow-lg rounded-sm overflow-hidden"
+                className="relative w-full shadow-lg rounded-lg overflow-hidden"
                 style={{
                     aspectRatio: SLIDE_ASPECT_RATIO,
                     maxHeight: '100%',

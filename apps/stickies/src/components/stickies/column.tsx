@@ -91,7 +91,7 @@ export function Column({
             <div
                 ref={contentRef}
                 className={cn(
-                    'flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-3 border',
+                    'flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-3 rounded-lg',
                     isDropAnimating ? 'bg-accent/10' : 'bg-background',
                 )}
             >

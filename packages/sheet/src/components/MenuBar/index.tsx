@@ -16,7 +16,7 @@ const triggerClass = cn('px-3 h-8 text-sm rounded-sm', 'hover:bg-muted focus-vis
 
 export function MenuBar({ leftItems, rightItems }: Props) {
     return (
-        <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-background">
+        <div className="flex items-center gap-1 px-4 h-12 border-b border-border bg-background">
             {leftItems}
             <DropdownMenu>
                 <DropdownMenuTrigger className={triggerClass}>Edit</DropdownMenuTrigger>
