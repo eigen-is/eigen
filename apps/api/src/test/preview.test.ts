@@ -1,5 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
+import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import { isExiftoolCandidate } from '../lib/preview/exiftool-preview';
+import { getTextPreview } from '../lib/preview/preview-cache';
 import { isVideoCandidate } from '../lib/preview/video-preview';
 import { generateImagePreview, saveThumbnail } from '../lib/shared/thumbnails';
 import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
@@ -357,5 +360,58 @@ describe('pruneOldVersions', () => {
         expect(existsSync(`${dir}/${id}-150.screen.webp`)).toBe(false);
         expect(existsSync(`${dir}/${keep}`)).toBe(true);
         expect(existsSync(`${dir}/${other}-100.json`)).toBe(true);
+    });
+});
+
+function createGetLocalDatabase(baseDir: string) {
+    return async <S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        relativePath: string,
+    ): Promise<ManagedDatabase<S>> => {
+        const db = new ManagedDatabase(config, `${baseDir}/${relativePath}`);
+        await db.open(0);
+        return db;
+    };
+}
+
+describe('getTextPreview (stale-while-revalidate)', () => {
+    test('serves the prior version while the current one regenerates, then converges on it', async () => {
+        const { mkdirSync } = await import('node:fs');
+        const tmpDir = `/tmp/eigen-stale-preview-test-${Date.now()}`;
+        mkdirSync(tmpDir, { recursive: true });
+
+        const config = createDefaultMountConfig('test-stale-preview', 'local-key');
+        const mount = new Mount('test-owner-id', tmpDir, config, createGetLocalDatabase(tmpDir));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        const v1 = Buffer.from('version one');
+        const fileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', v1.length, v1);
+        const path = await mount.getActivePath(fileId);
+
+        // Nothing cached yet — the first request generates the current version synchronously.
+        const first = await getTextPreview(mount, { ...path, updatedAt: new Date(1000) });
+        expect(first?.stale).toBe(false);
+        expect(first?.value.body).toContain('version one');
+
+        // Edit: new content under a newer updatedAt. Cache names are content-addressed by updatedAt,
+        // so the current version is now a miss while the prior one becomes a stale candidate.
+        await mount.writeFile(fileId, Buffer.from('version two'));
+        const edited = { ...path, updatedAt: new Date(2000) };
+
+        // The request serves the prior version immediately (the route marks it no-store) and kicks
+        // off a single background regeneration of the current one.
+        const stale = await getTextPreview(mount, edited);
+        expect(stale?.stale).toBe(true);
+        expect(stale?.value.body).toContain('version one');
+
+        // Background regeneration lands the fresh version; subsequent requests return it as current.
+        let fresh = await getTextPreview(mount, edited);
+        for (let i = 0; i < 40 && fresh?.stale !== false; i++) {
+            await Bun.sleep(25);
+            fresh = await getTextPreview(mount, edited);
+        }
+        expect(fresh?.stale).toBe(false);
+        expect(fresh?.value.body).toContain('version two');
     });
 });

@@ -10,7 +10,8 @@
 // 0x00, after which the three trailing magic bytes would have to match an improbable struct
 // sequence. decompressBlob sniffs the 4-byte magic and passes legacy/raw blobs through untouched
 // (the < 4 guard also covers the 2-byte empty-doc update [0, 0]); a false positive would throw
-// in the caller's existing try/catch and be skipped, never silently corrupted. No schema
+// in the caller's existing try/catch and skip that one row — losing one update's edits, or a
+// snapshot's consolidated pre-history — rather than silently corrupting state. No schema
 // migration — the BLOB column stores either form, and old/new rows coexist because each row is
 // decoded independently.
 

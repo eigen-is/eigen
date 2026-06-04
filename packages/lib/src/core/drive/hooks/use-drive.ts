@@ -596,7 +596,8 @@ export function useTextPreview(
         },
         enabled: enabled && !!pathId && !!ownerId && !!mountId,
         // Short window so a stale-while-revalidate preview (the previous version, served while
-        // the current one regenerates server-side) self-heals on the next refetch within ~30s.
+        // the current one regenerates server-side) self-heals: after 30s the query is stale, so
+        // the next refetch trigger (window focus or remount) fetches the fresh copy.
         staleTime: 1000 * 30,
     });
 }
