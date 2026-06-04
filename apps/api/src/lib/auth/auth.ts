@@ -118,7 +118,7 @@ export const auth = betterAuth({
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
-    logger: { disabled: isTest() && false },
+    logger: { disabled: isTest() },
     // Falls back to random UUID before setup is completed — intentional since sessions don't
     // need to persist across restarts during the pre-setup phase.
     secret: getServerConfig()?.secret || crypto.randomUUID(),
