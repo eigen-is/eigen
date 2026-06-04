@@ -1,8 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
-import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { getBackgroundStyle } from '@workspace/lib/background';
-import { useComments, useResolveComment } from '@workspace/lib/chat';
 import {
     needsReUpload,
     readEigenClipboard,
@@ -10,14 +8,7 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
-import {
-    useCardIdFromChatName,
-    useCommentCards,
-    useCreateCommentCard,
-    useOpenCommentCard,
-    useUnresolvedCommentCount,
-    useUpdateCommentCard,
-} from '@workspace/lib/comments';
+import { useCommentLifecycle } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -26,12 +17,11 @@ import {
     useUploadFile,
 } from '@workspace/lib/drive';
 import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
-import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
-import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { AddCardDialog, CardDialog, CommentContextMenu, CommentPanel } from '@workspace/ui';
+import { CardFormDialog, CommentLifecycleDialogs, CommentPanel } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
@@ -174,19 +164,19 @@ function SlideEditorInner({
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetObjId, setAddTargetObjId] = useState<string | null>(null);
-    const [openCardId, setOpenCardId] = useState<string | null>(null);
 
     const activeComments = useActiveComments(deck);
-    const { data: allComments = [] } = useComments(ownerId, path.mountId, path.id);
-    const resolveComment = useResolveComment(ownerId, path.mountId, path.id);
-    const cards = useCommentCards(yjsDoc, 'comments');
-    const createCard = useCreateCommentCard(ownerId, path.mountId, chatFolderId, yjsDoc, 'comments');
-    const updateCard = useUpdateCommentCard(yjsDoc, 'comments');
-    const commentContextMenu = useContextMenu<{ card: CommentCard; entry: CommentEntry | undefined }>();
-
-    const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeComments.ids);
-    const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, allComments, openCardId);
-    useCardIdFromChatName(cards, initialChatName, setOpenCardId);
+    const lifecycle = useCommentLifecycle({
+        ownerId,
+        mountId: path.mountId,
+        pathId: path.id,
+        chatFolderId,
+        doc: yjsDoc,
+        activeCardIds: activeComments.ids,
+        initialChatName,
+    });
+    const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
+    const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
@@ -626,16 +616,16 @@ function SlideEditorInner({
     );
 
     const handleSaveNew = useCallback(
-        async ({ title, description, color }: { title: string; description: string; color?: string }) => {
+        async (patch: { title?: string; description?: string; color?: string }) => {
             if (!addTargetObjId) return;
             const objId = addTargetObjId;
-            await createCard({ title, description, color }, (card) => {
+            await createCard({ title: addInitialTitle, ...patch }, (card) => {
                 addCommentToObject(objId, card.id);
             });
             setAddTargetObjId(null);
             setAddOpen(false);
         },
-        [addTargetObjId, createCard, addCommentToObject],
+        [addTargetObjId, addInitialTitle, createCard, addCommentToObject],
     );
 
     const activeSlide = activeSlideId ? deck.slides[activeSlideId] : null;
@@ -829,7 +819,7 @@ function SlideEditorInner({
                 )}
             </Column>
 
-            <AddCardDialog
+            <CardFormDialog
                 open={addOpen}
                 onOpenChange={(o) => {
                     setAddOpen(o);
@@ -837,35 +827,15 @@ function SlideEditorInner({
                 }}
                 initialTitle={addInitialTitle}
                 onSave={handleSaveNew}
-                titleLabel="New comment"
+                dialogTitle="New comment"
                 submitLabel="Add comment"
             />
 
-            <CardDialog
-                open={!!openCard}
-                onOpenChange={(o) => {
-                    if (!o) setOpenCardId(null);
-                }}
-                card={openCard}
-                entry={openEntry}
-                ownerId={ownerId}
-                mountId={path.mountId}
+            <CommentLifecycleDialogs
+                lifecycle={lifecycle}
+                path={path}
                 canWrite={canWrite}
-                copyLinkUrl={
-                    openCard?.chatName
-                        ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
-                        : undefined
-                }
-                showResolveAction
-                onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
-                onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
-            />
-
-            <CommentContextMenu
-                contextMenu={commentContextMenu}
-                onOpen={setOpenCardId}
-                onUpdateCard={updateCard}
-                onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                commentContextMenu={commentContextMenu}
                 onDelete={(cardId) => {
                     for (const obj of Object.values(deck.objects)) {
                         if (obj.commentCardIds?.includes(cardId)) {

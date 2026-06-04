@@ -152,7 +152,7 @@ export function ContactsList({
                 {isLoading ? (
                     <LoadingState />
                 ) : searchedContacts.length === 0 ? (
-                    <EmptyState message="No contacts found." />
+                    <EmptyState message="No contacts found" />
                 ) : (
                     <AlphabeticalList
                         items={searchedContacts}

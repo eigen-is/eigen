@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useCreatedByMeta } from '../comments/comment-dialog-meta';
 import { CommentThread } from '../comments/comment-thread';
 import { NoteCardDialog } from '../notes/note-card-dialog';
-import { CardSettingsDialog } from './card-settings-dialog';
+import { CardFormDialog } from './card-form-dialog';
 
 type CardDialogProps = {
     open: boolean;
@@ -73,14 +73,16 @@ export function CardDialog({
             </NoteCardDialog>
 
             {onUpdate && canWrite && (
-                <CardSettingsDialog
+                <CardFormDialog
                     key={card.id}
                     open={isSettingsOpen}
                     onOpenChange={setIsSettingsOpen}
-                    title={card.title}
-                    description={card.description}
-                    color={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
+                    mode="edit"
+                    initialTitle={card.title}
+                    initialDescription={card.description}
+                    initialColor={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
                     onSave={onUpdate}
+                    dialogTitle="Edit card"
                 />
             )}
         </>

@@ -55,7 +55,7 @@ function OrphansRoute() {
                         searchQuery={searchQuery}
                         activeUserId={userId}
                         onRowClick={(id) => navigate({ to: '/orphans', search: { userId: id } })}
-                        emptyMessage="No orphan users."
+                        emptyMessage="No orphan users"
                     />
                 </div>
             </Column>
@@ -65,11 +65,7 @@ function OrphansRoute() {
                 onBack={() => navigate({ to: '/orphans', search: {} })}
                 toolbar={user ? <AdminUserDetailToolbar user={user} onDelete={handleDelete} /> : undefined}
             >
-                {user ? (
-                    <AdminUserDetail user={user} onDelete={handleDelete} />
-                ) : (
-                    <EmptyState message="Select a user to view details" />
-                )}
+                {user ? <AdminUserDetail user={user} /> : <EmptyState message="Select a user to view details" />}
             </Column>
         </ColumnLayout>
     );

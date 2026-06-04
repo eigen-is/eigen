@@ -1,11 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCollabDocumentInfo } from '@workspace/lib/collab';
-import { usePaletteDocSelection } from '@workspace/lib/command-palette';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEigenDocEditorRoute } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
 import { CollaborativeEditor } from '../components/docs/editor';
 
 export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
@@ -18,37 +14,22 @@ export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
 function CollaborativeTextEditor() {
     const { ownerId, mountId, pathId } = Route.useParams();
     const { chat } = Route.useSearch();
-    const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
-    const { setDocumentTitle } = useLayout();
-    const [accessDialogOpen, setAccessDialogOpen] = useState(false);
-
-    useEffect(() => {
-        const title = docInfo?.path ? stripEigenExtension(docInfo.path.name) : '';
-        setDocumentTitle(title);
-        return () => setDocumentTitle('');
-    }, [docInfo?.path?.name, setDocumentTitle]);
-
-    // Publish the open document as a 1-item palette selection so item-aware commands
-    // (Mail to…, Copy link, …) surface from anywhere.
-    usePaletteDocSelection(docInfo?.path);
-
-    const handleAccessDialogOpen = useCallback(() => {
-        setAccessDialogOpen(true);
-    }, [setAccessDialogOpen]);
-
-    const mediaFolderId = useMemo(() => {
-        return docInfo?.folderContents?.find((item) => item.name === 'media')?.id ?? null;
-    }, [docInfo?.folderContents]);
-
-    const chatFolderId = useMemo(() => {
-        return docInfo?.folderContents?.find((item) => item.name === 'chat')?.id ?? null;
-    }, [docInfo?.folderContents]);
+    const {
+        docInfo,
+        isLoading,
+        path,
+        mediaFolderId,
+        chatFolderId,
+        accessDialogOpen,
+        openAccessDialog,
+        setAccessDialogOpen,
+    } = useEigenDocEditorRoute(ownerId, mountId, pathId);
 
     if (isLoading) {
         return <LoadingState />;
     }
 
-    if (!docInfo?.canRead || !docInfo.path) {
+    if (!docInfo?.canRead || !path) {
         return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
     }
 
@@ -56,15 +37,15 @@ function CollaborativeTextEditor() {
         <>
             <div className="flex-1 overflow-hidden">
                 <CollaborativeEditor
-                    path={docInfo.path}
+                    path={path}
                     access={docInfo}
                     mediaFolderId={mediaFolderId}
                     chatFolderId={chatFolderId}
-                    onAccessDialogOpen={handleAccessDialogOpen}
+                    onAccessDialogOpen={openAccessDialog}
                     initialChatName={chat}
                 />
             </div>
-            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path} />
+            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={path} />
         </>
     );
 }

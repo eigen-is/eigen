@@ -1,52 +1,34 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useDeleteUser, useRemoveMember, useUpdateMemberRole } from '@workspace/lib/admin';
+import { useDeleteUser, useUpdateMemberRole } from '@workspace/lib/admin';
 import { formatDate } from '@workspace/lib/date';
 import type { OrgMember } from '@workspace/lib/types/admin';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { DangerZone } from '@workspace/ui/components/layout/delete/danger-zone';
-import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { KeyRound, Trash2 } from 'lucide-react';
+import { KeyRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ResetPasswordDialog } from './reset-password-dialog';
 
 type MemberDetailToolbarProps = {
     member: OrgMember;
-    organizationId?: string;
 };
 
-export function MemberDetailToolbar({ member, organizationId }: MemberDetailToolbarProps) {
-    const [showRemove, setShowRemove] = useState(false);
+export function MemberDetailToolbar({ member }: MemberDetailToolbarProps) {
     const [showResetPassword, setShowResetPassword] = useState(false);
-    const removeMember = useRemoveMember(organizationId);
-    const navigate = useNavigate();
-
-    const handleRemove = async () => {
-        await removeMember.mutateAsync(member.id);
-        navigate({ to: '/members', search: {} });
-    };
 
     if (member.role === 'owner') return null;
 
     return (
         <div className="flex items-center gap-1 ml-auto">
             <TooltipButton icon={KeyRound} tooltipText="Reset password" onClick={() => setShowResetPassword(true)} />
-            <TooltipButton icon={Trash2} tooltipText="Remove from organization" onClick={() => setShowRemove(true)} />
             <ResetPasswordDialog
                 open={showResetPassword}
                 onOpenChange={setShowResetPassword}
                 userId={member.userId}
                 userName={member.name}
-            />
-            <DeleteDialog
-                open={showRemove}
-                onOpenChange={setShowRemove}
-                title="Remove Member"
-                description={`Remove ${member.name} from the organization? The user account and data will be preserved.`}
-                onDelete={handleRemove}
             />
         </div>
     );

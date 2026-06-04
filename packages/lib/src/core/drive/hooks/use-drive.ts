@@ -129,21 +129,24 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
 }
 
 // GET MIME CONTENTS (aggregates over all mounts)
-export function useMimeContent(ownerId: string, mimeType: string) {
-    return useQuery<DrivePath[]>({
+// Factored query config — reused by useMimeContent and useTeamsHaveChats (use-chat.ts)
+export function mimeContentQueryConfig(ownerId: string, mimeType: string) {
+    return {
         queryKey: driveKeys.mime(ownerId, mimeType),
-        queryFn: async () => {
+        queryFn: async (): Promise<DrivePath[]> => {
             if (!mimeType) return [];
             const response = await driveApi({ ownerId }).mime({ mimeType }).get();
-            if (response.error) {
-                throw new AppError(response);
-            }
+            if (response.error) throw new AppError(response);
             return response.data || [];
         },
         enabled: !!mimeType && !!ownerId,
         retry: 1,
         staleTime: 1000 * 60 * 5, // 5 minutes
-    });
+    };
+}
+
+export function useMimeContent(ownerId: string, mimeType: string) {
+    return useQuery<DrivePath[]>(mimeContentQueryConfig(ownerId, mimeType));
 }
 
 // GET MIME CONTENTS scoped to a single mount
@@ -503,6 +506,7 @@ export function useEffectiveMembers(ownerId: string, mountId: string, pathId: st
             return response.data || [];
         },
         enabled: !!pathId && !!ownerId && !!mountId,
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -574,6 +578,7 @@ export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
             }
         },
         enabled: !!ownerId,
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -607,11 +612,12 @@ export function useListTrash(ownerId: string, mountId: string) {
     return useQuery({
         queryKey: driveKeys.trashList(ownerId, mountId),
         queryFn: async () => {
-            const { data, error } = await driveApi({ ownerId })({ mountId }).trash.get();
-            if (error) throw error;
-            return data;
+            const response = await driveApi({ ownerId })({ mountId }).trash.get();
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!ownerId && !!mountId,
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 

@@ -7,6 +7,7 @@ import { LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
 import { Label } from '@workspace/ui/components/label';
 import { EigenLoader } from '@workspace/ui/components/layout/braket/eigen-loader';
 import { CheckCircle2 } from 'lucide-react';
@@ -222,19 +223,18 @@ export function SetupWizard() {
 
                             <div>
                                 <Label htmlFor="adminUsername">Username</Label>
-                                <div className="mt-1.5 flex">
-                                    <Input
+                                <InputGroup className="mt-1.5">
+                                    <InputGroupInput
                                         id="adminUsername"
                                         value={adminUsername}
                                         onChange={(e) => setAdminUsername(e.target.value)}
                                         placeholder="admin"
                                         required
-                                        className="rounded-r-none"
                                     />
-                                    <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-input bg-muted text-muted-foreground text-sm">
-                                        @{effectiveMailDomain}
-                                    </span>
-                                </div>
+                                    <InputGroupAddon align="inline-end">
+                                        <InputGroupText>@{effectiveMailDomain}</InputGroupText>
+                                    </InputGroupAddon>
+                                </InputGroup>
                             </div>
 
                             <div>

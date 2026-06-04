@@ -3,7 +3,6 @@ import type { AdminUser } from '@workspace/lib/types/admin';
 import { Badge } from '@workspace/ui/components/badge';
 import { AlphabeticalList } from '@workspace/ui/components/layout/alphabetical-list';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
-import { DangerZone } from '@workspace/ui/components/layout/delete/danger-zone';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
@@ -107,10 +106,9 @@ export function AdminUserDetailToolbar({ user, onDelete }: AdminUserDetailToolba
 
 type AdminUserDetailProps = {
     user: AdminUser;
-    onDelete: () => void;
 };
 
-export function AdminUserDetail({ user, onDelete }: AdminUserDetailProps) {
+export function AdminUserDetail({ user }: AdminUserDetailProps) {
     return (
         <div className="p-6 space-y-6">
             <UserDetailHero name={user.name} email={user.email} imageUrl={user.image} subtitle={user.email} />
@@ -127,14 +125,6 @@ export function AdminUserDetail({ user, onDelete }: AdminUserDetailProps) {
                     <p className="text-sm">{formatDate(user.createdAt)}</p>
                 </div>
             </div>
-
-            <DangerZone
-                description="Permanently delete this user account and all associated data."
-                buttonLabel="Delete user"
-                confirmTitle="Delete User"
-                confirmDescription={`Permanently delete ${user.name} (${user.email}) and all their data? This cannot be undone.`}
-                onConfirm={onDelete}
-            />
         </div>
     );
 }

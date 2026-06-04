@@ -55,7 +55,7 @@ function GuestsRoute() {
                         searchQuery={searchQuery}
                         activeUserId={userId}
                         onRowClick={(id) => navigate({ to: '/guests', search: { userId: id } })}
-                        emptyMessage="No guest users."
+                        emptyMessage="No guest users"
                     />
                 </div>
             </Column>
@@ -65,11 +65,7 @@ function GuestsRoute() {
                 onBack={() => navigate({ to: '/guests', search: {} })}
                 toolbar={user ? <AdminUserDetailToolbar user={user} onDelete={handleDelete} /> : undefined}
             >
-                {user ? (
-                    <AdminUserDetail user={user} onDelete={handleDelete} />
-                ) : (
-                    <EmptyState message="Select a guest to view details" />
-                )}
+                {user ? <AdminUserDetail user={user} /> : <EmptyState message="Select a guest to view details" />}
             </Column>
         </ColumnLayout>
     );

@@ -1,11 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useCollabDocumentInfo } from '@workspace/lib/collab';
-import { usePaletteDocSelection } from '@workspace/lib/command-palette';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEigenDocEditorRoute } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
+import { useCallback } from 'react';
 import { StickiesBoard } from '../components/stickies/board';
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
@@ -19,23 +16,8 @@ function StickiesRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
     const { chat } = Route.useSearch();
     const navigate = useNavigate();
-    const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
-    const { setDocumentTitle } = useLayout();
-    const [accessDialogOpen, setAccessDialogOpen] = useState(false);
-
-    useEffect(() => {
-        const title = docInfo?.path ? stripEigenExtension(docInfo.path.name) : '';
-        setDocumentTitle(title);
-        return () => setDocumentTitle('');
-    }, [docInfo?.path?.name, setDocumentTitle]);
-
-    // Publish the open document as a 1-item palette selection so item-aware commands
-    // (Mail to…, Copy link, …) surface from anywhere.
-    usePaletteDocSelection(docInfo?.path);
-
-    const handleAccessDialogOpen = useCallback(() => {
-        setAccessDialogOpen(true);
-    }, [setAccessDialogOpen]);
+    const { docInfo, isLoading, path, chatFolderId, accessDialogOpen, openAccessDialog, setAccessDialogOpen } =
+        useEigenDocEditorRoute(ownerId, mountId, pathId);
 
     const handleClearChat = useCallback(() => {
         navigate({
@@ -46,12 +28,8 @@ function StickiesRoute() {
         });
     }, [navigate, ownerId, mountId, pathId]);
 
-    const chatFolderId = useMemo(() => {
-        return docInfo?.folderContents?.find((item) => item.name === 'chat')?.id ?? null;
-    }, [docInfo?.folderContents]);
-
     if (isLoading) return <LoadingState />;
-    if (!docInfo?.canRead || !docInfo.path) {
+    if (!docInfo?.canRead || !path) {
         return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
     }
 
@@ -59,14 +37,14 @@ function StickiesRoute() {
         <>
             <StickiesBoard
                 ownerId={ownerId}
-                path={docInfo.path}
+                path={path}
                 canWrite={docInfo.canWrite}
                 chatFolderId={chatFolderId}
-                onAccessDialogOpen={handleAccessDialogOpen}
+                onAccessDialogOpen={openAccessDialog}
                 initialChatName={chat}
                 onClearInitialChat={handleClearChat}
             />
-            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path} />
+            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={path} />
         </>
     );
 }

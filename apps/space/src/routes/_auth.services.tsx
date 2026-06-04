@@ -16,6 +16,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { CopyInput } from '@workspace/ui/components/layout/copy-input';
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 import { Calendar, FolderTree, KeyRound, Mail, Plus, Trash2 } from 'lucide-react';
@@ -135,11 +136,7 @@ function ServicesComponent() {
 
     return (
         <ColumnLayout>
-            <Column
-                id="detail"
-                width="flex"
-                toolbar={<span className="text-sm text-foreground font-normal">Integrations</span>}
-            >
+            <Column id="detail" width="flex" toolbar={<ToolbarTitle>Integrations</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
                     <div className="w-full max-w-3xl p-8">
                         <p className="text-sm text-muted-foreground mb-6">

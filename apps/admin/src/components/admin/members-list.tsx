@@ -87,7 +87,7 @@ export function MembersList({ members, searchQuery, activeMemberId, onRowClick }
     });
 
     if (filteredMembers.length === 0) {
-        return <EmptyState message={searchQuery ? 'No members match your search.' : 'No members found.'} />;
+        return <EmptyState message={searchQuery ? 'No members match your search' : 'No members found'} />;
     }
 
     return (

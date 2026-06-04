@@ -54,25 +54,7 @@ export function useUpdateMemberRole(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.members(organizationId ?? '') });
-        },
-        onError: onMutationError,
-    });
-}
-
-export function useRemoveMember(organizationId?: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (memberIdOrEmail: string) => {
-            const { data, error } = await authClient.organization.removeMember({
-                memberIdOrEmail,
-                organizationId,
-            });
-            if (error) throw new Error(error.message ?? 'Failed to remove member');
-            return data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.members(organizationId ?? '') });
+            invalidateAdminMembers(queryClient, organizationId ?? '');
         },
         onError: onMutationError,
     });
@@ -89,7 +71,7 @@ export function useDeleteUser(organizationId?: string) {
         onSuccess: () => {
             invalidateAdminUsers(queryClient);
             if (organizationId) {
-                queryClient.invalidateQueries({ queryKey: adminKeys.members(organizationId) });
+                invalidateAdminMembers(queryClient, organizationId);
             }
         },
         onError: onMutationError,
@@ -98,6 +80,10 @@ export function useDeleteUser(organizationId?: string) {
 
 export function invalidateAdminUsers(queryClient: QueryClient): void {
     queryClient.invalidateQueries({ queryKey: adminKeys.users() });
+}
+
+export function invalidateAdminMembers(queryClient: QueryClient, organizationId: string): void {
+    queryClient.invalidateQueries({ queryKey: adminKeys.members(organizationId) });
 }
 
 export function useResetUserPassword() {
@@ -140,7 +126,7 @@ export function useCreateUser(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.members(organizationId ?? '') });
+            invalidateAdminMembers(queryClient, organizationId ?? '');
         },
         onError: onMutationError,
     });

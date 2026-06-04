@@ -22,6 +22,8 @@ export function DeleteDialog({
     cancelText = 'Cancel',
     deleteText = 'Delete',
 }: DeleteDialogProps) {
+    // Confirmation prompts read as questions; append "?" unless the caller already terminated the sentence.
+    const terminator = /[.?!]$/.test(description) ? '' : '?';
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
@@ -31,9 +33,10 @@ export function DeleteDialog({
                         {itemName ? (
                             <>
                                 {description} <strong>{itemName}</strong>
+                                {terminator}
                             </>
                         ) : (
-                            description
+                            `${description}${terminator}`
                         )}
                     </DialogDescription>
                 </DialogHeader>

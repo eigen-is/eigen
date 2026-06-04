@@ -62,7 +62,7 @@ function ChatIndex() {
         );
     }
 
-    return <EmptyState message="Select a chat from the sidebar" />;
+    return <EmptyState message="Select a chat to view details" />;
 }
 
 export const Route = createFileRoute('/_auth/')({

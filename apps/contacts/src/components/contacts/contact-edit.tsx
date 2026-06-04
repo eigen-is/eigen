@@ -20,7 +20,7 @@ import { uploadWithProgress } from '@workspace/ui/components/layout/upload-provi
 import { Textarea } from '@workspace/ui/components/textarea';
 import { Camera, Plus, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 // Define the form schema
@@ -70,6 +70,27 @@ export function ContactEditToolbar({ isNew }: ContactEditToolbarProps) {
     );
 }
 
+type RepeatableFieldProps = {
+    label: React.ReactNode;
+    onAdd: () => void;
+    children: React.ReactNode;
+};
+
+function RepeatableField({ label, onAdd, children }: RepeatableFieldProps) {
+    return (
+        <div>
+            <div className="flex items-center justify-between">
+                <FormLabel className="text-base">{label}</FormLabel>
+                <Button type="button" variant="outline" size="sm" className="h-7 gap-1" onClick={onAdd}>
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="text-xs">Add</span>
+                </Button>
+            </div>
+            <div className="grid gap-3 mt-2">{children}</div>
+        </div>
+    );
+}
+
 type ContactEditProps = {
     contact: Contact;
     onSave: (data: ContactFormValues) => void;
@@ -98,6 +119,31 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
             notes: contact?.notes || '',
             labels: contact?.labels || [],
         },
+    });
+
+    const {
+        fields: emailFields,
+        append: appendEmail,
+        remove: removeEmail,
+    } = useFieldArray({
+        control: form.control,
+        name: 'email' as never,
+    });
+    const {
+        fields: phoneFields,
+        append: appendPhone,
+        remove: removePhone,
+    } = useFieldArray({
+        control: form.control,
+        name: 'phone' as never,
+    });
+    const {
+        fields: addressFields,
+        append: appendAddress,
+        remove: removeAddress,
+    } = useFieldArray({
+        control: form.control,
+        name: 'address',
     });
 
     const handleSubmit = form.handleSubmit(async (data) => {
@@ -354,113 +400,71 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                 </div>
 
                                 <div className="grid gap-6">
-                                    <div>
-                                        <div className="flex items-center justify-between">
-                                            <FormLabel className="text-base">
-                                                Email Addresses<span className="text-muted-foreground">*</span>
-                                            </FormLabel>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-7 gap-1"
-                                                onClick={() => {
-                                                    const currentEmails = form.getValues('email');
-                                                    form.setValue('email', [...currentEmails, '']);
-                                                }}
-                                            >
-                                                <Plus className="h-3.5 w-3.5" />
-                                                <span className="text-xs">Add</span>
-                                            </Button>
-                                        </div>
-                                        <div className="grid gap-3 mt-2">
-                                            {form.watch('email').map((_, index) => (
-                                                <div key={index} className="flex gap-2 items-center">
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`email.${index}`}
-                                                        render={({ field }) => (
-                                                            <FormItem className="flex-1 space-y-0">
-                                                                <FormControl>
-                                                                    <Input {...field} placeholder="Email address" />
-                                                                </FormControl>
-                                                            </FormItem>
-                                                        )}
-                                                    />
-
-                                                    {form.watch('email').length > 1 && (
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-7 w-7 p-0"
-                                                            onClick={() => {
-                                                                const currentEmails = form.getValues('email');
-                                                                const newEmails = [...currentEmails];
-                                                                newEmails.splice(index, 1);
-                                                                form.setValue('email', newEmails);
-                                                            }}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                    <RepeatableField
+                                        label={
+                                            <>
+                                                Email Addresses
+                                                <span className="text-muted-foreground">*</span>
+                                            </>
+                                        }
+                                        onAdd={() => appendEmail('' as never)}
+                                    >
+                                        {emailFields.map((item, index) => (
+                                            <div key={item.id} className="flex gap-2 items-center">
+                                                <FormField
+                                                    control={form.control}
+                                                    name={`email.${index}`}
+                                                    render={({ field }) => (
+                                                        <FormItem className="flex-1 space-y-0">
+                                                            <FormControl>
+                                                                <Input {...field} placeholder="Email address" />
+                                                            </FormControl>
+                                                        </FormItem>
                                                     )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                                                />
+                                                {emailFields.length > 1 && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7 w-7 p-0"
+                                                        onClick={() => removeEmail(index)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </RepeatableField>
 
-                                    <div>
-                                        <div className="flex items-center justify-between">
-                                            <FormLabel className="text-base">Phone Numbers</FormLabel>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-7 gap-1"
-                                                onClick={() => {
-                                                    const currentPhones = form.getValues('phone');
-                                                    form.setValue('phone', [...currentPhones, '']);
-                                                }}
-                                            >
-                                                <Plus className="h-3.5 w-3.5" />
-                                                <span className="text-xs">Add</span>
-                                            </Button>
-                                        </div>
-                                        <div className="grid gap-3 mt-2">
-                                            {form.watch('phone').map((_, index) => (
-                                                <div key={index} className="flex gap-2 items-center">
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`phone.${index}`}
-                                                        render={({ field }) => (
-                                                            <FormItem className="flex-1 space-y-0">
-                                                                <FormControl>
-                                                                    <Input {...field} placeholder="Phone number" />
-                                                                </FormControl>
-                                                            </FormItem>
-                                                        )}
-                                                    />
-
-                                                    {form.watch('phone').length > 1 && (
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-7 w-7 p-0"
-                                                            onClick={() => {
-                                                                const currentPhones = form.getValues('phone');
-                                                                const newPhones = [...currentPhones];
-                                                                newPhones.splice(index, 1);
-                                                                form.setValue('phone', newPhones);
-                                                            }}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                    <RepeatableField label="Phone Numbers" onAdd={() => appendPhone('' as never)}>
+                                        {phoneFields.map((item, index) => (
+                                            <div key={item.id} className="flex gap-2 items-center">
+                                                <FormField
+                                                    control={form.control}
+                                                    name={`phone.${index}`}
+                                                    render={({ field }) => (
+                                                        <FormItem className="flex-1 space-y-0">
+                                                            <FormControl>
+                                                                <Input {...field} placeholder="Phone number" />
+                                                            </FormControl>
+                                                        </FormItem>
                                                     )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                                                />
+                                                {phoneFields.length > 1 && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7 w-7 p-0"
+                                                        onClick={() => removePhone(index)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </RepeatableField>
 
                                     <div>
                                         <div className="flex items-center justify-between">
@@ -470,34 +474,24 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                 variant="outline"
                                                 size="sm"
                                                 className="h-7 gap-1"
-                                                onClick={() => {
-                                                    const currentAddresses = form.getValues('address');
-                                                    form.setValue('address', [...currentAddresses, {}]);
-                                                }}
+                                                onClick={() => appendAddress({})}
                                             >
                                                 <Plus className="h-3.5 w-3.5" />
                                                 <span className="text-xs">Add</span>
                                             </Button>
                                         </div>
                                         <div className="grid gap-4 mt-2">
-                                            {form.watch('address').map((_, index) => (
-                                                <div key={index} className="border rounded-lg p-4 space-y-3">
+                                            {addressFields.map((item, index) => (
+                                                <div key={item.id} className="border rounded-lg p-4 space-y-3">
                                                     <div className="flex justify-between items-center">
                                                         <p className="text-sm font-medium">Address {index + 1}</p>
-                                                        {form.watch('address').length > 1 && (
+                                                        {addressFields.length > 1 && (
                                                             <Button
                                                                 type="button"
                                                                 variant="ghost"
                                                                 size="sm"
                                                                 className="h-7 w-7 p-0"
-                                                                onClick={() => {
-                                                                    const currentAddresses = form.getValues('address');
-                                                                    if (currentAddresses.length > 1) {
-                                                                        const newAddresses = [...currentAddresses];
-                                                                        newAddresses.splice(index, 1);
-                                                                        form.setValue('address', newAddresses);
-                                                                    }
-                                                                }}
+                                                                onClick={() => removeAddress(index)}
                                                             >
                                                                 <Trash2 className="h-4 w-4" />
                                                             </Button>
@@ -647,7 +641,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                     Cancel
                                 </Button>
                                 <Button type="submit" disabled={isLoading}>
-                                    {isLoading ? 'Saving...' : 'Save changes'}
+                                    {isLoading ? 'Saving...' : 'Save'}
                                 </Button>
                             </div>
                         </form>
