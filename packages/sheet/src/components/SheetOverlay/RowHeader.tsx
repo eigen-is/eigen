@@ -245,7 +245,6 @@ export const RowHeader: React.FC = () => {
                                 top: row_pre,
                                 height: row - row_pre - 1,
                                 display: 'block',
-                                backgroundColor: 'rgba(76, 76, 76, 0.1)',
                             },
                             fixRowStyleOverflowInFreeze(
                                 context,

@@ -63,7 +63,7 @@
     width: 100%;
     margin-top: 2px;
     display: none;
-    background-color: rgba(194, 194, 194, 0.4);
+    background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
 
 .fortune-row-header-selected {
@@ -74,7 +74,7 @@
     width: 100%;
     margin-top: 2px;
     display: none;
-    background-color: rgba(76, 76, 76, 0.1);
+    background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
 
 .fortune-col-header-wrap {
@@ -103,7 +103,7 @@
     height: 100%;
     margin-left: 0px;
     display: none;
-    background-color: rgba(194, 194, 194, 0.4);
+    background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
 
 .fortune-col-header-hover .header-arrow {
@@ -123,7 +123,7 @@
     height: 100%;
     margin-left: 0px;
     display: none;
-    background-color: rgba(76, 76, 76, 0.1);
+    background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
 
 .fortune-left-top {
@@ -413,9 +413,6 @@
 
 .luckysheet-bottom-controll-row {
     position: absolute;
-    height: 30px;
-    /*width: 400px;*/
-    /* background: #000; */
     bottom: 38px;
     left: 0px;
     z-index: 20;

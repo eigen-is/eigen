@@ -246,7 +246,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     }, []);
 
     return (
-        <div className="flex flex-1 flex-col min-h-0 relative">
+        <div className="flex flex-1 flex-col min-h-0 relative bg-muted">
             <div ref={placeholderRef} className="w-full h-full block" />
             <canvas className="w-full h-full block absolute" ref={refs.canvas} aria-hidden="true" />
             <MemoizedSheetOverlay />

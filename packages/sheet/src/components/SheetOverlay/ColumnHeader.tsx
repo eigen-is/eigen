@@ -1,4 +1,4 @@
-import { CircleChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -263,17 +263,23 @@ export const ColumnHeader: React.FC = () => {
                             <span
                                 className="header-arrow"
                                 onClick={(e) => {
+                                    const { pageX, pageY } = e;
                                     setContext((ctx) => {
                                         ctx.contextMenu = {
-                                            x: e.pageX,
-                                            y: 90,
+                                            pageX,
+                                            pageY,
                                             headerMenu: true,
                                         };
                                     });
                                 }}
                                 tabIndex={0}
                             >
-                                <CircleChevronDown width={12} height={12} aria-hidden="true" />
+                                <ChevronDown
+                                    width={12}
+                                    height={12}
+                                    className="text-muted-foreground"
+                                    aria-hidden="true"
+                                />
                             </span>
                         )}
                     </div>
@@ -287,7 +293,6 @@ export const ColumnHeader: React.FC = () => {
                                 left: col_pre,
                                 width: col - col_pre - 1,
                                 display: 'block',
-                                backgroundColor: 'rgba(76, 76, 76, 0.1)',
                             },
                             fixColumnStyleOverflowInFreeze(
                                 context,

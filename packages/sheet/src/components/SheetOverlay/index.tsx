@@ -687,7 +687,7 @@ export const SheetOverlay: React.FC = () => {
                                 />
                                 <div
                                     id="luckysheet-bottom-controll-row"
-                                    className="luckysheet-bottom-controll-row"
+                                    className="luckysheet-bottom-controll-row flex items-center gap-2"
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onMouseUp={(e) => e.stopPropagation()}
                                     onKeyDown={(e) => e.stopPropagation()}
@@ -696,7 +696,7 @@ export const SheetOverlay: React.FC = () => {
                                     onDoubleClick={(e) => e.stopPropagation()}
                                     style={{
                                         left: context.scrollLeft,
-                                        display: context.allowEdit ? 'block' : 'none',
+                                        display: context.allowEdit ? undefined : 'none',
                                     }}
                                 >
                                     <Button variant="outline" size="sm" onClick={handleBottomAddRow}>
@@ -705,14 +705,16 @@ export const SheetOverlay: React.FC = () => {
                                     <Input
                                         ref={bottomAddRowInputRef}
                                         type="text"
-                                        className="w-12"
+                                        className="h-8 w-16"
                                         placeholder={context.addDefaultRows.toString()}
-                                    />{' '}
-                                    <span className="text-sm">{info.row}</span>{' '}
-                                    <span className="text-sm text-muted-foreground">({info.addLast})</span>
+                                    />
+                                    <span className="text-sm text-muted-foreground">
+                                        {info.row} ({info.addLast})
+                                    </span>
                                     <Button
                                         variant="outline"
                                         size="sm"
+                                        className="ml-2"
                                         onClick={() => {
                                             // cellArea is the scroll source; its native scroll
                                             // event syncs globalCache and triggers the redraw.
