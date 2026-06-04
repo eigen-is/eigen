@@ -2,7 +2,7 @@ import { useAuth } from '@workspace/lib/auth';
 import {
     occurrenceDateToString,
     parseOccurrenceDate,
-    toISODateString,
+    toLocalDateString,
     truncateRRule,
     useCalendars,
     useCreateEvent,
@@ -127,14 +127,14 @@ export function EditEventDialog({
             if (event.allDay) {
                 const sd = event.startTime;
                 const ed = new Date(event.endTime.getTime() - 86400_000);
-                setStartDate(toISODateString(new Date(sd.getUTCFullYear(), sd.getUTCMonth(), sd.getUTCDate())));
-                setEndDate(toISODateString(new Date(ed.getUTCFullYear(), ed.getUTCMonth(), ed.getUTCDate())));
+                setStartDate(toLocalDateString(new Date(sd.getUTCFullYear(), sd.getUTCMonth(), sd.getUTCDate())));
+                setEndDate(toLocalDateString(new Date(ed.getUTCFullYear(), ed.getUTCMonth(), ed.getUTCDate())));
                 setStartTime('00:00');
                 setEndTime('00:00');
             } else {
-                setStartDate(toISODateString(event.startTime));
+                setStartDate(toLocalDateString(event.startTime));
                 setStartTime(toLocalTimeString(event.startTime));
-                setEndDate(toISODateString(event.endTime));
+                setEndDate(toLocalDateString(event.endTime));
                 setEndTime(toLocalTimeString(event.endTime));
             }
         }
@@ -234,14 +234,14 @@ export function EditEventDialog({
         const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
         const d = new Date(`${startDate}T00:00`);
         if (wraps) d.setDate(d.getDate() + 1);
-        setEndDate(toISODateString(d));
+        setEndDate(toLocalDateString(d));
     };
 
     const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
         setEndTime(newEnd);
         const d = new Date(`${startDate}T00:00`);
         if (dayOffset > 0) d.setDate(d.getDate() + dayOffset);
-        setEndDate(toISODateString(d));
+        setEndDate(toLocalDateString(d));
     };
 
     return (

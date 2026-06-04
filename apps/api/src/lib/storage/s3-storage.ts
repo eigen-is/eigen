@@ -95,6 +95,8 @@ export class S3Storage implements StorageBackend {
     }
 
     private getKey(key: string): string {
+        // Why: S3 keys are not filesystem paths, so `resolveWithinBase` (core/path-utils.ts) doesn't apply;
+        // this segment check is the intentional distinct traversal guard for the S3 backend.
         if (key.split('/').some((seg) => seg === '..')) {
             throw new ApiError(400, 'Invalid storage path: path traversal detected');
         }

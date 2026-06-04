@@ -8,12 +8,12 @@ export type CreateCallbacks = {
     onUploadFile?: () => void;
 };
 
-export type CreateMenuKind = 'folder' | 'upload' | EigenDocType;
-export type CreateMenuDef = { kind: CreateMenuKind; icon: LucideIcon; label: string; buttonLabel: string };
+type CreateMenuKind = 'folder' | 'upload' | EigenDocType;
+type CreateMenuDef = { kind: CreateMenuKind; icon: LucideIcon; label: string; buttonLabel: string };
 
 // Derive each eigendoc entry from the shared registries so adding a doc type is a
 // single-source edit (EIGEN_DOC_TYPE_INFO + EIGEN_DOC_ICONS), not a copy here.
-export const CREATE_MENU_DEFS: CreateMenuDef[] = [
+const CREATE_MENU_DEFS: CreateMenuDef[] = [
     { kind: 'folder', icon: FolderPlus, label: 'New folder', buttonLabel: 'New folder' },
     ...Object.values(EIGEN_DOC_TYPE_INFO).map((info): CreateMenuDef => {
         const label = `New ${info.label.toLowerCase()}`;

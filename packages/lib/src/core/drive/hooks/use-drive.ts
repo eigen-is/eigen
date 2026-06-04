@@ -130,7 +130,7 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
 
 // GET MIME CONTENTS (aggregates over all mounts)
 // Factored query config — reused by useMimeContent and useTeamsHaveChats (use-chat.ts)
-export function mimeContentQueryConfig(ownerId: string, mimeType: string) {
+export function mimeContentQueryConfig(ownerId: string, mimeType: string, staleTime: number = 1000 * 60 * 5) {
     return {
         queryKey: driveKeys.mime(ownerId, mimeType),
         queryFn: async (): Promise<DrivePath[]> => {
@@ -141,12 +141,12 @@ export function mimeContentQueryConfig(ownerId: string, mimeType: string) {
         },
         enabled: !!mimeType && !!ownerId,
         retry: 1,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime,
     };
 }
 
-export function useMimeContent(ownerId: string, mimeType: string) {
-    return useQuery<DrivePath[]>(mimeContentQueryConfig(ownerId, mimeType));
+export function useMimeContent(ownerId: string, mimeType: string, staleTime?: number) {
+    return useQuery<DrivePath[]>(mimeContentQueryConfig(ownerId, mimeType, staleTime));
 }
 
 // GET MIME CONTENTS scoped to a single mount
