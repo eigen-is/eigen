@@ -6,7 +6,6 @@ type UploadWithProgressOptions = {
     onProgress?: (progress: number) => void;
     onSuccess?: (resp: string) => void;
     onError?: (error: Error) => void;
-    headers?: Record<string, string>;
 };
 
 export async function uploadWithProgress({
@@ -15,16 +14,11 @@ export async function uploadWithProgress({
     onProgress,
     onSuccess,
     onError,
-    headers: _headers = {},
 }: UploadWithProgressOptions): Promise<Response> {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.withCredentials = true;
         xhr.open('POST', url);
-
-        // Custom headers are NOT applied here: setting them triggers a CORS preflight
-        // (OPTIONS) request that the server does not allow. Authentication is handled
-        // via xhr.withCredentials (cookies) instead.
 
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable && onProgress) {
