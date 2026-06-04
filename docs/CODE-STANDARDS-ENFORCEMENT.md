@@ -9,6 +9,12 @@ Guiding principle: **prefer making the correct path the path of least resistance
 one.** A linter catches regressions; discoverability prevents them from being written. Both matter, but the
 second is the real fix for the dominant problem.
 
+> **Status (2026-06-04).** The two dependency-direction seams in Tier 2 (engine-React-free, `lib`↛`sheet`)
+> are **landed and enforced** in `biome.jsonc`. Every Biome mechanism below was empirically validated on the
+> pinned **Biome 2.4.9** against the current tree; the per-tier notes record what actually fires, what's
+> already on, and what to *not* adopt. Everything else (the softer Tier 2 seams, Tier 3 plugins, Tiers 4–5)
+> is still proposal.
+
 ## The two failure modes
 
 The quality drift this enforcement targets collapses into two mechanisms, both amplified by LLM-assisted development:
@@ -28,9 +34,9 @@ Enforcement attacks #1. Discoverability attacks #2.
 ## Current state
 
 Biome **2.4.9**, `recommended` rules + formatting, with a handful of rules turned off
-(`noNonNullAssertion`, `noDescendingSpecificity`, `useLiteralKeys`, `noAssignInExpressions`, a11y). No
-`noRestrictedImports`, no `overrides`, no GritQL plugins, no cross-file fitness checks, no generated
-catalog. That's a lot of unused headroom.
+(`noNonNullAssertion`, `noDescendingSpecificity`, `useLiteralKeys`, `noAssignInExpressions`, a11y).
+`overrides` + `noRestrictedImports` now encode the two dependency-direction seams (Tier 2); still no GritQL
+plugins, no cross-file fitness checks, no generated catalog. That's a lot of remaining headroom.
 
 > **On upgrading:** everything below works on 2.4.9 — GritQL plugins, `noRestrictedImports`, and `overrides`
 > all shipped in Biome 2.x. Upgrading is therefore *optional* and only buys newer/promoted rules (Biome
@@ -63,7 +69,7 @@ mechanical `biome check --write` plus a review of the diff.
 | `noUnusedVariables` (correctness) | dead locals | dead-code vein | error (autofix) |
 | `useImportType` (style) | `import type` for type-only imports | typing standard | error (autofix) |
 | `useExhaustiveDependencies` (correctness) | missing hook deps | latent React bugs | warn |
-| `noUndeclaredDependencies` (correctness) | imports not in `package.json` | phantom deps | warn |
+| `noUndeclaredDependencies` (correctness) | imports not in `package.json` | phantom deps | ❌ **don't adopt** (see below) |
 
 ```jsonc
 // biome.jsonc → linter.rules (additive)
@@ -75,6 +81,21 @@ mechanical `biome check --write` plus a review of the diff.
 },
 "style": { "useImportType": "error" }
 ```
+
+**Measured on the current tree (Biome 2.4.9, 2026-06-04):**
+
+- `noExplicitAny`, `noUnusedImports`, `noUnusedVariables`, `useImportType` are **already active** via
+  `recommended: true` and report **0 violations** — the codebase already complies. The only thing this
+  config changes is their *severity* (their `recommended` default is `warn`; the table bumps them to
+  `error`). Worth doing for the ratchet, but it's a severity bump, not "turning them on".
+- `useExhaustiveDependencies` surfaces **48** hits. Its default severity is `error`, but it's only
+  *recommended for the react domain*, which isn't currently active — so those 48 stay latent until the rule
+  is listed explicitly (as in the block above). Keep it at `warn` and burn the list down.
+- `noUndeclaredDependencies` is **rejected**: it produces **940 false positives** here. The rule checks only
+  the *nearest* `package.json`, but this is a hoisted Bun workspace — `react`, `lucide-react`, `@tanstack/*`
+  etc. live in the root manifest, and even `@workspace/lib` is flagged on every subpath import. Adopting it
+  would mean duplicating every dependency into every app's manifest, contradicting the hoisting setup. This
+  is exactly the "high-false-positive rules discredit the config" trap from *What NOT to enforce*.
 
 Two judgment calls to make deliberately, not by default:
 
@@ -97,13 +118,13 @@ importing file (unlike ESLint's `import/no-restricted-paths`). So "files under X
 expressed by wrapping the rule in an **`overrides` entry scoped to X** with `includes`. That combination is
 how you encode every seam below.
 
-| Seam to enforce | Where | Ban |
-|-----------------|-------|-----|
-| **Engine stays React-free** (backend imports it) | `packages/sheet/src/engine/**` | `react`, `react-dom` |
-| **`lib` never imports `sheet`** (one-way rule) | `packages/lib/**` | `@workspace/sheet`, `@workspace/sheet/*` |
-| **Only `cn()` may import `clsx`/`tailwind-merge`** | everywhere except the `cn` util | `clsx`, `tailwind-merge` |
-| **App components don't fetch directly** | `apps/*/src/**` | `useQuery`/`useMutation` from `@tanstack/react-query` |
-| **Toasts live in hooks** | everywhere except `packages/lib/**/hooks/**` | `toast` from `sonner` |
+| Seam to enforce | Where | Ban | Status |
+|-----------------|-------|-----|--------|
+| **Engine stays React-free** (backend imports it) | `packages/sheet/src/engine/**` | `react`, `react-dom` | ✅ landed (`error`) |
+| **`lib` never imports `sheet`** (one-way rule) | `packages/lib/**` | `@workspace/sheet`, `@workspace/sheet/*` | ✅ landed (`error`) |
+| **Only `cn()` may import `clsx`/`tailwind-merge`** | everywhere except the `cn` util | `clsx`, `tailwind-merge` | deferred (see merge caveat) |
+| **App components don't fetch directly** | `apps/*/src/**` | `useQuery`/`useMutation` from `@tanstack/react-query` | deferred (`warn` first) |
+| **Toasts live in hooks** | everywhere except `packages/lib/**/hooks/**` | `toast` from `sonner` | deferred |
 
 ```jsonc
 // biome.jsonc → top level
@@ -137,10 +158,26 @@ how you encode every seam below.
 ]
 ```
 
+The two dependency-direction seams above are **landed and validated** on Biome 2.4.9: each fires on a
+planted violation *inside* its scope and stays silent on the same import *outside* it, confirming the
+"imported-module match + `overrides`/`includes` scoping" mechanism. The tree has **0 real violations** of any
+seam, so adoption needed no cleanup. (Methodology note: `biome lint --only=<rule>` *bypasses* `overrides` and
+resets severity, so it can't test scoped rules — use a real `biome check`.)
+
 For the `cn()` rule, ban `clsx`/`tailwind-merge` globally in `linter.rules.style.noRestrictedImports`, then
 add one override turning the rule `"off"` for the single file that defines `cn()`. Start the app-fetch and
 toast seams at `"warn"` — a few legitimate app-level `useQuery` calls may exist; review them, whitelist or
 relocate, then ratchet to `error`.
+
+> **Caveat — `overrides` *replace*, they don't merge.** When a file matches an `overrides` entry that sets
+> `noRestrictedImports`, that entry's `options` **replace** the global `noRestrictedImports.options`
+> entirely — they do not deep-merge. Verified on 2.4.9: an engine file with `import 'clsx'` is *not* flagged,
+> because the engine override's `react` ban replaced the global `clsx` ban. Practical consequence: a global
+> `clsx`/`tailwind-merge` ban is **silently nullified in every directory that already has its own
+> `noRestrictedImports` override** — i.e. across all of `apps/*` and `packages/lib/**` with the config above.
+> To keep the `cn()` ban effective everywhere, **re-declare the `clsx`/`tailwind-merge` paths inside each
+> override** (next to that override's own bans), rather than relying on the global. This is why the `cn()`
+> seam is deferred here — it's a config-shape decision, not a copy-paste.
 
 ---
 
@@ -166,7 +203,7 @@ the patterns below, not for anything needing cross-file type information.)
 ```
 
 ```grit
-// biome/rules/no-native-confirm.grit  — ILLUSTRATIVE; verify syntax against the installed Biome 2.4 plugin docs
+// biome/rules/no-native-confirm.grit  — verified working on Biome 2.4.9 (syntax exactly as below)
 language js
 
 `window.confirm($message)` where {
@@ -176,6 +213,13 @@ language js
   )
 }
 ```
+
+**Validated on Biome 2.4.9:** this plugin loads and fires with the syntax exactly as shown, and a plugin
+diagnostic makes `biome check` exit non-zero (so it gates CI). Two caveats: the pattern
+`` `window.confirm($message)` `` matches **only** the `window.`-qualified call — bare `confirm(...)` and
+`alert(...)` are *not* caught, so the "Native confirm/alert" row needs **one pattern per form**, not the
+single example above. (There are 0 real `window.confirm`/`alert` usages today, so this is pure
+regression-prevention — low benefit against the per-plugin maintenance cost.)
 
 Keep this tier small and high-signal. Each plugin is a maintained artifact; only write one when the pattern
 recurs and a built-in can't catch it.
@@ -187,9 +231,10 @@ recurs and a built-in can't catch it.
 Biome is fast because it's single-file and not type-aware. The rest needs cheap CI checks:
 
 - **`knip`** — unused *exports*, files, and dependencies across the monorepo. Biome only sees unused
-  symbols *within* a file; knip is what catches the dead-code class (`combobox.tsx` + its
-  `@base-ui/react` dep, `useFileUpload`, `FormulaEngine.evaluateAll()`, the three unreachable mail
-  endpoints). Run in CI, report-only first, then fail-on-new.
+  symbols *within* a file; knip is what catches the dead-code class. (The original audit's examples —
+  `combobox.tsx` + its `@base-ui/react` dep, `useFileUpload`, `FormulaEngine.evaluateAll()`, the three
+  unreachable mail endpoints — have **all since been removed**; they're historical, not current targets.)
+  Run in CI, report-only first, then fail-on-new.
 - **`jscpd`** (copy-paste detector) — flags new duplication over a threshold so the *next* 4×-scaffold gets
   caught at PR time, not six months later. Treat it as **radar, not a wall**: the philosophy says don't
   extract single-use helpers, so some duplication is fine. Report in CI; don't hard-block.
