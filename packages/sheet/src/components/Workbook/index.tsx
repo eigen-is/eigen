@@ -10,7 +10,6 @@ import {
     api,
     type CellWithRowAndCol,
     type Context,
-    calcSelectionInfo,
     defaultContext,
     defaultSettings,
     ensureSheetIndex,
@@ -147,39 +146,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         const [context, setContext] = useState(defaultContext(refs));
-        const { info, formula } = locale(context);
-
-        const [calInfo, setCalInfo] = useState<{
-            numberC: number;
-            count: number;
-            sum: string;
-            max: string;
-            min: string;
-            average: string;
-        }>({
-            numberC: 0,
-            count: 0,
-            sum: '0',
-            max: '0',
-            min: '0',
-            average: '',
-        });
+        const { info } = locale(context);
 
         // biome-ignore lint/correctness/useExhaustiveDependencies: deps spread from Object.values(props) — biome can't see through the spread
         const mergedSettings = useMemo(
             () => Object.assign(cloneDeep(defaultSettings), props) as Required<Settings>,
             [...Object.values(props)],
         );
-
-        // Calculate selection info
-        // biome-ignore lint/correctness/useExhaustiveDependencies: selection-info recompute is intentionally selection-only; firing on every props/context change would churn
-        useEffect(() => {
-            const selection = context.selections;
-            if (selection) {
-                const re = calcSelectionInfo(context);
-                setCalInfo(re);
-            }
-        }, [context.selections]);
 
         // Build the formula dependency map off the interaction path once the sheet
         // has loaded, so the first edit on a large workbook doesn't pay the
@@ -775,35 +748,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 className="absolute top-0 left-0 z-30 h-full w-full"
                             />
                         )}
-                        <div className="flex justify-end items-center leading-[0] h-0">
-                            <div className="luckysheet-sheet-selection-calInfo">
-                                {!!calInfo.count && (
-                                    <div style={{ width: '60px' }}>
-                                        {formula.count}: {calInfo.count}
-                                    </div>
-                                )}
-                                {!!calInfo.numberC && !!calInfo.sum && (
-                                    <div>
-                                        {formula.sum}: {calInfo.sum}
-                                    </div>
-                                )}
-                                {!!calInfo.numberC && !!calInfo.average && (
-                                    <div>
-                                        {formula.average}: {calInfo.average}
-                                    </div>
-                                )}
-                                {!!calInfo.numberC && !!calInfo.max && (
-                                    <div>
-                                        {formula.max}: {calInfo.max}
-                                    </div>
-                                )}
-                                {!!calInfo.numberC && !!calInfo.min && (
-                                    <div>
-                                        {formula.min}: {calInfo.min}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
                     </div>
                 </ModalProvider>
             </WorkbookContext.Provider>
