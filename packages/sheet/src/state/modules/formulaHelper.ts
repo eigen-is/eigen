@@ -1,6 +1,5 @@
 import { isNil } from 'es-toolkit/compat';
-import { getCalculationOrder, matchDependencies } from '../../engine/dependency-graph';
-import type { CellMatrix, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
+import type { CellMatrix, FormulaCellInfo, FormulaDependency } from '../../engine/types';
 import {
     type Context,
     execfunction,
@@ -163,17 +162,3 @@ export function executeAffectedFormulas(ctx: Context, formulaRunList: FormulaCel
         };
     }
 }
-
-export function getFormulaRunList(updateValueArray: FormulaCellInfo[], formulaCellInfoMap: FormulaCellInfoMap) {
-    return getCalculationOrder(updateValueArray, formulaCellInfoMap);
-}
-
-export const arrayMatch = (
-    arrayMatchCache: Record<string, Array<{ key: string; r: number; c: number; sheetId: string }>>,
-    formulaDependency: FormulaDependency[],
-    _formulaCellInfoMap: FormulaCellInfoMap | null,
-    _updateValueObjects: Record<string, unknown> | null,
-    func: (key: string, r: number, c: number, sheetId: string) => void,
-) => {
-    matchDependencies(arrayMatchCache, formulaDependency, _formulaCellInfoMap, _updateValueObjects, func);
-};

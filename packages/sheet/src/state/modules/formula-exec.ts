@@ -2,6 +2,7 @@
 // (formula caches, sheet data, calc chains) so they stay in the state layer.
 // The engine directory has zero state-runtime dependencies.
 import { forEach, isEmpty } from 'es-toolkit/compat';
+import { getCalculationOrder, matchDependencies } from '../../engine/dependency-graph';
 import {
     calPostfixExpression,
     checkBracketNum,
@@ -15,7 +16,7 @@ import type { FormulaCell } from '../types';
 import { columnCharToIndex, getSheetIndex } from '../utils';
 import { setCellValue } from './cell';
 import { createContextResolver } from './formula-cache';
-import { arrayMatch, executeAffectedFormulas, getFormulaRunList, setFormulaCellInfo } from './formulaHelper';
+import { executeAffectedFormulas, setFormulaCellInfo } from './formulaHelper';
 import { error } from './validation';
 
 // Regex for cell label extraction
@@ -694,7 +695,7 @@ export function execFunctionGroup(
     const arrayMatchCache: Record<string, { key: string; r: number; c: number; sheetId: string }[]> = {};
     Object.keys(formulaCellInfoMap).forEach((key) => {
         const formulaObject = formulaCellInfoMap[key];
-        arrayMatch(
+        matchDependencies(
             arrayMatchCache,
             formulaObject.formulaDependency,
             formulaCellInfoMap,
@@ -717,7 +718,7 @@ export function execFunctionGroup(
     });
 
     // 5. Get list of affected formulas using the graph structure by depth-first traversal
-    const formulaRunList = getFormulaRunList(updateValueArray, formulaCellInfoMap);
+    const formulaRunList = getCalculationOrder(updateValueArray, formulaCellInfoMap);
 
     // 6. execute relevant formulas
     executeAffectedFormulas(ctx, formulaRunList, calcChains);
