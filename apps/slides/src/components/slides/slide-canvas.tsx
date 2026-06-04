@@ -272,8 +272,8 @@ export function SlideCanvas({
                     );
                 })}
                 {canWrite &&
-                    objects
-                        .filter((o) => selectedObjectIds.includes(o.id) && o.id !== editingObjectId)
+                    selectedObjects
+                        .filter((o) => o.id !== editingObjectId)
                         .map((obj) => {
                             const preview = dragPreviewMap.get(obj.id);
                             const displayObj = preview
