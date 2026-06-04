@@ -136,6 +136,7 @@ function SlideEditorInner({
         duplicateSlide,
         updateSlideBackground,
         addObject,
+        duplicateObjects,
         updateObject,
         updateObjects,
         deleteObject,
@@ -565,6 +566,14 @@ function SlideEditorInner({
         [editingObjectId],
     );
 
+    const handleDuplicateObjects = useCallback(
+        (placements: { id: string; x: number; y: number }[]) => {
+            const ids = duplicateObjects(placements);
+            if (ids.length) setSelectedObjectIds(ids);
+        },
+        [duplicateObjects],
+    );
+
     const handleDropImage = useCallback(
         (file: File) => {
             handleImageFile(file);
@@ -731,6 +740,7 @@ function SlideEditorInner({
                                         onSelectObjects={setSelectedObjectIds}
                                         onStartEditing={handleStartEditing}
                                         onUpdateObject={updateObject}
+                                        onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
                                         onDropImage={canWrite ? handleDropImage : undefined}
                                         onCopyObject={handleCopyObject}
                                         onDeleteObject={canWrite ? handleDeleteObject : undefined}

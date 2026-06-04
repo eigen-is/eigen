@@ -290,6 +290,40 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         [getTargetSlideIds],
     );
 
+    const duplicateObjects = useCallback(
+        (placements: { id: string; x: number; y: number }[]): string[] => {
+            const doc = docRef.current;
+            if (!doc) return [];
+            const newIds: string[] = [];
+            doc.transact(() => {
+                const objectsMap = doc.getMap('objects');
+                const slidesMap = doc.getMap('slides');
+                for (const placement of placements) {
+                    const src = deck.objects[placement.id];
+                    if (!src) continue;
+                    const newObjId = `obj-${nanoid(6)}`;
+                    const objYMap = new Y.Map();
+                    for (const [k, v] of Object.entries(src)) {
+                        if (k === 'id') objYMap.set('id', newObjId);
+                        else if (k === 'commentCardIds') continue;
+                        else if (k === 'x') objYMap.set('x', placement.x);
+                        else if (k === 'y') objYMap.set('y', placement.y);
+                        else objYMap.set(k, v);
+                    }
+                    objectsMap.set(newObjId, objYMap);
+                    const slideMap = slidesMap.get(src.slideId) as Y.Map<unknown> | undefined;
+                    if (slideMap) {
+                        const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
+                        if (objIdsArr) objIdsArr.push([newObjId]);
+                    }
+                    newIds.push(newObjId);
+                }
+            });
+            return newIds;
+        },
+        [deck],
+    );
+
     const addObject = useCallback((slideId: string, obj: Omit<SlideObject, 'id' | 'slideId'>) => {
         const doc = docRef.current;
         if (!doc) return;
@@ -503,6 +537,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         duplicateSlide,
         updateSlideBackground,
         addObject,
+        duplicateObjects,
         updateObject,
         updateObjects,
         deleteObject,

@@ -46,12 +46,13 @@ type DragPreview = {
 
 type UseObjectDragProps = {
     onUpdate: (objId: string, updates: { x?: number; y?: number; w?: number; h?: number; rotation?: number }) => void;
+    onDuplicate?: (placements: { id: string; x: number; y: number }[]) => void;
     canvasRef: React.RefObject<HTMLDivElement | null>;
     vSnaps?: number[];
     hSnaps?: number[];
 };
 
-export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }: UseObjectDragProps) => {
+export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], hSnaps = [] }: UseObjectDragProps) => {
     const [activeSnapLines, setActiveSnapLines] = useState<SnapLine[]>([]);
     const [dragPreviews, setDragPreviews] = useState<DragPreview[]>([]);
     const lastSnappedRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -222,7 +223,11 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 if (s.objId && s.mode === 'rotate' && lastRotationRef.current !== null) {
                     onUpdate(s.objId, { rotation: normalizeAngle(lastRotationRef.current) });
                 } else if (s.objId && lastSnappedRef.current) {
-                    onUpdate(s.objId, lastSnappedRef.current);
+                    if (s.mode === 'move' && cursor.altKey && onDuplicate) {
+                        onDuplicate([{ id: s.objId, x: lastSnappedRef.current.x, y: lastSnappedRef.current.y }]);
+                    } else {
+                        onUpdate(s.objId, lastSnappedRef.current);
+                    }
                 }
                 cleanup();
                 document.removeEventListener('mousemove', handleMouseMove);
@@ -239,7 +244,7 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
             // Commit and tear down on focus loss (alt-tab, devtools opening) — browsers can drop mouseup.
             window.addEventListener('blur', endDrag);
         },
-        [getCanvasSize, onUpdate],
+        [getCanvasSize, onUpdate, onDuplicate],
     );
 
     const startGroupDrag = useCallback(
@@ -268,7 +273,14 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 startRotation: 0,
             };
 
+            const cursor = { altKey: e.altKey };
+            const handleKey = (ke: KeyboardEvent) => {
+                if (ke.key !== 'Alt') return;
+                cursor.altKey = ke.altKey;
+            };
+
             const handleMouseMove = (me: MouseEvent) => {
+                cursor.altKey = me.altKey;
                 const g = groupStateRef.current;
                 if (!g) return;
                 const canvas = getCanvasSize();
@@ -300,19 +312,30 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 const g = groupStateRef.current;
                 const delta = lastGroupDeltaRef.current;
                 if (g && delta) {
-                    for (const o of g.objects) {
-                        onUpdate(o.id, { x: o.x + delta.dx, y: o.y + delta.dy });
+                    if (cursor.altKey && onDuplicate) {
+                        onDuplicate(g.objects.map((o) => ({ id: o.id, x: o.x + delta.dx, y: o.y + delta.dy })));
+                    } else {
+                        for (const o of g.objects) {
+                            onUpdate(o.id, { x: o.x + delta.dx, y: o.y + delta.dy });
+                        }
                     }
                 }
                 cleanup();
                 document.removeEventListener('mousemove', handleMouseMove);
                 document.removeEventListener('mouseup', handleMouseUp);
+                document.removeEventListener('keydown', handleKey);
+                document.removeEventListener('keyup', handleKey);
+                window.removeEventListener('blur', handleMouseUp);
             };
 
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
+            document.addEventListener('keydown', handleKey);
+            document.addEventListener('keyup', handleKey);
+            // Commit and tear down on focus loss (alt-tab, devtools opening) — browsers can drop mouseup.
+            window.addEventListener('blur', handleMouseUp);
         },
-        [getCanvasSize, onUpdate],
+        [getCanvasSize, onUpdate, onDuplicate],
     );
 
     const cleanup = useCallback(() => {
