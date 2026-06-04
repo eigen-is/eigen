@@ -153,9 +153,10 @@ export const SheetTab: React.FC = () => {
                                         )}
                                     </span>
                                     {!!singleSheet.color && (
-                                        <div
-                                            className="mr-1 h-4 w-1.5 rounded-sm"
-                                            style={{ background: singleSheet.color }}
+                                        <span
+                                            className="mr-1 size-2.5 shrink-0 rounded-full"
+                                            style={{ backgroundColor: singleSheet.color }}
+                                            aria-hidden="true"
                                         />
                                     )}
                                     {singleSheet.name}
