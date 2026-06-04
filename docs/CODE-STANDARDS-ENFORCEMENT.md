@@ -1,28 +1,27 @@
 # Enforcing Standards & Improving Discoverability
 
-Companion to [CODE-STANDARDS.md](CODE-STANDARDS.md) (the rules) and
-[CODE-QUALITY-AUDIT.md](CODE-QUALITY-AUDIT.md) (a 2026-06-04 snapshot of where the rules are drifting).
-This document is about the **mechanism**: how to make the standards self-enforcing with tooling (mostly
-Biome 2.4) and — more importantly — how to make the shared primitives discoverable enough that the right
-answer is the *easy* answer.
+Companion to [CODE-STANDARDS.md](CODE-STANDARDS.md) (the rules). It grew out of a one-time
+2026-06-04 code-quality audit (since addressed) and is about the **mechanism**: how to make the
+standards self-enforcing with tooling (mostly Biome 2.4) and — more importantly — how to make the
+shared primitives discoverable enough that the right answer is the *easy* answer.
 
 Guiding principle: **prefer making the correct path the path of least resistance over policing the wrong
 one.** A linter catches regressions; discoverability prevents them from being written. Both matter, but the
 second is the real fix for the dominant problem.
 
-## The two failure modes (from the audit)
+## The two failure modes
 
-The audit's 43 findings collapse into two mechanisms, and both are amplified by LLM-assisted development:
+The quality drift this enforcement targets collapses into two mechanisms, both amplified by LLM-assisted development:
 
 1. **Drift** — small convention violations: inline `invalidateQueries` bypassing the `invalidate*()`
    helpers, `as Type` casts on Eden responses, query hooks missing `staleTime`/`enabled`, bare
    `throw new Error` where `ApiError` belongs, hand-rolled `en-US` date formatting. Individually trivial;
    collectively the leading indicator of decay. **Root cause: the rules live in prose, not in CI.**
-2. **Re-derivation** — the same component / hook / scaffold rebuilt per app and then diverging: the 4×
-   EigenDoc editor route, the two byte-identical storage classes, the comment-lifecycle wiring, the
-   contact-input state machine. **Root cause: the shared primitive doesn't exist yet, or isn't
-   discoverable — so rebuilding is cheaper than finding.** This is *the* AI-slop vector: an LLM (and a
-   busy human) re-creates what it can't see.
+2. **Re-derivation** — the same component / hook / scaffold rebuilt per app and then diverging (e.g. the
+   4× EigenDoc editor route, two byte-identical storage classes, the comment-lifecycle wiring — all since
+   unified). **Root cause: the shared primitive doesn't exist yet, or isn't discoverable — so rebuilding
+   is cheaper than finding.** This is *the* AI-slop vector: an LLM (and a busy human) re-creates what it
+   can't see.
 
 Enforcement attacks #1. Discoverability attacks #2.
 
@@ -57,7 +56,7 @@ Climb it roughly in order: each tier is higher-effort and catches what the tier 
 Flip on the high-value rules that map directly to audit findings. Most are autofixable, so adoption is a
 mechanical `biome check --write` plus a review of the diff.
 
-| Rule (group) | Enforces | Audit finding it closes | Suggested level |
+| Rule (group) | Enforces | Targets | Suggested level |
 |--------------|----------|-------------------------|-----------------|
 | `noExplicitAny` (suspicious) | bans `any`, incl. `x as any` | `as any` casts | error |
 | `noUnusedImports` (correctness) | dead imports | dead-code vein | error (autofix) |
@@ -111,7 +110,6 @@ how you encode every seam below.
 "overrides": [
   {
     // The sheet engine is imported by apps/api — it MUST stay React-free.
-    // (See CODE-QUALITY-AUDIT.md → "packages/sheet Package Boundary".)
     "includes": ["packages/sheet/src/engine/**"],
     "linter": { "rules": { "style": { "noRestrictedImports": { "level": "error", "options": { "paths": {
       "react": { "message": "engine/ is imported by the backend and must stay React-free." },
@@ -153,7 +151,7 @@ at `.grit` files that match AST patterns and call `register_diagnostic`. Use thi
 no built-in expresses. (Biome is **not type-aware**, so these are syntactic/structural heuristics — good for
 the patterns below, not for anything needing cross-file type information.)
 
-| Plugin idea | Pattern | Audit finding |
+| Plugin idea | Pattern | Targets |
 |-------------|---------|---------------|
 | `useQuery` missing `staleTime` | `useQuery({…})` object arg with no `staleTime` key | missing-staleTime hooks |
 | Native confirm/alert | `window.confirm(…)`, `confirm(…)`, `alert(…)` | `window.confirm('…Discard?')` |
@@ -189,7 +187,7 @@ recurs and a built-in can't catch it.
 Biome is fast because it's single-file and not type-aware. The rest needs cheap CI checks:
 
 - **`knip`** — unused *exports*, files, and dependencies across the monorepo. Biome only sees unused
-  symbols *within* a file; knip is what catches the audit's whole dead-code vein (`combobox.tsx` + its
+  symbols *within* a file; knip is what catches the dead-code class (`combobox.tsx` + its
   `@base-ui/react` dep, `useFileUpload`, `FormulaEngine.evaluateAll()`, the three unreachable mail
   endpoints). Run in CI, report-only first, then fail-on-new.
 - **`jscpd`** (copy-paste detector) — flags new duplication over a threshold so the *next* 4×-scaffold gets
@@ -209,11 +207,9 @@ Tiers 1–4 stop regressions. This tier stops the duplication being written at a
 the AI-slop concern, because **LLMs re-create what they can't find.** Make the right thing findable and the
 slop largely stops accruing.
 
-1. **Shrink the surface — one canonical way.** Every dedup in the audit *is* discoverability work:
-   collapsing the 4 editor routes into `useEigenDocEditorRoute`, the two storage classes into one base,
-   `AddCardDialog`+`CardSettingsDialog` into one `CardFormDialog` — each removes a wrong answer. Always pair
-   a new shared primitive with deletion of the local copies; fewer alternatives means the right one is
-   unmissable.
+1. **Shrink the surface — one canonical way.** Every dedup *is* discoverability work — collapsing N
+   copies into one shared primitive removes a wrong answer. Always pair a new shared primitive with
+   deletion of the local copies; fewer alternatives means the right one is unmissable.
 2. **A generated primitive catalog.** Auto-generate `docs/SHARED-PRIMITIVES.md` from the exports of
    `packages/ui` and `packages/lib` (name, file, one-line purpose). Regenerate + diff-check in CI so it
    can never go stale. This is the authoritative "before you build X, look here" index — the existing
