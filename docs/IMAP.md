@@ -30,7 +30,7 @@ reconciles disk state with the DB, enabling seamless coexistence with Dovecot IM
 | `mailutils.ts` | Filename generation, flag parsing, flag rebuild helpers |
 | `sender.ts` | `draftToOutboundMail()` -- converts `EmailDraft` to `OutboundMail` for `sendMail()` |
 | `welcome.ts` | Generates the welcome email delivered on first mailbox init |
-| `mail.ts` | Thin facade resolving `User` -> `Maildir` instance (called by routes) |
+| `mail.ts` | Logic-bearing helpers (`mailboxDeliver`, `messageGet`, `messageMoveToTrash`, `uploadDraftAttachment`, `attachFromDrive`, `saveAttachmentsToDrive`) + `getMailClient` for inline use in routes |
 | `sse-events.ts` | `buildMailEvent()` -- SSE event builder for mail mutations |
 | `schema.ts` | Drizzle ORM schema for `emails`, `emailLabels`, `emailsToLabels` |
 | `constants.ts` | `STANDARD_MAILBOXES`, `PATHS.MAIL` |
