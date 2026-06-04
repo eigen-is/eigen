@@ -24,28 +24,3 @@ export const authClient = createAuthClient({
         apiKeyClient(),
     ],
 });
-
-type ErrorTypes = Partial<
-    Record<
-        keyof typeof authClient.$ERROR_CODES,
-        {
-            en: string;
-        }
-    >
->;
-
-const errorCodes = {
-    USER_ALREADY_EXISTS: {
-        en: 'User already registered',
-    },
-    INVALID_PASSWORD: {
-        en: 'Invalid password',
-    },
-} satisfies ErrorTypes;
-
-export const getErrorMessage = (code: string, lang: 'en') => {
-    if (code in errorCodes) {
-        return errorCodes[code as keyof typeof errorCodes][lang];
-    }
-    return 'Authentication error';
-};
