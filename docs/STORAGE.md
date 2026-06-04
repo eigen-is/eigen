@@ -1,7 +1,7 @@
 # Storage & Mount System
 
 > **TLDR**: Home is the per-user singleton managing DB connections + domain services. Drive uses Mounts with pluggable
-> storage backends (LocalKeyStorage, LocalStorage, S3). Mail/Contacts use LocalFilesystem directly. Data lives in
+> storage backends (LocalStorage, S3). Mail/Contacts use LocalFilesystem directly. Data lives in
 > `data/home/{userId}/`, teams in `data/team/{teamId}/`, orgs in `data/org/{orgId}/`.
 
 ## Architecture
@@ -35,12 +35,12 @@ All in `apps/api/src/lib/storage/`:
 
 | Backend           | File                   | Use Case                       | Pattern                  |
 |-------------------|------------------------|--------------------------------|--------------------------|
-| `LocalKeyStorage` | `local-key-storage.ts` | Drive mounts (`local-key`)     | Flat `data/{uuid}.ext`   |
-| `LocalStorage`    | `local-storage.ts`     | Drive mounts (`local`)         | Full directory hierarchy |
+| `LocalStorage`    | `local-storage.ts`     | Drive mounts (`local` + `local-key`) | Directory hierarchy (`local`) or flat `data/{uuid}.ext` (`local-key`) |
 | `S3Storage`       | `s3-storage.ts`        | Remote storage (`s3`)          | S3-compatible objects    |
 
-**Path safety**: All local backends validate resolved paths against traversal (`..`). `S3Storage` validates key
-segments to prevent escaping the configured prefix.
+**Path safety**: `LocalStorage` and `LocalFilesystem` validate resolved paths against traversal (`..`) via the
+shared `resolveWithinBase` guard (`apps/api/src/lib/core/path-utils.ts`). `S3Storage` validates key segments to
+prevent escaping the configured prefix.
 
 **`StorageFile` type** (`types.ts`): `BunFile | S3File` — a lazy file reference. `read()` returns a `StorageFile`
 without reading data into memory. Callers stream or buffer as needed (e.g., `file.arrayBuffer()`,
@@ -117,7 +117,7 @@ Org data: `data/org/{orgId}/` — minimal (filesystem only, no domain services).
 - `DriveACL` — access control entry (`{id, read, write}`)
 - `MountConfig` (`packages/lib/src/types/mount.ts`) — mount settings (id, name, storageType, isDefault, s3Config)
 - `StorageFile` (`apps/api/src/lib/storage/types.ts`) — `BunFile | S3File`, lazy file reference returned by `read()`
-- `StorageBackend` — interface implemented by all three storage backends
+- `StorageBackend` — interface implemented by both storage backends
 
 ## Soft Delete (Trash)
 

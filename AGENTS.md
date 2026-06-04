@@ -104,7 +104,7 @@ bun run check          # lint + typecheck + test
 | **DB config**         | `apps/api/src/lib/[domain]/db-config.ts`     | `DatabaseConfig` with versioned migrations                                                                 |
 | **ManagedDatabase**   | `apps/api/src/lib/core/managed-database.ts`  | WAL mode, versioning, auto-sync, dirty tracking                                                            |
 | **Collab storage**    | `apps/api/src/lib/collab/`                   | Yjs updates/snapshots in `data.db` BLOBs; zstd-compressed at the storage seam (`blob-codec.ts`), BC via zstd magic-byte sniff; live WS sync unaffected |
-| **Storage backends**  | `apps/api/src/lib/storage/`                  | `LocalKeyStorage`, `LocalStorage`, `S3Storage`                                                             |
+| **Storage backends**  | `apps/api/src/lib/storage/`                  | Two classes — `LocalStorage` (serves both `local` + `local-key` modes) and `S3Storage`                     |
 | **Errors**            | `apps/api/src/lib/core/errors.ts`            | `throw new ApiError(status, message)`                                                                      |
 | **SSE emission**      | `apps/api/src/lib/[domain]/sse-events.ts`    | `home.broadcast(buildEvent(...))`                                                                          |
 | **Notifications**     | `apps/api/src/lib/notification-center/`      | `home.notifications.persist({...})` — per-user SQLite, broadcasts SSE                                      |

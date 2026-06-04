@@ -149,8 +149,6 @@ menu needs submenu.
 | `useUpload`           | `upload-provider/upload-provider.tsx`            | Hook for creating/tracking uploads         |
 | `UploadContainer`     | `upload-provider/upload-container.tsx`           | Floating upload progress cards             |
 | `uploadWithProgress`  | `upload-provider/upload-with-progress.tsx`       | XHR upload helper with progress callback   |
-| `LabelProvider`       | `labels/label-provider.tsx`                      | Label CRUD context                         |
-| `useLabels`           | `labels/label-provider.tsx`                      | Hook: addLabel, updateLabel, deleteLabel   |
 | `PreviewProvider`     | `preview-provider/preview-provider.tsx`          | File preview (images, videos, PDFs)        |
 | `usePreview`          | `preview-provider/preview-provider.tsx`          | Hook: openPreview, closePreview            |
 | `useOptionalPreview`  | `preview-provider/preview-provider.tsx`          | Returns null when no provider in the tree  |
@@ -302,7 +300,6 @@ DriveLayout (orchestrator)
 | `DriveEmailCollaborators` | `drive-email-collaborators.tsx` | Email collaborators about a shared file             |
 | `FilePreview`             | `file-preview.tsx`              | Lightbox for images/videos/PDFs                     |
 | `fileIconHelper`          | `file-icon-helper.tsx`          | MIME type → Lucide icon                             |
-| `useFileUpload`           | `file-upload.tsx`               | Hook for uploading files with progress              |
 | `useDriveDialogs`         | `use-drive-dialogs.ts`          | Dialog state for all 7+ dialogs                     |
 
 ### EigenDoc Components

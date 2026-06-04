@@ -38,13 +38,10 @@ All in `apps/stickies/src/components/stickies/`:
 
 | File                         | Purpose                                         |
 |------------------------------|-------------------------------------------------|
-| `board.tsx`                  | Main board with drag-drop, undo/redo + dialogs  |
+| `board.tsx`                  | Main board: drag-drop, undo/redo; hosts shared `CardFormDialog` (create/edit) + `CardDialog` (detail) |
 | `column.tsx`                 | Column rendering                                |
-| `card.tsx`                   | Sticky card with drag + card dialog trigger      |
-| `card-dialog.tsx`            | Card detail dialog with embedded chat            |
-| `card-settings-dialog.tsx`   | Card title/description/color editing             |
+| `sortable-note-card.tsx`     | Draggable sticky card wrapping the shared `NoteCard` |
 | `column-settings-dialog.tsx` | Column settings (rename, delete)                 |
-| `add-card-dialog.tsx`        | New card dialog                                  |
 | `add-column-dialog.tsx`      | New column dialog                                |
 | `toolbar.tsx`                | Board toolbar (file menu, undo/redo, color filter) |
 | `normalize-board.ts`         | Board data normalization (dedup tasks across columns) |
