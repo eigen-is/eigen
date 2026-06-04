@@ -328,11 +328,11 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             ref={containerRef}
             className={cn(
                 'relative flex shrink-0 items-center outline-hidden',
-                isDropPlaceholder ? 'w-[30px]' : 'cursor-pointer px-2 text-[13px] transition-colors',
+                isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-sm transition-colors',
                 !isDropPlaceholder &&
                     (isActive
-                        ? 'bg-background font-medium text-foreground'
-                        : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'),
+                        ? 'bg-background text-foreground'
+                        : 'text-muted-foreground hover:bg-background hover:text-foreground'),
                 dragOver && 'border-l-2 border-primary',
                 sheet.hide === 1 && 'hidden',
             )}
@@ -342,7 +342,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             <span
                 className={cn(
                     'px-0.5 outline-hidden',
-                    editing && 'min-w-[8px] select-text rounded-sm border border-input bg-background focus:border-ring',
+                    editing && 'min-w-2 select-text rounded-sm border border-input bg-background focus:border-ring',
                 )}
                 spellCheck="false"
                 suppressContentEditableWarning
@@ -374,7 +374,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             )}
             {!!sheet.color && (
                 <span
-                    className="absolute inset-x-0 bottom-0 h-[3px]"
+                    className="absolute inset-x-0 bottom-0 h-1"
                     style={{ backgroundColor: sheet.color }}
                     aria-hidden="true"
                 />

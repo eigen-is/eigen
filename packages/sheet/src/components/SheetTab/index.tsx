@@ -110,7 +110,7 @@ export const SheetTab: React.FC = () => {
 
     return (
         <div
-            className="flex h-7 select-none items-stretch gap-0.5 border-t border-border bg-muted px-1"
+            className="flex h-8 select-none items-stretch gap-1 border-t border-border bg-muted px-4"
             onContextMenu={(e) => e.preventDefault()}
         >
             {context.allowEdit && (
@@ -168,7 +168,7 @@ export const SheetTab: React.FC = () => {
             <div className="hidden min-w-0 flex-1 gap-0.5 sm:flex">
                 <div className="relative flex min-w-0 flex-1">
                     {!isShowBoundary && (
-                        <div className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-gradient-to-r from-muted to-transparent" />
+                        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-2 bg-gradient-to-r from-muted to-transparent" />
                     )}
                     <div ref={tabContainerRef} className="flex min-w-0 flex-1 overflow-hidden">
                         {[...context.sheets]
@@ -178,7 +178,7 @@ export const SheetTab: React.FC = () => {
                             ))}
                     </div>
                     {isShowBoundary && isShowScrollBtn && (
-                        <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-2 bg-gradient-to-l from-muted to-transparent" />
+                        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-2 bg-gradient-to-l from-muted to-transparent" />
                     )}
                 </div>
                 {isShowScrollBtn && (
