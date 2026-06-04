@@ -5,6 +5,7 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import Typography from '@tiptap/extension-typography';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Column } from '@workspace/ui/components/layout/app/column-layout';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useRef, useState } from 'react';
@@ -108,7 +109,17 @@ export function MarkdownEditor({
 
     const getFrontmatter = useCallback(() => frontmatter ?? undefined, [frontmatter]);
 
-    const { saveState, showConflict, setShowConflict, markDirty, doSave, confirmClose } = useEditorSave({
+    const {
+        saveState,
+        showConflict,
+        setShowConflict,
+        markDirty,
+        doSave,
+        confirmClose,
+        showDiscardConfirm,
+        handleDiscardConfirm,
+        handleDiscardCancel,
+    } = useEditorSave({
         ownerId,
         mountId,
         pathId,
@@ -188,6 +199,16 @@ export function MarkdownEditor({
                     onReload();
                 }}
                 onDownload={handleDownload}
+            />
+            <ConfirmDialog
+                open={showDiscardConfirm}
+                onOpenChange={(open) => {
+                    if (!open) handleDiscardCancel();
+                }}
+                title="Discard changes?"
+                description="You have unsaved changes. Discard them?"
+                confirmText="Discard"
+                onConfirm={handleDiscardConfirm}
             />
         </Column>
     );
