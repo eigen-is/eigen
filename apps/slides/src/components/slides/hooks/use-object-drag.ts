@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { applyResize } from '../transform-geometry';
+import { resizeRotatedRect } from '../transform-geometry';
 import { SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from '../types';
 import { type SnapLine, snapRect } from './use-snap-lines';
 
@@ -24,6 +24,7 @@ type ObjectDragState = {
     startObjY: number;
     startObjW: number;
     startObjH: number;
+    startRotation: number;
 };
 
 type GroupDragState = {
@@ -64,6 +65,7 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
         startObjY: 0,
         startObjW: 0,
         startObjH: 0,
+        startRotation: 0,
     });
     const groupStateRef = useRef<GroupDragState | null>(null);
 
@@ -82,6 +84,7 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
             objY: number,
             objW: number,
             objH: number,
+            objRotation = 0,
         ) => {
             e.preventDefault();
             e.stopPropagation();
@@ -94,6 +97,7 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 startObjY: objY,
                 startObjW: objW,
                 startObjH: objH,
+                startRotation: objRotation,
             };
             groupStateRef.current = null;
             const cursor = {
@@ -122,11 +126,12 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                     x = s.startObjX + dx;
                     y = s.startObjY + dy;
                 } else {
-                    const resized = applyResize(
+                    const resized = resizeRotatedRect(
                         s.mode,
                         dx,
                         dy,
                         { x: s.startObjX, y: s.startObjY, w: s.startObjW, h: s.startObjH },
+                        s.startRotation,
                         { fromCenter, keepAspect },
                     );
                     x = resized.x;
@@ -135,9 +140,10 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                     h = resized.h;
                 }
 
-                // Snapping per-edge would break the center mirror / aspect lock, so skip it while modifiers are held.
+                // Skip snapping while modifiers are held (center mirror / aspect lock) or when the object is
+                // rotated — the axis-aligned snap rect doesn't match a rotated object's visual box.
                 const snapped =
-                    fromCenter || keepAspect
+                    fromCenter || keepAspect || s.startRotation !== 0
                         ? { x, y, w, h, lines: [] as SnapLine[] }
                         : snapRect({ x, y, w, h }, snapsRef.current.vSnaps, snapsRef.current.hSnaps, s.mode);
 
@@ -218,6 +224,7 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
                 startObjY: 0,
                 startObjW: 0,
                 startObjH: 0,
+                startRotation: 0,
             };
 
             const handleMouseMove = (me: MouseEvent) => {
@@ -282,6 +289,7 @@ export const useObjectDrag = ({ onUpdate, canvasRef, vSnaps = [], hSnaps = [] }:
             startObjY: 0,
             startObjW: 0,
             startObjH: 0,
+            startRotation: 0,
         };
     }, []);
 

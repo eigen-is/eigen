@@ -22,6 +22,7 @@ type SelectionChromeProps = {
         y: number,
         w: number,
         h: number,
+        rotation: number,
     ) => void;
 };
 
@@ -52,7 +53,7 @@ export function SelectionChrome({ obj, onResizeStart }: SelectionChromeProps) {
                     )}
                     onMouseDown={(e) => {
                         e.stopPropagation();
-                        onResizeStart(e, obj.id, mode, obj.x, obj.y, obj.w, obj.h);
+                        onResizeStart(e, obj.id, mode, obj.x, obj.y, obj.w, obj.h, obj.rotation);
                     }}
                 />
             ))}
