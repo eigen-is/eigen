@@ -31,7 +31,7 @@ import {
 import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
-import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
+import { LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { type RetentionPolicy, selectSnapshotsToPrune } from '../versioning/retention';
 import { formatSnapshotTimestamp } from '../versioning/timestamp';
 import { MOUNT_DB_CONFIG } from './db-config';
@@ -98,9 +98,9 @@ export class Mount {
         this.baseDir = path.join(baseDir, 'mounts', config.id);
         this.getLocalDatabase = getLocalDatabase;
 
-        if (config.storageType === 'local-key') {
-            this.storage = new LocalKeyStorage(this.baseDir);
-        } else if (config.storageType === 'local') {
+        if (config.storageType === 'local-key' || config.storageType === 'local') {
+            // LocalStorage is a strict superset of the flat-key backend; mount.ts gates all
+            // mkdir/rename/deleteDir calls behind isPathBased, so the extra methods are inert for local-key.
             this.storage = new LocalStorage(this.baseDir);
         } else if (config.storageType === 's3') {
             if (!config.s3Config)
