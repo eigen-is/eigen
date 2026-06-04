@@ -69,10 +69,28 @@ export function useEditorSave({ ownerId, mountId, pathId, updatedAt, getContent,
         return () => window.removeEventListener('beforeunload', handler);
     }, []);
 
-    const confirmClose = (onClose: () => void) => {
-        if (isDirtyRef.current && !window.confirm('You have unsaved changes. Discard?')) return;
-        onClose();
-    };
+    const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+    const pendingCloseRef = useRef<(() => void) | null>(null);
+
+    const confirmClose = useCallback((onClose: () => void) => {
+        if (!isDirtyRef.current) {
+            onClose();
+            return;
+        }
+        pendingCloseRef.current = onClose;
+        setShowDiscardConfirm(true);
+    }, []);
+
+    const handleDiscardConfirm = useCallback(() => {
+        setShowDiscardConfirm(false);
+        pendingCloseRef.current?.();
+        pendingCloseRef.current = null;
+    }, []);
+
+    const handleDiscardCancel = useCallback(() => {
+        setShowDiscardConfirm(false);
+        pendingCloseRef.current = null;
+    }, []);
 
     return {
         saveState,
@@ -81,5 +99,8 @@ export function useEditorSave({ ownerId, mountId, pathId, updatedAt, getContent,
         markDirty,
         doSave,
         confirmClose,
+        showDiscardConfirm,
+        handleDiscardConfirm,
+        handleDiscardCancel,
     };
 }

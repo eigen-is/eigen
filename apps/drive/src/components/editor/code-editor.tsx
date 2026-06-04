@@ -22,6 +22,7 @@ import {
     lineNumbers,
 } from '@codemirror/view';
 import { TooltipButton } from '@workspace/ui';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Column } from '@workspace/ui/components/layout/app/column-layout';
 import { Redo, Undo } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
@@ -226,7 +227,17 @@ export function CodeEditor({
 
     const getContent = useCallback(() => contentRef.current, []);
 
-    const { saveState, showConflict, setShowConflict, markDirty, doSave, confirmClose } = useEditorSave({
+    const {
+        saveState,
+        showConflict,
+        setShowConflict,
+        markDirty,
+        doSave,
+        confirmClose,
+        showDiscardConfirm,
+        handleDiscardConfirm,
+        handleDiscardCancel,
+    } = useEditorSave({
         ownerId,
         mountId,
         pathId,
@@ -287,6 +298,16 @@ export function CodeEditor({
                     onReload();
                 }}
                 onDownload={handleDownload}
+            />
+            <ConfirmDialog
+                open={showDiscardConfirm}
+                onOpenChange={(open) => {
+                    if (!open) handleDiscardCancel();
+                }}
+                title="Discard changes?"
+                description="You have unsaved changes. Discard them?"
+                confirmText="Discard"
+                onConfirm={handleDiscardConfirm}
             />
         </Column>
     );
