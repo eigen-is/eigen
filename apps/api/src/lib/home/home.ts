@@ -27,7 +27,7 @@ export class Home {
 
     public settings!: JsonStore<HomeSettings>;
 
-    protected _drive!: Drive;
+    protected _drive?: Drive;
     protected _contacts!: Contacts;
     protected _mail!: Maildir;
     protected _calendar!: Calendar;
@@ -54,7 +54,7 @@ export class Home {
 
     get drive(): Drive {
         this.touch();
-        return this._drive;
+        return this._drive!;
     }
 
     get contacts(): Contacts {
@@ -219,8 +219,16 @@ export class Home {
         const [mail, contacts, driveDefault] = await Promise.all([
             this._mail?.size(),
             this._contacts?.size(),
-            this._drive.size('default'),
+            this._drive?.size('default') ?? 0,
         ]);
+
+        if (!this._drive) {
+            return {
+                mailAndContacts: { used: 0, max: 0 },
+                drive: { default: { used: 0, max: 0 } },
+                total: { used: 0, max: 0 },
+            };
+        }
 
         const mountConfig = this._drive.getMountConfig('default');
         const quotas = await resolveUserQuotas(mountConfig, teamIds);
@@ -243,7 +251,7 @@ export class Home {
         // managedDatabases loop below is a safety net (idempotent close), not a
         // concurrent second close on the same db.
         const subsystems: [string, Promise<unknown> | undefined][] = [
-            ['drive', this._drive.destruct()],
+            ['drive', this._drive?.destruct()],
             ['contacts', this._contacts?.destruct()],
             ['mail', this._mail?.destruct()],
             ['calendar', this._calendar?.destruct()],
