@@ -3,7 +3,7 @@
 > **TLDR**: Unified comment-card model across stickies / docs / slides / sheets. Each card is a
 > `{ id, title, description, color?, chatName? }` record stored in a Y.Map on the container's Y.Doc. The
 > server-side `comments.db` SQLite index holds derived metadata (status, lastAuthorEmail, messageCount,
-> mentions, createdAt, createdBy). Shared `<AddCardDialog>` and `<CardDialog>` in `packages/ui` render
+> mentions, createdAt, createdBy). Shared `<CardFormDialog>` and `<CardDialog>` in `packages/ui` render
 > create + view/edit flows; per-app anchors connect cards to host content.
 
 ## Architecture
@@ -185,9 +185,10 @@ Properties-panel overlay showing all comments for a document. The caller passes 
 Single comment thread: resolves `chatName` to `chatId` via `useMediaResolver`, renders
 `ChatMessageList` + `ChatMessageInput`. Embedded inside `<CardDialog>` when a card has a `chatName`.
 
-### AddCardDialog (`packages/ui/src/components/layout/cards/add-card-dialog.tsx`)
+### CardFormDialog (`packages/ui/src/components/layout/cards/card-form-dialog.tsx`)
 
-Shared create dialog. The host wires it to `useCreateCommentCard` — typically:
+Shared create/edit form dialog selected by a `mode` prop (merges the former AddCardDialog +
+CardSettingsDialog). The host wires `mode="create"` to `useCreateCommentCard` — typically:
 
 ```ts
 const handleSaveNew = async ({ title, description, color }) => {
@@ -197,19 +198,20 @@ const handleSaveNew = async ({ title, description, color }) => {
 };
 ```
 
-Card creation is lazy: clicking "Add comment" opens the dialog purely client-side. Backend is only
-touched on Save.
+- **`mode="create"`** (default) emits concrete values (trimmed title + seeded color) so a new card
+  never persists an empty title or a missing color.
+- **`mode="edit"`** emits a minimal patch (changed fields only), so an unchanged save is a no-op
+  Yjs update.
+
+Description is edited via `<LightEditor>`, color via the shared `<ColorPicker>`
+(`EIGEN_STICKIES_COLORS`). Card creation is lazy: clicking "Add comment" opens the dialog purely
+client-side; the backend is only touched on Save.
 
 ### CardDialog (`packages/ui/src/components/layout/cards/card-dialog.tsx`)
 
 Shared view/edit dialog. Wraps `<NoteCardDialog>` with `<CommentThread>` inside; opens
-`<CardSettingsDialog>` for inline edits via `onUpdate`. Optional `showResolveAction` + `onResolve`
+`<CardFormDialog mode="edit">` for inline edits via `onUpdate`. Optional `showResolveAction` + `onResolve`
 for apps that surface resolve/re-open at the dialog level (docs, slides, sheets).
-
-### CardSettingsDialog (`packages/ui/src/components/layout/cards/card-settings-dialog.tsx`)
-
-Title / description / color edit form. `onSave` receives a minimal patch (changed fields only).
-Color picker uses `EIGEN_STICKIES_COLORS` via the shared `<ColorPicker>`.
 
 ## Per-app integration
 
@@ -218,7 +220,7 @@ Color picker uses `EIGEN_STICKIES_COLORS` via the shared `<ColorPicker>`.
 - TipTap mark `CommentMark` carries attribute `cardId`.
 - `useActiveComments(editor)` walks the doc and collects `Set<cardId>` + first-anchor texts.
 - `comment-mark.ts` decoration plugin keys decoration colors by `cardId` from the `cards` map.
-- On selection right-click → AddCardDialog opens with the selected text as `initialTitle`. On save,
+- On selection right-click → CardFormDialog opens with the selected text as `initialTitle`. On save,
   `useCreateCommentCard`'s `anchorInTransact` callback runs `editor.chain().setComment(card.id)`.
 
 ### Slides
@@ -235,7 +237,7 @@ Color picker uses `EIGEN_STICKIES_COLORS` via the shared `<ColorPicker>`.
 - `useActiveComments(flowdata)` scans the cell matrix; anchor text is `"Cell A1"` etc.
 - Sheet canvas draws an indicator triangle; color comes from `hooks.getCommentInfo(r, c)` which the
   host wires up.
-- Add Comment fires `hooks.onAddComment(r, c)`; the host opens AddCardDialog with the cell ref as
+- Add Comment fires `hooks.onAddComment(r, c)`; the host opens CardFormDialog with the cell ref as
   initial title and then `setCellFormat(r, c, 'commentCardIds', [...existing, card.id])`.
 
 ### Stickies
@@ -269,7 +271,7 @@ The Y.Doc is the source of truth for which cards are "active":
 | `packages/lib/src/docs/eigendoc/nodes/comment-mark.ts`              | TipTap mark schema (attr `cardId`)            |
 | `packages/lib/src/slides/types.ts`                                  | `BaseObject.commentCardIds`                   |
 | `packages/lib/src/sheets/types.ts`                                  | `Cell.commentCardIds`                         |
-| `packages/ui/src/components/layout/cards/`                          | Shared AddCardDialog + CardDialog + CardSettingsDialog |
+| `packages/ui/src/components/layout/cards/`                          | Shared CardFormDialog + CardDialog |
 | `packages/ui/src/components/layout/comments/`                       | CommentPanel + CommentThread + CommentMenuItems + CommentContextMenu + useCreatedByMeta |
 | `packages/ui/src/components/layout/notes/`                          | NoteCard + NoteCardDialog                     |
 | `apps/docs/src/components/docs/editor.tsx`                          | Docs editor integration                       |
