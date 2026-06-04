@@ -76,7 +76,7 @@ evaluation (resolver reads from Yjs snapshot).
 
 ```
 engine/
-├── formula-engine.ts       # FormulaEngine class (evaluate, evaluateAll, recalculateAll, getDependencies)
+├── formula-engine.ts       # FormulaEngine class (evaluate, recalculateAll, getDependencies)
 ├── formula-utils.ts        # Pure utilities (iscelldata, checkBracketNum, calPostfixExpression)
 ├── formula-shift.ts        # functionCopy + functionStrChange (formula relative-ref shifters)
 ├── rowcol.ts               # applySheetsInsertRowCol / applySheetsDeleteRowCol (pure row/col data shifts)

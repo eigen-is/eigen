@@ -156,29 +156,6 @@ export class FormulaEngine {
         }
     }
 
-    evaluateAll(
-        cells: Array<{ r: number; c: number; id: string; f: string }>,
-        resolver: CellResolver,
-    ): Map<string, EvaluationResult> {
-        const results = new Map<string, EvaluationResult>();
-
-        for (const cell of cells) {
-            const result = this.evaluate(cell.f, cell.id, cell.r, cell.c, resolver);
-            const key = `${cell.r}_${cell.c}_${cell.id}`;
-            results.set(key, result);
-
-            // Store in global data so subsequent formulas can reference this result
-            if (result.type !== 'error') {
-                this.state.execFunctionGlobalData[key] = {
-                    v: result.value,
-                    ct: { t: result.type === 'number' ? 'n' : 's', fa: 'General' },
-                };
-            }
-        }
-
-        return results;
-    }
-
     getDependencies(formula: string, sheetId: string): FormulaDependency[] {
         const deps: FormulaDependency[] = [];
 
