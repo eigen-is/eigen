@@ -9,13 +9,28 @@ type AlignmentPickerProps = {
 export function AlignmentPicker({ value, onChange }: AlignmentPickerProps) {
     return (
         <div className="flex items-center gap-1">
-            <Toggle size="sm" pressed={value === 'left'} onPressedChange={() => onChange('left')}>
+            <Toggle
+                size="sm"
+                aria-label="Align left"
+                pressed={value === 'left'}
+                onPressedChange={() => onChange('left')}
+            >
                 <AlignLeft className="h-4 w-4" />
             </Toggle>
-            <Toggle size="sm" pressed={value === 'center'} onPressedChange={() => onChange('center')}>
+            <Toggle
+                size="sm"
+                aria-label="Align center"
+                pressed={value === 'center'}
+                onPressedChange={() => onChange('center')}
+            >
                 <AlignCenter className="h-4 w-4" />
             </Toggle>
-            <Toggle size="sm" pressed={value === 'right'} onPressedChange={() => onChange('right')}>
+            <Toggle
+                size="sm"
+                aria-label="Align right"
+                pressed={value === 'right'}
+                onPressedChange={() => onChange('right')}
+            >
                 <AlignRight className="h-4 w-4" />
             </Toggle>
         </div>

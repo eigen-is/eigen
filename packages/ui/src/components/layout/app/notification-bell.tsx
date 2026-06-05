@@ -35,12 +35,20 @@ function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationI
 
     return (
         <div
+            role="button"
+            tabIndex={0}
             className={cn(
                 'flex items-start gap-3 px-3 py-2.5 transition-colors',
                 isClickable && 'cursor-pointer hover:bg-muted/50',
                 !notification.read && 'bg-primary/5',
             )}
             onClick={handleClick}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleClick();
+                }
+            }}
         >
             {notification.actorEmail && (
                 <div className="shrink-0 pt-0.5">
@@ -64,7 +72,8 @@ function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationI
             <Button
                 variant="ghost"
                 size="icon"
-                className="shrink-0 h-6 w-6 opacity-0 group-hover/item:opacity-100"
+                aria-label="Dismiss notification"
+                className="shrink-0 h-6 w-6 opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100"
                 onClick={(e) => {
                     e.stopPropagation();
                     onDismiss(notification.id);
@@ -94,6 +103,7 @@ export function NotificationBell() {
                 <Button
                     variant="ghost"
                     size="icon"
+                    aria-label={count > 0 ? `Notifications, ${count} unread` : 'Notifications'}
                     className="relative h-8 w-8 text-white hover:bg-primary/20 hover:text-white"
                 >
                     <Bell className="h-4 w-4" />
