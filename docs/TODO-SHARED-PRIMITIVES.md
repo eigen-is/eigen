@@ -35,8 +35,11 @@ You are reviewing a findings draft. Be skeptical — the goal is correctness, no
 6. **Output**: for each finding, a verdict — `CONFIRMED` / `PARTIALLY CONFIRMED` / `REJECTED` / `NEEDS
    DECISION` — with evidence, plus any findings this audit missed.
 
-Note: eigen is pre-release, so renames/moves do **not** need backward-compat shims or migration code —
-update all call sites directly.
+Note: eigen.is is **live with real users** (stickies especially are heavily used) — this is **not** a
+free-for-all rename. The audit's changes are *identifier-level only* (type names, type locations, import
+paths, a value-preserving constant dedup) and change **no persisted or wire value**, so they need no
+migration. But **persisted/wire values are frozen** — never change a string written to the drive DB, a Yjs
+doc, SQLite, S3, or the network. See *Live-data / BC safety* in the Decisions section.
 
 ---
 
@@ -149,6 +152,22 @@ Resolves the "needs a decision" items. Author + reviewer recommendations accepte
 - **Barrel branch:** F1 (moves only; defer the CI gate).
 - **Types branch:** F5 subset (drive-access + auth → new `types/auth.ts`). May fold into the barrel branch.
 - **Skipped / deferred:** F4-A; F5 constants + optional types; F6 `Command` (optional) + branding.
+
+### Live-data / BC safety (read before touching any constant)
+
+eigen.is is in production and **stickies are heavily used**, so the "pre-release, change freely" assumption
+is retired. Every change in this audit is identifier-level and BC-safe, but these are **frozen values** —
+rename the *identifier* if you must, never the *value*:
+
+- **Drive type/mime strings** — `DRIVE_TYPE_*` (`'stickies'`, …) and `DRIVE_MIME_*`
+  (`'application/eigenstickies'`, …); persisted in the drive DB and used in routes. F2's dedup must keep the
+  `EIGEN_DOC_TYPES` / `EIGEN_DOCUMENT_TYPES` array values **byte-identical**.
+- **Yjs root keys** — `EIGEN_DOC_TYPE_INFO[*].yjsRoots` (stickies: `columns` / `tasks` / `columnOrder`); the
+  live Y.Doc structure of every existing document.
+- **DB schemas/columns, S3 storage keys, and `EIGEN_STICKIES_*` color/indicator keys** a note persists.
+
+Rule: a type rename or file move is fine (compile-time only); changing a value already on disk/wire requires
+an explicit migration plan — **ask first**.
 
 ---
 
