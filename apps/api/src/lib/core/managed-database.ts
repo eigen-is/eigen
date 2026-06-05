@@ -42,6 +42,7 @@ export class ManagedDatabase<S extends SchemaType> {
     private syncTimer: Timer | null = null;
     private lastSyncedChanges = 0;
     private lastSnapshotChanges = 0;
+    private forceDirty = false;
 
     constructor(config: DatabaseConfig<S>, localPath: string, callbacks: SyncCallbacks = {}) {
         this.config = config;
@@ -127,7 +128,16 @@ export class ManagedDatabase<S extends SchemaType> {
     }
 
     private get isDirty(): boolean {
-        return this.getTotalChanges() !== this.lastSyncedChanges;
+        return this.forceDirty || this.getTotalChanges() !== this.lastSyncedChanges;
+    }
+
+    // Force the next sync() to run even though total_changes() looks unchanged.
+    // Crash recovery: Mount.buildDocumentDb reuses a temp file that survived an
+    // unclean shutdown, but total_changes() resets to 0 on the fresh connection, so
+    // isDirty would read false and the close-time cleanupTemp would silently drop the
+    // unsynced bytes. Marking dirty guarantees they re-reach storage. Cleared on sync.
+    markDirty(): void {
+        this.forceDirty = true;
     }
 
     // Push pending writes to storage. Snapshots are handled separately by
@@ -138,6 +148,7 @@ export class ManagedDatabase<S extends SchemaType> {
             this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
             await this.callbacks.onSync();
             this.lastSyncedChanges = this.getTotalChanges();
+            this.forceDirty = false;
             console.log(`[${this.config.name}] Synced`);
         }
     }

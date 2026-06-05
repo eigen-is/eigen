@@ -92,3 +92,36 @@ describe('ManagedDatabase snapshot lifecycle', () => {
         await db.close({ skipFinalSnapshot: true });
     });
 });
+
+describe('ManagedDatabase dirty tracking', () => {
+    test('markDirty() forces the next sync even when nothing changed since the last one', async () => {
+        // Phase 1a: crash recovery reuses a temp whose total_changes() reset to 0, so the
+        // DB looks clean. markDirty() guarantees the unsynced bytes are re-synced instead
+        // of being silently dropped by the close-time cleanupTemp.
+        let syncs = 0;
+        const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {
+            onSync: async () => {
+                syncs++;
+            },
+        });
+        await db.open(0);
+        db.db.insert(items).values({ v: 'x' }).run();
+        await db.flush();
+        expect(syncs).toBe(1);
+
+        // No new writes → not dirty → flush is a no-op.
+        await db.flush();
+        expect(syncs).toBe(1);
+
+        // markDirty() makes the next flush sync despite an unchanged total_changes().
+        db.markDirty();
+        await db.flush();
+        expect(syncs).toBe(2);
+
+        // The forced sync clears the flag — a subsequent clean flush does nothing.
+        await db.flush();
+        expect(syncs).toBe(2);
+
+        await db.close({ skipFinalSnapshot: true });
+    });
+});
