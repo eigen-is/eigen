@@ -1,8 +1,6 @@
 import type { DriveSearchParams, EigenDocType } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 
-export type { EigenDocType } from '@workspace/lib/types/drive';
-
 export type EigenDocAppConfig = {
     appName: string;
     mimeType: string;
