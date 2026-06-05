@@ -156,8 +156,16 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
 
         return () => {
             setIsSynced(false);
-            providerRef.current?.disconnect();
-            docRef.current?.destroy();
+            // Unregister observers and tear down the UndoManager + provider; the effect re-runs on
+            // pathId change without an unmount, so without this the old ones leak (and fire on
+            // torn-down state). provider.destroy() before doc.destroy() — it detaches its own doc listener.
+            slidesMap.unobserveDeep(updateReactState);
+            objectsMap.unobserveDeep(updateReactState);
+            slideOrderArray.unobserve(updateReactState);
+            undoManager.current?.destroy();
+            undoManager.current = null;
+            wsProvider.destroy();
+            doc.destroy();
         };
     }, [ownerId, mountId, pathId, initializeDefaultDeck]);
 

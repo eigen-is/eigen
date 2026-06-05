@@ -2,6 +2,8 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { PublicConfig, PublicUser } from '@workspace/lib/types/public';
 import { assertJson, authedRequest, getTestContext } from './setup';
 
+// All /p/* routes are intentionally PUBLIC (unauthenticated) — that is what the /p/ prefix means.
+// Do not gate them (see routes/public.ts).
 describe('Public Routes', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
 

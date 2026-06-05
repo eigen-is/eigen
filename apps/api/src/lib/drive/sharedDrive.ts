@@ -66,9 +66,9 @@ export default class SharedDrive {
         throw new ApiError(403, 'No write permission');
     }
 
-    // Mime-type listings span every path in the owner's drive — there's no single pathId
-    // to ACL-check, so we gate on team membership of the owner. Cross-user (non-team)
-    // SharedDrive instances cannot list by mime type at all.
+    // Mount and mime-type listings span every path in the owner's drive — there's no single
+    // pathId to ACL-check, so we gate on team membership of the owner. Cross-user (non-team)
+    // SharedDrive instances cannot enumerate mounts or list by mime type at all.
     private async requireTeamMembership(): Promise<void> {
         const parsed = parseOwnerId(this.owner.id);
         if (parsed.type !== 'team') throw new ApiError(403, 'No read permission');
@@ -77,6 +77,7 @@ export default class SharedDrive {
     }
 
     public async listMounts(): Promise<MountInfo[]> {
+        await this.requireTeamMembership();
         return this.sharedDrive.listMounts();
     }
 

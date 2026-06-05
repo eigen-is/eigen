@@ -321,6 +321,16 @@ describe('Guest Auth', () => {
             );
         }
 
+        test('a wrong guess consumes the code — a later correct attempt fails', async () => {
+            const otp = await requestOtpAndCapture(guestEmail);
+            // The code row is deleted before the async verify, so even a wrong guess consumes it...
+            const wrong = await verifyOtp(guestEmail, otp === '000000' ? '111111' : '000000');
+            expect(wrong.status).toBe(400);
+            // ...and the real code no longer works (one code can't be retried or double-spent).
+            const retry = await verifyOtp(guestEmail, otp);
+            expect(retry.status).toBe(400);
+        });
+
         test('end-to-end: guest can hit /events, /notifications, and sees shared item in /shared/with-me', async () => {
             const otp = await requestOtpAndCapture(guestEmail);
             const verifyRes = await verifyOtp(guestEmail, otp);
