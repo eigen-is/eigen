@@ -3,7 +3,7 @@ import type { EigenClipboardData } from '../../types/clipboard';
 import type { DrivePath } from '../../types/drive';
 import { getDriveDownloadUrl } from '../api';
 
-export const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
+const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
 const HTML_MARKER = 'data-eigen-clipboard';
 
 function parseEigenJson(raw: string): EigenClipboardData | null {

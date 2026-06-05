@@ -1,6 +1,6 @@
 import { formatDateTime } from '@workspace/lib/date';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
-import { EmptyState, LoadingState, Toolbar } from '@workspace/ui';
+import { EmptyState, ErrorState, LoadingState, Toolbar } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
@@ -52,6 +52,7 @@ export function EmailList({
     emails,
     searchQuery,
     isLoading,
+    error,
     activeRowId,
     onRowClick,
     onReply,
@@ -108,6 +109,10 @@ export function EmailList({
 
     if (isLoading || !emails) {
         return <LoadingState />;
+    }
+
+    if (error) {
+        return <ErrorState message="Could not load emails." detail={error.message} />;
     }
 
     return (

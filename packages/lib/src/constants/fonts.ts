@@ -12,8 +12,6 @@ export const EIGEN_FONTS: EigenFont[] = [
     { name: 'Excalifont', family: "'Excalifont', cursive", category: 'hand-drawn', weights: [400] },
 ];
 
-export const DEFAULT_FONT = EIGEN_FONTS[0];
-
 export function getFontFamily(fontName: string): string {
     const font = EIGEN_FONTS.find((f) => f.name === fontName);
     return font?.family ?? `'${fontName}', sans-serif`;

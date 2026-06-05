@@ -75,7 +75,7 @@ function DriveRoute() {
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             });
         } else {
-            openPreview(path);
+            openPreview(path, folderContents);
         }
     };
 

@@ -1,14 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
+import { eigenDocEditorValidateSearch } from '@workspace/ui/components/layout/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { useEigenDocEditorRoute } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
 import { SheetEditor } from '../components/sheets/editor';
 
 export const Route = createFileRoute('/_auth/sheet/$ownerId/$mountId/$pathId')({
     component: SheetView,
-    validateSearch: (search: Record<string, unknown>) => ({
-        chat: typeof search.chat === 'string' ? search.chat : undefined,
-    }),
+    validateSearch: eigenDocEditorValidateSearch,
 });
 
 function SheetView() {

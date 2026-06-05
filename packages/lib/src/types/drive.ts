@@ -217,11 +217,9 @@ const INLINE_EDITABLE_MIMES = new Set([
     'application/toml',
 ]);
 
-const INLINE_EDITABLE_EXTENSIONS = new Set([
-    '.md',
-    '.markdown',
-    '.txt',
-    '.csv',
+// Single source for "this extension is a code file" — shared by isInlineEditable
+// (below) and the 'code' preview mode (constants/preview.ts).
+export const CODE_EXTENSIONS = new Set([
     '.json',
     '.yaml',
     '.yml',
@@ -229,6 +227,7 @@ const INLINE_EDITABLE_EXTENSIONS = new Set([
     '.html',
     '.htm',
     '.css',
+    '.csv',
     '.js',
     '.jsx',
     '.mjs',
@@ -262,8 +261,6 @@ const INLINE_EDITABLE_EXTENSIONS = new Set([
     '.ini',
     '.toml',
     '.env',
-    '.env.local',
-    '.env.example',
     '.gitignore',
     '.dockerignore',
     '.editorconfig',
@@ -279,6 +276,8 @@ const INLINE_EDITABLE_EXTENSIONS = new Set([
     '.zig',
     '.dart',
 ]);
+
+const INLINE_EDITABLE_EXTENSIONS = new Set([...CODE_EXTENSIONS, '.md', '.markdown', '.txt']);
 
 export function isInlineEditable(mimeType: string, name: string): boolean {
     if (INLINE_EDITABLE_MIMES.has(mimeType)) return true;

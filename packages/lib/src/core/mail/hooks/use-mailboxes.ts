@@ -7,9 +7,6 @@ export const mailboxKeys = {
     owner: (ownerId: string) => [...mailboxKeys.all, ownerId] as const,
     lists: (ownerId: string) => [...mailboxKeys.owner(ownerId), 'list'] as const,
     list: (ownerId: string, filters: Record<string, unknown>) => [...mailboxKeys.lists(ownerId), { filters }] as const,
-    details: (ownerId: string) => [...mailboxKeys.owner(ownerId), 'detail'] as const,
-    detail: (ownerId: string, id: string) => [...mailboxKeys.details(ownerId), id] as const,
-    exists: (ownerId: string, id: string) => [...mailboxKeys.detail(ownerId, id), 'exists'] as const,
 };
 
 export function useMailboxes() {
