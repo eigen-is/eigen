@@ -315,13 +315,12 @@ describe('Drive', () => {
         });
 
         test('Bob cannot access Alice folder before sharing', async () => {
-            const contents = await driveGetList(
+            // Assert the denial status directly — driveGetList would mask a 403 as an empty list.
+            const res = await authedRequest(
                 ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `folder/${sharedFolderId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${sharedFolderId}`,
             );
-            expect(contents).toEqual([]);
+            expect(res.status).toBe(403);
         });
 
         test('Bob has no read/write permissions before sharing', async () => {
@@ -562,13 +561,11 @@ describe('Drive', () => {
         });
 
         test('Bob can no longer access after revoke', async () => {
-            const contents = await driveGetList(
+            const res = await authedRequest(
                 ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `folder/${sharedFolderId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${sharedFolderId}`,
             );
-            expect(contents).toEqual([]);
+            expect(res.status).toBe(403);
         });
 
         test('Bob has no read permission after revoke', async () => {
@@ -713,14 +710,12 @@ describe('Drive', () => {
                 aliceMountId,
                 inheritedChildFileId,
             );
-            const contents = await driveGetList(
+            const res = await authedRequest(
                 ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `folder/${inheritedChildFolderId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${inheritedChildFolderId}`,
             );
             expect(fileRead.canRead).toBe(false);
-            expect(contents).toEqual([]);
+            expect(res.status).toBe(403);
         });
     });
 
@@ -3250,6 +3245,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 `/drive/${teamOwner}/${teamMountId}/mime/text-plain`,
             );
+            expect(res.status).toBe(403);
+        });
+
+        test('non-member gets 403 on team mount list', async () => {
+            // Regression for the previously-unguarded SharedDrive.listMounts(): a non-member must
+            // not be able to enumerate a team's mounts (ids, names, storage types, byte counts).
+            const res = await authedRequest(ctx.bob.user.sessionToken, `/drive/${teamOwner}/mounts`);
             expect(res.status).toBe(403);
         });
 

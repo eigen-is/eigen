@@ -1,5 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import * as encoding from 'lib0/encoding';
+import * as syncProtocol from 'y-protocols/sync';
+import * as Y from 'yjs';
 
+import { getHome } from '../lib/home/get-home';
 import { assertJson, authedRequest, driveGet, drivePost, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -103,6 +107,36 @@ describe('Collab', () => {
             expect(data.canRead).toBe(true);
             expect(data.canWrite).toBe(false);
             expect(data.path).toBeDefined();
+        });
+    });
+
+    // The HTTP→WS upgrade does not complete under app.handle(), so the WebSocket integration tests
+    // below skip their bodies (status !== 101). Test the write-permission guard at its real seam
+    // instead: CollabDocument.handleMessage drops sync writes (sub-types 1/2) when canWrite is false.
+    describe('handleMessage write enforcement', () => {
+        function syncUpdateMessage(doc: Y.Doc): Uint8Array {
+            const encoder = encoding.createEncoder();
+            encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collabDocument.ts)
+            syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(doc));
+            return encoding.toUint8Array(encoder);
+        }
+
+        test('a read-only connection cannot mutate the document; a writable one can', async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const collab = await home.drive.getCollabDocument(aliceMountId, docId);
+            const conn = { send() {}, readyState: 1 } as unknown as Parameters<typeof collab.handleMessage>[0];
+
+            const edit = new Y.Doc();
+            edit.getMap('write-test').set('k', 'v');
+            const message = syncUpdateMessage(edit);
+
+            // canWrite=false: the update must be dropped.
+            collab.handleMessage(conn, message, false);
+            expect(collab.doc.getMap('write-test').get('k')).toBeUndefined();
+
+            // canWrite=true: the identical update now applies.
+            collab.handleMessage(conn, message, true);
+            expect(collab.doc.getMap('write-test').get('k')).toBe('v');
         });
     });
 
