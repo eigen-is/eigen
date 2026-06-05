@@ -8,7 +8,7 @@ export type StructuredHeader = {
 
 export type HeaderValue = string | string[] | AddressObject | Date | StructuredHeader | StructuredHeader[];
 
-export type Headers = Map<string, HeaderValue>;
+export type MailHeaders = Map<string, HeaderValue>;
 
 export type HeaderLines = ReadonlyArray<{
     key: string;
@@ -33,7 +33,7 @@ export type Attachment = {
     contentType: string;
     contentDisposition: string;
     filename?: string | undefined;
-    headers: Headers;
+    headers: MailHeaders;
     headerLines: HeaderLines;
     checksum: string;
     size: number;
@@ -45,7 +45,7 @@ export type Attachment = {
 
 export type ParsedMail = {
     attachments: Attachment[];
-    headers: Headers;
+    headers: MailHeaders;
     headerLines: HeaderLines;
     html: string | false;
     text?: string | undefined;
