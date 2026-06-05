@@ -178,8 +178,16 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
 
         return () => {
             setIsSynced(false);
-            if (providerRef.current) providerRef.current.disconnect();
-            if (docRef.current) docRef.current.destroy();
+            // Unregister observers and tear down the UndoManager + provider; the effect re-runs on
+            // pathId change without an unmount, so without this the old ones leak (and fire on
+            // torn-down state). provider.destroy() before doc.destroy() — it detaches its own doc listener.
+            tasksMap.unobserveDeep(updateReactState);
+            columnsMap.unobserveDeep(updateReactState);
+            columnOrderArray.unobserve(updateReactState);
+            undoManager.current?.destroy();
+            undoManager.current = null;
+            wsProvider.destroy();
+            doc.destroy();
         };
     }, [ownerId, mountId, pathId, user?.email, initializeDefaultBoard]);
 
