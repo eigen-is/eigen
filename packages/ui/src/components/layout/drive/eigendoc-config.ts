@@ -19,3 +19,9 @@ export function eigenDocValidateSearch(search: Record<string, unknown>): DriveSe
     const mid = typeof search.mid === 'string' ? search.mid : undefined;
     return { pid, uid, mid };
 }
+
+// The four EigenDoc editor routes (doc/slide/board/sheet) all read an optional
+// `?chat=` deep-link param; share one validator so they can't drift.
+export function eigenDocEditorValidateSearch(search: Record<string, unknown>): { chat?: string } {
+    return { chat: typeof search.chat === 'string' ? search.chat : undefined };
+}
