@@ -4,7 +4,7 @@ import { isInlineEditable } from '@workspace/lib/types/drive';
 
 // Characterization tests locking the behavior of the text/code file registries
 // (isInlineEditable + getTextPreviewMode) so the shared-extension-corpus refactor
-// stays behavior-preserving. See CODE-QUALITY-AUDIT.md item #10.
+// stays behavior-preserving.
 
 describe('isInlineEditable', () => {
     test('code extensions are editable', () => {
