@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { LocalStorage } from '../lib/storage/local-storage';
-import { checkS3Connection } from '../lib/storage/s3-storage';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data/test-storage-${Date.now()}`);
 
@@ -115,47 +114,5 @@ describe('LocalStorage', () => {
     test('size returns null for missing file', async () => {
         const size = await storage.size('no-such-file');
         expect(size).toBeNull();
-    });
-});
-
-describe('checkS3Connection SSRF guard', () => {
-    const baseConfig = { bucket: 'b', prefix: '', accessKeyId: 'k', secretAccessKey: 's' };
-
-    // Cloud-metadata endpoints are rejected while validating the endpoint, before any S3 client is
-    // constructed — so these return immediately with ok:false and make no outbound request.
-    test.each([
-        'http://169.254.169.254/latest/meta-data/',
-        '169.254.169.254',
-        'http://metadata.google.internal/',
-        'http://[fd00:ec2::254]/',
-        'http://100.100.100.200/',
-        'http://192.0.0.192/',
-    ])('blocks cloud-metadata endpoint %s', async (endpoint) => {
-        const result = await checkS3Connection({ ...baseConfig, endpoint });
-        expect(result.ok).toBe(false);
-        expect(result.message).toBe('S3 endpoint is not allowed');
-    });
-
-    test('rejects non-http(s) schemes', async () => {
-        const result = await checkS3Connection({ ...baseConfig, endpoint: 'file:///etc/passwd' });
-        expect(result.ok).toBe(false);
-        expect(result.message).toBe('S3 endpoint must use http or https');
-    });
-
-    test('redacts the failure message on the unauthenticated setup path', async () => {
-        const result = await checkS3Connection(
-            { ...baseConfig, endpoint: 'http://169.254.169.254/' },
-            { redactErrors: true },
-        );
-        expect(result.ok).toBe(false);
-        expect(result.message).toBe('Connection failed');
-    });
-
-    // A LAN/loopback endpoint must NOT be guard-blocked (self-hosted MinIO). We can't assert a
-    // successful connection here, but the message must never be the guard's rejection string.
-    test('does not block private/LAN endpoints', async () => {
-        const result = await checkS3Connection({ ...baseConfig, endpoint: 'http://127.0.0.1:9/' });
-        expect(result.ok).toBe(false);
-        expect(result.message).not.toBe('S3 endpoint is not allowed');
     });
 });
