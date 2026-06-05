@@ -24,7 +24,7 @@ const PACKAGES = [
     { name: '@workspace/ui', dir: 'packages/ui' },
 ];
 
-type Kind = 'Component' | 'Provider' | 'Hook' | 'Cache' | 'Type' | 'Util';
+type Kind = 'Component' | 'Provider' | 'Schema' | 'Hook' | 'Cache' | 'Type' | 'Util';
 type Primitive = { name: string; kind: Kind; importPath: string; file: string };
 
 // Build the set of public entry files → the import path callers should use to reach them.
@@ -63,11 +63,48 @@ async function entryFiles(pkg: { name: string; dir: string }): Promise<Map<strin
     return found;
 }
 
-function classify(name: string, flags: ts.SymbolFlags): Kind {
+// Simple callee name of a call expression: `createContext` from `createContext(...)`
+// or `React.createContext(...)`; `create` from `Node.create(...)` / `Mark.create(...)`.
+function calleeName(call: ts.CallExpression): string | undefined {
+    const e = call.expression;
+    if (ts.isIdentifier(e)) return e.text;
+    if (ts.isPropertyAccessExpression(e)) return e.name.text;
+    return undefined;
+}
+
+// React class components (ErrorBoundary) extend Component/PureComponent; error and other
+// utility classes (AppError) don't — only the latter belong with the schemas/classes.
+function isReactComponentClass(decl: ts.Declaration): boolean {
+    if (!ts.isClassDeclaration(decl)) return false;
+    for (const clause of decl.heritageClauses ?? []) {
+        if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
+        for (const t of clause.types) {
+            const e = t.expression;
+            const base = ts.isPropertyAccessExpression(e) ? e.name.text : ts.isIdentifier(e) ? e.text : '';
+            if (base === 'Component' || base === 'PureComponent') return true;
+        }
+    }
+    return false;
+}
+
+function classify(name: string, flags: ts.SymbolFlags, decl: ts.Declaration): Kind {
     if (flags & (ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Interface)) return 'Type';
     if (/^use[A-Z]/.test(name)) return 'Hook';
     if (/^invalidate|Keys$/.test(name)) return 'Cache';
     if (/Provider$/.test(name)) return 'Provider';
+    // Non-component classes (AppError), React contexts, and TipTap Node/Mark schemas are
+    // values but not components — name+flags alone can't tell them apart, so inspect the
+    // declaration; React class components (ErrorBoundary) still classify as Component.
+    if (flags & ts.SymbolFlags.Class) return isReactComponentClass(decl) ? 'Component' : 'Schema';
+    if (ts.isVariableDeclaration(decl) && decl.initializer) {
+        let init = decl.initializer;
+        if (ts.isCallExpression(init) && (calleeName(init) === 'createContext' || calleeName(init) === 'create')) {
+            return 'Schema';
+        }
+        if (ts.isAsExpression(init)) init = init.expression;
+        // PascalCase `const X = { … } (as const)` is an enum-like constant (SSEventType), not a component.
+        if (ts.isObjectLiteralExpression(init)) return 'Util';
+    }
     // PascalCase value (has a lowercase letter, unlike SCREAMING_SNAKE constants) → a component.
     const isValue = flags & (ts.SymbolFlags.Function | ts.SymbolFlags.Variable | ts.SymbolFlags.Class);
     if (isValue && /^[A-Z]/.test(name) && /[a-z]/.test(name)) return 'Component';
@@ -114,7 +151,7 @@ for (const entry of entries) {
         }
         const declFile = decl.getSourceFile().fileName;
         if (declFile.includes('node_modules')) continue;
-        const kind = classify(name, sym.flags);
+        const kind = classify(name, sym.flags, decl);
         // Query-key factories + invalidators are intra-domain plumbing, co-located with the domain's hooks
         // (same @workspace/lib/<domain> import as the hook you already found). Listing them is redundant
         // noise, so they're excluded — the convention is documented in the header note instead.
@@ -136,7 +173,8 @@ const primitives = [...byKey.values()].sort(
 
 const KINDS: { kind: Kind; title: string }[] = [
     { kind: 'Component', title: 'Components' },
-    { kind: 'Provider', title: 'Providers & context' },
+    { kind: 'Provider', title: 'Providers' },
+    { kind: 'Schema', title: 'Contexts, schemas & classes' },
     { kind: 'Hook', title: 'Hooks' },
     { kind: 'Type', title: 'Types' },
     { kind: 'Util', title: 'Utilities & constants' },
