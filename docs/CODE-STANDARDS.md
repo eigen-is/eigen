@@ -188,6 +188,10 @@ Elysia route handler return type → Eden Treaty infers response type → hook e
   Use `selection-handle` token for selection UI (resize handles, bounding boxes)
 - **Use `cn()` for class merging** — import from `@workspace/ui/lib/utils`, never use raw `clsx`/`twMerge`
   or string concatenation for conditional Tailwind classes
+- **Name for grep-ability; don't shadow libraries** — use the established prefixes so a whole category is
+  one search away: `use*` (hooks), `Eigen*` (brand components), `*Dialog`, `*Provider`, `invalidate*`
+  (cache helpers), `*Keys` (query-key factories). Don't reuse a name a dependency already owns (we shadow
+  TanStack Router's `useSearch`), and don't give three different helpers the same name (`isMobile`)
 
 ### Imports
 
