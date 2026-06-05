@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { DrivePath, EditorContent, EditorSaveResult } from '@workspace/lib/types/drive';
+import type { DrivePath, EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
 import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 describe('Editor', () => {
@@ -19,7 +19,7 @@ describe('Editor', () => {
         return driveUpload<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
     }
 
-    async function editorGet(pathId: string): Promise<{ status: number; data: EditorContent }> {
+    async function editorGet(pathId: string): Promise<{ status: number; data: FileEditorContent }> {
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
             `/editor/${ctx.alice.user.id}/${mountId}/${pathId}/content`,

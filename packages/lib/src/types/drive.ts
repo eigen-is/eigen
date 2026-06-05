@@ -183,15 +183,10 @@ export function isDocumentType(type: DrivePathType) {
 
 // Every Eigen container type except plain folders. Single source of truth for
 // "is this an Eigen-managed document/chat" — used by WebDAV write-protect
-// (mount internals are read-only) and by the excludeDocumentChildren CTE
-// in mount.ts. Same set as isDocumentType, exposed as an array for SQL IN.
-export const EIGEN_DOCUMENT_TYPES = [
-    DRIVE_TYPE_DOC,
-    DRIVE_TYPE_STICKIES,
-    DRIVE_TYPE_SLIDES,
-    DRIVE_TYPE_SHEETS,
-    DRIVE_TYPE_CHAT,
-] as const;
+// (mount internals are read-only) and by the excludeDocumentChildren CTE in
+// mount.ts. Same set as isDocumentType; an alias of EIGEN_DOC_TYPES (kept under
+// this name for the SQL-IN call sites) so the two lists can't drift.
+export const EIGEN_DOCUMENT_TYPES = EIGEN_DOC_TYPES;
 
 const INLINE_EDITABLE_MIMES = new Set([
     'text/markdown',
@@ -350,7 +345,7 @@ export type InviteResult = {
     targetPathId: string;
 };
 
-export type EditorContent = {
+export type FileEditorContent = {
     editMode: string;
     content: string;
     frontmatter: string | null;

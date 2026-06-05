@@ -1,6 +1,6 @@
 import { getTextPreviewMode } from '@workspace/lib/constants';
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
-import type { DrivePath, EditorContent } from '@workspace/lib/types/drive';
+import type { DrivePath, FileEditorContent } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
 
@@ -19,7 +19,7 @@ export function reattachFrontmatter(body: string, frontmatter: string | null): s
     return `---\n${frontmatter}\n---\n${body}`;
 }
 
-export async function getEditableContent(mount: Mount, path: DrivePath): Promise<EditorContent> {
+export async function getEditableContent(mount: Mount, path: DrivePath): Promise<FileEditorContent> {
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
     const editMode = getTextPreviewMode(path.mimeType, path.name);

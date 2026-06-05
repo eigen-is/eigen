@@ -5,21 +5,16 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-714 primitives across 5 kinds. `packages/sheet` internals are excluded.
+713 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (100)
+## Components (93)
 
 | Name | Import from | File |
 |------|-------------|------|
-| `AppError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
-| `CommandPaletteContext` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
-| `CommentMarkSchema` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/comment-mark.ts |
-| `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
-| `SSEventType` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
 | `AccessDenied` | `@workspace/ui` | packages/ui/src/components/layout/app/access-denied.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
@@ -57,7 +52,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DrivePreview` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-preview.tsx |
 | `DriveTable` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
 | `EigenApp` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-app.tsx |
-| `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `EigenDocListView` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-list-view.tsx |
 | `EigenDocNewButton` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-new-button.tsx |
 | `EigenDocRoot` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
@@ -74,10 +68,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LabelDialog` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-dialog.tsx |
 | `LabelFilterHeader` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-filter-header.tsx |
 | `LabelManager` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-manager.tsx |
-| `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `LoadingScreen` | `@workspace/ui` | packages/ui/src/components/layout/pages/loading-screen.tsx |
 | `LoadingState` | `@workspace/ui` | packages/ui/src/components/layout/app/loading-state.tsx |
-| `LoginPage` | `@workspace/ui` | packages/ui/src/components/layout/pages/loginpage.tsx |
+| `LoginPage` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-page.tsx |
 | `NoteCard` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card.tsx |
 | `NoteCardDialog` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card-dialog.tsx |
 | `NotFound` | `@workspace/ui` | packages/ui/src/components/layout/app/not-found.tsx |
@@ -116,7 +109,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserDetailHero` | `@workspace/ui/components/layout/user-detail-hero` | packages/ui/src/components/layout/user-detail-hero.tsx |
 | `UserName` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 
-## Providers & context (5)
+## Providers (5)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -125,6 +118,17 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UploadProvider` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-provider.tsx |
 | `PreviewProvider` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
 | `SSEProvider` | `@workspace/ui/components/layout/sse-provider` | packages/ui/src/components/layout/sse-provider/sse-provider.tsx |
+
+## Contexts, schemas & classes (6)
+
+| Name | Import from | File |
+|------|-------------|------|
+| `AppError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `CommandPaletteContext` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
+| `CommentMarkSchema` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/comment-mark.ts |
+| `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
+| `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
+| `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
 ## Hooks (188)
 
@@ -403,7 +407,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveTypeSlides` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveTypeStickies` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveVisibility` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `EditorContent` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EditorSaveResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EigenClipboardData` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardImageItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
@@ -418,10 +421,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EmailSignature` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `EmailSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EventData` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `FileEditorContent` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `FreeBusyBlock` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `FullOrganization` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `HeaderLines` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
-| `Headers` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `HeaderValue` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `HomeSizeResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -429,6 +432,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `Label` | `@workspace/lib/types` | packages/lib/src/types/label.ts |
 | `MaildirMailbox` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
+| `MailHeaders` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `MountConfig` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `MountInfo` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `MountResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
@@ -719,6 +723,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mapStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `parseOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `SSEventType` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `stripEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `teamOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `userOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
@@ -733,9 +738,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `createLoginRouteOptions` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-route.tsx |
 | `DEFAULT_COLORS` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
 | `defaultDriveSort` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
-| `DOCS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-configs.ts |
+| `DOCS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `eigenDocEditorValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
-| `EigenDocType` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `eigenDocValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `FilePresentation` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
@@ -745,7 +749,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFilePresentation` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
 | `getSlashTargetQuery` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-utils.ts |
 | `loginSearchSchema` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-route.tsx |
-| `SHEETS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-configs.ts |
-| `SLIDES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-configs.ts |
-| `STICKIES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-configs.ts |
+| `SHEETS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
+| `SLIDES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
+| `STICKIES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `uploadWithProgress` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-with-progress.tsx |
