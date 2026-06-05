@@ -405,3 +405,40 @@ the existing per-upload `[timing]`/`[sync] failed` logs; structured gauges for o
 ack-latency are not yet added. The S3 noncurrent-version lifecycle rule + the `docker-compose`
 `stop_grace_period` raise are ops changes tracked separately (not code in this branch beyond the 20 s
 `SHUTDOWN_DRAIN_BUDGET_MS` constant, which assumes a grace period above it).
+
+### Review findings + residual limitations (post-multi-agent review)
+
+Three independent Opus reviews (correctness/data-loss, code-quality, test-coverage) ran against the
+branch. The one real bug they surfaced is fixed; the rest are documented trade-offs.
+
+- **Resurrection during an in-flight PUT — FIXED.** A permanent-delete/restore landing *during* a PUT
+  (after `performUpload`'s pre-PUT re-check) would let the completed PUT recreate the just-deleted
+  object as an orphan. `performUpload` now, on a PUT that succeeded but whose row is *gone* (cancelled,
+  not merely superseded), issues a compensating `storage.delete` — the key is a dead UUID, never reused,
+  so this can't clobber a fresh object. Covered by the "delete during an in-flight PUT" test (verified to
+  fail without the guard). The fault-injection `StorageBackend` reads the body up-front like a real S3
+  PUT so this window is actually reproduced.
+- **Version snapshot during a concurrent close — residual, low severity.** If a snapshot's
+  `documentDbs` lookup misses in the narrow window between `closeDatabase`'s map-delete and the close's
+  own sync, it sources from a pending staging copy or storage, which can be up to one sync interval
+  behind — a slightly-stale *version-history* entry, never live-doc data loss. Mitigated by sourcing the
+  live `VACUUM INTO` first when cached; the residual is the cache-miss window. Not worth a deadlock-prone
+  cross-lock with the close path.
+- **Idle-teardown widens the outage RPO — accepted.** A home that idle-destructs mid-outage leaves its
+  queued uploads on the host bind-mount until the home is next opened or the process restarts (replay),
+  rather than draining immediately (no surviving registry — by design). Same disk durability as today's
+  temp files; only a host-disk-loss *during* that window loses the queued bytes (Litestream-class
+  residual). Healthy S3 acks in ms, long before the 5-min idle timer, so this only bites during a
+  multi-minute outage.
+- **`VACUUM INTO` corruption — not reachable.** `VACUUM INTO` fsyncs its output file before returning,
+  and the pending row is inserted *after* `stageCopy` returns, so the staged copy is durable-before-row;
+  a crash can't leave a referenced-but-partial staging file. Any corruption would also be caught on
+  open, not silently served. No per-PUT integrity check added.
+- **Shutdown drain budget is whole-process.** `SHUTDOWN_DRAIN_BUDGET_MS` bounds when the loop *starts*
+  new PUTs, not an already-in-flight one (≈ deadline + one PUT). Multi-mount homes drain mounts
+  sequentially, so the budget is first-mount-biased; anything undrained replays on boot — safe, just
+  not fair. A PUT that overruns the grace period is SIGKILLed and replayed.
+- **Deliberately synchronous `metadata.db` access.** The pipeline uses the sync `bun:sqlite` API (no
+  `await`) on purpose: `enqueueUpload` must persist before returning, and the drain's post-PUT
+  bookkeeping must have no `await` between the `uploadClosing` teardown guard and the DB access. Adding
+  `await` for stylistic consistency would inject interleaving points and re-open the teardown race.
