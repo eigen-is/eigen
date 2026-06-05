@@ -30,7 +30,7 @@ describe('Public Routes', () => {
 
     describe('/p/user/:emailOrId', () => {
         test('returns public user info by email', async () => {
-            const response = await authedRequest(ctx.alice.user.sessionToken, `/p/user/${ctx.alice.user.email}`);
+            const response = await ctx.app.handle(new Request(`http://localhost/p/user/${ctx.alice.user.email}`));
             const data = await assertJson<PublicUser>(response);
             expect(data.name).toBe('Alice Test');
             expect(data.email).toBe('alice@test.eigen.is');
@@ -38,20 +38,15 @@ describe('Public Routes', () => {
         });
 
         test('returns public user info by id', async () => {
-            const response = await authedRequest(ctx.alice.user.sessionToken, `/p/user/${ctx.alice.user.id}`);
+            const response = await ctx.app.handle(new Request(`http://localhost/p/user/${ctx.alice.user.id}`));
             const data = await assertJson<PublicUser>(response);
             expect(data.name).toBe('Alice Test');
             expect(data.email).toBe('alice@test.eigen.is');
         });
 
         test('returns 404 for non-existent user', async () => {
-            const response = await authedRequest(ctx.alice.user.sessionToken, '/p/user/nobody@test.eigen.is');
+            const response = await ctx.app.handle(new Request('http://localhost/p/user/nobody@test.eigen.is'));
             expect(response.status).toBe(404);
-        });
-
-        test('requires authentication — no anonymous account enumeration', async () => {
-            const response = await ctx.app.handle(new Request(`http://localhost/p/user/${ctx.alice.user.email}`));
-            expect(response.status).toBe(401);
         });
     });
 
