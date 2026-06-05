@@ -29,14 +29,7 @@ import { getAvatarsDir } from '../config/paths';
 import type { PersistInput } from '../notification-center/notification-center';
 import type { User } from '../user';
 import { updateUser } from '../user/';
-import { atHome, getHome } from './get-home';
-import { TeamHome } from './team-home';
-
-async function getTeamHome(teamOwnerId: string): Promise<TeamHome> {
-    const home = await getHome(teamOwnerId);
-    if (!(home instanceof TeamHome)) throw new Error(`Not a team home: ${teamOwnerId}`);
-    return home;
-}
+import { atHome, getHome, getTeamHome } from './get-home';
 
 export type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string }

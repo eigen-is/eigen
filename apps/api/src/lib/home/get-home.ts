@@ -92,6 +92,24 @@ export async function getHome(ownerId: string): Promise<Home> {
     throw new Error(`getHome: could not obtain a stable home for ${ownerId}`);
 }
 
+// Typed own-home accessors: resolve the caller's own home and assert its concrete
+// subtype, so routes can drop the `(await getHome(id)) as TeamHome` casts.
+export async function getTeamHome(teamOwnerId: string): Promise<TeamHome> {
+    const home = await getHome(teamOwnerId);
+    if (!(home instanceof TeamHome)) {
+        throw new Error(`Not a team home: ${teamOwnerId}`);
+    }
+    return home;
+}
+
+export async function getUserHome(userId: string): Promise<UserHome> {
+    const home = await getHome(userId);
+    if (!(home instanceof UserHome)) {
+        throw new Error(`Not a user home: ${userId}`);
+    }
+    return home;
+}
+
 export async function evictHome(ownerId: string): Promise<void> {
     const factory = homeFactories.get(ownerId);
     if (factory) {

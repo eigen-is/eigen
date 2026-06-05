@@ -1,8 +1,7 @@
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
-import type { UserHome } from '../lib/home';
-import { getHome } from '../lib/home';
+import { getUserHome } from '../lib/home';
 import { betterAuth } from './auth';
 
 // Space routes are personal-only (user settings)
@@ -14,7 +13,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
         async ({ params, user }): Promise<UserSettings> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const home = (await getHome(user.id)) as UserHome;
+            const home = await getUserHome(user.id);
             return home.settings.get();
         },
         { auth: true },
@@ -25,7 +24,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
         async ({ params, body, user }): Promise<UserSettings> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const home = (await getHome(user.id)) as UserHome;
+            const home = await getUserHome(user.id);
             return await home.settings.set(body);
         },
         {
