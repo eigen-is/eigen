@@ -81,7 +81,10 @@ export function parseIcs(icsText: string): IcsParseResult {
             ['confirmed', 'tentative', 'cancelled'].includes(rawStatus) ? rawStatus : 'confirmed'
         ) as ParsedEvent['status'];
 
-        const sequence = Number(vevent.getFirstPropertyValue('sequence') || 0);
+        // Coerce a non-numeric SEQUENCE to 0 so a malformed value can't slip past the
+        // receiver's `<=` replay guard as NaN (NaN comparisons are always false).
+        const rawSequence = Number(vevent.getFirstPropertyValue('sequence') || 0);
+        const sequence = Number.isFinite(rawSequence) ? rawSequence : 0;
 
         const recurrenceId = vevent.getFirstProperty('recurrence-id');
         let recurrenceDate: string | null = null;

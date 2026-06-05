@@ -164,14 +164,18 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
                 new Date(params.to * 1000),
             );
             if (permission === 'free-busy') {
-                return events.map(
-                    (e): FreeBusyBlock => ({
-                        startTime: e.startTime,
-                        endTime: e.endTime,
-                        allDay: e.allDay,
-                        status: e.status as FreeBusyBlock['status'],
-                    }),
-                );
+                // Exclude cancelled events: their existence + time must not leak into another
+                // user's free/busy view, and excluding them makes the status cast below valid.
+                return events
+                    .filter((e) => e.status !== 'cancelled')
+                    .map(
+                        (e): FreeBusyBlock => ({
+                            startTime: e.startTime,
+                            endTime: e.endTime,
+                            allDay: e.allDay,
+                            status: e.status as FreeBusyBlock['status'],
+                        }),
+                    );
             }
             return events;
         },

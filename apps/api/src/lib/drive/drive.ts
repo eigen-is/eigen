@@ -491,14 +491,27 @@ export default class Drive {
         if (!file) throw new ApiError(404, 'File not found');
         // S3File doesn't support ResponseInit options — stream it instead
         const body: BodyInit = 'bucket' in file ? file.stream() : file;
-        return new Response(body, {
-            headers: {
-                'Content-Type': path.mimeType || 'application/octet-stream',
-                'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
-                'Cache-Control': 'public, max-age=86400',
-                Expires: new Date(Date.now() + 86400000).toUTCString(),
-            },
-        });
+        const mimeType = path.mimeType || 'application/octet-stream';
+        const headers: Record<string, string> = {
+            'Content-Type': mimeType,
+            'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
+            'Cache-Control': 'public, max-age=86400',
+            Expires: new Date(Date.now() + 86400000).toUTCString(),
+            // Stored MIME is the upload's own Content-Type, served verbatim — nosniff stops the
+            // browser re-sniffing a disguised payload (e.g. HTML bytes uploaded as image/png).
+            'X-Content-Type-Options': 'nosniff',
+        };
+        // /embed serves inline from the API's own origin, so a scriptable upload (HTML/SVG) could
+        // run script with the viewer's session. A sandbox CSP neutralises active content while
+        // still rendering the file; scoped to scriptable types so media/PDF previews are untouched.
+        const baseMime = mimeType.split(';')[0]!.trim().toLowerCase();
+        if (
+            disposition === 'inline' &&
+            (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml')
+        ) {
+            headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
+        }
+        return new Response(body, { headers });
     }
 
     async writeFileContent(
