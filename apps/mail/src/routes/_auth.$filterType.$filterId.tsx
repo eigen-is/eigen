@@ -122,6 +122,14 @@ function MailRoute() {
         }
     };
 
+    const handleDeleteEmailById = async (emailId: string) => {
+        const result = await actions.handleDeleteEmailById(emailId);
+        if (result.needsConfirmation) {
+            setPendingDeleteEmails(result.emails);
+            setDeleteDialogOpen(true);
+        }
+    };
+
     const confirmDeleteEmails = async () => {
         if (pendingDeleteEmails.length > 0) {
             await actions.confirmDeleteEmails(pendingDeleteEmails);
@@ -147,7 +155,7 @@ function MailRoute() {
     ) : selectedEmail ? (
         <EmailDetailToolbar
             email={selectedEmail}
-            onDelete={actions.handleDeleteEmailById}
+            onDelete={handleDeleteEmailById}
             onArchive={actions.handleArchiveEmailById}
             onReportSpam={actions.handleReportSpamById}
             onMoveToFolder={actions.handleMoveEmailToFolderById}
