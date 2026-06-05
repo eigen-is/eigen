@@ -25,5 +25,8 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Primitives index
+        run: bun run primitives:check
+
       - name: Test
         run: bun --filter '*' test
