@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
+import { eigenDocEditorValidateSearch } from '@workspace/ui/components/layout/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { useEigenDocEditorRoute } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
 import { useCallback } from 'react';
@@ -7,9 +8,7 @@ import { StickiesBoard } from '../components/stickies/board';
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
     component: StickiesRoute,
-    validateSearch: (search: Record<string, unknown>) => ({
-        chat: typeof search.chat === 'string' ? search.chat : undefined,
-    }),
+    validateSearch: eigenDocEditorValidateSearch,
 });
 
 function StickiesRoute() {
