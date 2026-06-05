@@ -504,12 +504,11 @@ export default class Drive {
         // /embed serves inline from the API's own origin, so a scriptable upload (HTML/SVG) could
         // run script with the viewer's session. A sandbox CSP neutralises active content while
         // still rendering the file; scoped to scriptable types so media/PDF previews are untouched.
-        const baseMime = mimeType.split(';')[0]!.trim().toLowerCase();
-        if (
-            disposition === 'inline' &&
-            (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml')
-        ) {
-            headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
+        if (disposition === 'inline') {
+            const baseMime = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
+            if (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml') {
+                headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
+            }
         }
         return new Response(body, { headers });
     }
