@@ -549,19 +549,23 @@ export class Mount {
         return created;
     }
 
-    // Produce a local copy of data.db's current bytes at destPath, freshest source first: a
-    // pending staged copy (set by the just-run flush/close sync), else a fresh VACUUM INTO of
-    // the live connection, else the storage object (current only once every upload has acked).
+    // Produce a local copy of data.db's current bytes at destPath. Source order:
+    //  1. the live connection via VACUUM INTO — authoritative and immune to a concurrent
+    //     enqueue unlinking a staging file out from under us (the caller flushed it first);
+    //  2. a pending staged copy — used only when not cached (e.g. close-time, after the doc's
+    //     timer is cleared, so no concurrent tick can supersede/unlink it);
+    //  3. the storage object — reached only when nothing is pending, i.e. every upload acked,
+    //     so it is current (never the stale-S3 read the old copyPath did — §3).
     private async stageDataDbSnapshot(dataDbPathId: string, destPath: string): Promise<void> {
+        const cached = this.documentDbs.get(dataDbPathId);
+        if (cached) {
+            (await cached()).stageCopy(destPath);
+            return;
+        }
         const storageKey = await this.getStorageKey(dataDbPathId);
         const pendingStaging = this.getPendingStagingPath(storageKey);
         if (pendingStaging && (await Bun.file(pendingStaging).exists())) {
             await Bun.write(destPath, Bun.file(pendingStaging));
-            return;
-        }
-        const cached = this.documentDbs.get(dataDbPathId);
-        if (cached) {
-            (await cached()).stageCopy(destPath);
             return;
         }
         await Bun.write(destPath, this.storage.read(storageKey));
@@ -1256,9 +1260,8 @@ export class Mount {
                       onSnapshot,
                   },
         );
-        const db = managed;
 
-        await db.open();
+        await managed.open();
 
         // Phase 1a (crash-recovery durability): a surviving temp means a prior process
         // died before its writes synced. The fresh connection's total_changes() reset to
@@ -1267,7 +1270,7 @@ export class Mount {
         // next sync so they re-reach storage. Safe because a clean close always
         // cleanupTemp's the temp — a surviving temp is always an unclean-shutdown signal.
         if (recoveredFromCrash) {
-            db.markDirty();
+            managed.markDirty();
         }
 
         // For temp-copy backends (s3, path-based local), push the
@@ -1278,10 +1281,10 @@ export class Mount {
         // that window would make subsequent strict openDatabase
         // calls throw.
         if (mode === 'create' && this.needsTempCopy) {
-            await db.flush();
+            await managed.flush();
         }
 
-        return db;
+        return managed;
     }
 
     async closeDatabase(pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
@@ -1324,6 +1327,14 @@ export class Mount {
     }
 
     // ---- Write-behind upload pipeline (Phase 1b; isRemote mounts only) ------------------
+    //
+    // These methods read/write `this.db` (the mount's metadata.db) with the SYNCHRONOUS
+    // bun:sqlite/Drizzle API (no `await`) — deliberately, not by omission. enqueueUpload must
+    // persist the pending row before it returns (synchronous durability), and the drain's
+    // post-PUT bookkeeping must run with no `await` between the `uploadClosing` teardown guard
+    // and the DB access — an interleaving point there could touch metadata.db after Home.destruct
+    // closed it. metadata.db is owned by the Home (getLocalDatabase), so the only safe window
+    // for these accesses is while the mount is live; the guards enforce that.
 
     // Queue depth (observability, §9): how many uploads are awaiting an ack on this mount.
     get pendingUploadCount(): number {
@@ -1358,11 +1369,7 @@ export class Mount {
     // worker deletes that one on completion).
     private enqueueUpload(storageKey: string, stagingPath: string): void {
         const now = Date.now();
-        const prev = this.db
-            .select({ stagingPath: pendingUploads.stagingPath })
-            .from(pendingUploads)
-            .where(eq(pendingUploads.storageKey, storageKey))
-            .get();
+        const prevStaging = this.getPendingStagingPath(storageKey);
         this.db
             .insert(pendingUploads)
             .values({ storageKey, stagingPath, attempt: 0, enqueuedAt: now, nextAttemptAt: now })
@@ -1371,8 +1378,8 @@ export class Mount {
                 set: { stagingPath, attempt: 0, enqueuedAt: now, nextAttemptAt: now },
             })
             .run();
-        if (prev && prev.stagingPath !== stagingPath && !this.inFlightStagingKeys.has(storageKey)) {
-            void this.unlinkStaging(prev.stagingPath);
+        if (prevStaging && prevStaging !== stagingPath && !this.inFlightStagingKeys.has(storageKey)) {
+            void this.unlinkStaging(prevStaging);
         }
         registerForSync(this);
         void this.drainPendingUploads();
@@ -1489,7 +1496,16 @@ export class Mount {
             .get();
         const stillCurrent = !!after && after.stagingPath === stagingPath;
         if (putOk) {
-            if (stillCurrent) this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, storageKey)).run();
+            if (stillCurrent) {
+                this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, storageKey)).run();
+            } else if (!after) {
+                // The row was CANCELLED (permanent delete / chat restore) while our PUT was in
+                // flight, so the PUT just resurrected a deleted object. Delete it (invariant 7).
+                // The key is a dead UUID — never reused — so this can't clobber a fresh object.
+                // (A row that merely changed stagingPath was SUPERSEDED, not cancelled: leave the
+                // object, the newer staging overwrites it.)
+                await this.storage.delete(storageKey).catch(() => {});
+            }
             await this.unlinkStaging(stagingPath); // uploaded — our copy is no longer needed
         } else if (stillCurrent) {
             const next = attempt + 1;

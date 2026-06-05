@@ -1,12 +1,13 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
-import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
+import { buildStorageKey, createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
 import { setShutdownDrainDeadline } from '../lib/sync';
@@ -46,6 +47,15 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     snapshot: { policy: DEFAULT_RETENTION, writesPerSnapshot: 1_000_000 }, // snapshot only when asked
 };
 
+// Same schema, no snapshot config — for tests where a close-time version enqueue would just be
+// noise (mirrors comments.db, which has no snapshot).
+const docConfigNoSnap: DatabaseConfig<typeof docSchema> = {
+    name: 'sync-test-doc-nosnap',
+    currentVersion: 1,
+    schema: docSchema,
+    migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
+};
+
 // Wraps a LocalStorage as an S3-like backend with injectable write delays/failures, so the
 // async upload pipeline can be exercised deterministically without a real S3. Omits getPath so
 // the mount treats it like S3 (temp-copy path), not a path-based local store.
@@ -61,12 +71,16 @@ class FaultStorage implements StorageBackend {
     }
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         this.writeCount++;
+        // Read the body up-front, like an S3 PUT streaming the request body — so a concurrent
+        // unlink of the staging file can't abort an already-started upload. This is what makes
+        // the resurrection window (cancel during an in-flight PUT) reproducible.
+        const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
         if (this.writeDelayMs > 0) await Bun.sleep(this.writeDelayMs);
         if (this.failNextWrites > 0) {
             this.failNextWrites--;
             throw new Error('injected upload failure (503)');
         }
-        return this.inner.write(key, data);
+        return this.inner.write(key, bytes);
     }
     async delete(key: string): Promise<boolean> {
         return this.inner.delete(key);
@@ -163,14 +177,17 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         await mount.init();
         const { dataDbId } = await provisionDoc(mount);
 
-        fault.writeDelayMs = 400; // every PUT is slow
+        fault.writeDelayMs = 2_000; // every PUT is slow — awaiting even one would dominate the timing
         const start = Bun.nanoseconds();
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId);
         const elapsedMs = (Bun.nanoseconds() - start) / 1_000_000;
 
-        expect(elapsedMs).toBeLessThan(400); // returned before the background PUT could finish
+        // create+close returned in a small fraction of one 2s PUT → they did not await the PUT.
+        expect(elapsedMs).toBeLessThan(500);
+        expect(mount.pendingUploadCount).toBeGreaterThan(0); // the upload is queued, not yet done
+        fault.writeDelayMs = 0; // don't make the verification drain slow too
         await mount.drainPendingUploads({ flushNow: true }); // now await the upload
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, dataDbId)).toBe(1);
@@ -305,12 +322,13 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         expect(await countBackingRows(mount, dataDbId)).toBe(1);
     });
 
-    test('shutdown flush is bounded — a dead backend does not hang the drain past its deadline', async () => {
+    test('shutdown flush is bounded under a slow-AND-failing backend (the real incident shape)', async () => {
         const { mount, fault } = createS3Mount('shutdown-bounded');
         await mount.init();
         const { dataDbId } = await provisionDoc(mount);
 
-        fault.failNextWrites = 9999; // dead backend
+        fault.writeDelayMs = 2_000; // slow…
+        fault.failNextWrites = 9999; // …then 503 — Hetzner's degraded shape, not an instant fail
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
 
@@ -320,7 +338,10 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         const elapsedMs = (Bun.nanoseconds() - start) / 1_000_000;
         setShutdownDrainDeadline(null);
 
-        expect(elapsedMs).toBeLessThan(3_000); // did not hang on the dead backend
+        // The deadline bounds when the loop STARTS new PUTs; an already-in-flight PUT still runs
+        // to completion, so the bound is ≈ deadline + one PUT (~2s here), never N×PUT. A PUT that
+        // overruns the process grace period is SIGKILLed and replays on boot — no data loss.
+        expect(elapsedMs).toBeLessThan(4_000);
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // left queued for boot replay
     });
 
@@ -351,5 +372,100 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         await mount.drainPendingUploads({ flushNow: true });
 
         expect(await countBackingRows(mount, versionId)).toBe(2); // current bytes, not stale {1}
+    });
+
+    test('a delete landing during an in-flight PUT does not resurrect the deleted object', async () => {
+        const { mount, fault } = createS3Mount('resurrect-guard');
+        await mount.init();
+        const { containerId, dataDbId } = await provisionDoc(mount);
+        const key = buildStorageKey(dataDbId, 'data.db');
+
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mount.closeDatabase(dataDbId); // enqueue
+
+        fault.writeDelayMs = 1_000; // hold the PUT in flight (its body was already read up-front)
+        const draining = mount.drainPendingUploads({ flushNow: true });
+        await Bun.sleep(150); // let performUpload enter storage.write — the object is mid-upload
+        await mount.deletePath(containerId); // cancel + storage.delete while the PUT is in flight
+        await draining; // PUT completes after the delay → the guard must delete what it resurrected
+
+        expect(mount.pendingUploadCount).toBe(0);
+        expect(await fault.exists(key)).toBe(false); // NOT resurrected
+        expect(readdirSync(mount.stagingDir)).toHaveLength(0);
+    });
+
+    test('a container with two managed DBs (data.db + comments.db) both upload under the queue', async () => {
+        const { mount, fault } = createS3Mount('two-managed-dbs');
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+        const containerId = await mount.createFolder(rootId, 'room', 'chat');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        const commentsId = await mount.touchFile(containerId, 'comments.db', 'application/x-sqlite3');
+
+        fault.failNextWrites = 9999; // outage holds both
+        const data = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        data.db.insert(docSchema.items).values({ id: 1, data: 'd' }).run();
+        await mount.closeDatabase(dataDbId);
+        const comments = await mount.createDatabase(docConfigNoSnap, commentsId);
+        comments.db.insert(docSchema.items).values({ id: 1, data: 'c' }).run();
+        await mount.closeDatabase(commentsId);
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(mount.pendingUploadCount).toBe(2); // two distinct keys queued, no collision
+
+        fault.failNextWrites = 0; // recovery uploads both
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(mount.pendingUploadCount).toBe(0);
+        expect(await countBackingRows(mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(mount, commentsId)).toBe(1);
+    });
+
+    test('reconcile resumes the real pending upload and sweeps an orphan staging file', async () => {
+        const m1 = createS3Mount('reconcile-orphan');
+        m1.fault.failNextWrites = 9999;
+        await m1.mount.init();
+        const { dataDbId } = await provisionDoc(m1.mount);
+        const managed = await m1.mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await m1.mount.closeDatabase(dataDbId);
+        await m1.mount.drainPendingUploads({ flushNow: true });
+        expect(m1.mount.pendingUploadCount).toBe(1);
+
+        // Plant an orphan staging file (a crash between stageCopy and the row insert leaves one).
+        const orphan = join(m1.mount.stagingDir, `${randomUUID()}.db`);
+        await Bun.write(orphan, 'garbage-referenced-by-no-row');
+        expect(readdirSync(m1.mount.stagingDir)).toHaveLength(2);
+
+        // Restart sharing the same baseDir: reconcile keeps the referenced staging, sweeps the orphan.
+        const m2 = createS3Mount('reconcile-orphan');
+        m2.fault.failNextWrites = 9999;
+        await m2.mount.init();
+        expect(m2.mount.pendingUploadCount).toBe(1);
+        expect(existsSync(orphan)).toBe(false);
+        expect(readdirSync(m2.mount.stagingDir)).toHaveLength(1);
+
+        m2.fault.failNextWrites = 0; // and the real one still uploads
+        await m2.mount.drainPendingUploads({ flushNow: true });
+        expect(await countBackingRows(m2.mount, dataDbId)).toBe(1);
+    });
+
+    test('idle teardown during an in-flight PUT bails cleanly and leaves the row for replay', async () => {
+        const { mount, fault } = createS3Mount('idle-teardown');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mount.closeDatabase(dataDbId); // enqueue; mount still live
+
+        fault.writeDelayMs = 500; // hold the PUT in flight
+        const draining = mount.drainPendingUploads(); // background drain, no flush
+        await Bun.sleep(100);
+        // Idle teardown (no shutdown deadline): sets uploadClosing + unregisters, does NOT await the
+        // in-flight PUT. The drain must then bail via its uploadClosing guards without throwing.
+        await mount.closeAllDatabases();
+        await draining; // resolves cleanly — no DB-after-close error
+
+        fault.writeDelayMs = 0;
+        expect(mount.pendingUploadCount).toBeGreaterThan(0); // row preserved for replay on reopen
     });
 });
