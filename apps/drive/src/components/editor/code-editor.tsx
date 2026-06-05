@@ -21,8 +21,7 @@ import {
     keymap,
     lineNumbers,
 } from '@codemirror/view';
-import { TooltipButton } from '@workspace/ui';
-import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
+import { ConfirmDialog, TooltipButton } from '@workspace/ui';
 import { Column } from '@workspace/ui/components/layout/app/column-layout';
 import { Redo, Undo } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';

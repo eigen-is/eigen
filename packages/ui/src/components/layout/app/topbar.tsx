@@ -8,7 +8,6 @@ import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { Grip, LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
-import { ConfirmDialog } from '../../confirm-dialog.tsx';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -23,6 +22,7 @@ import {
     DropdownMenuTrigger,
 } from '../../dropdown-menu.tsx';
 import { EigenLogo } from '../braket/eigen-logo.tsx';
+import { ConfirmDialog } from '../confirm-dialog.tsx';
 import { UserAvatar } from '../user-avatar.tsx';
 import { UserItem } from '../user-item.tsx';
 import { AboutDialog } from './about-dialog.tsx';

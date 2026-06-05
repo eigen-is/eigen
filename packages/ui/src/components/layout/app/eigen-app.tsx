@@ -5,13 +5,13 @@ import { AuthProvider } from '@workspace/lib/auth/auth-context.tsx';
 import type React from 'react';
 import { lazy, Suspense, useState } from 'react';
 import { printDocument } from '../../../lib/printElement.ts';
-import { ErrorBoundary } from '../../error-boundary.tsx';
 import { Toaster } from '../../sonner.tsx';
 import { LoadingScreen } from '../pages/loading-screen.tsx';
 import { PreviewProvider } from '../preview-provider/preview-provider.tsx';
 import { SSEProvider } from '../sse-provider';
 import { UploadProvider } from '../upload-provider/upload-provider.tsx';
 import { CommandPaletteProvider } from './command-palette/command-palette-provider.tsx';
+import { ErrorBoundary } from './error-boundary.tsx';
 import { ThemeProvider } from './theme-provider.tsx';
 
 const ReactQueryDevtools = import.meta.env.DEV
