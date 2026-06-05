@@ -1,4 +1,4 @@
-import { createRootRouteWithContext, Outlet, useLocation } from '@tanstack/react-router';
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { useAddTeamMember, useMembers, useSetupStatus, useTeams } from '@workspace/lib/admin';
 import { type AuthContextType, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
@@ -41,14 +41,11 @@ function AuthenticatedAdmin() {
     const { data: teams = [] } = useTeams(config?.orgId);
     const { data: members = [] } = useMembers(config?.orgId);
     const addMember = useAddTeamMember();
-    const location = useLocation();
 
     const { data: serverSettings } = useServerSettings();
     const currentMember = members.find((m) => m.userId === user?.id);
     const isOwner = currentMember?.role === 'owner';
     const waitlistEnabled = serverSettings?.onboarding?.waitlist?.enabled ?? false;
-
-    const isTeamDetailSelected = location.pathname === '/teams' && location.search.teamId;
 
     const handleAddMembersToTeam = async (memberIds: string[], teamId: string) => {
         for (const userId of memberIds) {
@@ -60,7 +57,7 @@ function AuthenticatedAdmin() {
         <AppShell
             appName="admin"
             rootRoute={Route}
-            sidebarMode={isTeamDetailSelected ? 'hidden' : 'collapsible'}
+            sidebarMode="collapsible"
             sidebar={({ condensed, isMobile, onClose }) => (
                 <AdminSidebar
                     condensed={condensed}
