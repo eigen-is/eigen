@@ -1,14 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
+import { eigenDocEditorValidateSearch } from '@workspace/ui/components/layout/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { useEigenDocEditorRoute } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
 import { CollaborativeEditor } from '../components/docs/editor';
 
 export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
     component: CollaborativeTextEditor,
-    validateSearch: (search: Record<string, unknown>) => ({
-        chat: typeof search.chat === 'string' ? search.chat : undefined,
-    }),
+    validateSearch: eigenDocEditorValidateSearch,
 });
 
 function CollaborativeTextEditor() {

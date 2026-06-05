@@ -5,7 +5,6 @@ export type { DeckData, ImageObject, SlideItem, SlideObject, TextObject } from '
 export type ApplyTo = 'this' | 'this-and-following' | 'all';
 export {
     BORDER_RADIUS_ROUND,
-    percentToPx,
     pxToPercent,
     SLIDE_ASPECT_RATIO,
     SLIDE_BASE_HEIGHT,

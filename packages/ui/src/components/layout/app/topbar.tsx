@@ -92,6 +92,7 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                 <Button
                     variant="ghost"
                     size="icon"
+                    aria-label="Switch app"
                     className="mr-1 h-8 w-8 text-white hover:bg-primary/20 hover:text-white"
                 >
                     <Grip className="h-5 w-5" />

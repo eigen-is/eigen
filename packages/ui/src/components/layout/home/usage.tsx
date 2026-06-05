@@ -33,7 +33,12 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
     const ratio = totalUsed / totalMax;
 
     return (
-        <div className={cn('p-3 select-none cursor-pointer', className)} onClick={() => setShowDetails(!showDetails)}>
+        <button
+            type="button"
+            aria-expanded={showDetails}
+            className={cn('w-full text-left p-3 select-none cursor-pointer', className)}
+            onClick={() => setShowDetails(!showDetails)}
+        >
             <div>
                 {!condensed && (
                     <div className="flex justify-between items-center mb-1">
@@ -75,6 +80,6 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
                     </div>
                 )}
             </div>
-        </div>
+        </button>
     );
 }
