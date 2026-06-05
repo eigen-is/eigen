@@ -1103,6 +1103,10 @@ export class Mount {
               }
             : undefined;
 
+        // Set when onOpen reuses a temp that survived an unclean shutdown — those bytes
+        // never synced, so the DB must be force-dirtied after open (Phase 1a, below).
+        let recoveredFromCrash = false;
+
         const db = new ManagedDatabase(
             config,
             localPath,
@@ -1113,6 +1117,7 @@ export class Mount {
                           const tempPath = this.getTempPath(pathId);
                           if (fs.existsSync(tempPath)) {
                               console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
+                              recoveredFromCrash = true;
                               return;
                           }
                           if (!(await this.storage.exists(storageKey))) {
@@ -1144,6 +1149,16 @@ export class Mount {
         );
 
         await db.open();
+
+        // Phase 1a (crash-recovery durability): a surviving temp means a prior process
+        // died before its writes synced. The fresh connection's total_changes() reset to
+        // 0, so the DB looks clean and the close-time cleanupTemp would silently drop
+        // those bytes (the most plausible cause of the 2026-05-30 chat loss). Force the
+        // next sync so they re-reach storage. Safe because a clean close always
+        // cleanupTemp's the temp — a surviving temp is always an unclean-shutdown signal.
+        if (recoveredFromCrash) {
+            db.markDirty();
+        }
 
         // For temp-copy backends (s3, path-based local), push the
         // freshly-created schema to storage before returning.
