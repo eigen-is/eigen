@@ -345,7 +345,7 @@ export type InviteResult = {
     targetPathId: string;
 };
 
-export type EditorContent = {
+export type FileEditorContent = {
     editMode: string;
     content: string;
     frontmatter: string | null;
