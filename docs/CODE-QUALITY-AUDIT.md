@@ -29,7 +29,7 @@ every user's/team's mounts). Everything else is proactive hygiene that keeps Eig
 
 **🔴 Tier 1 — Do first (reachable security, correctness & test-integrity)**
 
-> **Implementation status (2026-06-05, branch `fix/audit-tier1`).** Landed: items 1, 2, 4, 5, 6,
+> **Implementation status (2026-06-05, merged to `main`; Docker smoke-test 27/27 green).** Landed: items 1, 2, 4, 5, 6,
 > 8, the iMIP-SEQUENCE half of 7, and the stored-XSS (`nosniff` + scoped sandbox CSP) and
 > OTP-atomicity halves of 9. **Reverted after review as misjudgments of *intentional* design:**
 > item 3 (SSRF) — blocking the S3 endpoint breaks self-hosted MinIO-on-LAN and first-run setup is
