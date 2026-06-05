@@ -58,6 +58,9 @@ bun run check          # lint + typecheck + test
   any task complete
 - **Read existing code before writing new code** — read 2-3 existing files in the same directory. Match their style,
   structure, naming, and patterns exactly. New code must look like it was always there
+- **Search [SHARED-PRIMITIVES.md](docs/SHARED-PRIMITIVES.md) before building a shared hook, component, type, or
+  util** — the generated index of everything `packages/ui` + `packages/lib` export. Import what already exists;
+  if it's missing, export it from the package barrel so it gets catalogued. `bun run primitives` regenerates it
 - **Read relevant docs before planning or coding** — check `docs/` for architecture docs on the domain you're
   touching (e.g., `docs/COMMENTS.md` before adding comment features, `docs/EXPORT.md` before changing export).
   Don't assume you know the conventions — verify them
