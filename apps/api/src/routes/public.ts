@@ -6,8 +6,10 @@ import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo, getPublicInfo } from '../lib/space/public';
 import { registerFromInvite, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
+import { betterAuth } from './auth';
 
 export const publicRouter = new Elysia({ name: 'public' })
+    .use(betterAuth)
     .get('/p/avatar/:emailOrId', async ({ params, set }) => {
         const avatar = await getAvatarByEmailOrId(params.emailOrId);
 
@@ -21,9 +23,12 @@ export const publicRouter = new Elysia({ name: 'public' })
         set.headers['Content-Type'] = 'image/svg+xml';
         return await generateFallbackSvg(params.emailOrId);
     })
-    .get('/p/user/:emailOrId', async ({ params }) => await getPublicInfo(params.emailOrId))
+    // Authenticated: these resolve a user's name + email, so leaving them public allows bulk
+    // account enumeration. Every consumer (usePublicUser / user-batcher) runs post-auth.
+    .get('/p/user/:emailOrId', async ({ params }) => await getPublicInfo(params.emailOrId), { auth: true })
     .post('/p/users', async ({ body }): Promise<Record<string, PublicUser>> => await getBatchPublicInfo(body.ids), {
         body: t.Object({ ids: t.Array(t.String(), { maxItems: 100 }) }),
+        auth: true,
     })
     .post(
         '/p/waitlist',

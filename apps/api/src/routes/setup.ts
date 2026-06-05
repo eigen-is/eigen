@@ -10,7 +10,7 @@ export const setupRouter = new Elysia({ name: 'setup' })
         '/setup/s3check',
         async ({ body }) => {
             if (!isSetupRequired()) throw new ApiError(403, 'Setup already completed');
-            return checkS3Connection(toS3Config(body));
+            return checkS3Connection(toS3Config(body), { redactErrors: true });
         },
         { body: s3ConfigBody },
     )

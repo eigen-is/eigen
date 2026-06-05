@@ -4,8 +4,40 @@ import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
 import type { S3Config, StorageBackend } from './types';
 
-export async function checkS3Connection(config: S3Config): Promise<S3CheckResult> {
+// Cloud instance-metadata (IMDS) endpoints — there is no legitimate S3 service here, but a
+// caller-supplied endpoint pointed at one could exfiltrate instance credentials (SSRF). We block
+// these specifically and DELIBERATELY allow private/LAN ranges: self-hosted MinIO on localhost or
+// a LAN is a supported, common setup, so a blanket private-IP block would be wrong for this product.
+const BLOCKED_METADATA_HOSTS = new Set([
+    'fd00:ec2::254', // AWS IPv6 IMDS
+    'metadata.google.internal', // GCP
+    '100.100.100.200', // Alibaba Cloud
+    '192.0.0.192', // Oracle Cloud
+]);
+
+function assertEndpointAllowed(endpoint: string): void {
+    // Reject an explicit non-http(s) scheme (file:, gopher:, …); a bare hostname gets https prepended.
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(endpoint) && !/^https?:\/\//i.test(endpoint)) {
+        throw new Error('S3 endpoint must use http or https');
+    }
+    let url: URL;
     try {
+        url = new URL(/^https?:\/\//i.test(endpoint) ? endpoint : `https://${endpoint}`);
+    } catch {
+        throw new Error('S3 endpoint is not a valid URL');
+    }
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    // 169.254.0.0/16 (IPv4 link-local, where AWS/Azure/GCP IMDS lives) + fe80::/10 (IPv6 link-local).
+    const isLinkLocal = host.startsWith('169.254.') || host.startsWith('fe80:');
+    if (isLinkLocal || BLOCKED_METADATA_HOSTS.has(host)) {
+        // Generic message — don't confirm which internal host was probed.
+        throw new Error('S3 endpoint is not allowed');
+    }
+}
+
+export async function checkS3Connection(config: S3Config, opts?: { redactErrors?: boolean }): Promise<S3CheckResult> {
+    try {
+        assertEndpointAllowed(config.endpoint);
         const client = new S3Client({
             endpoint: config.endpoint,
             bucket: config.bucket,
@@ -22,6 +54,9 @@ export async function checkS3Connection(config: S3Config): Promise<S3CheckResult
         const versioning = await checkS3Versioning(config);
         return { ok: true, message: 'Connection successful', versioning };
     } catch (err) {
+        // Pre-auth (first-run setup) callers redact the message so a failed probe can't be used
+        // as an internal-service reachability oracle; authenticated admins get the real error.
+        if (opts?.redactErrors) return { ok: false, message: 'Connection failed' };
         return { ok: false, message: err instanceof Error ? err.message : 'Connection failed' };
     }
 }

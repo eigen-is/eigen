@@ -272,14 +272,17 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         if (!input.s3Bucket || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
             throw new ApiError(400, 'S3 configuration requires bucket, access key, and secret key');
         }
-        const s3Result = await checkS3Connection({
-            endpoint: input.s3Endpoint ?? '',
-            bucket: input.s3Bucket,
-            prefix: '',
-            accessKeyId: input.s3AccessKeyId,
-            secretAccessKey: input.s3SecretAccessKey,
-            region: input.s3Region,
-        });
+        const s3Result = await checkS3Connection(
+            {
+                endpoint: input.s3Endpoint ?? '',
+                bucket: input.s3Bucket,
+                prefix: '',
+                accessKeyId: input.s3AccessKeyId,
+                secretAccessKey: input.s3SecretAccessKey,
+                region: input.s3Region,
+            },
+            { redactErrors: true },
+        );
         if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
     }
 
