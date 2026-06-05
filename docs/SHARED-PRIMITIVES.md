@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-720 primitives across 5 kinds. `packages/sheet` internals are excluded.
+713 primitives across 5 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (103)
+## Components (100)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -19,7 +19,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommandPaletteContext` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `CommentMarkSchema` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/comment-mark.ts |
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
-| `SmallMark` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/small-mark.ts |
 | `SSEventType` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
 | `AccessDenied` | `@workspace/ui` | packages/ui/src/components/layout/app/access-denied.tsx |
@@ -27,7 +26,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
 | `AppSidebar` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `Bar` | `@workspace/ui` | packages/ui/src/components/layout/braket/bar.tsx |
-| `Bra` | `@workspace/ui` | packages/ui/src/components/layout/braket/bra.tsx |
 | `CardDialog` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-dialog.tsx |
 | `CardFormDialog` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-form-dialog.tsx |
 | `ChatMessageInput` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-message-input.tsx |
@@ -108,7 +106,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DangerZone` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/danger-zone.tsx |
 | `DeleteDialog` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/delete-dialog.tsx |
 | `InfoBlock` | `@workspace/ui/components/layout/info-block` | packages/ui/src/components/layout/info-block.tsx |
-| `LinkedText` | `@workspace/ui/components/layout/linked-text` | packages/ui/src/components/layout/linked-text.tsx |
 | `OwnerInfoPopover` | `@workspace/ui/components/layout/owner-info-popover` | packages/ui/src/components/layout/owner-info-popover.tsx |
 | `AlignmentPicker` | `@workspace/ui/components/layout/properties-panel` | packages/ui/src/components/layout/properties-panel/alignment-picker.tsx |
 | `BackgroundFillBlock` | `@workspace/ui/components/layout/properties-panel` | packages/ui/src/components/layout/properties-panel/background-fill-block.tsx |
@@ -521,7 +518,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (230)
+## Utilities & constants (226)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -623,7 +620,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `resolveEmoteKey` | `@workspace/lib/chat` | packages/lib/src/core/chat/emotes.ts |
 | `SLASH_COMMANDS` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `copyToClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
-| `EIGEN_CLIPBOARD_MIME` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `needsReUpload` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `reUploadImage` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -634,7 +630,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `deleteCardFromDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-delete-comment-card.ts |
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
-| `DEFAULT_FONT` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `EIGEN_ACCENT_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_ACCENT_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -680,7 +675,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `resolveNotificationLink` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `BORDER_RADIUS_ROUND` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `percentToPx` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `pxToPercent` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `SLIDE_ASPECT_RATIO` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `SLIDE_BASE_HEIGHT` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
@@ -728,7 +722,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `teamOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `userOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
-| `EMAIL_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `parseContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `validateACLEntries` | `@workspace/lib/validation` | packages/lib/src/validation/acl.ts |
 | `validateCommand` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
@@ -740,6 +733,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_COLORS` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
 | `defaultDriveSort` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
 | `DOCS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-configs.ts |
+| `eigenDocEditorValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `EigenDocType` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `eigenDocValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `FilePresentation` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
@@ -754,4 +748,3 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SLIDES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-configs.ts |
 | `STICKIES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-configs.ts |
 | `uploadWithProgress` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-with-progress.tsx |
-| `URL_REGEX` | `@workspace/ui/components/layout/linked-text` | packages/ui/src/components/layout/linked-text.tsx |

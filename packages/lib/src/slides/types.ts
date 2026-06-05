@@ -59,8 +59,4 @@ export function pxToPercent(val: number, axis: 'x' | 'y'): number {
     return (val / (axis === 'x' ? SLIDE_BASE_WIDTH : SLIDE_BASE_HEIGHT)) * 100;
 }
 
-export function percentToPx(val: number, axis: 'x' | 'y'): number {
-    return (val / 100) * (axis === 'x' ? SLIDE_BASE_WIDTH : SLIDE_BASE_HEIGHT);
-}
-
 export const BORDER_RADIUS_ROUND = 9999;
