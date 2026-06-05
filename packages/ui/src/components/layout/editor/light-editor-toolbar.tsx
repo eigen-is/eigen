@@ -15,6 +15,7 @@ function ToolbarButton({ icon: Icon, isActive, onClick, title }: ToolbarButtonPr
         <button
             type="button"
             title={title}
+            aria-label={title}
             className={cn('p-1.5 rounded hover:bg-muted transition-colors', isActive && 'bg-muted text-foreground')}
             onMouseDown={(e) => {
                 e.preventDefault();
@@ -95,6 +96,7 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
             {showLinkInput && (
                 <input
                     type="url"
+                    aria-label="Link URL"
                     placeholder="https://..."
                     className="ml-1 px-2 py-1 text-xs border rounded bg-background w-40"
                     value={linkUrl}
