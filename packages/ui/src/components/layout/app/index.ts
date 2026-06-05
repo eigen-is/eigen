@@ -6,6 +6,7 @@ export type { ColumnProps } from './column-layout.tsx';
 export { Column, ColumnLayout } from './column-layout.tsx';
 export { EigenApp } from './eigen-app.tsx';
 export { EmptyState } from './empty-state.tsx';
+export { ErrorBoundary } from './error-boundary.tsx';
 export { ErrorState } from './error-state.tsx';
 export type { LayoutContextType } from './layout-context.tsx';
 export { LayoutContext, useApp, useLayout, useSidebar } from './layout-context.tsx';

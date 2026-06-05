@@ -3,9 +3,8 @@ import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mai
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isContainerType } from '@workspace/lib/types/drive';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
-import { ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
+import { ConfirmDialog, ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import {
     Dialog,
     DialogContent,
