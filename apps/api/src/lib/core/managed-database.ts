@@ -181,6 +181,15 @@ export class ManagedDatabase<S extends SchemaType> {
         await this.sync();
     }
 
+    // Write a frozen, WAL-complete copy of the current DB to destPath via VACUUM INTO.
+    // The write-behind upload pipeline (Phase 1b) uploads this copy, not the live file
+    // (which keeps mutating as the user edits). VACUUM INTO captures committed-but-
+    // uncheckpointed WAL frames, so the copy is complete without a prior checkpoint.
+    stageCopy(destPath: string): void {
+        if (!this.rawDb) throw new Error('Database not open');
+        this.rawDb.run('VACUUM INTO ?', [destPath]);
+    }
+
     // skipFinalSnapshot: callers about to discard the on-disk file (eviction
     // inside Drive.restoreContainer) opt out so the close-time snapshot can't
     // prune the snapshot the restore is about to read from.
