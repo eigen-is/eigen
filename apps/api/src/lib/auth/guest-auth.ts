@@ -80,15 +80,16 @@ export async function verifyOtpAndSignIn(email: string, otp: string): Promise<Re
     const record = db.select().from(verification).where(eq(verification.identifier, identifier)).get();
     if (!record) throw new ApiError(400, 'Invalid code');
 
-    if (record.expiresAt < new Date()) {
-        db.delete(verification).where(eq(verification.id, record.id)).run();
-        throw new ApiError(400, 'Code expired');
-    }
+    // Consume the code synchronously, before the async verify below. bun:sqlite is synchronous,
+    // so this SELECT + DELETE runs in one un-interruptible tick: a second concurrent request for
+    // the same code finds no row, so one OTP can never mint two sessions. A wrong or expired
+    // guess also consumes the code — acceptable given the 6-digit space and 5-minute expiry.
+    db.delete(verification).where(eq(verification.id, record.id)).run();
+
+    if (record.expiresAt < new Date()) throw new ApiError(400, 'Code expired');
 
     const valid = await Bun.password.verify(otp, record.value);
     if (!valid) throw new ApiError(400, 'Invalid code');
-
-    db.delete(verification).where(eq(verification.id, record.id)).run();
 
     // Find or create guest user
     let guestUser = await getUserByEmail(email);

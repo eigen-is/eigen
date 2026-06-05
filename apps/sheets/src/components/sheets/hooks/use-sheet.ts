@@ -68,27 +68,29 @@ export function useSheet(
         });
         providerRef.current = wsProvider;
 
-        opsArray.observe((event) => {
+        const handleOps = (event: Y.YArrayEvent<unknown>) => {
             if (!readyForOpsRef.current) return;
             if (isLocalOpRef.current) {
                 isLocalOpRef.current = false;
                 return;
             }
-            if (!workbookRef.current) return;
-            event.changes.delta.forEach((delta) => {
+            const workbook = workbookRef.current;
+            if (!workbook) return;
+            for (const delta of event.changes.delta) {
                 if (delta.insert && Array.isArray(delta.insert)) {
-                    (delta.insert as Op[][]).forEach((ops) => {
+                    for (const ops of delta.insert as Op[][]) {
                         try {
-                            workbookRef.current!.applyOp(ops);
+                            workbook.applyOp(ops);
                         } catch (e) {
                             console.error('[sheet] Failed to apply remote op:', e);
                         }
-                    });
+                    }
                 }
-            });
-        });
+            }
+        };
+        opsArray.observe(handleOps);
 
-        stateMap.observe(() => {
+        const handleState = () => {
             if (!readyForOpsRef.current) return;
             if (isLocalSnapshotRef.current) {
                 isLocalSnapshotRef.current = false;
@@ -109,7 +111,8 @@ export function useSheet(
             } catch (e) {
                 console.error('[sheet] Failed to apply remote snapshot:', e);
             }
-        });
+        };
+        stateMap.observe(handleState);
 
         wsProvider.on('sync', (isSynced: boolean) => {
             if (!isSynced) return;
@@ -137,7 +140,11 @@ export function useSheet(
             window.removeEventListener('beforeunload', handleBeforeUnload);
             flushSnapshot();
             readyForOpsRef.current = false;
-            wsProvider.disconnect();
+            // Unregister observers (held by reference) and destroy the provider so a WS message
+            // racing teardown can't fire an observer against a destroyed doc on board switch.
+            opsArray.unobserve(handleOps);
+            stateMap.unobserve(handleState);
+            wsProvider.destroy();
             doc.destroy();
             docRef.current = null;
             providerRef.current = null;

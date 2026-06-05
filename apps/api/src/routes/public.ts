@@ -7,6 +7,9 @@ import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo, getPublicInfo } from '../lib/space/public';
 import { registerFromInvite, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
 
+// The /p/ prefix is eigen's PUBLIC API surface — every route here is intentionally unauthenticated
+// (avatar, user info, config, invite, waitlist). Do NOT add `auth: true` / `.use(betterAuth)`: these
+// are consumed by pre-auth pages and external callers, and gating them breaks the public contract.
 export const publicRouter = new Elysia({ name: 'public' })
     .get('/p/avatar/:emailOrId', async ({ params, set }) => {
         const avatar = await getAvatarByEmailOrId(params.emailOrId);

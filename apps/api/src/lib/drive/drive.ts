@@ -491,14 +491,26 @@ export default class Drive {
         if (!file) throw new ApiError(404, 'File not found');
         // S3File doesn't support ResponseInit options — stream it instead
         const body: BodyInit = 'bucket' in file ? file.stream() : file;
-        return new Response(body, {
-            headers: {
-                'Content-Type': path.mimeType || 'application/octet-stream',
-                'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
-                'Cache-Control': 'public, max-age=86400',
-                Expires: new Date(Date.now() + 86400000).toUTCString(),
-            },
-        });
+        const mimeType = path.mimeType || 'application/octet-stream';
+        const headers: Record<string, string> = {
+            'Content-Type': mimeType,
+            'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
+            'Cache-Control': 'public, max-age=86400',
+            Expires: new Date(Date.now() + 86400000).toUTCString(),
+            // Stored MIME is the upload's own Content-Type, served verbatim — nosniff stops the
+            // browser re-sniffing a disguised payload (e.g. HTML bytes uploaded as image/png).
+            'X-Content-Type-Options': 'nosniff',
+        };
+        // /embed serves inline from the API's own origin, so a scriptable upload (HTML/SVG) could
+        // run script with the viewer's session. A sandbox CSP neutralises active content while
+        // still rendering the file; scoped to scriptable types so media/PDF previews are untouched.
+        if (disposition === 'inline') {
+            const baseMime = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
+            if (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml') {
+                headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
+            }
+        }
+        return new Response(body, { headers });
     }
 
     async writeFileContent(
@@ -823,13 +835,17 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const key = this.documentKey(mountId, pathId);
         const documentFn = this.documents.get(key);
-        if (documentFn) {
-            const doc = await documentFn();
-            doc.destruct();
-            this.documents.delete(key);
-            if (doc.dataDbPathId) {
-                await mount.closeDatabase(doc.dataDbPathId, opts);
-            }
+        if (!documentFn) return;
+        // Delete BEFORE the async destruct so a concurrent getCollabDocument() builds a fresh
+        // singleton instead of receiving the doc that is closing (a closing doc never sends
+        // sync-step-1, stalling the client). Mirrors Mount.closeDatabase's delete-before-close.
+        this.documents.delete(key);
+        const doc = await documentFn();
+        doc.destruct();
+        // Only tear down the shared data.db if no concurrent reopen re-registered this doc — the
+        // reopened doc now owns the db lifecycle.
+        if (doc.dataDbPathId && !this.documents.has(key)) {
+            await mount.closeDatabase(doc.dataDbPathId, opts);
         }
     }
 
