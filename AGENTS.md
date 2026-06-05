@@ -87,6 +87,15 @@ bun run check          # lint + typecheck + test
 - **Check existing code before writing new** — shared components in `packages/ui/src/components/layout/`
   (`TooltipButton`, `DeleteDialog`, `EmptyState`, etc.), utilities in `packages/lib/` (`cn()`, `formatDate`,
   shared types). Don't reinvent them. See [LAYOUT.md](docs/LAYOUT.md)
+- **One source of truth per fact** — a set, map, schema, or constant that answers a question (which
+  extensions are text-editable? which MIME is a spreadsheet? what's a valid S3 config?) lives in exactly
+  one module. Import it; never re-list its members inline "just for here." Two lists of one fact drift
+  (we shipped three disagreeing "is this text?" registries). Need a subset? Derive it from the canonical one
+- **A primitive isn't "shared" until its barrel exports it** — reusable values go through the package's
+  public entry (`@workspace/ui`, `@workspace/lib/<domain>`), reusable types through
+  `@workspace/lib/types/<domain>`. An unexported primitive is invisible to the next author, who rebuilds it.
+  The inverse is also a smell: deep-importing past a barrel (`@workspace/lib/core/…`) usually means the
+  thing you reached for should have been exported
 - **Fix broken windows** — fix pre-existing issues if the fix is straightforward
 - **Self-review before declaring done** — review your diff against the checklist in CODE-STANDARDS.md
 - **Keep docs up to date** — update `docs/` and this file when changes affect architecture
@@ -266,6 +275,11 @@ These patterns have caused bugs across multiple domains:
   content. The `Column` component renders the toolbar in a fixed-height bar. See Page Layout Pattern above
 - **Use existing shared components** — check `packages/ui/src/components/layout/` before building custom UI.
   `TooltipButton`, `DeleteDialog`, `EmptyState`, etc. already exist
+- **Third copy → shared wrapper** — the "if two+ apps need it, it goes in `packages/`" rule applies to
+  *scaffolds*, not just components: route guards, `_auth.tsx` files, editor shells, loading/empty/error
+  treatments. When you're about to paste one into a *third* app, stop and extract a single guarded wrapper
+  into `packages/ui` (we have four near-identical EigenDoc editor routes and four sidebars rendering
+  loaders four ways)
 
 ### SSE Pattern
 
