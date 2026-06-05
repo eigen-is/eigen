@@ -54,6 +54,30 @@ every user's/team's mounts). Everything else is proactive hygiene that keeps Eig
 
 **⚡ Tier 2 — Quick wins (high-impact, small-effort, mostly unifying)**
 
+> **Implementation status (2026-06-05, merged to `main` via `93229e7c`; NOT pushed to origin; `bun run check` green = 1308 tests).**
+> Every finding was re-verified against the current code first — and, as in Tier 1, several audit *fixes* turned out to be
+> wrong. **Landed (10 commits):** 15 (memoize the `LayoutContext` value); 13 (the live preview next/prev bug — the 2-line
+> sibling-array fix; the `useDriveRowHandlers` extraction deferred); 11 (the shared `eigenDocEditorValidateSearch`; the
+> `EigenDocEditorGuard` deferred — the four editors take divergent prop shapes, so it needs a render-prop wrapper, not a
+> generic one); 17 (typed `getTeamHome`/`getUserHome` in `home/get-home.ts`, dropping 7 `as` casts — a type-safety fix, not a
+> live crash: the access guards already 403 before the cast); 12 (the `EmailList` `ErrorState`); 16 (accessible names on the
+> self-contained icon-only controls + keyboard paths for the two clickable `div`s); 19 (the dead-export sweep — 8 symbols
+> deleted/demoted, `SHARED-PRIMITIVES.md` regenerated). **Fixes corrected (the audit's proposal would have shipped a
+> regression):** item 14 — the audit said admin should pass `'none'` to hide the team-detail sidebar, but `TeamDetail` has no
+> team-switcher, so hiding it strands the user; instead the dead `'hidden'` variant was removed and admin keeps `'collapsible'`
+> (the visible sidebar is the desirable behavior — the "silently breaks the admin teams view" framing was itself a misread).
+> Item 10 — the audit's "route everything through `isInlineEditable`" would regress unknown-`text/*` previews (it drops the
+> `text/` prefix catch-all) and file icons; scoped instead to sharing only the `CODE_EXTENSIONS` corpus, with a
+> characterization test locking behavior. Item 18 — the real gap is the **769–1200px** band (below 768px slides is read-only
+> by design), and the fix carries Add slide/text/image, not just undo/redo. **Deferred within Tier 2:** the
+> `EigenDocEditorGuard` (11b), the `useDriveRowHandlers`→`DriveLayout` fold (13b), the broader `TooltipButton` aria-label
+> sweep (16; ~15 callers — its `label` prop renders as *visible text*, not `aria-label`, so the primitive itself must grow the
+> prop), the `EmailSidebar` static-fallback change (12; the standard mailboxes are a defensible graceful-degradation), and the
+> `knip` rollout (19; not a dependency, no config, and the cited `CODE-STANDARDS-ENFORCEMENT.md` prescription does not exist).
+> `useIsDesktop` was **kept** (it is one of the symmetric `useIsMobile`/`useIsTablet`/`useIsDesktop` trio). A fresh-Opus
+> adversarial review (read the standards, ran its own typecheck, diffed the two extension Sets at the object level) returned
+> SHIP; a `/simplify` pass over the diff was clean. Tier 3 and the bonus mail-Trash-confirm-bypass bug are not started.
+
 | # | Item | Dimension | Where |
 |---|------|-----------|-------|
 | 10 | Collapse **3 drifting text-file extension/MIME registries** into one (`isInlineEditable`) — they already disagree | Duplication | §Duplication |
