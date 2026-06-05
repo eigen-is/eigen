@@ -1133,8 +1133,9 @@ export class Calendar {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
 
-        // RFC 5546 §3.2.2.1: ignore a REQUEST whose SEQUENCE isn't newer than the stored
-        // revision — a stale or replayed invite must not overwrite the attendee's live copy.
+        // RFC 5546 §3.2.2.1: ignore a REQUEST whose SEQUENCE isn't newer than the stored revision —
+        // a stale or replayed invite must not overwrite the attendee's live copy. Equal SEQUENCE is
+        // also dropped: a significant change bumps SEQUENCE, so an equal one is a non-significant re-send.
         if (payload.sequence <= linked.sequence) return;
 
         // Don't extend rrule beyond what the attendee has locally — they may have
