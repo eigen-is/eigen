@@ -138,6 +138,26 @@ describe('Collab', () => {
             collab.handleMessage(conn, message, true);
             expect(collab.doc.getMap('write-test').get('k')).toBe('v');
         });
+
+        test('closing a document while it reopens yields a fresh, usable instance', async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const collab1 = await home.drive.getCollabDocument(aliceMountId, docId);
+
+            // closeCollabDocument synchronously deletes the map entry, then suspends at the async
+            // destruct. Reopening in that window must build a fresh doc, not the one being closed.
+            const closing = home.drive.closeCollabDocument(aliceMountId, docId);
+            const collab2 = await home.drive.getCollabDocument(aliceMountId, docId);
+            await closing;
+
+            expect(collab2).not.toBe(collab1);
+
+            // A closed doc's handleMessage no-ops, so a write applying proves collab2 is live.
+            const conn = { send() {}, readyState: 1 } as unknown as Parameters<typeof collab2.handleMessage>[0];
+            const edit = new Y.Doc();
+            edit.getMap('reopen-test').set('k', 'v');
+            collab2.handleMessage(conn, syncUpdateMessage(edit), true);
+            expect(collab2.doc.getMap('reopen-test').get('k')).toBe('v');
+        });
     });
 
     describe('WebSocket Connection', () => {

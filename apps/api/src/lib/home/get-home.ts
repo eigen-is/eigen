@@ -17,17 +17,31 @@ export function atHome(ownerId: string): boolean {
 }
 
 export async function getHome(ownerId: string): Promise<Home> {
-    if (homeFactories.has(ownerId)) {
-        const home = await homeFactories.get(ownerId)!();
-        if (!home.destructing) {
-            return home.touch();
+    // Retry to resolve races with a concurrently-destructing home or a competing installer. This
+    // settles in one or two iterations in practice; the bound is only a runaway safety net.
+    for (let attempt = 0; attempt < 100; attempt++) {
+        const existing = homeFactories.get(ownerId);
+        if (existing) {
+            const home = await existing();
+            if (!home.destructing) {
+                return home.touch();
+            }
+            // The cached home is tearing down — evict it, but only if it is still the current entry
+            // (a concurrent caller may already have installed a replacement we must not clobber).
+            if (homeFactories.get(ownerId) === existing) {
+                homeFactories.delete(ownerId);
+            }
+            continue;
         }
-        homeFactories.delete(ownerId);
-    }
 
-    homeFactories.set(
-        ownerId,
-        createAsyncSingleton(async () => {
+        const factory: () => Promise<Home> = createAsyncSingleton(async () => {
+            // Identity-checked cleanup: evict only while we are still the installed factory, so a
+            // superseded/orphaned home's teardown cannot evict a live successor for the same owner.
+            const cleanUp = () => {
+                if (homeFactories.get(ownerId) === factory) {
+                    homeFactories.delete(ownerId);
+                }
+            };
             const parsed = parseOwnerId(ownerId);
             if (!parsed) {
                 throw new ApiError(400, 'Invalid ownerId format');
@@ -40,15 +54,7 @@ export async function getHome(ownerId: string): Promise<Home> {
                         console.error(`[getHome] User not found for id=${parsed.id}, ownerId=${ownerId}`);
                         throw new ApiError(404, 'User not found');
                     }
-                    if (user.role === 'guest') {
-                        home = new GuestHome(user, () => {
-                            cleanupHomeFactory(ownerId);
-                        });
-                    } else {
-                        home = new UserHome(user, () => {
-                            cleanupHomeFactory(ownerId);
-                        });
-                    }
+                    home = user.role === 'guest' ? new GuestHome(user, cleanUp) : new UserHome(user, cleanUp);
                     break;
                 }
                 case 'team': {
@@ -56,9 +62,7 @@ export async function getHome(ownerId: string): Promise<Home> {
                     if (!teamData) {
                         throw new ApiError(404, 'Team not found');
                     }
-                    home = new TeamHome(getSyntheticTeamUser(ownerId, teamData.name), () => {
-                        cleanupHomeFactory(ownerId);
-                    });
+                    home = new TeamHome(getSyntheticTeamUser(ownerId, teamData.name), cleanUp);
                     break;
                 }
                 case 'external':
@@ -67,9 +71,7 @@ export async function getHome(ownerId: string): Promise<Home> {
                     if (!(await getOrgExists(parsed.id))) {
                         throw new ApiError(404, 'Organization not found');
                     }
-                    home = new OrgHome(getSyntheticOrgUser(ownerId), () => {
-                        cleanupHomeFactory(ownerId);
-                    });
+                    home = new OrgHome(getSyntheticOrgUser(ownerId), cleanUp);
                     break;
                 }
                 default:
@@ -77,14 +79,17 @@ export async function getHome(ownerId: string): Promise<Home> {
             }
             await home.init();
             return home.touch();
-        }),
-    );
+        });
 
-    return (await homeFactories.get(ownerId)!()).touch();
-}
-
-export function cleanupHomeFactory(ownerId: string): void {
-    homeFactories.delete(ownerId);
+        // Install only if no factory exists; if a concurrent caller won the install race, discard
+        // ours and re-loop to use theirs — honouring createAsyncSingleton's "build once" contract.
+        if (homeFactories.has(ownerId)) {
+            continue;
+        }
+        homeFactories.set(ownerId, factory);
+        return (await factory()).touch();
+    }
+    throw new Error(`getHome: could not obtain a stable home for ${ownerId}`);
 }
 
 export async function evictHome(ownerId: string): Promise<void> {

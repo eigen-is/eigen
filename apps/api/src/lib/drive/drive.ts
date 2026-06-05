@@ -836,13 +836,17 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const key = this.documentKey(mountId, pathId);
         const documentFn = this.documents.get(key);
-        if (documentFn) {
-            const doc = await documentFn();
-            doc.destruct();
-            this.documents.delete(key);
-            if (doc.dataDbPathId) {
-                await mount.closeDatabase(doc.dataDbPathId, opts);
-            }
+        if (!documentFn) return;
+        // Delete BEFORE the async destruct so a concurrent getCollabDocument() builds a fresh
+        // singleton instead of receiving the doc that is closing (a closing doc never sends
+        // sync-step-1, stalling the client). Mirrors Mount.closeDatabase's delete-before-close.
+        this.documents.delete(key);
+        const doc = await documentFn();
+        doc.destruct();
+        // Only tear down the shared data.db if no concurrent reopen re-registered this doc — the
+        // reopened doc now owns the db lifecycle.
+        if (doc.dataDbPathId && !this.documents.has(key)) {
+            await mount.closeDatabase(doc.dataDbPathId, opts);
         }
     }
 
