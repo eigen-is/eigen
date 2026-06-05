@@ -50,22 +50,28 @@ export function AppShell({
 
     const effectiveSidebarMode = sidebar && !sidebarHidden ? sidebarMode : 'none';
 
+    // Memoize so the context value keeps a stable identity across AppShell
+    // re-renders (resize, sidebar toggle, title changes) — without it every
+    // useLayout() consumer re-renders on each render. useState setters are stable.
+    const layoutValue = useMemo(
+        () => ({
+            appName,
+            setAppName,
+            documentTitle,
+            setDocumentTitle,
+            sidebarOpen,
+            setSidebarOpen,
+            sidebarMode: effectiveSidebarMode,
+            sidebarHidden,
+            setSidebarHidden,
+            isMobile,
+            isTablet,
+        }),
+        [appName, documentTitle, sidebarOpen, effectiveSidebarMode, sidebarHidden, isMobile, isTablet],
+    );
+
     return (
-        <LayoutContext.Provider
-            value={{
-                appName,
-                setAppName,
-                documentTitle,
-                setDocumentTitle,
-                sidebarOpen,
-                setSidebarOpen,
-                sidebarMode: effectiveSidebarMode,
-                sidebarHidden,
-                setSidebarHidden,
-                isMobile,
-                isTablet,
-            }}
-        >
+        <LayoutContext.Provider value={layoutValue}>
             <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute} />
                 <PaletteRunner />
