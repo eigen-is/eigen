@@ -22,3 +22,15 @@ export const paths = sqliteTable('paths', {
     trashedAt: integer('trashedAt', { mode: 'timestamp' }),
     trashedFrom: text('trashedFrom'),
 });
+
+// Write-behind upload queue for S3-backed mounts (Phase 1b). One row per storage key
+// with an upload owed; deleted on ack. Local to metadata.db so the queue's own state is
+// synchronously durable, transactional with the path rows it guards, and moves with the
+// Home. `stagingPath` is a frozen VACUUM INTO copy on disk; epochs are plain ms numbers.
+export const pendingUploads = sqliteTable('pending_uploads', {
+    storageKey: text('storageKey').primaryKey(),
+    stagingPath: text('stagingPath').notNull(),
+    attempt: integer('attempt').notNull().default(0),
+    enqueuedAt: integer('enqueuedAt').notNull(),
+    nextAttemptAt: integer('nextAttemptAt').notNull(),
+});
