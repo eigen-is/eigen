@@ -7,7 +7,7 @@ export type LayoutContextType = {
     setDocumentTitle: (title: string) => void;
     sidebarOpen: boolean;
     setSidebarOpen: (open: boolean) => void;
-    sidebarMode: 'collapsible' | 'hidden' | 'none';
+    sidebarMode: 'collapsible' | 'none';
     sidebarHidden: boolean;
     setSidebarHidden: (hidden: boolean) => void;
     isMobile: boolean;

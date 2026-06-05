@@ -29,7 +29,7 @@ type AppShellProps = {
         useNavigate: () => (opts: { to: string }) => unknown;
     };
     sidebar?: ReactNode | ((props: SidebarProps) => ReactNode);
-    sidebarMode?: 'collapsible' | 'hidden' | 'none';
+    sidebarMode?: 'collapsible' | 'none';
     children?: ReactNode;
 };
 
