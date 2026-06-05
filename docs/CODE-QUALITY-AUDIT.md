@@ -29,6 +29,17 @@ every user's/team's mounts). Everything else is proactive hygiene that keeps Eig
 
 **🔴 Tier 1 — Do first (reachable security, correctness & test-integrity)**
 
+> **Implementation status (2026-06-05, branch `fix/audit-tier1`).** Landed: items 1, 2, 4, 5, 6,
+> 8, the iMIP-SEQUENCE half of 7, and the stored-XSS (`nosniff` + scoped sandbox CSP) and
+> OTP-atomicity halves of 9. **Reverted after review as misjudgments of *intentional* design:**
+> item 3 (SSRF) — blocking the S3 endpoint breaks self-hosted MinIO-on-LAN and first-run setup is
+> a trusted-operator window; and the `/p/users` auth-gate inside item 9 — `/p/` is the deliberate
+> **public** API surface (sits beside `/p/avatar`, `/p/config`). **Deferred:** the VTIMEZONE half
+> of item 7 (interop-only; the audit's suggested `@ical.js/timezones` package does not exist — it
+> needs a real tz-data dependency such as `@touch4it/ical-timezones`). Two independent reviews
+> (incl. a fresh Opus pass) confirmed the landed set; the lesson — audit *findings*, not just
+> their fixes, can misread design intent — is in project memory.
+
 | # | Item | Dimension | Where |
 |---|------|-----------|-------|
 | 1 | `SharedDrive.listMounts()` has no authorization guard — leaks every user's/team's mount list | Authz | §Security |
