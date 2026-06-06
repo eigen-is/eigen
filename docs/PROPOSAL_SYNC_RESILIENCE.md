@@ -442,3 +442,31 @@ branch. The one real bug they surfaced is fixed; the rest are documented trade-o
   `await`) on purpose: `enqueueUpload` must persist before returning, and the drain's post-PUT
   bookkeeping must have no `await` between the `uploadClosing` teardown guard and the DB access. Adding
   `await` for stylistic consistency would inject interleaving points and re-open the teardown race.
+
+### Ops
+
+- **`stop_grace_period: 30s`** on the `eigen-api` service (`docker-compose.yml`) — gives the SIGTERM
+  drain (`SHUTDOWN_DRAIN_BUDGET_MS=20s`) room to finish before Docker SIGKILLs; un-drained uploads
+  replay on boot regardless.
+- **S3 noncurrent-version expiration on `eigen-drive`.** Bucket versioning is now ON (good — it would
+  have made the 2026-05-30 chat wipe recoverable), but the pipeline re-PUTs whole `data.db` files, so
+  every sync creates a new version and noncurrent versions accumulate without bound. Add a lifecycle
+  rule to expire them (and abort stale multipart uploads). `NoncurrentDays` is the recovery-window ↔
+  storage-cost knob — 30 d is recovery-safe; drop toward 7 d if hot-doc version bloat dominates cost
+  (WAL-shipping later removes the whole-file churn). Hetzner Object Storage is S3-compatible:
+  ```bash
+  cat > /tmp/eigen-lifecycle.json <<'JSON'
+  { "Rules": [ {
+      "ID": "expire-noncurrent-versions",
+      "Filter": {},
+      "Status": "Enabled",
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+  } ] }
+  JSON
+  AWS_ACCESS_KEY_ID=<key> AWS_SECRET_ACCESS_KEY=<secret> \
+    aws s3api put-bucket-lifecycle-configuration \
+      --endpoint-url https://nbg1.your-objectstorage.com \
+      --bucket eigen-drive --lifecycle-configuration file:///tmp/eigen-lifecycle.json
+  # verify: aws s3api get-bucket-lifecycle-configuration --endpoint-url https://nbg1.your-objectstorage.com --bucket eigen-drive
+  ```
