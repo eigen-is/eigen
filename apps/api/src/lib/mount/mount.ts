@@ -16,7 +16,7 @@ import {
 } from '@workspace/lib/types';
 import { type DriveVisibility, EIGEN_DOCUMENT_TYPES, isContainerType } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { getS3Config, getServerSettings } from '../config/server-settings';
@@ -32,18 +32,13 @@ import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
-import {
-    getShutdownDrainDeadline,
-    registerForSync,
-    unregisterForSync,
-    uploadBackoffMs,
-    uploadSemaphore,
-} from '../sync';
+import { getShutdownDrainDeadline } from '../sync';
 import { type RetentionPolicy, selectSnapshotsToPrune } from '../versioning/retention';
 import { formatSnapshotTimestamp } from '../versioning/timestamp';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type * as schema from './schema';
-import { paths, pendingUploads } from './schema';
+import { paths } from './schema';
+import { UploadQueue } from './upload-queue';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
     config: DatabaseConfig<S>,
@@ -97,14 +92,8 @@ export class Mount {
     private documentDbs: Map<string, () => Promise<ManagedDatabase<SchemaType>>> = new Map();
     private pathLocks: Map<string, Promise<void>> = new Map();
 
-    // Write-behind upload pipeline state (Phase 1b; isRemote mounts only). inFlightStagingKeys
-    // tracks keys whose staging file is mid-PUT so enqueue won't delete it from under the worker;
-    // uploadDraining coalesces concurrent drain calls; uploadClosing stops the drain on teardown.
-    private inFlightStagingKeys: Set<string> = new Set();
-    private uploadDraining: Promise<void> | null = null;
-    private uploadClosing = false;
-    // Read each loop iteration, so a drainPendingUploads call can bound an already-running loop.
-    private uploadDeadline: number | null = null;
+    // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
+    private uploadQueue?: UploadQueue;
 
     constructor(ownerId: string, baseDir: string, config: MountConfig, getLocalDatabase: LocalDatabaseGetter) {
         this.ownerId = ownerId;
@@ -178,11 +167,20 @@ export class Mount {
 
         await this.ensureRootFolder();
 
-        // Replay persisted pending uploads BEFORE the tmp sweep (invariant 5) so a restart or
-        // home-reopen resumes them; their staging files live in stagingDir, which the sweep
-        // never touches.
+        // Stand up the upload queue and replay persisted pending uploads BEFORE the tmp sweep
+        // (invariant 5) so a restart or home-reopen resumes them; staging lives in stagingDir, which
+        // the sweep never touches. The destination key groups uploads to the same provider onto one
+        // concurrency limiter, so a slow bucket can't block uploads to other buckets.
         if (this.isRemote) {
-            this.reconcilePendingUploads();
+            const s3 = this.config.s3Config!;
+            this.uploadQueue = new UploadQueue({
+                db: this.db,
+                storage: this.storage,
+                stagingDir: this.stagingDir,
+                destinationKey: `${s3.endpoint}/${s3.bucket}`,
+                label: this.id,
+            });
+            this.uploadQueue.reconcile();
         }
 
         // Cleanup stale temp files older than 1 hour (e.g. from interrupted uploads or crashes)
@@ -538,12 +536,13 @@ export class Mount {
     ): Promise<DrivePath> {
         const versionPathId = await this.touchFile(versionsId, snapshotName, dataDb.mimeType);
         const versionKey = await this.getStorageKey(versionPathId);
-        const versionStaging = this.newStagingPath();
+        const queue = this.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
+        const versionStaging = queue.newStagingPath();
         await this.stageDataDbSnapshot(dataDb.id, versionStaging);
         const size = fs.statSync(versionStaging).size;
         await this.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, versionPathId));
         await this.invalidateAncestorsOf(versionPathId);
-        this.enqueueUpload(versionKey, versionStaging);
+        queue.enqueueStaged(versionKey, versionStaging);
         const created = await this.getPath(versionPathId);
         if (!created) throw new ApiError(500, 'Failed to create version snapshot');
         return created;
@@ -556,7 +555,7 @@ export class Mount {
         // copy already holds the current bytes — reuse it instead of a second VACUUM INTO. Copy it
         // SYNCHRONOUSLY: with no await between the existsSync and the copy, a concurrent enqueue
         // can't unlink it mid-read.
-        const pendingStaging = this.getPendingStagingPath(storageKey);
+        const pendingStaging = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
         if (pendingStaging && fs.existsSync(pendingStaging)) {
             fs.copyFileSync(pendingStaging, destPath);
             return;
@@ -750,7 +749,7 @@ export class Mount {
             // resurrect the object we're about to delete (invariant 7). Covers container
             // deletes (recursive deletePath), provisionManagedDbs rollback, and the chat-restore
             // replace, which all route data.db deletion through here.
-            if (this.isRemote) await this.cancelPendingUpload(storageKey);
+            if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
             await this.storage.delete(storageKey);
         } else if (this.isPathBased && this.storage.deleteDir) {
             const storageKey = await this.getStorageKey(pathId);
@@ -1102,7 +1101,10 @@ export class Mount {
     }
 
     async cleanupTemp(tempId: string): Promise<void> {
-        await this.unlinkFile(this.getTempPath(tempId));
+        try {
+            const file = Bun.file(this.getTempPath(tempId));
+            if (await file.exists()) await file.delete();
+        } catch {}
     }
 
     private get isRemote(): boolean {
@@ -1209,8 +1211,8 @@ export class Mount {
                           // Clean close during an outage: the live temp was cleaned but a staged
                           // copy holds bytes newer than storage (upload not yet acked). Recover
                           // from it rather than downloading a stale object.
-                          if (this.isRemote) {
-                              const staged = this.getPendingStagingPath(storageKey);
+                          if (this.uploadQueue) {
+                              const staged = this.uploadQueue.getPendingStagingPath(storageKey);
                               if (staged && fs.existsSync(staged)) {
                                   console.log(`[Mount] Recovering from staged upload for ${pathId}`);
                                   await Bun.write(tempPath, Bun.file(staged));
@@ -1226,10 +1228,10 @@ export class Mount {
                       // Local path-based: keep the synchronous local copy (Bun.write never 503s,
                       // and async-queuing it would only weaken its on-completion durability).
                       onSync: async () => {
-                          if (this.isRemote) {
-                              const stagingPath = this.newStagingPath();
+                          if (this.uploadQueue) {
+                              const stagingPath = this.uploadQueue.newStagingPath();
                               managed.stageCopy(stagingPath);
-                              this.enqueueUpload(storageKey, stagingPath);
+                              this.uploadQueue.enqueueStaged(storageKey, stagingPath);
                           } else {
                               await this.uploadFromTemp(storageKey, pathId);
                           }
@@ -1304,246 +1306,32 @@ export class Mount {
             }
         }
 
-        if (this.isRemote) {
+        if (this.uploadQueue) {
             // Process shutdown only: flush the queue (bounded by the global deadline) AFTER the
             // final close-time enqueues, so healthy uploads finish before metadata.db closes.
             // Idle teardown leaves the deadline null and skips the flush — leftover pending rows
-            // replay on the next mount open. Then stop the drain and leave the live-mount set.
+            // replay on the next mount open. Then stop the queue (cancels its retry timer).
             const deadline = getShutdownDrainDeadline();
             if (deadline !== null) {
-                await this.drainPendingUploads({ flushNow: true, deadline }).catch((e) =>
-                    console.error(`[Mount] shutdown drain failed:`, e),
-                );
+                await this.uploadQueue
+                    .drain({ flushNow: true, deadline })
+                    .catch((e) => console.error(`[Mount] shutdown drain failed:`, e));
             }
-            this.uploadClosing = true;
-            unregisterForSync(this);
+            this.uploadQueue.close();
         }
     }
 
-    // ---- Write-behind upload pipeline (Phase 1b; isRemote mounts only) ------------------
-    //
-    // These methods read/write `this.db` (the mount's metadata.db) with the SYNCHRONOUS
-    // bun:sqlite/Drizzle API (no `await`) — deliberately, not by omission. enqueueUpload must
-    // persist the pending row before it returns (synchronous durability), and the drain's
-    // post-PUT bookkeeping must run with no `await` between the `uploadClosing` teardown guard
-    // and the DB access — an interleaving point there could touch metadata.db after Home.destruct
-    // closed it. metadata.db is owned by the Home (getLocalDatabase), so the only safe window
-    // for these accesses is while the mount is live; the guards enforce that.
+    // ---- Upload-queue facade (Phase 1b) — thin delegation to the per-mount UploadQueue ----
+
+    // Force a drain of this mount's pending uploads. The queue otherwise self-drives (on enqueue +
+    // backoff); this is for the shutdown flush, tests, and potential ops. No-op for non-S3 mounts.
+    drainPendingUploads(opts?: { flushNow?: boolean; deadline?: number }): Promise<void> {
+        return this.uploadQueue?.drain(opts) ?? Promise.resolve();
+    }
 
     // Queue depth (observability, §9): how many uploads are awaiting an ack on this mount.
     get pendingUploadCount(): number {
-        if (!this.isRemote) return 0;
-        const row = this.db.select({ c: count() }).from(pendingUploads).get();
-        return row?.c ?? 0;
-    }
-
-    private newStagingPath(): string {
-        return path.join(this.stagingDir, `${randomUUID()}.db`);
-    }
-
-    private getPendingStagingPath(storageKey: string): string | null {
-        const row = this.db
-            .select({ stagingPath: pendingUploads.stagingPath })
-            .from(pendingUploads)
-            .where(eq(pendingUploads.storageKey, storageKey))
-            .get();
-        return row?.stagingPath ?? null;
-    }
-
-    // Best-effort delete of a local file (a temp or a staged copy) — already-gone is fine.
-    private async unlinkFile(fullPath: string): Promise<void> {
-        try {
-            const file = Bun.file(fullPath);
-            if (await file.exists()) await file.delete();
-        } catch {}
-    }
-
-    // Record a frozen staged copy as the pending upload for storageKey and kick the drain.
-    // Durable: the row is written synchronously to metadata.db before this returns. Newest
-    // staging wins (PK upsert); a superseded staged copy is deleted unless it's mid-PUT (the
-    // worker deletes that one on completion).
-    private enqueueUpload(storageKey: string, stagingPath: string): void {
-        const now = Date.now();
-        const prevStaging = this.getPendingStagingPath(storageKey);
-        this.db
-            .insert(pendingUploads)
-            .values({ storageKey, stagingPath, attempt: 0, enqueuedAt: now, nextAttemptAt: now })
-            .onConflictDoUpdate({
-                target: pendingUploads.storageKey,
-                set: { stagingPath, attempt: 0, enqueuedAt: now, nextAttemptAt: now },
-            })
-            .run();
-        if (prevStaging && prevStaging !== stagingPath && !this.inFlightStagingKeys.has(storageKey)) {
-            void this.unlinkFile(prevStaging);
-        }
-        registerForSync(this);
-        void this.drainPendingUploads();
-    }
-
-    // Cancel any pending upload for storageKey and delete its staged copy (idempotent).
-    // Called by permanent delete + chat-restore replace so a queued PUT can't resurrect a
-    // removed object (invariant 7). performUpload re-checks the row immediately before its
-    // PUT, so a cancel that lands after dequeue still aborts the upload.
-    private async cancelPendingUpload(storageKey: string): Promise<void> {
-        const row = this.db
-            .select({ stagingPath: pendingUploads.stagingPath })
-            .from(pendingUploads)
-            .where(eq(pendingUploads.storageKey, storageKey))
-            .get();
-        this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, storageKey)).run();
-        if (row) await this.unlinkFile(row.stagingPath);
-    }
-
-    // Drain due pending uploads through the global concurrency limiter. One loop per mount;
-    // concurrent calls coalesce. A failed PUT backs its row off into the future, so the
-    // due-selection naturally drops it and the loop never spins on a dead backend. opts widen
-    // an already-running loop: flushNow resets every row's backoff so the shutdown flush + tests
-    // get one immediate attempt at each; deadline bounds the flush. Public: the retry sweep
-    // calls it (no opts → backoff respected) via the UploadDrainable interface.
-    async drainPendingUploads(opts: { flushNow?: boolean; deadline?: number } = {}): Promise<void> {
-        if (opts.deadline !== undefined) this.uploadDeadline = opts.deadline;
-        if (opts.flushNow) {
-            this.db.update(pendingUploads).set({ nextAttemptAt: Date.now() }).run();
-        }
-        if (this.uploadDraining) return this.uploadDraining;
-        this.uploadDraining = this.runDrainLoop().finally(() => {
-            this.uploadDraining = null;
-            this.uploadDeadline = null;
-        });
-        return this.uploadDraining;
-    }
-
-    private async runDrainLoop(): Promise<void> {
-        while (!this.uploadClosing) {
-            if (this.uploadDeadline !== null && Date.now() >= this.uploadDeadline) break;
-            const row = this.db
-                .select()
-                .from(pendingUploads)
-                .where(lte(pendingUploads.nextAttemptAt, Date.now()))
-                .orderBy(asc(pendingUploads.enqueuedAt))
-                .limit(1)
-                .get();
-            if (!row) break;
-            await uploadSemaphore.run(() => this.performUpload(row.storageKey, row.stagingPath, row.attempt));
-        }
-        // Once nothing remains, leave the live-mount set so the retry sweep stops visiting us.
-        // Skipped during teardown — closeAllDatabases already unregistered and is closing the DB.
-        if (this.uploadClosing) return;
-        const remaining = this.db.select({ c: count() }).from(pendingUploads).get();
-        if (!remaining || remaining.c === 0) unregisterForSync(this);
-    }
-
-    // PUT one staged copy to its storage key. Re-checks the row immediately before the PUT so
-    // a cancel/restore/supersede that landed since dequeue aborts it (no resurrected or stale
-    // object). On success: clear the row iff still ours, delete the staged copy. On failure:
-    // back off and leave both for a later retry. Never throws — failures stay queued.
-    private async performUpload(storageKey: string, stagingPath: string, attempt: number): Promise<void> {
-        if (this.uploadClosing) return;
-        const current = this.db
-            .select({ stagingPath: pendingUploads.stagingPath })
-            .from(pendingUploads)
-            .where(eq(pendingUploads.storageKey, storageKey))
-            .get();
-        if (!current || current.stagingPath !== stagingPath) {
-            // superseded by a newer enqueue, or cancelled — our staged copy is no longer current
-            await this.unlinkFile(stagingPath);
-            return;
-        }
-        const file = Bun.file(stagingPath);
-        if (!(await file.exists())) {
-            // staged copy vanished (cancelled mid-flight) — drop the orphan row (skip the DB
-            // write if we're tearing down; metadata.db may be closing)
-            if (!this.uploadClosing) {
-                this.db
-                    .delete(pendingUploads)
-                    .where(and(eq(pendingUploads.storageKey, storageKey), eq(pendingUploads.stagingPath, stagingPath)))
-                    .run();
-            }
-            return;
-        }
-
-        this.inFlightStagingKeys.add(storageKey);
-        let putOk = false;
-        try {
-            const start = Bun.nanoseconds();
-            await this.storage.write(storageKey, file);
-            putOk = true;
-            const ms = (Bun.nanoseconds() - start) / 1_000_000;
-            console.log(`[timing] Mount.upload ${storageKey} ${(file.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
-        } catch (err) {
-            console.error(
-                `[sync] upload failed for ${storageKey} (attempt ${attempt + 1}):`,
-                err instanceof Error ? err.message : err,
-            );
-        } finally {
-            this.inFlightStagingKeys.delete(storageKey);
-        }
-
-        // Tearing down — leave the row + staged copy untouched for boot replay (metadata.db
-        // may be closing, so skip all DB access).
-        if (this.uploadClosing) return;
-
-        // A newer enqueue (or a cancel) may have replaced/removed our row mid-PUT.
-        const after = this.db
-            .select({ stagingPath: pendingUploads.stagingPath })
-            .from(pendingUploads)
-            .where(eq(pendingUploads.storageKey, storageKey))
-            .get();
-        const stillCurrent = !!after && after.stagingPath === stagingPath;
-
-        // A PUT that succeeded but whose row is GONE — cancelled (permanent delete / chat restore),
-        // not merely superseded — just resurrected a deleted object. Delete it (invariant 7). The
-        // key is a dead UUID, never reused, so this can't clobber a fresh object. (A row that only
-        // changed stagingPath was superseded: leave the object, the newer staging overwrites it.)
-        if (putOk && !after) {
-            await this.storage.delete(storageKey).catch(() => {});
-        }
-
-        if (!putOk && stillCurrent) {
-            // Failed and still the current pending row → back off for a retry; keep the staged copy.
-            const next = attempt + 1;
-            this.db
-                .update(pendingUploads)
-                .set({ attempt: next, nextAttemptAt: Date.now() + uploadBackoffMs(next) })
-                .where(eq(pendingUploads.storageKey, storageKey))
-                .run();
-            return;
-        }
-
-        // Acked (still ours) → clear the row. Every remaining case drops the now-unneeded staged copy.
-        if (putOk && stillCurrent) {
-            this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, storageKey)).run();
-        }
-        await this.unlinkFile(stagingPath);
-    }
-
-    // On mount open, re-enqueue every persisted pending upload so a restart / home-reopen
-    // resumes them, and sweep orphaned staged copies (a crash between staging and the row
-    // insert). Runs before the tmp sweep (invariant 5).
-    private reconcilePendingUploads(): void {
-        const rows = this.db.select().from(pendingUploads).all();
-        const referenced = new Set<string>();
-        let pending = 0;
-        for (const row of rows) {
-            if (fs.existsSync(row.stagingPath)) {
-                referenced.add(path.basename(row.stagingPath));
-                pending++;
-            } else {
-                // staged copy gone (crash between deleting it and deleting the row on ack) — drop the row
-                this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, row.storageKey)).run();
-            }
-        }
-        try {
-            for (const entry of fs.readdirSync(this.stagingDir)) {
-                if (!referenced.has(entry)) {
-                    fs.unlinkSync(path.join(this.stagingDir, entry));
-                }
-            }
-        } catch {}
-        if (pending > 0) {
-            registerForSync(this);
-            void this.drainPendingUploads();
-        }
+        return this.uploadQueue?.pendingCount ?? 0;
     }
 
     async getTotalSize(): Promise<number> {

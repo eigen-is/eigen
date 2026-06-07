@@ -5,9 +5,10 @@
 > and `bun run check`-green. The as-built design **diverges** from the original proposal below on the
 > worker lifecycle (the proposal's "stateless worker resolves backends by `mountId` and keeps draining
 > after idle teardown" is impossible — `metadata.db` closes on `Home.destruct`). See **§ As-built notes**
-> at the end for the divergences (registry-free worker, `flushNow` drain, staging-path supersession
-> instead of a content-hash marker, `onOpen` recovery from staging). The empirical `bun:sqlite` claims
-> were re-verified independently before building. Original design (for context) follows.
+> at the end for the divergences (registry-free per-mount `UploadQueue` with **per-destination**
+> concurrency + self-scheduled retries — no global registry/sweep, `flushNow` drain, staging-path
+> supersession instead of a content-hash marker, `onOpen` recovery from staging). The empirical
+> `bun:sqlite` claims were re-verified independently before building. Original design (for context) follows.
 >
 > **Status — Proposed, not implemented.** Design for review; reviewed independently by three Opus
 > agents (convergent on the load-bearing findings; the third empirically verified the `bun:sqlite`
@@ -368,12 +369,17 @@ teardown." The actual architecture makes that impossible — `Home.destruct()` c
 in the per-Home `Drive.mounts`; the S3 backend is built from `MountConfig.s3Config`, which is gone with
 the Home. There is no surviving registry. So the build diverges:
 
-1. **Registry-free worker.** The only process-global state (`lib/sync/sync-worker.ts`) is a concurrency
-   `Semaphore` (`utils/semaphore.ts`) + a `Set` of **live** mounts with pending work + the shutdown
-   deadline. The queue itself is per-Mount in `metadata.db`. A mount **unregisters on teardown**; its
-   leftover pending rows + staging files are **replayed on the next `Mount.init()`**
-   (`reconcilePendingUploads`, before the tmp sweep — invariant 5). The retry sweep + shutdown drain
-   only ever touch live mounts, so nothing needs to reach a destructed one. `home-relay.ts` untouched.
+1. **Registry-free, per-mount queue with per-destination concurrency.** The per-mount queue is a
+   `UploadQueue` (`lib/mount/upload-queue.ts`) owning the `pending_uploads` rows + staging + drain. The
+   only process-global state (`lib/sync/sync-worker.ts`) is a `Map<destination, Semaphore>` keyed by S3
+   `endpoint+bucket` (`getUploadSemaphore`), the shutdown deadline, and the backoff fn — **infra
+   strings only, no mount/user references, no live-mount registry.** Per-destination (not one global
+   limiter) so a slow/down provider only backs up its own uploads and never blocks other destinations —
+   essential once team mounts + user-owned endpoints point at different buckets. Each queue
+   **self-schedules its own retry** (`setTimeout` to the earliest backed-off row) and re-drives on
+   enqueue — no global sweep. A mount's leftover pending rows + staging files **replay on the next
+   `Mount.init()`** (`UploadQueue.reconcile`, before the tmp sweep — invariant 5); teardown calls
+   `UploadQueue.close()` (cancels the timer). `home-relay.ts` untouched.
 2. **`onOpen` recovers from staging.** Under async, a clean close during an outage cleans the live temp
    but the upload hasn't acked. So `onOpen` (for `isRemote`) recovers from the **staging copy** when a
    pending row exists, before falling back to a (stale/absent) storage download — otherwise a reopen
@@ -388,7 +394,7 @@ the Home. There is no surviving registry. So the build diverges:
 4. **`flushNow` drain, not `ignoreBackoff`.** A single due-loop (`nextAttemptAt <= now`) where a failed
    PUT backs its row off into the future — so the loop drains each row once and **never spins** on a
    dead backend. The shutdown flush + tests pass `flushNow` (reset all backoffs → one immediate attempt
-   each) bounded by an absolute `deadline`; the retry sweep respects backoff.
+   each) bounded by an absolute `deadline`; the self-scheduled retry respects backoff.
 5. **Shutdown drain is per-mount, after the final enqueues.** `index.ts` sets a process-global
    `setShutdownDrainDeadline(...)` before `shutdownAllHomes()`; each `Mount.closeAllDatabases` closes its
    docs (final close-time enqueues) **then** flushes its queue bounded by that deadline, before
