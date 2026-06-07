@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/co
 import { buildStorageKey, createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
-import { setShutdownDrainDeadline } from '../lib/sync';
+import { getUploadSemaphore, setShutdownDrainDeadline } from '../lib/sync';
 import { DEFAULT_RETENTION } from '../lib/versioning/retention';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-sync-resilience-${Date.now()}`);
@@ -93,13 +93,24 @@ class FaultStorage implements StorageBackend {
     }
 }
 
-// Same `id` ⇒ same baseDir + backing dir ⇒ a second call simulates a process restart that
-// shares the prior mount's metadata.db, staging dir, and "S3" object store.
+// Tracks mounts created via createS3Mount so afterEach can stop their self-scheduled retry timers.
+const createdMounts: Mount[] = [];
+
+// Same `id` ⇒ same baseDir + backing dir ⇒ a second call simulates a process restart that shares the
+// prior mount's metadata.db, staging dir, and "S3" object store. A distinct bucket per id gives each
+// mount its own destination semaphore (matching the per-destination design).
 function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
-    const config: MountConfig = { id, name: id, storageType: 's3', isDefault: false, s3Config: DUMMY_S3 };
+    const config: MountConfig = {
+        id,
+        name: id,
+        storageType: 's3',
+        isDefault: false,
+        s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
+    };
     const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
     const fault = new FaultStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
     (mount as unknown as { storage: StorageBackend }).storage = fault;
+    createdMounts.push(mount);
     return { mount, fault };
 }
 
@@ -124,8 +135,18 @@ async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDb
 }
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
-afterAll(() => {
+// Stop each test's mounts so their per-queue self-scheduled retry timers don't linger (a backed-off
+// upload in an outage test would otherwise keep the event loop alive after the test).
+afterEach(async () => {
     setShutdownDrainDeadline(null);
+    for (const mount of createdMounts) {
+        try {
+            await mount.closeAllDatabases();
+        } catch {}
+    }
+    createdMounts.length = 0;
+});
+afterAll(() => {
     try {
         rmSync(TEST_DIR, { recursive: true, force: true });
     } catch {}
@@ -467,5 +488,17 @@ describe('Phase 1b — write-behind upload pipeline', () => {
 
         fault.writeDelayMs = 0;
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // row preserved for replay on reopen
+    });
+});
+
+describe('per-destination upload concurrency', () => {
+    test('each S3 destination gets its own semaphore; the same destination shares one', () => {
+        // Distinct Semaphore instances per destination ⇒ independent permit pools ⇒ a slow/down
+        // provider only backs up its own uploads and never blocks uploads to other destinations.
+        const bucketA = getUploadSemaphore('https://s3.example//bucket-a');
+        const bucketAAgain = getUploadSemaphore('https://s3.example//bucket-a');
+        const bucketB = getUploadSemaphore('https://s3.example//bucket-b');
+        expect(bucketA).toBe(bucketAAgain);
+        expect(bucketA).not.toBe(bucketB);
     });
 });
