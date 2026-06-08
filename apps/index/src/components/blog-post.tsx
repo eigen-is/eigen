@@ -1,3 +1,4 @@
+import { formatDate } from '@workspace/lib/date';
 import type { ArticleBody } from '../content/manifest';
 import type { BlogPost as BlogPostType } from '../data/blog-posts';
 import { ArticleContent } from './article-content';
@@ -8,7 +9,9 @@ export function BlogPost({ post, body }: BlogPostProps) {
     return (
         <article className="blog-post">
             <h1 className="text-4xl font-bold mb-2">{post.title}</h1>
-            <p className="text-sm text-muted-foreground mb-6">{post.date}</p>
+            {post.date && (
+                <p className="text-sm text-muted-foreground mb-6">last updated at: {formatDate(post.date)}</p>
+            )}
             <ArticleContent body={body} className="eigen-prose" />
         </article>
     );

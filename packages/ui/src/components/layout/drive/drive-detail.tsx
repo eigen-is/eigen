@@ -1,4 +1,4 @@
-import { formatDate } from '@workspace/lib/date';
+import { formatDateTime } from '@workspace/lib/date';
 import { type DrivePath, isDocumentType, isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
 import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -148,7 +148,7 @@ function DetailsSection({ path }: { path: DrivePath }) {
             <dl className="text-sm space-y-1.5">
                 <Row label="Type" value={presentation.label} />
                 <Row label="Size" value={formatFileSize(path.size)} />
-                {path.createdAt && <Row label="Created" value={formatDate(path.createdAt)} />}
+                {path.createdAt && <Row label="Created" value={formatDateTime(path.createdAt)} />}
                 {details?.width && details?.height && (
                     <Row label="Dimensions" value={`${details.width} × ${details.height}`} />
                 )}

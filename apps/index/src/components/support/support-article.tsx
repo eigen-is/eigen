@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { formatDate } from '@workspace/lib/date';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import type { ArticleBody, ArticleMeta } from '../../content/manifest';
 import { ArticleBreadcrumb } from '../article-breadcrumb';
@@ -50,7 +51,9 @@ export function SupportArticle({
                         <article className="mx-auto w-full max-w-[70ch]">
                             <h1 className="text-3xl font-bold mb-1">{article.title}</h1>
                             {article.updated && (
-                                <p className="text-sm text-muted-foreground mb-6">Updated {article.updated}</p>
+                                <p className="text-sm text-muted-foreground mb-6">
+                                    last updated at: {formatDate(article.updated)}
+                                </p>
                             )}
                             <ArticleContent body={body} className="eigen-prose" />
 

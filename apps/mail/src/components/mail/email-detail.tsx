@@ -1,5 +1,5 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
-import { formatFullDateTime } from '@workspace/lib/date';
+import { formatDateTime } from '@workspace/lib/date';
 import type { AddressObject, Attachment, Email, EmailAddress, MaildirMailbox } from '@workspace/lib/types/mail';
 import { Toolbar, TooltipButton, UserAvatar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -254,7 +254,7 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
         );
     }
 
-    const formattedDate = email.date ? formatFullDateTime(new Date(email.date)) : 'Unknown date';
+    const formattedDate = email.date ? formatDateTime(new Date(email.date)) : 'Unknown date';
 
     // Get email content
     const emailContent = email.html || email.textAsHtml || email.text || '';
