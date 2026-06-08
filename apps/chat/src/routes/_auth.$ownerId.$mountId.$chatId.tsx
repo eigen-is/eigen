@@ -9,6 +9,7 @@ import {
     ChatMessageList,
     LoadingState,
     RequestAccessView,
+    ToolbarTitle,
     TooltipButton,
     UserAvatar,
 } from '@workspace/ui';
@@ -54,7 +55,7 @@ function ChatView() {
                     />
                 ))
             }
-            center={chat.chatPath && <span className="font-medium text-sm truncate">{chat.chatName}</span>}
+            center={chat.chatPath && <ToolbarTitle>{chat.chatName}</ToolbarTitle>}
             right={
                 <div className="flex items-center gap-1">
                     <TooltipButton
