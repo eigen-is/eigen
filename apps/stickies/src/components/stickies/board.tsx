@@ -2,7 +2,7 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl } from '@workspace/lib/api';
-import { useComments } from '@workspace/lib/chat';
+import { useComments, useResolveComment } from '@workspace/lib/chat';
 import {
     useCardIdFromChatName,
     useCreateCommentCard,
@@ -11,6 +11,7 @@ import {
 } from '@workspace/lib/comments';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
+import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CardDialog, CardFormDialog, CommentMenuItems, LoadingState, NoteCard } from '@workspace/ui';
@@ -66,17 +67,17 @@ export function StickiesBoard({
     const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({ board, yjsDoc });
 
     const { data: commentList = [] } = useComments(ownerId, path.mountId, path.id);
-    const messageCounts = useMemo(() => {
-        const map = new Map<string, number>();
-        for (const c of commentList) {
-            if (c.messageCount > 0) map.set(c.chatName, c.messageCount);
-        }
+    const entryByChatName = useMemo(() => {
+        const map = new Map<string, CommentEntry>();
+        for (const c of commentList) map.set(c.chatName, c);
         return map;
     }, [commentList]);
+    const entryFor = (card: CommentCard) => (card.chatName ? entryByChatName.get(card.chatName) : undefined);
 
     // Shared comment-card hooks for the new dialog path
     const createCard = useCreateCommentCard(ownerId, path.mountId, chatFolderId, yjsDoc ?? null, 'tasks');
     const updateCard = useUpdateCommentCard(yjsDoc ?? null, 'tasks');
+    const resolveComment = useResolveComment(ownerId, path.mountId, path.id);
 
     useHotkey(
         'Mod+Z',
@@ -176,6 +177,11 @@ export function StickiesBoard({
         cardContextMenu.close();
     };
 
+    const handleCardContextResolve = (chatName: string, status: 'open' | 'resolved') => {
+        resolveComment.mutate({ chatName, status });
+        cardContextMenu.close();
+    };
+
     const handleDeleteCard = () => {
         if (!deleteCardId) return;
         deleteCardFromBoard(deleteCardId);
@@ -198,12 +204,14 @@ export function StickiesBoard({
 
         if (dragState.activeType === 'task') {
             const card = dragState.activeItem as CommentCard;
+            const entry = entryFor(card);
             return (
                 <NoteCard
                     title={card.title}
                     description={card.description}
                     color={card.color}
-                    replyCount={card.chatName ? messageCounts.get(card.chatName) : undefined}
+                    replyCount={entry?.messageCount}
+                    resolved={entry?.status === 'resolved'}
                     className={isMobile ? 'w-full' : 'w-[254px]'}
                 />
             );
@@ -216,7 +224,7 @@ export function StickiesBoard({
                 <Column
                     column={column}
                     cards={columnCards}
-                    messageCounts={messageCounts}
+                    entryByChatName={entryByChatName}
                     canWrite={canWrite}
                     onAddCard={handleAddCard}
                     onEditColumn={handleEditColumn}
@@ -227,6 +235,10 @@ export function StickiesBoard({
 
         return null;
     };
+
+    const contextMenuItem = cardContextMenu.item
+        ? { card: cardContextMenu.item, entry: entryFor(cardContextMenu.item) }
+        : null;
 
     if (!isSynced) return <LoadingState />;
 
@@ -295,7 +307,7 @@ export function StickiesBoard({
                                                     key={column.id}
                                                     column={column}
                                                     cards={columnCards}
-                                                    messageCounts={messageCounts}
+                                                    entryByChatName={entryByChatName}
                                                     canWrite={canWrite}
                                                     onAddCard={handleAddCard}
                                                     onEditColumn={handleEditColumn}
@@ -357,11 +369,11 @@ export function StickiesBoard({
                                         SubContent: DropdownMenuSubContent,
                                     }}
                                     noun="sticky"
-                                    item={
-                                        cardContextMenu.item ? { card: cardContextMenu.item, entry: undefined } : null
-                                    }
+                                    item={contextMenuItem}
                                     onOpen={handleCardContextOpen}
                                     onChangeColor={handleCardContextColor}
+                                    onResolve={(chatName) => handleCardContextResolve(chatName, 'resolved')}
+                                    onReopen={(chatName) => handleCardContextResolve(chatName, 'open')}
                                     onDelete={handleCardContextDelete}
                                 />
                             </ContextMenuAnchor>
@@ -389,8 +401,8 @@ export function StickiesBoard({
                                         ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
                                         : undefined
                                 }
-                                showResolveAction={false}
                                 onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
+                                onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
                             />
                         </div>
                     </div>

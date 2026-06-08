@@ -1,5 +1,6 @@
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { cn } from '@workspace/ui/lib/utils';
@@ -11,7 +12,7 @@ import type { ColumnItem } from './types';
 type ColumnProps = {
     column: ColumnItem;
     cards: CommentCard[];
-    messageCounts: Map<string, number>;
+    entryByChatName: Map<string, CommentEntry>;
     canWrite?: boolean;
     isDropAnimating?: boolean;
     onAddCard: (columnId: string) => void;
@@ -25,7 +26,7 @@ type ColumnProps = {
 export function Column({
     column,
     cards,
-    messageCounts,
+    entryByChatName,
     canWrite = true,
     isDropAnimating,
     onAddCard,
@@ -103,16 +104,20 @@ export function Column({
                 ) : (
                     <div className="flex-grow space-y-2">
                         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
-                            {cards.map((card) => (
-                                <SortableNoteCard
-                                    key={card.id}
-                                    card={card}
-                                    replyCount={card.chatName ? messageCounts.get(card.chatName) : undefined}
-                                    canWrite={canWrite}
-                                    onOpen={onCardOpen}
-                                    onContextMenu={onCardContextMenu}
-                                />
-                            ))}
+                            {cards.map((card) => {
+                                const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;
+                                return (
+                                    <SortableNoteCard
+                                        key={card.id}
+                                        card={card}
+                                        replyCount={entry?.messageCount}
+                                        resolved={entry?.status === 'resolved'}
+                                        canWrite={canWrite}
+                                        onOpen={onCardOpen}
+                                        onContextMenu={onCardContextMenu}
+                                    />
+                                );
+                            })}
                         </SortableContext>
                     </div>
                 )}
