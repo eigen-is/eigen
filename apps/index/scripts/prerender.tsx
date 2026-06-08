@@ -49,6 +49,15 @@ function routes(): PrerenderRoute[] {
                 type: 'website',
             },
         },
+        {
+            path: '/licenses',
+            meta: {
+                title: 'Open-source licenses - eigen',
+                description: 'The open-source packages eigen is built on, and their licenses.',
+                url: `${BASE_URL}/licenses`,
+                type: 'website',
+            },
+        },
     ];
     for (const a of blogArticles) {
         list.push({

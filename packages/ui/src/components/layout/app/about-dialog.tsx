@@ -1,6 +1,7 @@
+import { getLicensesUrl } from '@workspace/lib/api';
 import { formatInputDate } from '@workspace/lib/date';
 import { usePublicConfig } from '@workspace/lib/public';
-import { Github } from 'lucide-react';
+import { Github, Scale } from 'lucide-react';
 import { Button } from '../../button.tsx';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
 
@@ -48,6 +49,18 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
                         >
                             <Github className="size-3.5" />
                             github.com/eigen-is/eigen
+                        </a>
+                    </div>
+
+                    <div className="flex justify-center text-xs text-muted-foreground">
+                        <a
+                            href={getLicensesUrl()}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 hover:text-foreground"
+                        >
+                            <Scale className="size-3.5" />
+                            Open-source licenses
                         </a>
                     </div>
                 </div>
