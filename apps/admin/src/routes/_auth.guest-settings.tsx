@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { GuestSettingsPage } from '../components/admin/guest-settings';
 
 export const Route = createFileRoute('/_auth/guest-settings')({
@@ -9,7 +10,7 @@ export const Route = createFileRoute('/_auth/guest-settings')({
 function GuestSettingsRoute() {
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex">
+            <Column id="detail" width="flex" toolbar={<ToolbarTitle>Guest access</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
                     <GuestSettingsPage />
                 </div>
