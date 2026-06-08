@@ -17,6 +17,14 @@ export function formatDate(date: Date | string | number): string {
     return new Date(date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// "Jun 8, 2026" for a bare YYYY-MM-DD calendar date. Parses the parts as a *local* date —
+// `new Date("2026-06-08")` reads the string as UTC midnight, which renders the day before for
+// viewers west of UTC and mismatches between prerender (build TZ) and hydration (viewer TZ).
+export function formatDateOnly(isoDate: string): string {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 export function formatDateTime(date: Date | string | number): string {
     const d = new Date(date);
     const isToday = d.toDateString() === new Date().toDateString();

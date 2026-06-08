@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { formatDate } from '@workspace/lib/date';
+import { formatDateOnly } from '@workspace/lib/date';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import type { ArticleBody, ArticleMeta } from '../../content/manifest';
 import { ArticleBreadcrumb } from '../article-breadcrumb';
@@ -52,7 +52,7 @@ export function SupportArticle({
                             <h1 className="text-3xl font-medium mb-1">{article.title}</h1>
                             {article.updated && (
                                 <p className="text-sm text-muted-foreground mb-6">
-                                    last updated at: {formatDate(article.updated)}
+                                    last updated at: {formatDateOnly(article.updated)}
                                 </p>
                             )}
                             <ArticleContent body={body} className="eigen-prose" />
