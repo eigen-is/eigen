@@ -1,8 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
-
-type LicensePackage = { name: string; version: string; license: string; url: string };
+import type { LicensePackage } from '../../scripts/lib/content-types';
 
 // Eager glob (not a static import) so a not-yet-generated file degrades to an empty list
 // in dev instead of breaking the module load. Regenerated on every prod build by
