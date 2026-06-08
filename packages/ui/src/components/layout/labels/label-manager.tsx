@@ -59,7 +59,7 @@ export function LabelManager({
     return (
         <div className={cn('py-2', className)}>
             <div className={cn('flex items-center mb-2', condensed ? 'justify-center' : 'justify-between')}>
-                {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">Labels</h3>}
+                {!condensed && <h3 className="text-sm font-medium text-foreground px-3 select-none">Labels</h3>}
                 <div className="flex items-center gap-1">
                     <TooltipButton icon={Plus} tooltipText="Add new label" onClick={handleAddLabel} />
                 </div>

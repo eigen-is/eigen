@@ -1,11 +1,11 @@
 import { useRouter } from '@tanstack/react-router';
 import { useIsAdmin } from '@workspace/lib/admin';
-import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl } from '@workspace/lib/api.ts';
+import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl, getSupportUrl } from '@workspace/lib/api.ts';
 import { apps } from '@workspace/lib/apps.ts';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
-import { Grip, LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
+import { Grip, LifeBuoy, LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
 import {
@@ -154,6 +154,12 @@ function GuestUserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] 
                         <UserItem name={auth.user?.name} email={auth.user?.email} className="p-0" />
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                        <a href={getSupportUrl()}>
+                            <LifeBuoy />
+                            Support
+                        </a>
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setAboutOpen(true)}>
                         <EigenLogo />
                         About Eigen
@@ -229,6 +235,12 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                        <a href={getSupportUrl()}>
+                            <LifeBuoy />
+                            Support
+                        </a>
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setAboutOpen(true)}>
                         <EigenLogo />
                         About Eigen

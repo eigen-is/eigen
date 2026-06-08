@@ -70,7 +70,7 @@ function SignupPage() {
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <CardTitle className="text-2xl">
-                        <span className="font-bold">eigen</span>
+                        <span className="font-medium">eigen</span>
                         <span className="font-normal">
                             <Bar />
                             signup

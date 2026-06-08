@@ -84,7 +84,7 @@ export function ServerSettingsPage() {
 
     return (
         <div className="p-6 max-w-2xl space-y-6">
-            <h2 className="text-xl font-semibold">Server Settings</h2>
+            <h2 className="text-xl font-medium">Server Settings</h2>
 
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Storage Quotas</h3>

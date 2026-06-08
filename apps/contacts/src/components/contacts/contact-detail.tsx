@@ -146,7 +146,7 @@ export function ContactDetail({ contact }: ContactDetailProps) {
 
                     <div className="flex-1 space-y-6">
                         <div className="space-y-4">
-                            <h3 className="text-lg font-semibold border-b pb-2">Contact Information</h3>
+                            <h3 className="text-lg font-medium border-b pb-2">Contact Information</h3>
 
                             {contact.email && contact.email.length > 0 && (
                                 <div className="space-y-2">
@@ -208,7 +208,7 @@ export function ContactDetail({ contact }: ContactDetailProps) {
                             contact.address.length > 0 &&
                             Object.keys(contact.address[0]).length > 0 && (
                                 <div className="space-y-4">
-                                    <h3 className="text-lg font-semibold border-b pb-2">Addresses</h3>
+                                    <h3 className="text-lg font-medium border-b pb-2">Addresses</h3>
 
                                     {contact.address.map((address: Address, index: number) => (
                                         <div key={index} className="space-y-2">
@@ -224,7 +224,7 @@ export function ContactDetail({ contact }: ContactDetailProps) {
 
                         {contact.notes && (
                             <div className="space-y-4">
-                                <h3 className="text-lg font-semibold border-b pb-2">Notes</h3>
+                                <h3 className="text-lg font-medium border-b pb-2">Notes</h3>
                                 <div className="whitespace-pre-wrap">{contact.notes}</div>
                             </div>
                         )}

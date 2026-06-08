@@ -14,7 +14,7 @@ function HomeComponent() {
                 <div className="h-full overflow-y-auto">
                     <div className="flex flex-col items-center justify-center w-full px-4 py-8">
                         <div className="text-4xl mb-6">
-                            <span className="font-bold text-app">eigen</span>
+                            <span className="font-medium text-app">eigen</span>
                         </div>
 
                         <div className="text-md text-center mb-10">

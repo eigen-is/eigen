@@ -476,7 +476,7 @@ export function ChatMessageList({
                             <div className="flex-1 min-w-0 pb-1">
                                 {!grouped && (
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-sm font-bold text-foreground">{displayName}</span>
+                                        <span className="text-sm font-medium text-foreground">{displayName}</span>
                                         <span className="text-xs text-muted-foreground">
                                             {formatDateTime(message.createdAt)}
                                         </span>
@@ -516,7 +516,7 @@ export function ChatMessageList({
                             <div className="flex-1 min-w-0 pb-1">
                                 {!grouped && (
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-sm font-bold text-foreground">{displayName}</span>
+                                        <span className="text-sm font-medium text-foreground">{displayName}</span>
                                         <span className="text-xs text-muted-foreground">
                                             {formatDateTime(message.createdAt)}
                                         </span>
@@ -556,7 +556,7 @@ export function ChatMessageList({
                         <div className="flex-1 min-w-0 pb-1">
                             {!grouped && (
                                 <div className="flex items-baseline gap-2">
-                                    <span className="text-sm font-bold text-foreground">{displayName}</span>
+                                    <span className="text-sm font-medium text-foreground">{displayName}</span>
                                     <span className="text-xs text-muted-foreground">
                                         {formatDateTime(message.createdAt)}
                                     </span>

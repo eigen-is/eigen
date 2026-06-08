@@ -152,7 +152,7 @@ export function EmailList({
                                                 <div
                                                     className={cn(
                                                         'text-sm font-medium text-foreground',
-                                                        !email.isRead && 'font-semibold',
+                                                        !email.isRead && 'font-medium',
                                                     )}
                                                 >
                                                     {email.fromShort || 'Unknown'}

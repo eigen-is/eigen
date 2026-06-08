@@ -105,7 +105,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                                 <Separator />
 
                                 <div>
-                                    <Label className="text-sm font-semibold">People with access</Label>
+                                    <Label className="text-sm font-medium">People with access</Label>
                                     <div className="mt-2 space-y-3">
                                         <UserItem userId={sharedCalendar.ownerUserId} label="Owner" />
                                         {accessData?.shares?.map((share, i) => (

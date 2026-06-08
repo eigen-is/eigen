@@ -150,7 +150,7 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
             data-slot="dialog-title"
             // pr-8 reserves space for the absolute-positioned close button so long titles
             // wrap above it instead of running underneath.
-            className={cn('text-lg leading-none font-semibold pr-8', className)}
+            className={cn('text-lg leading-none font-medium pr-8', className)}
             {...props}
         />
     );

@@ -165,7 +165,7 @@ export function SetupWizard() {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-4">
-                            <h3 className="font-semibold text-lg">Server Configuration</h3>
+                            <h3 className="font-medium text-lg">Server Configuration</h3>
 
                             <div>
                                 <Label htmlFor="domain">Domain</Label>
@@ -208,7 +208,7 @@ export function SetupWizard() {
                         </div>
 
                         <div className="space-y-4 pt-6 border-t">
-                            <h3 className="font-semibold text-lg">Admin Account</h3>
+                            <h3 className="font-medium text-lg">Admin Account</h3>
 
                             <div>
                                 <Label htmlFor="adminName">Full Name</Label>

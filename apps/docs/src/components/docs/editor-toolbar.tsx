@@ -435,25 +435,25 @@ export const EditorToolbar = ({
                                         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
                                     >
                                         <Heading1 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-xl font-bold">Heading 1</span>
+                                        <span className="text-xl font-medium">Heading 1</span>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
                                     >
                                         <Heading2 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-lg font-semibold">Heading 2</span>
+                                        <span className="text-lg font-medium">Heading 2</span>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
                                     >
                                         <Heading3 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-base font-semibold">Heading 3</span>
+                                        <span className="text-base font-medium">Heading 3</span>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
                                     >
                                         <Heading4 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-sm font-semibold">Heading 4</span>
+                                        <span className="text-sm font-medium">Heading 4</span>
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>

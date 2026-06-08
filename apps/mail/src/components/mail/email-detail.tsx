@@ -265,7 +265,7 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
                 {/* Email header */}
                 <div className="space-y-4 mb-6">
                     <div>
-                        <h1 className="text-xl font-semibold mb-4">
+                        <h1 className="text-xl font-medium mb-4">
                             {email.subject ? String(email.subject) : '(No subject)'}
                         </h1>
 

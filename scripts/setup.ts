@@ -328,6 +328,7 @@ VITE_APP_CHAT_URL=/chat
 VITE_APP_ADMIN_URL=/admin
 VITE_APP_SLIDES_URL=/slides
 VITE_APP_SHEETS_URL=/sheets
+VITE_APP_INDEX_URL=/
 `;
 
 writeFileSync(ENV_PATH, env);

@@ -44,7 +44,7 @@ export function GuestSettingsPage() {
 
     return (
         <div className="p-6 max-w-2xl space-y-6">
-            <h2 className="text-xl font-semibold">Guest access</h2>
+            <h2 className="text-xl font-medium">Guest access</h2>
 
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Open signup</h3>

@@ -49,7 +49,7 @@ export function SupportArticle({
                             </aside>
                         )}
                         <article className="mx-auto w-full max-w-[70ch]">
-                            <h1 className="text-3xl font-bold mb-1">{article.title}</h1>
+                            <h1 className="text-3xl font-medium mb-1">{article.title}</h1>
                             {article.updated && (
                                 <p className="text-sm text-muted-foreground mb-6">
                                     last updated at: {formatDate(article.updated)}

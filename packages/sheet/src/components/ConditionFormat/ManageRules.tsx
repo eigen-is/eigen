@@ -79,7 +79,7 @@ function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
     if (rule.type === 'default') {
         return (
             <div
-                className="w-8 h-6 rounded border border-border text-[10px] font-bold flex items-center justify-center shrink-0"
+                className="w-8 h-6 rounded border border-border text-[10px] font-medium flex items-center justify-center shrink-0"
                 style={{
                     backgroundColor: rule.format.cellColor ?? undefined,
                     color: rule.format.textColor ?? undefined,
