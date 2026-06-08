@@ -20,12 +20,20 @@ type ArticleRef = { collection: 'blog' | 'support'; slug: string };
 type PageArticle = ArticleRef & { body: ArticleBody };
 type PrerenderRoute = { path: string; meta: PageMeta; article?: ArticleRef };
 
-// Build the route list: the /blog and /support trees (not "/", which stays SPA).
+// Build the route list: the home page, plus the /blog and /support trees.
 function routes(): PrerenderRoute[] {
     const blogArticles = manifest('blog').articles;
     const support = manifest('support').articles;
     const latestBlog = blogArticles[0];
     const list: PrerenderRoute[] = [
+        {
+            // Landing page. Its first render is deterministic — appIndex starts at 0 and
+            // waitlistEnabled is false until the public config resolves — so it hydrates
+            // cleanly in place (AuthProvider renders children on the first client render
+            // for this ungated app rather than a null loading fallback).
+            path: '/',
+            meta: { title: 'eigen', description: DEFAULT_DESCRIPTION, url: BASE_URL, type: 'website' },
+        },
         {
             path: '/blog',
             meta: { title: 'Blog - eigen', description: DEFAULT_DESCRIPTION, url: `${BASE_URL}/blog`, type: 'website' },
