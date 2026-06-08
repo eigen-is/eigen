@@ -31,7 +31,17 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
   resumes un-acked uploads (`UploadQueue.reconcile`, before the stale-temp sweep).
 - **Crash recovery (Phase 1a)** — a temp that survived an unclean shutdown is force-dirtied on reopen
   (`ManagedDatabase.markDirty`) so its unsynced bytes re-reach storage instead of being dropped by the
-  close-time cleanup. Closes the original data-loss bug; needs no queue.
+  close-time cleanup. Closes the original data-loss bug; needs no queue. (It also *introduced* one — see
+  Recovery integrity below.)
+- **Recovery integrity (2026-06-08 fix)** — force-dirtying a recovered temp is only safe if the temp holds
+  real data. A failed/empty S3 GET could leave a 0-byte temp, which `openCold` opened as a fresh EMPTY db
+  and `markDirty` then re-uploaded *over the good object* — two live stickies docs were wiped this way (and
+  re-wiped on every later redeploy). The open-vs-create intent is threaded `Drive.openDatabase` vs
+  `createDatabase` → Mount `mode` → `ManagedDatabase.mustExist`: a `mustExist` open uses `{ create: false }`
+  and **refuses a missing or 0-byte working copy** in `openCold`, and `Mount.buildDocumentDb` adopts a
+  surviving temp only if it's a valid, non-collapsed SQLite (else it discards it and re-fetches the
+  authoritative object). **Invariant: an empty/invalid working copy can never overwrite a non-trivial
+  stored object — worst case a transient 503, never a wipe.**
 - **Newest-from-staging on reopen** — during an outage a reopened doc reads the staged copy (newest bytes),
   not a stale/absent S3 object.
 - **No resurrection** — permanent delete + chat restore cancel the pending upload; if a PUT finishes after
@@ -68,7 +78,7 @@ temp-copy backend.
 | `lib/mount/upload-queue.ts` | The per-mount `UploadQueue` — enqueue / drain / backoff / cancel / reconcile + staging |
 | `lib/sync/sync-worker.ts` | Process-global bits: per-destination semaphore map, backoff, shutdown deadline |
 | `lib/mount/mount.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring |
-| `lib/core/managed-database.ts` | `markDirty` (crash recovery), `stageCopy` (`VACUUM INTO`) |
+| `lib/core/managed-database.ts` | `markDirty` (crash recovery), `stageCopy` (`VACUUM INTO`), `mustExist` open guard (refuse a missing/0-byte working copy) |
 | `lib/mount/schema.ts` + `db-config.ts` | The `pending_uploads` table (additive migration v4) |
 
 ## Ops
