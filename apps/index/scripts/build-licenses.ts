@@ -1,13 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Glob } from 'bun';
+import type { LicensePackage } from './lib/content-types';
 
 // apps/index/scripts → repo root is three levels up.
 const INDEX_APP = join(import.meta.dir, '..');
 const REPO_ROOT = join(INDEX_APP, '..', '..');
 const OUT = join(INDEX_APP, 'src', 'content', '.generated', 'licenses.json');
-
-type LicensePackage = { name: string; version: string; license: string; url: string };
 
 type PackageJson = {
     version?: string;

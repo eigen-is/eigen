@@ -56,3 +56,6 @@ export type ContentManifest = { articles: ArticleMeta[] };
 
 // The per-article generated body file.
 export type ArticleBody = { html: string; mediaGrids: MediaGridData[] };
+
+// The generated open-source license list (one entry per package), written by build-licenses.ts.
+export type LicensePackage = { name: string; version: string; license: string; url: string };

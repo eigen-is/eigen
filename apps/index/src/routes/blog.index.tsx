@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
+import { formatDateOnly } from '@workspace/lib/date';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { BlogPost } from '../components/blog-post';
 import { useArticleBody } from '../content/use-article-body';
@@ -52,7 +53,11 @@ function BlogOverviewComponent() {
                                                     {post.title}
                                                 </Link>
                                             </h3>
-                                            <p className="text-sm text-muted-foreground mb-2">{post.date}</p>
+                                            {post.date && (
+                                                <p className="text-sm text-muted-foreground mb-2">
+                                                    {formatDateOnly(post.date)}
+                                                </p>
+                                            )}
                                             <p className="text-foreground leading-7">{post.description}</p>
                                         </article>
                                     ))}
