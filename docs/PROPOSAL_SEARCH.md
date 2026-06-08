@@ -109,6 +109,7 @@ Requirements:
 |----------|-----------------------------------------|---------------------------------------|
 | Mail     | Subject, sender, recipients (To and CC), short body preview | Yes — in the mail database     |
 | Drive    | File and folder names                   | Yes — in mount metadata               |
+| Drive (file bodies) | Body of plain-text / code files (`.txt`, `.md`, `.json`, source) | Yes — raw bytes, capped read (Phase 2) |
 | Calendar | Event title, description, location      | Yes — in the calendar database        |
 | Chat     | Message content, author                 | Yes — in the per-room database        |
 | Docs     | Document body text                      | No — extract from Yjs state           |
@@ -305,6 +306,115 @@ inline FTS5 (Option C), the mount's own FTS table is reachable directly from the
 without threading a separate service reference. Extraction failures must never block the
 snapshot itself — they're caught and logged.
 
+> **Refined 2026-06-08 — see [Phase 2 — body-content indexing](#phase-2--body-content-indexing-worked-design) below.**
+> Reading the current code corrected two things in the sketch above (the `export/*/content.ts`
+> loaders it names don't exist — the real shared loaders are in `lib/document/`; and extraction
+> should hook the storage-agnostic `onSync` seam, not snapshot-creation alone) and extended
+> Phase 2 to index plain text / code file bodies.
+
+## Phase 2 — body-content indexing (worked design)
+
+> Worked out 2026-06-08 from reading the current code. Refines [Content extraction](#content-extraction-from-collaborative-documents)
+> above and **corrects two things in it**: the `export/{doc,slides,sheets}/content.ts` loaders it
+> names **do not exist** — the real shared loaders live in `apps/api/src/lib/document/`; and
+> extraction should hook the **storage-agnostic `onSync`** seam, not snapshot-creation alone (and
+> explicitly **not** the S3-only upload queue). It also **extends** Phase 2 beyond Yjs documents to
+> index the **body of plain text / code files**, which Phase 1b indexes by name only. No
+> backward-compat constraint — the content index is regenerable, so it is populated on write and
+> backfilled once.
+
+**What gets indexed**
+
+| Kind | Body source | Notes |
+|------|-------------|-------|
+| Docs (`.eigendoc`) | full ProseMirror text, all blocks | *not* capped at the preview's first-20-blocks |
+| Slides (`.eigenslides`) | text of all slide objects, all slides | *not* capped at the preview's first-8-slides |
+| Sheets (`.eigensheets`) | display values of all non-empty cells | sparse-`celldata` walk — see grid cliff below |
+| Text / code files | raw file body | eligibility via the canonical `getTextPreviewMode` (`packages/lib/src/constants/preview.ts`); capped read |
+
+Deferred (unchanged from the proposal): stickies (no loader until stickies export ships), chat
+(Phase 3), uploaded **binary** docs (PDF / Office — need real text extractors), semantic / vector
+(Phase 6).
+
+**Extraction — reuse the loaders, not the preview renderers, not the export.** The reusable kernel
+is the shared content loaders `readEigendocContent()` / `readSheetsContent()` / `readSlidesContent()`
+(`apps/api/src/lib/document/{doc,sheets,slides}.ts`), all built on `loadYjsState` and already shared
+by export and preview — so search's notion of "document text" can't drift from theirs. A new thin
+`extractText(mount, path)` sits on top:
+
+- **doc** — ProseMirror JSON → plain text (all blocks)
+- **slides** — concatenate every slide's text objects
+- **sheets** — iterate the **sparse `celldata`** and concatenate display values; skip formulas, use the stored `.v`
+- **text / code files** — `mount.readFile(pathId)` then `.text()`, **capped** via `readRange` (there is *no* size guard today — must not slurp a 500 MB file)
+
+Two traps this avoids, both confirmed in the code:
+
+- The **preview generators** (`apps/api/src/lib/preview/*`) are the wrong tool: they cap hard (first
+  20 blocks / 8 slides / 1 sheet) and emit display **HTML**. Reuse the loaders *under* them, not the
+  generators.
+- The **full export** is the wrong tool: it base64-embeds media, shells out to WeasyPrint, and for
+  sheets can call `celldataToData()` which **materializes a dense grid** — a sparse-but-large sheet
+  (one cell at row 1 000 000) blows up memory. The extractor must never densify; iterate `celldata`.
+
+**Per-file cap.** Extract at most ~100 KB of text per file (≈16k tokens). Far larger than the preview
+caps (so content on slide 9 / row 200 is findable), but bounded so the FTS shadow tables and
+extraction cost stay predictable.
+
+**Storage — a separate content FTS table, not a column on `paths`.** Keep `paths_fts` (name,
+trigger-maintained, instant) exactly as Phase 1b shipped it. Add a **separate `paths_content_fts`** in
+the mount `metadata.db`, keyed by path id and populated by the reindex worker — deliberately **not**
+an extra column on `paths` and **not** external-content over `paths`: the `paths` row is hot (every
+folder listing SELECTs it), and large body blobs there would bloat those reads. A dedicated table
+keeps big text off the hot path. `Mount.searchPaths` queries both tables, merges ids, and ranks a
+name match above a body-only match (`bm25()` within each; the name boost is structural). A little
+per-path bookkeeping (`contentIndexedAt` + the source `updatedAt` or a content hash) lets the worker
+skip unchanged files and detect staleness.
+
+**Trigger — the storage-agnostic `onSync`, not the S3 queue.** Verified `onSync` semantics: it is
+called by `ManagedDatabase.sync()` **only when dirty** (`total_changes() !== lastSyncedChanges`), from
+(1) the 30s auto-sync timer while the container is open, (2) `flush()` (e.g. just after create), and
+(3) `close()`. It fires for **all three storage types** (`local`, `local-key`, `s3`) — only the
+callback *body* differs (`mount.ts:1230` vs `1250`). The **upload queue is S3-only** (`isRemote`,
+`mount.ts:174`), so hooking *it* would silently skip both local backends; `onSync` is the universal
+seam.
+
+- **Containers** (doc / sheet / slide): mark-for-reindex inside the `onSync` callback.
+- **Plain files**: no `onSync` (they are not `ManagedDatabase`s) — mark in the file write-path
+  (`Mount.createFile` / `createFileFromTemp` / `updatePath`).
+- `onSync` re-fires ~every 30s during active editing, so the mark is a cheap idempotent dirty-bit and
+  the **worker rate-limits** re-extraction of the same container (skip if recently indexed; prefer
+  when idle) — otherwise a 2-hour session re-extracts a big sheet hundreds of times.
+- Extraction is cheapest while the container is still open (the local temp is present). A **closed S3
+  container** must be re-downloaded via `openDatabase` to read it (the same cost preview / export
+  already pay), so the worker should drain promptly rather than let closed-S3 docs backlog.
+
+**Durability — dirty-flag + sweep (recommended).** On a durable write, set `contentDirty = 1` (cheap,
+same `metadata.db`). A `scheduleInterval` worker (existing primitive, `apps/api/src/lib/scheduler/`)
+sweeps dirty rows off the request path: load → `extractText` (capped) → upsert `paths_content_fts` →
+clear the bit + stamp `contentIndexedAt` → emit SSE. Crash-safe via the persisted bit, self-healing (a
+missed sweep just reruns), and backfill is simply "mark all dirty" once. Rejected alternatives:
+
+- **Fire-and-forget at the seam** — no durable retry; one failed extraction leaves a file unindexed
+  until it happens to be edited again.
+- **A full per-mount `ReindexQueue`** mirroring the S3 `UploadQueue` (backoff / reconcile /
+  per-destination semaphore) — overkill. Unlike an upload, whose staged bytes are the *only* copy
+  until the PUT acks, a search index is **regenerable**; it does not need hard delivery guarantees.
+
+**Lifecycle.** Delete clears the content row — an `AFTER DELETE` trigger on `paths` keeps it atomic
+(the content table is keyed by path id). Trash and move need nothing: search already excludes
+`trashedAt IS NOT NULL`, and a move changes neither name nor body (mirrors the existing
+`DRIVE_PATH_MOVED` SSE exclusion). A new `DRIVE_FILE_REINDEXED` SSE event after a sweep lets the FE
+`invalidateSearchOwner` so freshly-indexed content shows up.
+
+**Open — resume here.**
+
+- Lock the durability model (dirty-flag + sweep vs fire-and-forget vs full queue). Leaning dirty-flag + sweep.
+- Confirm the v1 type scope (docs / sheets / slides + plaintext / code; defer stickies / chat / PDF / Office).
+- Pick the sweep cadence and the per-container re-extract rate-limit.
+- Pick the cap size (~100 KB?) and the staleness key (source `updatedAt` vs content hash).
+- Settle `paths_content_fts`'s exact shape (standalone vs external-content over a small `path_content`
+  table) — this decides whether `snippet()` highlighting is available later.
+
 ## Search API
 
 A single owner-scoped endpoint:
@@ -465,7 +575,7 @@ What not to do:
 |-------|---------------------------------------------------------------------------------------------------------|--------|
 | 1a    | Mail v3 migration (CREATE VIRTUAL TABLE + triggers + populate), `MailDB.searchMail` two-pass JOIN+hydrate, the `/search` route, index-on-write via FTS triggers. **Shipped — see status block.** | M |
 | 1b    | Drive name indexing — mount metadata.db v2 (`paths_fts` + 3 triggers, UPDATE gated on `name` change), `Mount.searchPaths`, `Drive.search` mount fan-out, `/search` route extended with a `file` source, eigendoc-internals exclusion. **Shipped — see status block.** | M |
-| 2     | Content extraction for docs, slides, and sheets — a thin text collector over the export content loaders, hooked into snapshot creation; lands inside the same `paths_fts` (additional column) or a sibling `paths_text` table. | M |
+| 2     | Body-content indexing — docs / slides / sheets (thin text collector over the `lib/document/` loaders) **plus plain text / code file bodies**, written to a sibling `paths_content_fts` table, populated by a dirty-flag + sweep worker hooked on the storage-agnostic `onSync` (not the S3-only upload queue). **[Worked design](#phase-2--body-content-indexing-worked-design).** | M |
 | 3     | Chat message indexing — index message content                                                            | S      |
 | 4     | Calendar event indexing — `calendar.db` gains an `events_fts` + same trigger shape                       | S      |
 | 5     | Shared data — make items shared with the user searchable                                                 | S–M    |
