@@ -1274,15 +1274,8 @@ export class Mount {
                               throw new ApiError(503, `Storage object for ${pathId} not available`);
                           }
                           await this.downloadKeyToTemp(storageKey, pathId);
-                          // A storage object we just confirmed exists must download as a real SQLite db.
-                          // create:false (mustExist) catches a MISSING temp, but a 0-byte/partial GET writes
-                          // a present-but-empty file that still opens as a valid empty db — validate the
-                          // bytes and fail loud (503), leaving the stored object intact, rather than letting
-                          // an empty doc reach the live session and overwrite good data on the next sync.
-                          if (!isSqliteFile(tempPath)) {
-                              fs.rmSync(tempPath, { force: true });
-                              throw new ApiError(503, `Downloaded object for ${pathId} is empty or invalid`);
-                          }
+                          // No empty-check here: a 0-byte/partial GET is caught by ManagedDatabase's
+                          // mustExist guard (openCold refuses to open an empty working copy as a fresh db).
                       },
                       // isRemote: stage a frozen copy + enqueue, off the request/close path.
                       // Local path-based: keep the synchronous local copy (Bun.write never 503s,
