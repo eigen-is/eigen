@@ -1,6 +1,6 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { Check, Circle, MessageSquareOff, X } from 'lucide-react';
+import { MessageSquareOff, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../select';
 import { Tabs, TabsList, TabsTrigger } from '../../tabs';
@@ -94,13 +94,7 @@ export function CommentPanel({
                             description={card.description}
                             color={card.color}
                             replyCount={entry?.messageCount}
-                            statusIcon={
-                                entry?.status === 'resolved' ? (
-                                    <Check className="h-3.5 w-3.5 opacity-50" />
-                                ) : (
-                                    <Circle className="h-2.5 w-2.5 fill-current opacity-40" />
-                                )
-                            }
+                            resolved={entry?.status === 'resolved'}
                             onClick={() => onCommentClick?.(card.id)}
                             onContextMenu={
                                 onCommentContextMenu ? (e) => onCommentContextMenu(e, card, entry) : undefined

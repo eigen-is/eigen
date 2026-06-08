@@ -1,6 +1,7 @@
 import { isLightColor, lightenColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
-import type { HTMLAttributes, ReactNode } from 'react';
+import { Check } from 'lucide-react';
+import type { HTMLAttributes } from 'react';
 import { Card, CardContent } from '../../card';
 import { Progress } from '../../progress';
 
@@ -13,7 +14,7 @@ type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     title: string;
     description?: string;
     color?: string | null;
-    statusIcon?: ReactNode;
+    resolved?: boolean;
     replyCount?: number;
     replyLabel?: string;
     ref?: React.Ref<HTMLDivElement>;
@@ -23,7 +24,7 @@ export function NoteCard({
     title,
     description,
     color,
-    statusIcon,
+    resolved,
     replyCount,
     replyLabel,
     onClick,
@@ -55,8 +56,12 @@ export function NoteCard({
             {...rest}
         >
             <CardContent className="p-3 text-sm relative">
-                {statusIcon && <span className="absolute top-2 right-2">{statusIcon}</span>}
-                <span className={cn('line-clamp-2', statusIcon && 'pr-5')}>{title}</span>
+                {resolved && (
+                    <span className="absolute top-2 right-2">
+                        <Check className="h-3.5 w-3.5 opacity-50" />
+                    </span>
+                )}
+                <span className={cn('line-clamp-2', resolved && 'pr-5')}>{title}</span>
                 {description && (
                     <div
                         className="text-xs mt-1 max-h-24 overflow-hidden opacity-70 pointer-events-none [&>*+*]:mt-1.5 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"

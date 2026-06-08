@@ -7,6 +7,7 @@ import { memo, useRef } from 'react';
 type SortableNoteCardProps = {
     card: CommentCard;
     replyCount?: number;
+    resolved?: boolean;
     canWrite?: boolean;
     onOpen?: (cardId: string) => void;
     onContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
@@ -15,6 +16,7 @@ type SortableNoteCardProps = {
 export const SortableNoteCard = memo(function SortableNoteCard({
     card,
     replyCount,
+    resolved,
     canWrite = true,
     onOpen,
     onContextMenu,
@@ -45,6 +47,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
             description={card.description}
             color={card.color}
             replyCount={replyCount}
+            resolved={resolved}
             onPointerDownCapture={(e: React.PointerEvent) => {
                 pointerStart.current = { x: e.clientX, y: e.clientY };
             }}

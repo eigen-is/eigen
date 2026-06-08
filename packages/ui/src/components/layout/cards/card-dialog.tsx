@@ -17,7 +17,6 @@ type CardDialogProps = {
     mountId: string;
     canWrite?: boolean;
     copyLinkUrl?: string;
-    showResolveAction?: boolean;
     onUpdate?: (patch: { title?: string; description?: string; color?: string }) => void;
     onResolve?: (chatName: string, next: 'open' | 'resolved') => void;
 };
@@ -31,7 +30,6 @@ export function CardDialog({
     mountId,
     canWrite = true,
     copyLinkUrl,
-    showResolveAction = false,
     onUpdate,
     onResolve,
 }: CardDialogProps) {
@@ -42,7 +40,7 @@ export function CardDialog({
     if (!card) return null;
 
     const action =
-        showResolveAction && entry && onResolve
+        entry && onResolve
             ? {
                   actionIcon: entry.status === 'open' ? Check : RotateCcw,
                   actionTooltip: entry.status === 'open' ? 'Resolve' : 'Re-open',
