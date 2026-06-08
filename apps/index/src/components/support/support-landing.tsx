@@ -9,7 +9,7 @@ export function SupportLanding() {
         <ColumnLayout>
             <Column id="landing" width="flex">
                 <div className="h-full overflow-y-auto">
-                    <div className="mx-auto max-w-4xl px-6 py-12">
+                    <div className="mx-auto max-w-3xl px-6 py-12">
                         <h1 className="text-3xl font-bold text-app text-center mb-10">How can we help?</h1>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                             {SECTIONS.map((section) => {

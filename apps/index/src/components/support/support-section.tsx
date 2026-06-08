@@ -16,16 +16,16 @@ export function SupportSection({ section, articles }: { section: string; article
                 id="section"
                 width="flex"
                 toolbar={
-                    <div className="mx-auto w-full max-w-2xl px-2">
+                    <div className="mx-auto w-full max-w-[70ch]">
                         <ArticleBreadcrumb trail={[{ label: 'Eigen Support', to: '/support' }, { label: title }]} />
                     </div>
                 }
             >
-                <div className="h-full overflow-y-auto px-6 py-6">
-                    <div className="mx-auto max-w-2xl">
-                        <h1 className="text-2xl font-bold mb-1">{title}</h1>
+                <div className="h-full overflow-y-auto px-4 py-10">
+                    <div className="mx-auto max-w-[70ch]">
+                        <h1 className="text-3xl font-bold mb-1">{title}</h1>
                         {config && <p className="text-muted-foreground mb-6">{config.description}</p>}
-                        <ul className="space-y-1">
+                        <ul className="list-disc pl-6 space-y-1 marker:text-muted-foreground">
                             {sorted.map((article) => {
                                 const [articleSection, file] = article.slug.split('/');
                                 return (
