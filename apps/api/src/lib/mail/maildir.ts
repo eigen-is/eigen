@@ -667,6 +667,9 @@ export default class Maildir {
     // -- Sync --
 
     async syncMailbox(mailbox: string): Promise<void> {
+        // Don't start a sync once teardown has begun — the watcher can fire one fire-and-forget
+        // (init :98) and doSyncMailbox's later phases would query a closed db (see destruct).
+        if (this.home.destructing) return;
         const running = this.syncingMailboxes.get(mailbox);
         if (running) return running;
 
@@ -792,6 +795,9 @@ export default class Maildir {
 
     async destruct(): Promise<void> {
         this.store.unwatchMailboxes();
+        // Let any in-flight mailbox sync (kicked fire-and-forget by the watcher) finish before
+        // closing the db — otherwise its later phases hit a closed database (RangeError).
+        await Promise.allSettled([...this.syncingMailboxes.values()]);
         await this.flushDraftSidecars();
         if (this.db) {
             await this.db.destruct();
