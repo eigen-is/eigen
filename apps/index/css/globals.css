@@ -46,7 +46,3 @@
 .heading-anchor:focus-visible {
     opacity: 1;
 }
-
-.heading-anchor:hover {
-    color: var(--app-current-color);
-}
