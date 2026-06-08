@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-718 primitives across 6 kinds. `packages/sheet` internals are excluded.
+719 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -525,7 +525,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (229)
+## Utilities & constants (230)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -563,6 +563,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getDriveThumbnailUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getIndexAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getInlineEditUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getLicensesUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailAttachmentUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailComposeUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
