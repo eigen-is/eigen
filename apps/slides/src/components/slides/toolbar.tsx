@@ -2,7 +2,7 @@ import { useYjsUndoState } from '@workspace/lib/collab';
 import { useExportDocument } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
+import { CenteredToolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -58,60 +58,64 @@ export function Toolbar({
 
     return (
         <>
-            <SharedToolbar>
-                <div className="flex items-center">
-                    <FileMenu
-                        path={path}
-                        canWrite={canWrite}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        onExport={handleExport}
-                        exportFormats={['pdf', 'html']}
-                        createLabel="New slide"
-                        createIcon={Presentation}
-                        createType="slides"
-                    />
+            <CenteredToolbar
+                left={
+                    <div className="flex items-center">
+                        <FileMenu
+                            path={path}
+                            canWrite={canWrite}
+                            onAccessDialogOpen={onAccessDialogOpen}
+                            onExport={handleExport}
+                            exportFormats={['pdf', 'html']}
+                            createLabel="New slide"
+                            createIcon={Presentation}
+                            createType="slides"
+                        />
 
-                    {showMobileEditMenu && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost">Edit</Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                                <DropdownMenuItem onClick={undo} disabled={!canUndo}>
-                                    <Undo className="h-4 w-4 mr-2" /> Undo
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={redo} disabled={!canRedo}>
-                                    <Redo className="h-4 w-4 mr-2" /> Redo
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={onAddSlide}>
-                                    <Plus className="h-4 w-4 mr-2" /> Add slide
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={onAddText}>
-                                    <Type className="h-4 w-4 mr-2" /> Add text
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={onAddImage}>
-                                    <ImagePlus className="h-4 w-4 mr-2" /> Add image
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )}
+                        {showMobileEditMenu && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost">Edit</Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                    <DropdownMenuItem onClick={undo} disabled={!canUndo}>
+                                        <Undo className="h-4 w-4 mr-2" /> Undo
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={redo} disabled={!canRedo}>
+                                        <Redo className="h-4 w-4 mr-2" /> Redo
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={onAddSlide}>
+                                        <Plus className="h-4 w-4 mr-2" /> Add slide
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={onAddText}>
+                                        <Type className="h-4 w-4 mr-2" /> Add text
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={onAddImage}>
+                                        <ImagePlus className="h-4 w-4 mr-2" /> Add image
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
 
-                    {canWrite && !isMobile && (
-                        <UndoRedoButtons canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo} />
-                    )}
-                </div>
-                <div className="flex items-center">
-                    {canWrite && !isMobile && (
-                        <>
-                            <TooltipButton icon={Plus} tooltipText="Add slide" onClick={onAddSlide} />
-                            <TooltipButton icon={Type} tooltipText="Add text" onClick={onAddText} />
-                            <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onAddImage} />
-                        </>
-                    )}
-                    <TooltipButton icon={Play} tooltipText="Present" onClick={onPresent} />
-                </div>
-                <div className="flex items-center">
+                        {canWrite && !isMobile && (
+                            <UndoRedoButtons canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo} />
+                        )}
+                    </div>
+                }
+                center={
+                    <>
+                        {canWrite && !isMobile && (
+                            <>
+                                <TooltipButton icon={Plus} tooltipText="Add slide" onClick={onAddSlide} />
+                                <TooltipButton icon={Type} tooltipText="Add text" onClick={onAddText} />
+                                <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onAddImage} />
+                            </>
+                        )}
+                        <TooltipButton icon={Play} tooltipText="Present" onClick={onPresent} />
+                    </>
+                }
+                right={
                     <DocumentShareCluster
                         canWrite={canWrite}
                         onAccessDialogOpen={onAccessDialogOpen}
@@ -119,8 +123,8 @@ export function Toolbar({
                         commentPanelOpen={commentPanelOpen}
                         unresolvedCommentCount={unresolvedCommentCount}
                     />
-                </div>
-            </SharedToolbar>
+                }
+            />
             <ExportProgressDialog open={isExporting} />
         </>
     );

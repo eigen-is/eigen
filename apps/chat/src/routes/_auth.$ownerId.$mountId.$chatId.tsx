@@ -3,12 +3,12 @@ import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useCheckPermissions } from '@workspace/lib/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
+    CenteredToolbar,
     ChatMessageInput,
     type ChatMessageInputHandle,
     ChatMessageList,
     LoadingState,
     RequestAccessView,
-    Toolbar,
     TooltipButton,
     UserAvatar,
 } from '@workspace/ui';
@@ -41,8 +41,9 @@ function ChatView() {
     const isTeam = parseOwnerId(ownerId).type === 'team';
 
     const toolbar = (
-        <Toolbar>
-            {chat.chatPath &&
+        <CenteredToolbar
+            left={
+                chat.chatPath &&
                 (isTeam ? (
                     <UserAvatar email={ownerId} size="sm" popover tooltip />
                 ) : (
@@ -51,23 +52,26 @@ function ChatView() {
                         onClick={() => setAccessDialogOpen(true)}
                         showIconOnHover={false}
                     />
-                ))}
-            {chat.chatPath && <span className="font-semibold text-sm truncate">{chat.chatName}</span>}
-            <div className="flex items-center gap-1">
-                <TooltipButton
-                    icon={Pencil}
-                    tooltipText="Edit"
-                    variant="ghost"
-                    onClick={() => setRenameDialogOpen(true)}
-                />
-                <TooltipButton
-                    icon={UserRoundPlus}
-                    tooltipText="Share"
-                    variant="ghost"
-                    onClick={() => setAccessDialogOpen(true)}
-                />
-            </div>
-        </Toolbar>
+                ))
+            }
+            center={chat.chatPath && <span className="font-semibold text-sm truncate">{chat.chatName}</span>}
+            right={
+                <div className="flex items-center gap-1">
+                    <TooltipButton
+                        icon={Pencil}
+                        tooltipText="Edit"
+                        variant="ghost"
+                        onClick={() => setRenameDialogOpen(true)}
+                    />
+                    <TooltipButton
+                        icon={UserRoundPlus}
+                        tooltipText="Share"
+                        variant="ghost"
+                        onClick={() => setAccessDialogOpen(true)}
+                    />
+                </div>
+            }
+        />
     );
 
     return (
