@@ -31,10 +31,15 @@ export function AuthProvider({
     loadingFallback?: ReactNode;
 }): ReactNode {
     const [user, setUser] = useState<AuthUser | null>(null);
-    // On the server there is no session to check and effects never run, so start
-    // resolved — this lets SSR/prerender render children (unauthenticated) instead
-    // of the loading fallback. In the browser we wait for the session check.
-    const [isLoading, setIsLoading] = useState(typeof window !== 'undefined');
+    // Blocking the app on the browser session check is opt-in via loadingFallback.
+    // The SPA shell (eigen-app.tsx) passes one, so it shows a loading screen until
+    // the session resolves. The prerendered index site passes none: it must render
+    // children on the very first client render too — matching the server-rendered
+    // HTML so React hydrates it in place instead of discarding it and appending a
+    // second copy. The session check still runs; it just updates `user` afterwards
+    // (e.g. swapping the Topbar to its signed-in state). On the server window is
+    // undefined, so every app renders children (unauthenticated) at build time.
+    const [isLoading, setIsLoading] = useState(loadingFallback != null && typeof window !== 'undefined');
     const queryClient = useQueryClient();
 
     useEffect(() => {
