@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-719 primitives across 6 kinds. `packages/sheet` internals are excluded.
+720 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -525,7 +525,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (230)
+## Utilities & constants (231)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -664,6 +664,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
 | `formatDate` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
+| `formatDateOnly` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatDateTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatEventWhen` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatFullDateTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
