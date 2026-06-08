@@ -2,6 +2,12 @@ import { app } from './app';
 import { shutdownAllHomes } from './lib/home';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
+import { setShutdownDrainDeadline } from './lib/sync';
+
+// Wall-clock budget for flushing pending S3 uploads on shutdown. Must stay below
+// docker-compose's stop_grace_period so the drain finishes before SIGKILL; anything
+// not drained in time stays in pending_uploads and replays on the next boot.
+const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 
 const server = app.listen({
     port: 8000,
@@ -18,6 +24,9 @@ async function gracefulShutdown(signal: string) {
     console.log(`\n${signal} received, shutting down gracefully...`);
     stopAllSchedules();
     server.stop();
+    // Each mount flushes its upload queue (bounded by this deadline) during destruct, after
+    // its final close-time enqueues but before metadata.db closes.
+    setShutdownDrainDeadline(Date.now() + SHUTDOWN_DRAIN_BUDGET_MS);
     await shutdownAllHomes();
     console.log('All homes shut down, exiting.');
     process.exit(0);

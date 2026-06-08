@@ -1,5 +1,15 @@
 # Durable async SQLite→S3 sync
 
+> **Status — IMPLEMENTED (Phase 1a + Phase 1b), 2026-06-05, branch `feat/sync-resilience`.**
+> Phase 1a (crash-recovery durability) and Phase 1b (the write-behind pipeline) are built, tested,
+> and `bun run check`-green. The as-built design **diverges** from the original proposal below on the
+> worker lifecycle (the proposal's "stateless worker resolves backends by `mountId` and keeps draining
+> after idle teardown" is impossible — `metadata.db` closes on `Home.destruct`). See **§ As-built notes**
+> at the end for the divergences (registry-free per-mount `UploadQueue` with **per-destination**
+> concurrency + self-scheduled retries — no global registry/sweep, `flushNow` drain, staging-path
+> supersession instead of a content-hash marker, `onOpen` recovery from staging). The empirical
+> `bun:sqlite` claims were re-verified independently before building. Original design (for context) follows.
+>
 > **Status — Proposed, not implemented.** Design for review; reviewed independently by three Opus
 > agents (convergent on the load-bearing findings; the third empirically verified the `bun:sqlite`
 > behaviour below) and revised. Motivated by the 2026-06-05 Hetzner Object Storage incident
@@ -349,3 +359,120 @@ Shipping changed WAL frames instead of whole files is *inherently* "only real ch
 async + transactionally consistent (checksummed frames, point-in-time recovery, ~1s RPO), and kills the
 version-bloat and staging-cost problems at the source. Cost: Litestream is one-DB-per-instance; our
 many-small-DBs model needs a custom WAL-shipping layer. Park as strategic direction once Phase 1 lands.
+
+## As-built notes (divergences from the design above)
+
+The original design's load-bearing flaw was the **worker lifecycle**: it assumed a process-global,
+stateless worker that "resolves a mount's storage backend by `mountId`" and "keeps draining after idle
+teardown." The actual architecture makes that impossible — `Home.destruct()` closes every managed DB
+(incl. each mount's `metadata.db`, which holds `pending_uploads`) and clears the map; mounts live only
+in the per-Home `Drive.mounts`; the S3 backend is built from `MountConfig.s3Config`, which is gone with
+the Home. There is no surviving registry. So the build diverges:
+
+1. **Registry-free, per-mount queue with per-destination concurrency.** The per-mount queue is a
+   `UploadQueue` (`lib/mount/upload-queue.ts`) owning the `pending_uploads` rows + staging + drain. The
+   only process-global state (`lib/sync/sync-worker.ts`) is a `Map<destination, Semaphore>` keyed by S3
+   `endpoint+bucket` (`getUploadSemaphore`), the shutdown deadline, and the backoff fn — **infra
+   strings only, no mount/user references, no live-mount registry.** Per-destination (not one global
+   limiter) so a slow/down provider only backs up its own uploads and never blocks other destinations —
+   essential once team mounts + user-owned endpoints point at different buckets. Each queue
+   **self-schedules its own retry** (`setTimeout` to the earliest backed-off row) and re-drives on
+   enqueue — no global sweep. A mount's leftover pending rows + staging files **replay on the next
+   `Mount.init()`** (`UploadQueue.reconcile`, before the tmp sweep — invariant 5); teardown calls
+   `UploadQueue.close()` (cancels the timer). `home-relay.ts` untouched.
+2. **`onOpen` recovers from staging.** Under async, a clean close during an outage cleans the live temp
+   but the upload hasn't acked. So `onOpen` (for `isRemote`) recovers from the **staging copy** when a
+   pending row exists, before falling back to a (stale/absent) storage download — otherwise a reopen
+   mid-outage would 503 or read stale bytes. (Crash recovery from the live temp + Phase 1a force-dirty
+   still takes precedence.)
+3. **No persistent content-hash marker.** The proposal's `lastAckedMarker` (a per-key staged-content
+   hash, separate hash pass) was dropped: the cheap in-session `total_changes()` gate already suppresses
+   the only redundancy a hash would catch, and the genuine redundancy (full re-PUT per delta on a hot
+   doc) is unsolvable without WAL-shipping anyway. Last-write-wins + supersession use the **staging file
+   path** as the marker (UUID-named, unique per enqueue; PK upsert; the worker re-checks
+   `row.stagingPath` immediately before and after each PUT). One fewer table, no hashing cost.
+4. **`flushNow` drain, not `ignoreBackoff`.** A single due-loop (`nextAttemptAt <= now`) where a failed
+   PUT backs its row off into the future — so the loop drains each row once and **never spins** on a
+   dead backend. The shutdown flush + tests pass `flushNow` (reset all backoffs → one immediate attempt
+   each) bounded by an absolute `deadline`; the self-scheduled retry respects backoff.
+5. **Shutdown drain is per-mount, after the final enqueues.** `index.ts` sets a process-global
+   `setShutdownDrainDeadline(...)` before `shutdownAllHomes()`; each `Mount.closeAllDatabases` closes its
+   docs (final close-time enqueues) **then** flushes its queue bounded by that deadline, before
+   `metadata.db` closes. Idle teardown leaves the deadline null → no flush → replay on reopen. This
+   catches the final shutdown writes, which a single global drain *before* `shutdownAllHomes` would miss.
+6. **Chat-restore quiescing falls out of delete.** `replaceContainerDataDb` already closes + `deletePath`s
+   the old `data.db` key; `deletePath`'s `cancelPendingUpload` (added for invariant 7) handles the
+   quiescing, and `createFile` writes the replacement under a **new** key synchronously. No separate
+   quiesce step needed.
+
+**Scope as built:** Phase 1a (any temp-copy backend) + Phase 1b (`isRemote`/S3 only; `local`/`local-key`
+keep synchronous writes). Observability is partial (§9): `Mount.pendingUploadCount` queue-depth getter +
+the existing per-upload `[timing]`/`[sync] failed` logs; structured gauges for oldest-pending-age and
+ack-latency are not yet added. The S3 noncurrent-version lifecycle rule + the `docker-compose`
+`stop_grace_period` raise are ops changes tracked separately (not code in this branch beyond the 20 s
+`SHUTDOWN_DRAIN_BUDGET_MS` constant, which assumes a grace period above it).
+
+### Review findings + residual limitations (post-multi-agent review)
+
+Three independent Opus reviews (correctness/data-loss, code-quality, test-coverage) ran against the
+branch. The one real bug they surfaced is fixed; the rest are documented trade-offs.
+
+- **Resurrection during an in-flight PUT — FIXED.** A permanent-delete/restore landing *during* a PUT
+  (after `performUpload`'s pre-PUT re-check) would let the completed PUT recreate the just-deleted
+  object as an orphan. `performUpload` now, on a PUT that succeeded but whose row is *gone* (cancelled,
+  not merely superseded), issues a compensating `storage.delete` — the key is a dead UUID, never reused,
+  so this can't clobber a fresh object. Covered by the "delete during an in-flight PUT" test (verified to
+  fail without the guard). The fault-injection `StorageBackend` reads the body up-front like a real S3
+  PUT so this window is actually reproduced.
+- **Version snapshot during a concurrent close — residual, low severity.** If a snapshot's
+  `documentDbs` lookup misses in the narrow window between `closeDatabase`'s map-delete and the close's
+  own sync, it sources from a pending staging copy or storage, which can be up to one sync interval
+  behind — a slightly-stale *version-history* entry, never live-doc data loss. Mitigated by sourcing the
+  live `VACUUM INTO` first when cached; the residual is the cache-miss window. Not worth a deadlock-prone
+  cross-lock with the close path.
+- **Idle-teardown widens the outage RPO — accepted.** A home that idle-destructs mid-outage leaves its
+  queued uploads on the host bind-mount until the home is next opened or the process restarts (replay),
+  rather than draining immediately (no surviving registry — by design). Same disk durability as today's
+  temp files; only a host-disk-loss *during* that window loses the queued bytes (Litestream-class
+  residual). Healthy S3 acks in ms, long before the 5-min idle timer, so this only bites during a
+  multi-minute outage.
+- **`VACUUM INTO` corruption — not reachable.** `VACUUM INTO` fsyncs its output file before returning,
+  and the pending row is inserted *after* `stageCopy` returns, so the staged copy is durable-before-row;
+  a crash can't leave a referenced-but-partial staging file. Any corruption would also be caught on
+  open, not silently served. No per-PUT integrity check added.
+- **Shutdown drain budget is whole-process.** `SHUTDOWN_DRAIN_BUDGET_MS` bounds when the loop *starts*
+  new PUTs, not an already-in-flight one (≈ deadline + one PUT). Multi-mount homes drain mounts
+  sequentially, so the budget is first-mount-biased; anything undrained replays on boot — safe, just
+  not fair. A PUT that overruns the grace period is SIGKILLed and replayed.
+- **Deliberately synchronous `metadata.db` access.** The pipeline uses the sync `bun:sqlite` API (no
+  `await`) on purpose: `enqueueUpload` must persist before returning, and the drain's post-PUT
+  bookkeeping must have no `await` between the `uploadClosing` teardown guard and the DB access. Adding
+  `await` for stylistic consistency would inject interleaving points and re-open the teardown race.
+
+### Ops
+
+- **`stop_grace_period: 30s`** on the `eigen-api` service (`docker-compose.yml`) — gives the SIGTERM
+  drain (`SHUTDOWN_DRAIN_BUDGET_MS=20s`) room to finish before Docker SIGKILLs; un-drained uploads
+  replay on boot regardless.
+- **S3 noncurrent-version expiration on `eigen-drive`.** Bucket versioning is now ON (good — it would
+  have made the 2026-05-30 chat wipe recoverable), but the pipeline re-PUTs whole `data.db` files, so
+  every sync creates a new version and noncurrent versions accumulate without bound. Add a lifecycle
+  rule to expire them (and abort stale multipart uploads). `NoncurrentDays` is the recovery-window ↔
+  storage-cost knob — 30 d is recovery-safe; drop toward 7 d if hot-doc version bloat dominates cost
+  (WAL-shipping later removes the whole-file churn). Hetzner Object Storage is S3-compatible:
+  ```bash
+  cat > /tmp/eigen-lifecycle.json <<'JSON'
+  { "Rules": [ {
+      "ID": "expire-noncurrent-versions",
+      "Filter": {},
+      "Status": "Enabled",
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+  } ] }
+  JSON
+  AWS_ACCESS_KEY_ID=<key> AWS_SECRET_ACCESS_KEY=<secret> \
+    aws s3api put-bucket-lifecycle-configuration \
+      --endpoint-url https://nbg1.your-objectstorage.com \
+      --bucket eigen-drive --lifecycle-configuration file:///tmp/eigen-lifecycle.json
+  # verify: aws s3api get-bucket-lifecycle-configuration --endpoint-url https://nbg1.your-objectstorage.com --bucket eigen-drive
+  ```

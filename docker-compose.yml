@@ -50,6 +50,10 @@ services:
       EIGEN_COMMIT: ${EIGEN_COMMIT:-}
       EIGEN_BUILT_AT: ${EIGEN_BUILT_AT:-}
     restart: unless-stopped
+    # On SIGTERM the API drains pending S3 uploads before exit (SHUTDOWN_DRAIN_BUDGET_MS=20s,
+    # index.ts). Give it more than Docker's 10s default so a healthy drain completes; anything
+    # still in flight past this is SIGKILLed and replays from pending_uploads on next boot.
+    stop_grace_period: 30s
     networks: [eigen]
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
