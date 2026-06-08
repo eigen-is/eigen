@@ -31,6 +31,16 @@ afterAll(() => {
     } catch {}
 });
 
+describe('ManagedDatabase open-vs-create intent', () => {
+    test('mustExist refuses to create a missing database instead of silently making an empty one', async () => {
+        // An "open existing" must honor the caller's knowledge (from metadata.db) that the db
+        // exists. Opening an absent working copy with create:true silently produced an empty db —
+        // the 2026-06-08 data-loss shape. With mustExist, a missing file throws instead of creating.
+        const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {}, true);
+        await expect(db.open(0)).rejects.toThrow();
+    });
+});
+
 describe('ManagedDatabase snapshot lifecycle', () => {
     test('flush() pushes writes to storage but does NOT take a version snapshot', async () => {
         // Regression: flush() used to run the snapshot trigger, so a snapshot
