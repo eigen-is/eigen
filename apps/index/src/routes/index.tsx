@@ -106,8 +106,11 @@ export function HomeComponent() {
                         )}
                     </div>
                     <div className="flex justify-center gap-4 mt-4 text-sm">
-                        <Link to="/blog" className="text-link hover:text-link/80 underline">
+                        <Link to="/support" className="text-link hover:text-link/80 underline">
                             Learn more
+                        </Link>
+                        <Link to="/blog" className="text-link hover:text-link/80 underline">
+                            Blog
                         </Link>
                         <a
                             href="https://github.com/eigen-is/eigen"

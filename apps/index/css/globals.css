@@ -22,3 +22,31 @@
 .eigen-prose .eigen-callout p {
     margin: 0;
 }
+
+/* Wikipedia-style hover anchor on headings; clicking it copies a link to the section. */
+.eigen-prose h2,
+.eigen-prose h3 {
+    scroll-margin-top: 5rem;
+}
+
+.heading-anchor {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.3em;
+    color: var(--muted-foreground);
+    opacity: 0;
+    vertical-align: middle;
+    transition:
+        opacity 0.12s ease,
+        color 0.12s ease;
+}
+
+.eigen-prose h2:hover .heading-anchor,
+.eigen-prose h3:hover .heading-anchor,
+.heading-anchor:focus-visible {
+    opacity: 1;
+}
+
+.heading-anchor:hover {
+    color: var(--app-current-color);
+}

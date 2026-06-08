@@ -18,7 +18,9 @@ function app(name: string): Pick<SectionConfig, 'icon' | 'color'> {
     return { icon: entry.icon, color: entry.color };
 }
 
-const NEUTRAL = 'var(--muted-foreground)';
+// Sections without their own app take the index app's own colour — the greenish
+// brand used by the help center header and callouts (var(--app-current-color)).
+const INDEX = 'var(--app-current-color)';
 
 // Display order, titles, icons, and colours for help center sections. The `id`
 // matches the folder name under src/data/support/.
@@ -28,7 +30,7 @@ export const SECTIONS: SectionConfig[] = [
         title: 'Getting started',
         description: 'New to Eigen — start here.',
         icon: Rocket,
-        color: NEUTRAL,
+        color: INDEX,
     },
     { id: 'mail', title: 'Mail', description: 'Reading, composing, filters.', ...app('Mail') },
     { id: 'drive', title: 'Drive', description: 'Files, folders, sharing.', ...app('Drive') },
@@ -41,24 +43,24 @@ export const SECTIONS: SectionConfig[] = [
     { id: 'stickies', title: 'Stickies', description: 'Notes and boards.', ...app('Stickies') },
     {
         id: 'connect',
-        title: 'Connecting external apps',
+        title: 'Integrations',
         description: 'Use Eigen with other apps.',
         icon: MonitorSmartphone,
-        color: NEUTRAL,
+        color: INDEX,
     },
     {
         id: 'account',
         title: 'Account & settings',
         description: 'Profile, security, appearance.',
         icon: Settings,
-        color: NEUTRAL,
+        color: INDEX,
     },
     {
         id: 'admin',
         title: 'Admin',
         description: 'Organisations, teams, the server.',
         icon: Shield,
-        color: 'var(--app-admin-color)',
+        color: INDEX,
     },
 ];
 

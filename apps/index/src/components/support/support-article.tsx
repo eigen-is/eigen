@@ -40,10 +40,10 @@ export function SupportArticle({
                 }
             >
                 <div className="h-full overflow-y-auto scroll-smooth">
-                    <div className="grid grid-cols-1 gap-x-8 px-6 py-10 xl:grid-cols-[1fr_minmax(0,70ch)_1fr]">
+                    <div className="grid grid-cols-1 gap-x-8 px-4 py-10 xl:grid-cols-[1fr_minmax(0,70ch)_1fr]">
                         {showToc && (
                             <aside className="hidden xl:block xl:justify-self-end">
-                                <div className="sticky top-8 w-56">
+                                <div className="sticky top-10 w-56">
                                     <ArticleToc toc={article.toc} />
                                 </div>
                             </aside>
