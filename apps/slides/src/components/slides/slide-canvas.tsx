@@ -3,6 +3,7 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useMemo, useRef } from 'react';
 import { boundingBox } from './arrange';
@@ -10,6 +11,7 @@ import { useMarqueeSelect } from './hooks/use-marquee-select';
 import { type DragMode, useObjectDrag } from './hooks/use-object-drag';
 import { useSnapTargets } from './hooks/use-snap-lines';
 import { SlideObjectView } from './slide-object';
+import { getCommentItems, SlideObjectMenu } from './slide-object-menu';
 import { SelectionChrome } from './slide-selection-chrome';
 import { normalizeAngle } from './transform-geometry';
 import { pxToPercent, SLIDE_ASPECT_RATIO, type SlideItem, type SlideObject } from './types';
@@ -74,6 +76,7 @@ export function SlideCanvas({
     const { resolveMediaUrl } = useMediaResolver();
     const canvasRef = useRef<HTMLDivElement>(null);
     const { vSnaps, hSnaps } = useSnapTargets(objects, selectedObjectIds);
+    const objectContextMenu = useContextMenu<SlideObject>();
 
     const selectedObjects = useMemo(
         () => objects.filter((o) => selectedObjectIds.includes(o.id)),
@@ -230,13 +233,7 @@ export function SlideCanvas({
                               rotation: preview.rotation ?? obj.rotation,
                           }
                         : obj;
-                    const commentItems: Array<{ card: CommentCard; entry: CommentEntry | undefined }> = [];
-                    for (const cardId of obj.commentCardIds ?? []) {
-                        const card = cards?.[cardId];
-                        if (!card) continue;
-                        const entry = card.chatName ? entries?.find((e) => e.chatName === card.chatName) : undefined;
-                        commentItems.push({ card, entry });
-                    }
+                    const commentItems = getCommentItems(obj, cards, entries);
                     const firstUnresolved = commentItems.find(({ entry }) => entry?.status !== 'resolved');
                     return (
                         <SlideObjectView
@@ -250,24 +247,13 @@ export function SlideCanvas({
                             onStartEditing={onStartEditing}
                             onUpdate={onUpdateObject}
                             onDragStart={handleDragStart}
-                            onCopy={onCopyObject}
-                            onDelete={onDeleteObject}
-                            onMoveUp={onMoveUp}
-                            onMoveDown={onMoveDown}
-                            onMoveToFront={onMoveToFront}
-                            onMoveToBack={onMoveToBack}
-                            onAddComment={onAddComment}
+                            onContextMenu={canWrite ? objectContextMenu.handleContextMenu : undefined}
                             onCommentClick={onCommentClick}
                             commentColor={
                                 firstUnresolved?.card.color ??
                                 (firstUnresolved ? EIGEN_STICKIES_COLORS[0][1].value : undefined)
                             }
                             firstCommentCardId={firstUnresolved?.card.id}
-                            commentItems={commentItems}
-                            onCommentResolve={onCommentResolve}
-                            onCommentReopen={onCommentReopen}
-                            onCommentChangeColor={onCommentChangeColor}
-                            onCommentDelete={onCommentDelete}
                         />
                     );
                 })}
@@ -349,6 +335,23 @@ export function SlideCanvas({
                     />
                 )}
             </div>
+            <SlideObjectMenu
+                contextMenu={objectContextMenu}
+                cards={cards}
+                entries={entries}
+                onCopy={onCopyObject}
+                onDelete={onDeleteObject}
+                onMoveUp={onMoveUp}
+                onMoveDown={onMoveDown}
+                onMoveToFront={onMoveToFront}
+                onMoveToBack={onMoveToBack}
+                onAddComment={onAddComment}
+                onCommentClick={onCommentClick}
+                onCommentChangeColor={onCommentChangeColor}
+                onCommentResolve={onCommentResolve}
+                onCommentReopen={onCommentReopen}
+                onCommentDelete={onCommentDelete}
+            />
         </div>
     );
 }

@@ -2,23 +2,9 @@ import { getBackgroundStyle } from '@workspace/lib/background';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
-import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { CommentCard } from '@workspace/lib/types/comments';
-import {
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuSeparator,
-    ContextMenuSub,
-    ContextMenuSubContent,
-    ContextMenuSubTrigger,
-    ContextMenuTrigger,
-} from '@workspace/ui/components/context-menu';
-import { CommentMenuItems } from '@workspace/ui/components/layout/comments';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
 import { cn } from '@workspace/ui/lib/utils';
-import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2 } from 'lucide-react';
 import { memo } from 'react';
 import {
     BORDER_RADIUS_ROUND,
@@ -144,21 +130,10 @@ type SlideObjectViewProps = {
         h: number,
         rotation: number,
     ) => void;
-    onCopy?: (objId: string) => void;
-    onDelete?: (objId: string) => void;
-    onMoveUp?: (objId: string) => void;
-    onMoveDown?: (objId: string) => void;
-    onMoveToFront?: (objId: string) => void;
-    onMoveToBack?: (objId: string) => void;
+    onContextMenu?: (e: React.MouseEvent, obj: SlideObject) => void;
     commentColor?: string | null;
     onCommentClick?: (cardId: string) => void;
     firstCommentCardId?: string | null;
-    onAddComment?: (objId: string) => void;
-    commentItems?: Array<{ card: CommentCard; entry: CommentEntry | undefined }>;
-    onCommentResolve?: (chatName: string) => void;
-    onCommentReopen?: (chatName: string) => void;
-    onCommentChangeColor?: (cardId: string, color: string) => void;
-    onCommentDelete?: (objId: string, cardId: string) => void;
 };
 
 export const SlideObjectView = memo(function SlideObjectView({
@@ -171,21 +146,10 @@ export const SlideObjectView = memo(function SlideObjectView({
     onStartEditing,
     onUpdate,
     onDragStart,
-    onCopy,
-    onDelete,
-    onMoveUp,
-    onMoveDown,
-    onMoveToFront,
-    onMoveToBack,
+    onContextMenu,
     commentColor,
     onCommentClick,
     firstCommentCardId,
-    onAddComment,
-    commentItems,
-    onCommentResolve,
-    onCommentReopen,
-    onCommentChangeColor,
-    onCommentDelete,
 }: SlideObjectViewProps) {
     const { resolveMediaUrl } = useMediaResolver();
 
@@ -215,7 +179,7 @@ export const SlideObjectView = memo(function SlideObjectView({
     const verticalAlign = obj.type === 'text' ? obj.verticalAlign || 'top' : undefined;
     const imageUrl = obj.type === 'image' ? resolveMediaUrl(obj.mediaName) : null;
 
-    const objectDiv = (
+    return (
         <div
             className={cn(
                 'absolute',
@@ -225,6 +189,7 @@ export const SlideObjectView = memo(function SlideObjectView({
             style={getObjectPositionStyle(obj)}
             onMouseDown={handleMouseDown}
             onDoubleClick={handleDoubleClick}
+            onContextMenu={onContextMenu ? (e) => onContextMenu(e, obj) : undefined}
         >
             {obj.type === 'text' && !editing && (
                 <div
@@ -280,60 +245,5 @@ export const SlideObjectView = memo(function SlideObjectView({
                 />
             )}
         </div>
-    );
-
-    if (!editable) return objectDiv;
-
-    return (
-        <ContextMenu>
-            <ContextMenuTrigger asChild>{objectDiv}</ContextMenuTrigger>
-            <ContextMenuContent className="min-w-48">
-                <ContextMenuItem onClick={() => onCopy?.(obj.id)}>
-                    <Copy className="h-4 w-4 mr-2" /> Copy
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem onClick={() => onMoveUp?.(obj.id)}>
-                    <ChevronUp className="h-4 w-4 mr-2" /> Move up
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => onMoveDown?.(obj.id)}>
-                    <ChevronDown className="h-4 w-4 mr-2" /> Move down
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => onMoveToFront?.(obj.id)}>
-                    <ArrowUpToLine className="h-4 w-4 mr-2" /> Bring to front
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => onMoveToBack?.(obj.id)}>
-                    <ArrowDownToLine className="h-4 w-4 mr-2" /> Send to back
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem variant="destructive" onClick={() => onDelete?.(obj.id)}>
-                    <Trash2 className="h-4 w-4 mr-2" /> Delete
-                </ContextMenuItem>
-                {(() => {
-                    const single = commentItems && commentItems.length === 1 ? commentItems[0] : null;
-                    const showAdd = onAddComment && (!commentItems || commentItems.length === 0);
-                    if (!single && !showAdd) return null;
-                    return (
-                        <>
-                            <ContextMenuSeparator />
-                            <CommentMenuItems
-                                primitives={{
-                                    Item: ContextMenuItem,
-                                    Sub: ContextMenuSub,
-                                    SubTrigger: ContextMenuSubTrigger,
-                                    SubContent: ContextMenuSubContent,
-                                }}
-                                item={single}
-                                onAddComment={onAddComment ? () => onAddComment(obj.id) : undefined}
-                                onOpen={onCommentClick}
-                                onChangeColor={onCommentChangeColor}
-                                onResolve={onCommentResolve}
-                                onReopen={onCommentReopen}
-                                onDelete={onCommentDelete ? (cardId) => onCommentDelete(obj.id, cardId) : undefined}
-                            />
-                        </>
-                    );
-                })()}
-            </ContextMenuContent>
-        </ContextMenu>
     );
 });

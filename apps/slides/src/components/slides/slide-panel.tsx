@@ -4,13 +4,8 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
-import {
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuSeparator,
-    ContextMenuTrigger,
-} from '@workspace/ui/components/context-menu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { Copy, Trash2 } from 'lucide-react';
 import { SlideThumbnail } from './slide-thumbnail';
@@ -41,6 +36,7 @@ export function SlidePanel({
 }: SlidePanelProps) {
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
     const { resolveMediaUrl } = useMediaResolver();
+    const slideContextMenu = useContextMenu<string>();
 
     const slideList = deck.slideOrder.map((slideId, index) => {
         const slide = deck.slides[slideId];
@@ -61,27 +57,12 @@ export function SlidePanel({
 
         return (
             <SortableSlide key={slideId} slideId={slideId} isDragOverlay={false}>
-                <ContextMenu>
-                    <ContextMenuTrigger asChild>
-                        <div>{thumbnail}</div>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent>
-                        <ContextMenuItem onClick={() => onDuplicateSlide?.(slideId)}>
-                            <Copy className="h-4 w-4 mr-2" /> Duplicate
-                        </ContextMenuItem>
-                        <ContextMenuSeparator />
-                        <ContextMenuItem
-                            variant="destructive"
-                            disabled={deck.slideOrder.length <= 1}
-                            onClick={() => onDeleteSlide?.(slideId)}
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
-                        </ContextMenuItem>
-                    </ContextMenuContent>
-                </ContextMenu>
+                <div onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}>{thumbnail}</div>
             </SortableSlide>
         );
     });
+
+    const menuSlideId = slideContextMenu.item;
 
     return (
         <div className={cn(mobile ? 'w-full' : 'w-52 flex-shrink-0 border-r', 'bg-muted/30 flex flex-col h-full')}>
@@ -112,6 +93,25 @@ export function SlidePanel({
                     </DndContext>
                 )}
             </div>
+            {!mobile && (
+                <ContextMenuAnchor contextMenu={slideContextMenu}>
+                    {menuSlideId && (
+                        <>
+                            <DropdownMenuItem onClick={() => onDuplicateSlide?.(menuSlideId)}>
+                                <Copy className="h-4 w-4 mr-2" /> Duplicate
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                variant="destructive"
+                                disabled={deck.slideOrder.length <= 1}
+                                onClick={() => onDeleteSlide?.(menuSlideId)}
+                            >
+                                <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                        </>
+                    )}
+                </ContextMenuAnchor>
+            )}
         </div>
     );
 }
