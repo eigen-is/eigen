@@ -73,7 +73,9 @@ export const SLIDES_APP_URL = import.meta.env.VITE_APP_SLIDES_URL as string;
 export const SHEETS_APP_URL = import.meta.env.VITE_APP_SHEETS_URL as string;
 export const CALENDAR_APP_URL = import.meta.env.VITE_APP_CALENDAR_URL as string;
 export const ADMIN_APP_URL = import.meta.env.VITE_APP_ADMIN_URL as string;
-export const INDEX_APP_URL = import.meta.env.VITE_APP_INDEX_URL as string;
+// Only set in dev, where each app runs on its own port. In production the index app is
+// served same-origin at root, so an unset value falls back to a relative `/support` link.
+export const INDEX_APP_URL = (import.meta.env.VITE_APP_INDEX_URL as string | undefined) ?? '';
 
 const trimTrailingSlash = (url: string) => url.replace(/\/+$/, '');
 
