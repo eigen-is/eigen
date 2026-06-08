@@ -1,8 +1,8 @@
 # S3 bucket-safety UX (versioning + retention) in the admin app
 
-> **Status — Proposed, not implemented.** Design for review. Follow-on to the sync-resilience work
-> (branch `feat/sync-resilience`): that made the async upload pipeline safe *given* a sane bucket;
-> this makes the bucket sane **from inside the admin app** instead of a warning telling the operator
+> **Status — Proposed, not implemented.** Design for review. Follow-on to the async S3 sync work
+> (see [SYNC.md](SYNC.md)): that made the upload pipeline safe *given* a sane bucket; this makes the
+> bucket sane **from inside the admin app** instead of a warning telling the operator
 > to go click around their S3 provider. Surface: the shared `S3ConfigCard`
 > (`packages/ui/src/components/layout/mount/s3-config-card.tsx`), already rendered everywhere the admin
 > app selects S3 — server-default storage and team mounts.
@@ -121,8 +121,8 @@ Small, reuses the existing signing:
 2. **`setS3Versioning(config, enabled)`** → `PUT ?versioning` with
    `<VersioningConfiguration><Status>Enabled</Status></VersioningConfiguration>`.
 3. **`setS3LifecycleRule(config, { noncurrentDays })`** → `PUT ?lifecycle` with the
-   noncurrent-version-expiration rule (+ abort-incomplete-multipart). Same rule documented in the
-   sync-resilience proposal's § Ops (on `feat/sync-resilience`).
+   noncurrent-version-expiration rule (+ abort-incomplete-multipart). Same rule documented in
+   [SYNC.md](SYNC.md) § Ops.
 4. **Route**, admin-gated like the existing `/settings/s3*` (team-scoped for team mounts):
    `POST /settings/s3/harden` (does both, body `{ s3Config, noncurrentDays }`) returning a fresh
    `S3CheckResult`. One endpoint keeps the client simple and the re-check atomic with the change.
