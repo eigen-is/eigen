@@ -20,7 +20,8 @@ more. You sign in once and move between them from the top of any page.
 
 The name says it: *eigen* is Dutch and German for "own". Because you, or whoever runs your Eigen, host it
 yourself, your data stays with you. Eigen is open source too, so you can see exactly how it works at
-[github.com/eigen-is/eigen](https://github.com/eigen-is/eigen).
+[github.com/eigen-is/eigen](https://github.com/eigen-is/eigen). It is also built on the work of many other
+open-source projects, listed on the [open-source licenses](/licenses) page.
 
 ## The apps
 

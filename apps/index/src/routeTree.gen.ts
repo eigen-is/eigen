@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as LicensesRouteImport } from './routes/licenses'
 import { Route as BlogRouteImport } from './routes/blog'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SupportIndexRouteImport } from './routes/support.index'
@@ -21,6 +22,11 @@ import { Route as SupportSectionArticleRouteImport } from './routes/support.$sec
 const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LicensesRoute = LicensesRouteImport.update({
+  id: '/licenses',
+  path: '/licenses',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlogRoute = BlogRouteImport.update({
@@ -62,6 +68,7 @@ const SupportSectionArticleRoute = SupportSectionArticleRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/blog': typeof BlogRouteWithChildren
+  '/licenses': typeof LicensesRoute
   '/support': typeof SupportRouteWithChildren
   '/blog/$id': typeof BlogIdRoute
   '/blog/': typeof BlogIndexRoute
@@ -71,6 +78,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/licenses': typeof LicensesRoute
   '/blog/$id': typeof BlogIdRoute
   '/blog': typeof BlogIndexRoute
   '/support': typeof SupportIndexRoute
@@ -81,6 +89,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/blog': typeof BlogRouteWithChildren
+  '/licenses': typeof LicensesRoute
   '/support': typeof SupportRouteWithChildren
   '/blog/$id': typeof BlogIdRoute
   '/blog/': typeof BlogIndexRoute
@@ -93,6 +102,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/blog'
+    | '/licenses'
     | '/support'
     | '/blog/$id'
     | '/blog/'
@@ -102,6 +112,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/licenses'
     | '/blog/$id'
     | '/blog'
     | '/support'
@@ -111,6 +122,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/blog'
+    | '/licenses'
     | '/support'
     | '/blog/$id'
     | '/blog/'
@@ -122,6 +134,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BlogRoute: typeof BlogRouteWithChildren
+  LicensesRoute: typeof LicensesRoute
   SupportRoute: typeof SupportRouteWithChildren
 }
 
@@ -132,6 +145,13 @@ declare module '@tanstack/react-router' {
       path: '/support'
       fullPath: '/support'
       preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/licenses': {
+      id: '/licenses'
+      path: '/licenses'
+      fullPath: '/licenses'
+      preLoaderRoute: typeof LicensesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blog': {
@@ -216,6 +236,7 @@ const SupportRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BlogRoute: BlogRouteWithChildren,
+  LicensesRoute: LicensesRoute,
   SupportRoute: SupportRouteWithChildren,
 }
 export const routeTree = rootRouteImport

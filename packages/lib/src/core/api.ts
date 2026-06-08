@@ -132,6 +132,7 @@ export function openMailComposeWith(opts: { to?: string; attachments?: DrivePath
 export const getSpaceProfileUrl = () => getSpaceAppUrl('user');
 export const getSpacePasswordUrl = () => getSpaceAppUrl('security/password');
 export const getSupportUrl = () => getIndexAppUrl('support');
+export const getLicensesUrl = () => getIndexAppUrl('licenses');
 export const getSpaceLogin2faUrl = (search: string = '') => `${getSpaceAppUrl('login-2fa')}${search}`;
 
 export const getPublicAvatarUrl = (emailOrId: string) => `${API_HOST}/p/avatar/${encodeURIComponent(emailOrId)}`;

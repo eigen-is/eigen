@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
-    "prebuild": "bun run scripts/build-content.ts",
+    "prebuild": "bun run scripts/build-content.ts && bun run scripts/build-licenses.ts",
     "postbuild": "bun run scripts/prerender.tsx && bun run scripts/build-search-index.ts",
     "typecheck": "bun run scripts/build-content.ts && tsc --noEmit",
     "test": "bun test"
