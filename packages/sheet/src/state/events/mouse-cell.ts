@@ -391,21 +391,36 @@ export function handleCellAreaMouseDown(
                 ctx.selections![ctx.selections!.length - 1] = last;
             }
         } else if (e.ctrlKey || e.metaKey) {
-            // Add to selection
-            ctx.selections?.push({
-                left: col_pre,
-                width: col - col_pre - 1,
-                top: row_pre,
-                height: row - row_pre - 1,
-                left_move: col_pre,
-                width_move: col - col_pre - 1,
-                top_move: row_pre,
-                height_move: row - row_pre - 1,
-                row: [row_index, row_index_ed],
-                column: [col_index, col_index_ed],
-                row_focus: row_index,
-                column_focus: col_index,
-            });
+            // Cmd/Ctrl+click a cell that's already selected toggles it off (deselect),
+            // matching Excel/Sheets. Pushing a duplicate range instead would collide on
+            // the overlay's React key and orphan a stuck highlight div until reload.
+            const selections = ctx.selections;
+            const overlapIndex = selections?.findIndex(
+                (obj_s) =>
+                    row_index >= obj_s.row[0] &&
+                    row_index <= obj_s.row[1] &&
+                    col_index >= obj_s.column[0] &&
+                    col_index <= obj_s.column[1],
+            );
+            if (selections && overlapIndex != null && overlapIndex > -1) {
+                // Keep at least one active selection; clicking inside the only one is a no-op
+                if (selections.length > 1) selections.splice(overlapIndex, 1);
+            } else {
+                selections?.push({
+                    left: col_pre,
+                    width: col - col_pre - 1,
+                    top: row_pre,
+                    height: row - row_pre - 1,
+                    left_move: col_pre,
+                    width_move: col - col_pre - 1,
+                    top_move: row_pre,
+                    height_move: row - row_pre - 1,
+                    row: [row_index, row_index_ed],
+                    column: [col_index, col_index_ed],
+                    row_focus: row_index,
+                    column_focus: col_index,
+                });
+            }
         } else {
             // eslint-disable-next-line prefer-const
             ctx.selections = [
