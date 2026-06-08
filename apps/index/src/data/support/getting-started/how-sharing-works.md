@@ -3,8 +3,8 @@ title: "How sharing works in Eigen"
 description: "Understand who can see your files: private by default, the difference between Viewer and Editor, and how sharing with people, a team, or a link works."
 type: overview
 category: Sharing
-tags: [sharing, permissions, collaboration, getting-started]
-related: [drive/share-a-file, drive/get-started]
+tags: [sharing, permissions, collaboration, getting-started, guests]
+related: [drive/share-a-file, drive/get-started, admin/guests]
 order: 4
 updated: 2026-06-08
 ---
@@ -34,19 +34,21 @@ The person who created a file is its **Owner**. The owner always has full access
 
 You can give access to specific people, to a whole team, or to anyone with the link.
 
-- **People**: type a name or email address and pick the person. They appear under **People with access** with their own Viewer or Editor setting. This is the most precise way to share, and the right choice most of the time.
+- **People**: type a name or email address. You can choose someone from the suggestions or enter any email address, including one that doesn't have an Eigen account yet. They appear under **People with access** with their own Viewer or Editor setting. This is the most precise way to share, and the right choice most of the time.
 - **A team**: if you belong to a team, you can share with the team in one step. Everyone in that team gets access, and people who join the team later get it too. It saves adding members one by one.
 - **A link**: under **General access** you can open a file up so that anyone with the link can get in, as a viewer or an editor. Use the **Copy link** button to copy it and send it however you like.
 
 A file's general access starts as **Restricted**, which means only the people you've added can open it. Switching it to **Unrestricted** is what turns the link on.
 
-## A link still needs an Eigen account
+## Signing in to open a share
 
-A shared link is a shortcut to the file inside Eigen, not a public web page. When someone follows it, they still have to sign in to Eigen first. There's no anonymous, sign-in-free access.
+A shared link is a shortcut to the item inside Eigen, not a public web page. Whoever opens it has to sign in first, so there's no anonymous, sign-in-free access.
+
+They don't need an account set up for them in advance, though. Anyone you share with can sign in as a guest using a one-time code sent to their email address, then see only the things that have been shared with them. That's how you share with someone outside your organisation. How guests sign in, and the control an administrator has over it, are covered in [guest access](/support/admin/guests).
 
 <div class="eigen-callout">
 
-An **Unrestricted** link means *any signed-in Eigen user* with the link can open the file. It isn't open to the public internet, but it is wider than naming people one by one. Share specific people when you want to keep the circle tight.
+An **Unrestricted** link can be opened by anyone who has the link and signs in, including someone signing in as a guest. It isn't open to the public internet, but it is wider than naming people one by one. Share specific people when you want to keep the circle tight.
 
 </div>
 
