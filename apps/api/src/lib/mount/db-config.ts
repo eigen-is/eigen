@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 3,
+    currentVersion: 4,
     schema,
     migrations: [
         {
@@ -82,6 +82,21 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             up: (db) =>
                 db.exec(`
                 UPDATE paths SET size = NULL WHERE type != 'file';
+            `),
+        },
+        {
+            // Write-behind upload queue (Phase 1b). Additive; never touches existing rows.
+            version: 4,
+            up: (db) =>
+                db.exec(`
+                CREATE TABLE IF NOT EXISTS pending_uploads (
+                    storageKey TEXT PRIMARY KEY,
+                    stagingPath TEXT NOT NULL,
+                    attempt INTEGER NOT NULL DEFAULT 0,
+                    enqueuedAt INTEGER NOT NULL,
+                    nextAttemptAt INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_pending_uploads_next ON pending_uploads(nextAttemptAt);
             `),
         },
     ],

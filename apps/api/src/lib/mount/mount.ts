@@ -32,11 +32,13 @@ import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
+import { getShutdownDrainDeadline } from '../sync';
 import { type RetentionPolicy, selectSnapshotsToPrune } from '../versioning/retention';
 import { formatSnapshotTimestamp } from '../versioning/timestamp';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type * as schema from './schema';
 import { paths } from './schema';
+import { UploadQueue } from './upload-queue';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
     config: DatabaseConfig<S>,
@@ -90,6 +92,9 @@ export class Mount {
     private documentDbs: Map<string, () => Promise<ManagedDatabase<SchemaType>>> = new Map();
     private pathLocks: Map<string, Promise<void>> = new Map();
 
+    // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
+    private uploadQueue?: UploadQueue;
+
     constructor(ownerId: string, baseDir: string, config: MountConfig, getLocalDatabase: LocalDatabaseGetter) {
         this.ownerId = ownerId;
         this.id = config.id;
@@ -121,6 +126,13 @@ export class Mount {
         return path.join(this.baseDir, 'tmp');
     }
 
+    // Frozen VACUUM INTO upload payloads (Phase 1b) live here, NOT in tmpDir — the
+    // cleanupStaleFiles sweep must never purge a staged copy whose PUT hasn't acked yet
+    // (invariant 2). Only used by isRemote mounts.
+    get stagingDir(): string {
+        return path.join(this.baseDir, 'staging');
+    }
+
     get previewsDir(): string {
         return path.join(this.tmpDir, 'previews');
     }
@@ -142,8 +154,33 @@ export class Mount {
         if (!fs.existsSync(this.previewsDir)) {
             fs.mkdirSync(this.previewsDir, { recursive: true });
         }
+        if (this.isRemote && !fs.existsSync(this.stagingDir)) {
+            fs.mkdirSync(this.stagingDir, { recursive: true });
+        }
         if (this.isPathBased && !fs.existsSync(this.trashDir)) {
             fs.mkdirSync(this.trashDir, { recursive: true });
+        }
+
+        const dbPath = path.join('mounts', this.config.id, 'metadata.db');
+        const managedDb = await this.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
+        this.db = managedDb.db;
+
+        await this.ensureRootFolder();
+
+        // Stand up the upload queue and replay persisted pending uploads BEFORE the tmp sweep
+        // (invariant 5) so a restart or home-reopen resumes them; staging lives in stagingDir, which
+        // the sweep never touches. The destination key groups uploads to the same provider onto one
+        // concurrency limiter, so a slow bucket can't block uploads to other buckets.
+        if (this.isRemote) {
+            const s3 = this.config.s3Config!;
+            this.uploadQueue = new UploadQueue({
+                db: this.db,
+                storage: this.storage,
+                stagingDir: this.stagingDir,
+                destinationKey: `${s3.endpoint}/${s3.bucket}`,
+                label: this.id,
+            });
+            this.uploadQueue.reconcile();
         }
 
         // Cleanup stale temp files older than 1 hour (e.g. from interrupted uploads or crashes)
@@ -151,12 +188,6 @@ export class Mount {
 
         // Cleanup preview cache files older than 7 days
         this.cleanupStaleFiles(this.previewsDir, 7 * 24 * 60 * 60 * 1000);
-
-        const dbPath = path.join('mounts', this.config.id, 'metadata.db');
-        const managedDb = await this.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
-        this.db = managedDb.db;
-
-        await this.ensureRootFolder();
 
         const retentionDays = getServerSettings().quotas.trashRetentionDays;
         if (retentionDays > 0) {
@@ -472,7 +503,13 @@ export class Mount {
             // the existing one rather than failing on the duplicate name.
             const existing = await this.getChildByName(versions.id, snapshotName);
             if (existing) return existing;
-            const copy = await this.copyPath(dataDb.id, versions.id, snapshotName);
+            // isRemote sources the version from the freshest LOCAL bytes and enqueues its
+            // upload (§3) — never the possibly-stale storage object copyPath would read, and
+            // never blocking close on the backend. Local backends are synchronously current,
+            // so they keep the direct copyPath.
+            const copy = this.isRemote
+                ? await this.snapshotDataDbToVersionStaged(dataDb, versions.id, snapshotName)
+                : await this.copyPath(dataDb.id, versions.id, snapshotName);
 
             // Prune. Exclude the just-written copy: retention keeps the newest per
             // hour bucket, and excluding the fresh one lets a second snapshot taken
@@ -487,6 +524,50 @@ export class Mount {
 
             return copy;
         });
+    }
+
+    // isRemote version snapshot: create the version metadata row, source its bytes from the
+    // freshest LOCAL copy of data.db, and enqueue the upload (so a close-time snapshot never
+    // blocks on the backend). Caller holds the container lock.
+    private async snapshotDataDbToVersionStaged(
+        dataDb: DrivePath,
+        versionsId: string,
+        snapshotName: string,
+    ): Promise<DrivePath> {
+        const versionPathId = await this.touchFile(versionsId, snapshotName, dataDb.mimeType);
+        const versionKey = await this.getStorageKey(versionPathId);
+        const queue = this.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
+        const versionStaging = queue.newStagingPath();
+        await this.stageDataDbSnapshot(dataDb.id, versionStaging);
+        const size = fs.statSync(versionStaging).size;
+        await this.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, versionPathId));
+        await this.invalidateAncestorsOf(versionPathId);
+        queue.enqueueStaged(versionKey, versionStaging);
+        const created = await this.getPath(versionPathId);
+        if (!created) throw new ApiError(500, 'Failed to create version snapshot');
+        return created;
+    }
+
+    // Produce a local copy of data.db's current bytes at destPath, freshest source first.
+    private async stageDataDbSnapshot(dataDbPathId: string, destPath: string): Promise<void> {
+        const storageKey = await this.getStorageKey(dataDbPathId);
+        // The caller (snapshotContainerDataDb) flushed the cached db first, so the pending staged
+        // copy already holds the current bytes — reuse it instead of a second VACUUM INTO. Copy it
+        // SYNCHRONOUSLY: with no await between the existsSync and the copy, a concurrent enqueue
+        // can't unlink it mid-read.
+        const pendingStaging = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
+        if (pendingStaging && fs.existsSync(pendingStaging)) {
+            fs.copyFileSync(pendingStaging, destPath);
+            return;
+        }
+        // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which
+        // is current because every upload acked (never the stale read the old copyPath did, §3).
+        const cached = this.documentDbs.get(dataDbPathId);
+        if (cached) {
+            (await cached()).stageCopy(destPath);
+            return;
+        }
+        await Bun.write(destPath, this.storage.read(storageKey));
     }
 
     // Replaces the container's data.db with the file at `sourcePath` — a snapshot the
@@ -664,6 +745,11 @@ export class Mount {
             const storageKey = await this.getStorageKey(pathId);
             await this.db.delete(paths).where(eq(paths.id, pathId));
             await deleteThumbnail(this.thumbsDir, pathId);
+            // Cancel any queued upload + staged copy first, so an in-flight/queued PUT can't
+            // resurrect the object we're about to delete (invariant 7). Covers container
+            // deletes (recursive deletePath), provisionManagedDbs rollback, and the chat-restore
+            // replace, which all route data.db deletion through here.
+            if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
             await this.storage.delete(storageKey);
         } else if (this.isPathBased && this.storage.deleteDir) {
             const storageKey = await this.getStorageKey(pathId);
@@ -1015,12 +1101,9 @@ export class Mount {
     }
 
     async cleanupTemp(tempId: string): Promise<void> {
-        const tempPath = this.getTempPath(tempId);
         try {
-            const file = Bun.file(tempPath);
-            if (await file.exists()) {
-                await file.delete();
-            }
+            const file = Bun.file(this.getTempPath(tempId));
+            if (await file.exists()) await file.delete();
         } catch {}
     }
 
@@ -1103,7 +1186,16 @@ export class Mount {
               }
             : undefined;
 
-        const db = new ManagedDatabase(
+        // Set when onOpen reuses a temp that survived an unclean shutdown — those bytes
+        // never synced, so the DB must be force-dirtied after open (Phase 1a, below).
+        let recoveredFromCrash = false;
+
+        // Captured by the callbacks so onSync can VACUUM INTO-stage the live DB (Phase 1b).
+        // Assigned synchronously below before any callback can fire (callbacks run during
+        // open() and later).
+        let managed!: ManagedDatabase<S>;
+
+        managed = new ManagedDatabase(
             config,
             localPath,
             this.needsTempCopy
@@ -1113,19 +1205,41 @@ export class Mount {
                           const tempPath = this.getTempPath(pathId);
                           if (fs.existsSync(tempPath)) {
                               console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
+                              recoveredFromCrash = true;
                               return;
+                          }
+                          // Clean close during an outage: the live temp was cleaned but a staged
+                          // copy holds bytes newer than storage (upload not yet acked). Recover
+                          // from it rather than downloading a stale object.
+                          if (this.uploadQueue) {
+                              const staged = this.uploadQueue.getPendingStagingPath(storageKey);
+                              if (staged && fs.existsSync(staged)) {
+                                  console.log(`[Mount] Recovering from staged upload for ${pathId}`);
+                                  await Bun.write(tempPath, Bun.file(staged));
+                                  return;
+                              }
                           }
                           if (!(await this.storage.exists(storageKey))) {
                               throw new ApiError(503, `Storage object for ${pathId} not available`);
                           }
                           await this.downloadKeyToTemp(storageKey, pathId);
                       },
+                      // isRemote: stage a frozen copy + enqueue, off the request/close path.
+                      // Local path-based: keep the synchronous local copy (Bun.write never 503s,
+                      // and async-queuing it would only weaken its on-completion durability).
                       onSync: async () => {
-                          await this.uploadFromTemp(storageKey, pathId);
+                          if (this.uploadQueue) {
+                              const stagingPath = this.uploadQueue.newStagingPath();
+                              managed.stageCopy(stagingPath);
+                              this.uploadQueue.enqueueStaged(storageKey, stagingPath);
+                          } else {
+                              await this.uploadFromTemp(storageKey, pathId);
+                          }
                           await this.syncDocumentDbSize(pathId, localPath);
                       },
-                      // onClose runs after wal_checkpoint(TRUNCATE), so the
-                      // final stat captures any pages PASSIVE left in WAL.
+                      // onClose runs after wal_checkpoint(TRUNCATE), so the final stat captures
+                      // any pages PASSIVE left in WAL. cleanupTemp is safe under async: the
+                      // staged copy (not the live temp) is the upload payload.
                       onClose: async () => {
                           await this.syncDocumentDbSize(pathId, localPath);
                           await this.cleanupTemp(pathId);
@@ -1143,7 +1257,17 @@ export class Mount {
                   },
         );
 
-        await db.open();
+        await managed.open();
+
+        // Phase 1a (crash-recovery durability): a surviving temp means a prior process
+        // died before its writes synced. The fresh connection's total_changes() reset to
+        // 0, so the DB looks clean and the close-time cleanupTemp would silently drop
+        // those bytes (the most plausible cause of the 2026-05-30 chat loss). Force the
+        // next sync so they re-reach storage. Safe because a clean close always
+        // cleanupTemp's the temp — a surviving temp is always an unclean-shutdown signal.
+        if (recoveredFromCrash) {
+            managed.markDirty();
+        }
 
         // For temp-copy backends (s3, path-based local), push the
         // freshly-created schema to storage before returning.
@@ -1153,10 +1277,10 @@ export class Mount {
         // that window would make subsequent strict openDatabase
         // calls throw.
         if (mode === 'create' && this.needsTempCopy) {
-            await db.flush();
+            await managed.flush();
         }
 
-        return db;
+        return managed;
     }
 
     async closeDatabase(pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
@@ -1176,11 +1300,38 @@ export class Mount {
         for (const [pathId, getter] of entries) {
             try {
                 const db = await getter();
-                await db.close();
+                await db.close(); // isRemote: onClose-time sync stages + enqueues the final state
             } catch (err) {
                 console.error(`[Mount] closeAllDatabases close failed for ${pathId}:`, err);
             }
         }
+
+        if (this.uploadQueue) {
+            // Process shutdown only: flush the queue (bounded by the global deadline) AFTER the
+            // final close-time enqueues, so healthy uploads finish before metadata.db closes.
+            // Idle teardown leaves the deadline null and skips the flush — leftover pending rows
+            // replay on the next mount open. Then stop the queue (cancels its retry timer).
+            const deadline = getShutdownDrainDeadline();
+            if (deadline !== null) {
+                await this.uploadQueue
+                    .drain({ flushNow: true, deadline })
+                    .catch((e) => console.error(`[Mount] shutdown drain failed:`, e));
+            }
+            this.uploadQueue.close();
+        }
+    }
+
+    // ---- Upload-queue facade (Phase 1b) — thin delegation to the per-mount UploadQueue ----
+
+    // Force a drain of this mount's pending uploads. The queue otherwise self-drives (on enqueue +
+    // backoff); this is for the shutdown flush, tests, and potential ops. No-op for non-S3 mounts.
+    drainPendingUploads(opts?: { flushNow?: boolean; deadline?: number }): Promise<void> {
+        return this.uploadQueue?.drain(opts) ?? Promise.resolve();
+    }
+
+    // Queue depth (observability, §9): how many uploads are awaiting an ack on this mount.
+    get pendingUploadCount(): number {
+        return this.uploadQueue?.pendingCount ?? 0;
     }
 
     async getTotalSize(): Promise<number> {
