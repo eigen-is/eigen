@@ -259,8 +259,10 @@ export function Topbar({ rootRoute }: TopbarProps) {
 
     return (
         <header className="bg-app shrink-0">
-            <div className="flex h-12 items-center">
-                <div className="flex items-center pl-2 pr-4 shrink-0">
+            {/* 1fr·auto·1fr grid keeps the title / command palette at the bar's true
+                center, independent of the left (logo) and right (actions) block widths */}
+            <div className="grid h-12 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+                <div className="flex items-center pl-2 pr-4">
                     {showBurger && (
                         <Button
                             variant="ghost"
@@ -276,14 +278,14 @@ export function Topbar({ rootRoute }: TopbarProps) {
                     <AppLogo appName={appName.toLowerCase()} />
                 </div>
 
-                <div className="flex-1 flex justify-center min-w-0">
+                <div className="flex justify-center min-w-0">
                     {documentTitle && !isMobile && (
                         <span className="text-white/70 truncate max-w-[400px]">{documentTitle}</span>
                     )}
                     {!documentTitle && !isMobile && <CommandPaletteTrigger />}
                 </div>
 
-                <div className="flex items-center gap-1 px-4 shrink-0">
+                <div className="flex items-center justify-end gap-1 px-4">
                     {isMobile && <CommandPaletteTrigger />}
                     <NotificationBell />
                     {isMobile && <AppSwitcher isGuest={isGuest} />}
