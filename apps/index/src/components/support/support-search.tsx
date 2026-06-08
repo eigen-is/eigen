@@ -97,10 +97,10 @@ export function SupportSearch() {
                                     <a href={r.url} className="block px-4 py-2.5 hover:bg-muted">
                                         <div className="text-sm font-medium text-foreground">{r.meta.title}</div>
                                         {/* Pagefind's excerpt is trusted build-time HTML with <mark> match
-                                            highlights — recoloured from the browser default yellow to
-                                            rgb(254, 243, 198). */}
+                                            highlights — recoloured from the browser default yellow to the
+                                            index theme's soft accent (--app-current-color-soft, as .eigen-callout). */}
                                         <div
-                                            className="mt-0.5 line-clamp-2 text-xs text-muted-foreground [&_mark]:bg-[#fef3c6] [&_mark]:text-foreground"
+                                            className="mt-0.5 line-clamp-2 text-xs text-muted-foreground [&_mark]:bg-[var(--app-current-color-soft)] [&_mark]:text-foreground"
                                             dangerouslySetInnerHTML={{ __html: r.excerpt }}
                                         />
                                     </a>
