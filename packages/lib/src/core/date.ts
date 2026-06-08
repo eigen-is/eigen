@@ -8,11 +8,6 @@ export function formatTime(date: Date | string | number): string {
     return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-// "Jun 8" — month + day without the year, for formatDateTime's same-year case below.
-function formatDayMonth(d: Date): string {
-    return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
-}
-
 export function formatDate(date: Date | string | number): string {
     return new Date(date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
 }
@@ -34,7 +29,7 @@ export function formatDateTime(date: Date | string | number): string {
         return `Today, ${formatTime(d)}`;
     }
     if (isSameYear) {
-        return `${formatDayMonth(d)}, ${formatTime(d)}`;
+        return `${d.toLocaleDateString('en', { month: 'short', day: 'numeric' })}, ${formatTime(d)}`;
     }
 
     return `${formatDate(d)}, ${formatTime(d)}`;
