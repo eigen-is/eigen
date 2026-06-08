@@ -86,7 +86,7 @@ export class UploadQueue {
         if (prevStaging && prevStaging !== stagingPath && !this.inFlight.has(storageKey)) {
             void bestEffortUnlink(prevStaging);
         }
-        void this.drain();
+        this.drain().catch((err) => console.error(`[sync] drain failed for ${this.label}:`, err));
     }
 
     // Cancel any pending upload for storageKey and delete its staged copy (idempotent). Called by
@@ -118,7 +118,9 @@ export class UploadQueue {
                 if (!referenced.has(entry)) fs.unlinkSync(path.join(this.stagingDir, entry));
             }
         } catch {}
-        if (referenced.size > 0) void this.drain();
+        if (referenced.size > 0) {
+            this.drain().catch((err) => console.error(`[sync] drain failed for ${this.label}:`, err));
+        }
     }
 
     // Stop the queue (mount teardown): no more drains, cancel the pending retry. Leftover rows replay

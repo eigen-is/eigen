@@ -1227,12 +1227,8 @@ export class Mount {
         // never synced, so the DB must be force-dirtied after open (Phase 1a, below).
         let recoveredFromCrash = false;
 
-        // Captured by the callbacks so onSync can VACUUM INTO-stage the live DB (Phase 1b).
-        // Assigned synchronously below before any callback can fire (callbacks run during
-        // open() and later).
-        let managed!: ManagedDatabase<S>;
-
-        managed = new ManagedDatabase(
+        // Captured by onSync to VACUUM INTO-stage the live DB (Phase 1b).
+        const managed = new ManagedDatabase(
             config,
             localPath,
             this.needsTempCopy
@@ -1378,7 +1374,8 @@ export class Mount {
     // ---- Upload-queue facade (Phase 1b) — thin delegation to the per-mount UploadQueue ----
 
     // Force a drain of this mount's pending uploads. The queue otherwise self-drives (on enqueue +
-    // backoff); this is for the shutdown flush, tests, and potential ops. No-op for non-S3 mounts.
+    // backoff), and process shutdown flushes via uploadQueue.drain() directly (see closeAllDatabases),
+    // so this thin facade exists only for tests and ad-hoc ops. No-op for non-S3 mounts.
     drainPendingUploads(opts?: { flushNow?: boolean; deadline?: number }): Promise<void> {
         return this.uploadQueue?.drain(opts) ?? Promise.resolve();
     }
