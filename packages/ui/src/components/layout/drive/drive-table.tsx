@@ -345,7 +345,7 @@ export function DriveTable({
                             />
                         </div>
                         {!hideModified && (
-                            <div className="hidden @[600px]:flex items-center justify-end pl-2 pr-4 py-1.5 whitespace-nowrap text-muted-foreground">
+                            <div className="hidden @[600px]:flex items-center justify-end pl-2 pr-4 py-1.5 whitespace-nowrap text-xs text-muted-foreground">
                                 {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
                             </div>
                         )}
