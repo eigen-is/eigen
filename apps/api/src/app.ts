@@ -75,12 +75,20 @@ export const app = new Elysia({
     .use(
         rateLimit({
             duration: 60_000,
-            max: 300,
-            generator: (request, server) => server?.requestIP(request)?.address ?? 'unknown',
+            max: 1000,
+            // Behind Caddy the socket peer is always the proxy, so server.requestIP() would put
+            // every user in one shared bucket. Caddy sets X-Real-IP / X-Forwarded-For to the real
+            // client (see Caddyfile); key on those and fall back to the socket when not proxied.
+            generator: (request, server) =>
+                request.headers.get('x-real-ip') ??
+                request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+                server?.requestIP(request)?.address ??
+                'unknown',
             skip: (request, key) => {
                 if (key === 'unknown') return true; // No server (tests / app.handle())
                 const path = new URL(request.url).pathname;
-                return path === '/health' || path.endsWith('/events');
+                // /p/avatar is public, cached, and fetched in bulk (member lists) — exempt it
+                return path === '/health' || path.endsWith('/events') || path.startsWith('/p/avatar/');
             },
         }),
     )
