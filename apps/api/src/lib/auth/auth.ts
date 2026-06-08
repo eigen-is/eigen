@@ -82,6 +82,25 @@ export const auth = betterAuth({
     emailAndPassword: {
         enabled: true,
     },
+    advanced: {
+        // Behind Caddy: X-Real-IP / X-Forwarded-For carry the real client on /eigen/* (Caddy
+        // overwrites them, so they're not spoofable). Pin detection to them — mirrors the global
+        // limiter in app.ts and follows better-auth's anti-spoofing guidance.
+        ipAddress: { ipAddressHeaders: ['x-real-ip', 'x-forwarded-for'] },
+    },
+    rateLimit: {
+        // Eigen sets PRODUCTION=1, not NODE_ENV, so better-auth's prod auto-enable never fires.
+        // Force it on; keep the general window loose (the global limiter handles broad abuse, and
+        // a low default would throttle high-frequency get-session for NAT'd offices) and throttle
+        // the credential endpoints hard.
+        enabled: true,
+        window: 60,
+        max: 1000,
+        customRules: {
+            '/sign-in/email': { window: 60, max: 10 },
+            '/two-factor/*': { window: 60, max: 10 },
+        },
+    },
     plugins: [
         twoFactor({
             issuer: 'eigen',
