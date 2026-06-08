@@ -43,11 +43,16 @@ export class ManagedDatabase<S extends SchemaType> {
     private lastSyncedChanges = 0;
     private lastSnapshotChanges = 0;
     private forceDirty = false;
+    // When true, openCold opens with { create: false } so a MISSING working copy throws instead of
+    // silently materialising an empty db. Set by Mount for "open existing" document dbs — the file is
+    // known to exist (metadata.db has its row), so a fresh empty db here means lost data, not a new doc.
+    private mustExist: boolean;
 
-    constructor(config: DatabaseConfig<S>, localPath: string, callbacks: SyncCallbacks = {}) {
+    constructor(config: DatabaseConfig<S>, localPath: string, callbacks: SyncCallbacks = {}, mustExist = false) {
         this.config = config;
         this.localPath = localPath;
         this.callbacks = callbacks;
+        this.mustExist = mustExist;
     }
 
     async open(autoSyncMs = 30000): Promise<BunSQLiteDatabase<S>> {
@@ -63,7 +68,12 @@ export class ManagedDatabase<S extends SchemaType> {
             fs.mkdirSync(dir, { recursive: true });
         }
 
-        this.rawDb = new BunDatabase(this.localPath, { create: true });
+        // mustExist ⇒ open existing read-write WITHOUT create, so a missing working copy throws
+        // instead of silently becoming an empty db. Bun needs an explicit access mode when create
+        // is off, otherwise it raises SQLITE_MISUSE.
+        this.rawDb = this.mustExist
+            ? new BunDatabase(this.localPath, { readwrite: true, create: false })
+            : new BunDatabase(this.localPath, { create: true });
         this.rawDb.run('PRAGMA journal_mode = WAL;');
         this.rawDb.run('PRAGMA foreign_keys = ON;');
         this.rawDb.run('PRAGMA busy_timeout = 5000;');

@@ -502,3 +502,73 @@ describe('per-destination upload concurrency', () => {
         expect(bucketA).not.toBe(bucketB);
     });
 });
+
+// The 2026-06-08 incident: an S3 read hiccup during a redeploy left an empty/0-byte temp, which
+// crash-recovery (Phase 1a) adopted and re-uploaded OVER the good stored object — wiping two live
+// stickies docs, then re-wiping on every later redeploy. Recovery must refuse an empty/invalid/
+// collapsed temp and re-fetch the authoritative object, never overwrite real data with an empty db.
+describe('data-loss guard — crash recovery must not overwrite a good object with an empty temp', () => {
+    test('a 0-byte crash temp is discarded; the stored object is re-fetched, not wiped', async () => {
+        const { mount } = createS3Mount('empty-temp-guard');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+
+        // A real, fully-uploaded stored object {1,2,3}.
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db
+            .insert(docSchema.items)
+            .values([
+                { id: 1, data: 'a' },
+                { id: 2, data: 'b' },
+                { id: 3, data: 'c' },
+            ])
+            .run();
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(await countBackingRows(mount, dataDbId)).toBe(3);
+
+        // Unclean shutdown leaves a poison temp: a 0-byte file from an interrupted/empty GET.
+        await Bun.write(mount.getTempPath(dataDbId), new Uint8Array(0));
+
+        // Reopen must recover the real object, not adopt the empty temp as a fresh doc.
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(3);
+
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(await countBackingRows(mount, dataDbId)).toBe(3); // good object intact, not overwritten
+    });
+
+    test('a valid but content-empty temp does not collapse a larger stored object', async () => {
+        const { mount } = createS3Mount('collapse-temp-guard');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+
+        // Stored object with substantial content (well above the small-doc floor).
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        for (let i = 0; i < 500; i++) {
+            managed.db
+                .insert(docSchema.items)
+                .values({ id: i, data: 'x'.repeat(1000) })
+                .run();
+        }
+        await managed.flush();
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(await countBackingRows(mount, dataDbId)).toBe(500);
+        await mount.closeDatabase(dataDbId);
+
+        // Poison temp: a VALID but freshly-initialized (0-row) SQLite — passes a header check but is
+        // a tiny fraction of the stored object. This is the shape that reached S3 in the incident, so
+        // build it exactly the way the code creates a fresh db (schema + migrations, then 0 rows).
+        const emptyTemp = new ManagedDatabase(docConfigNoSnap, mount.getTempPath(dataDbId));
+        await emptyTemp.open(0);
+        await emptyTemp.close({ skipFinalSnapshot: true });
+
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(500);
+
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(await countBackingRows(mount, dataDbId)).toBe(500); // not collapsed to empty
+    });
+});

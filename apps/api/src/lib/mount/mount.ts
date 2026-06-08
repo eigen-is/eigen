@@ -79,6 +79,36 @@ export function buildStorageKey(id: string, name: string): string {
     return id;
 }
 
+// A document working copy must be a real SQLite db. The 16-byte magic header is the cheapest proof;
+// a 0-byte or partial download (an empty/failed S3 GET) fails it. Used to refuse opening such a file
+// as a fresh empty doc and re-uploading it over good stored bytes (the 2026-06-08 data loss).
+function isSqliteFile(filePath: string): boolean {
+    let fd: number | null = null;
+    try {
+        fd = fs.openSync(filePath, 'r');
+        const header = Buffer.alloc(16);
+        const read = fs.readSync(fd, header, 0, 16, 0);
+        // SQLite magic: the 15 ASCII bytes "SQLite format 3" followed by a NUL terminator.
+        return read === 16 && header.toString('latin1', 0, 15) === 'SQLite format 3' && header[15] === 0;
+    } catch {
+        return false;
+    } finally {
+        if (fd !== null) fs.closeSync(fd);
+    }
+}
+
+// A recovered temp is the live working copy after an unclean shutdown: it should be the stored db
+// (plus any unsynced writes), never a fraction of it. Refuse it if it isn't a valid SQLite, or if it
+// has collapsed far below the last-known stored size (a tiny fresh-init db where a multi-MB doc was) —
+// either signals corrupt/empty bytes that must not be adopted and re-uploaded over the good object.
+const RECOVERY_COLLAPSE_FLOOR_BYTES = 64 * 1024;
+const RECOVERY_COLLAPSE_RATIO = 0.5;
+function isViableRecoveryTemp(tempPath: string, knownSize: number): boolean {
+    if (!isSqliteFile(tempPath)) return false;
+    const tempSize = fs.statSync(tempPath).size;
+    return !(knownSize >= RECOVERY_COLLAPSE_FLOOR_BYTES && tempSize < knownSize * RECOVERY_COLLAPSE_RATIO);
+}
+
 export class Mount {
     readonly id: string;
     readonly name: string;
@@ -1077,7 +1107,14 @@ export class Mount {
         const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
         const file = this.storage.read(storageKey);
-        await Bun.write(tempPath, file);
+        try {
+            await Bun.write(tempPath, file);
+        } catch (err) {
+            // A failed/partial GET can leave a truncated or 0-byte temp behind. Remove it so a later
+            // crash-recovery open can't adopt those bytes as a fresh empty doc.
+            fs.rmSync(tempPath, { force: true });
+            throw err;
+        }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
         console.log(
             `[timing] Mount.download ${storageKey} ${(Bun.file(tempPath).size / 1024) | 0}KB ${ms.toFixed(1)}ms`,
@@ -1204,9 +1241,23 @@ export class Mount {
                           if (mode === 'create') return;
                           const tempPath = this.getTempPath(pathId);
                           if (fs.existsSync(tempPath)) {
-                              console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
-                              recoveredFromCrash = true;
-                              return;
+                              // A surviving temp signals an unclean shutdown. Adopt it as recovered live
+                              // state ONLY if it's a real, non-collapsed SQLite. A 0-byte/partial/fresh-init
+                              // temp (e.g. from a failed or empty S3 GET) must NOT be opened as an empty doc
+                              // and re-uploaded over the good stored object (the 2026-06-08 wipe) — discard
+                              // it and fall through to the authoritative copy.
+                              const known = await this.getPath(pathId);
+                              if (isViableRecoveryTemp(tempPath, known?.size ?? 0)) {
+                                  console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
+                                  recoveredFromCrash = true;
+                                  return;
+                              }
+                              const tempSize = fs.statSync(tempPath).size;
+                              console.warn(
+                                  `[Mount] Discarding unusable crash temp for ${pathId} ` +
+                                      `(temp=${tempSize}B, stored=${known?.size ?? 0}B); re-fetching from storage`,
+                              );
+                              fs.rmSync(tempPath, { force: true });
                           }
                           // Clean close during an outage: the live temp was cleaned but a staged
                           // copy holds bytes newer than storage (upload not yet acked). Recover
@@ -1223,6 +1274,15 @@ export class Mount {
                               throw new ApiError(503, `Storage object for ${pathId} not available`);
                           }
                           await this.downloadKeyToTemp(storageKey, pathId);
+                          // A storage object we just confirmed exists must download as a real SQLite db.
+                          // create:false (mustExist) catches a MISSING temp, but a 0-byte/partial GET writes
+                          // a present-but-empty file that still opens as a valid empty db — validate the
+                          // bytes and fail loud (503), leaving the stored object intact, rather than letting
+                          // an empty doc reach the live session and overwrite good data on the next sync.
+                          if (!isSqliteFile(tempPath)) {
+                              fs.rmSync(tempPath, { force: true });
+                              throw new ApiError(503, `Downloaded object for ${pathId} is empty or invalid`);
+                          }
                       },
                       // isRemote: stage a frozen copy + enqueue, off the request/close path.
                       // Local path-based: keep the synchronous local copy (Bun.write never 503s,
@@ -1255,6 +1315,7 @@ export class Mount {
                       },
                       onSnapshot,
                   },
+            mode === 'open',
         );
 
         await managed.open();
