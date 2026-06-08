@@ -31,13 +31,16 @@ describe('time()', () => {
         await time('test.logs', async () => {
             await Bun.sleep(120);
         });
-        expect(logs.length).toBe(1);
-        expect(logs[0]).toMatch(/^\[timing\] test\.logs \d+\.\d+ms$/);
+        // Count only this test's own label: bun runs the whole suite in one process with one
+        // global console.log, so background async work from other tests can log into `logs` too.
+        const own = logs.filter((l) => l.startsWith('[timing] test.logs '));
+        expect(own.length).toBe(1);
+        expect(own[0]).toMatch(/^\[timing\] test\.logs \d+\.\d+ms$/);
     });
 
     test('does not log for fast operations', async () => {
         await time('test.fast', () => 42);
-        expect(logs.length).toBe(0);
+        expect(logs.filter((l) => l.startsWith('[timing] test.fast ')).length).toBe(0);
     });
 
     test('logs even if a slow function throws', async () => {
@@ -47,8 +50,9 @@ describe('time()', () => {
                 throw new Error('boom');
             }),
         ).rejects.toThrow('boom');
-        expect(logs.length).toBe(1);
-        expect(logs[0]).toMatch(/^\[timing\] test\.throws \d+\.\d+ms$/);
+        const own = logs.filter((l) => l.startsWith('[timing] test.throws '));
+        expect(own.length).toBe(1);
+        expect(own[0]).toMatch(/^\[timing\] test\.throws \d+\.\d+ms$/);
     });
 
     test('accepts a sync function that returns a promise', async () => {
