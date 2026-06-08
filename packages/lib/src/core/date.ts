@@ -8,11 +8,12 @@ export function formatTime(date: Date | string | number): string {
     return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-export function formatDate(date: Date | string | number): string {
-    return new Date(date).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+// "Jun 8" — month + day without the year, for formatDateTime's same-year case below.
+function formatDayMonth(d: Date): string {
+    return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
 }
 
-export function formatDateWithYear(date: Date | string | number): string {
+export function formatDate(date: Date | string | number): string {
     return new Date(date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
@@ -22,13 +23,13 @@ export function formatDateTime(date: Date | string | number): string {
     const isSameYear = d.getFullYear() === new Date().getFullYear();
 
     if (isToday) {
-        return formatTime(d);
+        return `Today, ${formatTime(d)}`;
     }
     if (isSameYear) {
-        return `${formatDate(d)}, ${formatTime(d)}`;
+        return `${formatDayMonth(d)}, ${formatTime(d)}`;
     }
 
-    return `${formatDateWithYear(d)}, ${formatTime(d)}`;
+    return `${formatDate(d)}, ${formatTime(d)}`;
 }
 
 export function formatTimeAgo(date: Date | string | number): string {
@@ -44,8 +45,7 @@ export function formatTimeAgo(date: Date | string | number): string {
 
 export function formatFullDateTime(date: Date | string | number): string {
     const d = new Date(date);
-    const datePart = d.toLocaleDateString('en', { month: 'long', day: 'numeric', year: 'numeric' });
-    return `${datePart} at ${formatTime(d)}`;
+    return `${formatDate(d)} at ${formatTime(d)}`;
 }
 
 export function formatMonth(date: Date | string | number, style: 'long' | 'short' = 'long'): string {

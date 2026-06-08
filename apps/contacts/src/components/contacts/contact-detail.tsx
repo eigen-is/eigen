@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { useLabels } from '@workspace/lib/contacts';
-import { formatDateWithYear } from '@workspace/lib/date';
+import { formatDate } from '@workspace/lib/date';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
@@ -199,7 +199,7 @@ export function ContactDetail({ contact }: ContactDetailProps) {
                                         <Calendar className="h-4 w-4" />
                                         Birthday
                                     </h4>
-                                    <div className="pl-6">{formatDateWithYear(contact.birthday!)}</div>
+                                    <div className="pl-6">{formatDate(contact.birthday!)}</div>
                                 </div>
                             )}
                         </div>
