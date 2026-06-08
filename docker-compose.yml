@@ -40,6 +40,10 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       PRODUCTION: 1
+      # Conventional production signal for third-party libs that gate on it (e.g. better-auth
+      # rate limiting + secure cookies). Set at runtime only — never as a Dockerfile build ENV,
+      # which would make `bun install` skip devDependencies. Dev overrides this back (dev compose).
+      NODE_ENV: production
       EIGEN_DATA_ROOT: /app/data
       DOMAIN: ${DOMAIN}
       MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
