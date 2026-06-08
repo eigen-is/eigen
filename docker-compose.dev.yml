@@ -17,6 +17,9 @@ services:
     user: ""
     environment:
       PRODUCTION: 0
+      # Override the base compose's NODE_ENV=production so local dev / test-deployments.sh keep
+      # dev behaviour (HTTP-only cookies, dev warnings, BA limiter off unless forced on).
+      NODE_ENV: development
       EIGEN_DATA_ROOT: /app/data
       DOMAIN: localhost
       MAIL_DOMAIN: localhost
