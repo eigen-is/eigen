@@ -545,9 +545,9 @@ export const SheetOverlay: React.FC = () => {
                     />
                     {(context.selections?.length ?? 0) > 0 && (
                         <div id="luckysheet-cell-selected-boxs">
-                            {context.selections!.map((selection) => (
+                            {context.selections!.map((selection, i) => (
                                 <div
-                                    key={`${selection.row[0]}-${selection.row[1]}-${selection.column[0]}-${selection.column[1]}`}
+                                    key={`${selection.row[0]}-${selection.row[1]}-${selection.column[0]}-${selection.column[1]}-${i}`}
                                     id="luckysheet-cell-selected"
                                     className="luckysheet-cell-selected"
                                     style={Object.assign(
