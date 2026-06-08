@@ -6,6 +6,7 @@ import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
 import { time } from '../../utils/timing';
 import { isTest } from '../config/env';
 import type { RetentionPolicy } from '../versioning/retention';
+import { ApiError } from './errors';
 
 export type SchemaType = Record<string, unknown>;
 
@@ -68,8 +69,18 @@ export class ManagedDatabase<S extends SchemaType> {
             fs.mkdirSync(dir, { recursive: true });
         }
 
-        // mustExist ⇒ open existing read-write WITHOUT create, so a missing working copy throws
-        // instead of silently becoming an empty db. Bun needs an explicit access mode when create
+        if (this.mustExist) {
+            // "Open existing" must find a populated db. A missing OR 0-byte working copy would
+            // otherwise be initialised as a fresh EMPTY db — the 2026-06-08 data-loss shape (a
+            // failed/empty S3 GET leaves a 0-byte temp, itself a valid empty SQLite). Refuse it so
+            // the caller re-fetches the authoritative object or fails loud, never silently wipes.
+            const size = fs.existsSync(this.localPath) ? fs.statSync(this.localPath).size : -1;
+            if (size <= 0) {
+                throw new ApiError(503, `${this.config.name}: expected an existing database at ${this.localPath}`);
+            }
+        }
+
+        // create:false keeps a missing file an error; Bun needs an explicit access mode when create
         // is off, otherwise it raises SQLITE_MISUSE.
         this.rawDb = this.mustExist
             ? new BunDatabase(this.localPath, { readwrite: true, create: false })

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase } from '../lib/core';
@@ -37,6 +37,15 @@ describe('ManagedDatabase open-vs-create intent', () => {
         // exists. Opening an absent working copy with create:true silently produced an empty db —
         // the 2026-06-08 data-loss shape. With mustExist, a missing file throws instead of creating.
         const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {}, true);
+        await expect(db.open(0)).rejects.toThrow();
+    });
+
+    test('mustExist refuses an existing-but-empty (0-byte) database', async () => {
+        // A 0-byte file is a valid empty SQLite, so { create: false } opens it happily — the exact
+        // shape a failed S3 GET leaves. mustExist must reject it rather than serve an empty db.
+        const dbPath = nextDbPath();
+        writeFileSync(dbPath, '');
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
         await expect(db.open(0)).rejects.toThrow();
     });
 });
