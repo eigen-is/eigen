@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-713 primitives across 6 kinds. `packages/sheet` internals are excluded.
+715 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (93)
+## Components (95)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -23,11 +23,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Bar` | `@workspace/ui` | packages/ui/src/components/layout/braket/bar.tsx |
 | `CardDialog` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-dialog.tsx |
 | `CardFormDialog` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-form-dialog.tsx |
+| `CenteredToolbar` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
 | `ChatMessageInput` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-message-input.tsx |
 | `ChatMessageList` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-message-list.tsx |
 | `ChatPlayerSuggest` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-player-suggest.tsx |
 | `ChatSlashSuggest` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-slash-suggest.tsx |
 | `ColorPicker` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
+| `ColorPickerButton` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker-button.tsx |
 | `ColorSwatchRow` | `@workspace/ui` | packages/ui/src/components/layout/notes/color-swatch-row.tsx |
 | `Column` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `ColumnLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
@@ -323,7 +325,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (194)
+## Types (195)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -491,6 +493,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `ChatMessageInputHandle` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-message-input.tsx |
+| `ColorPickerButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker-button.tsx |
 | `ColorPickerProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
 | `ColumnProps` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `CommentContextMenuItem` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-context-menu.tsx |
@@ -522,7 +525,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (227)
+## Utilities & constants (226)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -658,7 +661,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
 | `formatDate` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatDateTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
-| `formatDateWithYear` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatEventWhen` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatFullDateTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatInputDate` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
