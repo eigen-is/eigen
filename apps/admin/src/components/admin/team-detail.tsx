@@ -182,7 +182,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     return (
         <div className="p-6 space-y-6 h-full overflow-y-auto">
             <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold truncate">{team.name}</h2>
+                <h2 className="text-xl font-medium truncate">{team.name}</h2>
                 {!showSettingsForm && (
                     <Button variant="ghost" size="sm" onClick={openSettingsForm}>
                         <Pencil className="h-4 w-4 mr-1" />

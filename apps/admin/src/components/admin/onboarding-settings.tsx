@@ -64,7 +64,7 @@ export function OnboardingSettingsPage() {
 
     return (
         <div className="p-6 max-w-2xl space-y-6">
-            <h2 className="text-xl font-semibold">Onboarding</h2>
+            <h2 className="text-xl font-medium">Onboarding</h2>
 
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Waitlist</h3>

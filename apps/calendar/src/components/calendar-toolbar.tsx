@@ -57,7 +57,7 @@ export function CalendarToolbar({
                         <ChevronRight className="h-4 w-4" />
                     </Button>
                 </div>
-                <h2 className="text-lg font-semibold whitespace-nowrap">{formatTitle(currentDate, viewMode)}</h2>
+                <h2 className="text-lg font-medium whitespace-nowrap">{formatTitle(currentDate, viewMode)}</h2>
             </div>
 
             <div className="flex items-center gap-2">

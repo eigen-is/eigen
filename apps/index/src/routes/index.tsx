@@ -76,7 +76,7 @@ export function HomeComponent() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
             <div className="text-5xl mb-8" style={{ color: app.color }}>
-                <span className="font-bold">eigen</span>
+                <span className="font-medium">eigen</span>
                 <span className="font-normal">
                     <Bar />
                     {app.name.toLowerCase()}

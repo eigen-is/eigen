@@ -222,7 +222,7 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <CardTitle className="text-2xl text-app">
-                        <span className="font-bold">eigen</span>
+                        <span className="font-medium">eigen</span>
                         <span className="font-normal">
                             <Bar />
                             {appName}

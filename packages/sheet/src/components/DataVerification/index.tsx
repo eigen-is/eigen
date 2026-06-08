@@ -227,7 +227,7 @@ export function DataVerification() {
 
             <div className="text-sm space-y-4">
                 <div>
-                    <div className="text-sm font-semibold mb-2">{dataVerification.cellRange}</div>
+                    <div className="text-sm font-medium mb-2">{dataVerification.cellRange}</div>
                     <div className="flex h-8 rounded-md border border-input overflow-hidden">
                         <Input
                             className="flex-1 border-none rounded-none h-full"
@@ -255,7 +255,7 @@ export function DataVerification() {
                 </div>
 
                 <div className="space-y-2">
-                    <div className="text-sm font-semibold">{dataVerification.verificationCondition}</div>
+                    <div className="text-sm font-medium">{dataVerification.verificationCondition}</div>
                     <Select
                         value={context.dataVerification!.dataRegulation!.type}
                         onValueChange={(value) => {

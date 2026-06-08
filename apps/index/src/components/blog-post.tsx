@@ -8,7 +8,7 @@ type BlogPostProps = { post: BlogPostType; body: ArticleBody };
 export function BlogPost({ post, body }: BlogPostProps) {
     return (
         <article className="blog-post">
-            <h1 className="text-4xl font-bold mb-2">{post.title}</h1>
+            <h1 className="text-4xl font-medium mb-2">{post.title}</h1>
             {post.date && (
                 <p className="text-sm text-muted-foreground mb-6">last updated at: {formatDate(post.date)}</p>
             )}

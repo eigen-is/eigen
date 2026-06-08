@@ -17,7 +17,7 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
             <DialogContent size="sm">
                 <DialogHeader className="items-center">
                     <DialogTitle className="sr-only">About Eigen</DialogTitle>
-                    <div className="text-3xl font-bold select-none" style={{ color: 'var(--app-space-color)' }}>
+                    <div className="text-3xl font-medium select-none" style={{ color: 'var(--app-space-color)' }}>
                         eigen
                     </div>
                     <p className="text-sm text-muted-foreground text-center">

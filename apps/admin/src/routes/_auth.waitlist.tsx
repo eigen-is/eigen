@@ -210,7 +210,7 @@ function WaitlistDetail({ entry }: { entry: WaitlistEntry }) {
     return (
         <div className="p-6 space-y-6">
             <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold">{entry.email}</h2>
+                <h2 className="text-lg font-medium">{entry.email}</h2>
                 <Badge variant={statusVariant} className="capitalize">
                     {entry.status}
                 </Badge>

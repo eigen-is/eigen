@@ -54,7 +54,7 @@ function ChatView() {
                     />
                 ))
             }
-            center={chat.chatPath && <span className="font-semibold text-sm truncate">{chat.chatName}</span>}
+            center={chat.chatPath && <span className="font-medium text-sm truncate">{chat.chatName}</span>}
             right={
                 <div className="flex items-center gap-1">
                     <TooltipButton

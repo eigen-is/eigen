@@ -116,7 +116,7 @@ export function CalendarInviteWidget({ attachment, emailId, attachmentIndex }: C
                 {isCancelled && <p className="text-sm font-medium text-destructive">This event has been cancelled</p>}
                 {isReply && <p className="text-sm font-medium text-muted-foreground">Calendar RSVP response</p>}
                 {event.summary && (
-                    <p className={cn('text-sm font-semibold', isCancelled && 'line-through text-muted-foreground')}>
+                    <p className={cn('text-sm font-medium', isCancelled && 'line-through text-muted-foreground')}>
                         {event.summary}
                     </p>
                 )}

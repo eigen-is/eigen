@@ -22,7 +22,7 @@ export function AlphabeticalList<T>({ items, getKey, getGroupKey, renderItem }: 
             {sortedGroups.map(([letter, group]) => (
                 <div key={letter} className="border-b last:border-b-0">
                     <div className="flex items-center px-6 py-2 bg-muted/50">
-                        <h2 className="text-sm font-semibold">{letter}</h2>
+                        <h2 className="text-sm font-medium">{letter}</h2>
                     </div>
                     <div>
                         {group.map((item) => {

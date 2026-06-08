@@ -77,7 +77,7 @@ export function WeekView({
                                 <div className="text-xs font-medium text-muted-foreground">{WEEKDAY_HEADERS[idx]}</div>
                                 <div
                                     className={cn(
-                                        'text-lg font-semibold mt-0.5 w-8 h-8 flex items-center justify-center rounded-full mx-auto',
+                                        'text-lg font-medium mt-0.5 w-8 h-8 flex items-center justify-center rounded-full mx-auto',
                                         today && 'bg-primary text-primary-foreground',
                                     )}
                                 >

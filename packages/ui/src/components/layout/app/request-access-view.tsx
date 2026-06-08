@@ -35,7 +35,7 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
         <div className="flex flex-col items-center justify-center h-full w-full gap-6 p-8 text-center">
             <LockKeyhole className="h-12 w-12 text-muted-foreground" />
             <div className="space-y-1">
-                <h2 className="text-lg font-semibold">You need access</h2>
+                <h2 className="text-lg font-medium">You need access</h2>
                 {owner && (
                     <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                         <UserAvatar email={ownerId} size="sm" />

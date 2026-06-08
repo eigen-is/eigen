@@ -21,7 +21,7 @@ export function TeamMemberDetail({ member }: TeamMemberDetailProps) {
 
                     <div className="flex-1 space-y-6">
                         <div className="space-y-4">
-                            <h3 className="text-lg font-semibold border-b pb-2">Contact Information</h3>
+                            <h3 className="text-lg font-medium border-b pb-2">Contact Information</h3>
                             <div className="space-y-2">
                                 <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                     <Mail className="h-4 w-4" />

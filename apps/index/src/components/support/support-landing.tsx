@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { Card, CardContent } from '@workspace/ui/components/card';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { SECTIONS } from './sections';
+import { SupportSearch } from './support-search';
 
 // The help center front door: a hero and a browse-by-topic grid. No sidebar here.
 export function SupportLanding() {
@@ -10,7 +11,10 @@ export function SupportLanding() {
             <Column id="landing" width="flex">
                 <div className="h-full overflow-y-auto">
                     <div className="mx-auto max-w-3xl px-6 py-12">
-                        <h1 className="text-3xl font-bold text-app text-center mb-10">How can we help?</h1>
+                        <h1 className="text-3xl font-normal text-app text-center mb-6">How can we help?</h1>
+                        <div className="mb-10">
+                            <SupportSearch />
+                        </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                             {SECTIONS.map((section) => {
                                 const Icon = section.icon;

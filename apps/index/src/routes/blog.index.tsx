@@ -39,11 +39,11 @@ function BlogOverviewComponent() {
 
                         {otherPosts.length > 0 && (
                             <div className="mt-16 pt-8 border-t border-border">
-                                <h2 className="text-2xl font-bold mb-6">Other Posts</h2>
+                                <h2 className="text-2xl font-medium mb-6">Other Posts</h2>
                                 <div className="space-y-8">
                                     {otherPosts.map((post) => (
                                         <article key={post.slug}>
-                                            <h3 className="text-xl font-semibold mb-1">
+                                            <h3 className="text-xl font-medium mb-1">
                                                 <Link
                                                     to="/blog/$id"
                                                     params={{ id: post.slug }}
