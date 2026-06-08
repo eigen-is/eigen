@@ -52,7 +52,7 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
 ## Concurrency
 
 One `Semaphore` **per S3 destination** (`endpoint+bucket`), not one per process
-(`lib/sync/sync-worker.ts` → `getUploadSemaphore`). A slow/down provider only backs up its own uploads and
+(`lib/sync/index.ts` → `getUploadSemaphore`). A slow/down provider only backs up its own uploads and
 never blocks uploads to other destinations — important once team mounts + user-owned endpoints point at
 different buckets. Failed uploads back off (full-jitter, capped) and the queue **self-schedules** its own
 retry — there is no global registry or sweep. The only process-global state is the destination→semaphore
@@ -76,7 +76,7 @@ temp-copy backend.
 | File | Responsibility |
 |---|---|
 | `lib/mount/upload-queue.ts` | The per-mount `UploadQueue` — enqueue / drain / backoff / cancel / reconcile + staging |
-| `lib/sync/sync-worker.ts` | Process-global bits: per-destination semaphore map, backoff, shutdown deadline |
+| `lib/sync/index.ts` | Process-global bits: per-destination semaphore map, backoff, shutdown deadline |
 | `lib/mount/mount.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring |
 | `lib/core/managed-database.ts` | `markDirty` (crash recovery), `stageCopy` (`VACUUM INTO`), `mustExist` open guard (refuse a missing/0-byte working copy) |
 | `lib/mount/schema.ts` + `db-config.ts` | The `pending_uploads` table (additive migration v4) |
