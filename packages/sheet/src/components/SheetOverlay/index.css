@@ -386,7 +386,9 @@
 .luckysheet-cell-flow-clip {
     border-collapse: collapse;
     cursor: default;
-    width: 5000000px;
+    /* Shrink-wrap the content (the sheettable spacer) instead of a fixed 5,000,000px, which
+       forced the horizontal scroll area to 5M px regardless of the real sheet width. */
+    width: max-content;
     touch-action: manipulation;
     overflow: hidden;
 }
