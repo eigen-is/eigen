@@ -30,7 +30,7 @@ import { ChatRoom } from '../chat';
 import { openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
-import { contentDisposition } from '../core/http';
+import { contentDisposition, parseByteRange } from '../core/http';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
@@ -483,14 +483,15 @@ export default class Drive {
         return mount.readRange(pathId, start, end);
     }
 
-    async serveFile(mountId: string, pathId: string, disposition: 'attachment' | 'inline'): Promise<Response> {
+    async serveFile(
+        mountId: string,
+        pathId: string,
+        disposition: 'attachment' | 'inline',
+        range: string | null = null,
+    ): Promise<Response> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
         if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
-        const file = await mount.readFile(pathId);
-        if (!file) throw new ApiError(404, 'File not found');
-        // S3File doesn't support ResponseInit options — stream it instead
-        const body: BodyInit = 'bucket' in file ? file.stream() : file;
         const mimeType = path.mimeType || 'application/octet-stream';
         const headers: Record<string, string> = {
             'Content-Type': mimeType,
@@ -500,6 +501,9 @@ export default class Drive {
             // Stored MIME is the upload's own Content-Type, served verbatim — nosniff stops the
             // browser re-sniffing a disguised payload (e.g. HTML bytes uploaded as image/png).
             'X-Content-Type-Options': 'nosniff',
+            // Advertise range support so media players seek by fetching byte ranges instead of
+            // re-downloading the whole file (notably from S3, where readRange issues a ranged GET).
+            'Accept-Ranges': 'bytes',
         };
         // /embed serves inline from the API's own origin, so a scriptable upload (HTML/SVG) could
         // run script with the viewer's session. A sandbox CSP neutralises active content while
@@ -510,6 +514,33 @@ export default class Drive {
                 headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
             }
         }
+
+        const parsed = parseByteRange(range, path.size);
+        if (parsed === 'unsatisfiable') {
+            return new Response(null, {
+                status: 416,
+                headers: { ...headers, 'Content-Range': `bytes */${path.size}` },
+            });
+        }
+        if (parsed) {
+            const slice = await mount.readRange(pathId, parsed.start, parsed.end + 1);
+            if (!slice) throw new ApiError(404, 'File not found');
+            // Stream the slice. Passing the BunFile/S3File directly loses the slice bounds
+            // somewhere in the response pipeline, so route through .stream() which respects them.
+            return new Response(slice.stream(), {
+                status: 206,
+                headers: {
+                    ...headers,
+                    'Content-Length': String(parsed.end - parsed.start + 1),
+                    'Content-Range': `bytes ${parsed.start}-${parsed.end}/${path.size}`,
+                },
+            });
+        }
+
+        const file = await mount.readFile(pathId);
+        if (!file) throw new ApiError(404, 'File not found');
+        // S3File doesn't support ResponseInit options — stream it instead
+        const body: BodyInit = 'bucket' in file ? file.stream() : file;
         return new Response(body, { headers });
     }
 

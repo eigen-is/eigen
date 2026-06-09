@@ -146,8 +146,15 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.readRange(mountId, pathId, start, end));
     }
 
-    public async serveFile(mountId: string, pathId: string, disposition: 'attachment' | 'inline') {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.serveFile(mountId, pathId, disposition));
+    public async serveFile(
+        mountId: string,
+        pathId: string,
+        disposition: 'attachment' | 'inline',
+        range: string | null = null,
+    ) {
+        return this.withReadPermission(mountId, pathId, () =>
+            this.sharedDrive.serveFile(mountId, pathId, disposition, range),
+        );
     }
 
     public async writeFileContent(

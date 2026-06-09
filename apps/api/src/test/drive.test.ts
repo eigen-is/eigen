@@ -2082,10 +2082,12 @@ describe('Drive', () => {
     });
 
     describe('Embed Endpoint', () => {
+        const embedContent = 'Embed test content';
         let embedFileId: string;
+        const embedUrl = () => `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${embedFileId}/embed/embed-test.txt`;
 
         beforeAll(async () => {
-            const file = new File(['Embed test content'], 'embed-test.txt', { type: 'text/plain' });
+            const file = new File([embedContent], 'embed-test.txt', { type: 'text/plain' });
             const uploaded = await driveUpload(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
@@ -2097,21 +2099,47 @@ describe('Drive', () => {
         });
 
         test('embed endpoint returns file content', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${embedFileId}/embed/embed-test.txt`,
-            );
+            const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl());
             expect(res.status).toBe(200);
         });
 
         test('embed has cache headers', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${embedFileId}/embed/embed-test.txt`,
-            );
+            const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl());
             expect(res.status).toBe(200);
             expect(res.headers.get('cache-control')).toContain('public');
             expect(res.headers.get('expires')).toBeDefined();
+        });
+
+        test('full response advertises Accept-Ranges', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl());
+            expect(res.headers.get('accept-ranges')).toBe('bytes');
+        });
+
+        test('Range request returns 206 with the requested slice', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl(), {
+                headers: { Range: 'bytes=0-4' },
+            });
+            expect(res.status).toBe(206);
+            expect(res.headers.get('content-range')).toBe(`bytes 0-4/${embedContent.length}`);
+            expect(res.headers.get('content-length')).toBe('5');
+            expect(await res.text()).toBe('Embed');
+        });
+
+        test('suffix Range returns the last N bytes', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl(), {
+                headers: { Range: 'bytes=-7' },
+            });
+            expect(res.status).toBe(206);
+            expect(res.headers.get('content-range')).toBe(`bytes 11-17/${embedContent.length}`);
+            expect(await res.text()).toBe('content');
+        });
+
+        test('unsatisfiable Range returns 416', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl(), {
+                headers: { Range: `bytes=${embedContent.length}-${embedContent.length + 10}` },
+            });
+            expect(res.status).toBe(416);
+            expect(res.headers.get('content-range')).toBe(`bytes */${embedContent.length}`);
         });
     });
 
