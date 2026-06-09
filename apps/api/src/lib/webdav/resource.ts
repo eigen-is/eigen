@@ -1,6 +1,7 @@
 import { isContainerType } from '@workspace/lib/types/drive';
 import { enforceMountQuota } from '../config/enforcement';
 import { ApiError } from '../core/errors';
+import { parseByteRange } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
@@ -55,20 +56,12 @@ export async function handleGet(args: {
 
     if (headOnly) return new Response(null, { status: 200, headers });
 
-    if (rangeHeader) {
-        if (path.size === 0) return new Response(null, { status: 416, headers });
-        const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
-        if (!match) return new Response(null, { status: 416, headers });
-        const startStr = match[1];
-        const endStr = match[2];
-        // Suffix range "bytes=-N" means "last N bytes": start = size - N, end = size - 1.
-        // Open-ended "bytes=N-" means "from N to EOF": end = size - 1.
-        const start = startStr === '' ? Math.max(0, path.size - Number(endStr)) : Number(startStr);
-        const end = endStr === '' || startStr === '' ? path.size - 1 : Math.min(Number(endStr), path.size - 1);
-        if (start < 0 || start > end || start >= path.size) {
-            return new Response(null, { status: 416, headers });
-        }
-        const slice = await drive.readRange(mountId, path.id, start, end + 1);
+    const range = parseByteRange(rangeHeader, path.size);
+    if (range === 'unsatisfiable') {
+        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${path.size}` } });
+    }
+    if (range) {
+        const slice = await drive.readRange(mountId, path.id, range.start, range.end + 1);
         if (!slice) throw new ApiError(404, 'Not found');
         // Stream the slice. Passing the BunFile/S3File directly loses the slice bounds
         // somewhere in the response pipeline, so route through .stream() which respects them.
@@ -76,8 +69,8 @@ export async function handleGet(args: {
             status: 206,
             headers: {
                 ...headers,
-                'Content-Length': String(end - start + 1),
-                'Content-Range': `bytes ${start}-${end}/${path.size}`,
+                'Content-Length': String(range.end - range.start + 1),
+                'Content-Range': `bytes ${range.start}-${range.end}/${path.size}`,
             },
         });
     }
