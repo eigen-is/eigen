@@ -21,3 +21,10 @@ export const searchKeys = {
             params.limit ?? null,
         ] as const,
 };
+
+// Help search runs client-side against the static Pagefind index — no ownerId or
+// route params, so the query string alone keys the cache.
+export const helpSearchKeys = {
+    all: ['help-search'] as const,
+    query: (q: string) => [...helpSearchKeys.all, q] as const,
+};

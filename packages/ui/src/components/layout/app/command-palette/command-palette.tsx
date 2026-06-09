@@ -9,6 +9,7 @@ import { CommandFooter } from './command-footer';
 import { CommandRowAction } from './command-row-action';
 import { CommandRowContact } from './command-row-contact';
 import { CommandRowFile } from './command-row-file';
+import { CommandRowHelp } from './command-row-help';
 import { CommandRowMail } from './command-row-mail';
 import { CommandRowSmart } from './command-row-smart';
 
@@ -19,6 +20,7 @@ const SCOPE_CHIPS: Record<PaletteScope, string> = {
     file: 'Files',
     actions: 'Actions',
     contacts: 'Contacts',
+    help: 'Help',
 };
 
 // Tab cycles through scopes. The lookup makes the order obvious at a glance and is
@@ -28,7 +30,8 @@ const NEXT_SCOPE: Record<PaletteScope | 'none', PaletteScope | undefined> = {
     file: 'mail',
     mail: 'actions',
     actions: 'contacts',
-    contacts: undefined,
+    contacts: 'help',
+    help: undefined,
 };
 
 // First item the engine produced — the Top Hit if there is one, else the first
@@ -101,6 +104,8 @@ export function CommandPalette({ ctx }: Props) {
                 return <CommandRowMail key={r.id} result={r} onSelect={onSelect} />;
             case 'file':
                 return <CommandRowFile key={r.id} result={r} onSelect={onSelect} />;
+            case 'help':
+                return <CommandRowHelp key={r.id} result={r} onSelect={onSelect} />;
             default: {
                 // Exhaustiveness guard: if a new PaletteResult kind is added without a row
                 // component, TypeScript refuses to compile this assignment AND we fail loud

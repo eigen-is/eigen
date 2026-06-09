@@ -1,36 +1,17 @@
+import { loadPagefind } from '@workspace/lib/search';
+import type { HelpSearchDoc } from '@workspace/lib/types/search';
 import { Input } from '@workspace/ui/components/input';
 import { Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-type PagefindDoc = {
-    url: string;
-    excerpt: string;
-    meta: { title?: string; section?: string };
-};
-type PagefindSearchResult = { data: () => Promise<PagefindDoc> };
-type PagefindApi = {
-    search: (query: string) => Promise<{ results: PagefindSearchResult[] }>;
-};
-
-// Loaded once, lazily, from the statically-served bundle the build's postbuild step
-// writes to dist/index/pagefind. Vite must not resolve it at build time (@vite-ignore);
-// it is absent in dev, where a failed load simply degrades to no results.
-let pagefindPromise: Promise<PagefindApi | null> | null = null;
-function loadPagefind(): Promise<PagefindApi | null> {
-    if (!pagefindPromise) {
-        const path = '/pagefind/pagefind.js';
-        pagefindPromise = import(/* @vite-ignore */ path).then((m) => m as unknown as PagefindApi).catch(() => null);
-    }
-    return pagefindPromise;
-}
-
 const MAX_RESULTS = 6;
 
 // Experiment: client-side full-text search over the help center, powered by the
-// prebuilt Pagefind index. Shown on the /support landing under the hero heading.
+// prebuilt Pagefind index (loadPagefind is shared with the command palette's help
+// source). Shown on the /support landing under the hero heading.
 export function SupportSearch() {
     const [query, setQuery] = useState('');
-    const [results, setResults] = useState<PagefindDoc[]>([]);
+    const [results, setResults] = useState<HelpSearchDoc[]>([]);
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 

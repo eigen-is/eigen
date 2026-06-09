@@ -41,6 +41,7 @@
     "./notification": "./src/core/notification/index.ts",
     "./admin": "./src/core/admin/index.ts",
     "./public": "./src/core/public/index.ts",
+    "./search": "./src/core/search/index.ts",
     "./settings": "./src/core/settings/index.ts",
     "./space": "./src/core/space/index.ts",
     "./sse": "./src/core/sse/index.ts",

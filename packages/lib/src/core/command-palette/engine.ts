@@ -7,6 +7,7 @@ type BuildInput = {
     smart: PaletteResult[];
     mail: PaletteResult[];
     file: PaletteResult[];
+    help: PaletteResult[];
     input: string;
     scope?: PaletteScope;
     suggestedCommandIds?: string[];
@@ -31,9 +32,11 @@ const QUALITY_RANK: Record<NonNullable<ReturnType<typeof structuralMatchQuality>
 //                           derived from a contact name match), shown alongside Top Hit
 //   3. Selection          — selection-aware actions (Share X, Preview X, …) when a
 //                           selection is present
-//   4. Mail               — search results
-//   5. Contacts           — search results
-//   6. Actions            — catalog commands ("Go to Mail", "New doc", …)
+//   4. Files              — search results
+//   5. Mail               — search results
+//   6. Contacts           — search results
+//   7. Help               — help-centre articles (client-side Pagefind)
+//   8. Actions            — catalog commands ("Go to Mail", "New doc", …)
 //
 // Catalog actions live at the bottom because they're the least time-sensitive — the
 // user reaches them via type-to-match. Search results and selection-aware actions are
@@ -69,6 +72,7 @@ export function buildSections(input: BuildInput): Sections {
     let mailList = input.scope && input.scope !== 'mail' ? [] : input.mail;
     let fileList = input.scope && input.scope !== 'file' ? [] : input.file;
     let contactList = input.scope && input.scope !== 'contacts' ? [] : input.contact;
+    let helpList = input.scope && input.scope !== 'help' ? [] : input.help;
     const smartList = input.scope ? [] : input.smart;
 
     // Engine owns final ordering: sort by descending rank, then cap.
@@ -76,6 +80,7 @@ export function buildSections(input: BuildInput): Sections {
     mailList = [...mailList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     fileList = [...fileList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     contactList = [...contactList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
+    helpList = [...helpList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     const scopedSelection = [...selectionList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
 
     // Top Hit: a deterministic smart parse claims it outright; otherwise the strongest
@@ -90,6 +95,7 @@ export function buildSections(input: BuildInput): Sections {
             ...fileList,
             ...mailList,
             ...contactList,
+            ...helpList,
             ...scopedActions,
         ];
         let bestQuality = 0;
@@ -116,6 +122,7 @@ export function buildSections(input: BuildInput): Sections {
     if (fileList.length > 0) groups.push({ id: 'file', heading: 'Files', items: fileList });
     if (mailList.length > 0) groups.push({ id: 'mail', heading: 'Mail', items: mailList });
     if (contactList.length > 0) groups.push({ id: 'contacts', heading: 'Contacts', items: contactList });
+    if (helpList.length > 0) groups.push({ id: 'help', heading: 'Help', items: helpList });
     if (scopedActions.length > 0) groups.push({ id: 'actions', heading: 'Actions', items: scopedActions });
 
     // Don't double-render the Top Hit in its own section, and drop any group that

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-720 primitives across 6 kinds. `packages/sheet` internals are excluded.
+723 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -132,7 +132,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (188)
+## Hooks (189)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -291,6 +291,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `usePublicConfig` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `useResolvedUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-resolved-user.ts |
+| `useSearch` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-search.ts |
 | `useCheckS3Connection` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `useServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
@@ -325,7 +326,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (195)
+## Types (196)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -428,6 +429,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FullOrganization` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `HeaderLines` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `HeaderValue` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
+| `HelpSearchDoc` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `HomeSizeResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `ImipMethod` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
@@ -525,7 +527,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (231)
+## Utilities & constants (232)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -685,6 +687,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `resolveNotificationLink` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
+| `loadPagefind` | `@workspace/lib/search` | packages/lib/src/core/search/pagefind.ts |
 | `BORDER_RADIUS_ROUND` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `pxToPercent` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `SLIDE_ASPECT_RATIO` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
