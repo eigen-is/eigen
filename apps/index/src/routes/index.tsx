@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { publicApi } from '@workspace/lib/api';
+import { getSpaceAppUrl, publicApi } from '@workspace/lib/api';
 import { apps } from '@workspace/lib/apps';
+import { useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -24,6 +25,14 @@ export function HomeComponent() {
     const { data: config } = usePublicConfig();
     const waitlistEnabled = config?.waitlistEnabled ?? false;
     const app = apps[appIndex];
+    const { isAuthenticated } = useAuth();
+
+    // This page is prerendered and hydrates before the session check resolves, so
+    // send signed-in visitors to the app from an effect that reacts to auth flipping
+    // — a one-shot router guard would only ever see the pre-auth (signed-out) state.
+    React.useEffect(() => {
+        if (isAuthenticated) window.location.href = getSpaceAppUrl();
+    }, [isAuthenticated]);
 
     React.useEffect(() => {
         const interval = setInterval(() => {
