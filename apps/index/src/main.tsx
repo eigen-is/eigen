@@ -4,7 +4,7 @@ import { routeTree } from './routeTree.gen';
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider, useAuth } from '@workspace/lib/auth';
+import { AuthProvider } from '@workspace/lib/auth';
 import { Toaster } from '@workspace/ui/components/sonner';
 
 const router = createRouter({
@@ -12,20 +12,12 @@ const router = createRouter({
     defaultPreload: 'intent',
     basepath: '/',
     scrollRestoration: true,
-    context: {
-        auth: undefined!,
-    },
 });
 
 declare module '@tanstack/react-router' {
     interface Register {
         router: typeof router;
     }
-}
-
-function InnerApp() {
-    const auth = useAuth();
-    return <RouterProvider router={router} context={{ auth }} />;
 }
 
 const queryClient = new QueryClient();
@@ -35,7 +27,7 @@ function App() {
         <QueryClientProvider client={queryClient}>
             <AuthProvider>
                 <Toaster />
-                <InnerApp />
+                <RouterProvider router={router} />
             </AuthProvider>
         </QueryClientProvider>
     );

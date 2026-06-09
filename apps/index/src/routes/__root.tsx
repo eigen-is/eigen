@@ -1,5 +1,4 @@
-import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import type { AuthContextType } from '@workspace/lib/auth';
+import { createRootRoute, Outlet } from '@tanstack/react-router';
 import { lazy, Suspense } from 'react';
 
 // Browser-only dev widget — never render it during SSR/prerender, where
@@ -9,11 +8,7 @@ const TanStackRouterDevtools =
         ? lazy(() => import('@tanstack/react-router-devtools').then((m) => ({ default: m.TanStackRouterDevtools })))
         : () => null;
 
-type MyRouterContext = {
-    auth: AuthContextType;
-};
-
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRoute({
     component: () => (
         <>
             <div className="flex flex-col min-h-dvh">
