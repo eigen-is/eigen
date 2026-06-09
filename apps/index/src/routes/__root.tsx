@@ -1,5 +1,4 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { getSpaceAppUrl } from '@workspace/lib/api';
 import type { AuthContextType } from '@workspace/lib/auth';
 import { lazy, Suspense } from 'react';
 
@@ -15,12 +14,6 @@ type MyRouterContext = {
 };
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-    beforeLoad: ({ context }) => {
-        if (typeof window !== 'undefined' && context.auth?.isAuthenticated && window.location.pathname === '/') {
-            window.location.href = getSpaceAppUrl();
-            return new Promise(() => {});
-        }
-    },
     component: () => (
         <>
             <div className="flex flex-col min-h-dvh">
