@@ -16,7 +16,6 @@ export async function render(url: string, article: PageArticle | null): Promise<
     const router = createRouter({
         routeTree,
         history: createMemoryHistory({ initialEntries: [url] }),
-        context: { auth: undefined! },
     });
     await router.load();
     return renderToString(
