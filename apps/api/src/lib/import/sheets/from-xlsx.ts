@@ -1,7 +1,7 @@
 /// <reference path="../modules.d.ts" />
 
 import type { BorderSide, CellBorderInfo, Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
-import { parseA1Range } from '@workspace/sheet/engine';
+import { parseA1Range, update } from '@workspace/sheet/engine';
 import type { Alignment, Border, CellRichTextValue, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
@@ -334,32 +334,19 @@ function resolveFormulaResult(
 
 function dateToSerialAndDisplay(date: Date, numFmt?: string): { value: number; display: string } {
     const serial = (date.getTime() - EXCEL_EPOCH_MS) / DAY_MS;
-    const display = formatDateForDisplay(date, numFmt);
+    // Render with the same formatter the sheet engine uses (numfmt) so the imported display
+    // matches the editor — Excel date formats use lowercase month tokens (m/mm/mmm) and "…"
+    // literal-text escapes that a hand-rolled replacer mangles. numfmt renders a bare serial
+    // under 'General' as a raw number, so undated cells fall back to a date pattern; a malformed
+    // format string from a hostile workbook makes numfmt throw, so guard this boundary.
+    const fmt = numFmt && numFmt !== 'General' ? numFmt : 'm/d/yyyy';
+    let display: string;
+    try {
+        display = update(fmt, serial);
+    } catch {
+        display = update('yyyy-mm-dd', serial);
+    }
     return { value: serial, display };
-}
-
-function formatDateForDisplay(date: Date, numFmt?: string): string {
-    const y = date.getUTCFullYear();
-    const M = date.getUTCMonth() + 1;
-    const d = date.getUTCDate();
-    const H = date.getUTCHours();
-    const m = date.getUTCMinutes();
-    const s = date.getUTCSeconds();
-    if (!numFmt || numFmt === 'General') return `${M}/${d}/${y}`;
-    const h12 = H === 0 ? 12 : H > 12 ? H - 12 : H;
-    const ampm = H >= 12 ? 'PM' : 'AM';
-    return numFmt
-        .replace('yyyy', String(y))
-        .replace('yy', String(y).slice(-2))
-        .replace(/MM(?!M)/, String(M).padStart(2, '0'))
-        .replace(/M(?!M)/, String(M))
-        .replace('dd', String(d).padStart(2, '0'))
-        .replace(/\bd\b/, String(d))
-        .replace('hh', String(numFmt.includes('AM/PM') ? h12 : H).padStart(2, '0'))
-        .replace(/\bh\b/, String(numFmt.includes('AM/PM') ? h12 : H))
-        .replace('ss', String(s).padStart(2, '0'))
-        .replace('mm', String(m).padStart(2, '0'))
-        .replace('AM/PM', ampm);
 }
 
 function buildCellType(cell: XlsxCell, value: string | number | boolean | undefined): FortuneCell['ct'] {
