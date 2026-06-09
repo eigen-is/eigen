@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { PaletteResult } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { EmailSummary } from '@workspace/lib/types/mail';
-import { File, Mail, Search } from 'lucide-react';
+import { CircleHelp, File, Mail, Search } from 'lucide-react';
 import { buildSections } from './engine';
 
 function action(id: string, title: string, rank: number): PaletteResult {
@@ -43,6 +43,19 @@ function fileResult(id: string, title: string, rank: number): PaletteResult {
     };
 }
 
+function helpResult(id: string, title: string, rank: number): PaletteResult {
+    return {
+        kind: 'help',
+        id,
+        title,
+        icon: CircleHelp,
+        group: 'help',
+        rank,
+        payload: { url: `/support/${id}`, excerpt: '', meta: { title } },
+        run: () => {},
+    };
+}
+
 function smart(id: string, title: string, opts: { deterministic?: boolean } = {}): PaletteResult {
     return {
         kind: 'smart',
@@ -67,6 +80,7 @@ describe('buildSections', () => {
             smart: [],
             mail: mails,
             file: files,
+            help: [],
             input: 'foo',
             scope: undefined,
         });
@@ -82,6 +96,7 @@ describe('buildSections', () => {
             smart: [],
             mail: [],
             file: [],
+            help: [],
             input: 'foo',
             scope: undefined,
         });
@@ -96,6 +111,7 @@ describe('buildSections', () => {
             smart: [det],
             mail: [],
             file: [],
+            help: [],
             input: 'alice@example.com',
             scope: undefined,
         });
@@ -110,6 +126,7 @@ describe('buildSections', () => {
             smart: [],
             mail: [mailResult('m1', 'something else', 0)],
             file: [],
+            help: [],
             input: 'new document',
             scope: undefined,
         });
@@ -123,6 +140,7 @@ describe('buildSections', () => {
             smart: [],
             mail: [mailResult('m1', 'thing', 0)],
             file: [fileResult('f1', 'thing', 0)],
+            help: [],
             input: 'xyz',
             scope: undefined,
         });
@@ -136,6 +154,7 @@ describe('buildSections', () => {
             smart: [],
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
+            help: [],
             input: 'foo',
             scope: 'mail',
         });
@@ -149,6 +168,7 @@ describe('buildSections', () => {
             smart: [],
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
+            help: [],
             input: 'foo',
             scope: 'file',
         });
@@ -162,10 +182,25 @@ describe('buildSections', () => {
             smart: [],
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
+            help: [],
             input: 'foo',
             scope: 'actions',
         });
         expect(sections.groups.map((g) => g.id)).toEqual(['actions']);
+    });
+
+    test('scope=help keeps only the help group', () => {
+        const sections = buildSections({
+            action: [action('a1', 'A1', 0)],
+            contact: [],
+            smart: [],
+            mail: [mailResult('m1', 'M1', 0)],
+            file: [fileResult('f1', 'F1', 0)],
+            help: [helpResult('h1', 'H1', 0)],
+            input: 'foo',
+            scope: 'help',
+        });
+        expect(sections.groups.map((g) => g.id)).toEqual(['help']);
     });
 
     test('Files section renders above Mail when both have results', () => {
@@ -175,10 +210,25 @@ describe('buildSections', () => {
             smart: [],
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
+            help: [],
             input: 'foo',
             scope: undefined,
         });
         expect(sections.groups.map((g) => g.id)).toEqual(['file', 'mail']);
+    });
+
+    test('Help renders below Files/Mail and above Actions', () => {
+        const sections = buildSections({
+            action: [action('a1', 'A1', 0)],
+            contact: [],
+            smart: [],
+            mail: [mailResult('m1', 'M1', 0)],
+            file: [fileResult('f1', 'F1', 0)],
+            help: [helpResult('h1', 'H1', 0)],
+            input: 'foo',
+            scope: undefined,
+        });
+        expect(sections.groups.map((g) => g.id)).toEqual(['file', 'mail', 'help', 'actions']);
     });
 
     test('a file with a strong title match becomes the Top Hit', () => {
@@ -188,6 +238,7 @@ describe('buildSections', () => {
             smart: [],
             mail: [],
             file: [fileResult('f.q4', 'Q4 budget', 0)],
+            help: [],
             input: 'Q4 budget',
             scope: undefined,
         });
@@ -205,6 +256,7 @@ describe('buildSections', () => {
             smart: [],
             mail: [],
             file: [],
+            help: [],
             input: '',
             scope: undefined,
             suggestedCommandIds: ['nav.mail'],

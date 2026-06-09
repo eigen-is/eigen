@@ -26,6 +26,11 @@ describe('parseQuery', () => {
         expect(parseQuery('@alice')).toEqual({ scope: 'contacts', q: 'alice' });
     });
 
+    test('? prefix sets the help scope', () => {
+        expect(parseQuery('? share a file')).toEqual({ scope: 'help', q: 'share a file' });
+        expect(parseQuery('?share a file')).toEqual({ scope: 'help', q: 'share a file' });
+    });
+
     test('from: operator extracts the sender filter', () => {
         expect(parseQuery('from:alice@example.com q3')).toEqual({
             from: 'alice@example.com',

@@ -2,10 +2,20 @@ import type { LucideIcon } from 'lucide-react';
 import type { ContactSuggestion } from './contact';
 import type { DrivePath, EigenDocType } from './drive';
 import type { EmailSummary } from './mail';
+import type { HelpSearchDoc } from './search';
 
-export type PaletteScope = 'mail' | 'file' | 'actions' | 'contacts';
+export type PaletteScope = 'mail' | 'file' | 'actions' | 'contacts' | 'help';
 
-export type ResultGroup = 'top-hit' | 'suggested' | 'smart' | 'selection' | 'mail' | 'file' | 'contacts' | 'actions';
+export type ResultGroup =
+    | 'top-hit'
+    | 'suggested'
+    | 'smart'
+    | 'selection'
+    | 'mail'
+    | 'file'
+    | 'contacts'
+    | 'help'
+    | 'actions';
 
 // A 1-item selection from an eigendoc viewer is identical in shape to a 1-item
 // Drive selection — both surface the same actions (Share, Mail to…, Copy link, …).
@@ -106,6 +116,16 @@ export type PaletteResult =
           group: ResultGroup;
           rank: number;
           payload: DrivePath;
+          run: (ctx: CommandContext) => void;
+      }
+    | {
+          kind: 'help';
+          id: string;
+          title: string;
+          icon: LucideIcon;
+          group: ResultGroup;
+          rank: number;
+          payload: HelpSearchDoc;
           run: (ctx: CommandContext) => void;
       };
 

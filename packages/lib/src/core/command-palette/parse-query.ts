@@ -12,6 +12,7 @@ const SCOPE_PREFIXES: { prefix: string; scope: PaletteScope }[] = [
     { prefix: 'file:', scope: 'file' },
     { prefix: '>', scope: 'actions' },
     { prefix: '@', scope: 'contacts' },
+    { prefix: '?', scope: 'help' },
 ];
 
 // Matches `from:<value>` / `to:<value>` where the value runs until the next
