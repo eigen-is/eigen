@@ -272,6 +272,55 @@ describe('Sheets xlsx import/convert', () => {
         expect(formulaCell?.v?.f).toBe('=SUM(A1:A3)');
     });
 
+    test('convert renders custom date number formats via numfmt, not literal format tokens', async () => {
+        // Excel date formats use lowercase month tokens (m/mm/mmm) and "…" literal-text escapes.
+        // The old hand-rolled formatter leaked both — e.g. d"-"m rendered as 15"-"m, mm/dd/yyyy as
+        // 00/15/2024 (lowercase mm collided with minutes). Render through numfmt instead so the
+        // import display matches what the engine shows live.
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Dates');
+        const date = new Date(Date.UTC(2024, 2, 15)); // 2024-03-15 → Excel serial 45366
+        for (const [a1, numFmt] of [
+            ['A1', 'd"-"m'],
+            ['A2', 'd"-"mmm'],
+            ['A3', 'mm/dd/yyyy'],
+        ] as const) {
+            const cell = ws.getCell(a1);
+            cell.value = date;
+            cell.numFmt = numFmt;
+        }
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'dates.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+
+        // Serial value and raw format string are preserved; only the cached display was wrong.
+        expect(byCoord.get('0:0')?.v).toBe(45366);
+        expect(byCoord.get('0:0')?.ct).toEqual({ fa: 'd"-"m', t: 'd' });
+
+        expect(byCoord.get('0:0')?.m).toBe('15-3');
+        expect(byCoord.get('1:0')?.m).toBe('15-Mar');
+        expect(byCoord.get('2:0')?.m).toBe('03/15/2024');
+    });
+
     test('large sheet import stores a zstd-compressed blob and reads back intact', async () => {
         const cells = Array.from({ length: 300 }, (_, i) => ({ a1: `A${i + 1}`, value: `value-${i}` }));
         const buffer = await buildXlsxBuffer(cells);
