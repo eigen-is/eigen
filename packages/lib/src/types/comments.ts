@@ -1,3 +1,6 @@
+import type { ChatAttachment } from './chat';
+import type { DrivePath } from './drive';
+
 export type CommentCard = {
     id: string;
     title: string;
@@ -6,7 +9,12 @@ export type CommentCard = {
     chatName?: string;
     creator?: string;
     createdAt?: number;
+    attachments?: ChatAttachment[];
 };
+
+// What the card form stages before Save: settled entries (edit mode), drive picks, device files.
+// Resolved to ChatAttachment[] by useResolveCardAttachments at save time.
+export type CardAttachmentDraft = ChatAttachment | DrivePath | File;
 
 export type ActiveComments = {
     ids: Set<string>;

@@ -24,6 +24,7 @@ export function useCommentLifecycle({
     mountId,
     pathId,
     chatFolderId,
+    mediaFolderId,
     doc,
     activeCardIds,
     initialChatName,
@@ -35,6 +36,7 @@ export function useCommentLifecycle({
     mountId: string;
     pathId: string;
     chatFolderId: string | null;
+    mediaFolderId: string | null;
     doc: Y.Doc | null;
     activeCardIds: Set<string>;
     initialChatName?: string;
@@ -47,7 +49,7 @@ export function useCommentLifecycle({
     const { data: allComments = [] } = useComments(ownerId, mountId, pathId);
     const resolveComment = useResolveComment(ownerId, mountId, pathId);
     const cards = useCommentCards(doc, mapName);
-    const createCard = useCreateCommentCard(ownerId, mountId, chatFolderId, doc, mapName);
+    const createCard = useCreateCommentCard(ownerId, mountId, chatFolderId, mediaFolderId, doc, mapName);
     const updateCard = useUpdateCommentCard(doc, mapName);
 
     const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeCardIds);
