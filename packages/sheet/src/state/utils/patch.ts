@@ -130,22 +130,28 @@ function additionalCellOps(
 
 // The row/col reducers replace the whole target sheet object, so immer hands us a
 // single sheet-sized replace patch instead of granular ones. Shipping that patch
-// copies the entire sheet into every collab update — multi-MB on large sheets and
-// the dominant cost of inserting a row — so patchToOp drops it. The paired
-// insertRowCol/deleteRowCol special op re-derives the structural data shift on
-// every consumer (client applyOp and the BE replay both run the engine); these
-// compact ops carry the sheet-level fields that pass doesn't reproduce: state-only
-// shifts (calcChain, filter, borderInfo/rowReadOnly inside config, alternate
-// format rules, row/column counts) and state that isn't derivable at all, like
-// the config of rows a delete-undo restores.
+// copies the entire sheet (its `data` matrix above all) into every collab update —
+// multi-MB on large sheets and the dominant cost of inserting a row — so patchToOp
+// drops it. The paired insertRowCol/deleteRowCol special op lets every consumer
+// (client applyOp and the BE replay both run the engine) re-derive the `data`
+// shift instead of receiving it. The engine only rebuilds `data` and the few
+// config fields it owns, so we still have to ship the rest of the sheet's
+// metadata authoritatively: the reducer also shifts calcChain, filter, hyperlink,
+// dataVerification, borderInfo/rowReadOnly (inside config) and more, and a
+// delete-undo restores config that isn't derivable at all.
+//
+// Rather than enumerate the shifted fields here — a list that silently drifts from
+// the reducer the moment a field is added — we emit every top-level field except
+// the two that must not be sent: `data` (re-derived by the engine) and
+// `selections` (per-client cursor, also dropped by filterPatch). Everything else
+// is small, and shipping an unchanged field as an authoritative replace is a no-op.
 function sheetMetadataOps(ctx: Context, id: string): Op[] {
     const index = getSheetIndex(ctx, id);
     if (typeof index !== 'number') return [];
     const sheet = ctx.sheets[index];
-    const fields = ['config', 'calcChain', 'alternateFormatRules', 'filter', 'filterRange', 'row', 'column'] as const;
     const metaOps: Op[] = [];
-    for (const field of fields) {
-        if (sheet[field] === undefined) continue;
+    for (const field of Object.keys(sheet) as (keyof Sheet)[]) {
+        if (field === 'data' || field === 'selections') continue;
         metaOps.push({ op: 'replace', id, path: [field], value: sheet[field] });
     }
     return metaOps;
