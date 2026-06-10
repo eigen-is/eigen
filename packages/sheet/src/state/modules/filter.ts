@@ -376,6 +376,10 @@ export function matchesFilterCondition(cell: Cell | null | undefined, condition:
                     (compareFilterValues(raw, values[1]) >= 0 && compareFilterValues(raw, values[0]) <= 0));
             return conditionName === 'between' ? within : !within;
         }
+        default:
+            // A snapshot written by a newer client can carry a condition this
+            // version doesn't know; matching everything beats hiding every row.
+            return true;
     }
 }
 
