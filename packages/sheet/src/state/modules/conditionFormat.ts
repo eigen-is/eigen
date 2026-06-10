@@ -13,7 +13,8 @@ import { type Context, getFlowdata } from '../context';
 import type { ConditionRulesProps } from '../types';
 import { getSheetIndex } from '../utils';
 import { getCellValue, getRangeByTxt } from './cell';
-import { execfunction, functionCopy } from './formula-ui';
+import { createContextResolver } from './formula-cache';
+import { functionCopy } from './formula-ui';
 import { checkProtectionFormatCells } from './protection';
 
 const KNOWN_CONDITION_NAMES = [
@@ -222,6 +223,11 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
         return _cfCache.result;
     }
 
+    // Evaluate CF formulas through the engine directly (same shape as the HTML export's
+    // buildCfFormulaEvaluator). execfunction would assign ctx.calculateSheetId — painting
+    // runs against an immer-frozen context, so that throws — and would register every CF
+    // formula into the sheet's calc chain via insertUpdateFunctionGroup.
+    const resolver = createContextResolver(ctx);
     const computeMap = evaluateConditionalFormat(ruleArr, data, {
         evaluateFormula: (formula, anchorRow, anchorCol, targetRow, targetCol) => {
             const offsetRow = targetRow - anchorRow;
@@ -233,7 +239,7 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
             if (offsetCol > 0) {
                 shifted = `=${functionCopy(shifted, 'right', offsetCol)}`;
             }
-            return execfunction(ctx, shifted, targetRow, targetCol)[1];
+            return ctx.formulaCache.engine.evaluate(shifted, ctx.currentSheetId, targetRow, targetCol, resolver).value;
         },
     });
     _cfCache = {
