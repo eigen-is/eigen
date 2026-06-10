@@ -131,6 +131,10 @@ function CardFormDialogContent({
                         />
                     </div>
                 </div>
+                <AttachmentDraftChips
+                    items={drafts}
+                    onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
+                />
                 <div className="grid gap-2">
                     <Label>Color</Label>
                     <ColorPicker
@@ -141,21 +145,18 @@ function CardFormDialogContent({
                         showReset={false}
                     />
                 </div>
+            </div>
+            <DialogFooter>
                 {allowAttachments && (
-                    <div className="grid gap-2">
-                        <Label>Attachments</Label>
-                        <AttachmentDraftChips
-                            items={drafts}
-                            onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
-                        />
+                    <>
                         <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="w-fit"
+                            variant="ghost"
+                            size="icon"
+                            className="mr-auto shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
                             onClick={() => setPickerOpen(true)}
+                            type="button"
                         >
-                            <Paperclip className="h-4 w-4 mr-1" /> Add attachment
+                            <Paperclip className="h-4 w-4" />
                         </Button>
                         <DrivePickerWithUpload
                             open={pickerOpen}
@@ -165,10 +166,8 @@ function CardFormDialogContent({
                             onPickFromDrive={(paths) => setDrafts((prev) => [...prev, ...paths])}
                             onPickFromDevice={(files) => setDrafts((prev) => [...prev, ...files])}
                         />
-                    </div>
+                    </>
                 )}
-            </div>
-            <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                     Cancel
                 </Button>
