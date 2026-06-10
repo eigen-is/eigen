@@ -282,7 +282,11 @@ function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boo
     const raw = cell.value;
     if (raw === null || raw === undefined) return {};
 
-    if (typeof raw === 'number' || typeof raw === 'string' || typeof raw === 'boolean') {
+    if (typeof raw === 'number') {
+        return { value: raw, display: numberDisplay(raw, cell.numFmt) };
+    }
+
+    if (typeof raw === 'string' || typeof raw === 'boolean') {
         return { value: raw, display: String(raw) };
     }
 
@@ -320,7 +324,10 @@ function resolveFormulaResult(
     numFmt?: string,
 ): { value?: string | number | boolean; display?: string } {
     if (result === null || result === undefined) return {};
-    if (typeof result === 'number' || typeof result === 'string' || typeof result === 'boolean') {
+    if (typeof result === 'number') {
+        return { value: result, display: numberDisplay(result, numFmt) };
+    }
+    if (typeof result === 'string' || typeof result === 'boolean') {
         return { value: result, display: String(result) };
     }
     if (result instanceof Date) {
@@ -347,6 +354,17 @@ function dateToSerialAndDisplay(date: Date, numFmt?: string): { value: number; d
         display = update('yyyy-mm-dd', serial);
     }
     return { value: serial, display };
+}
+
+function numberDisplay(value: number, numFmt?: string): string {
+    if (!numFmt || numFmt === 'General') return String(value);
+    // Same boundary guard as dateToSerialAndDisplay: a malformed format string from a
+    // hostile workbook makes numfmt throw.
+    try {
+        return update(numFmt, value);
+    } catch {
+        return String(value);
+    }
 }
 
 function buildCellType(cell: XlsxCell, value: string | number | boolean | undefined): FortuneCell['ct'] {

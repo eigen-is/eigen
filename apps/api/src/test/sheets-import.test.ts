@@ -321,6 +321,73 @@ describe('Sheets xlsx import/convert', () => {
         expect(byCoord.get('2:0')?.m).toBe('03/15/2024');
     });
 
+    test('convert renders numeric display strings through numfmt, not raw floats', async () => {
+        // extractValueAndDisplay used to cache m = String(raw) for numbers, so a cell formatted
+        // as "€"#,##0.00 showed the raw float in the grid while ct.fa held the format — until
+        // the cell was touched. Numbers must render through the engine's numfmt like dates do.
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Numbers');
+        for (const [a1, value, numFmt] of [
+            ['A1', 14207.82, '#,##0'],
+            ['A2', 0.4072175408, '0.00%'],
+            ['A3', 90, '[$€]#,##0'],
+            ['A4', 1, '0.0'],
+            ['A5', 495083.6, '"€"#,##0.00'],
+            ['A6', 145.2, '_-"€" * #,##0.00_-;_-"€" * #,##0.00-;_-"€" * "-"??_-;_-@'],
+        ] as const) {
+            const cell = ws.getCell(a1);
+            cell.value = value;
+            cell.numFmt = numFmt;
+        }
+        ws.getCell('B1').value = 100.5; // General/missing format stays the raw string
+        const text = ws.getCell('C1');
+        text.value = 'hello';
+        text.numFmt = '"€"#,##0.00'; // a string cell with a currency numFmt stays the string
+        const formula = ws.getCell('D1');
+        formula.value = { formula: 'A3*2', result: 90 };
+        formula.numFmt = '[$€]#,##0';
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'numbers.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+
+        // Raw value and format are preserved; only the cached display changes.
+        expect(byCoord.get('0:0')?.v).toBe(14207.82);
+        expect(byCoord.get('0:0')?.ct).toEqual({ fa: '#,##0', t: 'n' });
+
+        expect(byCoord.get('0:0')?.m).toBe('14,208');
+        expect(byCoord.get('1:0')?.m).toBe('40.72%');
+        expect(byCoord.get('2:0')?.m).toBe('€90');
+        expect(byCoord.get('3:0')?.m).toBe('1.0');
+        expect(byCoord.get('4:0')?.m).toBe('€495,083.60');
+        // numfmt expands the accounting format's `*` fill char to one padding space per side.
+        expect(byCoord.get('5:0')?.m).toBe(' € 145.20 ');
+
+        expect(byCoord.get('0:1')?.m).toBe('100.5');
+        expect(byCoord.get('0:2')?.m).toBe('hello');
+
+        expect(byCoord.get('0:3')?.f).toBe('=A3*2');
+        expect(byCoord.get('0:3')?.m).toBe('€90');
+    });
+
     test('large sheet import stores a zstd-compressed blob and reads back intact', async () => {
         const cells = Array.from({ length: 300 }, (_, i) => ({ a1: `A${i + 1}`, value: `value-${i}` }));
         const buffer = await buildXlsxBuffer(cells);
