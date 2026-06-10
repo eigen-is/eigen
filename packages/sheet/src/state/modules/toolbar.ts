@@ -919,6 +919,10 @@ export function handleItalic(ctx: Context, cellInput: HTMLDivElement) {
     toggleAttr(ctx, cellInput, 'it');
 }
 
+export function handleFont(ctx: Context, cellInput: HTMLDivElement, fontName: string) {
+    setAttr(ctx, cellInput, 'ff', fontName);
+}
+
 export function handleStrikeThrough(ctx: Context, cellInput: HTMLDivElement) {
     toggleAttr(ctx, cellInput, 'cl');
 }

@@ -30,7 +30,6 @@ import {
     warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
-import { ContextMenu } from '../ContextMenu';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
 import { FxEditor } from '../FxEditor';
 import { MenuBar } from '../MenuBar';
@@ -729,25 +728,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         </div>
                         <Sheet sheet={sheet} />
                         {mergedSettings.showSheetTabs && <SheetTab />}
-                        <ContextMenu />
                         <FilterMenu />
-                        {context.contextMenu && Object.keys(context.contextMenu).length > 0 && (
-                            <div
-                                onMouseDown={() => {
-                                    setContextWithProduce((draftCtx) => {
-                                        draftCtx.contextMenu = {};
-                                        draftCtx.filterContextMenu = undefined;
-                                    });
-                                }}
-                                onMouseMove={(e) => e.stopPropagation()}
-                                onMouseUp={(e) => e.stopPropagation()}
-                                onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                }}
-                                className="absolute top-0 left-0 z-30 h-full w-full"
-                            />
-                        )}
                     </div>
                 </ModalProvider>
             </WorkbookContext.Provider>

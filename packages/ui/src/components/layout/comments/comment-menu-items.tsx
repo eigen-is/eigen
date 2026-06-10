@@ -47,7 +47,7 @@ export function CommentMenuItems({
         if (!onAddComment) return null;
         return (
             <Item onClick={onAddComment}>
-                <MessageSquarePlus className="h-4 w-4 mr-2" /> Add {noun}
+                <MessageSquarePlus className="h-4 w-4" /> Add {noun}
             </Item>
         );
     }
@@ -56,13 +56,13 @@ export function CommentMenuItems({
         <>
             {onOpen && (
                 <Item onClick={() => onOpen(card.id)}>
-                    <MessageSquare className="h-4 w-4 mr-2" /> View {noun}
+                    <MessageSquare className="h-4 w-4" /> View {noun}
                 </Item>
             )}
             {onChangeColor && (
                 <Sub>
                     <SubTrigger className="gap-2">
-                        <Palette className="h-4 w-4 mr-2" /> {Noun} color
+                        <Palette className="h-4 w-4" /> {Noun} color
                     </SubTrigger>
                     <SubContent>
                         <ColorSwatchRow
@@ -74,17 +74,17 @@ export function CommentMenuItems({
             )}
             {entry?.status === 'open' && onResolve && (
                 <Item onClick={() => onResolve(entry.chatName)}>
-                    <Check className="h-4 w-4 mr-2" /> Resolve {noun}
+                    <Check className="h-4 w-4" /> Resolve {noun}
                 </Item>
             )}
             {entry?.status === 'resolved' && onReopen && (
                 <Item onClick={() => onReopen(entry.chatName)}>
-                    <RotateCcw className="h-4 w-4 mr-2" /> Reopen {noun}
+                    <RotateCcw className="h-4 w-4" /> Reopen {noun}
                 </Item>
             )}
             {onDelete && (
                 <Item variant="destructive" onClick={() => onDelete(card.id)}>
-                    <Trash2 className="h-4 w-4 mr-2" /> Delete {noun}
+                    <Trash2 className="h-4 w-4" /> Delete {noun}
                 </Item>
             )}
         </>

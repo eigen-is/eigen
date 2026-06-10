@@ -1,4 +1,4 @@
-import type { MergeCell } from '@workspace/lib/sheets';
+import type { MergeCell, SheetConfig } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { every, isEqual, isNil, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
@@ -40,7 +40,13 @@ export type PatchOptions = {
 const addtionalMergeOps = (ops: Op[], id: string) => {
     let merge_new: Record<string, MergeCell> = {};
     ops.some((op) => {
-        if (op.op === 'replace' && op.path[0] === 'config' && op.path[1] === 'merge') {
+        if (op.op !== 'replace' || op.path[0] !== 'config') return false;
+        if (op.path.length === 1) {
+            // Whole-config op from sheetMetadataOps.
+            merge_new = (op.value as SheetConfig | undefined)?.merge ?? {};
+            return true;
+        }
+        if (op.path[1] === 'merge') {
             merge_new = op.value as Record<string, MergeCell>;
             return true;
         }
@@ -122,34 +128,51 @@ function additionalCellOps(
     return cellOps;
 }
 
-export function filterPatch(patches: Patch[]) {
-    return patches.filter((p) => p.path[0] === 'sheets' && p.path[2] !== 'selections');
+// The row/col reducers replace the whole target sheet object, so immer hands us a
+// single sheet-sized replace patch instead of granular ones. Shipping that patch
+// copies the entire sheet (its `data` matrix above all) into every collab update —
+// multi-MB on large sheets and the dominant cost of inserting a row — so patchToOp
+// drops it. The paired insertRowCol/deleteRowCol special op lets every consumer
+// (client applyOp and the BE replay both run the engine) re-derive the `data`
+// shift instead of receiving it. The engine only rebuilds `data` and the few
+// config fields it owns, so we still have to ship the rest of the sheet's
+// metadata authoritatively: the reducer also shifts calcChain, filter, hyperlink,
+// dataVerification, borderInfo/rowReadOnly (inside config) and more, and a
+// delete-undo restores config that isn't derivable at all.
+//
+// Rather than enumerate the shifted fields here — a list that silently drifts from
+// the reducer the moment a field is added — we emit every top-level field except
+// the ones that must not be sent: `data` (re-derived by the engine), `selections`
+// (per-client cursor, also dropped by filterPatch), and `calcChain` (a derived
+// cache that scales with formula count — receivers shift their own copy in the
+// reducer, the BE replay never reads it, and a fresh mount re-seeds it from
+// `cell.f`). Everything else is small, and shipping an unchanged field as an
+// authoritative replace is a no-op.
+//
+// The one case where `calcChain` IS shipped: undoing a delete. The delete dropped
+// the removed rows' entries from every peer's calcChain, and the restoring insert
+// can't re-derive them — without the authoritative copy, formulas in restored
+// rows would stop recalculating on peers.
+function sheetMetadataOps(ctx: Context, id: string, includeCalcChain: boolean): Op[] {
+    const index = getSheetIndex(ctx, id);
+    if (typeof index !== 'number') return [];
+    const sheet = ctx.sheets[index];
+    const metaOps: Op[] = [];
+    for (const field of Object.keys(sheet) as (keyof Sheet)[]) {
+        if (field === 'data' || field === 'selections') continue;
+        if (field === 'calcChain' && !includeCalcChain) continue;
+        metaOps.push({ op: 'replace', id, path: [field], value: sheet[field] });
+    }
+    return metaOps;
 }
 
-export function extractFormulaCellOps(ops: Op[]) {
-    // ops are ensured to be cell data ops
-    const formulaOps: Op[] = [];
-    ops.forEach((op) => {
-        if (op.op === 'remove') return;
-        if (op.path.length === 2 && Array.isArray(op.value)) {
-            // entire row op
-            for (let i = 0; i < op.value.length; i += 1) {
-                if (op.value[i]?.f) {
-                    formulaOps.push({
-                        op: 'replace',
-                        id: op.id,
-                        path: [...op.path, i],
-                        value: op.value[i],
-                    });
-                }
-            }
-        } else if (op.path.length === 3 && op.value?.f) {
-            formulaOps.push(op);
-        } else if (op.path.length === 4 && op.path[3] === 'f') {
-            formulaOps.push(op);
-        }
-    });
-    return formulaOps;
+// TODO(sizing-sync): row/column sizing writes to `config` (columnlen/rowlen) on both the sheet
+// and the live top-level `ctx.config`. This filter keeps only `sheets[*]` patches, so the change
+// doesn't round-trip through undo or Yjs sync — resizing (drag handles + the resize dialog) is
+// currently local-only and non-undoable. A proper fix routes config changes through the
+// patch → op → undo pipeline.
+export function filterPatch(patches: Patch[]) {
+    return patches.filter((p) => p.path[0] === 'sheets' && p.path[2] !== 'selections');
 }
 
 export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions, undo: boolean = false): Op[] {
@@ -182,21 +205,20 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         }
     });
     if (options?.insertRowColOp) {
-        const [nonDataOps, dataOps] = partition(ops, (p) => p.path[0] !== 'data');
-        // find out formula cells as their formula range may be changed
-        const formulaOps = extractFormulaCellOps(dataOps);
-        ops = nonDataOps;
+        // Drop the whole-sheet replace ops (path []) — see sheetMetadataOps.
+        ops = ops.filter((p) => p.path.length > 0 && p.path[0] !== 'data');
         ops.push({
             op: 'insertRowCol',
             id: options.insertRowColOp.id,
             path: [],
             value: options.insertRowColOp,
         });
-        ops = [...ops, ...formulaOps];
+        ops = [...ops, ...sheetMetadataOps(ctx, options.insertRowColOp.id, !!options.restoreDeletedCells)];
 
-        const mergeOps = addtionalMergeOps(ops, ctx.currentSheetId);
-        ops = [...ops, ...mergeOps];
-
+        // The cell-content ops below must precede the merge mc ops at the end of
+        // this branch: the engine fills inserted rows with nulls, and a
+        // ['data', r, c, 'mc'] patch can't be applied to a cell that doesn't
+        // exist yet on the replay side.
         if (options?.restoreDeletedCells) {
             // undoing deleted row/col, find out cells to restore
             const restoreCellsOps: Op[] = [];
@@ -228,24 +250,20 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
             }
             ops = [...ops, ...restoreCellsOps];
         } else {
-            const cellOps = additionalCellOps(ctx, options.insertRowColOp);
-            ops = [...ops, ...cellOps];
+            ops = [...ops, ...additionalCellOps(ctx, options.insertRowColOp)];
         }
+        ops = [...ops, ...addtionalMergeOps(ops, options.insertRowColOp.id)];
     } else if (options?.deleteRowColOp) {
-        const [nonDataOps, dataOps] = partition(ops, (p) => p.path[0] !== 'data');
-        // find out formula cells as their formula range may be changed
-        const formulaOps = extractFormulaCellOps(dataOps);
-        ops = nonDataOps;
+        // Drop the whole-sheet replace ops (path []) — see sheetMetadataOps.
+        ops = ops.filter((p) => p.path.length > 0 && p.path[0] !== 'data');
         ops.push({
             op: 'deleteRowCol',
             id: options.deleteRowColOp.id,
             path: [],
             value: options.deleteRowColOp,
         });
-        ops = [...ops, ...formulaOps];
-
-        const mergeOps = addtionalMergeOps(ops, ctx.currentSheetId);
-        ops = [...ops, ...mergeOps];
+        ops = [...ops, ...sheetMetadataOps(ctx, options.deleteRowColOp.id, false)];
+        ops = [...ops, ...addtionalMergeOps(ops, options.deleteRowColOp.id)];
     } else if (options?.addSheetOp) {
         const [addSheetOps, otherOps] = partition(ops, (op) => op.path.length === 0 && op.op === 'add');
         options.id = options.addSheet!.id as string;
