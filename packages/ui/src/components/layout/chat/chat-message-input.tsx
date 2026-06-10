@@ -2,6 +2,7 @@ import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib
 import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useFileDropTarget } from '../../../hooks/use-file-drop-target';
 import { useSuggestions } from '../../../hooks/use-suggestions';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
@@ -211,6 +212,9 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         setFiles((prev) => prev.filter((_, i) => i !== index));
     };
 
+    const stageDroppedFiles = useCallback((dropped: File[]) => setFiles((prev) => [...prev, ...dropped]), []);
+    const dropProps = useFileDropTarget(stageDroppedFiles, !disabled);
+
     if (readOnly) {
         return (
             <div className={cn('border-t px-5 py-3', className)}>
@@ -220,7 +224,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
     }
 
     return (
-        <div className={cn('border-t px-5 py-3', className)}>
+        <div className={cn('border-t px-5 py-3', className)} {...dropProps}>
             <AttachmentDraftChips
                 items={[...(driveAttachments ?? []), ...files]}
                 className="mb-2"
