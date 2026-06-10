@@ -1,5 +1,4 @@
 import type { MergeCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
-import { cloneDeep } from 'es-toolkit/compat';
 import { functionStrChange } from './formula-shift';
 import type { EditorSheetConfigExtras } from './types';
 
@@ -41,7 +40,13 @@ type ExtendedSheetConfig = SheetConfig & EditorSheetConfigExtras;
 
 // Generic over S so the state-side state.Sheet[] passes through with its extras
 // (filter / frozen / dataVerification / ...) typed end-to-end. The engine only
-// reads lib.Sheet-typed fields; cloneDeep preserves the wider input shape.
+// reads lib.Sheet-typed fields; shallow copies preserve the wider input shape.
+//
+// All rebuilds use structural sharing, never a deep clone: rows (and cells, for
+// column ops) that an operation doesn't touch are reused by reference. On the FE
+// the inputs are immer drafts and the result is assigned back into the draft —
+// untouched rows finalize to their unchanged bases, so a row insert no longer
+// pays a deep walk over every cell (multi-second on large sheets).
 export function applySheetsInsertRowCol<S extends Sheet>(sheets: S[], op: InsertRowColOp): S[] {
     const targetIndex = sheets.findIndex((s) => s.id === op.id);
     if (targetIndex === -1) return sheets;
@@ -166,7 +171,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
 ): S[] {
     return sheets.map((sheet) => {
         if (!sheet.data) return sheet;
-        let cloned: S | null = null;
+        let newData: typeof sheet.data | null = null;
         for (let r = 0; r < sheet.data.length; r += 1) {
             const row = sheet.data[r];
             if (!row) continue;
@@ -177,11 +182,12 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
                 const shifted = functionStrChange(txt, op, type === 'row' ? 'row' : 'col', direction, index, count);
                 const newF = `=${shifted}`;
                 if (newF === cell.f) continue;
-                if (!cloned) cloned = cloneDeep(sheet);
-                cloned.data![r]![c]!.f = newF;
+                if (!newData) newData = [...sheet.data];
+                if (newData[r] === row) newData[r] = [...row];
+                newData[r][c] = { ...cell, f: newF };
             }
         }
-        return cloned ?? sheet;
+        return newData ? { ...sheet, data: newData } : sheet;
     });
 }
 
@@ -197,9 +203,10 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
     if (op.type === 'column' && data[0] && data[0].length + op.count >= 1000) throw new RowColError('maxExceeded');
 
     const { count } = op;
-    const newTarget = cloneDeep(target);
-    const newCfg = (newTarget.config ?? {}) as ExtendedSheetConfig;
-    const newData = newTarget.data!;
+    const newTarget = { ...target };
+    const newCfg = { ...(target.config ?? {}) } as ExtendedSheetConfig;
+    const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
+    newTarget.data = newData;
     const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
 
     newCfg.merge = shiftMergeForInsert(cfg, op.type, op.index, count, op.direction);
@@ -403,9 +410,10 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         }
     }
 
-    const newTarget = cloneDeep(target);
-    const newCfg = (newTarget.config ?? {}) as ExtendedSheetConfig;
-    const newData = newTarget.data!;
+    const newTarget = { ...target };
+    const newCfg = { ...(target.config ?? {}) } as ExtendedSheetConfig;
+    const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
+    newTarget.data = newData;
     const removeCount = op.end - op.start + 1;
 
     newCfg.merge = shiftMergeForDelete(cfg, op.type, op.start, removeCount);
