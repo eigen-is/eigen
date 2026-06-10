@@ -38,6 +38,11 @@ function richContext(): Context {
                     merge: { '3_2': { r: 3, c: 2, rs: 1, cs: 2 } },
                 },
                 calcChain: [{ r: 2, c: 1, id: 'id_1' }],
+                // hyperlink + dataVerification are shifted only in the state layer,
+                // never re-derived by the engine — they prove the metadata ops carry
+                // every field the engine doesn't reproduce.
+                hyperlink: { '2_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } },
+                dataVerification: { '2_1': { type: 'dropdown', type2: 'true', value1: 'a,b', value2: '' } },
                 order: 0,
                 row: 4,
                 column: 4,
@@ -79,7 +84,9 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
     test('insertRowCol carries authoritative metadata ops for the target sheet', () => {
         const [ops, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
         const metaPaths = ops.filter((op) => op.id === 'id_1' && op.path.length === 1).map((op) => op.path[0]);
-        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'calcChain', 'row', 'column']));
+        expect(metaPaths).toEqual(
+            expect.arrayContaining(['config', 'calcChain', 'hyperlink', 'dataVerification', 'row', 'column']),
+        );
         const configOp = ops.find((op) => op.path[0] === 'config');
         expect(configOp?.value).toEqual(next.sheets[0].config);
         // The state layer shifted the calcChain entry below the inserted row.
@@ -94,6 +101,8 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
             expect(sheet.data).toEqual(next.sheets[i].data);
             expect(sheet.config ?? {}).toEqual(next.sheets[i].config ?? {});
             expect(sheet.calcChain ?? []).toEqual(next.sheets[i].calcChain ?? []);
+            expect(sheet.hyperlink ?? {}).toEqual(next.sheets[i].hyperlink ?? {});
+            expect(sheet.dataVerification ?? {}).toEqual(next.sheets[i].dataVerification ?? {});
         }
     }
 
