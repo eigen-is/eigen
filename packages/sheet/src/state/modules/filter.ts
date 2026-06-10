@@ -1,22 +1,22 @@
 import { cloneDeep, find, flatten, omit, reduce, size, union } from 'es-toolkit/compat';
-import { update } from '../../engine/format';
+import { genarate, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import { locale } from '../locale';
-import type { Selection } from '../types';
+import type { FilterCondition, FilterConditionName, Selection } from '../types';
 import { getSheetIndex, isAllowEdit, rgbToHex } from '../utils';
 import { normalizedAttr } from './cell';
 import { checkCF, getComputeMap } from './conditionFormat';
 import { normalizeSelection } from './selection';
 import { sortDataRange } from './sort';
-import { isRealNull } from './validation';
+import { isRealNull, isRealNum } from './validation';
 
 // Filter configuration state
 export function labelFilterOptionState(
     ctx: Context,
     optionstate: boolean,
     rowhidden: Record<string, number>,
-    caljs: unknown,
+    byCondition: FilterCondition | undefined,
     str: number,
     edr: number,
     cindex: number,
@@ -25,7 +25,7 @@ export function labelFilterOptionState(
     saveData: boolean,
 ) {
     const param = {
-        caljs,
+        byCondition,
         rowhidden,
         optionstate,
         str,
@@ -262,6 +262,152 @@ function getFilterHiddenRows(ctx: Context, col: number, startCol: number) {
     return { otherHiddenRows, hiddenRows };
 }
 
+// Ordered condition list for the filter menu's Select; arity is the number of
+// operand inputs the condition needs.
+export const FILTER_CONDITION_ITEMS: {
+    name: FilterConditionName;
+    localeKey: keyof ReturnType<typeof locale>['filter'];
+    arity: 0 | 1 | 2;
+}[] = [
+    { name: 'isEmpty', localeKey: 'conditionCellIsNull', arity: 0 },
+    { name: 'isNotEmpty', localeKey: 'conditionCellNotNull', arity: 0 },
+    { name: 'textContains', localeKey: 'conditionCellTextContain', arity: 1 },
+    { name: 'textNotContains', localeKey: 'conditionCellTextNotContain', arity: 1 },
+    { name: 'textStartsWith', localeKey: 'conditionCellTextStart', arity: 1 },
+    { name: 'textEndsWith', localeKey: 'conditionCellTextEnd', arity: 1 },
+    { name: 'textEquals', localeKey: 'conditionCellTextEqual', arity: 1 },
+    { name: 'dateEqual', localeKey: 'conditionCellDateEqual', arity: 1 },
+    { name: 'dateBefore', localeKey: 'conditionCellDateBefore', arity: 1 },
+    { name: 'dateAfter', localeKey: 'conditionCellDateAfter', arity: 1 },
+    { name: 'greaterThan', localeKey: 'conditionCellGreater', arity: 1 },
+    { name: 'greaterThanOrEqual', localeKey: 'conditionCellGreaterEqual', arity: 1 },
+    { name: 'lessThan', localeKey: 'conditionCellLess', arity: 1 },
+    { name: 'lessThanOrEqual', localeKey: 'conditionCellLessEqual', arity: 1 },
+    { name: 'equal', localeKey: 'conditionCellEqual', arity: 1 },
+    { name: 'notEqual', localeKey: 'conditionCellNotEqual', arity: 1 },
+    { name: 'between', localeKey: 'conditionCellBetween', arity: 2 },
+    { name: 'notBetween', localeKey: 'conditionCellNotBetween', arity: 2 },
+];
+
+// -1/0/1 ordering: numeric when both sides parse as numbers, case-insensitive
+// string compare otherwise.
+function compareFilterValues(cellValue: string, input: string): number {
+    if (isRealNum(cellValue) && isRealNum(input)) {
+        const a = Number(cellValue);
+        const b = Number(input);
+        if (a === b) return 0;
+        return a < b ? -1 : 1;
+    }
+    const a = cellValue.toLowerCase();
+    const b = input.toLowerCase();
+    if (a === b) return 0;
+    return a < b ? -1 : 1;
+}
+
+// Condition input → canonical YYYY-MM-DD, or null when it doesn't parse as a date.
+function toIsoDay(input: string): string | null {
+    const [, ct, v] = genarate(input);
+    if (ct.t !== 'd') return null;
+    return update('YYYY-MM-DD', v);
+}
+
+// Blank cells (no cell / null / empty / whitespace-only value) match only
+// isEmpty and the negative conditions — each negative is the exact complement
+// of its positive, so notEqual / textNotContains / notBetween keep blank rows
+// visible. Text conditions compare the display string (m) case-insensitively;
+// date conditions only match ct.t === 'd' cells at day granularity. An
+// incomplete condition (blank operand, unparseable date) filters nothing.
+export function matchesFilterCondition(cell: Cell | null | undefined, condition: FilterCondition): boolean {
+    const { conditionName, values } = condition;
+    const arity = FILTER_CONDITION_ITEMS.find((item) => item.name === conditionName)?.arity ?? 0;
+    for (let i = 0; i < arity; i += 1) {
+        if (isRealNull(values[i])) return true;
+    }
+
+    const blank = cell == null || isRealNull(cell.v);
+    const display = blank ? '' : `${cell.m ?? cell.v}`.toLowerCase();
+    const raw = blank ? '' : `${cell.v}`;
+
+    switch (conditionName) {
+        case 'isEmpty':
+            return blank;
+        case 'isNotEmpty':
+            return !blank;
+        case 'textContains':
+            return !blank && display.includes(values[0].toLowerCase());
+        case 'textNotContains':
+            return blank || !display.includes(values[0].toLowerCase());
+        case 'textStartsWith':
+            return !blank && display.startsWith(values[0].toLowerCase());
+        case 'textEndsWith':
+            return !blank && display.endsWith(values[0].toLowerCase());
+        case 'textEquals':
+            return !blank && display === values[0].toLowerCase();
+        case 'dateEqual':
+        case 'dateBefore':
+        case 'dateAfter': {
+            const day = toIsoDay(values[0]);
+            if (day == null) return true;
+            if (cell == null || cell.ct?.t !== 'd' || isRealNull(cell.v)) return false;
+            const cellDay = update('YYYY-MM-DD', cell.v);
+            if (conditionName === 'dateEqual') return cellDay === day;
+            if (conditionName === 'dateBefore') return cellDay < day;
+            return cellDay > day;
+        }
+        case 'greaterThan':
+            return !blank && compareFilterValues(raw, values[0]) > 0;
+        case 'greaterThanOrEqual':
+            return !blank && compareFilterValues(raw, values[0]) >= 0;
+        case 'lessThan':
+            return !blank && compareFilterValues(raw, values[0]) < 0;
+        case 'lessThanOrEqual':
+            return !blank && compareFilterValues(raw, values[0]) <= 0;
+        case 'equal':
+            return !blank && compareFilterValues(raw, values[0]) === 0;
+        case 'notEqual':
+            return blank || compareFilterValues(raw, values[0]) !== 0;
+        case 'between':
+        case 'notBetween': {
+            // Checking both bound orientations normalizes reversed bounds without
+            // needing a min/max on the mixed numeric/string ordering.
+            const within =
+                !blank &&
+                ((compareFilterValues(raw, values[0]) >= 0 && compareFilterValues(raw, values[1]) <= 0) ||
+                    (compareFilterValues(raw, values[1]) >= 0 && compareFilterValues(raw, values[0]) <= 0));
+            return conditionName === 'between' ? within : !within;
+        }
+        default:
+            // A snapshot written by a newer client can carry a condition this
+            // version doesn't know; matching everything beats hiding every row.
+            return true;
+    }
+}
+
+// Hidden-row set for a condition on one column: every visible row in the filter
+// range whose cell fails the condition. Rows hidden by other columns' filters
+// are skipped, mirroring the by-values flow (getFilterColumnValues only offers
+// visible rows). Evaluated on Confirm, not live.
+export function getFilterConditionHiddenRows(
+    ctx: Context,
+    col: number,
+    startRow: number,
+    endRow: number,
+    startCol: number,
+    condition: FilterCondition,
+): Record<string, number> {
+    const { otherHiddenRows } = getFilterHiddenRows(ctx, col, startCol);
+    const rowhidden: Record<string, number> = {};
+    const flowdata = getFlowdata(ctx);
+    if (flowdata == null) return rowhidden;
+    for (let r = startRow + 1; r <= endRow; r += 1) {
+        if (r in otherHiddenRows) continue;
+        if (!matchesFilterCondition(flowdata[r][col], condition)) {
+            rowhidden[r] = 0;
+        }
+    }
+    return rowhidden;
+}
+
 export function getFilterColumnValues(ctx: Context, col: number, startRow: number, endRow: number, startCol: number) {
     const { otherHiddenRows, hiddenRows } = getFilterHiddenRows(ctx, col, startCol);
     const visibleRows: number[] = [];
@@ -494,7 +640,7 @@ export function saveFilter(
     ctx: Context,
     optionState: boolean,
     hiddenRows: Record<string, number>,
-    caljs: unknown,
+    byCondition: FilterCondition | undefined,
     st_r: number,
     ed_r: number,
     cindex: number,
@@ -504,7 +650,7 @@ export function saveFilter(
     const { otherHiddenRows } = getFilterHiddenRows(ctx, cindex, st_c);
     const rowHiddenAll = Object.assign(otherHiddenRows, hiddenRows);
 
-    labelFilterOptionState(ctx, optionState, hiddenRows, caljs, st_r, ed_r, cindex, st_c, ed_c, true);
+    labelFilterOptionState(ctx, optionState, hiddenRows, byCondition, st_r, ed_r, cindex, st_c, ed_c, true);
 
     const cfg = cloneDeep(ctx.config);
     cfg.rowhidden = rowHiddenAll;
