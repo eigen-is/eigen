@@ -66,13 +66,6 @@ export type Context = {
     dataVerificationDropDownList?: boolean;
     conditionRules: ConditionRulesProps; // conditional formatting
 
-    contextMenu: {
-        x?: number;
-        y?: number;
-        headerMenu?: boolean;
-        pageX?: number;
-        pageY?: number;
-    };
     filterContextMenu?: {
         x: number;
         y: number;
@@ -224,8 +217,6 @@ export function defaultContext(refs: RefValues): Context {
         addDefaultRows: 50,
         fullscreenmode: true,
         devicePixelRatio: (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio,
-
-        contextMenu: {},
 
         currentSheetId: '',
         calculateSheetId: '',

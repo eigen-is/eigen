@@ -31,6 +31,7 @@ import {
     selectAll,
     showLinkCard,
 } from '../../state';
+import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropDownList } from '../DataVerification/DropdownList';
 import { FilterOptions } from '../FilterOption';
 import { ImgBoxs } from '../ImgBoxs';
@@ -44,6 +45,7 @@ export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const { info, rightclick } = locale(context);
     const { showDialog } = useDialog();
+    const { open: openCellMenu, anchor: cellMenuAnchor } = useSheetContextMenu('cell');
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
     const [lastRangeText, setLastRangeText] = useState('');
@@ -85,19 +87,13 @@ export const SheetOverlay: React.FC = () => {
 
     const cellAreaContextMenu = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const { nativeEvent } = e;
+            if (!context.allowEdit) return;
             setContext((draftCtx) => {
-                handleContextMenu(
-                    draftCtx,
-                    settings,
-                    nativeEvent,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
-                    'cell',
-                );
+                handleContextMenu(draftCtx, e.nativeEvent, refs.cellArea.current!, 'cell');
             });
+            openCellMenu(e);
         },
-        [refs.workbookContainer, setContext, settings, refs.cellArea],
+        [context.allowEdit, setContext, refs.cellArea, openCellMenu],
     );
 
     const cellAreaDoubleClick = useCallback(
@@ -407,6 +403,7 @@ export const SheetOverlay: React.FC = () => {
                         cursor: context.cellSelectExtending ? 'crosshair' : 'default',
                     }}
                 >
+                    {cellMenuAnchor}
                     <div id="fortune-formula-functionrange" />
                     {context.formulaRangeSelect && (
                         <div

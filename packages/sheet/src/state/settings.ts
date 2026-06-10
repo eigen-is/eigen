@@ -137,8 +137,6 @@ export type Settings = {
     defaultColWidth?: number;
     defaultRowHeight?: number;
     defaultFontSize?: number;
-    cellContextMenu?: string[];
-    headerContextMenu?: string[];
     sheetTabContextMenu?: string[];
     filterContextMenu?: string[];
     generateSheetId?: () => string;
@@ -164,53 +162,6 @@ export const defaultSettings: Required<Settings> = {
     defaultColWidth: 73,
     defaultRowHeight: 19,
     defaultFontSize: 10,
-    cellContextMenu: [
-        'copy', // copy
-        'paste', // paste
-        '|',
-        'insert-row', // insert row
-        'insert-column', // insert column
-        'delete-row', // delete selected row(s)
-        'delete-column', // delete selected column(s)
-        'delete-cell', // delete cell
-        'hide-row', // hide/show selected row(s)
-        'hide-column', // hide/show selected column(s)
-        'set-row-height', // set row height
-        'set-column-width', // set column width
-        '|',
-        'clear', // clear content
-        'sort', // sort selection
-        '|',
-        'comment',
-        '|',
-        'orderAZ', // sort ascending
-        'orderZA', // sort descending
-        'filter', // filter selection
-        'chart', // generate chart
-        'image', // insert image
-        'link', // insert link
-        'data', // data validation
-        'cell-format', // set cell format
-    ], // custom cell right-click menu
-    headerContextMenu: [
-        'copy', // copy
-        'paste', // paste
-        '|',
-        'insert-row', // insert row
-        'insert-column', // insert column
-        'delete-row', // delete selected row(s)
-        'delete-column', // delete selected column(s)
-        'delete-cell', // delete cell
-        'hide-row', // hide/show selected row(s)
-        'hide-column', // hide/show selected column(s)
-        'set-row-height', // set row height
-        'set-column-width', // set column width
-        '|',
-        'clear', // clear content
-        'sort', // sort selection
-        'orderAZ', // sort ascending
-        'orderZA', // sort descending
-    ], // header context menu
     sheetTabContextMenu: [
         'delete',
         'copy',

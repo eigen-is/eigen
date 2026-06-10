@@ -14,9 +14,11 @@ import {
     selectTitlesMap,
     selectTitlesRange,
 } from '../../state';
+import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 
 export const RowHeader: React.FC = () => {
-    const { context, setContext, settings, refs } = useContext(WorkbookContext);
+    const { context, setContext, refs } = useContext(WorkbookContext);
+    const { open: openRowMenu, anchor: rowMenuAnchor } = useSheetContextMenu('row');
     const rowChangeSizeRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -134,19 +136,13 @@ export const RowHeader: React.FC = () => {
 
     const onContextMenu = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const { nativeEvent } = e;
+            if (!context.allowEdit) return;
             setContext((draftCtx) => {
-                handleContextMenu(
-                    draftCtx,
-                    settings,
-                    nativeEvent,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
-                    'rowHeader',
-                );
+                handleContextMenu(draftCtx, e.nativeEvent, refs.cellArea.current!, 'rowHeader');
             });
+            openRowMenu(e);
         },
-        [refs.workbookContainer, setContext, settings, refs.cellArea],
+        [context.allowEdit, setContext, refs.cellArea, openRowMenu],
     );
 
     useEffect(() => {
@@ -256,6 +252,7 @@ export const RowHeader: React.FC = () => {
                     />
                 ))}
             </div>
+            {rowMenuAnchor}
         </div>
     );
 };

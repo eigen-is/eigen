@@ -108,7 +108,6 @@ export function CustomSort() {
                     onClick={() => {
                         setContext((draftCtx: Context) => {
                             sortSelection(draftCtx, ascOrDesc, parseInt(selectedValue, 10));
-                            draftCtx.contextMenu = {};
                         });
                         hideDialog();
                     }}
