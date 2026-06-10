@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-723 primitives across 6 kinds. `packages/sheet` internals are excluded.
+722 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -199,6 +199,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useTeamsHaveChats` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useUnreadChatIds` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
 | `useCollabDocumentInfo` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab.ts |
+| `useYjsUndoHotkeys` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
 | `useYjsUndoState` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-state.ts |
 | `useCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `useCommandResults` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-results.ts |
@@ -210,7 +211,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCommentCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `useCommentLifecycle` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-lifecycle.ts |
 | `useCreateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
-| `useDeleteCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-delete-comment-card.ts |
 | `useOpenCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-open-comment-card.ts |
 | `useUnresolvedCommentCount` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-unresolved-comment-count.ts |
 | `useUpdateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
@@ -498,7 +498,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ColorPickerButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker-button.tsx |
 | `ColorPickerProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
 | `ColumnProps` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
-| `CommentContextMenuItem` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-context-menu.tsx |
+| `CommentContextMenuItem` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-menu-items.tsx |
 | `ConfirmDialogProps` | `@workspace/ui` | packages/ui/src/components/layout/confirm-dialog.tsx |
 | `ContactAutosuggestProps` | `@workspace/ui` | packages/ui/src/components/layout/contacts/types.ts |
 | `DocumentModeButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
@@ -527,7 +527,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (232)
+## Utilities & constants (231)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -640,7 +640,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `writeEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `restoreYjsDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `applyCardPatch` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
-| `deleteCardFromDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-delete-comment-card.ts |
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |

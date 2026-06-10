@@ -1,30 +1,23 @@
-import { useAuth } from '@workspace/lib/auth';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useState } from 'react';
-import type { ColumnItem } from './types';
 
 type AddColumnDialogProps = {
     isOpen: boolean;
     onClose: () => void;
-    onAddColumn: (column: Omit<ColumnItem, 'id' | 'taskIds'>) => void;
+    onAddColumn: (title: string) => void;
 };
 
 export function AddColumnDialog({ isOpen, onClose, onAddColumn }: AddColumnDialogProps) {
     const [title, setTitle] = useState('');
-    const { user } = useAuth();
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim()) return;
 
-        onAddColumn({
-            title: title.trim(),
-            creator: user?.email || '',
-            createdAt: Date.now(),
-        });
+        onAddColumn(title.trim());
 
         setTitle('');
         onClose();

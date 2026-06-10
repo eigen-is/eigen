@@ -4,7 +4,7 @@ import { Check, MessageSquare, MessageSquarePlus, Palette, RotateCcw, Trash2 } f
 import type { ElementType } from 'react';
 import { ColorSwatchRow } from '../notes/color-swatch-row';
 
-export type CommentMenuItem = { card: CommentCard; entry: CommentEntry | undefined };
+export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | undefined };
 
 // Slot for the menu primitives so the same items can render inside either a
 // Radix ContextMenu (slides) or DropdownMenu (stickies, docs, sheets, anchored
@@ -19,7 +19,7 @@ export type CommentMenuPrimitives = {
 
 type CommentMenuItemsProps = {
     primitives: CommentMenuPrimitives;
-    item: CommentMenuItem | null;
+    item: CommentContextMenuItem | null;
     // Noun in user-visible labels: "Edit {noun}", "{Noun} color", "Delete {noun}".
     // Defaults to "comment"; stickies passes "sticky".
     noun?: string;

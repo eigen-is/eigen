@@ -24,11 +24,26 @@ function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
     return out;
 }
 
+function sameCard(a: CommentCard, b: CommentCard): boolean {
+    return (
+        a.title === b.title &&
+        a.description === b.description &&
+        a.color === b.color &&
+        a.chatName === b.chatName &&
+        a.creator === b.creator &&
+        a.createdAt === b.createdAt
+    );
+}
+
 export function useCommentCards(
     doc: Y.Doc | null,
     mapName: 'comments' | 'tasks' = 'comments',
 ): Record<string, CommentCard> {
-    const [cards, setCards] = useState<Record<string, CommentCard>>({});
+    // Read synchronously on first render — a host that mounts after Yjs sync (docs) must see its
+    // cards immediately, or the ?chat= deep-link effect runs once against {} and gives up.
+    const [cards, setCards] = useState<Record<string, CommentCard>>(() =>
+        doc ? readCards(doc.getMap<Y.Map<unknown>>(mapName)) : {},
+    );
 
     useEffect(() => {
         if (!doc) {
@@ -36,7 +51,16 @@ export function useCommentCards(
             return;
         }
         const map = doc.getMap<Y.Map<unknown>>(mapName);
-        const refresh = () => setCards(readCards(map));
+        // Reuse the previous card object when its fields are unchanged, so memoized
+        // card components skip re-rendering when an edit elsewhere rebuilds the map.
+        const refresh = () =>
+            setCards((prev) => {
+                const next = readCards(map);
+                for (const id in next) {
+                    if (prev[id] && sameCard(prev[id], next[id])) next[id] = prev[id];
+                }
+                return next;
+            });
         refresh();
         map.observeDeep(refresh);
         return () => map.unobserveDeep(refresh);
