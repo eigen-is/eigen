@@ -2,8 +2,8 @@ import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { useMediaQuery } from '@workspace/lib/media';
 import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
+import { ToolbarSeparator } from '@workspace/ui/components/layout/toolbar/toolbar-separator';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { Separator } from '@workspace/ui/components/separator';
 import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
@@ -26,8 +26,6 @@ function fontNameFromCell(ff: number | string | undefined): string {
     if (typeof ff === 'number') return EIGEN_FONTS[ff]?.name ?? EIGEN_FONTS[0].name;
     return ff.replace(/['"]/g, '').split(',')[0]?.trim() || EIGEN_FONTS[0].name;
 }
-
-const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
 
 // Quick-format controls mirrored from the docs toolbar, driving the exact same
 // handlers as the Format menu — an extra surface, not a replacement. The menu bar's
