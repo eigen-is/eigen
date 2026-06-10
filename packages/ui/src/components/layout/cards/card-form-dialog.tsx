@@ -74,7 +74,9 @@ function CardFormDialogContent({
         if (!allowAttachments) return;
         const pastedFiles = Array.from(e.clipboardData.files);
         if (pastedFiles.length === 0) return;
-        e.preventDefault();
+        // A text+files clipboard (e.g. copied Excel cells) should still paste its text into
+        // the focused field; only swallow the event when the clipboard is files-only.
+        if (!e.clipboardData.types.includes('text/plain')) e.preventDefault();
         stageFiles(pastedFiles);
     };
 
