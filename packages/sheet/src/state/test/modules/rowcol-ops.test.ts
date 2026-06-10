@@ -84,23 +84,22 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
     test('insertRowCol carries authoritative metadata ops for the target sheet', () => {
         const [ops, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
         const metaPaths = ops.filter((op) => op.id === 'id_1' && op.path.length === 1).map((op) => op.path[0]);
-        expect(metaPaths).toEqual(
-            expect.arrayContaining(['config', 'calcChain', 'hyperlink', 'dataVerification', 'row', 'column']),
-        );
+        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink', 'dataVerification', 'row', 'column']));
         const configOp = ops.find((op) => op.path[0] === 'config');
         expect(configOp?.value).toEqual(next.sheets[0].config);
-        // The state layer shifted the calcChain entry below the inserted row.
-        const calcChainOp = ops.find((op) => op.path[0] === 'calcChain');
-        expect(calcChainOp?.value).toEqual([{ r: 3, c: 1, id: 'id_1' }]);
+        // calcChain scales with formula count and every consumer re-derives it,
+        // so a plain insert must not ship it.
+        expect(metaPaths).not.toContain('calcChain');
     });
 });
 
 describe('BE replay converges with FE state from the slim ops alone', () => {
+    // calcChain is deliberately absent: it isn't shipped on plain inserts/deletes
+    // (the BE replay never reads it, clients re-derive it) — see sheetMetadataOps.
     function expectConverged(replayed: Sheet[], next: Context) {
         for (const [i, sheet] of replayed.entries()) {
             expect(sheet.data).toEqual(next.sheets[i].data);
             expect(sheet.config ?? {}).toEqual(next.sheets[i].config ?? {});
-            expect(sheet.calcChain ?? []).toEqual(next.sheets[i].calcChain ?? []);
             expect(sheet.hyperlink ?? {}).toEqual(next.sheets[i].hyperlink ?? {});
             expect(sheet.dataVerification ?? {}).toEqual(next.sheets[i].dataVerification ?? {});
         }
@@ -147,11 +146,31 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         undoOptions.restoreDeletedCells = true;
         const undoOps = patchToOp(afterUndo, filterPatch(inversePatches), undoOptions, true);
 
-        const replayed = replaySheetsOps(baseSheets, [deleteOps, undoOps]);
+        const replayed: Sheet[] = replaySheetsOps(baseSheets, [deleteOps, undoOps]);
         expect(replayed[0].data).toEqual(base.sheets[0].data);
         // rowlen/rowhidden of the deleted rows aren't derivable from the delete +
         // insert ops alone — the config metadata op must restore them.
         expect(replayed[0].config).toEqual(base.sheets[0].config);
+        // Same for calcChain: the delete dropped the removed rows' entries on
+        // every peer, so the undo must ship the authoritative copy back.
+        expect(replayed[0].calcChain).toEqual(base.sheets[0].calcChain);
+    });
+
+    test('insert inside a multi-row merge stamps the new null cells on the replay side', () => {
+        // The engine fills the inserted row with nulls; the mc stamps for cells
+        // inside the expanded merge must be applied as full-cell ops before the
+        // ['data', r, c, 'mc'] merge ops, or the replay walks into a null cell.
+        const op = { type: 'row', index: 3, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+        const base = richContext();
+        base.sheets[0].config!.merge = { '2_2': { r: 2, c: 2, rs: 2, cs: 2 } };
+        base.sheets[0].data![2]![2] = { v: 6, mc: { r: 2, c: 2, rs: 2, cs: 2 } };
+        base.sheets[0].data![2]![3] = { mc: { r: 2, c: 2 } };
+        base.sheets[0].data![3]![2] = { mc: { r: 2, c: 2 } };
+        base.sheets[0].data![3]![3] = { mc: { r: 2, c: 2 } };
+        const baseSheets = structuredClone(base.sheets);
+        const [next, patches] = produceWithPatches(base, (ctx: Context) => insertRowCol(ctx, op));
+        const ops = patchToOp(next, filterPatch(patches), { insertRowColOp: op });
+        expectConverged(replaySheetsOps(baseSheets, [ops]), next);
     });
 });
 
