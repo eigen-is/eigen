@@ -178,11 +178,9 @@ function TextSubmenu() {
                             value=""
                             resetLabel="Default"
                             onChange={(color) => {
-                                if (color) {
-                                    setContext((ctx) => {
-                                        handleTextColor(ctx, refs.cellInput.current!, color);
-                                    });
-                                }
+                                setContext((ctx) => {
+                                    handleTextColor(ctx, refs.cellInput.current!, color);
+                                });
                             }}
                         />
                     </DropdownMenuSubContent>
