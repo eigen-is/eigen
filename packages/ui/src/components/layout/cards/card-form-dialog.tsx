@@ -1,11 +1,16 @@
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import type { ChatAttachment } from '@workspace/lib/types/chat';
+import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { Paperclip } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
+import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 
 type CardFormDialogProps = {
     open: boolean;
@@ -17,7 +22,14 @@ type CardFormDialogProps = {
     initialTitle?: string;
     initialDescription?: string;
     initialColor?: string;
-    onSave: (patch: { title?: string; description?: string; color?: string }) => void | Promise<void>;
+    // Attachment staging is purely local — Files/DrivePaths are handed to onSave as
+    // drafts; the host resolves them (upload/copy) at save time. Cancel touches nothing.
+    allowAttachments?: boolean;
+    initialAttachments?: ChatAttachment[];
+    onSave: (
+        patch: { title?: string; description?: string; color?: string },
+        attachments?: CardAttachmentDraft[],
+    ) => void | Promise<void>;
     dialogTitle?: string;
     placeholderTitle?: string;
     placeholderDescription?: string;
@@ -31,6 +43,8 @@ function CardFormDialogContent({
     initialTitle,
     initialDescription,
     initialColor,
+    allowAttachments,
+    initialAttachments,
     onOpenChange,
     onSave,
     dialogTitle,
@@ -41,6 +55,8 @@ function CardFormDialogContent({
     const [title, setTitle] = useState(initialTitle);
     const [description, setDescription] = useState(initialDescription);
     const [color, setColor] = useState(initialColor);
+    const [drafts, setDrafts] = useState<CardAttachmentDraft[]>(initialAttachments);
+    const [pickerOpen, setPickerOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     // Capture the canonical TipTap-emitted form of the seeded description on
     // first mount. Old plain-text descriptions get wrapped in <p>...</p> by
@@ -53,6 +69,11 @@ function CardFormDialogContent({
         e.preventDefault();
         if (!title.trim()) return;
         const patch: { title?: string; description?: string; color?: string } = {};
+        // Edit mode seeds drafts with the existing ChatAttachment objects, so identity
+        // compare detects any removal/addition without a deep equality pass.
+        const draftsChanged =
+            drafts.length !== initialAttachments.length || drafts.some((d, i) => d !== initialAttachments[i]);
+        let attachments: CardAttachmentDraft[] | undefined;
         if (mode === 'create') {
             // A new card must carry concrete values: a trimmed title and the
             // seeded color (which the user may never touch). The diff below would
@@ -60,14 +81,16 @@ function CardFormDialogContent({
             patch.title = title.trim();
             patch.description = description;
             patch.color = color;
+            if (drafts.length > 0) attachments = drafts;
         } else {
             if (title !== initialTitle) patch.title = title;
             if (description !== canonicalInitialDescription.current) patch.description = description;
             if (color !== initialColor) patch.color = color;
+            if (draftsChanged) attachments = drafts;
         }
         setIsSubmitting(true);
         try {
-            await onSave(patch);
+            await onSave(patch, attachments);
             onOpenChange(false);
         } finally {
             setIsSubmitting(false);
@@ -118,6 +141,32 @@ function CardFormDialogContent({
                         showReset={false}
                     />
                 </div>
+                {allowAttachments && (
+                    <div className="grid gap-2">
+                        <Label>Attachments</Label>
+                        <AttachmentDraftChips
+                            items={drafts}
+                            onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
+                        />
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-fit"
+                            onClick={() => setPickerOpen(true)}
+                        >
+                            <Paperclip className="h-4 w-4 mr-1" /> Add attachment
+                        </Button>
+                        <DrivePickerWithUpload
+                            open={pickerOpen}
+                            onOpenChange={setPickerOpen}
+                            multiSelect
+                            multiple
+                            onPickFromDrive={(paths) => setDrafts((prev) => [...prev, ...paths])}
+                            onPickFromDevice={(files) => setDrafts((prev) => [...prev, ...files])}
+                        />
+                    </div>
+                )}
             </div>
             <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -138,6 +187,8 @@ export function CardFormDialog({
     initialTitle = '',
     initialDescription = '',
     initialColor = EIGEN_STICKIES_COLORS[0][1].value,
+    allowAttachments = false,
+    initialAttachments = [],
     onSave,
     dialogTitle = 'New card',
     placeholderTitle = 'Enter title',
@@ -153,6 +204,8 @@ export function CardFormDialog({
                         initialTitle={initialTitle}
                         initialDescription={initialDescription}
                         initialColor={initialColor}
+                        allowAttachments={allowAttachments}
+                        initialAttachments={initialAttachments}
                         onOpenChange={onOpenChange}
                         onSave={onSave}
                         dialogTitle={dialogTitle}

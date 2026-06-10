@@ -4,11 +4,42 @@ import { MessageSquareOff, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../select';
 import { Tabs, TabsList, TabsTrigger } from '../../tabs';
+import { useAttachmentMeta } from '../attachment/use-attachment-meta';
 import { NoteCard } from '../notes/note-card';
 import { PropertiesPanel } from '../properties-panel';
 import { TooltipButton } from '../toolbar/tooltip-button';
 
 type StatusFilter = 'open' | 'resolved' | 'all';
+
+// Row component so each card gets its own useAttachmentMeta call (hooks can't run in the map).
+function PanelCard({
+    card,
+    entry,
+    title,
+    onClick,
+    onContextMenu,
+}: {
+    card: CommentCard;
+    entry: CommentEntry | undefined;
+    title: string;
+    onClick?: () => void;
+    onContextMenu?: (e: React.MouseEvent) => void;
+}) {
+    const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
+    return (
+        <NoteCard
+            title={title}
+            description={card.description}
+            color={card.color}
+            replyCount={entry?.messageCount}
+            resolved={entry?.status === 'resolved'}
+            coverThumbnailUrl={coverThumbnailUrl}
+            attachmentCount={attachmentCount}
+            onClick={onClick}
+            onContextMenu={onContextMenu}
+        />
+    );
+}
 
 type CommentPanelProps = {
     cards: Record<string, CommentCard>;
@@ -89,13 +120,11 @@ export function CommentPanel({
             ) : (
                 <div className="p-2 space-y-2">
                     {visible.map(({ card, entry }) => (
-                        <NoteCard
+                        <PanelCard
                             key={card.id}
+                            card={card}
+                            entry={entry}
                             title={anchorTexts.get(card.id) || card.title || 'Comment'}
-                            description={card.description}
-                            color={card.color}
-                            replyCount={entry?.messageCount}
-                            resolved={entry?.status === 'resolved'}
                             onClick={() => onCommentClick?.(card.id)}
                             onContextMenu={
                                 onCommentContextMenu ? (e) => onCommentContextMenu(e, card, entry) : undefined
