@@ -7,6 +7,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Paperclip } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
@@ -149,15 +150,14 @@ function CardFormDialogContent({
             <DialogFooter>
                 {allowAttachments && (
                     <>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="mr-auto shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
+                        <TooltipButton
+                            icon={Paperclip}
+                            tooltipText="Add attachment"
+                            variant="outline"
+                            className="mr-auto h-9 w-9 text-muted-foreground hover:text-foreground"
                             onClick={() => setPickerOpen(true)}
                             type="button"
-                        >
-                            <Paperclip className="h-4 w-4" />
-                        </Button>
+                        />
                         <DrivePickerWithUpload
                             open={pickerOpen}
                             onOpenChange={setPickerOpen}
