@@ -19,6 +19,7 @@ import {
     handleBold,
     handleBorder,
     handleClearFormat,
+    handleFont,
     handleHorizontalAlign,
     handleItalic,
     handleMerge,
@@ -160,9 +161,7 @@ function TextSubmenu() {
                                 key={o}
                                 onClick={() => {
                                     setContext((ctx) => {
-                                        const d = getFlowdata(ctx);
-                                        if (!d) return;
-                                        updateFormat(ctx, refs.cellInput.current!, d, 'ff', o);
+                                        handleFont(ctx, refs.cellInput.current!, o);
                                     });
                                 }}
                             >
@@ -179,11 +178,9 @@ function TextSubmenu() {
                             value=""
                             resetLabel="Default"
                             onChange={(color) => {
-                                if (color) {
-                                    setContext((ctx) => {
-                                        handleTextColor(ctx, refs.cellInput.current!, color);
-                                    });
-                                }
+                                setContext((ctx) => {
+                                    handleTextColor(ctx, refs.cellInput.current!, color);
+                                });
                             }}
                         />
                     </DropdownMenuSubContent>

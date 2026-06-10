@@ -6,7 +6,6 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import './index.css';
 import { debounce } from 'es-toolkit/compat';
 import { type SetContextOptions, WorkbookContext } from '../../context';
-import { RowColError } from '../../engine';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -22,15 +21,15 @@ import {
     getSheetIndex,
     handleCellAreaDoubleClick,
     handleCellAreaMouseDown,
-    handleContextMenu,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
-    insertRowCol,
     locale,
     onCellsMoveStart,
     selectAll,
     showLinkCard,
+    tryInsertRowCol,
 } from '../../state';
+import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropDownList } from '../DataVerification/DropdownList';
 import { FilterOptions } from '../FilterOption';
 import { ImgBoxs } from '../ImgBoxs';
@@ -42,8 +41,9 @@ import { RowHeader } from './RowHeader';
 
 export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
-    const { info, rightclick } = locale(context);
+    const { info } = locale(context);
     const { showDialog } = useDialog();
+    const { onContextMenu: cellAreaContextMenu, anchor: cellMenuAnchor } = useSheetContextMenu('cell');
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
     const [lastRangeText, setLastRangeText] = useState('');
@@ -81,23 +81,6 @@ export const SheetOverlay: React.FC = () => {
             }
         },
         [setContext, refs.globalCache, refs.cellInput, refs.cellArea, refs.fxInput, refs.canvas],
-    );
-
-    const cellAreaContextMenu = useCallback(
-        (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const { nativeEvent } = e;
-            setContext((draftCtx) => {
-                handleContextMenu(
-                    draftCtx,
-                    settings,
-                    nativeEvent,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
-                    'cell',
-                );
-            });
-        },
-        [refs.workbookContainer, setContext, settings, refs.cellArea],
     );
 
     const cellAreaDoubleClick = useCallback(
@@ -243,15 +226,12 @@ export const SheetOverlay: React.FC = () => {
         };
         setContext(
             (draftCtx) => {
-                try {
-                    insertRowCol(draftCtx, insertRowColOp, false);
-                } catch (err) {
-                    if (err instanceof RowColError && err.code === 'maxExceeded') showAlert(rightclick.rowOverLimit);
-                }
+                const error = tryInsertRowCol(draftCtx, insertRowColOp, false);
+                if (error) showAlert(error, 'ok');
             },
             { insertRowColOp },
         );
-    }, [context, rightclick.rowOverLimit, setContext, showAlert]);
+    }, [context, setContext, showAlert]);
 
     useEffect(() => {
         setContext((draftCtx) => {
@@ -407,6 +387,7 @@ export const SheetOverlay: React.FC = () => {
                         cursor: context.cellSelectExtending ? 'crosshair' : 'default',
                     }}
                 >
+                    {cellMenuAnchor}
                     <div id="fortune-formula-functionrange" />
                     {context.formulaRangeSelect && (
                         <div

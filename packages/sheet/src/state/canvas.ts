@@ -1649,7 +1649,7 @@ export class Canvas {
         const pos_x = startX + offsetLeft;
         const pos_y = startY + offsetTop + 1;
 
-        const fontset = getFontSet(cell, this.sheetCtx.defaultFontSize, this.sheetCtx);
+        const fontset = getFontSet(cell, this.sheetCtx.defaultFontSize);
         renderCtx.font = fontset;
 
         renderCtx.save();

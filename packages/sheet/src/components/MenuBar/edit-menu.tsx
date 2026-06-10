@@ -7,28 +7,23 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
-import { RowColError } from '../../engine';
 import { useAlert } from '../../hooks/useAlert';
-import { useDialog } from '../../hooks/useDialog';
 import {
-    deleteRowCol,
-    deleteSelectedCellText,
-    getSheetIndex,
+    clearSelectedContents,
+    flushPendingCopy,
     handleCopy,
     handleCut,
     handleFormatPainter,
     handlePasteByClick,
-    isAllowEdit,
-    jfrefreshgrid,
     locale,
-    removeActiveImage,
+    readClipboardText,
+    tryDeleteRowCol,
 } from '../../state';
 
 export function EditMenu() {
     const { context, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
-    const { showDialog } = useDialog();
-    const { toolbar, rightclick, button, generalDialog } = locale(context);
+    const { toolbar, button } = locale(context);
 
     const selection = context.selections?.[0];
     const canUndo = refs.globalCache.undoList.length > 0;
@@ -49,6 +44,7 @@ export function EditMenu() {
                 onClick={() => {
                     setContext((draftCtx) => {
                         handleCut(draftCtx);
+                        flushPendingCopy();
                     });
                 }}
             >
@@ -58,27 +54,21 @@ export function EditMenu() {
                 onClick={() => {
                     setContext((draftCtx) => {
                         handleCopy(draftCtx);
+                        flushPendingCopy();
                     });
                 }}
             >
-                {rightclick.copy}
+                Copy
             </DropdownMenuItem>
             <DropdownMenuItem
                 onClick={async () => {
-                    let clipboardText = '';
-                    const sessionClipboardText = sessionStorage.getItem('localClipboard') || '';
-                    try {
-                        clipboardText = await navigator.clipboard.readText();
-                    } catch {
-                        console.warn('Clipboard access blocked. Attempting to use sessionStorage fallback.');
-                    }
-                    const finalText = clipboardText || sessionClipboardText;
+                    const text = await readClipboardText();
                     setContext((draftCtx) => {
-                        handlePasteByClick(draftCtx, finalText);
+                        handlePasteByClick(draftCtx, text);
                     });
                 }}
             >
-                {rightclick.paste}
+                Paste
             </DropdownMenuItem>
             <DropdownMenuItem
                 onClick={() => {
@@ -98,25 +88,12 @@ export function EditMenu() {
                     <DropdownMenuItem
                         onClick={() => {
                             setContext((draftCtx) => {
-                                const allowEdit = isAllowEdit(draftCtx);
-                                if (!allowEdit) return;
-                                if (draftCtx.activeImg != null) {
-                                    removeActiveImage(draftCtx);
-                                } else {
-                                    const msg = deleteSelectedCellText(draftCtx);
-                                    if (msg === 'partMC') {
-                                        showDialog(generalDialog.partiallyError, 'ok');
-                                    } else if (msg === 'allowEdit') {
-                                        showDialog(generalDialog.readOnlyError, 'ok');
-                                    } else if (msg === 'dataNullError') {
-                                        showDialog(generalDialog.dataNullError, 'ok');
-                                    }
-                                }
-                                jfrefreshgrid(draftCtx, null, undefined);
+                                const error = clearSelectedContents(draftCtx);
+                                if (error) showAlert(error, 'ok');
                             });
                         }}
                     >
-                        {rightclick.clearContent}
+                        Clear contents
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
@@ -130,24 +107,14 @@ export function EditMenu() {
                             };
                             setContext(
                                 (draftCtx) => {
-                                    const index = getSheetIndex(draftCtx, context.currentSheetId) as number;
-                                    if ((draftCtx.sheets[index].data?.length ?? 0) <= 1) {
-                                        showAlert(rightclick.cannotDeleteAllRow, 'ok');
-                                        return;
-                                    }
-                                    try {
-                                        deleteRowCol(draftCtx, deleteRowColOp);
-                                    } catch (e) {
-                                        if (e instanceof RowColError && e.code === 'readOnly') {
-                                            showAlert(rightclick.cannotDeleteRowReadOnly, 'ok');
-                                        }
-                                    }
+                                    const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
+                                    if (error) showAlert(error, 'ok');
                                 },
                                 { deleteRowColOp },
                             );
                         }}
                     >
-                        {rightclick.row}
+                        Row
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
@@ -161,24 +128,14 @@ export function EditMenu() {
                             };
                             setContext(
                                 (draftCtx) => {
-                                    const index = getSheetIndex(draftCtx, context.currentSheetId) as number;
-                                    if ((draftCtx.sheets[index].data?.[0]?.length ?? 0) <= 1) {
-                                        showAlert(rightclick.cannotDeleteAllColumn, 'ok');
-                                        return;
-                                    }
-                                    try {
-                                        deleteRowCol(draftCtx, deleteRowColOp);
-                                    } catch (e) {
-                                        if (e instanceof RowColError && e.code === 'readOnly') {
-                                            showAlert(rightclick.cannotDeleteColumnReadOnly, 'ok');
-                                        }
-                                    }
+                                    const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
+                                    if (error) showAlert(error, 'ok');
                                 },
                                 { deleteRowColOp },
                             );
                         }}
                     >
-                        {rightclick.column}
+                        Column
                     </DropdownMenuItem>
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
