@@ -13,14 +13,15 @@ import {
     handleColFreezeHandleMouseDown,
     handleColSizeHandleMouseDown,
     handleColumnHeaderMouseDown,
-    handleContextMenu,
     isAllowEdit,
     selectTitlesMap,
     selectTitlesRange,
 } from '../../state';
+import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 
 export const ColumnHeader: React.FC = () => {
-    const { context, setContext, settings, refs } = useContext(WorkbookContext);
+    const { context, setContext, refs } = useContext(WorkbookContext);
+    const { onContextMenu, anchor: columnMenuAnchor } = useSheetContextMenu('column');
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const colChangeSizeRef = useRef<HTMLDivElement>(null);
@@ -153,23 +154,6 @@ export const ColumnHeader: React.FC = () => {
         [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
     );
 
-    const onContextMenu = useCallback(
-        (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const { nativeEvent } = e;
-            setContext((draftCtx) => {
-                handleContextMenu(
-                    draftCtx,
-                    settings,
-                    nativeEvent,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
-                    'columnHeader',
-                );
-            });
-        },
-        [refs.workbookContainer, setContext, settings, refs.cellArea],
-    );
-
     useEffect(() => {
         const s = context.selections;
         if (s == null) return;
@@ -260,20 +244,7 @@ export const ColumnHeader: React.FC = () => {
                         )}
                     >
                         {allowEditRef.current && (
-                            <span
-                                className="header-arrow"
-                                onClick={(e) => {
-                                    const { pageX, pageY } = e;
-                                    setContext((ctx) => {
-                                        ctx.contextMenu = {
-                                            pageX,
-                                            pageY,
-                                            headerMenu: true,
-                                        };
-                                    });
-                                }}
-                                tabIndex={0}
-                            >
+                            <span className="header-arrow" onClick={onContextMenu} tabIndex={0}>
                                 <ChevronDown
                                     width={12}
                                     height={12}
@@ -304,6 +275,7 @@ export const ColumnHeader: React.FC = () => {
                     />
                 ))}
             </div>
+            {columnMenuAnchor}
         </div>
     );
 };

@@ -22,7 +22,6 @@ import {
     getSheetIndex,
     handleCellAreaDoubleClick,
     handleCellAreaMouseDown,
-    handleContextMenu,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
     insertRowCol,
@@ -31,6 +30,7 @@ import {
     selectAll,
     showLinkCard,
 } from '../../state';
+import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropDownList } from '../DataVerification/DropdownList';
 import { FilterOptions } from '../FilterOption';
 import { ImgBoxs } from '../ImgBoxs';
@@ -44,6 +44,7 @@ export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const { info, rightclick } = locale(context);
     const { showDialog } = useDialog();
+    const { onContextMenu: cellAreaContextMenu, anchor: cellMenuAnchor } = useSheetContextMenu('cell');
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
     const [lastRangeText, setLastRangeText] = useState('');
@@ -81,23 +82,6 @@ export const SheetOverlay: React.FC = () => {
             }
         },
         [setContext, refs.globalCache, refs.cellInput, refs.cellArea, refs.fxInput, refs.canvas],
-    );
-
-    const cellAreaContextMenu = useCallback(
-        (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const { nativeEvent } = e;
-            setContext((draftCtx) => {
-                handleContextMenu(
-                    draftCtx,
-                    settings,
-                    nativeEvent,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
-                    'cell',
-                );
-            });
-        },
-        [refs.workbookContainer, setContext, settings, refs.cellArea],
     );
 
     const cellAreaDoubleClick = useCallback(
@@ -407,6 +391,7 @@ export const SheetOverlay: React.FC = () => {
                         cursor: context.cellSelectExtending ? 'crosshair' : 'default',
                     }}
                 >
+                    {cellMenuAnchor}
                     <div id="fortune-formula-functionrange" />
                     {context.formulaRangeSelect && (
                         <div

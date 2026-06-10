@@ -1,21 +1,16 @@
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
 import type { CellMatrix } from '../../engine/types';
-import { hideCRCount, removeActiveImage } from '..';
+import { hideCRCount } from '..';
 import { type Context, getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
 import { handleCut } from '../modules/clipboard';
 import { handleFormulaInput } from '../modules/formula-ui';
 import { jfrefreshgrid } from '../modules/refresh';
-import {
-    deleteSelectedCellText,
-    moveHighlightCell,
-    moveHighlightRange,
-    selectAll,
-    selectionCache,
-} from '../modules/selection';
+import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
 import { handleBold } from '../modules/toolbar';
 import type { GlobalCache, Selection } from '../types';
 import { getNowDateTime, getSheetIndex, isAllowEdit } from '../utils';
+import { clearSelectedContents } from './clear';
 import { handleCopy } from './copy';
 
 export function handleGlobalEnter(
@@ -380,7 +375,7 @@ export function handleGlobalKeyDown(
     ctx.selectionActive = false;
     const kcode = e.keyCode;
     const kstr = e.key;
-    if (!isEmpty(ctx.contextMenu) || ctx.filterContextMenu) {
+    if (ctx.filterContextMenu) {
         return;
     }
 
@@ -469,17 +464,9 @@ export function handleGlobalKeyDown(
         (kstr === 'ArrowUp' || kstr === 'ArrowDown' || kstr === 'ArrowLeft' || kstr === 'ArrowRight')
     ) {
         handleShiftWithArrowKey(ctx, e);
-    } else if (kstr === 'Escape') {
-        ctx.contextMenu = {};
     } else if (kstr === 'Delete' || kstr === 'Backspace') {
         if (!allowEdit) return;
-        if (ctx.activeImg != null) {
-            removeActiveImage(ctx);
-        } else {
-            deleteSelectedCellText(ctx);
-        }
-
-        jfrefreshgrid(ctx, null, undefined);
+        clearSelectedContents(ctx);
         e.preventDefault();
     } else if (kstr === 'ArrowUp' || kstr === 'ArrowDown' || kstr === 'ArrowLeft' || kstr === 'ArrowRight') {
         handleArrowKey(ctx, e);
