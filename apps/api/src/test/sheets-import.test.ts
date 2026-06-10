@@ -787,6 +787,121 @@ describe('Sheets xlsx import/convert', () => {
         expect(a1?.v?.v).toBe('GSV Assets\nCanva');
     });
 
+    test('convert imports hidden columns from col min/max ranges', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Hidden');
+        ws.getCell('A1').value = 'visible';
+        ws.getCell('E1').value = 'after';
+        // Adjacent hidden columns C+D serialize as one <col min="3" max="4" hidden="1">
+        // range element; exceljs expands ranges back to per-column flags on read.
+        ws.getColumn(3).hidden = true;
+        ws.getColumn(4).hidden = true;
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'hiddencols.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        expect(sheets[0].config?.colhidden).toEqual({ '2': 0, '3': 0 });
+        expect(sheets[0].config?.rowhidden).toBeUndefined();
+    });
+
+    test('convert imports hidden rows including style-only hidden rows', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Hidden');
+        ws.getCell('A1').value = 'top';
+        ws.getCell('A2').value = 'hidden with data';
+        ws.getRow(2).hidden = true;
+        // Row 5 is hidden but carries no cell values, so eachRow({includeEmpty:false})
+        // skips it. Excel writes bare <row r="5" hidden="1"/> elements for such rows;
+        // exceljs's writer only keeps a valueless row when it has a height, so set one
+        // to make the fixture round-trip the same shape.
+        ws.getRow(5).hidden = true;
+        ws.getRow(5).height = 15;
+        ws.getCell('A7').value = 'bottom';
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'hiddenrows.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        expect(sheets[0].config?.rowhidden).toEqual({ '1': 0, '4': 0 });
+        expect(sheets[0].config?.colhidden).toBeUndefined();
+    });
+
+    test('convert maps frozen panes onto sheet.frozen', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const rowOnly = workbook.addWorksheet('RowOnly');
+        rowOnly.getCell('A1').value = 'header';
+        rowOnly.views = [{ state: 'frozen', ySplit: 1 }];
+        const colOnly = workbook.addWorksheet('ColOnly');
+        colOnly.getCell('A1').value = 'label';
+        colOnly.views = [{ state: 'frozen', xSplit: 1 }];
+        const both = workbook.addWorksheet('Both');
+        both.getCell('A1').value = 'corner';
+        both.views = [{ state: 'frozen', xSplit: 3, ySplit: 2 }];
+        const plain = workbook.addWorksheet('Plain');
+        plain.getCell('A1').value = 'free';
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'frozen.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+
+        // Excel semantics: ySplit=N freezes the top N rows, xSplit=M the left M columns.
+        // Engine range carries the 0-based index of the LAST frozen row/col.
+        expect(sheets[0].frozen).toEqual({ type: 'rangeRow', range: { row_focus: 0, column_focus: 0 } });
+        expect(sheets[1].frozen).toEqual({ type: 'rangeColumn', range: { row_focus: 0, column_focus: 0 } });
+        expect(sheets[2].frozen).toEqual({ type: 'rangeBoth', range: { row_focus: 1, column_focus: 2 } });
+        expect(sheets[3].frozen).toBeUndefined();
+    });
+
     test('import into another user document without write permission returns 403', async () => {
         const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
         const initialFile = new File([initial], 'alice.xlsx', {
