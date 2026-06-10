@@ -22,7 +22,6 @@ import {
     getSheetIndex,
     handleCellAreaDoubleClick,
     handleCellAreaMouseDown,
-    handleContextMenu,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
     insertRowCol,
@@ -45,7 +44,7 @@ export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const { info, rightclick } = locale(context);
     const { showDialog } = useDialog();
-    const { open: openCellMenu, anchor: cellMenuAnchor } = useSheetContextMenu('cell');
+    const { onContextMenu: cellAreaContextMenu, anchor: cellMenuAnchor } = useSheetContextMenu('cell');
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
     const [lastRangeText, setLastRangeText] = useState('');
@@ -83,17 +82,6 @@ export const SheetOverlay: React.FC = () => {
             }
         },
         [setContext, refs.globalCache, refs.cellInput, refs.cellArea, refs.fxInput, refs.canvas],
-    );
-
-    const cellAreaContextMenu = useCallback(
-        (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            if (!context.allowEdit) return;
-            setContext((draftCtx) => {
-                handleContextMenu(draftCtx, e.nativeEvent, refs.cellArea.current!, 'cell');
-            });
-            openCellMenu(e);
-        },
-        [context.allowEdit, setContext, refs.cellArea, openCellMenu],
     );
 
     const cellAreaDoubleClick = useCallback(
