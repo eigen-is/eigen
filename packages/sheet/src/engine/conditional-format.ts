@@ -39,14 +39,16 @@ function cellValueAt(data: CellMatrix, r: number, c: number) {
 
 // Merge a partial cell style into the map, creating the entry if absent. The CF evaluator
 // applies overlapping rules in order, so later rules layer onto earlier entries instead of
-// overwriting them — matching canvas-painter behaviour.
+// overwriting them — matching canvas-painter behaviour. Null/undefined fields are skipped:
+// a later rule that sets only a fill must not erase the text color an earlier rule
+// contributed (Excel resolves each style property independently by rule precedence, and
+// the xlsx importer relies on this by emitting rules in ascending-precedence order).
 function applyCellStyle(map: ComputeMap, r: number, c: number, style: CellFormatStyle) {
     const key = `${r}_${c}`;
-    if (key in map) {
-        Object.assign(map[key], style);
-    } else {
-        map[key] = { ...style };
-    }
+    const entry = map[key] ?? (map[key] = {});
+    if (style.textColor != null) entry.textColor = style.textColor;
+    if (style.cellColor != null) entry.cellColor = style.cellColor;
+    if (style.dataBar != null) entry.dataBar = style.dataBar;
 }
 
 // Parse "#rrggbb" or "rgb(R, G, B)" into [r, g, b].
@@ -247,8 +249,11 @@ export function evaluateConditionalFormat(
                 // check condition type
                 if (
                     conditionName === 'greaterThan' ||
+                    conditionName === 'greaterThanOrEqual' ||
                     conditionName === 'lessThan' ||
+                    conditionName === 'lessThanOrEqual' ||
                     conditionName === 'equal' ||
+                    conditionName === 'notEqual' ||
                     conditionName === 'textContains'
                 ) {
                     // iterate over apply range and evaluate
@@ -265,10 +270,16 @@ export function evaluateConditionalFormat(
                             let matches = false;
                             if (conditionName === 'greaterThan') {
                                 matches = cell.v > conditionValue0;
+                            } else if (conditionName === 'greaterThanOrEqual') {
+                                matches = cell.v >= conditionValue0;
                             } else if (conditionName === 'lessThan') {
                                 matches = cell.v < conditionValue0;
+                            } else if (conditionName === 'lessThanOrEqual') {
+                                matches = cell.v <= conditionValue0;
                             } else if (conditionName === 'equal') {
                                 matches = cell.v.toString() === conditionValue0;
+                            } else if (conditionName === 'notEqual') {
+                                matches = cell.v.toString() !== conditionValue0;
                             } else if (conditionName === 'textContains') {
                                 matches = cell.v.toString().indexOf(String(conditionValue0)) !== -1;
                             }
@@ -277,8 +288,8 @@ export function evaluateConditionalFormat(
                             }
                         }
                     }
-                } else if (conditionName === 'between') {
-                    // Coerce to number — `between` only compares against numeric cell values
+                } else if (conditionName === 'between' || conditionName === 'notBetween') {
+                    // Coerce to number — both variants only compare against numeric cell values
                     // (`typeof cell.v === 'number'` guard below) and form input arrives as string.
                     const v0 = Number(conditionValue0);
                     const v1 = Number(conditionValue1);
@@ -292,10 +303,11 @@ export function evaluateConditionalFormat(
                             }
                             // cell value
                             const cell = data[r][c];
-                            if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v)) {
+                            if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v) || typeof cell.v !== 'number') {
                                 continue;
                             }
-                            if (typeof cell.v === 'number' && cell.v >= vSmall && cell.v <= vBig) {
+                            const within = cell.v >= vSmall && cell.v <= vBig;
+                            if (conditionName === 'between' ? within : !within) {
                                 applyCellStyle(computeMap, r, c, { textColor, cellColor });
                             }
                         }

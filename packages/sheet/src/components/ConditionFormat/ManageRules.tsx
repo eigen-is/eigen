@@ -22,9 +22,13 @@ function formatRanges(ranges: SingleRange[]): string {
 
 const RULE_LABELS: Record<string, string> = {
     greaterThan: 'Greater than',
+    greaterThanOrEqual: 'Greater than or equal to',
     lessThan: 'Less than',
+    lessThanOrEqual: 'Less than or equal to',
     between: 'Between',
+    notBetween: 'Not between',
     equal: 'Equal to',
+    notEqual: 'Not equal to',
     textContains: 'Text contains',
     occurrenceDate: 'Date is',
     duplicateValue: 'Duplicate values',
@@ -43,12 +47,16 @@ function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
 
     switch (rule.conditionName) {
         case 'greaterThan':
+        case 'greaterThanOrEqual':
         case 'lessThan':
+        case 'lessThanOrEqual':
         case 'equal':
+        case 'notEqual':
         case 'textContains':
         case 'occurrenceDate':
             return values[0] != null ? `${label} ${values[0]}` : label;
         case 'between':
+        case 'notBetween':
             return values.length >= 2 ? `${label} ${values[0]} and ${values[1]}` : label;
         case 'top10':
         case 'top10_percent':
