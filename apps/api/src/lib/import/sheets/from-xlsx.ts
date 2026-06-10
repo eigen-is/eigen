@@ -1,8 +1,24 @@
 /// <reference path="../modules.d.ts" />
 
-import type { BorderSide, CellBorderInfo, Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
-import { parseA1Range, update } from '@workspace/sheet/engine';
-import type { Alignment, Border, CellRichTextValue, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
+import type {
+    BorderSide,
+    CellBorderInfo,
+    Cell as FortuneCell,
+    Sheet,
+    SheetConfig,
+    SingleRange,
+} from '@workspace/lib/sheets';
+import { parseA1Range, toA1, update } from '@workspace/sheet/engine';
+import type {
+    Alignment,
+    AutoFilter,
+    Border,
+    CellRichTextValue,
+    CellValue,
+    Workbook,
+    Worksheet,
+    Cell as XlsxCell,
+} from 'exceljs';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -197,7 +213,28 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
         }
     }
 
+    // Only the autofilter SPAN imports — per-column criteria (<filterColumn>) need the
+    // editor's condition model. A criteria-less autofilter matches what a fresh filter
+    // enable writes (state/modules/filter.ts createFilter): filterRange only, no
+    // per-column filter entries.
+    const filterRange = autoFilterToFilterRange(worksheet.autoFilter);
+    if (filterRange) sheet.filterRange = filterRange;
+
     return sheet;
+}
+
+// exceljs reads <autoFilter ref> back as the raw A1 ref string — Excel writes absolute
+// refs like "$B$8:$L$432", which parseA1Range's optional $ anchors accept. Workbooks
+// built programmatically can instead still carry the setter's {from, to} object with
+// string addresses or 1-based {row, column} pairs.
+function autoFilterToFilterRange(autoFilter: AutoFilter | undefined): SingleRange | null {
+    if (autoFilter == null) return null;
+    const toRef = (a: string | { row: number; column: number }) =>
+        typeof a === 'string' ? a : toA1(a.row - 1, a.column - 1);
+    const ref = typeof autoFilter === 'string' ? autoFilter : `${toRef(autoFilter.from)}:${toRef(autoFilter.to)}`;
+    const parsed = parseA1Range(ref);
+    if (!parsed) return null;
+    return { row: [parsed.start.row, parsed.end.row], column: [parsed.start.col, parsed.end.col] };
 }
 
 function buildMergeStructures(merges: string[]): {
