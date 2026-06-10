@@ -147,8 +147,9 @@ export type AlternateFormatEntry = {
 };
 
 // Editor-runtime Sheet: lib's canonical fields plus state-only extras (selection
-// state, calc chain, filters, frozen panes, dynamic-array spill ranges, …) that
-// never reach the wire shape. `config` is widened to state's SheetConfig.
+// state, calc chain, filters, dynamic-array spill ranges, …) that never reach
+// the wire shape. `config` is widened to state's SheetConfig. Frozen panes live
+// on the lib Sheet — they persist and the xlsx importer emits them.
 export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
     color?: string;
@@ -176,10 +177,6 @@ export type Sheet = Omit<LibSheet, 'config'> & {
     // shape as calcChain; `id` is optional for legacy entries.
     dynamicArray_compute?: CalcChainEntry[];
     dynamicArray?: { r: number; c: number; id?: string }[];
-    frozen?: {
-        type: 'row' | 'column' | 'both' | 'rangeRow' | 'rangeColumn' | 'rangeBoth';
-        range?: { row_focus: number; column_focus: number };
-    };
 };
 
 export type SearchResult = {

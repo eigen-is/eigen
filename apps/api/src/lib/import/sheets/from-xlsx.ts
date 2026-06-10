@@ -114,12 +114,15 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
 
     // Compute column widths first (needed for auto-fit height estimation).
     const colWidthPx: Record<number, number> = {};
+    const colhidden: NonNullable<SheetConfig['colhidden']> = {};
     for (const [i, col] of (worksheet.columns ?? []).entries()) {
         if (col && typeof col.width === 'number' && col.width > 0) {
             const px = Math.round(col.width * 8);
             colWidthPx[i] = px;
             columnlen[String(i)] = px;
         }
+        // exceljs expands <col min/max hidden> ranges to per-column flags.
+        if (col?.hidden) colhidden[String(i)] = 0;
     }
 
     const DEFAULT_ROW_HEIGHT_PT = 15.75;
@@ -151,10 +154,21 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
         }
     });
 
+    // Hidden flags can sit on row elements with no cell values (style-only hidden
+    // rows), which the eachRow({includeEmpty:false}) pass above skips — Excel hides
+    // them all the same. findRow doesn't materialize gap rows, and rowCount is
+    // bounded by the last row element present in the file.
+    const rowhidden: NonNullable<SheetConfig['rowhidden']> = {};
+    for (let n = 1; n <= worksheet.rowCount; n++) {
+        if (worksheet.findRow(n)?.hidden) rowhidden[String(n - 1)] = 0;
+    }
+
     const config: SheetConfig = {};
     if (Object.keys(merge).length > 0) config.merge = merge;
     if (Object.keys(columnlen).length > 0) config.columnlen = columnlen;
     if (Object.keys(rowlen).length > 0) config.rowlen = rowlen;
+    if (Object.keys(rowhidden).length > 0) config.rowhidden = rowhidden;
+    if (Object.keys(colhidden).length > 0) config.colhidden = colhidden;
     if (borderInfo.length > 0) config.borderInfo = borderInfo;
 
     const sheet: Sheet = {
@@ -168,6 +182,19 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
     const view = worksheet.views?.[0];
     if (view && view.showGridLines === false) {
         sheet.showGridLines = false;
+    }
+
+    if (view?.state === 'frozen') {
+        const xSplit = view.xSplit ?? 0;
+        const ySplit = view.ySplit ?? 0;
+        // Excel: ySplit=N freezes the top N rows, xSplit=M the left M columns.
+        // The engine range carries the 0-based index of the LAST frozen row/col.
+        if (xSplit > 0 || ySplit > 0) {
+            sheet.frozen = {
+                type: xSplit > 0 && ySplit > 0 ? 'rangeBoth' : ySplit > 0 ? 'rangeRow' : 'rangeColumn',
+                range: { row_focus: Math.max(ySplit - 1, 0), column_focus: Math.max(xSplit - 1, 0) },
+            };
+        }
     }
 
     return sheet;
