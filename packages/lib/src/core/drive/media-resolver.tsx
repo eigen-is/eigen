@@ -46,7 +46,9 @@ export function MediaResolverProvider({
 }) {
     const media = useFolderLookup(ownerId, mountId, mediaFolderId);
     const chat = useFolderLookup(ownerId, mountId, chatFolderId);
-    const uploadFile = useUploadFile(ownerId, mountId);
+    // mutateAsync is referentially stable; depending on the whole mutation object would
+    // rebuild startUpload (and thus the context value) on every render.
+    const { mutateAsync: uploadMutateAsync } = useUploadFile(ownerId, mountId);
     // Pending uploads live in a ref, not state: consumers only need the latest URL
     // when they re-render for their own reasons (mediaName changes in Yjs). Keeping
     // the context value stable avoids re-rendering every image renderer on each upload.
@@ -75,8 +77,7 @@ export function MediaResolverProvider({
                 pendingRef.current.delete(pendingName);
             };
 
-            const promise = uploadFile
-                .mutateAsync({ parentId: mediaFolderId, file })
+            const promise = uploadMutateAsync({ parentId: mediaFolderId, file })
                 .then(async (result) => {
                     // Preload so the renderer's <img src=serverUrl> swap is instant.
                     // Defer settle to a macrotask so the caller's mediaName rewrite
@@ -94,7 +95,7 @@ export function MediaResolverProvider({
 
             return { pendingName, promise };
         },
-        [mediaFolderId, ownerId, mountId, uploadFile],
+        [mediaFolderId, ownerId, mountId, uploadMutateAsync],
     );
 
     const resolveMediaUrl = useCallback(

@@ -76,11 +76,19 @@ describe('readCards (BC for legacy stickies cards)', () => {
             malformed.set('description', '');
             malformed.set('attachments', 'not-an-array');
             tasks.set('a2', malformed);
+
+            const dirtyElements = new Y.Map<unknown>();
+            dirtyElements.set('id', 'a3');
+            dirtyElements.set('title', 'Dirty elements');
+            dirtyElements.set('description', '');
+            dirtyElements.set('attachments', [null, 42, 'ok.png']);
+            tasks.set('a3', dirtyElements);
         });
 
         const result = readCards(tasks);
         expect(result['a1'].attachments).toEqual(['photo.png', reference]);
         expect(result['a2'].attachments).toBeUndefined();
+        expect(result['a3'].attachments).toEqual(['ok.png']);
     });
 
     test('mixed legacy + new cards both project correctly', () => {

@@ -23,6 +23,24 @@ import { useDragAndDrop } from './hooks/use-drag-and-drop';
 import { Toolbar } from './toolbar';
 import type { ColumnItem } from './types';
 
+// Rendered inside the DragOverlay (and therefore inside MediaResolverProvider) — the
+// useAttachmentMeta context read only works below the provider StickiesBoard renders.
+function OverlayNoteCard({ card, entry, isMobile }: { card: CommentCard; entry?: CommentEntry; isMobile: boolean }) {
+    const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
+    return (
+        <NoteCard
+            title={card.title}
+            description={card.description}
+            color={card.color}
+            replyCount={entry?.messageCount}
+            resolved={entry?.status === 'resolved'}
+            coverThumbnailUrl={coverThumbnailUrl}
+            attachmentCount={attachmentCount}
+            className={isMobile ? 'w-full' : 'w-[254px]'}
+        />
+    );
+}
+
 type StickiesBoardProps = {
     ownerId: string;
     path: DrivePath;
@@ -140,10 +158,6 @@ export function StickiesBoard({
         [handleContextMenu, entryByChatName],
     );
 
-    // Hook for the drag overlay's card — must run unconditionally at top level.
-    const overlayCard = dragState.activeType === 'task' ? (dragState.activeItem as CommentCard) : null;
-    const overlayMeta = useAttachmentMeta(overlayCard?.attachments);
-
     // Per-column card arrays with stable identity, so memoized columns only re-render
     // when their own cards (or the color filter) actually change.
     const prevColumnCardsRef = useRef<Record<string, CommentCard[]>>({});
@@ -173,18 +187,7 @@ export function StickiesBoard({
         if (dragState.activeType === 'task') {
             const card = dragState.activeItem as CommentCard;
             const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;
-            return (
-                <NoteCard
-                    title={card.title}
-                    description={card.description}
-                    color={card.color}
-                    replyCount={entry?.messageCount}
-                    resolved={entry?.status === 'resolved'}
-                    coverThumbnailUrl={overlayMeta.coverThumbnailUrl}
-                    attachmentCount={overlayMeta.attachmentCount}
-                    className={isMobile ? 'w-full' : 'w-[254px]'}
-                />
-            );
+            return <OverlayNoteCard card={card} entry={entry} isMobile={isMobile} />;
         }
 
         if (dragState.activeType === 'column') {
