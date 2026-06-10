@@ -1,3 +1,5 @@
+import { cn } from '@workspace/ui/lib/utils';
+import { ChevronDown } from 'lucide-react';
 import { useCallback, useContext, useEffect } from 'react';
 import { WorkbookContext } from '../../context';
 import {
@@ -77,15 +79,16 @@ export function FilterOptions() {
     ) : (
         <>
             <div
-                id="luckysheet-filter-selected-sheet"
-                className="luckysheet-cell-selected luckysheet-filter-selected"
+                className="pointer-events-none absolute -mt-px -ml-px box-content border border-selection-handle"
                 style={Object.assign(
                     {
                         left: filterOptions.left,
                         width: filterOptions.width,
                         top: filterOptions.top,
                         height: filterOptions.height,
-                        display: 'block',
+                        // Sheet canvas-internal overlay; sits with the selection box (z 15)
+                        // under the cellArea ≤ 30 ceiling.
+                        zIndex: 15,
                     },
                     fixRowStyleOverflowInFreeze(
                         context,
@@ -146,21 +149,26 @@ export function FilterOptions() {
                         style={Object.assign(rowOverflowFreezeStyle, columnOverflowFreezeStyle, {
                             left,
                             top,
-                            height: undefined,
+                            height: 15,
                             width: undefined,
+                            // Sheet canvas-internal overlay (cellArea ≤ 30 world).
+                            zIndex: 12,
                         })}
-                        className={`luckysheet-filter-options ${
-                            filterParam == null ? '' : 'luckysheet-filter-options-active'
-                        }`}
+                        className={cn(
+                            'absolute flex cursor-pointer items-center rounded-sm border border-primary px-0.5',
+                            filterParam == null
+                                ? 'bg-background text-primary hover:bg-primary hover:text-primary-foreground'
+                                : 'bg-primary text-primary-foreground',
+                        )}
                     >
                         {filterParam == null ? (
-                            <div className="caret down" />
+                            <ChevronDown className="size-3" aria-hidden="true" />
                         ) : (
                             <svg
                                 viewBox="0 0 24 24"
-                                fill="white"
+                                fill="currentColor"
                                 stroke="none"
-                                style={{ width: 15, height: 15 }}
+                                style={{ width: 13, height: 13 }}
                                 aria-hidden="true"
                             >
                                 <path d="M18.14 4a1.5 1.5 0 0 1 1.16 2.44L14.7 12.15v6.4l-5.37-2.56v-3.96L4.5 6.31A1.5 1.5 0 0 1 5.76 4h12.38z" />
