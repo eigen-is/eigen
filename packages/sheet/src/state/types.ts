@@ -124,11 +124,42 @@ export type Image = {
     mediaName: string;
 };
 
+// Filter-by-condition rule names. The names overlapping conditional formatting
+// reuse the CF conditionNames (greaterThan, lessThan, equal, between, …); each
+// maps 1:1 onto a `conditionCell*` locale string. `values` carries the rule's
+// operands: none for is(Not)Empty, one for text/date/compare rules, two for
+// (not)between.
+export type FilterConditionName =
+    | 'isEmpty'
+    | 'isNotEmpty'
+    | 'textContains'
+    | 'textNotContains'
+    | 'textStartsWith'
+    | 'textEndsWith'
+    | 'textEquals'
+    | 'dateEqual'
+    | 'dateBefore'
+    | 'dateAfter'
+    | 'greaterThan'
+    | 'greaterThanOrEqual'
+    | 'lessThan'
+    | 'lessThanOrEqual'
+    | 'equal'
+    | 'notEqual'
+    | 'between'
+    | 'notBetween';
+
+export type FilterCondition = {
+    conditionName: FilterConditionName;
+    values: string[];
+};
+
 // Per-column filter rule state. Producers in state/modules/filter.ts /
-// rowcol.ts set every field. Variable-shape rule details (FilterMethod,
-// FilterCustomDetail, …) flow through the `[key]: unknown` overflow.
+// rowcol.ts set every field. `byCondition` is set when the column filters by
+// condition instead of by values/color. Legacy snapshot fields (e.g. the
+// retired luckysheet `caljs`) flow through the `[key]: unknown` overflow.
 export type FilterEntry = {
-    caljs: unknown;
+    byCondition?: FilterCondition;
     rowhidden: Record<string, number>;
     optionstate: boolean;
     str: number;
