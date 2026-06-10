@@ -947,6 +947,312 @@ describe('Sheets xlsx import/convert', () => {
         expect(sheets[1].filterRange).toBeUndefined();
     });
 
+    async function convertWorkbook(workbook: ExcelJS.Workbook, filename: string): Promise<Sheet[]> {
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], filename, {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        return readSnapshot(ctx.alice.user.id, mountId, converted.id);
+    }
+
+    test('convert imports cellIs rules with resolved dxf colors and percent-string coercion', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('CF');
+        ws.getCell('B1').value = 5;
+        ws.getCell('B2').value = 12;
+        ws.addConditionalFormatting({
+            ref: 'B1:B5',
+            rules: [
+                {
+                    type: 'cellIs',
+                    operator: 'greaterThan',
+                    formulae: [10],
+                    priority: 1,
+                    style: {
+                        font: { color: { argb: 'FFFFFFFF' } },
+                        fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
+                    },
+                },
+                // Google Sheets exports serialize numeric thresholds as quoted percent
+                // strings; the importer must coerce them to the numeric form the engine
+                // compares against. Also covers an operator beyond exceljs's typed four.
+                {
+                    type: 'cellIs',
+                    operator: 'lessThanOrEqual',
+                    formulae: ['"5%"'],
+                    priority: 2,
+                    style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FF00FF00' } } },
+                } as unknown as ExcelJS.ConditionalFormattingRule,
+            ],
+        });
+        const plain = workbook.addWorksheet('Plain');
+        plain.getCell('A1').value = 'free';
+        const sheets = await convertWorkbook(workbook, 'cellis.xlsx');
+
+        // Priority DESC order: priority 2 first, priority 1 last (last write wins in the engine).
+        expect(sheets[0].conditionalFormatRules).toEqual([
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                format: { textColor: null, cellColor: '#00FF00' },
+                conditionName: 'lessThanOrEqual',
+                conditionRange: [],
+                conditionValue: ['0.05'],
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                format: { textColor: '#FFFFFF', cellColor: '#FF0000' },
+                conditionName: 'greaterThan',
+                conditionRange: [],
+                conditionValue: ['10'],
+            },
+        ]);
+        expect(sheets[1].conditionalFormatRules).toBeUndefined();
+    });
+
+    test('convert imports cellIs between rules with both bounds', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Between');
+        ws.getCell('A1').value = 3;
+        ws.addConditionalFormatting({
+            ref: 'A1:A4',
+            rules: [
+                {
+                    type: 'cellIs',
+                    operator: 'between',
+                    formulae: [2, 5],
+                    priority: 1,
+                    style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FF112233' } } },
+                },
+            ],
+        });
+        const sheets = await convertWorkbook(workbook, 'between.xlsx');
+
+        expect(sheets[0].conditionalFormatRules).toEqual([
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 3], column: [0, 0] }],
+                format: { textColor: null, cellColor: '#112233' },
+                conditionName: 'between',
+                conditionRange: [],
+                conditionValue: ['2', '5'],
+            },
+        ]);
+    });
+
+    test('convert imports expression rules anchored at the first range and shifted per sub-range', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Expr');
+        ws.getCell('B2').value = 'longtext';
+        ws.getCell('D2').value = 'x';
+        ws.addConditionalFormatting({
+            ref: 'B2:B4 D2:D4',
+            rules: [
+                {
+                    type: 'expression',
+                    formulae: ['LEN(B2)>2'],
+                    priority: 1,
+                    style: { font: { color: { argb: 'FF0000FF' } } },
+                },
+            ],
+        });
+        const sheets = await convertWorkbook(workbook, 'expression.xlsx');
+
+        // Excel anchors the formula's relative refs at the top-left of the FIRST sqref
+        // range; the engine re-anchors per cellrange entry, so the importer emits one
+        // rule per sub-range with the formula pre-shifted (D2 range → LEN(D2)).
+        expect(sheets[0].conditionalFormatRules).toEqual([
+            {
+                type: 'default',
+                cellrange: [{ row: [1, 3], column: [1, 1] }],
+                format: { textColor: '#0000FF', cellColor: null },
+                conditionName: 'formula',
+                conditionRange: [],
+                conditionValue: ['=LEN(B2)>2'],
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [1, 3], column: [3, 3] }],
+                format: { textColor: '#0000FF', cellColor: null },
+                conditionName: 'formula',
+                conditionRange: [],
+                conditionValue: ['=LEN(D2)>2'],
+            },
+        ]);
+    });
+
+    test('convert maps colorScale rules onto colorGradation with engine stop order', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Scale');
+        ws.getCell('C1').value = 1;
+        ws.getCell('C2').value = 5;
+        ws.getCell('C3').value = 9;
+        ws.addConditionalFormatting({
+            ref: 'C1:C3',
+            rules: [
+                {
+                    type: 'colorScale',
+                    cfvo: [{ type: 'min' }, { type: 'max' }],
+                    color: [{ argb: 'FFFFFFFF' }, { argb: 'FFFF0000' }],
+                    priority: 1,
+                },
+            ],
+        });
+        const sheets = await convertWorkbook(workbook, 'colorscale.xlsx');
+
+        // exceljs lists stops min→max; the engine's colorGradation format is max→min.
+        expect(sheets[0].conditionalFormatRules).toEqual([
+            {
+                type: 'colorGradation',
+                cellrange: [{ row: [0, 2], column: [2, 2] }],
+                format: ['#FF0000', '#FFFFFF'],
+            },
+        ]);
+    });
+
+    test('convert imports multi-range refs as multiple cellrange entries', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Multi');
+        ws.getCell('A1').value = 1;
+        ws.addConditionalFormatting({
+            ref: 'A1:A2 C1:C2 E5',
+            rules: [
+                {
+                    type: 'cellIs',
+                    operator: 'lessThan',
+                    formulae: [0],
+                    priority: 1,
+                    style: { font: { color: { argb: 'FFAA0000' } } },
+                },
+            ],
+        });
+        const sheets = await convertWorkbook(workbook, 'multirange.xlsx');
+
+        expect(sheets[0].conditionalFormatRules).toEqual([
+            {
+                type: 'default',
+                cellrange: [
+                    { row: [0, 1], column: [0, 0] },
+                    { row: [0, 1], column: [2, 2] },
+                    { row: [4, 4], column: [4, 4] },
+                ],
+                format: { textColor: '#AA0000', cellColor: null },
+                conditionName: 'lessThan',
+                conditionRange: [],
+                conditionValue: ['0'],
+            },
+        ]);
+    });
+
+    test('convert orders overlapping rules so the lowest Excel priority number wins', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Prio');
+        ws.getCell('A1').value = 100;
+        ws.addConditionalFormatting({
+            ref: 'A1:A5',
+            rules: [
+                {
+                    type: 'cellIs',
+                    operator: 'greaterThan',
+                    formulae: [0],
+                    priority: 2,
+                    style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FF00FF00' } } },
+                },
+                {
+                    type: 'cellIs',
+                    operator: 'greaterThan',
+                    formulae: [50],
+                    priority: 1,
+                    style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } } },
+                },
+            ],
+        });
+        const sheets = await convertWorkbook(workbook, 'priority.xlsx');
+
+        // Excel: lowest priority number wins conflicting properties. The engine applies
+        // rules in array order with last-write-wins per property, so the importer emits
+        // priority DESCENDING — the priority-1 (red) rule must come last.
+        const rules = sheets[0].conditionalFormatRules ?? [];
+        expect(rules).toHaveLength(2);
+        expect(rules[0]).toMatchObject({ format: { cellColor: '#00FF00' }, conditionValue: ['0'] });
+        expect(rules[1]).toMatchObject({ format: { cellColor: '#FF0000' }, conditionValue: ['50'] });
+    });
+
+    test('convert skips iconSet rules but keeps supported rules from the same sheet', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Icons');
+        ws.getCell('A1').value = 1;
+        ws.addConditionalFormatting({
+            ref: 'A1:A3',
+            rules: [
+                {
+                    type: 'iconSet',
+                    iconSet: '3TrafficLights1',
+                    cfvo: [
+                        { type: 'percent', value: 0 },
+                        { type: 'percent', value: 33 },
+                        { type: 'percent', value: 67 },
+                    ],
+                    priority: 1,
+                },
+                {
+                    type: 'cellIs',
+                    operator: 'equal',
+                    formulae: [1],
+                    priority: 2,
+                    style: { font: { color: { argb: 'FF00AA00' } } },
+                },
+            ],
+        });
+        const onlyIcons = workbook.addWorksheet('OnlyIcons');
+        onlyIcons.getCell('A1').value = 2;
+        onlyIcons.addConditionalFormatting({
+            ref: 'A1:A3',
+            rules: [
+                {
+                    type: 'iconSet',
+                    iconSet: '3Arrows',
+                    cfvo: [
+                        { type: 'percent', value: 0 },
+                        { type: 'percent', value: 33 },
+                        { type: 'percent', value: 67 },
+                    ],
+                    priority: 1,
+                },
+            ],
+        });
+        const sheets = await convertWorkbook(workbook, 'iconset.xlsx');
+
+        expect(sheets[0].conditionalFormatRules).toEqual([
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 2], column: [0, 0] }],
+                format: { textColor: '#00AA00', cellColor: null },
+                conditionName: 'equal',
+                conditionRange: [],
+                conditionValue: ['1'],
+            },
+        ]);
+        expect(sheets[1].conditionalFormatRules).toBeUndefined();
+    });
+
     test('import into another user document without write permission returns 403', async () => {
         const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
         const initialFile = new File([initial], 'alice.xlsx', {

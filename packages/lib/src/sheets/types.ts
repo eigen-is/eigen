@@ -175,10 +175,14 @@ export type SheetConfig = {
 // `evaluateConditionalFormat` (canvas painter + apps/api HTML export).
 export type ConditionalFormatConditionName =
     | 'greaterThan'
+    | 'greaterThanOrEqual'
     | 'lessThan'
+    | 'lessThanOrEqual'
     | 'equal'
+    | 'notEqual'
     | 'textContains'
     | 'between'
+    | 'notBetween'
     | 'occurrenceDate'
     | 'duplicateValue'
     | 'top10'
