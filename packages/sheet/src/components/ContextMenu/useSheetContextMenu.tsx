@@ -482,7 +482,15 @@ export function useSheetContextMenu(area: SheetMenuArea) {
                 onContextMenu={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
             >
-                <ContextMenuAnchor contextMenu={contextMenu}>
+                <ContextMenuAnchor
+                    contextMenu={contextMenu}
+                    // Return focus to the sheet, not <body>, so Ctrl-Z and other
+                    // grid shortcuts still reach the Workbook keydown handler.
+                    onCloseAutoFocus={(e) => {
+                        e.preventDefault();
+                        refs.cellInput.current?.focus();
+                    }}
+                >
                     {area === 'cell' && <CellMenu close={contextMenu.close} />}
                     {area === 'row' && <RowMenu />}
                     {area === 'column' && <ColumnMenu />}
