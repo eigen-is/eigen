@@ -2,13 +2,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspa
 import type { ReactNode } from 'react';
 
 type ContextMenuAnchorProps = {
-    contextMenu: { isOpen: boolean; position: { x: number; y: number }; close: () => void };
+    contextMenu: {
+        isOpen: boolean;
+        position: { x: number; y: number };
+        close: () => void;
+        restoreFocus: () => void;
+    };
     children: ReactNode;
     className?: string;
-    // The trigger is a 0×0 pointer-events:none div, so Radix's default close
-    // behaviour (focus the trigger) silently drops focus to <body>. Pass this to
-    // preventDefault and move focus somewhere useful (e.g. a host's own input) so
-    // keyboard handling keeps working after the menu closes.
+    // By default the anchor restores focus to the element that was focused when
+    // the menu opened (see useContextMenu). Pass this to send focus somewhere
+    // else instead — call event.preventDefault() and focus your own target.
     onCloseAutoFocus?: (event: Event) => void;
 };
 
@@ -32,7 +36,21 @@ export function ContextMenuAnchor({ contextMenu, children, className, onCloseAut
                 align="start"
                 collisionPadding={8}
                 className={className}
-                onCloseAutoFocus={onCloseAutoFocus}
+                // Radix menus never stop propagation, and portaled content still
+                // bubbles through the React tree — without these stops, menu-internal
+                // keystrokes and clicks reach the host surface underneath (list
+                // keyboard navigation, grid selection handlers).
+                onKeyDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => e.stopPropagation()}
+                onCloseAutoFocus={(e) => {
+                    if (onCloseAutoFocus) {
+                        onCloseAutoFocus(e);
+                        return;
+                    }
+                    e.preventDefault();
+                    contextMenu.restoreFocus();
+                }}
             >
                 {children}
             </DropdownMenuContent>
