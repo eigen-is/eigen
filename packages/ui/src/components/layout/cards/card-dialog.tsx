@@ -89,28 +89,30 @@ export function CardDialog({
                 onEdit={onUpdate ? () => setIsSettingsOpen(true) : undefined}
                 copyLinkUrl={copyLinkUrl}
                 onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
+                attachments={
+                    card.attachments && card.attachments.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                            {card.attachments.map((attachment) =>
+                                isAttachmentReference(attachment) ? (
+                                    <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
+                                ) : mediaFolderId ? (
+                                    <AttachmentChip
+                                        key={`name-${attachment}`}
+                                        fileName={attachment}
+                                        ownerId={ownerId}
+                                        mountId={mountId}
+                                        mediaFolderId={mediaFolderId}
+                                        siblingFileNames={attachmentNames}
+                                    />
+                                ) : (
+                                    <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
+                                ),
+                            )}
+                        </div>
+                    ) : undefined
+                }
                 {...action}
             >
-                {card.attachments && card.attachments.length > 0 && (
-                    <div className="px-4 pb-3 flex flex-wrap gap-2">
-                        {card.attachments.map((attachment) =>
-                            isAttachmentReference(attachment) ? (
-                                <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
-                            ) : mediaFolderId ? (
-                                <AttachmentChip
-                                    key={`name-${attachment}`}
-                                    fileName={attachment}
-                                    ownerId={ownerId}
-                                    mountId={mountId}
-                                    mediaFolderId={mediaFolderId}
-                                    siblingFileNames={attachmentNames}
-                                />
-                            ) : (
-                                <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
-                            ),
-                        )}
-                    </div>
-                )}
                 {card.chatName ? (
                     <CommentThread ownerId={ownerId} mountId={mountId} chatName={card.chatName} />
                 ) : (
