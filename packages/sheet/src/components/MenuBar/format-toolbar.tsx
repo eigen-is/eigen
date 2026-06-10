@@ -111,11 +111,9 @@ export function FormatToolbar() {
                 showSwatch
                 popoverClassName="luckysheet-mousedown-cancel"
                 onChange={(color) => {
-                    if (color) {
-                        setContext((ctx) => {
-                            handleTextColor(ctx, refs.cellInput.current!, color);
-                        });
-                    }
+                    setContext((ctx) => {
+                        handleTextColor(ctx, refs.cellInput.current!, color);
+                    });
                 }}
             />
 
@@ -127,11 +125,9 @@ export function FormatToolbar() {
                 showSwatch
                 popoverClassName="luckysheet-mousedown-cancel"
                 onChange={(color) => {
-                    if (color) {
-                        setContext((ctx) => {
-                            handleTextBackground(ctx, refs.cellInput.current!, color);
-                        });
-                    }
+                    setContext((ctx) => {
+                        handleTextBackground(ctx, refs.cellInput.current!, color);
+                    });
                 }}
             />
 
