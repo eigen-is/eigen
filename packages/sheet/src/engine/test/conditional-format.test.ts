@@ -115,6 +115,101 @@ describe('engine/conditional-format — comparison rules', () => {
         expect(styles['0_1']).toEqual({ textColor: '#ffffff', cellColor: '#ff0000' });
     });
 
+    test('greaterThanOrEqual / lessThanOrEqual include the boundary value', () => {
+        const data = buildMatrix([[5, 10, 15]]);
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    format: { cellColor: '#ff0000' },
+                    conditionName: 'greaterThanOrEqual',
+                    conditionRange: [],
+                    conditionValue: ['10'],
+                },
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    format: { textColor: '#0000ff' },
+                    conditionName: 'lessThanOrEqual',
+                    conditionRange: [],
+                    conditionValue: ['10'],
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']).toEqual({ textColor: '#0000ff' });
+        expect(styles['0_1']).toEqual({ cellColor: '#ff0000', textColor: '#0000ff' });
+        expect(styles['0_2']).toEqual({ cellColor: '#ff0000' });
+    });
+
+    test('notEqual matches every cell except the condition value', () => {
+        const data = buildMatrix([[0, 7]]);
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 1] }],
+                    format: { cellColor: '#00ff00' },
+                    conditionName: 'notEqual',
+                    conditionRange: [],
+                    conditionValue: ['0'],
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']).toBeUndefined();
+        expect(styles['0_1']?.cellColor).toBe('#00ff00');
+    });
+
+    test('notBetween matches numeric cells outside the bounds only', () => {
+        const data = buildMatrix([[1, 5, 9]]);
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    format: { cellColor: '#ff8800' },
+                    conditionName: 'notBetween',
+                    conditionRange: [],
+                    conditionValue: ['2', '8'],
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']?.cellColor).toBe('#ff8800');
+        expect(styles['0_1']).toBeUndefined();
+        expect(styles['0_2']?.cellColor).toBe('#ff8800');
+    });
+
+    test("a later rule without a text color does not erase an earlier rule's text color", () => {
+        // Excel resolves each style property independently by rule precedence; the xlsx
+        // importer emits rules ascending-precedence and relies on null fields not clobbering.
+        const data = buildMatrix([[5]]);
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { textColor: '#ff0000', cellColor: null },
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: ['0'],
+                },
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { textColor: null, cellColor: '#00ff00' },
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: ['1'],
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']).toEqual({ textColor: '#ff0000', cellColor: '#00ff00' });
+    });
+
     test('aboveAverage matches cells strictly greater than the mean', () => {
         const data = buildMatrix([[1, 2, 3, 100]]);
         const styles = evaluateConditionalFormat(
