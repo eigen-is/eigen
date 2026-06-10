@@ -191,6 +191,34 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
     });
 }
 
+// config carries several index-keyed maps (rowlen, rowhidden, customHeight and
+// their column twins) that all shift identically when rows/columns move.
+function shiftKeyedMapForInsert(
+    map: Record<string, number>,
+    index: number,
+    count: number,
+    direction: 'lefttop' | 'rightbottom',
+): Record<string, number> {
+    const shifted: Record<string, number> = {};
+    for (const [key, v] of Object.entries(map)) {
+        const i = Number.parseInt(key, 10);
+        if (i < index || (i === index && direction === 'rightbottom')) shifted[i] = v;
+        else shifted[i + count] = v;
+    }
+    return shifted;
+}
+
+function shiftKeyedMapForDelete(map: Record<string, number>, start: number, end: number): Record<string, number> {
+    const shifted: Record<string, number> = {};
+    const removeCount = end - start + 1;
+    for (const [key, v] of Object.entries(map)) {
+        const i = Number.parseInt(key, 10);
+        if (i < start) shifted[i] = v;
+        else if (i > end) shifted[i - removeCount] = v;
+    }
+    return shifted;
+}
+
 function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: InsertRowColOp): S[] {
     const target = sheets[targetIndex];
     const cfg = (target.config ?? {}) as ExtendedSheetConfig;
@@ -212,123 +240,22 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
     newCfg.merge = shiftMergeForInsert(cfg, op.type, op.index, count, op.direction);
 
     if (op.type === 'row') {
-        if (cfg.rowhidden != null) {
-            const rowhidden_new: Record<string, number> = {};
-            for (const [rstr, v] of Object.entries(cfg.rowhidden)) {
-                const r = Number.parseInt(rstr, 10);
-                if (r < op.index) {
-                    rowhidden_new[r] = v;
-                } else if (r === op.index) {
-                    if (op.direction === 'lefttop') {
-                        rowhidden_new[r + count] = v;
-                    } else {
-                        rowhidden_new[r] = v;
-                    }
-                } else {
-                    rowhidden_new[r + count] = v;
-                }
-            }
-            newCfg.rowhidden = rowhidden_new;
-        }
-
-        if (cfg.rowlen != null) {
-            const rowlen_new: Record<string, number> = {};
-            for (const [rstr, v] of Object.entries(cfg.rowlen)) {
-                const r = Number.parseInt(rstr, 10);
-                if (r < op.index) {
-                    rowlen_new[r] = v;
-                } else if (r === op.index) {
-                    if (op.direction === 'lefttop') {
-                        rowlen_new[r + count] = v;
-                    } else {
-                        rowlen_new[r] = v;
-                    }
-                } else {
-                    rowlen_new[r + count] = v;
-                }
-            }
-            newCfg.rowlen = rowlen_new;
-        }
-
-        if (cfg.customHeight != null) {
-            const customHeight_new: Record<string, number> = {};
-            for (const [rstr, v] of Object.entries(cfg.customHeight)) {
-                const r = Number.parseInt(rstr, 10);
-                if (r < op.index) {
-                    customHeight_new[r] = v;
-                } else if (r === op.index) {
-                    if (op.direction === 'lefttop') {
-                        customHeight_new[r + count] = v;
-                    } else {
-                        customHeight_new[r] = v;
-                    }
-                } else {
-                    customHeight_new[r + count] = v;
-                }
-            }
-            newCfg.customHeight = customHeight_new;
-        }
+        if (cfg.rowhidden != null)
+            newCfg.rowhidden = shiftKeyedMapForInsert(cfg.rowhidden, op.index, count, op.direction);
+        if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForInsert(cfg.rowlen, op.index, count, op.direction);
+        if (cfg.customHeight != null)
+            newCfg.customHeight = shiftKeyedMapForInsert(cfg.customHeight, op.index, count, op.direction);
 
         const cols = newData[0]?.length ?? 0;
         const blank = () => new Array<null>(cols).fill(null);
         for (let i = 0; i < count; i += 1) newData.splice(insertAt, 0, blank());
     } else {
-        if (cfg.colhidden != null) {
-            const colhidden_new: Record<string, number> = {};
-            for (const [cstr, v] of Object.entries(cfg.colhidden)) {
-                const c = Number.parseInt(cstr, 10);
-                if (c < op.index) {
-                    colhidden_new[c] = v;
-                } else if (c === op.index) {
-                    if (op.direction === 'lefttop') {
-                        colhidden_new[c + count] = v;
-                    } else {
-                        colhidden_new[c] = v;
-                    }
-                } else {
-                    colhidden_new[c + count] = v;
-                }
-            }
-            newCfg.colhidden = colhidden_new;
-        }
-
-        if (cfg.columnlen != null) {
-            const columnlen_new: Record<string, number> = {};
-            for (const [cstr, v] of Object.entries(cfg.columnlen)) {
-                const c = Number.parseInt(cstr, 10);
-                if (c < op.index) {
-                    columnlen_new[c] = v;
-                } else if (c === op.index) {
-                    if (op.direction === 'lefttop') {
-                        columnlen_new[c + count] = v;
-                    } else {
-                        columnlen_new[c] = v;
-                    }
-                } else {
-                    columnlen_new[c + count] = v;
-                }
-            }
-            newCfg.columnlen = columnlen_new;
-        }
-
-        if (cfg.customWidth != null) {
-            const customWidth_new: Record<string, number> = {};
-            for (const [cstr, v] of Object.entries(cfg.customWidth)) {
-                const c = Number.parseInt(cstr, 10);
-                if (c < op.index) {
-                    customWidth_new[c] = v;
-                } else if (c === op.index) {
-                    if (op.direction === 'lefttop') {
-                        customWidth_new[c + count] = v;
-                    } else {
-                        customWidth_new[c] = v;
-                    }
-                } else {
-                    customWidth_new[c + count] = v;
-                }
-            }
-            newCfg.customWidth = customWidth_new;
-        }
+        if (cfg.colhidden != null)
+            newCfg.colhidden = shiftKeyedMapForInsert(cfg.colhidden, op.index, count, op.direction);
+        if (cfg.columnlen != null)
+            newCfg.columnlen = shiftKeyedMapForInsert(cfg.columnlen, op.index, count, op.direction);
+        if (cfg.customWidth != null)
+            newCfg.customWidth = shiftKeyedMapForInsert(cfg.customWidth, op.index, count, op.direction);
 
         for (const row of newData) {
             for (let i = 0; i < count; i += 1) row.splice(insertAt, 0, null);
@@ -419,85 +346,15 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
     newCfg.merge = shiftMergeForDelete(cfg, op.type, op.start, removeCount);
 
     if (op.type === 'row') {
-        if (cfg.rowhidden != null) {
-            const rowhidden_new: Record<string, number> = {};
-            for (const [rstr, v] of Object.entries(cfg.rowhidden)) {
-                const r = Number.parseInt(rstr, 10);
-                if (r < op.start) {
-                    rowhidden_new[r] = v;
-                } else if (r > op.end) {
-                    rowhidden_new[r - removeCount] = v;
-                }
-            }
-            newCfg.rowhidden = rowhidden_new;
-        }
-
-        if (cfg.rowlen != null) {
-            const rowlen_new: Record<string, number> = {};
-            for (const [rstr, v] of Object.entries(cfg.rowlen)) {
-                const r = Number.parseInt(rstr, 10);
-                if (r < op.start) {
-                    rowlen_new[r] = v;
-                } else if (r > op.end) {
-                    rowlen_new[r - removeCount] = v;
-                }
-            }
-            newCfg.rowlen = rowlen_new;
-        }
-
-        if (cfg.customHeight != null) {
-            const customHeight_new: Record<string, number> = {};
-            for (const [rstr, v] of Object.entries(cfg.customHeight)) {
-                const r = Number.parseInt(rstr, 10);
-                if (r < op.start) {
-                    customHeight_new[r] = v;
-                } else if (r > op.end) {
-                    customHeight_new[r - removeCount] = v;
-                }
-            }
-            newCfg.customHeight = customHeight_new;
-        }
+        if (cfg.rowhidden != null) newCfg.rowhidden = shiftKeyedMapForDelete(cfg.rowhidden, op.start, op.end);
+        if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForDelete(cfg.rowlen, op.start, op.end);
+        if (cfg.customHeight != null) newCfg.customHeight = shiftKeyedMapForDelete(cfg.customHeight, op.start, op.end);
 
         newData.splice(op.start, removeCount);
     } else {
-        if (cfg.colhidden != null) {
-            const colhidden_new: Record<string, number> = {};
-            for (const [cstr, v] of Object.entries(cfg.colhidden)) {
-                const c = Number.parseInt(cstr, 10);
-                if (c < op.start) {
-                    colhidden_new[c] = v;
-                } else if (c > op.end) {
-                    colhidden_new[c - removeCount] = v;
-                }
-            }
-            newCfg.colhidden = colhidden_new;
-        }
-
-        if (cfg.columnlen != null) {
-            const columnlen_new: Record<string, number> = {};
-            for (const [cstr, v] of Object.entries(cfg.columnlen)) {
-                const c = Number.parseInt(cstr, 10);
-                if (c < op.start) {
-                    columnlen_new[c] = v;
-                } else if (c > op.end) {
-                    columnlen_new[c - removeCount] = v;
-                }
-            }
-            newCfg.columnlen = columnlen_new;
-        }
-
-        if (cfg.customWidth != null) {
-            const customWidth_new: Record<string, number> = {};
-            for (const [cstr, v] of Object.entries(cfg.customWidth)) {
-                const c = Number.parseInt(cstr, 10);
-                if (c < op.start) {
-                    customWidth_new[c] = v;
-                } else if (c > op.end) {
-                    customWidth_new[c - removeCount] = v;
-                }
-            }
-            newCfg.customWidth = customWidth_new;
-        }
+        if (cfg.colhidden != null) newCfg.colhidden = shiftKeyedMapForDelete(cfg.colhidden, op.start, op.end);
+        if (cfg.columnlen != null) newCfg.columnlen = shiftKeyedMapForDelete(cfg.columnlen, op.start, op.end);
+        if (cfg.customWidth != null) newCfg.customWidth = shiftKeyedMapForDelete(cfg.customWidth, op.start, op.end);
 
         for (const row of newData) row.splice(op.start, removeCount);
     }

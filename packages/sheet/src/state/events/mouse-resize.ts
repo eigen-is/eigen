@@ -238,7 +238,7 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
         }
         if (!text) continue;
 
-        const fontset = getFontSet(cell, ctx.defaultFontSize, ctx);
+        const fontset = getFontSet(cell, ctx.defaultFontSize);
         renderCtx.font = fontset;
         const measured = renderCtx.measureText(text);
         const width = measured.width + padding;

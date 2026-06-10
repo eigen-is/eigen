@@ -7,27 +7,23 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
-import { RowColError } from '../../engine';
 import { useAlert } from '../../hooks/useAlert';
-import { useDialog } from '../../hooks/useDialog';
 import {
     clearSelectedContents,
-    deleteRowCol,
     flushPendingCopy,
-    getSheetIndex,
     handleCopy,
     handleCut,
     handleFormatPainter,
     handlePasteByClick,
     locale,
     readClipboardText,
+    tryDeleteRowCol,
 } from '../../state';
 
 export function EditMenu() {
     const { context, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
-    const { showDialog } = useDialog();
-    const { toolbar, rightclick, button } = locale(context);
+    const { toolbar, button } = locale(context);
 
     const selection = context.selections?.[0];
     const canUndo = refs.globalCache.undoList.length > 0;
@@ -93,7 +89,7 @@ export function EditMenu() {
                         onClick={() => {
                             setContext((draftCtx) => {
                                 const error = clearSelectedContents(draftCtx);
-                                if (error) showDialog(error, 'ok');
+                                if (error) showAlert(error, 'ok');
                             });
                         }}
                     >
@@ -111,24 +107,14 @@ export function EditMenu() {
                             };
                             setContext(
                                 (draftCtx) => {
-                                    const index = getSheetIndex(draftCtx, context.currentSheetId) as number;
-                                    if ((draftCtx.sheets[index].data?.length ?? 0) <= 1) {
-                                        showAlert(rightclick.cannotDeleteAllRow, 'ok');
-                                        return;
-                                    }
-                                    try {
-                                        deleteRowCol(draftCtx, deleteRowColOp);
-                                    } catch (e) {
-                                        if (e instanceof RowColError && e.code === 'readOnly') {
-                                            showAlert(rightclick.cannotDeleteRowReadOnly, 'ok');
-                                        }
-                                    }
+                                    const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
+                                    if (error) showAlert(error, 'ok');
                                 },
                                 { deleteRowColOp },
                             );
                         }}
                     >
-                        {rightclick.row}
+                        Row
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
@@ -142,24 +128,14 @@ export function EditMenu() {
                             };
                             setContext(
                                 (draftCtx) => {
-                                    const index = getSheetIndex(draftCtx, context.currentSheetId) as number;
-                                    if ((draftCtx.sheets[index].data?.[0]?.length ?? 0) <= 1) {
-                                        showAlert(rightclick.cannotDeleteAllColumn, 'ok');
-                                        return;
-                                    }
-                                    try {
-                                        deleteRowCol(draftCtx, deleteRowColOp);
-                                    } catch (e) {
-                                        if (e instanceof RowColError && e.code === 'readOnly') {
-                                            showAlert(rightclick.cannotDeleteColumnReadOnly, 'ok');
-                                        }
-                                    }
+                                    const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
+                                    if (error) showAlert(error, 'ok');
                                 },
                                 { deleteRowColOp },
                             );
                         }}
                     >
-                        {rightclick.column}
+                        Column
                     </DropdownMenuItem>
                 </DropdownMenuSubContent>
             </DropdownMenuSub>

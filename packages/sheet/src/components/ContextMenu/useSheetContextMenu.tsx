@@ -28,26 +28,24 @@ import {
 import type React from 'react';
 import { useCallback, useContext } from 'react';
 import { type SetContextOptions, WorkbookContext } from '../../context';
-import { RowColError } from '../../engine';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
     clearSelectedContents,
     createFilter,
-    deleteRowCol,
     flushPendingCopy,
     getFlowdata,
-    getSheetIndex,
     handleContextMenu,
     handleCopy,
     handleCut,
     handleLink,
     handlePasteByClick,
     hideSelected,
-    insertRowCol,
     readClipboardText,
     showSelected,
     sortSelection,
+    tryDeleteRowCol,
+    tryInsertRowCol,
 } from '../../state';
 import { ResizeDialog } from '../ResizeDialog';
 
@@ -142,17 +140,8 @@ function InsertItem({
         };
         setContext(
             (d) => {
-                try {
-                    insertRowCol(d, op);
-                } catch (err) {
-                    if (err instanceof RowColError && err.code === 'maxExceeded')
-                        showAlert(type === 'row' ? '10000 row limit exceeded' : '1000 column limit exceeded', 'ok');
-                    else if (err instanceof RowColError && err.code === 'readOnly')
-                        showAlert(
-                            type === 'row' ? 'Cannot insert on read-only row' : 'Cannot insert into read-only column',
-                            'ok',
-                        );
-                }
+                const error = tryInsertRowCol(d, op);
+                if (error) showAlert(error, 'ok');
             },
             { insertRowColOp: op },
         );
@@ -179,23 +168,8 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
                     showAlert(MSG_MULTI, 'ok');
                     return;
                 }
-                const index = getSheetIndex(d, context.currentSheetId);
-                if (typeof index !== 'number') return;
-                const data = d.sheets[index].data;
-                const total = type === 'row' ? (data?.length ?? 0) : (data?.[0]?.length ?? 0);
-                if (total <= end - start + 1) {
-                    showAlert(type === 'row' ? 'Cannot delete all rows' : 'Cannot delete all columns', 'ok');
-                    return;
-                }
-                try {
-                    deleteRowCol(d, op);
-                } catch (e) {
-                    if (e instanceof RowColError && e.code === 'readOnly')
-                        showAlert(
-                            type === 'row' ? 'Cannot delete row readonly' : 'Cannot delete column readonly',
-                            'ok',
-                        );
-                }
+                const error = tryDeleteRowCol(d, op);
+                if (error) showAlert(error, 'ok');
             },
             { deleteRowColOp: op },
         );
@@ -210,13 +184,13 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
 
 function ClearItem({ label }: { label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showDialog } = useDialog();
+    const { showAlert } = useAlert();
     return (
         <DropdownMenuItem
             onClick={() =>
                 setContext((d) => {
                     const error = clearSelectedContents(d);
-                    if (error) showDialog(error, 'ok');
+                    if (error) showAlert(error, 'ok');
                 })
             }
         >
@@ -228,12 +202,12 @@ function ClearItem({ label }: { label: string }) {
 
 function HideItem({ type, label }: { type: RowColType; label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showDialog } = useDialog();
+    const { showAlert } = useAlert();
     return (
         <DropdownMenuItem
             onClick={() =>
                 setContext((d) => {
-                    if (hideSelected(d, type) === 'noMulti') showDialog(MSG_MULTI, 'ok');
+                    if (hideSelected(d, type) === 'noMulti') showAlert(MSG_MULTI, 'ok');
                 })
             }
         >
@@ -245,12 +219,12 @@ function HideItem({ type, label }: { type: RowColType; label: string }) {
 
 function ShowHiddenItem({ type, label }: { type: RowColType; label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showDialog } = useDialog();
+    const { showAlert } = useAlert();
     return (
         <DropdownMenuItem
             onClick={() =>
                 setContext((d) => {
-                    if (showSelected(d, type) === 'noMulti') showDialog(MSG_MULTI, 'ok');
+                    if (showSelected(d, type) === 'noMulti') showAlert(MSG_MULTI, 'ok');
                 })
             }
         >
@@ -471,31 +445,21 @@ export function useSheetContextMenu(area: SheetMenuArea) {
 
     return {
         onContextMenu,
-        // The menu content is portaled, but React bubbles its events along the
-        // component tree — without these stops, a click or keystroke inside the menu
-        // would reach the grid handlers underneath (select the cell beneath it, move
-        // the selection, or start a cell edit).
         anchor: (
-            <div
-                className="contents"
-                onMouseDown={(e) => e.stopPropagation()}
-                onContextMenu={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
+            <ContextMenuAnchor
+                contextMenu={contextMenu}
+                // Return focus to the sheet's cell input, not whatever was focused
+                // before the menu opened — Ctrl-Z and the other grid shortcuts read
+                // keydown from the Workbook container around it.
+                onCloseAutoFocus={(e) => {
+                    e.preventDefault();
+                    refs.cellInput.current?.focus();
+                }}
             >
-                <ContextMenuAnchor
-                    contextMenu={contextMenu}
-                    // Return focus to the sheet, not <body>, so Ctrl-Z and other
-                    // grid shortcuts still reach the Workbook keydown handler.
-                    onCloseAutoFocus={(e) => {
-                        e.preventDefault();
-                        refs.cellInput.current?.focus();
-                    }}
-                >
-                    {area === 'cell' && <CellMenu close={contextMenu.close} />}
-                    {area === 'row' && <RowMenu />}
-                    {area === 'column' && <ColumnMenu />}
-                </ContextMenuAnchor>
-            </div>
+                {area === 'cell' && <CellMenu close={contextMenu.close} />}
+                {area === 'row' && <RowMenu />}
+                {area === 'column' && <ColumnMenu />}
+            </ContextMenuAnchor>
         ),
     };
 }
