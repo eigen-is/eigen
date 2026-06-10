@@ -5,7 +5,7 @@ import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useExportDocument, useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CenteredToolbar, TooltipButton } from '@workspace/ui';
+import { CenteredToolbar, ToolbarSeparator, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import {
@@ -81,8 +81,6 @@ type EditorToolbarProps = {
     onImageUpload?: (file: File) => void;
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
 };
-
-const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
 
 export const EditorToolbar = ({
     editor,

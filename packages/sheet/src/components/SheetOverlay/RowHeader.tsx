@@ -5,7 +5,6 @@ import {
     fixPositionOnFrozenCells,
     fixRowStyleOverflowInFreeze,
     getSheetIndex,
-    handleContextMenu,
     handleRowFreezeHandleMouseDown,
     handleRowHeaderMouseDown,
     handleRowSizeHandleMouseDown,
@@ -14,9 +13,11 @@ import {
     selectTitlesMap,
     selectTitlesRange,
 } from '../../state';
+import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 
 export const RowHeader: React.FC = () => {
-    const { context, setContext, settings, refs } = useContext(WorkbookContext);
+    const { context, setContext, refs } = useContext(WorkbookContext);
+    const { onContextMenu, anchor: rowMenuAnchor } = useSheetContextMenu('row');
     const rowChangeSizeRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -132,23 +133,6 @@ export const RowHeader: React.FC = () => {
         [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
     );
 
-    const onContextMenu = useCallback(
-        (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const { nativeEvent } = e;
-            setContext((draftCtx) => {
-                handleContextMenu(
-                    draftCtx,
-                    settings,
-                    nativeEvent,
-                    refs.workbookContainer.current!,
-                    refs.cellArea.current!,
-                    'rowHeader',
-                );
-            });
-        },
-        [refs.workbookContainer, setContext, settings, refs.cellArea],
-    );
-
     useEffect(() => {
         const s = context.selections || [];
         let rowTitleMap: Record<number, number> = {};
@@ -256,6 +240,7 @@ export const RowHeader: React.FC = () => {
                     />
                 ))}
             </div>
+            {rowMenuAnchor}
         </div>
     );
 };

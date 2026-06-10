@@ -1,4 +1,4 @@
-import { isEmpty, isNil, last, set } from 'es-toolkit/compat';
+import { isNil, last } from 'es-toolkit/compat';
 import { type Context, getFlowdata } from '../context';
 import {
     cancelActiveImgItem,
@@ -29,7 +29,6 @@ export function handleCellAreaMouseDown(
     fxInput?: HTMLDivElement | null,
     canvas?: CanvasRenderingContext2D,
 ) {
-    ctx.contextMenu = {};
     ctx.filterContextMenu = undefined;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
@@ -524,9 +523,7 @@ export function handleCellAreaDoubleClick(
 
 export function handleContextMenu(
     ctx: Context,
-    settings: Settings,
     e: MouseEvent,
-    workbookContainer: HTMLDivElement,
     container: HTMLDivElement,
     area: 'cell' | 'rowHeader' | 'columnHeader',
 ) {
@@ -536,28 +533,8 @@ export function handleContextMenu(
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    const workbookRect = workbookContainer.getBoundingClientRect();
-
-    const { cellContextMenu } = settings;
-
-    // If all buttons hidden, hide the menu container
-    if (isEmpty(cellContextMenu)) {
-        return;
-    }
-
-    // relative to the workbook container
-    const x = e.pageX - workbookRect.left;
-    const y = e.pageY - workbookRect.top;
-    ctx.contextMenu = {
-        x,
-        y,
-        pageX: e.pageX,
-        pageY: e.pageY,
-    };
-    // select current cell when clicking the right button
     e.preventDefault();
     if (area === 'cell') {
-        set(ctx.contextMenu, 'headerMenu', undefined);
         const rect = container.getBoundingClientRect();
         const mouseX = e.pageX - rect.left - window.scrollX;
         const mouseY = e.pageY - rect.top - window.scrollY;
@@ -690,7 +667,6 @@ export function handleContextMenu(
             },
         ];
     } else if (area === 'rowHeader') {
-        set(ctx.contextMenu, 'headerMenu', 'row');
         const rect = container.getBoundingClientRect();
         const mouseY = e.pageY - rect.top - window.scrollY;
         const _selected_y = mouseY + ctx.scrollTop;
@@ -736,7 +712,6 @@ export function handleContextMenu(
             row_select: true,
         });
     } else if (area === 'columnHeader') {
-        set(ctx.contextMenu, 'headerMenu', 'column');
         const rect = container.getBoundingClientRect();
         const mouseX = e.pageX - rect.left - window.scrollX;
         const _selected_x = mouseX + ctx.scrollLeft;
