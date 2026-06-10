@@ -8,6 +8,7 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
+import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { useCommentLifecycle } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
@@ -175,6 +176,7 @@ function SlideEditorInner({
         doc: yjsDoc,
         activeCardIds: activeComments.ids,
         initialChatName,
+        ready: isSynced,
     });
     const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
@@ -185,30 +187,7 @@ function SlideEditorInner({
     const hasSelection = selectedObjectIds.length > 0;
     const isEditing = editingObjectId !== null;
 
-    useHotkey(
-        'Mod+Z',
-        (e) => {
-            e.preventDefault();
-            undoManager?.undo();
-        },
-        { enabled: canWrite && !!undoManager },
-    );
-    useHotkey(
-        'Mod+Y',
-        (e) => {
-            e.preventDefault();
-            undoManager?.redo();
-        },
-        { enabled: canWrite && !!undoManager },
-    );
-    useHotkey(
-        'Mod+Shift+Z',
-        (e) => {
-            e.preventDefault();
-            undoManager?.redo();
-        },
-        { enabled: canWrite && !!undoManager },
-    );
+    useYjsUndoHotkeys(undoManager, canWrite);
     useHotkey(
         'Delete',
         () => {

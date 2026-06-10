@@ -1,8 +1,8 @@
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useCreateChat } from '@workspace/lib/chat';
+import { writeCardToDoc } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
-import type { CommentCard } from '@workspace/lib/types/comments';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
@@ -17,21 +17,20 @@ const WELCOME_CARD = {
         'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
 };
 
-// Reuse the previous card object when its fields are unchanged, so memoized
-// cards skip re-rendering when an edit elsewhere on the board rebuilds state.
-function sameCard(a: CommentCard, b: CommentCard): boolean {
+// Reuse the previous column object when its fields are unchanged, so memoized
+// columns skip re-rendering when an edit elsewhere on the board rebuilds state.
+function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
     return (
         a.title === b.title &&
-        a.description === b.description &&
-        a.color === b.color &&
-        a.chatName === b.chatName &&
         a.creator === b.creator &&
-        a.createdAt === b.createdAt
+        a.createdAt === b.createdAt &&
+        a.taskIds.length === b.taskIds.length &&
+        a.taskIds.every((id, i) => id === b.taskIds[i])
     );
 }
 
 export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
-    const [board, setBoard] = useState<BoardData>({ tasks: {}, columns: {}, columnOrder: [] });
+    const [board, setBoard] = useState<BoardData>({ columns: {}, columnOrder: [] });
     const [isSynced, setIsSynced] = useState(false);
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
 
@@ -69,17 +68,18 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             const now = Date.now();
 
             doc.transact(() => {
-                const tasksMap = doc.getMap('tasks');
                 const columnOrderArray = doc.getArray('columnOrder');
 
                 const taskId = `task-${nanoid(10)}`;
-                const taskYMap = new Y.Map();
-                taskYMap.set('id', taskId);
-                taskYMap.set('title', WELCOME_CARD.title);
-                taskYMap.set('description', WELCOME_CARD.description);
-                taskYMap.set('color', EIGEN_STICKIES_COLORS[0][1].value);
-                if (chatName) taskYMap.set('chatName', chatName);
-                tasksMap.set(taskId, taskYMap);
+                writeCardToDoc(doc, 'tasks', {
+                    id: taskId,
+                    title: WELCOME_CARD.title,
+                    description: WELCOME_CARD.description,
+                    color: EIGEN_STICKIES_COLORS[0][1].value,
+                    chatName,
+                    creator: userEmail,
+                    createdAt: now,
+                });
 
                 const columnIds: string[] = [];
                 for (const [index, title] of DEFAULT_COLUMNS.entries()) {
@@ -121,45 +121,26 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
 
         const updateReactState = () => {
             setBoard((prev) => {
-                const tasks: Record<string, CommentCard> = {};
-                for (const [taskId, taskMapValue] of tasksMap) {
-                    const taskMap = taskMapValue as Y.Map<unknown>;
-                    const title = taskMap.get('title');
-                    const description = taskMap.get('description');
-                    const color = taskMap.get('color');
-                    const chatName = taskMap.get('chatName');
-                    const creator = taskMap.get('creator');
-                    const createdAt = taskMap.get('createdAt');
-                    const next: CommentCard = {
-                        id: taskId,
-                        title: typeof title === 'string' ? title : '',
-                        description: typeof description === 'string' ? description : '',
-                        color: typeof color === 'string' ? color : undefined,
-                        chatName: typeof chatName === 'string' ? chatName : undefined,
-                        creator: typeof creator === 'string' ? creator : undefined,
-                        createdAt: typeof createdAt === 'number' ? createdAt : undefined,
-                    };
-                    const prevTask = prev.tasks[taskId];
-                    tasks[taskId] = prevTask && sameCard(prevTask, next) ? prevTask : next;
-                }
                 const columns: Record<string, ColumnItem> = {};
                 for (const [columnId, columnMapValue] of columnsMap) {
                     const columnMap = columnMapValue as Y.Map<unknown>;
                     const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
-                    const taskIds = taskIdsArray ? (taskIdsArray.toArray() as string[]) : [];
-                    columns[columnId] = {
+                    const next: ColumnItem = {
                         id: columnId,
                         title: (columnMap.get('title') as string) || '',
-                        taskIds,
+                        taskIds: taskIdsArray ? (taskIdsArray.toArray() as string[]) : [],
                         creator: (columnMap.get('creator') as string) || '',
-                        createdAt: (columnMap.get('createdAt') as number) || Date.now(),
+                        // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
+                        // legacy columns that predate the createdAt field. Nothing renders it.
+                        createdAt: (columnMap.get('createdAt') as number) || 0,
                     };
+                    const prevColumn = prev.columns[columnId];
+                    columns[columnId] = prevColumn && sameColumn(prevColumn, next) ? prevColumn : next;
                 }
-                return { tasks, columns, columnOrder: columnOrderArray.toArray() as string[] };
+                return { columns, columnOrder: columnOrderArray.toArray() as string[] };
             });
         };
 
-        tasksMap.observeDeep(updateReactState);
         columnsMap.observeDeep(updateReactState);
         columnOrderArray.observe(updateReactState);
         updateReactState();
@@ -181,7 +162,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             // Unregister observers and tear down the UndoManager + provider; the effect re-runs on
             // pathId change without an unmount, so without this the old ones leak (and fire on
             // torn-down state). provider.destroy() before doc.destroy() — it detaches its own doc listener.
-            tasksMap.unobserveDeep(updateReactState);
             columnsMap.unobserveDeep(updateReactState);
             columnOrderArray.unobserve(updateReactState);
             undoManager.current?.destroy();
@@ -191,20 +171,19 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         };
     }, [ownerId, mountId, pathId, user?.email, initializeDefaultBoard]);
 
-    const handleAddColumn = (columnData: Omit<ColumnItem, 'id' | 'taskIds' | 'createdAt'>) => {
+    const handleAddColumn = (title: string) => {
         if (!docRef.current) return;
         const doc = docRef.current;
         doc.transact(() => {
             const columnId = `column-${nanoid(10)}`;
-            const now = Date.now();
             const columnsMap = doc.getMap('columns');
             const columnOrderArray = doc.getArray('columnOrder');
             const newColumnMap = new Y.Map();
             newColumnMap.set('id', columnId);
-            newColumnMap.set('title', columnData.title);
+            newColumnMap.set('title', title);
             newColumnMap.set('taskIds', new Y.Array());
-            newColumnMap.set('creator', columnData.creator);
-            newColumnMap.set('createdAt', now);
+            newColumnMap.set('creator', user?.email || '');
+            newColumnMap.set('createdAt', Date.now());
             columnsMap.set(columnId, newColumnMap);
             columnOrderArray.push([columnId]);
         });
@@ -214,6 +193,8 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     const deleteCardFromBoard = useCallback((cardId: string) => {
         if (!docRef.current) return;
         const doc = docRef.current;
+        // Walk columns + remove the tasks entry in one transact: single undo step, no orphan
+        // column refs. The `.eigenchat` + comments.db row persist for undo / version revert.
         doc.transact(() => {
             const columnsMap = doc.getMap('columns');
             for (const [, columnMapValue] of columnsMap) {
@@ -239,6 +220,5 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         deleteCardFromBoard,
         yjsDoc: docRef.current,
         undoManager: undoManager.current,
-        docRef,
     };
 };

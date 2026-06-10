@@ -16,7 +16,6 @@ type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     color?: string | null;
     resolved?: boolean;
     replyCount?: number;
-    replyLabel?: string;
     ref?: React.Ref<HTMLDivElement>;
 };
 
@@ -26,7 +25,6 @@ export function NoteCard({
     color,
     resolved,
     replyCount,
-    replyLabel,
     onClick,
     onContextMenu,
     className,
@@ -82,7 +80,7 @@ export function NoteCard({
                 )}
                 {!!replyCount && (
                     <p className="text-xs mt-0.5 opacity-50">
-                        {replyCount} {replyLabel || (replyCount === 1 ? 'reply' : 'replies')}
+                        {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
                     </p>
                 )}
             </CardContent>

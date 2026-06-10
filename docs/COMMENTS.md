@@ -141,13 +141,18 @@ y-websocket.
 | Hook / helper             | Description                                                                       |
 |---------------------------|-----------------------------------------------------------------------------------|
 | `useCommentCards(doc, mapName)` | `Record<cardId, CommentCard>` synced to the Y.Map (`comments` or `tasks`)   |
+| `useCommentLifecycle`     | The whole bundle above in one hook (open-card state, server entries, resolve mutation, create/update, `?chat=` resolution). Used by all four editors; `mapName` selects the Y.Map (`'comments'` default, stickies passes `'tasks'`), and hosts that mount before Yjs sync pass `ready` (+ optional `onChatNotFound`) |
 | `useCreateCommentCard`    | Returns `(input, anchorInTransact?) => Promise<void>`. Creates the `.eigenchat`, then writes the card + runs the caller's anchor inside one Y.Doc `transact` → single undo step. The anchor callback receives the new `CommentCard` synchronously inside the transaction |
 | `useUpdateCommentCard`    | `(cardId, patch) => void` — applies a partial patch to the Y.Map card             |
-| `useDeleteCommentCard`    | `(cardId) => void` — removes only the Y.Map entry; preserves `.eigenchat` + row    |
 | `useOpenCommentCard`      | `(cards, entries, openCardId)` → `{ card, entry }` — resolves the open dialog's `chatName` against the server-side entries |
 | `useCardIdFromChatName`   | Resolves a `?chat=<chatName>` URL param to a cardId. Optional `{ ready, onChatNotFound }` lets hosts gate on Yjs sync + clean up the URL when the chat genuinely doesn't exist |
 | `useUnresolvedCommentCount` | `(cards, entries) => number` — count of non-resolved active comments for badges/toolbar UI |
-| `readCards`, `writeCardToDoc`, `applyCardPatch`, `deleteCardFromDoc` | Pure Y.Doc helpers (React-free, unit-tested) |
+| `readCards`, `writeCardToDoc`, `applyCardPatch` | Pure Y.Doc helpers (React-free, unit-tested) |
+
+`useCommentCards` reads the map synchronously on mount (a host mounting after sync must see its
+cards on the first effect run, or `?chat=` deep links die against an empty map) and preserves card
+object identity across refreshes so memoized card components skip re-rendering. Deleting a card is
+host-specific (the anchor strip *is* the delete); there is no shared delete hook.
 
 ## Shared UI components
 
@@ -168,9 +173,17 @@ across all four apps. Renders items inside whichever menu family the host uses b
 ### CommentContextMenu (`packages/ui/src/components/layout/comments/comment-context-menu.tsx`)
 
 Convenience wrapper that pairs `<CommentMenuItems>` with the project's singleton
-`useContextMenu` + `ContextMenuAnchor` pattern. Used by docs / slides / sheets editors for the
-floating CommentPanel + mark/cell right-click cases. Stickies and the per-object slides menu
-use `<CommentMenuItems>` directly because their hosting menu differs.
+`useContextMenu` + `ContextMenuAnchor` pattern; `noun` tunes the labels (stickies passes
+`"sticky"` through `<CommentLifecycleDialogs>`). All four editors render it via
+`<CommentLifecycleDialogs>`; only the per-object slides menu uses `<CommentMenuItems>` directly
+because its hosting menu differs.
+
+### CommentLifecycleDialogs (`packages/ui/src/components/layout/comments/comment-lifecycle-dialogs.tsx`)
+
+Renders the `<CardDialog>` + `<CommentContextMenu>` pair driven by a `useCommentLifecycle` bundle.
+The host owns the `useContextMenu` instance and supplies the per-app `onDelete` that strips the
+host anchor. Optional `noun` and `onCardDialogClose` (stickies clears its `?chat=` URL param on
+close).
 
 ### CommentPanel (`packages/ui/src/components/layout/comments/comment-panel.tsx`)
 
@@ -242,7 +255,10 @@ for apps that surface resolve/re-open at the dialog level (docs, slides, sheets)
 
 ### Stickies
 
-- `tasks` Y.Map kept (legacy name; cards there are full `CommentCard`s).
+- `tasks` Y.Map kept (legacy name; cards there are full `CommentCard`s). The board consumes
+  `useCommentLifecycle({ mapName: 'tasks', ready: isSynced, ... })` + `<CommentLifecycleDialogs
+  noun="sticky">` like its siblings; `useBoard` only manages columns/order, the provider, and the
+  UndoManager.
 - Cards are anchored by column membership in `columnsMap.<col>.taskIds`.
 - Delete is a board-level helper `deleteCardFromBoard(cardId)` that walks columns + removes the
   Y.Map entry in one `transact` (single undo step, no orphan column refs).

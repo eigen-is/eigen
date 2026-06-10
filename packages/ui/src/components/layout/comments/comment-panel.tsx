@@ -35,11 +35,12 @@ export function CommentPanel({
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
 
     const visible = useMemo(() => {
+        const byChatName = new Map(entries.map((e) => [e.chatName, e]));
         const out: { card: CommentCard; entry: CommentEntry | undefined }[] = [];
         for (const cardId of activeCardIds) {
             const card = cards[cardId];
             if (!card) continue;
-            const entry = card.chatName ? entries.find((e) => e.chatName === card.chatName) : undefined;
+            const entry = card.chatName ? byChatName.get(card.chatName) : undefined;
             // Treat missing entry as "open" so freshly-created cards show up before SSE round-trip.
             const status = entry?.status ?? 'open';
             if (statusFilter !== 'all' && status !== statusFilter) continue;

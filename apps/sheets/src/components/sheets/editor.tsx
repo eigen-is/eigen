@@ -78,6 +78,7 @@ function SheetEditorInner({
         doc: docRef.current,
         activeCardIds: activeComments.ids,
         initialChatName,
+        ready: synced,
     });
     const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();

@@ -12,6 +12,7 @@
     "@apps/api": "workspace:*",
     "@better-auth/api-key": "^1.5.6",
     "@elysiajs/eden": "^1.4.8",
+    "@tanstack/react-hotkeys": "^0.1.1",
     "better-auth": "^1.5.6",
     "es-toolkit": "^1.46.0",
     "immer": "^9.0.12",
