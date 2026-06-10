@@ -1,18 +1,41 @@
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { useMediaQuery } from '@workspace/lib/media';
 import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
+import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { AlignCenter, AlignLeft, AlignRight, Baseline, Highlighter } from 'lucide-react';
+import { Separator } from '@workspace/ui/components/separator';
+import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
-import { getFlowdata, handleHorizontalAlign, handleTextBackground, handleTextColor } from '../../state';
+import {
+    getFlowdata,
+    handleBold,
+    handleFont,
+    handleHorizontalAlign,
+    handleItalic,
+    handleTextBackground,
+    handleTextColor,
+    handleTextSize,
+} from '../../state';
+import { FontSizeStepper } from './font-size-stepper';
+
+// `ff` is stored either as an index into the font list or as a bare family name;
+// normalise both to a picker-friendly name, falling back to the first font.
+function fontNameFromCell(ff: number | string | undefined): string {
+    if (ff == null || ff === '') return EIGEN_FONTS[0].name;
+    if (typeof ff === 'number') return EIGEN_FONTS[ff]?.name ?? EIGEN_FONTS[0].name;
+    return ff.replace(/['"]/g, '').split(',')[0]?.trim() || EIGEN_FONTS[0].name;
+}
+
+const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
 
 // Quick-format controls mirrored from the docs toolbar, driving the exact same
 // handlers as the Format menu — an extra surface, not a replacement. The menu bar's
 // 1fr·auto·1fr grid centers this on the bar; the min-width gate hides it (with
 // read-only) below the width where the side blocks still leave room to sit centered.
 export function FormatToolbar() {
-    const { context, setContext, refs } = useContext(WorkbookContext);
-    const hasSpace = useMediaQuery('(min-width: 1200px)');
+    const { context, setContext, refs, settings } = useContext(WorkbookContext);
+    const hasSpace = useMediaQuery('(min-width: 1360px)');
 
     if (!hasSpace || !context.allowEdit) return null;
 
@@ -26,9 +49,60 @@ export function FormatToolbar() {
     const textColor = cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
     const align = cell?.ht == null ? undefined : Number(cell.ht); // 0 = center, 1 = left, 2 = right
+    const fontName = fontNameFromCell(cell?.ff);
+    const fontSize = Number(cell?.fs) || settings.defaultFontSize;
+    const bold = Number(cell?.bl) === 1;
+    const italic = Number(cell?.it) === 1;
 
     return (
         <div className="flex items-center gap-0.5">
+            <FontPicker
+                value={fontName}
+                onChange={(name) => {
+                    setContext((ctx) => {
+                        handleFont(ctx, refs.cellInput.current!, name);
+                    });
+                }}
+            />
+
+            <ToolbarSeparator />
+
+            <FontSizeStepper
+                value={fontSize}
+                onChange={(size) => {
+                    setContext((ctx) => {
+                        handleTextSize(ctx, refs.cellInput.current!, size);
+                    });
+                }}
+            />
+
+            <ToolbarSeparator />
+
+            <TooltipButton
+                icon={Bold}
+                tooltipText="Bold"
+                active={bold}
+                preventFocusLoss
+                onClick={() => {
+                    setContext((ctx) => {
+                        handleBold(ctx, refs.cellInput.current!);
+                    });
+                }}
+            />
+            <TooltipButton
+                icon={Italic}
+                tooltipText="Italic"
+                active={italic}
+                preventFocusLoss
+                onClick={() => {
+                    setContext((ctx) => {
+                        handleItalic(ctx, refs.cellInput.current!);
+                    });
+                }}
+            />
+
+            <ToolbarSeparator />
+
             <ColorPickerButton
                 icon={Baseline}
                 tooltipText="Text color"
@@ -60,6 +134,8 @@ export function FormatToolbar() {
                     }
                 }}
             />
+
+            <ToolbarSeparator />
 
             <TooltipButton
                 icon={AlignLeft}

@@ -1,3 +1,5 @@
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
+
 export const en = {
     generalDialog: {
         partiallyError: 'Cannot perform this operation on partially merged cells',
@@ -9200,8 +9202,10 @@ export const en = {
     fontFamily: {
         MicrosoftYaHei: 'YaHei',
     },
-    fontarray: ['Inter', 'Source Serif 4', 'JetBrains Mono', 'Excalifont'],
-    fontjson: { inter: 0, 'source serif 4': 1, 'jetbrains mono': 2, excalifont: 3 },
+    // Single source for the font list — engine rendering, xlsx import, and the
+    // toolbar/menu pickers all read this; `ff` may be stored as an index into fontarray.
+    fontarray: EIGEN_FONTS.map((font) => font.name),
+    fontjson: Object.fromEntries(EIGEN_FONTS.map((font, i) => [font.name.toLowerCase(), i] as const)),
     border: {
         borderTop: 'Top border',
         borderBottom: 'Bottom border',
