@@ -21,7 +21,13 @@ function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
             chatName: typeof chatName === 'string' ? chatName : undefined,
             creator: typeof creator === 'string' ? creator : undefined,
             createdAt: typeof createdAt === 'number' ? createdAt : undefined,
-            attachments: Array.isArray(attachments) ? (attachments as ChatAttachment[]) : undefined,
+            // Element filter guards against malformed values from buggy peers — a null/number
+            // element would crash sameAttachments and the chip renderers.
+            attachments: Array.isArray(attachments)
+                ? attachments.filter(
+                      (a): a is ChatAttachment => typeof a === 'string' || (typeof a === 'object' && a !== null),
+                  )
+                : undefined,
         };
     }
     return out;
