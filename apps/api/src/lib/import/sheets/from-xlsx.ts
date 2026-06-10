@@ -3,12 +3,15 @@
 import type {
     BorderSide,
     CellBorderInfo,
+    ConditionalFormatConditionName,
+    ConditionalFormatRule,
+    DefaultConditionalFormatRule,
     Cell as FortuneCell,
     Sheet,
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { parseA1Range, toA1, update } from '@workspace/sheet/engine';
+import { functionCopy, parseA1Range, toA1, update } from '@workspace/sheet/engine';
 import type {
     Alignment,
     AutoFilter,
@@ -220,7 +223,285 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
     const filterRange = autoFilterToFilterRange(worksheet.autoFilter);
     if (filterRange) sheet.filterRange = filterRange;
 
+    const conditionalFormatRules = convertConditionalFormats(worksheet, theme);
+    if (conditionalFormatRules.length > 0) sheet.conditionalFormatRules = conditionalFormatRules;
+
     return sheet;
+}
+
+type XlsxCfColor = { argb?: string; theme?: number; tint?: number };
+
+// Loose shape of a parsed <cfRule>. exceljs's declared ConditionalFormattingRule union is
+// narrower than what file read-back produces: all eight cellIs operators appear (typings
+// list four), `duplicateValues`/`uniqueValues`/`beginsWith`/… pass through as raw type
+// strings, formulae entries are raw formula text, and dataBar `color` is a single object
+// while colorScale's is an array.
+type XlsxCfRule = {
+    type: string;
+    priority: number;
+    operator?: string;
+    formulae?: (string | number)[];
+    text?: string;
+    rank?: number;
+    percent?: boolean;
+    bottom?: boolean;
+    aboveAverage?: boolean;
+    color?: XlsxCfColor | XlsxCfColor[];
+    style?: {
+        font?: { color?: XlsxCfColor } | null;
+        fill?: { pattern?: string; fgColor?: XlsxCfColor; bgColor?: XlsxCfColor } | null;
+    } | null;
+};
+
+const CELL_IS_CONDITION: Record<string, ConditionalFormatConditionName> = {
+    greaterThan: 'greaterThan',
+    greaterThanOrEqual: 'greaterThanOrEqual',
+    lessThan: 'lessThan',
+    lessThanOrEqual: 'lessThanOrEqual',
+    equal: 'equal',
+    notEqual: 'notEqual',
+    between: 'between',
+    notBetween: 'notBetween',
+};
+
+const CELL_IS_FORMULA_OP: Record<string, string> = {
+    greaterThan: '>',
+    greaterThanOrEqual: '>=',
+    lessThan: '<',
+    lessThanOrEqual: '<=',
+    equal: '=',
+    notEqual: '<>',
+};
+
+// Text-operator and timePeriod rules read back without their own attribute payloads, but
+// Excel stores the equivalent formula inside the cfRule — evaluate those through the
+// engine's formula rule.
+const FORMULA_BACKED_CF_TYPES = new Set(['containsText', 'notContainsText', 'beginsWith', 'endsWith', 'timePeriod']);
+
+function convertConditionalFormats(worksheet: Worksheet, theme: ThemePalette): ConditionalFormatRule[] {
+    // `conditionalFormattings` is a real Worksheet property (lib/doc/worksheet.js) missing
+    // from exceljs's typings — same situation as `workbook._themes` in extractThemePalette.
+    const blocks =
+        (worksheet as unknown as { conditionalFormattings?: { ref: string; rules: XlsxCfRule[] }[] })
+            .conditionalFormattings ?? [];
+
+    const flat: { rule: XlsxCfRule; ranges: SingleRange[] }[] = [];
+    for (const block of blocks) {
+        // sqref can carry multiple space-separated ranges.
+        const ranges: SingleRange[] = [];
+        for (const token of block.ref.split(/\s+/)) {
+            const range = a1ToSingleRange(token);
+            if (range) ranges.push(range);
+        }
+        if (ranges.length === 0) continue;
+        for (const rule of block.rules) flat.push({ rule, ranges });
+    }
+
+    // Excel resolves overlapping rules by priority: the LOWEST priority number wins a
+    // conflicting style property. The engine applies rules in array order and merges the
+    // compute map last-write-wins per property (applyCellStyle), so emit rules sorted by
+    // priority DESCENDING — the highest-precedence rule is applied last and lands on top.
+    flat.sort((a, b) => b.rule.priority - a.rule.priority);
+
+    const rules: ConditionalFormatRule[] = [];
+    for (const { rule, ranges } of flat) {
+        rules.push(...mapCfRule(rule, ranges, theme));
+    }
+    return rules;
+}
+
+function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette): ConditionalFormatRule[] {
+    if (rule.type === 'colorScale') {
+        // exceljs lists colorScale stops min→(mid)→max; the engine's colorGradation
+        // format array is max→(mid)→min.
+        const stops = Array.isArray(rule.color) ? rule.color : [];
+        const format: string[] = [];
+        for (const stop of stops) {
+            const hex = resolveColor(stop, theme);
+            if (hex) format.push(hex);
+        }
+        if (format.length !== stops.length || (format.length !== 2 && format.length !== 3)) return [];
+        format.reverse();
+        return [{ type: 'colorGradation', cellrange: ranges, format }];
+    }
+
+    if (rule.type === 'dataBar') {
+        const color = Array.isArray(rule.color) ? rule.color[0] : rule.color;
+        const hex = resolveColor(color, theme);
+        // Single color → solid bar, like the editor's data-bar presets.
+        return hex ? [{ type: 'dataBar', cellrange: ranges, format: [hex] }] : [];
+    }
+
+    const format = convertDxfFormat(rule.style, theme);
+
+    if (rule.type === 'cellIs' && rule.operator != null && rule.operator in CELL_IS_CONDITION) {
+        const operands = (rule.formulae ?? []).map(String);
+        if (operands.length === 0) return [];
+        const literals = operands.map(parseCfLiteral);
+        if (literals.every((value) => value != null)) {
+            return [
+                {
+                    type: 'default',
+                    cellrange: ranges,
+                    format,
+                    conditionName: CELL_IS_CONDITION[rule.operator],
+                    conditionRange: [],
+                    conditionValue: literals,
+                },
+            ];
+        }
+        // Ref/function operand — the engine's comparison rules only hold literals, so
+        // express the comparison as a formula rule anchored at the range's top-left.
+        const tl = toA1(ranges[0].row[0], ranges[0].column[0]);
+        if (rule.operator === 'between' || rule.operator === 'notBetween') {
+            if (operands.length < 2) return [];
+            const within = `AND(${tl}>=${operands[0]},${tl}<=${operands[1]})`;
+            return cfFormulaRules(rule.operator === 'between' ? within : `NOT(${within})`, ranges, format);
+        }
+        return cfFormulaRules(`${tl}${CELL_IS_FORMULA_OP[rule.operator]}${operands[0]}`, ranges, format);
+    }
+
+    if (rule.type === 'containsText' && rule.operator === 'containsText') {
+        const text = rule.text ?? extractSearchText(rule.formulae?.[0]);
+        if (text != null) {
+            return [
+                {
+                    type: 'default',
+                    cellrange: ranges,
+                    format,
+                    conditionName: 'textContains',
+                    conditionRange: [],
+                    conditionValue: [text],
+                },
+            ];
+        }
+    }
+
+    if (rule.type === 'expression' || FORMULA_BACKED_CF_TYPES.has(rule.type)) {
+        const formula = rule.formulae?.[0];
+        return formula == null ? [] : cfFormulaRules(String(formula), ranges, format);
+    }
+
+    if (rule.type === 'top10') {
+        const conditionName = rule.bottom
+            ? rule.percent
+                ? 'last10_percent'
+                : 'last10'
+            : rule.percent
+              ? 'top10_percent'
+              : 'top10';
+        return [
+            {
+                type: 'default',
+                cellrange: ranges,
+                format,
+                conditionName,
+                conditionRange: [],
+                conditionValue: [String(rule.rank ?? 10)],
+            },
+        ];
+    }
+
+    if (rule.type === 'aboveAverage') {
+        // The aboveAverage attribute defaults to true and is omitted from the XML when true.
+        return [
+            {
+                type: 'default',
+                cellrange: ranges,
+                format,
+                conditionName: rule.aboveAverage === false ? 'belowAverage' : 'aboveAverage',
+                conditionRange: [],
+                conditionValue: [],
+            },
+        ];
+    }
+
+    if (rule.type === 'duplicateValues' || rule.type === 'uniqueValues') {
+        return [
+            {
+                type: 'default',
+                cellrange: ranges,
+                format,
+                conditionName: 'duplicateValue',
+                conditionRange: [],
+                conditionValue: [rule.type === 'duplicateValues' ? '0' : '1'],
+            },
+        ];
+    }
+
+    // Skipped rule types: iconSet (no engine evaluator), containsBlanks-family rules
+    // without a stored formula, and anything unrecognized. A dropped rule is honest;
+    // a wrong rendering is not.
+    return [];
+}
+
+// Excel anchors a CF formula's relative refs at the top-left of the FIRST range in the
+// sqref and shifts them per target cell across ALL ranges. The engine instead re-anchors
+// the formula at each cellrange entry's own top-left, so emit one rule per range with the
+// formula pre-shifted from the sqref anchor to that range's top-left.
+function cfFormulaRules(
+    formula: string,
+    ranges: SingleRange[],
+    format: DefaultConditionalFormatRule['format'],
+): DefaultConditionalFormatRule[] {
+    const anchorRow = ranges[0].row[0];
+    const anchorCol = ranges[0].column[0];
+    return ranges.map((range) => {
+        let shifted = formula;
+        const dr = range.row[0] - anchorRow;
+        const dc = range.column[0] - anchorCol;
+        if (dr !== 0) shifted = functionCopy(shifted, 'down', dr);
+        if (dc !== 0) shifted = functionCopy(shifted, 'right', dc);
+        return {
+            type: 'default',
+            cellrange: [range],
+            format,
+            conditionName: 'formula',
+            conditionRange: [],
+            conditionValue: [`=${shifted}`],
+        };
+    });
+}
+
+function convertDxfFormat(style: XlsxCfRule['style'], theme: ThemePalette): DefaultConditionalFormatRule['format'] {
+    const textColor = resolveColor(style?.font?.color, theme);
+    // dxf solid fills carry the visible color in bgColor (Excel-authored) or in both
+    // fgColor and bgColor (Google Sheets exports); pattern "none" marks a font-only dxf.
+    const fill = style?.fill;
+    const cellColor =
+        fill != null && fill.pattern !== 'none'
+            ? (resolveColor(fill.fgColor, theme) ?? resolveColor(fill.bgColor, theme))
+            : null;
+    return { textColor, cellColor };
+}
+
+// cellIs operands arrive as raw formula text: numeric literals, quoted strings, or
+// refs/functions (→ null, handled via the formula-rule fallback). Quoted percent strings
+// like "5%" come from Google Sheets exports that serialize a percent-format threshold as
+// text — coerce them to the numeric form the engine's comparisons expect.
+function parseCfLiteral(operand: string): string | null {
+    const txt = operand.trim();
+    if (/^-?(\d+\.?\d*|\.\d+)$/.test(txt)) return txt;
+    if (txt.startsWith('"') && txt.endsWith('"') && txt.length >= 2) {
+        const inner = txt.slice(1, -1).replace(/""/g, '"');
+        const pct = inner.match(/^(-?\d+(?:\.\d+)?)%$/);
+        return pct ? String(Number(pct[1]) / 100) : inner;
+    }
+    return null;
+}
+
+// exceljs read-back drops the containsText rule's `text` attribute but keeps the formula
+// Excel stores in the file: NOT(ISERROR(SEARCH("<text>",<topLeftRef>))).
+function extractSearchText(formula: string | number | undefined): string | null {
+    if (formula == null) return null;
+    const match = String(formula).match(/^NOT\(ISERROR\(SEARCH\("(.*)",/);
+    return match ? match[1].replace(/""/g, '"') : null;
+}
+
+function a1ToSingleRange(ref: string): SingleRange | null {
+    const parsed = parseA1Range(ref);
+    if (!parsed) return null;
+    return { row: [parsed.start.row, parsed.end.row], column: [parsed.start.col, parsed.end.col] };
 }
 
 // exceljs reads <autoFilter ref> back as the raw A1 ref string — Excel writes absolute
@@ -232,9 +513,7 @@ function autoFilterToFilterRange(autoFilter: AutoFilter | undefined): SingleRang
     const toRef = (a: string | { row: number; column: number }) =>
         typeof a === 'string' ? a : toA1(a.row - 1, a.column - 1);
     const ref = typeof autoFilter === 'string' ? autoFilter : `${toRef(autoFilter.from)}:${toRef(autoFilter.to)}`;
-    const parsed = parseA1Range(ref);
-    if (!parsed) return null;
-    return { row: [parsed.start.row, parsed.end.row], column: [parsed.start.col, parsed.end.col] };
+    return a1ToSingleRange(ref);
 }
 
 function buildMergeStructures(merges: string[]): {
