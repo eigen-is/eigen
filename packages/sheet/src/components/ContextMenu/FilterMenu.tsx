@@ -2,6 +2,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Input } from '@workspace/ui/components/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@workspace/ui/components/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
 import { concat, debounce, omit, union, without, xor } from 'es-toolkit/compat';
 import { ChevronDown, ChevronRight, Filter as FilterIcon } from 'lucide-react';
@@ -12,11 +13,14 @@ import { useAlert } from '../../hooks/useAlert';
 import {
     type Context,
     clearFilter,
+    FILTER_CONDITION_ITEMS,
     type FilterColor,
+    type FilterConditionName,
     type FilterDate,
     type FilterValue,
     getFilterColumnColors,
     getFilterColumnValues,
+    getFilterConditionHiddenRows,
     locale,
     orderbydatafiler,
     saveFilter,
@@ -155,6 +159,9 @@ export const FilterMenu: React.FC = () => {
         bgColors: FilterColor[];
         fcColors: FilterColor[];
     }>({ bgColors: [], fcColors: [] });
+    const [conditionExpanded, setConditionExpanded] = useState(false);
+    const [conditionName, setConditionName] = useState<FilterConditionName | 'none'>('none');
+    const [conditionValues, setConditionValues] = useState<[string, string]>(['', '']);
     const [showSubMenu, setShowSubMenu] = useState(false);
     const subMenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const { showAlert } = useAlert();
@@ -246,6 +253,10 @@ export const FilterMenu: React.FC = () => {
         setDatesUncheck(res.datesUncheck);
         setValuesUncheck(res.valuesUncheck);
         setShowValues(res.flattenValues);
+        const savedCondition = contextRef.current.filter[col - startCol]?.byCondition;
+        setConditionName(savedCondition?.conditionName ?? 'none');
+        setConditionValues([savedCondition?.values[0] ?? '', savedCondition?.values[1] ?? '']);
+        setConditionExpanded(savedCondition != null);
     }, [col, endRow, startRow, startCol, filterContextMenu?.hiddenRows]);
 
     useEffect(() => {
@@ -392,7 +403,7 @@ export const FilterMenu: React.FC = () => {
                                                             draftCtx,
                                                             Object.keys(rowHidden).length > 0,
                                                             rowHidden,
-                                                            {},
+                                                            undefined,
                                                             startRow,
                                                             endRow,
                                                             col,
@@ -413,15 +424,66 @@ export const FilterMenu: React.FC = () => {
                         );
                     }
                     if (name === 'filter-by-condition') {
-                        // Placeholder slot — not yet implemented. Render disabled-looking so it
-                        // doesn't masquerade as a working menu item.
+                        const arity =
+                            conditionName === 'none'
+                                ? 0
+                                : (FILTER_CONDITION_ITEMS.find((item) => item.name === conditionName)?.arity ?? 0);
                         return (
-                            <div
-                                key={name}
-                                className={cn(menuItemClass, 'justify-between gap-2 opacity-50 pointer-events-none')}
-                            >
-                                <span>{filter.filterByCondition}</span>
-                                <ChevronRight className="size-3.5" aria-hidden="true" />
+                            <div key={name}>
+                                <button
+                                    type="button"
+                                    className={cn(menuItemClass, 'w-full justify-between gap-2')}
+                                    onClick={() => setConditionExpanded((prev) => !prev)}
+                                >
+                                    <span>{filter.filterByCondition}</span>
+                                    {conditionExpanded ? (
+                                        <ChevronDown className="size-3.5" aria-hidden="true" />
+                                    ) : (
+                                        <ChevronRight className="size-3.5" aria-hidden="true" />
+                                    )}
+                                </button>
+                                {conditionExpanded && (
+                                    <div className="px-2 pt-1 pb-1.5 space-y-1.5">
+                                        <Select
+                                            value={conditionName}
+                                            onValueChange={(v) => setConditionName(v as FilterConditionName | 'none')}
+                                        >
+                                            <SelectTrigger size="sm" className="w-full">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">{filter.conditionNone}</SelectItem>
+                                                {FILTER_CONDITION_ITEMS.map((item) => (
+                                                    <SelectItem key={item.name} value={item.name}>
+                                                        {filter[item.localeKey]}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {arity >= 1 && (
+                                            <Input
+                                                className="h-8"
+                                                placeholder={filter.filiterInputTip}
+                                                value={conditionValues[0]}
+                                                onKeyDown={(e) => e.stopPropagation()}
+                                                onChange={(e) =>
+                                                    setConditionValues([e.target.value, conditionValues[1]])
+                                                }
+                                            />
+                                        )}
+                                        {arity === 2 && (
+                                            <Input
+                                                className="h-8"
+                                                placeholder={filter.filiterInputTip}
+                                                value={conditionValues[1]}
+                                                onKeyDown={(e) => e.stopPropagation()}
+                                                onChange={(e) =>
+                                                    setConditionValues([conditionValues[0], e.target.value])
+                                                }
+                                            />
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         );
                     }
@@ -523,24 +585,54 @@ export const FilterMenu: React.FC = () => {
                         onClick={() => {
                             if (col == null) return;
                             setContext((draftCtx) => {
-                                const rowHidden = hiddenRows.current.reduce(
-                                    (pre, curr) => {
-                                        pre[curr] = 0;
-                                        return pre;
-                                    },
-                                    {} as Record<string, number>,
-                                );
-                                saveFilter(
-                                    draftCtx,
-                                    hiddenRows.current.length > 0,
-                                    rowHidden,
-                                    {},
-                                    startRow,
-                                    endRow,
-                                    col,
-                                    startCol,
-                                    endCol,
-                                );
+                                // A selected condition takes precedence over the by-values
+                                // checkboxes — one filter mode per column, like Google Sheets.
+                                if (conditionName !== 'none') {
+                                    const arity =
+                                        FILTER_CONDITION_ITEMS.find((item) => item.name === conditionName)?.arity ?? 0;
+                                    const byCondition = {
+                                        conditionName,
+                                        values: conditionValues.slice(0, arity),
+                                    };
+                                    const rowHidden = getFilterConditionHiddenRows(
+                                        draftCtx,
+                                        col,
+                                        startRow,
+                                        endRow,
+                                        startCol,
+                                        byCondition,
+                                    );
+                                    saveFilter(
+                                        draftCtx,
+                                        true,
+                                        rowHidden,
+                                        byCondition,
+                                        startRow,
+                                        endRow,
+                                        col,
+                                        startCol,
+                                        endCol,
+                                    );
+                                } else {
+                                    const rowHidden = hiddenRows.current.reduce(
+                                        (pre, curr) => {
+                                            pre[curr] = 0;
+                                            return pre;
+                                        },
+                                        {} as Record<string, number>,
+                                    );
+                                    saveFilter(
+                                        draftCtx,
+                                        hiddenRows.current.length > 0,
+                                        rowHidden,
+                                        undefined,
+                                        startRow,
+                                        endRow,
+                                        col,
+                                        startCol,
+                                        endCol,
+                                    );
+                                }
                                 hiddenRows.current = [];
                                 draftCtx.filterContextMenu = undefined;
                             });
