@@ -215,4 +215,12 @@ export type Sheet = {
     column?: number;
     showGridLines?: boolean | number;
     conditionalFormatRules?: ConditionalFormatRule[];
+    // Frozen panes. `row_focus`/`column_focus` are the 0-based index of the LAST
+    // frozen row/column. The bare 'row'|'column'|'both' forms are aliases the
+    // editor normalizes to the 'range*' forms at consume time (the range applies
+    // either way — see state/modules/freeze.ts::frozenTofreezen).
+    frozen?: {
+        type: 'row' | 'column' | 'both' | 'rangeRow' | 'rangeColumn' | 'rangeBoth';
+        range?: { row_focus: number; column_focus: number };
+    };
 };
