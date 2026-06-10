@@ -1,13 +1,12 @@
 import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib/chat';
 import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
-import { isAttachmentReference } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useFileDropTarget } from '../../../hooks/use-file-drop-target';
 import { useSuggestions } from '../../../hooks/use-suggestions';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
-import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
-import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
+import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
 import { ChatPlayerSuggest } from './chat-player-suggest';
 import { ChatSlashSuggest } from './chat-slash-suggest';
 import { getAtSuggestQuery, getSlashTargetQuery } from './chat-utils';
@@ -213,6 +212,9 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         setFiles((prev) => prev.filter((_, i) => i !== index));
     };
 
+    const stageDroppedFiles = useCallback((dropped: File[]) => setFiles((prev) => [...prev, ...dropped]), []);
+    const dropProps = useFileDropTarget(stageDroppedFiles, !disabled);
+
     if (readOnly) {
         return (
             <div className={cn('border-t px-5 py-3', className)}>
@@ -222,33 +224,16 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
     }
 
     return (
-        <div className={cn('border-t px-5 py-3', className)}>
-            {(files.length > 0 || hasDriveAttachments) && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                    {driveAttachments?.map((attachment) =>
-                        isAttachmentReference(attachment) ? (
-                            <ReferenceAttachmentChip
-                                key={`ref-${attachment.id}`}
-                                reference={attachment}
-                                onRemove={
-                                    onRemoveDriveAttachment ? () => onRemoveDriveAttachment(attachment) : undefined
-                                }
-                            />
-                        ) : (
-                            <SimpleAttachmentChip
-                                key={`drive-${attachment}`}
-                                filename={attachment}
-                                onRemove={
-                                    onRemoveDriveAttachment ? () => onRemoveDriveAttachment(attachment) : undefined
-                                }
-                            />
-                        ),
-                    )}
-                    {files.map((file, i) => (
-                        <SimpleAttachmentChip key={i} filename={file.name} onRemove={() => removeFile(i)} />
-                    ))}
-                </div>
-            )}
+        <div className={cn('border-t px-5 py-3', className)} {...dropProps}>
+            <AttachmentDraftChips
+                items={[...(driveAttachments ?? []), ...files]}
+                className="mb-2"
+                onRemove={(i) => {
+                    const driveLen = driveAttachments?.length ?? 0;
+                    if (i < driveLen) onRemoveDriveAttachment?.((driveAttachments ?? [])[i]);
+                    else removeFile(i - driveLen);
+                }}
+            />
             <div className="flex items-end gap-2 relative">
                 {onAttachClick && (
                     <Button

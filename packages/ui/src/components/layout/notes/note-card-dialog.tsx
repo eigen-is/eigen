@@ -38,6 +38,9 @@ type NoteCardDialogProps = {
     // Fires after a read-only task-list checkbox toggle inside `description`.
     // Receives the post-toggle HTML. Only wired when `canWrite` is true.
     onDescriptionChange?: (html: string) => void;
+    // Rendered between the description and the meta/actions footer — card content,
+    // above the separator, unlike `children` (the thread).
+    attachments?: ReactNode;
     children: ReactNode;
 };
 
@@ -55,6 +58,7 @@ export function NoteCardDialog({
     onAction,
     copyLinkUrl,
     onDescriptionChange,
+    attachments,
     children,
 }: NoteCardDialogProps) {
     const handleDescriptionClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -94,8 +98,12 @@ export function NoteCardDialog({
                         </div>
                     )}
 
+                    {attachments && <div className={cn('px-4 pb-3', !description && 'pt-2')}>{attachments}</div>}
+
                     {(meta || copyLinkUrl || (canWrite && onEdit) || onAction) && (
-                        <div className={cn('flex items-center gap-2 px-4 pb-2', !description && 'pt-2')}>
+                        <div
+                            className={cn('flex items-center gap-2 px-4 pb-2', !description && !attachments && 'pt-2')}
+                        >
                             {meta && <p className="flex-1 text-xs text-muted-foreground">{meta}</p>}
                             {copyLinkUrl && (
                                 <IconAction

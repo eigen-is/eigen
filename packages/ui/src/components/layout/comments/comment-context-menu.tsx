@@ -1,13 +1,10 @@
-import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { CommentCard } from '@workspace/lib/types/comments';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dropdown-menu';
 import { ContextMenuAnchor, type useContextMenu } from '../context-menu';
-import { CommentMenuItems } from './comment-menu-items';
-
-export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | undefined };
+import { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
 
 type CommentContextMenuProps = {
     contextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
+    noun?: string;
     onOpen: (cardId: string) => void;
     onUpdateCard: (cardId: string, patch: { color: string }) => void;
     onResolve: (chatName: string, status: 'open' | 'resolved') => void;
@@ -16,6 +13,7 @@ type CommentContextMenuProps = {
 
 export function CommentContextMenu({
     contextMenu,
+    noun,
     onOpen,
     onUpdateCard,
     onResolve,
@@ -36,6 +34,7 @@ export function CommentContextMenu({
                     SubTrigger: DropdownMenuSubTrigger,
                     SubContent: DropdownMenuSubContent,
                 }}
+                noun={noun}
                 item={contextMenu.item ?? null}
                 onOpen={close(onOpen)}
                 onChangeColor={close((cardId, color) => onUpdateCard(cardId, { color }))}

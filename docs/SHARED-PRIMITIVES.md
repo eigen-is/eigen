@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-724 primitives across 6 kinds. `packages/sheet` internals are excluded.
+729 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (96)
+## Components (97)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -92,6 +92,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserAvatar` | `@workspace/ui` | packages/ui/src/components/layout/user-avatar.tsx |
 | `UserItem` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |
 | `AttachmentChip` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/attachment-chip.tsx |
+| `AttachmentDraftChips` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/attachment-draft-chips.tsx |
 | `LightEditor` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/editor/light-editor.tsx |
 | `ReferenceAttachmentChip` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/reference-attachment-chip.tsx |
 | `SimpleAttachmentChip` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/simple-attachment-chip.tsx |
@@ -133,7 +134,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (189)
+## Hooks (192)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -200,6 +201,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useTeamsHaveChats` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useUnreadChatIds` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
 | `useCollabDocumentInfo` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab.ts |
+| `useYjsUndoHotkeys` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
 | `useYjsUndoState` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-state.ts |
 | `useCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `useCommandResults` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-results.ts |
@@ -211,8 +213,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCommentCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `useCommentLifecycle` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-lifecycle.ts |
 | `useCreateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
-| `useDeleteCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-delete-comment-card.ts |
 | `useOpenCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-open-comment-card.ts |
+| `useResolveCardAttachments` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-resolve-card-attachments.ts |
 | `useUnresolvedCommentCount` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-unresolved-comment-count.ts |
 | `useUpdateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
 | `useAddContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
@@ -316,10 +318,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMountLabel` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-mount-list.tsx |
 | `useSidebar` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useUpload` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-provider.tsx |
+| `useAttachmentMeta` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/use-attachment-meta.ts |
 | `useContextMenu` | `@workspace/ui/components/layout/context-menu` | packages/ui/src/components/layout/context-menu/use-context-menu.ts |
 | `useOptionalPreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
 | `usePreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
+| `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
 | `useListDrag` | `@workspace/ui/hooks/use-list-drag` | packages/ui/src/hooks/use-list-drag.ts |
 | `useListDropTarget` | `@workspace/ui/hooks/use-list-drop-target` | packages/ui/src/hooks/use-list-drop-target.ts |
@@ -327,7 +331,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (196)
+## Types (197)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -490,6 +494,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ResultGroup` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `Sections` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `ActiveComments` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
@@ -499,7 +504,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ColorPickerButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker-button.tsx |
 | `ColorPickerProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
 | `ColumnProps` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
-| `CommentContextMenuItem` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-context-menu.tsx |
+| `CommentContextMenuItem` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-menu-items.tsx |
 | `ConfirmDialogProps` | `@workspace/ui` | packages/ui/src/components/layout/confirm-dialog.tsx |
 | `ContactAutosuggestProps` | `@workspace/ui` | packages/ui/src/components/layout/contacts/types.ts |
 | `DocumentModeButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
@@ -641,7 +646,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `writeEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `restoreYjsDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `applyCardPatch` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
-| `deleteCardFromDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-delete-comment-card.ts |
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
@@ -738,6 +742,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `teamOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `userOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `parseContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `validateACLEntries` | `@workspace/lib/validation` | packages/lib/src/validation/acl.ts |

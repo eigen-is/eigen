@@ -34,6 +34,15 @@ describe('writeCardToDoc', () => {
         expect(y.has('createdAt')).toBe(false);
     });
 
+    test('persists attachments only when non-empty', () => {
+        const doc = new Y.Doc();
+        writeCardToDoc(doc, 'comments', { id: 'c4', title: '', description: '', attachments: ['a.png'] });
+        expect(doc.getMap<Y.Map<unknown>>('comments').get('c4')!.get('attachments')).toEqual(['a.png']);
+
+        writeCardToDoc(doc, 'comments', { id: 'c5', title: '', description: '', attachments: [] });
+        expect(doc.getMap<Y.Map<unknown>>('comments').get('c5')!.has('attachments')).toBe(false);
+    });
+
     test('honours alternate mapName ("tasks" for stickies)', () => {
         const doc = new Y.Doc();
         writeCardToDoc(doc, 'tasks', { id: 'c3', title: '', description: '' });

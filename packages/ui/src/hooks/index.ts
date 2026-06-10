@@ -1,4 +1,5 @@
 export * from './use-eigen-doc-editor-route';
+export * from './use-file-drop-target';
 export * from './use-keyboard-list-navigation';
 export * from './use-list-drag';
 export * from './use-list-drop-target';

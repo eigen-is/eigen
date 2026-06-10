@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
+import type { AttachmentReference } from '../../../types/drive-reference';
 import { readCards } from './use-comment-cards';
 
 describe('readCards (BC for legacy stickies cards)', () => {
@@ -47,6 +48,47 @@ describe('readCards (BC for legacy stickies cards)', () => {
         expect(result['new-1'].creator).toBeUndefined();
         expect(result['new-1'].createdAt).toBeUndefined();
         expect(result['new-1'].title).toBe('New card');
+    });
+
+    test('parses attachments and ignores malformed values', () => {
+        const doc = new Y.Doc();
+        const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+        const reference: AttachmentReference = {
+            type: 'reference',
+            ownerId: 'o1',
+            mountId: 'm1',
+            id: 'p1',
+            name: 'Doc.eigendoc',
+            driveType: 'doc',
+            mimeType: 'application/eigendoc',
+        };
+        doc.transact(() => {
+            const withAttachments = new Y.Map<unknown>();
+            withAttachments.set('id', 'a1');
+            withAttachments.set('title', 'Has attachments');
+            withAttachments.set('description', '');
+            withAttachments.set('attachments', ['photo.png', reference]);
+            tasks.set('a1', withAttachments);
+
+            const malformed = new Y.Map<unknown>();
+            malformed.set('id', 'a2');
+            malformed.set('title', 'Malformed');
+            malformed.set('description', '');
+            malformed.set('attachments', 'not-an-array');
+            tasks.set('a2', malformed);
+
+            const dirtyElements = new Y.Map<unknown>();
+            dirtyElements.set('id', 'a3');
+            dirtyElements.set('title', 'Dirty elements');
+            dirtyElements.set('description', '');
+            dirtyElements.set('attachments', [null, 42, 'ok.png']);
+            tasks.set('a3', dirtyElements);
+        });
+
+        const result = readCards(tasks);
+        expect(result['a1'].attachments).toEqual(['photo.png', reference]);
+        expect(result['a2'].attachments).toBeUndefined();
+        expect(result['a3'].attachments).toEqual(['ok.png']);
     });
 
     test('mixed legacy + new cards both project correctly', () => {

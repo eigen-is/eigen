@@ -3,6 +3,7 @@ import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/cha
 import { isAttachmentReference } from '../../../types/chat';
 import type { DrivePath } from '../../../types/drive';
 import { isContainerType, stripEigenExtension } from '../../../types/drive';
+import { toAttachmentReference } from '../../../types/drive-reference';
 import { validateEmailTarget } from '../../../validation';
 import { useAuth } from '../../auth';
 import {
@@ -102,15 +103,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
 
             for (const path of paths) {
                 if (isContainerType(path.type)) {
-                    refs.push({
-                        type: 'reference',
-                        ownerId: path.ownerId,
-                        mountId: path.mountId,
-                        id: path.id,
-                        name: path.name,
-                        driveType: path.type,
-                        mimeType: path.mimeType,
-                    });
+                    refs.push(toAttachmentReference(path));
                 } else {
                     filesToCopy.push(path);
                 }

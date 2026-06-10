@@ -9,10 +9,9 @@ import type * as Y from 'yjs';
 type ColumnSettingsDialogProps = {
     isOpen: boolean;
     onClose: () => void;
-    columnId: string | null;
+    columnId: string;
     columnTitle: string;
     cardCount?: number;
-    canWrite?: boolean;
     yjsDoc: Y.Doc | null;
 };
 
@@ -22,7 +21,6 @@ export function ColumnSettingsDialog({
     columnId,
     columnTitle,
     cardCount = 0,
-    canWrite = true,
     yjsDoc,
 }: ColumnSettingsDialogProps) {
     const [title, setTitle] = useState(columnTitle);
@@ -30,7 +28,7 @@ export function ColumnSettingsDialog({
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!title.trim() || !yjsDoc || !columnId) return;
+        if (!title.trim() || !yjsDoc) return;
 
         yjsDoc.transact(() => {
             const columnsMap = yjsDoc.getMap('columns');
@@ -42,7 +40,7 @@ export function ColumnSettingsDialog({
     };
 
     const handleDelete = () => {
-        if (!yjsDoc || !columnId) return;
+        if (!yjsDoc) return;
 
         yjsDoc.transact(() => {
             const columnsMap = yjsDoc.getMap('columns');
@@ -80,33 +78,24 @@ export function ColumnSettingsDialog({
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
                             <Label htmlFor="title">Title</Label>
-                            <Input
-                                id="title"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                readOnly={!canWrite}
-                            />
+                            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
                         </div>
                     </div>
                     <DialogFooter>
-                        {canWrite && (
-                            <Button
-                                type="button"
-                                variant="destructive"
-                                className="mr-auto"
-                                onClick={() => setIsDeleteDialogOpen(true)}
-                            >
-                                Delete Column
-                            </Button>
-                        )}
-                        <Button type="button" variant="outline" onClick={onClose}>
-                            {canWrite ? 'Cancel' : 'Close'}
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            className="mr-auto"
+                            onClick={() => setIsDeleteDialogOpen(true)}
+                        >
+                            Delete Column
                         </Button>
-                        {canWrite && (
-                            <Button type="submit" disabled={!title.trim()}>
-                                Save Changes
-                            </Button>
-                        )}
+                        <Button type="button" variant="outline" onClick={onClose}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={!title.trim()}>
+                            Save Changes
+                        </Button>
                     </DialogFooter>
                 </form>
             </DialogContent>
