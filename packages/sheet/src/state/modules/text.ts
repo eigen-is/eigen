@@ -1,7 +1,7 @@
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
 import type { Cell, CellStyle } from '../../engine/types';
 import type { Context } from '../context';
-import { locale } from '../locale';
 import { isdatatypemulti } from '.';
 import { normalizedCellAttr } from './cell';
 import { isInlineStringCell } from './inline-string';
@@ -143,7 +143,16 @@ export function defaultFont(defaultFontSize: number) {
     return `normal normal normal ${defaultFontSize}pt "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC",  "WenQuanYi Micro Hei", sans-serif`;
 }
 
-export function getFontSet(format: CellStyle | null | undefined, defaultFontSize: number, ctx: Context) {
+// `ff` is persisted either as an index into the font list (legacy numeric or
+// numeric-string form) or as a family name. One decoder serves the canvas
+// renderer and the toolbar picker, so they can't disagree about a cell's font.
+export function resolveFontName(ff: number | string | undefined | null): string {
+    if (ff == null || ff === '') return EIGEN_FONTS[0].name;
+    if (isdatatypemulti(ff).num) return EIGEN_FONTS[Number.parseInt(String(ff), 10)]?.name ?? EIGEN_FONTS[0].name;
+    return String(ff).replace(/["']/g, '').split(',')[0]?.trim() || EIGEN_FONTS[0].name;
+}
+
+export function getFontSet(format: CellStyle | null | undefined, defaultFontSize: number) {
     if (format == null || !isPlainObject(format)) {
         return defaultFont(defaultFontSize);
     }
@@ -162,18 +171,10 @@ export function getFontSet(format: CellStyle | null | undefined, defaultFontSize
     // font-size
     fontAttr.push(`${format.fs ? Math.ceil(format.fs) : defaultFontSize}pt`);
 
-    const { fontarray } = locale(ctx);
     const fallback = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
 
-    let primary: string;
-    if (format.ff == null || format.ff === '') {
-        primary = fontarray[0];
-    } else if (isdatatypemulti(format.ff).num) {
-        primary = fontarray[parseInt(String(format.ff), 10)];
-    } else {
-        const stripped = String(format.ff).replace(/["']/g, '');
-        primary = stripped.includes(' ') ? `"${stripped}"` : stripped;
-    }
+    const name = resolveFontName(format.ff);
+    const primary = name.includes(' ') ? `"${name}"` : name;
 
     return `${fontAttr.join(' ')} ${primary},${fallback}`;
 }
@@ -394,7 +395,7 @@ export function getCellTextInfo(
         let similarIndex = 0;
         for (let i = 0; i < sharedStrings.length; i += 1) {
             const shareCell = sharedStrings[i];
-            const scfontset = getFontSet(shareCell, sheetCtx.defaultFontSize, sheetCtx);
+            const scfontset = getFontSet(shareCell, sheetCtx.defaultFontSize);
             const { fc } = shareCell;
             const { cl } = shareCell;
             const { un } = shareCell;
@@ -448,7 +449,7 @@ export function getCellTextInfo(
         }
         isInline = true;
     } else {
-        fontset = getFontSet(cell, sheetCtx.defaultFontSize, sheetCtx);
+        fontset = getFontSet(cell, sheetCtx.defaultFontSize);
         renderCtx.font = fontset;
 
         cancelLine = normalizedCellAttr(cell, 'cl'); // cancelLine

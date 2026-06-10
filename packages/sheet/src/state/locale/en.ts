@@ -2,11 +2,7 @@ import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 
 export const en = {
     generalDialog: {
-        partiallyError: 'Cannot perform this operation on partially merged cells',
-        readOnlyError: 'Cannot perform this operation in read-only mode',
-        dataNullError: 'Cannot perform this operation on data that does not exist',
         noSeletionError: 'The selection operation has not been performed yet',
-        cannotSelectMultiple: 'Cannot select multiple selections',
     },
     functionlist: [
         {
@@ -8920,8 +8916,6 @@ export const en = {
         tipInputNumber: 'Please enter the number',
         tipInputNumberLimit: 'The increase range is limited to 1-100',
 
-        tipRowHeightLimit: 'Row height must be between 0 ~ 545',
-        tipColumnWidthLimit: 'The column width must be between 0 ~ 2038',
         // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
         pageInfoFull: 'Total ${total}，${totalPage} page，All data displayed',
 
@@ -9344,15 +9338,6 @@ export const en = {
 
         valueBlank: '(Null)',
         mergeError: 'There are merged cells in the filter selection, this operation cannot be performed!',
-    },
-    rightclick: {
-        row: 'Row',
-        column: 'Column',
-        cannotDeleteAllRow: 'Cannot delete all rows',
-        cannotDeleteAllColumn: 'Cannot delete all columns',
-        cannotDeleteRowReadOnly: 'Cannot delete row readonly',
-        cannotDeleteColumnReadOnly: 'Cannot delete column readonly',
-        rowOverLimit: '10000 row limit exceeded',
     },
     splitText: {
         splitDelimiters: 'Delimiters',

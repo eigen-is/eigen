@@ -7,14 +7,24 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
+import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
-import { addSheet, autoSelectionFormula, getFlowdata, handleLink, handleSum, insertRowCol, locale } from '../../state';
+import {
+    addSheet,
+    autoSelectionFormula,
+    getFlowdata,
+    handleLink,
+    handleSum,
+    locale,
+    tryInsertRowCol,
+} from '../../state';
 import { FormulaSearch } from '../FormulaSearch';
 
 export function InsertMenu() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
+    const { showAlert } = useAlert();
     const { showDialog, hideDialog } = useDialog();
-    const { toolbar, rightclick, formula } = locale(context);
+    const { toolbar, formula } = locale(context);
 
     const selection = context.selections?.[0];
     const rowFocus = selection?.row_focus;
@@ -36,7 +46,8 @@ export function InsertMenu() {
         };
         setContext(
             (draftCtx) => {
-                insertRowCol(draftCtx, insertRowColOp);
+                const error = tryInsertRowCol(draftCtx, insertRowColOp);
+                if (error) showAlert(error, 'ok');
             },
             { insertRowColOp },
         );
@@ -49,7 +60,7 @@ export function InsertMenu() {
     return (
         <>
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger>{rightclick.row}</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger>Row</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
                     <DropdownMenuItem disabled={rowFocus == null} onClick={() => insertHandler('row', 'lefttop')}>
                         Insert 1 row above
@@ -61,7 +72,7 @@ export function InsertMenu() {
             </DropdownMenuSub>
 
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger>{rightclick.column}</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger>Column</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
                     <DropdownMenuItem disabled={columnFocus == null} onClick={() => insertHandler('column', 'lefttop')}>
                         Insert 1 column left

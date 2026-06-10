@@ -1,4 +1,3 @@
-import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { useMediaQuery } from '@workspace/lib/media';
 import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
@@ -16,16 +15,9 @@ import {
     handleTextBackground,
     handleTextColor,
     handleTextSize,
+    resolveFontName,
 } from '../../state';
 import { FontSizeStepper } from './font-size-stepper';
-
-// `ff` is stored either as an index into the font list or as a bare family name;
-// normalise both to a picker-friendly name, falling back to the first font.
-function fontNameFromCell(ff: number | string | undefined): string {
-    if (ff == null || ff === '') return EIGEN_FONTS[0].name;
-    if (typeof ff === 'number') return EIGEN_FONTS[ff]?.name ?? EIGEN_FONTS[0].name;
-    return ff.replace(/['"]/g, '').split(',')[0]?.trim() || EIGEN_FONTS[0].name;
-}
 
 // Quick-format controls mirrored from the docs toolbar, driving the exact same
 // handlers as the Format menu — an extra surface, not a replacement. The menu bar's
@@ -47,7 +39,7 @@ export function FormatToolbar() {
     const textColor = cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
     const align = cell?.ht == null ? undefined : Number(cell.ht); // 0 = center, 1 = left, 2 = right
-    const fontName = fontNameFromCell(cell?.ff);
+    const fontName = resolveFontName(cell?.ff);
     const fontSize = Number(cell?.fs) || settings.defaultFontSize;
     const bold = Number(cell?.bl) === 1;
     const italic = Number(cell?.it) === 1;
