@@ -121,9 +121,6 @@ export function LinkEditCard({
         return (
             <div
                 {...containerEvent}
-                onKeyDown={(e) => {
-                    e.stopPropagation();
-                }}
                 className={cn(modalBase, 'flex flex-row items-center py-0.5 pl-4 pr-2')}
                 style={{ left: position.cellLeft + 20, top: position.cellBottom }}
             >
@@ -138,29 +135,30 @@ export function LinkEditCard({
                 >
                     {linkType === 'webpage' ? insertLink.openLink : replaceHtml(insertLink.goTo, { linkAddress })}
                 </button>
-                {context.allowEdit === true && <div className="w-px h-4 mx-1.5 bg-border shrink-0" />}
-                {context.allowEdit === true &&
-                    linkType === 'webpage' &&
-                    renderToolbarButton(Copy, () => {
-                        navigator.clipboard.writeText(originAddress);
-                        hideLinkCard();
-                    })}
-                {context.allowEdit === true &&
-                    renderToolbarButton(Pencil, () =>
-                        setContext((draftCtx) => {
-                            if (draftCtx.linkCard != null && draftCtx.allowEdit) {
-                                draftCtx.linkCard.isEditing = true;
-                            }
-                        }),
-                    )}
-                {context.allowEdit === true && <div className="w-px h-4 mx-1.5 bg-border shrink-0" />}
-                {context.allowEdit === true &&
-                    renderToolbarButton(Unlink, () =>
-                        setContext((draftCtx) => {
-                            if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
-                            removeHyperlink(draftCtx, r, c);
-                        }),
-                    )}
+                {context.allowEdit && (
+                    <>
+                        <div className="w-px h-4 mx-1.5 bg-border shrink-0" />
+                        {linkType === 'webpage' &&
+                            renderToolbarButton(Copy, () => {
+                                navigator.clipboard.writeText(originAddress);
+                                hideLinkCard();
+                            })}
+                        {renderToolbarButton(Pencil, () =>
+                            setContext((draftCtx) => {
+                                if (draftCtx.linkCard != null && draftCtx.allowEdit) {
+                                    draftCtx.linkCard.isEditing = true;
+                                }
+                            }),
+                        )}
+                        <div className="w-px h-4 mx-1.5 bg-border shrink-0" />
+                        {renderToolbarButton(Unlink, () =>
+                            setContext((draftCtx) => {
+                                if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
+                                removeHyperlink(draftCtx, r, c);
+                            }),
+                        )}
+                    </>
+                )}
             </div>
         );
     }
@@ -174,11 +172,12 @@ export function LinkEditCard({
                     'fortune-link-modify-modal range-selection-modal w-[380px] p-[22px] select-auto',
                 )}
                 style={{ left: position.cellLeft, top: position.cellBottom + 5 }}
-                {...Object.fromEntries(
-                    Object.entries(containerEvent).filter(
-                        ([k]) => !['onMouseDown', 'onMouseMove', 'onMouseUp'].includes(k),
-                    ),
-                )}
+                // Of containerEvent, only the hover + keyboard handlers: mousemove/up
+                // must reach the overlay so the card's drag-to-move keeps working.
+                onMouseEnter={containerEvent.onMouseEnter}
+                onMouseLeave={containerEvent.onMouseLeave}
+                onKeyDown={containerEvent.onKeyDown}
+                onDoubleClick={containerEvent.onDoubleClick}
                 onMouseDown={(e) => {
                     const { nativeEvent } = e;
                     onRangeSelectionModalMoveStart(context, refs.globalCache, nativeEvent);
@@ -233,6 +232,16 @@ export function LinkEditCard({
                 className="sm:max-w-md"
                 onPointerDownOutside={(e) => e.preventDefault()}
                 onInteractOutside={(e) => e.preventDefault()}
+                // Unlike the ModalProvider dialogs, this one renders inside the cellArea's
+                // React tree, so its synthetic events would bubble into the grid handlers
+                // (start a cell edit, steal focus, trigger sheet undo). Stop them here,
+                // mirroring ModalProvider's guards.
+                onKeyDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onMouseMove={(e) => e.stopPropagation()}
+                onMouseUp={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                onContextMenu={(e) => e.stopPropagation()}
             >
                 <DialogHeader>
                     <DialogTitle>{originAddress ? 'Edit link' : 'Insert link'}</DialogTitle>

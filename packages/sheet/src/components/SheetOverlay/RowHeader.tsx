@@ -5,7 +5,6 @@ import {
     fixPositionOnFrozenCells,
     fixRowStyleOverflowInFreeze,
     getSheetIndex,
-    handleContextMenu,
     handleRowFreezeHandleMouseDown,
     handleRowHeaderMouseDown,
     handleRowSizeHandleMouseDown,
@@ -18,7 +17,7 @@ import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 
 export const RowHeader: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
-    const { open: openRowMenu, anchor: rowMenuAnchor } = useSheetContextMenu('row');
+    const { onContextMenu, anchor: rowMenuAnchor } = useSheetContextMenu('row');
     const rowChangeSizeRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -132,17 +131,6 @@ export const RowHeader: React.FC = () => {
             e.stopPropagation();
         },
         [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
-    );
-
-    const onContextMenu = useCallback(
-        (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            if (!context.allowEdit) return;
-            setContext((draftCtx) => {
-                handleContextMenu(draftCtx, e.nativeEvent, refs.cellArea.current!, 'rowHeader');
-            });
-            openRowMenu(e);
-        },
-        [context.allowEdit, setContext, refs.cellArea, openRowMenu],
     );
 
     useEffect(() => {

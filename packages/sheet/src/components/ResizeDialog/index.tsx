@@ -1,7 +1,7 @@
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import { api, type Context } from '../../state';
@@ -15,20 +15,24 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
     const { hideDialog } = useDialog();
     const isRow = mode === 'row';
 
-    const indexSet = new Set<number>();
-    for (const s of context.selections ?? []) {
-        const [start, end] = isRow ? s.row : s.column;
-        for (let i = start; i <= end; i += 1) indexSet.add(i);
-    }
-    const selectedIndices = [...indexSet];
+    // The selection can't change while the dialog is open, so compute once per open.
+    const selectedIndices = useMemo(() => {
+        const indexSet = new Set<number>();
+        for (const s of context.selections ?? []) {
+            const [start, end] = isRow ? s.row : s.column;
+            for (let i = start; i <= end; i += 1) indexSet.add(i);
+        }
+        return [...indexSet];
+    }, [context.selections, isRow]);
 
     // Prefill with the current size when every selected row/column shares it, else blank.
-    const lenMap = isRow ? context.config?.rowlen : context.config?.columnlen;
-    const fallback = isRow ? context.defaultrowlen : context.defaultcollen;
-    const sizes = selectedIndices.map((i) => lenMap?.[i] ?? fallback);
-    const uniformSize = sizes.length > 0 && sizes.every((v) => v === sizes[0]) ? sizes[0] : null;
-
-    const [value, setValue] = useState(uniformSize != null ? String(uniformSize) : '');
+    const [value, setValue] = useState(() => {
+        const lenMap = isRow ? context.config?.rowlen : context.config?.columnlen;
+        const fallback = isRow ? context.defaultrowlen : context.defaultcollen;
+        const sizes = selectedIndices.map((i) => lenMap?.[i] ?? fallback);
+        const uniformSize = sizes.length > 0 && sizes.every((v) => v === sizes[0]) ? sizes[0] : null;
+        return uniformSize != null ? String(uniformSize) : '';
+    });
     const inputRef = useRef<HTMLInputElement>(null);
     useEffect(() => {
         inputRef.current?.focus();

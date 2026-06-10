@@ -13,7 +13,6 @@ import {
     handleColFreezeHandleMouseDown,
     handleColSizeHandleMouseDown,
     handleColumnHeaderMouseDown,
-    handleContextMenu,
     isAllowEdit,
     selectTitlesMap,
     selectTitlesRange,
@@ -22,7 +21,7 @@ import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 
 export const ColumnHeader: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
-    const { open: openColumnMenu, anchor: columnMenuAnchor } = useSheetContextMenu('column');
+    const { onContextMenu, anchor: columnMenuAnchor } = useSheetContextMenu('column');
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const colChangeSizeRef = useRef<HTMLDivElement>(null);
@@ -153,17 +152,6 @@ export const ColumnHeader: React.FC = () => {
             e.stopPropagation();
         },
         [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
-    );
-
-    const onContextMenu = useCallback(
-        (e: React.MouseEvent) => {
-            if (!context.allowEdit) return;
-            setContext((draftCtx) => {
-                handleContextMenu(draftCtx, e.nativeEvent, refs.cellArea.current!, 'columnHeader');
-            });
-            openColumnMenu(e);
-        },
-        [context.allowEdit, setContext, refs.cellArea, openColumnMenu],
     );
 
     useEffect(() => {
