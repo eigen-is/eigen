@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
+import type { ChatAttachment } from '../../../types/chat';
 import type { CommentCard } from '../../../types/comments';
 
 function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
@@ -11,6 +12,7 @@ function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
         const chatName = yCard.get('chatName');
         const creator = yCard.get('creator');
         const createdAt = yCard.get('createdAt');
+        const attachments = yCard.get('attachments');
         out[id] = {
             id,
             title: typeof title === 'string' ? title : '',
@@ -19,9 +21,20 @@ function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
             chatName: typeof chatName === 'string' ? chatName : undefined,
             creator: typeof creator === 'string' ? creator : undefined,
             createdAt: typeof createdAt === 'number' ? createdAt : undefined,
+            attachments: Array.isArray(attachments) ? (attachments as ChatAttachment[]) : undefined,
         };
     }
     return out;
+}
+
+function sameAttachments(a?: ChatAttachment[], b?: ChatAttachment[]): boolean {
+    if (a === b) return true;
+    if (!a || !b || a.length !== b.length) return false;
+    return a.every((x, i) => {
+        const y = b[i];
+        if (typeof x === 'string' || typeof y === 'string') return x === y;
+        return x.id === y.id && x.name === y.name;
+    });
 }
 
 function sameCard(a: CommentCard, b: CommentCard): boolean {
@@ -31,7 +44,8 @@ function sameCard(a: CommentCard, b: CommentCard): boolean {
         a.color === b.color &&
         a.chatName === b.chatName &&
         a.creator === b.creator &&
-        a.createdAt === b.createdAt
+        a.createdAt === b.createdAt &&
+        sameAttachments(a.attachments, b.attachments)
     );
 }
 
