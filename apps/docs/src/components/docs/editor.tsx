@@ -21,7 +21,7 @@ import {
 import { useMediaQuery } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import type { ActiveComments, CommentCard } from '@workspace/lib/types/comments';
+import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     CardFormDialog,
@@ -558,6 +558,7 @@ const TiptapEditor = ({
         mountId: path.mountId,
         pathId: path.id,
         chatFolderId,
+        mediaFolderId,
         doc: yDoc,
         activeCardIds: activeComments.ids,
         initialChatName,
@@ -570,10 +571,13 @@ const TiptapEditor = ({
     const selectionContextMenu = useContextMenu<boolean>();
 
     const handleSaveNew = useCallback(
-        async (patch: { title?: string; description?: string; color?: string }) => {
+        async (
+            patch: { title?: string; description?: string; color?: string },
+            attachments?: CardAttachmentDraft[],
+        ) => {
             if (!editor || !pendingMarkRange) return;
             const range = pendingMarkRange;
-            await createCard({ title: pendingMarkRange.text.slice(0, 100), ...patch }, (card) => {
+            await createCard({ title: pendingMarkRange.text.slice(0, 100), ...patch, attachments }, (card) => {
                 editor.chain().focus().setTextSelection({ from: range.from, to: range.to }).setComment(card.id).run();
             });
             setPendingMarkRange(null);
@@ -749,6 +753,7 @@ const TiptapEditor = ({
                 }}
                 initialTitle={pendingMarkRange ? pendingMarkRange.text.slice(0, 100) : ''}
                 onSave={handleSaveNew}
+                allowAttachments={!!mediaFolderId}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />

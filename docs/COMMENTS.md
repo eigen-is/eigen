@@ -45,6 +45,7 @@ type CommentCard = {
     chatName?: string;
     creator?: string;     // user email at creation time
     createdAt?: number;   // ms epoch at creation time
+    attachments?: ChatAttachment[];  // additive since 2026-06-10; absent on older cards
 };
 ```
 
@@ -59,6 +60,27 @@ Cards live in a Y.Map keyed by `id`. The map name is per-app:
 
 Color lives on the Y.Doc card — undoable via the Y.UndoManager, collaborative via y-websocket, no
 REST round-trip on color change.
+
+## Card attachments
+
+`attachments` reuses chat's exact wire type (`ChatAttachment = string | AttachmentReference`): a
+plain string is a filename in the **container's `media/` folder**, a reference points at an
+external drive item. Card attachments are distinct from message attachments in the card's thread
+(those live in the comment chat's own `media/`, unchanged).
+
+- **Staging**: `CardFormDialog` stages drafts locally (`CardAttachmentDraft = ChatAttachment |
+  DrivePath | File`); nothing touches the server until Save, so Cancel leaves no orphans.
+- **Resolution** (`useResolveCardAttachments`): device files upload into container `media/`;
+  regular drive picks are **copied** there (the container's ACL must cover them for every
+  collaborator — same rule as chat); containers stay references. A failed upload aborts the save.
+- **Removal** orphans the media file deliberately — same model as docs inline images; it is what
+  lets undo and Y.Doc version revert restore attachments intact.
+- **Rendering**: chips in `CardDialog` (preview on click); on unopened cards (`NoteCard`) the
+  first image attachment's drive thumbnail renders as a small cover plus a paperclip count, via
+  `useAttachmentMeta` — filename resolution rides MediaResolver's cached folder lookup, one query
+  per board. References are skipped for the cover (no thumbnail).
+- Hosts gate the UI on `mediaFolderId` (`allowAttachments`); a container without a resolvable
+  media folder simply hides the attachment controls.
 
 ## Per-app anchoring
 
@@ -145,6 +167,7 @@ y-websocket.
 | `useCreateCommentCard`    | Returns `(input, anchorInTransact?) => Promise<void>`. Creates the `.eigenchat`, then writes the card + runs the caller's anchor inside one Y.Doc `transact` → single undo step. The anchor callback receives the new `CommentCard` synchronously inside the transaction |
 | `useUpdateCommentCard`    | `(cardId, patch) => void` — applies a partial patch to the Y.Map card             |
 | `useOpenCommentCard`      | `(cards, entries, openCardId)` → `{ card, entry }` — resolves the open dialog's `chatName` against the server-side entries |
+| `useResolveCardAttachments` | `(ownerId, mountId, mediaFolderId)` → async `(drafts) => ChatAttachment[]` — settles form drafts: uploads Files, copies regular drive picks into container `media/`, references containers |
 | `useCardIdFromChatName`   | Resolves a `?chat=<chatName>` URL param to a cardId. Optional `{ ready, onChatNotFound }` lets hosts gate on Yjs sync + clean up the URL when the chat genuinely doesn't exist |
 | `useUnresolvedCommentCount` | `(cards, entries) => number` — count of non-resolved active comments for badges/toolbar UI |
 | `readCards`, `writeCardToDoc`, `applyCardPatch` | Pure Y.Doc helpers (React-free, unit-tested) |

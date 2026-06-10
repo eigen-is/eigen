@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-722 primitives across 6 kinds. `packages/sheet` internals are excluded.
+727 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (95)
+## Components (96)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -91,6 +91,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserAvatar` | `@workspace/ui` | packages/ui/src/components/layout/user-avatar.tsx |
 | `UserItem` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |
 | `AttachmentChip` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/attachment-chip.tsx |
+| `AttachmentDraftChips` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/attachment-draft-chips.tsx |
 | `LightEditor` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/editor/light-editor.tsx |
 | `ReferenceAttachmentChip` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/reference-attachment-chip.tsx |
 | `SimpleAttachmentChip` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/simple-attachment-chip.tsx |
@@ -132,7 +133,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (189)
+## Hooks (191)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -212,6 +213,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCommentLifecycle` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-lifecycle.ts |
 | `useCreateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `useOpenCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-open-comment-card.ts |
+| `useResolveCardAttachments` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-resolve-card-attachments.ts |
 | `useUnresolvedCommentCount` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-unresolved-comment-count.ts |
 | `useUpdateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
 | `useAddContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
@@ -315,6 +317,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMountLabel` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-mount-list.tsx |
 | `useSidebar` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useUpload` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-provider.tsx |
+| `useAttachmentMeta` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/use-attachment-meta.ts |
 | `useContextMenu` | `@workspace/ui/components/layout/context-menu` | packages/ui/src/components/layout/context-menu/use-context-menu.ts |
 | `useOptionalPreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
 | `usePreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
@@ -326,7 +329,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (196)
+## Types (197)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -489,6 +492,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ResultGroup` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `Sections` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `ActiveComments` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
@@ -527,7 +531,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (231)
+## Utilities & constants (232)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -736,6 +740,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `teamOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `userOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `parseContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `validateACLEntries` | `@workspace/lib/validation` | packages/lib/src/validation/acl.ts |

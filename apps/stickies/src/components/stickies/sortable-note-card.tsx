@@ -2,6 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { NoteCard } from '@workspace/ui';
+import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
 import { memo, useRef } from 'react';
 
 type SortableNoteCardProps = {
@@ -26,6 +27,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
         data: { type: 'task', task: card },
         disabled: !canWrite,
     });
+    const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
 
     const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -48,6 +50,8 @@ export const SortableNoteCard = memo(function SortableNoteCard({
             color={card.color}
             replyCount={replyCount}
             resolved={resolved}
+            coverThumbnailUrl={coverThumbnailUrl}
+            attachmentCount={attachmentCount}
             onPointerDownCapture={(e: React.PointerEvent) => {
                 pointerStart.current = { x: e.clientX, y: e.clientY };
             }}
