@@ -147,9 +147,10 @@ export type AlternateFormatEntry = {
 };
 
 // Editor-runtime Sheet: lib's canonical fields plus state-only extras (selection
-// state, calc chain, filters, dynamic-array spill ranges, …) that never reach
-// the wire shape. `config` is widened to state's SheetConfig. Frozen panes live
-// on the lib Sheet — they persist and the xlsx importer emits them.
+// state, calc chain, filter criteria, dynamic-array spill ranges, …) that never
+// reach the wire shape. `config` is widened to state's SheetConfig. Frozen panes
+// and the autofilter range live on the lib Sheet — they persist and the xlsx
+// importer emits them.
 export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
     color?: string;
@@ -168,7 +169,6 @@ export type Sheet = Omit<LibSheet, 'config'> & {
     pivotTable?: unknown;
     isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
-    filterRange?: SingleRange;
     alternateFormatRules?: AlternateFormatEntry[];
     dataVerification?: Record<string, DataVerificationRule>;
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
