@@ -380,7 +380,7 @@ export function handleGlobalKeyDown(
     ctx.selectionActive = false;
     const kcode = e.keyCode;
     const kstr = e.key;
-    if (!isEmpty(ctx.contextMenu) || ctx.filterContextMenu) {
+    if (ctx.filterContextMenu) {
         return;
     }
 
@@ -469,8 +469,6 @@ export function handleGlobalKeyDown(
         (kstr === 'ArrowUp' || kstr === 'ArrowDown' || kstr === 'ArrowLeft' || kstr === 'ArrowRight')
     ) {
         handleShiftWithArrowKey(ctx, e);
-    } else if (kstr === 'Escape') {
-        ctx.contextMenu = {};
     } else if (kstr === 'Delete' || kstr === 'Backspace') {
         if (!allowEdit) return;
         if (ctx.activeImg != null) {
