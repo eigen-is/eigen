@@ -5,7 +5,7 @@ import type { CommentCard } from '@workspace/lib/types/comments';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { cn } from '@workspace/ui/lib/utils';
 import { Pencil, Plus } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { SortableNoteCard } from './sortable-note-card';
 import type { ColumnItem } from './types';
 
@@ -14,7 +14,6 @@ type ColumnProps = {
     cards: CommentCard[];
     entryByChatName: Map<string, CommentEntry>;
     canWrite?: boolean;
-    isDropAnimating?: boolean;
     onAddCard: (columnId: string) => void;
     onEditColumn: (columnId: string) => void;
     onCardOpen?: (cardId: string) => void;
@@ -23,12 +22,11 @@ type ColumnProps = {
     scrollToTopSignal?: number;
 };
 
-export function Column({
+export const Column = memo(function Column({
     column,
     cards,
     entryByChatName,
     canWrite = true,
-    isDropAnimating,
     onAddCard,
     onEditColumn,
     onCardOpen,
@@ -48,7 +46,9 @@ export function Column({
         contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }, [scrollToTopSignal]);
 
-    const cardIds = cards.map((c) => c.id);
+    // Stable array identity — dnd-kit's SortableContext keys its context value on it, and a fresh
+    // array per render would re-render every useSortable card regardless of React.memo.
+    const cardIds = useMemo(() => cards.map((c) => c.id), [cards]);
     const columnWidth = isMobile ? 'w-[92vw] min-w-[92vw]' : 'w-[280px] min-w-[280px]';
     const columnMargin = isMobile ? 'mx-[4vw]' : 'mx-1.5';
 
@@ -91,10 +91,7 @@ export function Column({
 
             <div
                 ref={contentRef}
-                className={cn(
-                    'flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-3 rounded-lg',
-                    isDropAnimating ? 'bg-accent/10' : 'bg-background',
-                )}
+                className="flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-3 rounded-lg bg-background"
             >
                 {cards.length === 0 ? (
                     <div
@@ -134,4 +131,4 @@ export function Column({
             </div>
         </div>
     );
-}
+});

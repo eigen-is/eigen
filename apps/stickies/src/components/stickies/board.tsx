@@ -1,30 +1,19 @@
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
-import { useHotkey } from '@tanstack/react-hotkeys';
-import { getDriveItemUrl } from '@workspace/lib/api';
-import { useComments, useResolveComment } from '@workspace/lib/chat';
-import {
-    useCardIdFromChatName,
-    useCreateCommentCard,
-    useOpenCommentCard,
-    useUpdateCommentCard,
-} from '@workspace/lib/comments';
+import { useYjsUndoHotkeys } from '@workspace/lib/collab';
+import { useCommentLifecycle } from '@workspace/lib/comments';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { CommentCard } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CardDialog, CardFormDialog, CommentMenuItems, LoadingState, NoteCard } from '@workspace/ui';
-import {
-    DropdownMenuItem,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-} from '@workspace/ui/components/dropdown-menu';
+import { CardFormDialog, CommentLifecycleDialogs, LoadingState, NoteCard } from '@workspace/ui';
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
+import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
+import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { AddColumnDialog } from './add-column-dialog';
 import { Column } from './column';
@@ -34,11 +23,30 @@ import { useDragAndDrop } from './hooks/use-drag-and-drop';
 import { Toolbar } from './toolbar';
 import type { ColumnItem } from './types';
 
+// Rendered inside the DragOverlay (and therefore inside MediaResolverProvider) — the
+// useAttachmentMeta context read only works below the provider StickiesBoard renders.
+function OverlayNoteCard({ card, entry, isMobile }: { card: CommentCard; entry?: CommentEntry; isMobile: boolean }) {
+    const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
+    return (
+        <NoteCard
+            title={card.title}
+            description={card.description}
+            color={card.color}
+            replyCount={entry?.messageCount}
+            resolved={entry?.status === 'resolved'}
+            coverThumbnailUrl={coverThumbnailUrl}
+            attachmentCount={attachmentCount}
+            className={isMobile ? 'w-full' : 'w-[254px]'}
+        />
+    );
+}
+
 type StickiesBoardProps = {
     ownerId: string;
     path: DrivePath;
     canWrite: boolean;
     chatFolderId: string | null;
+    mediaFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
     onClearInitialChat?: () => void;
@@ -49,6 +57,7 @@ export function StickiesBoard({
     path,
     canWrite,
     chatFolderId,
+    mediaFolderId,
     onAccessDialogOpen,
     initialChatName,
     onClearInitialChat,
@@ -64,55 +73,45 @@ export function StickiesBoard({
         undoManager,
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
 
-    const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({ board, yjsDoc });
+    // Cards are anchored by column membership — every referenced taskId is an active card.
+    const activeCardIds = useMemo(() => {
+        const ids = new Set<string>();
+        for (const column of Object.values(board.columns)) {
+            for (const id of column.taskIds) ids.add(id);
+        }
+        return ids;
+    }, [board]);
 
-    const { data: commentList = [] } = useComments(ownerId, path.mountId, path.id);
+    const lifecycle = useCommentLifecycle({
+        ownerId,
+        mountId: path.mountId,
+        pathId: path.id,
+        chatFolderId,
+        mediaFolderId,
+        doc: yjsDoc,
+        activeCardIds,
+        initialChatName,
+        mapName: 'tasks',
+        ready: isSynced,
+        onChatNotFound: onClearInitialChat,
+    });
+    const { allComments, cards, createCard, setOpenCardId } = lifecycle;
+
+    const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({ board, cards, yjsDoc });
+
     const entryByChatName = useMemo(() => {
         const map = new Map<string, CommentEntry>();
-        for (const c of commentList) map.set(c.chatName, c);
+        for (const c of allComments) map.set(c.chatName, c);
         return map;
-    }, [commentList]);
-    const entryFor = (card: CommentCard) => (card.chatName ? entryByChatName.get(card.chatName) : undefined);
+    }, [allComments]);
 
-    // Shared comment-card hooks for the new dialog path
-    const createCard = useCreateCommentCard(ownerId, path.mountId, chatFolderId, yjsDoc ?? null, 'tasks');
-    const updateCard = useUpdateCommentCard(yjsDoc ?? null, 'tasks');
-    const resolveComment = useResolveComment(ownerId, path.mountId, path.id);
-
-    useHotkey(
-        'Mod+Z',
-        (e) => {
-            e.preventDefault();
-            undoManager?.undo();
-        },
-        { enabled: canWrite && !!undoManager },
-    );
-
-    useHotkey(
-        'Mod+Y',
-        (e) => {
-            e.preventDefault();
-            undoManager?.redo();
-        },
-        { enabled: canWrite && !!undoManager },
-    );
-
-    useHotkey(
-        'Mod+Shift+Z',
-        (e) => {
-            e.preventDefault();
-            undoManager?.redo();
-        },
-        { enabled: canWrite && !!undoManager },
-    );
+    useYjsUndoHotkeys(undoManager, canWrite);
 
     const isMobile = useIsMobile();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
-    const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
     const [colorFilter, setColorFilter] = useState<Set<string>>(new Set());
-    const cardContextMenu = useContextMenu<CommentCard>();
+    const cardContextMenu = useContextMenu<CommentContextMenuItem>();
     const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
-    const [openCardId, setOpenCardId] = useState<string | null>(null);
 
     // Add-card dialog state
     const [addOpen, setAddOpen] = useState(false);
@@ -120,23 +119,14 @@ export function StickiesBoard({
     // Bumped after each successful add so the target column scrolls its newly-inserted top card into view.
     const [scrollToTopOf, setScrollToTopOf] = useState<{ columnId: string; n: number } | null>(null);
 
-    useCardIdFromChatName(board.tasks, initialChatName, setOpenCardId, {
-        ready: isSynced,
-        onChatNotFound: onClearInitialChat,
-    });
-
-    const { card: openCard, entry: openEntry } = useOpenCommentCard(board.tasks, commentList, openCardId);
-
-    const handleAddCard = (columnId: string) => {
-        setAddTargetColumn(columnId);
-        setAddOpen(true);
-    };
-
     const onSaveNew = useCallback(
-        async (patch: { title?: string; description?: string; color?: string }) => {
+        async (
+            patch: { title?: string; description?: string; color?: string },
+            attachments?: CardAttachmentDraft[],
+        ) => {
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
-            await createCard(patch, (card) => {
+            await createCard({ ...patch, attachments }, (card) => {
                 const col = yjsDoc.getMap('columns').get(targetColumnId) as Y.Map<unknown> | undefined;
                 if (!col) return;
                 let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
@@ -153,45 +143,37 @@ export function StickiesBoard({
         [yjsDoc, addTargetColumn, createCard],
     );
 
-    const handleCardOpen = useCallback((cardId: string) => {
-        setOpenCardId(cardId);
+    const handleAddCard = useCallback((columnId: string) => {
+        setAddTargetColumn(columnId);
+        setAddOpen(true);
     }, []);
 
-    const handleCardClose = useCallback(() => {
-        setOpenCardId(null);
-        onClearInitialChat?.();
-    }, [onClearInitialChat]);
+    const handleEditColumn = useCallback((columnId: string) => setEditColumnId(columnId), []);
 
-    const handleCardContextOpen = (cardId: string) => {
-        setOpenCardId(cardId);
-        cardContextMenu.close();
-    };
+    const { handleContextMenu } = cardContextMenu;
+    const handleCardContextMenu = useCallback(
+        (e: React.MouseEvent, card: CommentCard) => {
+            handleContextMenu(e, { card, entry: card.chatName ? entryByChatName.get(card.chatName) : undefined });
+        },
+        [handleContextMenu, entryByChatName],
+    );
 
-    const handleCardContextDelete = (cardId: string) => {
-        setDeleteCardId(cardId);
-        cardContextMenu.close();
-    };
-
-    const handleCardContextColor = (cardId: string, color: string) => {
-        updateCard(cardId, { color });
-        cardContextMenu.close();
-    };
-
-    const handleCardContextResolve = (chatName: string, status: 'open' | 'resolved') => {
-        resolveComment.mutate({ chatName, status });
-        cardContextMenu.close();
-    };
-
-    const handleDeleteCard = () => {
-        if (!deleteCardId) return;
-        deleteCardFromBoard(deleteCardId);
-        setDeleteCardId(null);
-    };
-
-    const handleEditColumn = (columnId: string) => {
-        setEditColumnId(columnId);
-        setIsColumnSettingsOpen(true);
-    };
+    // Per-column card arrays with stable identity, so memoized columns only re-render
+    // when their own cards (or the color filter) actually change.
+    const prevColumnCardsRef = useRef<Record<string, CommentCard[]>>({});
+    const columnCards = useMemo(() => {
+        const next: Record<string, CommentCard[]> = {};
+        for (const columnId of board.columnOrder) {
+            const fresh = board.columns[columnId].taskIds
+                .map((taskId) => cards[taskId])
+                .filter((card) => colorFilter.size === 0 || colorFilter.has(card.color || ''));
+            const prev = prevColumnCardsRef.current[columnId];
+            next[columnId] =
+                prev && prev.length === fresh.length && fresh.every((card, i) => card === prev[i]) ? prev : fresh;
+        }
+        prevColumnCardsRef.current = next;
+        return next;
+    }, [board, cards, colorFilter]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -204,26 +186,16 @@ export function StickiesBoard({
 
         if (dragState.activeType === 'task') {
             const card = dragState.activeItem as CommentCard;
-            const entry = entryFor(card);
-            return (
-                <NoteCard
-                    title={card.title}
-                    description={card.description}
-                    color={card.color}
-                    replyCount={entry?.messageCount}
-                    resolved={entry?.status === 'resolved'}
-                    className={isMobile ? 'w-full' : 'w-[254px]'}
-                />
-            );
+            const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;
+            return <OverlayNoteCard card={card} entry={entry} isMobile={isMobile} />;
         }
 
         if (dragState.activeType === 'column') {
             const column = dragState.activeItem as ColumnItem;
-            const columnCards = column.taskIds.map((taskId: string) => board.tasks[taskId]);
             return (
                 <Column
                     column={column}
-                    cards={columnCards}
+                    cards={column.taskIds.map((taskId) => cards[taskId])}
                     entryByChatName={entryByChatName}
                     canWrite={canWrite}
                     onAddCard={handleAddCard}
@@ -236,17 +208,13 @@ export function StickiesBoard({
         return null;
     };
 
-    const contextMenuItem = cardContextMenu.item
-        ? { card: cardContextMenu.item, entry: entryFor(cardContextMenu.item) }
-        : null;
-
     if (!isSynced) return <LoadingState />;
 
     return (
         <MediaResolverProvider
             ownerId={ownerId}
             mountId={path.mountId}
-            mediaFolderId={null}
+            mediaFolderId={mediaFolderId}
             chatFolderId={chatFolderId}
         >
             <ColumnLayout>
@@ -296,25 +264,17 @@ export function StickiesBoard({
                                     <SortableContext items={board.columnOrder} strategy={horizontalListSortingStrategy}>
                                         {board.columnOrder.map((columnId) => {
                                             const column = board.columns[columnId];
-                                            const columnCards = column.taskIds
-                                                .map((taskId) => board.tasks[taskId])
-                                                .filter(
-                                                    (card) =>
-                                                        colorFilter.size === 0 || colorFilter.has(card.color || ''),
-                                                );
                                             return (
                                                 <Column
                                                     key={column.id}
                                                     column={column}
-                                                    cards={columnCards}
+                                                    cards={columnCards[columnId]}
                                                     entryByChatName={entryByChatName}
                                                     canWrite={canWrite}
                                                     onAddCard={handleAddCard}
                                                     onEditColumn={handleEditColumn}
-                                                    onCardOpen={handleCardOpen}
-                                                    onCardContextMenu={
-                                                        canWrite ? cardContextMenu.handleContextMenu : undefined
-                                                    }
+                                                    onCardOpen={setOpenCardId}
+                                                    onCardContextMenu={canWrite ? handleCardContextMenu : undefined}
                                                     isMobile={isMobile}
                                                     scrollToTopSignal={
                                                         scrollToTopOf?.columnId === column.id
@@ -337,6 +297,7 @@ export function StickiesBoard({
                                     if (!o) setAddTargetColumn(null);
                                 }}
                                 onSave={onSaveNew}
+                                allowAttachments={!!mediaFolderId}
                                 dialogTitle="Add Sticky"
                                 submitLabel="Add Sticky"
                             />
@@ -350,59 +311,34 @@ export function StickiesBoard({
                             {editColumnId && (
                                 <ColumnSettingsDialog
                                     key={editColumnId}
-                                    isOpen={isColumnSettingsOpen}
-                                    onClose={() => setIsColumnSettingsOpen(false)}
+                                    isOpen={!!editColumnId}
+                                    onClose={() => setEditColumnId(null)}
                                     columnId={editColumnId}
                                     columnTitle={board.columns[editColumnId]?.title || ''}
                                     cardCount={board.columns[editColumnId]?.taskIds.length || 0}
-                                    canWrite={canWrite}
                                     yjsDoc={yjsDoc}
                                 />
                             )}
-
-                            <ContextMenuAnchor contextMenu={cardContextMenu}>
-                                <CommentMenuItems
-                                    primitives={{
-                                        Item: DropdownMenuItem,
-                                        Sub: DropdownMenuSub,
-                                        SubTrigger: DropdownMenuSubTrigger,
-                                        SubContent: DropdownMenuSubContent,
-                                    }}
-                                    noun="sticky"
-                                    item={contextMenuItem}
-                                    onOpen={handleCardContextOpen}
-                                    onChangeColor={handleCardContextColor}
-                                    onResolve={(chatName) => handleCardContextResolve(chatName, 'resolved')}
-                                    onReopen={(chatName) => handleCardContextResolve(chatName, 'open')}
-                                    onDelete={handleCardContextDelete}
-                                />
-                            </ContextMenuAnchor>
 
                             <DeleteDialog
                                 open={!!deleteCardId}
                                 onOpenChange={(open) => !open && setDeleteCardId(null)}
                                 title="Delete Card"
                                 description="This will permanently delete the card. This action cannot be undone."
-                                onDelete={handleDeleteCard}
+                                onDelete={() => {
+                                    if (deleteCardId) deleteCardFromBoard(deleteCardId);
+                                    setDeleteCardId(null);
+                                }}
                             />
 
-                            <CardDialog
-                                open={!!openCard}
-                                onOpenChange={(o) => {
-                                    if (!o) handleCardClose();
-                                }}
-                                card={openCard}
-                                entry={openEntry}
-                                ownerId={ownerId}
-                                mountId={path.mountId}
+                            <CommentLifecycleDialogs
+                                lifecycle={lifecycle}
+                                path={path}
                                 canWrite={canWrite}
-                                copyLinkUrl={
-                                    openCard?.chatName
-                                        ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
-                                        : undefined
-                                }
-                                onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
-                                onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
+                                commentContextMenu={cardContextMenu}
+                                onDelete={setDeleteCardId}
+                                noun="sticky"
+                                onCardDialogClose={onClearInitialChat}
                             />
                         </div>
                     </div>

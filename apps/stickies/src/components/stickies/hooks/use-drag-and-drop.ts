@@ -13,10 +13,11 @@ type DragState = {
 
 type UseDragAndDropProps = {
     board: BoardData;
+    cards: Record<string, CommentCard>;
     yjsDoc: Y.Doc | null;
 };
 
-export const useDragAndDrop = ({ board, yjsDoc }: UseDragAndDropProps) => {
+export const useDragAndDrop = ({ board, cards, yjsDoc }: UseDragAndDropProps) => {
     const [dragState, setDragState] = useState<DragState>({
         activeId: null,
         activeType: null,
@@ -34,8 +35,8 @@ export const useDragAndDrop = ({ board, yjsDoc }: UseDragAndDropProps) => {
 
     const handleDragStart = (event: DragStartEvent) => {
         const activeId = event.active.id as string;
-        if (activeId in board.tasks) {
-            setDragState({ activeId, activeType: 'task', activeItem: board.tasks[activeId] });
+        if (activeId in cards) {
+            setDragState({ activeId, activeType: 'task', activeItem: cards[activeId] });
         } else if (activeId in board.columns) {
             setDragState({ activeId, activeType: 'column', activeItem: board.columns[activeId] });
         }
@@ -67,43 +68,28 @@ export const useDragAndDrop = ({ board, yjsDoc }: UseDragAndDropProps) => {
                     }
                 }
             } else if (dragState.activeType === 'task') {
+                const overIsColumn = overId in board.columns;
                 const sourceColumnId = findColumnOfTask(activeId);
-                if (overId in board.columns && sourceColumnId && sourceColumnId !== overId) {
-                    const sourceColumnValue = columnsMap.get(sourceColumnId);
-                    const destColumnValue = columnsMap.get(overId);
-                    if (sourceColumnValue && destColumnValue) {
-                        const sourceTaskIds = (sourceColumnValue as Y.Map<unknown>).get('taskIds') as Y.Array<string>;
-                        const destTaskIds = (destColumnValue as Y.Map<unknown>).get('taskIds') as Y.Array<string>;
-                        const sourceArray = sourceTaskIds.toArray() as string[];
-                        const taskIndex = sourceArray.indexOf(activeId);
-                        if (taskIndex !== -1) {
-                            sourceTaskIds.delete(taskIndex, 1);
-                            destTaskIds.push([activeId]);
-                        }
-                    }
-                } else if (overId in board.tasks && sourceColumnId) {
-                    const overColumnId = findColumnOfTask(overId);
-                    if (overColumnId) {
-                        const sourceColumnValue = columnsMap.get(sourceColumnId);
-                        const overColumnValue = columnsMap.get(overColumnId);
-                        if (sourceColumnValue && overColumnValue) {
-                            const sourceTaskIds = (sourceColumnValue as Y.Map<unknown>).get(
-                                'taskIds',
-                            ) as Y.Array<string>;
-                            const overTaskIds = (overColumnValue as Y.Map<unknown>).get('taskIds') as Y.Array<string>;
-                            const sourceArray = sourceTaskIds.toArray() as string[];
-                            const overArray = overTaskIds.toArray() as string[];
-                            const sourceIndex = sourceArray.indexOf(activeId);
-                            const destIndex = overArray.indexOf(overId);
-                            if (sourceIndex !== -1 && destIndex !== -1) {
-                                if (sourceColumnId === overColumnId) {
-                                    sourceTaskIds.delete(sourceIndex, 1);
-                                    sourceTaskIds.insert(destIndex, [activeId]);
-                                } else {
-                                    sourceTaskIds.delete(sourceIndex, 1);
-                                    overTaskIds.insert(destIndex, [activeId]);
-                                }
-                            }
+                const destColumnId = overIsColumn ? overId : findColumnOfTask(overId);
+                // Dropping on a column appends; dropping back onto the own column header is a no-op.
+                if (sourceColumnId && destColumnId && !(overIsColumn && destColumnId === sourceColumnId)) {
+                    const sourceTaskIds = (columnsMap.get(sourceColumnId) as Y.Map<unknown> | undefined)?.get(
+                        'taskIds',
+                    ) as Y.Array<string> | undefined;
+                    const destTaskIds =
+                        sourceColumnId === destColumnId
+                            ? sourceTaskIds
+                            : ((columnsMap.get(destColumnId) as Y.Map<unknown> | undefined)?.get('taskIds') as
+                                  | Y.Array<string>
+                                  | undefined);
+                    if (sourceTaskIds && destTaskIds) {
+                        const sourceIndex = (sourceTaskIds.toArray() as string[]).indexOf(activeId);
+                        const destIndex = overIsColumn
+                            ? destTaskIds.length
+                            : (destTaskIds.toArray() as string[]).indexOf(overId);
+                        if (sourceIndex !== -1 && destIndex !== -1) {
+                            sourceTaskIds.delete(sourceIndex, 1);
+                            destTaskIds.insert(destIndex, [activeId]);
                         }
                     }
                 }
@@ -115,7 +101,6 @@ export const useDragAndDrop = ({ board, yjsDoc }: UseDragAndDropProps) => {
 
     return {
         dragState,
-        findColumnOfTask,
         handleDragStart,
         handleDragEnd,
     };

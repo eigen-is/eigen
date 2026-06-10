@@ -3,17 +3,21 @@ import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CardDialog } from '../cards/card-dialog';
 import type { useContextMenu } from '../context-menu';
-import { CommentContextMenu, type CommentContextMenuItem } from './comment-context-menu';
+import { CommentContextMenu } from './comment-context-menu';
+import type { CommentContextMenuItem } from './comment-menu-items';
 
-// Renders the view/edit dialog + right-click menu shared verbatim by the docs / slides / sheets
-// editors. The editor owns the `useContextMenu` instance (a ui-layer primitive) and supplies the
-// per-app `onDelete` that strips the host anchor; everything else is driven by the lifecycle bundle.
+// Renders the view/edit dialog + right-click menu shared verbatim by the docs / slides / sheets /
+// stickies editors. The editor owns the `useContextMenu` instance (a ui-layer primitive) and
+// supplies the per-app `onDelete` that strips the host anchor; everything else is driven by the
+// lifecycle bundle.
 type CommentLifecycleDialogsProps = {
     lifecycle: ReturnType<typeof useCommentLifecycle>;
     path: DrivePath;
     canWrite: boolean;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
     onDelete: (cardId: string) => void;
+    noun?: string;
+    onCardDialogClose?: () => void;
 };
 
 export function CommentLifecycleDialogs({
@@ -22,6 +26,8 @@ export function CommentLifecycleDialogs({
     canWrite,
     commentContextMenu,
     onDelete,
+    noun,
+    onCardDialogClose,
 }: CommentLifecycleDialogsProps) {
     const { updateCard, resolveComment, openCard, openEntry, setOpenCardId } = lifecycle;
 
@@ -30,7 +36,10 @@ export function CommentLifecycleDialogs({
             <CardDialog
                 open={!!openCard}
                 onOpenChange={(o) => {
-                    if (!o) setOpenCardId(null);
+                    if (!o) {
+                        setOpenCardId(null);
+                        onCardDialogClose?.();
+                    }
                 }}
                 card={openCard}
                 entry={openEntry}
@@ -48,6 +57,7 @@ export function CommentLifecycleDialogs({
 
             <CommentContextMenu
                 contextMenu={commentContextMenu}
+                noun={noun}
                 onOpen={setOpenCardId}
                 onUpdateCard={updateCard}
                 onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}

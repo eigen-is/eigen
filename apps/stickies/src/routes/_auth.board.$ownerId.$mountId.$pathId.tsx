@@ -15,8 +15,16 @@ function StickiesRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
     const { chat } = Route.useSearch();
     const navigate = useNavigate();
-    const { docInfo, isLoading, path, chatFolderId, accessDialogOpen, openAccessDialog, setAccessDialogOpen } =
-        useEigenDocEditorRoute(ownerId, mountId, pathId);
+    const {
+        docInfo,
+        isLoading,
+        path,
+        chatFolderId,
+        mediaFolderId,
+        accessDialogOpen,
+        openAccessDialog,
+        setAccessDialogOpen,
+    } = useEigenDocEditorRoute(ownerId, mountId, pathId);
 
     const handleClearChat = useCallback(() => {
         navigate({
@@ -39,6 +47,7 @@ function StickiesRoute() {
                 path={path}
                 canWrite={docInfo.canWrite}
                 chatFolderId={chatFolderId}
+                mediaFolderId={mediaFolderId}
                 onAccessDialogOpen={openAccessDialog}
                 initialChatName={chat}
                 onClearInitialChat={handleClearChat}

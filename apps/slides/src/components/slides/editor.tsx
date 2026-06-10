@@ -8,6 +8,7 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
+import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { useCommentLifecycle } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
@@ -18,6 +19,7 @@ import {
 } from '@workspace/lib/drive';
 import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
+import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CardFormDialog, CommentLifecycleDialogs, CommentPanel } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
@@ -172,9 +174,11 @@ function SlideEditorInner({
         mountId: path.mountId,
         pathId: path.id,
         chatFolderId,
+        mediaFolderId,
         doc: yjsDoc,
         activeCardIds: activeComments.ids,
         initialChatName,
+        ready: isSynced,
     });
     const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
@@ -185,30 +189,7 @@ function SlideEditorInner({
     const hasSelection = selectedObjectIds.length > 0;
     const isEditing = editingObjectId !== null;
 
-    useHotkey(
-        'Mod+Z',
-        (e) => {
-            e.preventDefault();
-            undoManager?.undo();
-        },
-        { enabled: canWrite && !!undoManager },
-    );
-    useHotkey(
-        'Mod+Y',
-        (e) => {
-            e.preventDefault();
-            undoManager?.redo();
-        },
-        { enabled: canWrite && !!undoManager },
-    );
-    useHotkey(
-        'Mod+Shift+Z',
-        (e) => {
-            e.preventDefault();
-            undoManager?.redo();
-        },
-        { enabled: canWrite && !!undoManager },
-    );
+    useYjsUndoHotkeys(undoManager, canWrite);
     useHotkey(
         'Delete',
         () => {
@@ -625,10 +606,13 @@ function SlideEditorInner({
     );
 
     const handleSaveNew = useCallback(
-        async (patch: { title?: string; description?: string; color?: string }) => {
+        async (
+            patch: { title?: string; description?: string; color?: string },
+            attachments?: CardAttachmentDraft[],
+        ) => {
             if (!addTargetObjId) return;
             const objId = addTargetObjId;
-            await createCard({ title: addInitialTitle, ...patch }, (card) => {
+            await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
                 addCommentToObject(objId, card.id);
             });
             setAddTargetObjId(null);
@@ -837,6 +821,7 @@ function SlideEditorInner({
                 }}
                 initialTitle={addInitialTitle}
                 onSave={handleSaveNew}
+                allowAttachments={!!mediaFolderId}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />

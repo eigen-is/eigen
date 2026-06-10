@@ -33,6 +33,18 @@ describe('applyCardPatch', () => {
         expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.get('color')).toBe('#00ff00');
     });
 
+    test('attachments: sets the array and deletes the key when emptied', () => {
+        const doc = seed();
+        applyCardPatch(doc, 'comments', 'c1', { attachments: ['a.png'] });
+        expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.get('attachments')).toEqual(['a.png']);
+
+        applyCardPatch(doc, 'comments', 'c1', { title: 'x' });
+        expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.get('attachments')).toEqual(['a.png']);
+
+        applyCardPatch(doc, 'comments', 'c1', { attachments: [] });
+        expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.has('attachments')).toBe(false);
+    });
+
     test('no-op when cardId is missing', () => {
         const doc = seed();
         applyCardPatch(doc, 'comments', 'unknown', { title: 'x' });

@@ -7,6 +7,7 @@ import {
     useCopyToMediaFolder,
     useMediaResolver,
 } from '@workspace/lib/drive';
+import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
 import { CardFormDialog, CommentLifecycleDialogs, CommentPanel, LoadingState } from '@workspace/ui';
@@ -75,9 +76,11 @@ function SheetEditorInner({
         mountId: path.mountId,
         pathId: path.id,
         chatFolderId,
+        mediaFolderId,
         doc: docRef.current,
         activeCardIds: activeComments.ids,
         initialChatName,
+        ready: synced,
     });
     const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
@@ -162,10 +165,13 @@ function SheetEditorInner({
     );
 
     const handleSaveNew = useCallback(
-        async (patch: { title?: string; description?: string; color?: string }) => {
+        async (
+            patch: { title?: string; description?: string; color?: string },
+            attachments?: CardAttachmentDraft[],
+        ) => {
             if (!addTargetCell || !workbookRef.current) return;
             const cell = addTargetCell;
-            await createCard({ title: addInitialTitle, ...patch }, (card) => {
+            await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
                 const fd = workbookRef.current?.getFlowdata();
                 const existing = fd?.[cell.r]?.[cell.c]?.commentCardIds ?? [];
                 workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, card.id]);
@@ -314,6 +320,7 @@ function SheetEditorInner({
                 }}
                 initialTitle={addInitialTitle}
                 onSave={handleSaveNew}
+                allowAttachments={!!mediaFolderId}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />

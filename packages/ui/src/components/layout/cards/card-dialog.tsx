@@ -1,8 +1,14 @@
+import { useResolveCardAttachments } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
-import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { CommentCard } from '@workspace/lib/types/comments';
+import { useMediaResolver } from '@workspace/lib/drive';
+import type { ChatAttachment, CommentEntry } from '@workspace/lib/types/chat';
+import { isAttachmentReference } from '@workspace/lib/types/chat';
+import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import { Check, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
+import { AttachmentChip } from '../attachment/attachment-chip';
+import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
+import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { useCreatedByMeta } from '../comments/comment-dialog-meta';
 import { CommentThread } from '../comments/comment-thread';
 import { NoteCardDialog } from '../notes/note-card-dialog';
@@ -17,7 +23,12 @@ type CardDialogProps = {
     mountId: string;
     canWrite?: boolean;
     copyLinkUrl?: string;
-    onUpdate?: (patch: { title?: string; description?: string; color?: string }) => void;
+    onUpdate?: (patch: {
+        title?: string;
+        description?: string;
+        color?: string;
+        attachments?: ChatAttachment[];
+    }) => void;
     onResolve?: (chatName: string, next: 'open' | 'resolved') => void;
 };
 
@@ -34,6 +45,8 @@ export function CardDialog({
     onResolve,
 }: CardDialogProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const { mediaFolderId } = useMediaResolver();
+    const resolveAttachments = useResolveCardAttachments(ownerId, mountId, mediaFolderId);
 
     const meta = useCreatedByMeta(card?.creator, card?.createdAt ?? 0);
 
@@ -48,6 +61,21 @@ export function CardDialog({
               }
             : {};
 
+    const attachmentNames = card.attachments?.filter((a): a is string => typeof a === 'string') ?? [];
+
+    const handleEditSave = async (
+        patch: { title?: string; description?: string; color?: string },
+        drafts?: CardAttachmentDraft[],
+    ) => {
+        if (!onUpdate) return;
+        if (drafts === undefined) {
+            onUpdate(patch);
+            return;
+        }
+        const attachments = await resolveAttachments(drafts);
+        onUpdate({ ...patch, attachments });
+    };
+
     return (
         <>
             <NoteCardDialog
@@ -61,6 +89,28 @@ export function CardDialog({
                 onEdit={onUpdate ? () => setIsSettingsOpen(true) : undefined}
                 copyLinkUrl={copyLinkUrl}
                 onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
+                attachments={
+                    card.attachments && card.attachments.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                            {card.attachments.map((attachment) =>
+                                isAttachmentReference(attachment) ? (
+                                    <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
+                                ) : mediaFolderId ? (
+                                    <AttachmentChip
+                                        key={`name-${attachment}`}
+                                        fileName={attachment}
+                                        ownerId={ownerId}
+                                        mountId={mountId}
+                                        mediaFolderId={mediaFolderId}
+                                        siblingFileNames={attachmentNames}
+                                    />
+                                ) : (
+                                    <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
+                                ),
+                            )}
+                        </div>
+                    ) : undefined
+                }
                 {...action}
             >
                 {card.chatName ? (
@@ -79,7 +129,9 @@ export function CardDialog({
                     initialTitle={card.title}
                     initialDescription={card.description}
                     initialColor={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
-                    onSave={onUpdate}
+                    allowAttachments={!!mediaFolderId}
+                    initialAttachments={card.attachments}
+                    onSave={handleEditSave}
                     dialogTitle="Edit card"
                 />
             )}

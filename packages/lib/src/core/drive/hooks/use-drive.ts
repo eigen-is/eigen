@@ -12,7 +12,7 @@ import {
     type EigenDocType,
 } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { collabKeys } from '../../collab/hooks/use-collab';
@@ -125,7 +125,9 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
         [data, folderId],
     );
 
-    return { contents: data, findByName };
+    // Stable return object — MediaResolver's context value memoizes on it, and a fresh
+    // literal per render would re-render every context subscriber (e.g. all board cards).
+    return useMemo(() => ({ contents: data, findByName }), [data, findByName]);
 }
 
 // GET MIME CONTENTS (aggregates over all mounts)
