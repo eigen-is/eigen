@@ -223,4 +223,9 @@ export type Sheet = {
         type: 'row' | 'column' | 'both' | 'rangeRow' | 'rangeColumn' | 'rangeBoth';
         range?: { row_focus: number; column_focus: number };
     };
+    // Autofilter span — the rectangle whose header row renders the filter dropdown
+    // buttons. Per-column criteria live on the editor-only `filter` field (sheet's
+    // state/types.ts); a criteria-less filter — what a fresh enable writes and all
+    // the xlsx importer emits — is just this range.
+    filterRange?: SingleRange;
 };

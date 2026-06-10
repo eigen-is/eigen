@@ -902,6 +902,51 @@ describe('Sheets xlsx import/convert', () => {
         expect(sheets[3].frozen).toBeUndefined();
     });
 
+    test('convert imports the autofilter range onto sheet.filterRange', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const filtered = workbook.addWorksheet('Filtered');
+        filtered.getCell('B2').value = 'Name';
+        filtered.getCell('C2').value = 'Count';
+        filtered.getCell('D2').value = 'Notes';
+        filtered.getCell('B3').value = 'Apples';
+        filtered.getCell('B4').value = 'Bananas';
+        filtered.autoFilter = 'B2:D10';
+        // Excel autofilter sheets routinely also carry hidden rows (a previously
+        // applied criterion hides non-matching rows); both must import together.
+        filtered.getRow(4).hidden = true;
+        const plain = workbook.addWorksheet('Plain');
+        plain.getCell('A1').value = 'free';
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'autofilter.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+
+        expect(sheets[0].filterRange).toEqual({ row: [1, 9], column: [1, 3] });
+        // No <filterColumn> criteria → no per-column entries. A fresh filter enable in
+        // the editor writes only filterRange too (state/modules/filter.ts createFilter);
+        // per-column `filter` entries appear only once a criterion is set.
+        expect('filter' in sheets[0]).toBe(false);
+        expect(sheets[0].config?.rowhidden).toEqual({ '3': 0 });
+        expect(sheets[1].filterRange).toBeUndefined();
+    });
+
     test('import into another user document without write permission returns 403', async () => {
         const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
         const initialFile = new File([initial], 'alice.xlsx', {
