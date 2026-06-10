@@ -5,10 +5,11 @@ import { useCommentLifecycle } from '@workspace/lib/comments';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { CommentCard } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CardFormDialog, CommentLifecycleDialogs, LoadingState, NoteCard } from '@workspace/ui';
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
+import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
@@ -27,6 +28,7 @@ type StickiesBoardProps = {
     path: DrivePath;
     canWrite: boolean;
     chatFolderId: string | null;
+    mediaFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
     onClearInitialChat?: () => void;
@@ -37,6 +39,7 @@ export function StickiesBoard({
     path,
     canWrite,
     chatFolderId,
+    mediaFolderId,
     onAccessDialogOpen,
     initialChatName,
     onClearInitialChat,
@@ -66,6 +69,7 @@ export function StickiesBoard({
         mountId: path.mountId,
         pathId: path.id,
         chatFolderId,
+        mediaFolderId,
         doc: yjsDoc,
         activeCardIds,
         initialChatName,
@@ -98,10 +102,13 @@ export function StickiesBoard({
     const [scrollToTopOf, setScrollToTopOf] = useState<{ columnId: string; n: number } | null>(null);
 
     const onSaveNew = useCallback(
-        async (patch: { title?: string; description?: string; color?: string }) => {
+        async (
+            patch: { title?: string; description?: string; color?: string },
+            attachments?: CardAttachmentDraft[],
+        ) => {
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
-            await createCard(patch, (card) => {
+            await createCard({ ...patch, attachments }, (card) => {
                 const col = yjsDoc.getMap('columns').get(targetColumnId) as Y.Map<unknown> | undefined;
                 if (!col) return;
                 let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
@@ -132,6 +139,10 @@ export function StickiesBoard({
         },
         [handleContextMenu, entryByChatName],
     );
+
+    // Hook for the drag overlay's card — must run unconditionally at top level.
+    const overlayCard = dragState.activeType === 'task' ? (dragState.activeItem as CommentCard) : null;
+    const overlayMeta = useAttachmentMeta(overlayCard?.attachments);
 
     // Per-column card arrays with stable identity, so memoized columns only re-render
     // when their own cards (or the color filter) actually change.
@@ -169,6 +180,8 @@ export function StickiesBoard({
                     color={card.color}
                     replyCount={entry?.messageCount}
                     resolved={entry?.status === 'resolved'}
+                    coverThumbnailUrl={overlayMeta.coverThumbnailUrl}
+                    attachmentCount={overlayMeta.attachmentCount}
                     className={isMobile ? 'w-full' : 'w-[254px]'}
                 />
             );
@@ -198,7 +211,7 @@ export function StickiesBoard({
         <MediaResolverProvider
             ownerId={ownerId}
             mountId={path.mountId}
-            mediaFolderId={null}
+            mediaFolderId={mediaFolderId}
             chatFolderId={chatFolderId}
         >
             <ColumnLayout>
@@ -281,6 +294,7 @@ export function StickiesBoard({
                                     if (!o) setAddTargetColumn(null);
                                 }}
                                 onSave={onSaveNew}
+                                allowAttachments={!!mediaFolderId}
                                 dialogTitle="Add Sticky"
                                 submitLabel="Add Sticky"
                             />

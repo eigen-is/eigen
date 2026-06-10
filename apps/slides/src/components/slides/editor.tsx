@@ -19,6 +19,7 @@ import {
 } from '@workspace/lib/drive';
 import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
+import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CardFormDialog, CommentLifecycleDialogs, CommentPanel } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
@@ -173,6 +174,7 @@ function SlideEditorInner({
         mountId: path.mountId,
         pathId: path.id,
         chatFolderId,
+        mediaFolderId,
         doc: yjsDoc,
         activeCardIds: activeComments.ids,
         initialChatName,
@@ -604,10 +606,13 @@ function SlideEditorInner({
     );
 
     const handleSaveNew = useCallback(
-        async (patch: { title?: string; description?: string; color?: string }) => {
+        async (
+            patch: { title?: string; description?: string; color?: string },
+            attachments?: CardAttachmentDraft[],
+        ) => {
             if (!addTargetObjId) return;
             const objId = addTargetObjId;
-            await createCard({ title: addInitialTitle, ...patch }, (card) => {
+            await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
                 addCommentToObject(objId, card.id);
             });
             setAddTargetObjId(null);
@@ -816,6 +821,7 @@ function SlideEditorInner({
                 }}
                 initialTitle={addInitialTitle}
                 onSave={handleSaveNew}
+                allowAttachments={!!mediaFolderId}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />
