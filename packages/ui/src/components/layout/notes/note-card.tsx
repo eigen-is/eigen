@@ -1,6 +1,6 @@
 import { isLightColor, lightenColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
-import { Check } from 'lucide-react';
+import { Check, Paperclip } from 'lucide-react';
 import type { HTMLAttributes } from 'react';
 import { Card, CardContent } from '../../card';
 import { Progress } from '../../progress';
@@ -16,6 +16,8 @@ type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     color?: string | null;
     resolved?: boolean;
     replyCount?: number;
+    coverThumbnailUrl?: string;
+    attachmentCount?: number;
     ref?: React.Ref<HTMLDivElement>;
 };
 
@@ -25,6 +27,8 @@ export function NoteCard({
     color,
     resolved,
     replyCount,
+    coverThumbnailUrl,
+    attachmentCount,
     onClick,
     onContextMenu,
     className,
@@ -59,6 +63,14 @@ export function NoteCard({
                         <Check className="h-3.5 w-3.5 opacity-50" />
                     </span>
                 )}
+                {coverThumbnailUrl && (
+                    <img
+                        src={coverThumbnailUrl}
+                        alt=""
+                        draggable={false}
+                        className="mb-2 h-20 w-full object-cover rounded-sm"
+                    />
+                )}
                 <span className={cn('line-clamp-2', resolved && 'pr-5')}>{title}</span>
                 {description && (
                     <div
@@ -78,9 +90,18 @@ export function NoteCard({
                         </span>
                     </div>
                 )}
-                {!!replyCount && (
-                    <p className="text-xs mt-0.5 opacity-50">
-                        {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+                {(!!replyCount || !!attachmentCount) && (
+                    <p className="text-xs mt-0.5 opacity-50 flex items-center gap-2">
+                        {!!replyCount && (
+                            <span>
+                                {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+                            </span>
+                        )}
+                        {!!attachmentCount && (
+                            <span className="flex items-center gap-0.5">
+                                <Paperclip className="h-3 w-3" /> {attachmentCount}
+                            </span>
+                        )}
                     </p>
                 )}
             </CardContent>
