@@ -1,6 +1,6 @@
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { replaySheetsOps } from '@workspace/sheet/engine';
+import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
@@ -17,7 +17,11 @@ export async function readSheetsContent(mount: Mount, drivePath: DrivePath): Pro
     const { doc } = loadYjsState(managedDb);
     const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
     const opBatches = doc.getArray<Op[]>('ops').toArray();
-    const sheets = (snapshot ? JSON.parse(snapshot) : []) as Sheet[];
+    // No snapshot + pending ops = a fresh doc closed before its first
+    // flushSnapshot. The ops were recorded against the editor's default sheets
+    // (they reference 'sheet-1'), so replay must start from the same base — an
+    // empty base silently drops every edit. A doc with neither stays [].
+    const sheets = snapshot ? (JSON.parse(snapshot) as Sheet[]) : opBatches.length > 0 ? createDefaultSheets() : [];
     return replaySheetsOps(sheets, opBatches);
 }
 

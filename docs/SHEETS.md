@@ -105,6 +105,11 @@ engine/
   patches via `opToPatchOnSheets`, `addSheet`/`deleteSheet` inline, and `insertRowCol`/`deleteRowCol` via
   the typed shape-adapter + `applySheetsInsertRowCol`/`applySheetsDeleteRowCol`. Used by the BE document
   reader and the FE Yjs sync handler — single source of truth for both initial-load paths.
+  Celldata-only sheets materialize to at least the editor's default grid
+  (`DEFAULT_SHEET_ROW_COUNT` × `DEFAULT_SHEET_COLUMN_COUNT`, engine `defaults.ts`) so ops recorded
+  against a never-flushed doc resolve; a batch that still cannot apply is rolled back and skipped
+  with a warning instead of making the doc unreadable. `createDefaultSheets()` (same module) is the
+  canonical no-snapshot base for the FE hook and `readSheetsContent`.
 - `applySheetsInsertRowCol<S extends Sheet>(sheets, op)` / `applySheetsDeleteRowCol<S extends Sheet>(sheets, op)`
   — pure data shifts for row/col ops over lib.Sheet-typed fields (`data`, `config.merge`, `config.rowhidden`,
   `conditionalFormatRules`, cross-sheet formula refs). Generic over `S` so the editor's wider
