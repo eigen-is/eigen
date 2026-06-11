@@ -12,6 +12,7 @@ import {
     api,
     type Context,
     createDropCellRange,
+    createFilterOptions,
     fixColumnStyleOverflowInFreeze,
     fixRowStyleOverflowInFreeze,
     type GlobalCache,
@@ -31,7 +32,6 @@ import {
 } from '../../state';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropDownList } from '../DataVerification/DropdownList';
-import { FilterOptions } from '../FilterOption';
 import { ImgBoxs } from '../ImgBoxs';
 import { LinkEditCard } from '../LinkEditCard';
 import { SearchReplace } from '../SearchReplace';
@@ -68,7 +68,12 @@ export const SheetOverlay: React.FC = () => {
                         refs.canvas.current!.getContext('2d')!,
                     );
 
+                    // Skip the input focus when the mousedown opened the filter menu:
+                    // focusing the off-screen cell input auto-scrolls the cell area,
+                    // which would snap the grid and close the menu via its
+                    // close-on-scroll listener.
                     if (
+                        draftCtx.filterContextMenu == null &&
                         draftCtx.selections?.[0] != null &&
                         Object.keys(draftCtx.selections[0]).length > 0 &&
                         refs.cellInput.current
@@ -269,6 +274,22 @@ export const SheetOverlay: React.FC = () => {
         if (req.top != null) el.scrollTop = req.top;
     }, [context.scrollRequest, refs.cellArea]);
 
+    // Keep ctx.filter/filterRange in sync with the current sheet and recompute the
+    // filter-button geometry (ctx.filterOptions) the canvas draws every frame —
+    // row/col metric changes, sheet switches and filter-range edits all re-derive.
+    const sheetIndex = getSheetIndex(context, context.currentSheetId);
+    const sheetFilterRange = sheetIndex == null ? undefined : context.sheets[sheetIndex].filterRange;
+    // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional triggers — body reads `draftCtx` so biome can't see the connection
+    useEffect(() => {
+        setContext((draftCtx) => {
+            const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
+            if (sheetIdx == null) return;
+            draftCtx.filterRange = draftCtx.sheets[sheetIdx].filterRange;
+            draftCtx.filter = draftCtx.sheets[sheetIdx].filter || {};
+            createFilterOptions(draftCtx, draftCtx.filterRange, undefined);
+        });
+    }, [context.visibledatarow, context.visibledatacolumn, setContext, context.currentSheetId, sheetFilterRange]);
+
     // The filter dropdown is position:fixed, positioned once from globalCache scroll
     // offsets, so it detaches from its column icon once the grid scrolls. Close it on
     // any scroll (standard dropdown behavior) — only subscribe while it is open.
@@ -384,7 +405,11 @@ export const SheetOverlay: React.FC = () => {
                     style={{
                         width: context.cellmainWidth,
                         height: context.cellmainHeight,
-                        cursor: context.cellSelectExtending ? 'crosshair' : 'default',
+                        cursor: context.cellSelectExtending
+                            ? 'crosshair'
+                            : context.filterButtonHover != null
+                              ? 'pointer'
+                              : 'default',
                     }}
                 >
                     {cellMenuAnchor}
@@ -645,7 +670,6 @@ export const SheetOverlay: React.FC = () => {
                             );
                         })}
                     {context.linkCard?.sheetId === context.currentSheetId && <LinkEditCard {...context.linkCard} />}
-                    <FilterOptions />
                     <InputBox />
                     <div id="luckysheet-multipleRange-show" />
                     <div id="luckysheet-dynamicArray-hightShow" />
