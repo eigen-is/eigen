@@ -9,6 +9,11 @@ import { sortedIndex } from 'es-toolkit/compat';
 // formerly the `bodrder05` parameter threaded through every render call).
 export const HALF_PIXEL = 0.5;
 
+// Cell fill rect adjustment relative to the raw cell edges
+// (left/top/width/height) — same inherited fudge family as HALF_PIXEL;
+// preserve the exact values.
+export const BORDER_FIX = [-1, 0, 0, -1] as const;
+
 // Index range of cells touching the viewport, shifted by the freeze-region
 // cell offset; end clamps to the last index.
 export function mainVisibleRange(
