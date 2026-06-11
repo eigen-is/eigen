@@ -168,6 +168,36 @@ describe('document/sheets — patch op replay', () => {
         expect(result[0].celldata).toEqual([{ r: 0, c: 0, v: { v: 7 } }]);
     });
 
+    test('reads doc with pending ops but no snapshot → replays over the default sheets', async () => {
+        // A fresh doc whose tab was killed before the first flushSnapshot has
+        // ops in Yjs but no snapshot. The replay base must be the same default
+        // sheets the editor started from — over an empty base the ops
+        // referencing 'sheet-1' are silently dropped and the doc reads empty.
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-no-snapshot' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const batch: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 1, 1], value: { v: 'b2', m: 'b2' } }];
+        collab.doc.transact(() => {
+            collab.doc.getArray<Op[]>('ops').push([batch]);
+        });
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('sheet-1');
+        expect(result[0].data![1][1]?.v).toBe('b2');
+        expect(result[0].celldata).toEqual([{ r: 1, c: 1, v: { v: 'b2', m: 'b2' } }]);
+    });
+
     test('reads doc with snapshot + multiple op batches → applies in order', async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,

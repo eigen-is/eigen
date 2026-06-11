@@ -1,19 +1,9 @@
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import type { Op, Sheet, WorkbookInstance } from '@workspace/sheet';
-import { replaySheetsOps } from '@workspace/sheet/engine';
+import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
-
-const DEFAULT_SHEETS: Sheet[] = [
-    {
-        name: 'Sheet1',
-        id: 'sheet-1',
-        order: 0,
-        celldata: [],
-        config: {},
-    },
-];
 
 export function useSheet(
     ownerId: string,
@@ -117,7 +107,7 @@ export function useSheet(
         wsProvider.on('sync', (isSynced: boolean) => {
             if (!isSynced) return;
             const snapshot = stateMap.get('snapshot') as string | undefined;
-            let initial: Sheet[] = DEFAULT_SHEETS;
+            let initial: Sheet[] = createDefaultSheets();
             if (snapshot) {
                 try {
                     initial = JSON.parse(snapshot) as Sheet[];
@@ -126,7 +116,17 @@ export function useSheet(
                 }
             }
             const pending = opsArray.toArray() as Op[][];
-            const data = pending.length > 0 ? replaySheetsOps(initial, pending) : initial;
+            let data = initial;
+            if (pending.length > 0) {
+                // The doc must still open if the pending ops can't be replayed —
+                // fall back to the snapshot (or defaults) rather than letting the
+                // throw escape the Yjs sync handler and kill the app.
+                try {
+                    data = replaySheetsOps(initial, pending);
+                } catch (e) {
+                    console.error('[sheet] Failed to replay pending ops, opening without them:', e);
+                }
+            }
             latestDataRef.current = data;
             setInitialData(data);
             setSynced(true);
