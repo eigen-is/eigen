@@ -48,8 +48,9 @@ incoming `Sheet[]` before rendering:
 This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with as little as `celldata + f` — the
 Workbook handles the rest. The xlsx importer goes well beyond that minimum: it also emits `config`
 (merges, row/col sizes, `rowhidden`/`colhidden`, borders), `frozen`, `filterRange`,
-`conditionalFormatRules`, and caches each cell's display string (`m`) through the engine's numfmt so
-the first paint matches the editor. Two invariants importers still must uphold:
+`conditionalFormatRules`, `dataVerification`, `hyperlink` (with the `hl` cell backref), and caches
+each cell's display string (`m`) through the engine's numfmt so the first paint matches the editor.
+Two invariants importers still must uphold:
 - **Pair `ct.fa` with `ct.t`**: whenever a cell has `ct.t` (type), set `ct.fa` (format assignment). Default
   to `'General'` when Excel reports no explicit format. Without an `fa`, `format(undefined, n)` falls through
   to the raw value — date serials display as numbers (e.g. `44927` instead of `1/1/2023`), percents lose
