@@ -1,4 +1,5 @@
 import { isNil, sortBy } from 'es-toolkit/compat';
+import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
 import type { SheetConfig } from '.';
 import { FormulaCache } from './modules';
@@ -211,8 +212,8 @@ export type Context = {
 export function defaultContext(refs: RefValues): Context {
     return {
         sheets: [],
-        defaultcolumnNum: 60,
-        defaultrowNum: 84,
+        defaultcolumnNum: DEFAULT_SHEET_COLUMN_COUNT,
+        defaultrowNum: DEFAULT_SHEET_ROW_COUNT,
         addDefaultRows: 50,
         fullscreenmode: true,
         devicePixelRatio: (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio,
