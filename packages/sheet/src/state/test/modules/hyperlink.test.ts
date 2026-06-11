@@ -106,12 +106,17 @@ describe('isLinkValid scheme allowlist', () => {
         expect(isLinkValid(ctx, 'webpage', 'example.com').isValid).toBe(true);
     });
 
-    test('rejects an adversarial near-miss quickly — no catastrophic backtracking', () => {
-        // 28 'a's + '!' took ~1.8s against the old nested-quantifier regex.
-        const address = `https://${'a'.repeat(28)}!`;
-        const start = performance.now();
-        expect(isLinkValid(ctx, 'webpage', address).isValid).toBe(false);
-        expect(performance.now() - start).toBeLessThan(100);
+    test('accepts everything navigation would open — same gate as goToLink', () => {
+        // The old charset regex rejected these while goToLink happily opened
+        // them; validity now derives from resolveWebLink + URL.canParse.
+        expect(isLinkValid(ctx, 'webpage', 'localhost:3000').isValid).toBe(true);
+        expect(isLinkValid(ctx, 'webpage', 'https://example.com/x;y=1#frag').isValid).toBe(true);
+        expect(isLinkValid(ctx, 'webpage', 'https://en.wikipedia.org/wiki/Foo_(bar)').isValid).toBe(true);
+    });
+
+    test('rejects structurally unparseable addresses', () => {
+        expect(isLinkValid(ctx, 'webpage', 'https://exa mple.com').isValid).toBe(false);
+        expect(isLinkValid(ctx, 'webpage', 'https://').isValid).toBe(false);
     });
 
     test('rejects non-allowlisted schemes', () => {

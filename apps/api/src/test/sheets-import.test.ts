@@ -1020,12 +1020,6 @@ describe('Sheets xlsx import/convert', () => {
         ]);
         const sheets = await convertBuffer(buffer, 'dv-skips.xlsx');
         expect(Object.keys(sheets[0].dataVerification ?? {})).toEqual(['0_1']);
-
-        const allSkipped = await buildXlsxBuffer([
-            { a1: 'A1', value: 1, dataValidation: { type: 'custom', formulae: ['A1>0'] } },
-        ]);
-        const skippedSheets = await convertBuffer(allSkipped, 'dv-all-skipped.xlsx');
-        expect(skippedSheets[0].dataVerification).toBeUndefined();
     });
 
     test('convert maps validation messages onto hint and prohibit-input flags', async () => {

@@ -52,6 +52,16 @@ last and wins.
 - Data validation `allowBlank` is dropped (no engine field) — blanks follow the engine's existing
   semantics regardless of the xlsx flag. Error/prompt titles and custom error text are dropped
   too; the engine generates its own hint/failure copy.
+- Per-cell `r_c` keying is the root cause behind the DV import clamp (margin constants, silent
+  truncation past the extent, duplicated rule objects in every snapshot): a range-keyed
+  `dataVerification` (mirroring CF's `cellrange`) would delete all three and the dialog's own
+  per-cell expansion loop. Related hazard: `checkboxChange` mutates the rule object in place, so
+  any producer that aliases one rule across cells misbehaves — the importer defends by cloning
+  per cell. Sheet-JSON format is free to change (dev-only carve-out); realistically its own cycle.
+- The hyperlink scheme allowlist (`resolveWebLink`) lives FE-only in `state/modules/hyperlink.ts`
+  — correct today (both consumers are there; exports render no links). If cycle 8 export parity
+  starts rendering hyperlinks, move it to a BE-importable seam (`packages/lib/src/sheets`)
+  instead of reimplementing.
 - Excel outline groups (`outlineLevel` row/col grouping with collapse buttons) are not imported —
   distinct from hidden rows.
 - Date condition input in the filter menu is a plain text field (no date picker).
