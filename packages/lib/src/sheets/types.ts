@@ -236,4 +236,9 @@ export type Sheet = {
     // DataVerification dialog and the xlsx importer; the runtime (cell focus,
     // updateCell, canvas painter) reads them straight off the sheet.
     dataVerification?: Record<string, DataVerificationRule>;
+    // Hyperlinks keyed "r_c" (0-based). Written by the editor's LinkEditCard
+    // (saveHyperlink) and the xlsx importer; read by the link preview card and
+    // goToLink navigation. The linked cell carries the `hl` backref. linkType
+    // ∈ webpage | sheet | cellrange (state/modules/hyperlink.ts).
+    hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
 };
