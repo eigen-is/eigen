@@ -1,7 +1,7 @@
 # Sheets xlsx-fidelity program
 
 > **TLDR**: Multi-cycle effort to make xlsx → `.eigensheets` conversion faithful and bring the
-> sheet feature set/UX toward Google Sheets parity. Cycles 0–6 are done; this doc carries the
+> sheet feature set/UX toward Google Sheets parity. Cycles 0–7 are done; this doc carries the
 > status, the backlog, and the working method so a fresh session can continue without archaeology.
 > Architecture background: [SHEETS.md](SHEETS.md).
 
@@ -19,6 +19,7 @@
 | 5 | Data-validation/dropdowns import → `Sheet.dataVerification` (now a lib-type field): list → dropdown (literal lists + live range refs incl. quoted cross-sheet names), whole/decimal/textLength/date with the full operator → type2 table, prompts → hints, stop-style errors → `prohibitInput`; custom/any, defined-name sources and non-literal operands skipped; emission clamped to used extent + margin | merge `64ae806d` |
 | 6 | Hyperlinks import → `Sheet.hyperlink` (now a lib-type field): web/mailto targets verbatim as `webpage`, `#`-prefixed internal locations as `cellrange`/`sheet` (quotes kept for getcellrange, stripped for sheet-name equality); linked cells get the `hl` backref. Engine: scheme allowlist in `goToLink`/`isLinkValid` — http/https/mailto pass verbatim, scheme-less keeps the https:// prepend, scripting schemes (`javascript:`, `data:`, `file:`, …) never navigate (mailto was mangled into `https://mailto:…` before). Also fixed the broken `@source` globs in `packages/ui` globals.css (three-up → nonexistent dirs) that left package-only Tailwind classes — incl. the LinkEditCard's `z-30` — out of every app's CSS, making the link preview card unclickable. Hardening: `noopener,noreferrer` on link `window.open`, host:port kept scheme-less, ReDoS regex defused | merge `c8111020` |
 | — | Cycles 5+6 whole-diff review (clean) + simplify pass: shared `unquoteXlsxLiteral`/`unquoteSheetName` (engine-exported), `formatInputDate` reuse, `isLinkValid` unified with the navigation gate (`resolveWebLink` + `URL.canParse` — charset regex rejected addresses goToLink opens), importer-coverage line added to SHEETS.md | commits `248588a9`, `ff6474da` |
+| 7 | Date/number format UX (Google parity, design approved from Reinder's reference shots): Format → Number menu restructured to Google's exact item list (adds Financial, Currency rounded, Duration `[h]:mm:ss`; thousands-separator presets; flat Custom items; active-format checkmark from anchor `ct.fa`), three custom-format dialogs replacing FormatSearch — number (mono input + live guarded sample + 14 presets), date/time (token-chip builder with per-token variant menus, grouped insert menu, pure pattern⇄chips tokenizer/serializer in `FormatDialogs/format-pattern.ts`, 16 presets), currencies (typed-query filter, 4 pattern variants, glyph cleanup `₼`/`£`/`¥`) — all applying via `updateFormat` (FormatSearch's hand-rolled cell loop + `numberFmtList` deleted); previews guarded against numfmt throws (illegal pattern = red message + disabled Apply, found live by Reinder); filter-menu footer aligned with the shared dialog button order (Clear filter left, Cancel→Confirm right) | merge `04a5dfb1` |
 
 Excel priority semantics for CF: rules are emitted sorted by priority **descending** because the
 engine compute-map merge is last-write-wins per property — the highest-precedence rule is applied
@@ -26,8 +27,6 @@ last and wins.
 
 ## Remaining cycles (signed-off order)
 
-7. **Date/number format UX** — Google-Sheets-style format dialogs (preset list with live
-   previews + custom format builder). Independent of import work.
 8. **Export parity** — close the xlsx round-trip for everything that landed.
 - **Filter menu visual redesign (Google parity)** — deliberately deferred for design iteration
   in small steps with Reinder; the functional condition tier is in. Reference: Google's
@@ -36,6 +35,19 @@ last and wins.
 
 ## Backlog
 
+- **BUG (serious, pre-existing, found during cycle 7 verification) — a sheet with unflushed ops
+  and no snapshot becomes permanently unloadable**: if the browser dies without `beforeunload`
+  (killed tab/process), the next load replays the pending ops over `DEFAULT_SHEETS` and
+  `replaySheetsOps` throws `[Immer] Cannot apply patch, path doesn't resolve: 0/data/1/1`,
+  uncaught → app crash on every subsequent open of that doc. Deterministic; reproduced on two
+  docs (left in place as reproducers in the `cycle7-verify@eigen.test` dev account). Start at
+  `wsProvider.on('sync')` in `apps/sheets/src/components/sheets/hooks/use-sheet.ts`. Needs both
+  a guard (don't crash the app on replay failure) and a root-cause look at the snapshot/ops
+  bootstrap ordering.
+- Imported xlsx date patterns use lowercase `mm` for month; the custom date/time dialog's
+  tokenizer follows the Google convention (`M` month / `m` minute), so such a pattern shows
+  "Minute" chips for its months. Display-only — serialization is the identity on unedited
+  chips — but switching a variant on a mislabeled chip writes minutes where months were.
 - **BUG — filter buttons misrender across a freeze pane**: when the autofilter row spans frozen
   columns/rows, the per-column filter buttons land at wrong positions after scrolling (buttons
   drift over the wrong cells; observed 2026-06-11 on a sheet with frozen panes + autofilter).
