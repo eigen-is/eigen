@@ -20,6 +20,9 @@ export function CustomCurrencies() {
     const [selectedName, setSelectedName] = useState<string | null>(
         () => currencyDetail.find((c) => c.value === settings.currency)?.name ?? null,
     );
+    // The field holds the active symbol, but only user-typed text filters the
+    // list — a prefilled or clicked symbol keeps the full list visible.
+    const [query, setQuery] = useState('');
 
     const currencies = useMemo(() => {
         const sorted = [...currencyDetail].sort((a, b) => {
@@ -27,18 +30,15 @@ export function CustomCurrencies() {
             if (b.name === 'EUR') return 1;
             return a.name.localeCompare(b.name);
         });
-        const query = symbol.trim().toLowerCase();
-        if (!query) return sorted;
-        const matches = sorted.filter(
-            (c) => c.name.toLowerCase().includes(query) || c.value.toLowerCase().includes(query),
-        );
-        // The field holds the active symbol after a row click — never blank the list.
-        return matches.length > 0 ? matches : sorted;
-    }, [currencyDetail, symbol]);
+        const needle = query.trim().toLowerCase();
+        if (!needle) return sorted;
+        return sorted.filter((c) => c.name.toLowerCase().includes(needle));
+    }, [currencyDetail, query]);
 
     const selectCurrency = (currency: { name: string; pos?: string; value: string }) => {
         const rounded = variantId === 'symbolFirstRounded' || variantId === 'symbolLastRounded';
         setSymbol(currency.value);
+        setQuery('');
         setSelectedName(currency.name);
         setVariantId(
             currency.pos === 'after'
@@ -72,6 +72,7 @@ export function CustomCurrencies() {
                     value={symbol}
                     onChange={(e) => {
                         setSymbol(e.target.value);
+                        setQuery(e.target.value);
                         setSelectedName(null);
                     }}
                 />
