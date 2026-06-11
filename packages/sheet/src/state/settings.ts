@@ -1,6 +1,7 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { v4 as uuidv4 } from 'uuid';
+import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
 import type { Selection, Sheet, SheetConfig } from './types';
 
@@ -146,8 +147,8 @@ export type Settings = {
 };
 
 export const defaultSettings: Required<Settings> = {
-    column: 60, // default number of columns for an empty sheet
-    row: 84, // default number of rows for an empty sheet
+    column: DEFAULT_SHEET_COLUMN_COUNT, // default number of columns for an empty sheet
+    row: DEFAULT_SHEET_ROW_COUNT, // default number of rows for an empty sheet
     addRows: 50, // It will add the rows when we click on add row button
     showToolbar: true, // whether to show the toolbar
     showFormulaBar: true, // whether to show the formula bar

@@ -44,6 +44,11 @@ truth, also used by the FE on initial load. The replay path uses `opToPatchOnShe
 (`packages/lib/src/sheets/yjs-ops.ts`), kept in `@workspace/lib` so server-side replay doesn't
 pull in the sheet package's DOM-coupled state barrel.
 
+A doc with pending ops but no snapshot (browser killed before the first flush) replays from
+`createDefaultSheets()` (engine) — the same base the editor seeded its grid from — on both FE
+and BE. An op batch that cannot apply is rolled back and skipped with a warning rather than
+failing the whole read; the doc stays loadable with everything else applied.
+
 ## Writers are unsafe against live editors
 
 `writeSheetsToYjs` (sheets.ts:24) does:

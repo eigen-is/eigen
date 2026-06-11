@@ -27,6 +27,7 @@ export type {
 export { cfSplitRange, evaluateConditionalFormat, getColorGradation } from './conditional-format';
 // CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
 // are surfaced through `./types` re-exports below.
+export { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
 export {
     detectCycle,
     getCalculationOrder,
