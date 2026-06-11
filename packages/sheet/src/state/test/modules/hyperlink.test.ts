@@ -1,8 +1,9 @@
 // Scheme allowlist for hyperlink navigation. linkAddress comes straight from
 // untrusted xlsx files and flows into window.open: http/https/mailto pass
-// through verbatim, a scheme-less address keeps the legacy https:// prepend,
-// and any other scheme (javascript:, data:, file:, …) must neither navigate
-// nor validate — scripting schemes must be unreachable.
+// through verbatim, a scheme-less address keeps the legacy https:// prepend
+// (host:port like localhost:3000 counts as scheme-less), and any other scheme
+// (javascript:, data:, file:, …) must neither navigate nor validate —
+// scripting schemes must be unreachable.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { Context } from '../../context';
@@ -11,7 +12,9 @@ import { contextFactory } from '../factories/context';
 
 // Bun's test runtime has no DOM; goToLink's webpage branch only touches
 // window.open, so a single-method stub scoped to this file suffices.
-const g = globalThis as unknown as { window?: { open: (url?: string) => void } };
+const g = globalThis as unknown as {
+    window?: { open: (url?: string, target?: string, features?: string) => void };
+};
 
 afterEach(() => {
     delete g.window;
@@ -51,6 +54,33 @@ describe('goToLink scheme allowlist', () => {
         expect(calls).toEqual(['https://example.com']);
     });
 
+    test('opens links via _blank with noopener so the target cannot reach back through window.opener', () => {
+        const calls: (string | undefined)[][] = [];
+        g.window = { open: (...args: (string | undefined)[]) => void calls.push(args) };
+        goToLink(webpageContext('https://example.com'), 0, 0, 'webpage', 'https://example.com', scrollEl);
+        expect(calls).toEqual([['https://example.com', '_blank', 'noopener,noreferrer']]);
+    });
+
+    test('treats host:port as scheme-less — digits only after the colon is a port, not a scheme', () => {
+        const calls = openedUrls();
+        goToLink(webpageContext('example.com:8080/x'), 0, 0, 'webpage', 'example.com:8080/x', scrollEl);
+        goToLink(webpageContext('localhost:3000'), 0, 0, 'webpage', 'localhost:3000', scrollEl);
+        expect(calls).toEqual(['https://example.com:8080/x', 'https://localhost:3000']);
+    });
+
+    test('javascript:8080 resolves as host:port — a harmless https hostname, not a scheme', () => {
+        const calls = openedUrls();
+        goToLink(webpageContext('javascript:8080'), 0, 0, 'webpage', 'javascript:8080', scrollEl);
+        expect(calls).toEqual(['https://javascript:8080']);
+    });
+
+    test('whitespace/control-char scheme variants get the https:// prepend, never a raw scripting scheme', () => {
+        const calls = openedUrls();
+        goToLink(webpageContext(' javascript:alert(1)'), 0, 0, 'webpage', ' javascript:alert(1)', scrollEl);
+        goToLink(webpageContext('java\nscript:alert(1)'), 0, 0, 'webpage', 'java\nscript:alert(1)', scrollEl);
+        expect(calls).toEqual(['https:// javascript:alert(1)', 'https://java\nscript:alert(1)']);
+    });
+
     test('never opens scripting or other non-allowlisted schemes', () => {
         const calls = openedUrls();
         for (const address of [
@@ -71,8 +101,17 @@ describe('isLinkValid scheme allowlist', () => {
 
     test('accepts http/https, mailto and scheme-less addresses', () => {
         expect(isLinkValid(ctx, 'webpage', 'https://example.com').isValid).toBe(true);
+        expect(isLinkValid(ctx, 'webpage', 'https://example.com/a/b?x=1&y=2').isValid).toBe(true);
         expect(isLinkValid(ctx, 'webpage', 'mailto:foo@bar.com').isValid).toBe(true);
         expect(isLinkValid(ctx, 'webpage', 'example.com').isValid).toBe(true);
+    });
+
+    test('rejects an adversarial near-miss quickly — no catastrophic backtracking', () => {
+        // 28 'a's + '!' took ~1.8s against the old nested-quantifier regex.
+        const address = `https://${'a'.repeat(28)}!`;
+        const start = performance.now();
+        expect(isLinkValid(ctx, 'webpage', address).isValid).toBe(false);
+        expect(performance.now() - start).toBeLessThan(100);
     });
 
     test('rejects non-allowlisted schemes', () => {

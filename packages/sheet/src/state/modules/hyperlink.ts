@@ -124,7 +124,9 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
 // refuses to resolve so scripting schemes can never navigate.
 function resolveWebLink(linkAddress: string): string | null {
     if (/^(https?|mailto):/i.test(linkAddress)) return linkAddress;
-    if (/^[a-z][a-z0-9+.-]*:/i.test(linkAddress)) return null;
+    // A colon followed by digits only (up to the next / or end) is a host:port
+    // like localhost:3000, not a scheme — let it fall through to the prepend.
+    if (/^[a-z][a-z0-9+.-]*:(?!\d+(?:\/|$))/i.test(linkAddress)) return null;
     return `https://${linkAddress}`;
 }
 
@@ -143,7 +145,7 @@ export function goToLink(
     }
     if (linkType === 'webpage') {
         const address = resolveWebLink(linkAddress);
-        if (address != null) window.open(address);
+        if (address != null) window.open(address, '_blank', 'noopener,noreferrer');
     } else if (linkType === 'sheet') {
         let sheetId: string | undefined;
         for (const sheet of ctx.sheets) {
@@ -172,7 +174,7 @@ export function isLinkValid(ctx: Context, linkType: string, linkAddress: string)
         const address = resolveWebLink(linkAddress);
         if (
             address == null ||
-            (!/^mailto:/i.test(address) && !/^http[s]?:\/\/([\w\-.]+)+[\w-]*([\w\-./?%&=]+)?$/i.test(address))
+            (!/^mailto:/i.test(address) && !/^http[s]?:\/\/[\w\-.]+[\w-]*([\w\-./?%&=]+)?$/i.test(address))
         ) {
             return { isValid: false, tooltip: insertLink.tooltipInfo1 };
         }
