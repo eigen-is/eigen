@@ -1,7 +1,7 @@
 # Sheets xlsx-fidelity program
 
 > **TLDR**: Multi-cycle effort to make xlsx → `.eigensheets` conversion faithful and bring the
-> sheet feature set/UX toward Google Sheets parity. Cycles 0–4 are done; this doc carries the
+> sheet feature set/UX toward Google Sheets parity. Cycles 0–6 are done; this doc carries the
 > status, the backlog, and the working method so a fresh session can continue without archaeology.
 > Architecture background: [SHEETS.md](SHEETS.md).
 
@@ -17,6 +17,7 @@
 | 3b | Filter-by-condition tier: `FilterEntry.byCondition` (18-name union), pure evaluator, enabled UI section in the filter menu; condition takes precedence over by-values | merge `b168bd07` |
 | — | Whole-diff polish (test consolidation, `filterConditionArity`, docs refresh) + simplify pass (per-Confirm matcher hoisting, `KNOWN_CONDITION_NAMES` completed) | merges `057b830c`, `45a21744` |
 | 5 | Data-validation/dropdowns import → `Sheet.dataVerification` (now a lib-type field): list → dropdown (literal lists + live range refs incl. quoted cross-sheet names), whole/decimal/textLength/date with the full operator → type2 table, prompts → hints, stop-style errors → `prohibitInput`; custom/any, defined-name sources and non-literal operands skipped; emission clamped to used extent + margin | merge `64ae806d` |
+| 6 | Hyperlinks import → `Sheet.hyperlink` (now a lib-type field): web/mailto targets verbatim as `webpage`, `#`-prefixed internal locations as `cellrange`/`sheet` (quotes kept for getcellrange, stripped for sheet-name equality); linked cells get the `hl` backref. Engine: scheme allowlist in `goToLink`/`isLinkValid` — http/https/mailto pass verbatim, scheme-less keeps the https:// prepend, scripting schemes (`javascript:`, `data:`, `file:`, …) never navigate (mailto was mangled into `https://mailto:…` before). Also fixed the broken `@source` globs in `packages/ui` globals.css (three-up → nonexistent dirs) that left package-only Tailwind classes — incl. the LinkEditCard's `z-30` — out of every app's CSS, making the link preview card unclickable | branch `sheets-hyperlink-import` |
 
 Excel priority semantics for CF: rules are emitted sorted by priority **descending** because the
 engine compute-map merge is last-write-wins per property — the highest-precedence rule is applied
@@ -24,8 +25,6 @@ last and wins.
 
 ## Remaining cycles (signed-off order)
 
-6. **Hyperlinks import** — engine `hyperlink` field + LinkEditCard exist; today link cells import
-   as styled dead text (blue underline from font style, no target).
 7. **Date/number format UX** — Google-Sheets-style format dialogs (preset list with live
    previews + custom format builder). Independent of import work.
 8. **Export parity** — close the xlsx round-trip for everything that landed.
@@ -63,6 +62,14 @@ last and wins.
 - CF formula-evaluator wiring is duplicated (8 lines) between
   `state/modules/conditionFormat.ts` and the HTML export's `buildCfFormulaEvaluator` — extract a
   shared helper if a third consumer appears.
+- Imported hyperlink cells keep Excel's font styling; dialog-authored links hardcode
+  `rgb(0,0,255)` + underline (saveHyperlink). Divergence is intentional — forcing the dialog
+  style at import would clobber theme-styled link cells.
+- Excel-AUTHORED internal hyperlinks (a `<hyperlink location=…>` attr without a rel) are dropped
+  by exceljs's reconcile (`hyperlinkMap` only maps rel-based entries) and never reach the cell
+  surface — they don't import. Rel-based `#location` targets (what exceljs and Google Sheets
+  exports write) do. Same cell-surface gap behind the raw-XML link-part counts from the cycle 0
+  audit (75 INT/70 EXT raw) vs the exceljs-visible 38/70 the importer maps.
 - Rich-text runs flatten to a single string at import; defined names are dropped (formulas
   referencing names break — decide inline-resolve at import vs. real support).
 - Out of scope (decided 2026-06-10): importing Excel comments/notes — Eigen has its own
