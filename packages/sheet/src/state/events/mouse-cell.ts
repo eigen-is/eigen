@@ -11,6 +11,7 @@ import {
     rangeSetValue,
 } from '../modules';
 import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, setEditingCell, updateCell } from '../modules/cell';
+import { getFilterButtonAtPosition } from '../modules/filter';
 import { showLinkCard } from '../modules/hyperlink';
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
 import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
@@ -44,6 +45,33 @@ export function handleCellAreaMouseDown(
     }
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
     const { x, y, inHorizontalFreeze, inVerticalFreeze } = fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
+
+    // Canvas-drawn autofilter button: a plain left click opens the filter menu
+    // anchored under the button; right/middle clicks fall through to selection.
+    if (e.button === 0 && ctx.filterOptions != null) {
+        const filterButton = getFilterButtonAtPosition(ctx, x, y);
+        if (filterButton != null) {
+            const { startRow, endRow, startCol, endCol } = ctx.filterOptions;
+            ctx.filterContextMenu = {
+                // Viewport-space anchor from the click's offset inside the button —
+                // freeze-correct by construction (click and button share a region).
+                x: rect.left + mouseX - (x - filterButton.left),
+                y: rect.top + mouseY - (y - filterButton.top) + filterButton.height,
+                col: filterButton.col,
+                startRow,
+                endRow,
+                startCol,
+                endCol,
+                hiddenRows: Object.keys(ctx.filter[filterButton.col - startCol]?.rowhidden ?? {}).map((r) =>
+                    parseInt(r, 10),
+                ),
+            };
+            // Keep the browser from focusing the overlay on this mousedown — that
+            // focus shift would dismiss the just-opened menu via onFocusOutside.
+            e.preventDefault();
+            return;
+        }
+    }
 
     const row_location = rowLocation(y, ctx.visibledatarow);
     let row = row_location[1];
@@ -489,6 +517,9 @@ export function handleCellAreaDoubleClick(
 
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
     const { x, y } = fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
+
+    // Double-clicking a filter button must not start editing the cell under it
+    if (getFilterButtonAtPosition(ctx, x, y) != null) return;
 
     const row_location = rowLocation(y, ctx.visibledatarow);
     let row_index = row_location[2];
