@@ -341,6 +341,12 @@ function updateFilterButtonHover(ctx: Context, globalCache: GlobalCache, e: Mous
     const rect = scrollEl.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;
     const mouseY = e.pageY - rect.top - window.scrollY;
+    // Document-level listener: outside the cell area the scroll-shifted sheet
+    // coordinates below would be meaningless and could phantom-hit a button.
+    if (mouseX < 0 || mouseY < 0 || mouseX >= rect.width || mouseY >= rect.height) {
+        setHover(undefined);
+        return;
+    }
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
     const { x, y } = fixPositionOnFrozenCells(freeze, mouseX + ctx.scrollLeft, mouseY + ctx.scrollTop, mouseX, mouseY);
     setHover(getFilterButtonAtPosition(ctx, x, y)?.col);
