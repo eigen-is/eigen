@@ -118,6 +118,16 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
     }
 }
 
+// linkAddress flows into window.open and may come from an untrusted xlsx
+// import: http/https/mailto pass through verbatim, a scheme-less address gets
+// https:// prepended, and any other scheme (javascript:, data:, file:, …)
+// refuses to resolve so scripting schemes can never navigate.
+function resolveWebLink(linkAddress: string): string | null {
+    if (/^(https?|mailto):/i.test(linkAddress)) return linkAddress;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(linkAddress)) return null;
+    return `https://${linkAddress}`;
+}
+
 export function goToLink(
     ctx: Context,
     r: number,
@@ -132,17 +142,15 @@ export function goToLink(
         return;
     }
     if (linkType === 'webpage') {
-        if (!/^http[s]?:\/\//.test(linkAddress)) {
-            linkAddress = `https://${linkAddress}`;
-        }
-        window.open(linkAddress);
+        const address = resolveWebLink(linkAddress);
+        if (address != null) window.open(address);
     } else if (linkType === 'sheet') {
         let sheetId: string | undefined;
-        ctx.sheets.forEach((f) => {
-            if (linkAddress === f.name) {
-                sheetId = f.id;
+        for (const sheet of ctx.sheets) {
+            if (linkAddress === sheet.name) {
+                sheetId = sheet.id;
             }
-        });
+        }
         if (sheetId != null) changeSheet(ctx, sheetId);
     } else {
         const range = cloneDeep(getcellrange(ctx, linkAddress));
@@ -161,14 +169,13 @@ export function isLinkValid(ctx: Context, linkType: string, linkAddress: string)
     if (!linkAddress) return { isValid: false, tooltip: '' };
     const { insertLink } = locale(ctx);
     if (linkType === 'webpage') {
-        if (!/^http[s]?:\/\//.test(linkAddress)) {
-            linkAddress = `https://${linkAddress}`;
-        }
+        const address = resolveWebLink(linkAddress);
         if (
-            // eslint-disable-next-line no-useless-escape
-            !/^http[s]?:\/\/([\w\-.]+)+[\w-]*([\w\-./?%&=]+)?$/gi.test(linkAddress)
-        )
+            address == null ||
+            (!/^mailto:/i.test(address) && !/^http[s]?:\/\/([\w\-.]+)+[\w-]*([\w\-./?%&=]+)?$/i.test(address))
+        ) {
             return { isValid: false, tooltip: insertLink.tooltipInfo1 };
+        }
     }
     if (linkType === 'cellrange' && !iscelldata(linkAddress)) {
         return { isValid: false, tooltip: insertLink.invalidCellRangeTip };
