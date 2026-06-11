@@ -300,13 +300,11 @@ function compareFilterValues(cellValue: string, input: string): number {
     if (isRealNum(cellValue) && isRealNum(input)) {
         const a = Number(cellValue);
         const b = Number(input);
-        if (a === b) return 0;
-        return a < b ? -1 : 1;
+        return a < b ? -1 : a > b ? 1 : 0;
     }
     const a = cellValue.toLowerCase();
     const b = input.toLowerCase();
-    if (a === b) return 0;
-    return a < b ? -1 : 1;
+    return a < b ? -1 : a > b ? 1 : 0;
 }
 
 // Condition input → canonical YYYY-MM-DD, or null when it doesn't parse as a date.
@@ -322,70 +320,82 @@ function toIsoDay(input: string): string | null {
 // visible. Text conditions compare the display string (m) case-insensitively;
 // date conditions only match ct.t === 'd' cells at day granularity. An
 // incomplete condition (blank operand, unparseable date) filters nothing.
-export function matchesFilterCondition(cell: Cell | null | undefined, condition: FilterCondition): boolean {
+export function buildFilterConditionMatcher(condition: FilterCondition): (cell: Cell | null | undefined) => boolean {
     const { conditionName, values } = condition;
     const arity = filterConditionArity(conditionName);
     for (let i = 0; i < arity; i += 1) {
-        if (isRealNull(values[i])) return true;
+        if (isRealNull(values[i])) return () => true;
     }
 
-    const blank = cell == null || isRealNull(cell.v);
-    const display = blank ? '' : `${cell.m ?? cell.v}`.toLowerCase();
-    const raw = blank ? '' : `${cell.v}`;
+    // Operand parsing is hoisted out of the per-row matcher: the needle and the
+    // condition date are constant for a whole Confirm pass over the column.
+    const needle = arity > 0 ? values[0].toLowerCase() : '';
 
-    switch (conditionName) {
-        case 'isEmpty':
-            return blank;
-        case 'isNotEmpty':
-            return !blank;
-        case 'textContains':
-            return !blank && display.includes(values[0].toLowerCase());
-        case 'textNotContains':
-            return blank || !display.includes(values[0].toLowerCase());
-        case 'textStartsWith':
-            return !blank && display.startsWith(values[0].toLowerCase());
-        case 'textEndsWith':
-            return !blank && display.endsWith(values[0].toLowerCase());
-        case 'textEquals':
-            return !blank && display === values[0].toLowerCase();
-        case 'dateEqual':
-        case 'dateBefore':
-        case 'dateAfter': {
-            const day = toIsoDay(values[0]);
-            if (day == null) return true;
+    if (conditionName === 'dateEqual' || conditionName === 'dateBefore' || conditionName === 'dateAfter') {
+        const day = toIsoDay(values[0]);
+        if (day == null) return () => true;
+        return (cell) => {
             if (cell == null || cell.ct?.t !== 'd' || isRealNull(cell.v)) return false;
             const cellDay = update('YYYY-MM-DD', cell.v);
             if (conditionName === 'dateEqual') return cellDay === day;
             if (conditionName === 'dateBefore') return cellDay < day;
             return cellDay > day;
-        }
-        case 'greaterThan':
-            return !blank && compareFilterValues(raw, values[0]) > 0;
-        case 'greaterThanOrEqual':
-            return !blank && compareFilterValues(raw, values[0]) >= 0;
-        case 'lessThan':
-            return !blank && compareFilterValues(raw, values[0]) < 0;
-        case 'lessThanOrEqual':
-            return !blank && compareFilterValues(raw, values[0]) <= 0;
-        case 'equal':
-            return !blank && compareFilterValues(raw, values[0]) === 0;
-        case 'notEqual':
-            return blank || compareFilterValues(raw, values[0]) !== 0;
-        case 'between':
-        case 'notBetween': {
-            // Checking both bound orientations normalizes reversed bounds without
-            // needing a min/max on the mixed numeric/string ordering.
-            const within =
-                !blank &&
-                ((compareFilterValues(raw, values[0]) >= 0 && compareFilterValues(raw, values[1]) <= 0) ||
-                    (compareFilterValues(raw, values[1]) >= 0 && compareFilterValues(raw, values[0]) <= 0));
-            return conditionName === 'between' ? within : !within;
-        }
-        default:
-            // A snapshot written by a newer client can carry a condition this
-            // version doesn't know; matching everything beats hiding every row.
-            return true;
+        };
     }
+
+    return (cell) => {
+        const blank = cell == null || isRealNull(cell.v);
+        const display = blank ? '' : `${cell.m ?? cell.v}`.toLowerCase();
+        const raw = blank ? '' : `${cell.v}`;
+
+        switch (conditionName) {
+            case 'isEmpty':
+                return blank;
+            case 'isNotEmpty':
+                return !blank;
+            case 'textContains':
+                return !blank && display.includes(needle);
+            case 'textNotContains':
+                return blank || !display.includes(needle);
+            case 'textStartsWith':
+                return !blank && display.startsWith(needle);
+            case 'textEndsWith':
+                return !blank && display.endsWith(needle);
+            case 'textEquals':
+                return !blank && display === needle;
+            case 'greaterThan':
+                return !blank && compareFilterValues(raw, values[0]) > 0;
+            case 'greaterThanOrEqual':
+                return !blank && compareFilterValues(raw, values[0]) >= 0;
+            case 'lessThan':
+                return !blank && compareFilterValues(raw, values[0]) < 0;
+            case 'lessThanOrEqual':
+                return !blank && compareFilterValues(raw, values[0]) <= 0;
+            case 'equal':
+                return !blank && compareFilterValues(raw, values[0]) === 0;
+            case 'notEqual':
+                return blank || compareFilterValues(raw, values[0]) !== 0;
+            case 'between':
+            case 'notBetween': {
+                if (blank) return conditionName === 'notBetween';
+                // Checking both bound orientations normalizes reversed bounds without
+                // needing a min/max on the mixed numeric/string ordering.
+                const lo = compareFilterValues(raw, values[0]);
+                const hi = compareFilterValues(raw, values[1]);
+                const within = (lo >= 0 && hi <= 0) || (hi >= 0 && lo <= 0);
+                return conditionName === 'between' ? within : !within;
+            }
+            default:
+                // Date conditions returned their own matcher above; a snapshot
+                // written by a newer client can carry a condition this version
+                // doesn't know — matching everything beats hiding every row.
+                return true;
+        }
+    };
+}
+
+export function matchesFilterCondition(cell: Cell | null | undefined, condition: FilterCondition): boolean {
+    return buildFilterConditionMatcher(condition)(cell);
 }
 
 // Hidden-row set for a condition on one column: every visible row in the filter
@@ -404,9 +414,10 @@ export function getFilterConditionHiddenRows(
     const rowhidden: Record<string, number> = {};
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return rowhidden;
+    const matches = buildFilterConditionMatcher(condition);
     for (let r = startRow + 1; r <= endRow; r += 1) {
         if (r in otherHiddenRows) continue;
-        if (!matchesFilterCondition(flowdata[r][col], condition)) {
+        if (!matches(flowdata[r][col])) {
             rowhidden[r] = 0;
         }
     }
