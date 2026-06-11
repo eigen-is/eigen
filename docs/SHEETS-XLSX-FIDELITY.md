@@ -1,0 +1,102 @@
+# Sheets xlsx-fidelity program
+
+> **TLDR**: Multi-cycle effort to make xlsx → `.eigensheets` conversion faithful and bring the
+> sheet feature set/UX toward Google Sheets parity. Cycles 0–4 are done; this doc carries the
+> status, the backlog, and the working method so a fresh session can continue without archaeology.
+> Architecture background: [SHEETS.md](SHEETS.md).
+
+## Status (2026-06-11)
+
+| Cycle | Scope | Landed |
+|---|---|---|
+| 0 | Fidelity audit (4-stage gap matrix: in xlsx → exceljs → `Sheet[]` → renders) + filter diagnosis | audit artifacts local-only, see § Working method |
+| 1 | Numeric display strings render through numfmt at import (`m = update(fa, v)`, not `String(raw)`) | merge `3aa538a4` |
+| 2 | Hidden rows/cols (`config.rowhidden/colhidden`) + frozen panes (`Sheet.frozen`, now a lib-type field) | merge `379395f4` |
+| 3a | Autofilter range → `Sheet.filterRange` (lib-type field); buttons render on load | merge `de36c674` |
+| 4 | Conditional formatting import (all 8 cellIs ops, expression/formula rules per sqref sub-range, colorScale→colorGradation, dataBar, top10, aboveAverage, duplicateValues; iconSet skipped). Engine: 4 new conditionNames, per-property no-clobber style merge, **fixed formula CF rules never rendering in the editor** (evaluator mutated the immer-frozen ctx) | merge `84e7410f` |
+| 3b | Filter-by-condition tier: `FilterEntry.byCondition` (18-name union), pure evaluator, enabled UI section in the filter menu; condition takes precedence over by-values | merge `b168bd07` |
+| — | Whole-diff polish (test consolidation, `filterConditionArity`, docs refresh) + simplify pass (per-Confirm matcher hoisting, `KNOWN_CONDITION_NAMES` completed) | merges `057b830c`, `45a21744` |
+
+Excel priority semantics for CF: rules are emitted sorted by priority **descending** because the
+engine compute-map merge is last-write-wins per property — the highest-precedence rule is applied
+last and wins.
+
+## Remaining cycles (signed-off order)
+
+5. **Data validation / dropdowns import** — engine `dataVerification` + DropdownList UI exist;
+   work is exceljs → `dataVerification` mapping. Benchmark impact: 2 536 cells.
+6. **Hyperlinks import** — engine `hyperlink` field + LinkEditCard exist; today link cells import
+   as styled dead text (blue underline from font style, no target).
+7. **Date/number format UX** — Google-Sheets-style format dialogs (preset list with live
+   previews + custom format builder). Independent of import work.
+8. **Export parity** — close the xlsx round-trip for everything that landed.
+- **Filter menu visual redesign (Google parity)** — deliberately deferred for design iteration
+  in small steps with Reinder; the functional condition tier is in. Reference: Google's
+  per-column menu (sort A–Z/Z–A, sort by colour, filter by colour, filter by condition, filter
+  by values with search).
+
+## Backlog
+
+- **BUG — filter buttons misrender across a freeze pane**: when the autofilter row spans frozen
+  columns/rows, the per-column filter buttons land at wrong positions after scrolling (buttons
+  drift over the wrong cells; observed 2026-06-11 on a sheet with frozen panes + autofilter).
+  Likely the `FilterOption` overlay positions against unscrolled canvas coordinates without the
+  freeze-pane offset split that the selection overlay handles. Start at
+  `packages/sheet/src/components/FilterOption/index.tsx` (geometry) and the freeze offsets in
+  `state/modules/freeze.ts`.
+- Name box shows `A1:NaN` on initial sheet load before any selection (init-state only; correct
+  after first click).
+- xlsx `customFilters`/`top10`/`dynamicFilter`/`colorFilter` **criteria** import — the condition
+  model now exists (`FilterEntry.byCondition`); exceljs only exposes the autofilter range, so
+  criteria need a raw-XML read of `<filterColumn>` children.
+- CF `stopIfTrue` is ignored (per-property merge applies regardless); Excel's aboveAverage
+  stdDev/equalAverage sub-variants map to plain above/belowAverage.
+- Excel outline groups (`outlineLevel` row/col grouping with collapse buttons) are not imported —
+  distinct from hidden rows.
+- Date condition input in the filter menu is a plain text field (no date picker).
+- By-values checkboxes stay visible (and are ignored) while a condition is active on a column —
+  resolve in the Google-parity redesign (accordion makes the active mode explicit).
+- Engine `top10` CF evaluation uses `indexOf` over the sorted slice per cell (O(n²) on large
+  ranges); pre-existing, now reachable from import. A `Set` lookup would fix it.
+- CF formula-evaluator wiring is duplicated (8 lines) between
+  `state/modules/conditionFormat.ts` and the HTML export's `buildCfFormulaEvaluator` — extract a
+  shared helper if a third consumer appears.
+- Rich-text runs flatten to a single string at import; defined names are dropped (formulas
+  referencing names break — decide inline-resolve at import vs. real support).
+- Out of scope (decided 2026-06-10): importing Excel comments/notes — Eigen has its own
+  comment-card system.
+
+## Working method (kept because it worked)
+
+One **full-cycle subagent** per cycle with a complete brief (project rules digest, audit facts,
+exact file pointers, TDD red→green, scoped test commands, browser-verification recipe), then an
+**independent review subagent** on the branch diff, then the controller merges to `main` —
+one branch per cycle, `--no-ff`. Reviews are two-stage where deliverables warrant it
+(spec compliance first, then quality) and obey signal-over-volume: "clean" is a valid verdict.
+
+**Browser verification is mandatory per cycle, not optional.** The pattern that works:
+
+1. Convert the benchmark through the real pipeline as a throwaway dev user (signup is open on
+   the local API): upload via `POST /drive/:owner/:mount/file/:parentId` (multipart), convert via
+   `POST /drive/:owner/:mount/file/:pathId/convert/eigensheets`.
+2. Drive the running dev app headless with Playwright (`chromium.launch({ channel: 'chrome' })`,
+   inject the `better-auth.session_token` cookie for `localhost` — cookies are host-scoped, so it
+   works across ports). Sheets app: port 3013 under the `/sheets` base path.
+3. **Screenshot every worksheet tab and actually READ the screenshots** — verdicts come from
+   pixels, not from data-shape assertions alone. Interaction probes (scroll for frozen panes,
+   click filter buttons, apply a condition, reload for persistence) catch what static shots miss.
+4. Long-running dev server quirks: first canvas render takes 20–30 s (poll for `canvas`);
+   a stale-HMR double-import of `main.tsx?t=…` can crash the first load — serve that request an
+   empty module via Playwright route interception, or just load again.
+5. Compare against the previous cycle's baseline screenshots — regressions show up immediately.
+
+Local-only artifacts (gitignored, `docs/superpowers/`): the Cycle 0 gap matrix + filter
+assessment (`audit/`), per-cycle spec records (`specs/`), and all verification screenshots
+(`audit/screens/`). The real benchmark workbooks live in the local drive data and must never
+enter git. The audit script (`apps/api/scripts/audit-xlsx.ts`, untracked) regenerates the
+4-stage report for any xlsx.
+
+Synthetic-fixture tests are the committed regression net: `apps/api/src/test/sheets-import.test.ts`
+builds workbooks with exceljs in-test and asserts on the converted snapshot through the full
+upload→convert→Yjs pipeline (shared helpers at the top of the file). Sheet-engine behavior tests
+live in `packages/sheet/src/{engine,state}/test/`.
