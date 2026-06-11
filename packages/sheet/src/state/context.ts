@@ -143,6 +143,8 @@ export type Context = {
     filterOptions?: FilterOptions;
     filterRange?: { row: number[]; column: number[] } | undefined;
     filter: Record<string, FilterEntry>;
+    // Transient hover column for the canvas-drawn filter buttons.
+    filterButtonHover?: number;
 
     sheetTabDragging: boolean;
     sheetTabDragData: unknown[];

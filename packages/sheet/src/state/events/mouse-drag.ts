@@ -13,6 +13,7 @@ import {
 } from '../modules';
 import { mergeMoveMain } from '../modules/cell';
 import { onDropCellSelect, onDropCellSelectEnd } from '../modules/dropCell';
+import { getFilterButtonAtPosition } from '../modules/filter';
 import { handleFormulaInput, rangeDragColumn, rangeDragRow } from '../modules/formula-ui';
 import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
 import { onRangeSelectionModalMove, onRangeSelectionModalMoveEnd } from '../modules/hyperlink';
@@ -326,6 +327,25 @@ function mouseRender(
 // Exported handlers
 // ---------------------------------------------------------------------------
 
+// Track which canvas-drawn filter button the pointer is over; written only on
+// change so idle mousemoves stay redraw-free. The matching pointer cursor and
+// hover fill read ctx.filterButtonHover.
+function updateFilterButtonHover(ctx: Context, globalCache: GlobalCache, e: MouseEvent, scrollEl: HTMLDivElement) {
+    const setHover = (col: number | undefined) => {
+        if (ctx.filterButtonHover !== col) ctx.filterButtonHover = col;
+    };
+    if (ctx.filterOptions == null) {
+        setHover(undefined);
+        return;
+    }
+    const rect = scrollEl.getBoundingClientRect();
+    const mouseX = e.pageX - rect.left - window.scrollX;
+    const mouseY = e.pageY - rect.top - window.scrollY;
+    const freeze = globalCache.freezen?.[ctx.currentSheetId];
+    const { x, y } = fixPositionOnFrozenCells(freeze, mouseX + ctx.scrollLeft, mouseY + ctx.scrollTop, mouseX, mouseY);
+    setHover(getFilterButtonAtPosition(ctx, x, y)?.col);
+}
+
 export function handleOverlayMouseMove(
     ctx: Context,
     globalCache: GlobalCache,
@@ -340,6 +360,10 @@ export function handleOverlayMouseMove(
     onCellsMove(ctx, globalCache, e, scrollEl, container);
     onSearchDialogMove(globalCache, e);
     onRangeSelectionModalMove(globalCache, e);
+
+    if (!ctx.selectionActive && !ctx.scrolling) {
+        updateFilterButtonHover(ctx, globalCache, e, scrollEl);
+    }
 
     if (
         !!ctx.scrolling ||
