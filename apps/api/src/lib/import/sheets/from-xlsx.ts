@@ -125,10 +125,12 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
 }
 
 function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalette): Sheet {
+    const sheetId = `sheet-${index}`;
     const celldata: { r: number; c: number; v: FortuneCell }[] = [];
     const columnlen: NonNullable<SheetConfig['columnlen']> = {};
     const rowlen: NonNullable<SheetConfig['rowlen']> = {};
     const borderInfo: CellBorderInfo[] = [];
+    const hyperlink: NonNullable<Sheet['hyperlink']> = {};
 
     const { merge, anchorByCell } = buildMergeStructures(worksheet.model.merges ?? []);
 
@@ -155,6 +157,13 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
             const c = colNumber - 1;
             const converted = convertCell(cell, theme);
+            const link = mapHyperlink(cell.hyperlink);
+            if (link) {
+                hyperlink[`${r}_${c}`] = link;
+                // saveHyperlink invariant: the linked cell carries an hl backref
+                // (patch.ts's cell-op path keys off it).
+                converted.hl = { r, c, id: sheetId };
+            }
             const mergeAnchor = anchorByCell.get(`${r}:${c}`);
             if (mergeAnchor) converted.mc = mergeAnchor;
             if (!mergeAnchor && isEmptyCell(converted)) return;
@@ -193,11 +202,12 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
 
     const sheet: Sheet = {
         name: worksheet.name,
-        id: `sheet-${index}`,
+        id: sheetId,
         order: index,
         celldata,
         config,
     };
+    if (Object.keys(hyperlink).length > 0) sheet.hyperlink = hyperlink;
 
     const view = worksheet.views?.[0];
     if (view && view.showGridLines === false) {
@@ -780,7 +790,39 @@ function convertCell(cell: XlsxCell, theme: ThemePalette): FortuneCell {
 }
 
 function isEmptyCell(cell: FortuneCell): boolean {
-    return cell.v === undefined && cell.f === undefined && cell.bg === undefined && cell.fc === undefined;
+    return (
+        cell.v === undefined &&
+        cell.f === undefined &&
+        cell.bg === undefined &&
+        cell.fc === undefined &&
+        cell.hl === undefined
+    );
+}
+
+// exceljs surfaces a cell's hyperlink target as a string: web/mailto targets
+// verbatim, internal locations with a leading '#' (the rel-based form, which is
+// what exceljs round-trips — Excel-authored <hyperlink location=…> entries
+// without a rel are dropped by exceljs's reconcile and never reach the cell).
+// External targets import verbatim; scheme safety is enforced at navigation
+// time by the engine's allowlist (state/modules/hyperlink.ts).
+function mapHyperlink(target: string | undefined): { linkType: string; linkAddress: string } | null {
+    if (target == null || target.trim().length === 0) return null;
+    if (!target.startsWith('#')) return { linkType: 'webpage', linkAddress: target };
+    const location = target.slice(1);
+    if (location.length === 0) return null;
+    // Quoted sheet name ('My Sheet', 'It''s') with an optional !ref tail. Sheet
+    // names may legally contain '!', so don't split the quoted form on it.
+    const quoted = location.match(/^'((?:[^']|'')*)'(!.+)?$/);
+    if (quoted) {
+        // goToLink's sheet branch matches sheet names by exact equality → strip
+        // the quotes; cellrange keeps the quoted form (getcellrange parses it).
+        return quoted[2]
+            ? { linkType: 'cellrange', linkAddress: location }
+            : { linkType: 'sheet', linkAddress: quoted[1].replace(/''/g, "'") };
+    }
+    return location.includes('!')
+        ? { linkType: 'cellrange', linkAddress: location }
+        : { linkType: 'sheet', linkAddress: location };
 }
 
 function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boolean; display?: string } {

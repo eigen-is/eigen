@@ -1081,6 +1081,92 @@ describe('Sheets xlsx import/convert', () => {
         expect(Object.keys(rules).length).toBe(1005);
     });
 
+    test('convert imports webpage and mailto hyperlinks with verbatim targets and cell backrefs', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Links');
+        ws.getCell('B2').value = {
+            text: 'PLATFORMS-1452',
+            hyperlink: 'https://jira.example.com/browse/PLATFORMS-1452',
+        };
+        ws.getCell('B3').value = { text: 'Erik-Jan ten Brinke', hyperlink: 'mailto:erikjan@example.com' };
+        ws.getCell('B4').value = 'no link';
+        const sheets = await convertWorkbook(workbook, 'links.xlsx');
+
+        // Targets import verbatim (incl. mailto:) — fidelity at import; scheme
+        // safety is enforced at navigation time by the engine's allowlist.
+        expect(sheets[0].hyperlink).toEqual({
+            '1_1': { linkType: 'webpage', linkAddress: 'https://jira.example.com/browse/PLATFORMS-1452' },
+            '2_1': { linkType: 'webpage', linkAddress: 'mailto:erikjan@example.com' },
+        });
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        // The cell keeps its display text; hl is the saveHyperlink backref invariant
+        // (patch.ts's cell-op path keys off it).
+        expect(byCoord.get('1:1')?.v).toBe('PLATFORMS-1452');
+        expect(byCoord.get('1:1')?.m).toBe('PLATFORMS-1452');
+        expect(byCoord.get('1:1')?.hl).toEqual({ r: 1, c: 1, id: 'sheet-0' });
+        expect(byCoord.get('2:1')?.hl).toEqual({ r: 2, c: 1, id: 'sheet-0' });
+        expect(byCoord.get('3:1')?.hl).toBeUndefined();
+    });
+
+    test('convert maps internal #location links onto cellrange and sheet link types', async () => {
+        // exceljs round-trips a {text, hyperlink: '#…'} cell as an external rel with
+        // the verbatim #-prefixed target. Excel-AUTHORED internal links (a location
+        // attr without a rel) are dropped by exceljs's reconcile and never surface
+        // on the cell — recorded in docs/SHEETS-XLSX-FIDELITY.md.
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Sheet1');
+        workbook.addWorksheet('Sheet2');
+        workbook.addWorksheet('My Sheet');
+        ws.getCell('A1').value = { text: 'cell link', hyperlink: '#Sheet2!A3' };
+        ws.getCell('A2').value = { text: 'sheet link', hyperlink: '#Sheet2' };
+        ws.getCell('A3').value = { text: 'quoted cell link', hyperlink: "#'My Sheet'!B2" };
+        ws.getCell('A4').value = { text: 'quoted sheet link', hyperlink: "#'My Sheet'" };
+        const sheets = await convertWorkbook(workbook, 'internal-links.xlsx');
+
+        // cellrange keeps the quoted form (getcellrange resolves quoted names);
+        // sheet links strip quotes to match goToLink's name exact-equality.
+        expect(sheets[0].hyperlink).toEqual({
+            '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!A3' },
+            '1_0': { linkType: 'sheet', linkAddress: 'Sheet2' },
+            '2_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!B2" },
+            '3_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
+        });
+    });
+
+    test('convert imports hyperlinks on rich-text cells with flattened display text', async () => {
+        // Benchmark shape (e.g. Project Checklist E9): the link cell's .text is a
+        // CellRichTextValue, not a string.
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Links');
+        ws.getCell('E9').value = {
+            text: { richText: [{ text: 'GSV Assets ' }, { text: 'Canva' }] },
+            hyperlink: 'https://example.com/assets',
+        } as unknown as ExcelJS.CellHyperlinkValue;
+        const sheets = await convertWorkbook(workbook, 'rich-links.xlsx');
+
+        expect(sheets[0].hyperlink).toEqual({
+            '8_4': { linkType: 'webpage', linkAddress: 'https://example.com/assets' },
+        });
+        const e9 = (sheets[0].celldata ?? []).find((c) => c.r === 8 && c.c === 4);
+        expect(e9?.v?.v).toBe('GSV Assets Canva');
+        expect(e9?.v?.hl).toEqual({ r: 8, c: 4, id: 'sheet-0' });
+    });
+
+    test('convert omits the hyperlink field for sheets without links and skips blank targets', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Plain');
+        ws.getCell('A1').value = 'text';
+        // Whitespace-only targets survive the exceljs round-trip (empty ones do
+        // not); a webpage entry pointing at ' ' would be navigation garbage.
+        ws.getCell('A2').value = { text: 'blank target', hyperlink: ' ' };
+        const sheets = await convertWorkbook(workbook, 'no-links.xlsx');
+
+        expect(sheets[0].hyperlink).toBeUndefined();
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('1:0')?.v).toBe('blank target');
+        expect(byCoord.get('1:0')?.hl).toBeUndefined();
+    });
+
     test('import into another user document without write permission returns 403', async () => {
         const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
         const sheetsDoc = await uploadAndConvert(initial, 'alice.xlsx');
