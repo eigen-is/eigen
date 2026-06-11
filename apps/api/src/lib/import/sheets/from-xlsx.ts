@@ -568,16 +568,29 @@ const DV_DATE_OPERATOR: Record<string, string> = {
     lessThanOrEqual: 'noLaterThan',
 };
 
+// Column-wide validations ("D2:D1048576") are common in real workbooks, and exceljs
+// pre-expands the sqref to one model entry per cell — emitting a rule object for each
+// would put a multi-hundred-MB dataVerification map into the snapshot JSON while the
+// converted grid only covers the data extent anyway. DV-only blank rows below the data
+// are a legit pattern (pre-validated entry rows), hence the generous margins.
+const DV_ROW_MARGIN = 1000;
+const DV_COL_MARGIN = 100;
+
 function convertDataValidations(worksheet: Worksheet): NonNullable<Sheet['dataVerification']> {
     const model =
         (worksheet as unknown as { dataValidations?: { model?: Record<string, XlsxDataValidation> } }).dataValidations
             ?.model ?? {};
 
+    // rowCount/columnCount are bounded by the row/cell elements present in the file
+    // (the structural extent the rest of the converter trusts, e.g. the rowhidden pass).
+    const maxRow = worksheet.rowCount + DV_ROW_MARGIN;
+    const maxCol = worksheet.columnCount + DV_COL_MARGIN;
     const rules: NonNullable<Sheet['dataVerification']> = {};
     for (const [address, dv] of Object.entries(model)) {
         // Model keys are single-cell addresses (ranges arrive pre-expanded).
         const parsed = parseA1Range(address);
         if (!parsed) continue;
+        if (parsed.start.row >= maxRow || parsed.start.col >= maxCol) continue;
         // Mapping per entry yields a fresh rule object per cell key — exceljs aliases
         // one object across an expanded range, and the engine mutates rules in place.
         const rule = mapDataValidation(dv);
