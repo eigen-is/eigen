@@ -18,6 +18,7 @@ import {
     type FilterConditionName,
     type FilterDate,
     type FilterValue,
+    filterConditionArity,
     getFilterColumnColors,
     getFilterColumnValues,
     getFilterConditionHiddenRows,
@@ -424,10 +425,7 @@ export const FilterMenu: React.FC = () => {
                         );
                     }
                     if (name === 'filter-by-condition') {
-                        const arity =
-                            conditionName === 'none'
-                                ? 0
-                                : (FILTER_CONDITION_ITEMS.find((item) => item.name === conditionName)?.arity ?? 0);
+                        const arity = conditionName === 'none' ? 0 : filterConditionArity(conditionName);
                         return (
                             <div key={name}>
                                 <button
@@ -587,52 +585,40 @@ export const FilterMenu: React.FC = () => {
                             setContext((draftCtx) => {
                                 // A selected condition takes precedence over the by-values
                                 // checkboxes — one filter mode per column, like Google Sheets.
-                                if (conditionName !== 'none') {
-                                    const arity =
-                                        FILTER_CONDITION_ITEMS.find((item) => item.name === conditionName)?.arity ?? 0;
-                                    const byCondition = {
-                                        conditionName,
-                                        values: conditionValues.slice(0, arity),
-                                    };
-                                    const rowHidden = getFilterConditionHiddenRows(
-                                        draftCtx,
-                                        col,
-                                        startRow,
-                                        endRow,
-                                        startCol,
-                                        byCondition,
-                                    );
-                                    saveFilter(
-                                        draftCtx,
-                                        true,
-                                        rowHidden,
-                                        byCondition,
-                                        startRow,
-                                        endRow,
-                                        col,
-                                        startCol,
-                                        endCol,
-                                    );
-                                } else {
-                                    const rowHidden = hiddenRows.current.reduce(
-                                        (pre, curr) => {
-                                            pre[curr] = 0;
-                                            return pre;
-                                        },
-                                        {} as Record<string, number>,
-                                    );
-                                    saveFilter(
-                                        draftCtx,
-                                        hiddenRows.current.length > 0,
-                                        rowHidden,
-                                        undefined,
-                                        startRow,
-                                        endRow,
-                                        col,
-                                        startCol,
-                                        endCol,
-                                    );
-                                }
+                                const byCondition =
+                                    conditionName === 'none'
+                                        ? undefined
+                                        : {
+                                              conditionName,
+                                              values: conditionValues.slice(0, filterConditionArity(conditionName)),
+                                          };
+                                const rowHidden = byCondition
+                                    ? getFilterConditionHiddenRows(
+                                          draftCtx,
+                                          col,
+                                          startRow,
+                                          endRow,
+                                          startCol,
+                                          byCondition,
+                                      )
+                                    : hiddenRows.current.reduce(
+                                          (pre, curr) => {
+                                              pre[curr] = 0;
+                                              return pre;
+                                          },
+                                          {} as Record<string, number>,
+                                      );
+                                saveFilter(
+                                    draftCtx,
+                                    byCondition != null || hiddenRows.current.length > 0,
+                                    rowHidden,
+                                    byCondition,
+                                    startRow,
+                                    endRow,
+                                    col,
+                                    startCol,
+                                    endCol,
+                                );
                                 hiddenRows.current = [];
                                 draftCtx.filterContextMenu = undefined;
                             });

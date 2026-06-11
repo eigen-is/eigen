@@ -289,6 +289,11 @@ export const FILTER_CONDITION_ITEMS: {
     { name: 'notBetween', localeKey: 'conditionCellNotBetween', arity: 2 },
 ];
 
+// Unknown names (a snapshot written by a newer client) report arity 0.
+export function filterConditionArity(name: FilterConditionName): 0 | 1 | 2 {
+    return FILTER_CONDITION_ITEMS.find((item) => item.name === name)?.arity ?? 0;
+}
+
 // -1/0/1 ordering: numeric when both sides parse as numbers, case-insensitive
 // string compare otherwise.
 function compareFilterValues(cellValue: string, input: string): number {
@@ -319,7 +324,7 @@ function toIsoDay(input: string): string | null {
 // incomplete condition (blank operand, unparseable date) filters nothing.
 export function matchesFilterCondition(cell: Cell | null | undefined, condition: FilterCondition): boolean {
     const { conditionName, values } = condition;
-    const arity = FILTER_CONDITION_ITEMS.find((item) => item.name === conditionName)?.arity ?? 0;
+    const arity = filterConditionArity(conditionName);
     for (let i = 0; i < arity; i += 1) {
         if (isRealNull(values[i])) return true;
     }

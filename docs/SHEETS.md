@@ -45,8 +45,11 @@ incoming `Sheet[]` before rendering:
    `insertUpdateFunctionGroup`. `ctx.formulaCache.formulaCellInfoMap` lazy-primes on the first edit via
    `execFunctionGroup`, so no eager priming is needed at mount.
 
-This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with just `celldata + f` fields — the
-Workbook handles the rest. Two invariants importers still must uphold:
+This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with as little as `celldata + f` — the
+Workbook handles the rest. The xlsx importer goes well beyond that minimum: it also emits `config`
+(merges, row/col sizes, `rowhidden`/`colhidden`, borders), `frozen`, `filterRange`,
+`conditionalFormatRules`, and caches each cell's display string (`m`) through the engine's numfmt so
+the first paint matches the editor. Two invariants importers still must uphold:
 - **Pair `ct.fa` with `ct.t`**: whenever a cell has `ct.t` (type), set `ct.fa` (format assignment). Default
   to `'General'` when Excel reports no explicit format. Without an `fa`, `format(undefined, n)` falls through
   to the raw value — date serials display as numbers (e.g. `44927` instead of `1/1/2023`), percents lose
@@ -104,9 +107,9 @@ engine/
 - `applySheetsInsertRowCol<S extends Sheet>(sheets, op)` / `applySheetsDeleteRowCol<S extends Sheet>(sheets, op)`
   — pure data shifts for row/col ops over lib.Sheet-typed fields (`data`, `config.merge`, `config.rowhidden`,
   `conditionalFormatRules`, cross-sheet formula refs). Generic over `S` so the editor's wider
-  `state.Sheet[]` flows through with its extras unchanged. State-only fields (filter / frozen /
-  dataVerification / hyperlink / calcChain / selections) are shifted by the state wrapper
-  in `state/modules/rowcol.ts` after the engine call.
+  `state.Sheet[]` flows through with its extras unchanged. Editor-managed fields (filter /
+  filterRange / frozen / dataVerification / hyperlink / calcChain / selections) are shifted by the
+  state wrapper in `state/modules/rowcol.ts` after the engine call.
 
 **Architecture boundary:** Context-coupled orchestration functions (`execFunctionGroup`, `groupValuesRefresh`,
 etc.) live in `state/modules/formula-exec.ts`. The `formula-ui.ts` barrel re-exports from both, so UI consumers
@@ -137,7 +140,8 @@ const styles = evaluateConditionalFormat(
 ```
 
 Formula-based rules require an `evaluateFormula` callback; when omitted, formula rules are skipped. The
-remaining rule types — `dataBar`, `colorGradation`, `greaterThan`/`lessThan`/`equal`, `between`,
+remaining rule types — `dataBar`, `colorGradation`, the comparison set
+(`greaterThan`/`lessThan` and their `OrEqual` variants, `equal`/`notEqual`, `between`/`notBetween`),
 `textContains`, `occurrenceDate`, `duplicateValue`, `top10`, `aboveAverage`, etc. — evaluate without
 any context.
 
@@ -185,6 +189,3 @@ formula recalc push (formulas are evaluated on read, not on write).
 The entire fortune-sheet + luckysheet upstream library (UI components, state runtime, formula parser, engine)
 was forked into `packages/sheet/`. There is no external `@fortune-sheet/core` dependency — everything lives
 in-repo under full source control.
-
-See [TODO-SHEETS.md](TODO-SHEETS.md) for all outstanding cleanup work (biome coverage,
-lodash removal, CSS migration, shadcn adoption, typing debt).
