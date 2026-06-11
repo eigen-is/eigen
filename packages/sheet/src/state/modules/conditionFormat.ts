@@ -19,10 +19,14 @@ import { checkProtectionFormatCells } from './protection';
 
 const KNOWN_CONDITION_NAMES = [
     'greaterThan',
+    'greaterThanOrEqual',
     'lessThan',
+    'lessThanOrEqual',
     'equal',
+    'notEqual',
     'textContains',
     'between',
+    'notBetween',
     'occurrenceDate',
     'duplicateValue',
     'top10',
