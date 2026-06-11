@@ -16,6 +16,7 @@
 | 4 | Conditional formatting import (all 8 cellIs ops, expression/formula rules per sqref sub-range, colorScale→colorGradation, dataBar, top10, aboveAverage, duplicateValues; iconSet skipped). Engine: 4 new conditionNames, per-property no-clobber style merge, **fixed formula CF rules never rendering in the editor** (evaluator mutated the immer-frozen ctx) | merge `84e7410f` |
 | 3b | Filter-by-condition tier: `FilterEntry.byCondition` (18-name union), pure evaluator, enabled UI section in the filter menu; condition takes precedence over by-values | merge `b168bd07` |
 | — | Whole-diff polish (test consolidation, `filterConditionArity`, docs refresh) + simplify pass (per-Confirm matcher hoisting, `KNOWN_CONDITION_NAMES` completed) | merges `057b830c`, `45a21744` |
+| 5 | Data-validation/dropdowns import → `Sheet.dataVerification` (now a lib-type field): list → dropdown (literal lists + live range refs incl. quoted cross-sheet names), whole/decimal/textLength/date with the full operator → type2 table, prompts → hints, stop-style errors → `prohibitInput`; custom/any, defined-name sources and non-literal operands skipped | branch `sheets-dv-import` |
 
 Excel priority semantics for CF: rules are emitted sorted by priority **descending** because the
 engine compute-map merge is last-write-wins per property — the highest-precedence rule is applied
@@ -23,8 +24,6 @@ last and wins.
 
 ## Remaining cycles (signed-off order)
 
-5. **Data validation / dropdowns import** — engine `dataVerification` + DropdownList UI exist;
-   work is exceljs → `dataVerification` mapping. Benchmark impact: 2 536 cells.
 6. **Hyperlinks import** — engine `hyperlink` field + LinkEditCard exist; today link cells import
    as styled dead text (blue underline from font style, no target).
 7. **Date/number format UX** — Google-Sheets-style format dialogs (preset list with live
@@ -51,6 +50,9 @@ last and wins.
   criteria need a raw-XML read of `<filterColumn>` children.
 - CF `stopIfTrue` is ignored (per-property merge applies regardless); Excel's aboveAverage
   stdDev/equalAverage sub-variants map to plain above/belowAverage.
+- Data validation `allowBlank` is dropped (no engine field) — blanks follow the engine's existing
+  semantics regardless of the xlsx flag. Error/prompt titles and custom error text are dropped
+  too; the engine generates its own hint/failure copy.
 - Excel outline groups (`outlineLevel` row/col grouping with collapse buttons) are not imported —
   distinct from hidden rows.
 - Date condition input in the filter menu is a plain text field (no date picker).
