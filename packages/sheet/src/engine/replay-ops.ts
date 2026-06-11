@@ -2,6 +2,7 @@ import type { Op, Sheet } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
 import { celldataToData, dataToCelldata } from './celldata';
+import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from './rowcol';
 
 // immer's patch plugin is a global, idempotent enable. Calling here means any
@@ -42,10 +43,15 @@ function asSheet(v: unknown): Sheet | null {
 // Persisted snapshots carry `celldata` only; ops reference `data[r][c]`. When a
 // batch targets `data`, materialize that sheet on the way in and resync its
 // `celldata` on the way out. Sheets touched only via `celldata` paths pass
-// through unchanged.
+// through unchanged. The editor (initSheetData) expands sheets without a
+// usable row/column to the default grid, so replay must materialize the same
+// grid — ops were recorded against it, and a smaller base makes patches
+// beyond the celldata extent fail to resolve.
 function withMaterializedData(s: Sheet): Sheet {
     if (s.data) return s;
-    return { ...s, data: celldataToData(s.celldata ?? [], s.row, s.column) };
+    const row = s.row != null && s.row > 0 ? s.row : DEFAULT_SHEET_ROW_COUNT;
+    const column = s.column != null && s.column > 0 ? s.column : DEFAULT_SHEET_COLUMN_COUNT;
+    return { ...s, data: celldataToData(s.celldata ?? [], row, column) };
 }
 
 // Sheets reach this path with three possible shapes:
@@ -64,70 +70,82 @@ function withSyncedCelldataIfData(s: Sheet): Sheet {
 // any op that reads/writes through `data[r][c]`. Cell patches reach via
 // `path[0] === 'data'`; insertRowCol / deleteRowCol bypass paths and operate
 // on `target.data` directly inside the engine — both must trigger materialization.
-function collectDataOpSheetIds(opBatches: Op[][]): Set<string> | null {
+// Collected per batch (not once up-front) so a sheet introduced mid-replay by
+// an addSheet op — whose value may carry celldata only — is materialized
+// before a later batch's data ops touch it.
+function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
     let touched: Set<string> | null = null;
-    for (const batch of opBatches) {
-        for (const op of batch) {
-            const needsData =
-                (op.path[0] === 'data' && op.id) || ((op.op === 'insertRowCol' || op.op === 'deleteRowCol') && op.id);
-            if (needsData && op.id) {
-                if (!touched) touched = new Set();
-                touched.add(op.id);
-            }
+    for (const op of batch) {
+        const needsData = op.path[0] === 'data' || op.op === 'insertRowCol' || op.op === 'deleteRowCol';
+        if (needsData && op.id) {
+            if (!touched) touched = new Set();
+            touched.add(op.id);
         }
     }
     return touched;
 }
 
 export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
-    if (opBatches.length === 0) return sheets.map(withSyncedCelldataIfData);
-    const dataOpIds = collectDataOpSheetIds(opBatches);
-    let result = dataOpIds ? sheets.map((s) => (s.id && dataOpIds.has(s.id) ? withMaterializedData(s) : s)) : sheets;
+    let result = sheets;
     for (const batch of opBatches) {
-        // Special ops first: opToPatchOnSheets maps sheet id → array index, so
-        // addSheet/deleteSheet must settle the array before patches resolve.
-        for (const op of batch) {
-            if (op.op === 'addSheet') {
-                const newSheet = asSheet(op.value);
-                if (!newSheet) {
-                    console.warn('[sheets] addSheet op has malformed value', op.value);
-                    continue;
-                }
-                result = [...result, newSheet];
-            } else if (op.op === 'deleteSheet' && op.id) {
-                result = result.filter((s) => s.id !== op.id);
-            } else if (op.op === 'insertRowCol' && op.id) {
-                const v = asInsertValue(op.value);
-                if (!v) {
-                    console.warn('[sheets] insertRowCol op has malformed value', op.value);
-                    continue;
-                }
-                // RowColError is a UI-layer signal (readOnly / maxExceeded). On
-                // the BE replay path (export, preview, server-side read) there
-                // is no user to alert, so skip rather than propagate.
-                try {
-                    result = applySheetsInsertRowCol(result, { ...v, id: op.id });
-                } catch (e) {
-                    if (!(e instanceof RowColError)) throw e;
-                    console.warn('[sheets] insertRowCol op skipped:', e.code);
-                }
-            } else if (op.op === 'deleteRowCol' && op.id) {
-                const v = asDeleteValue(op.value);
-                if (!v) {
-                    console.warn('[sheets] deleteRowCol op has malformed value', op.value);
-                    continue;
-                }
-                try {
-                    result = applySheetsDeleteRowCol(result, { ...v, id: op.id });
-                } catch (e) {
-                    if (!(e instanceof RowColError)) throw e;
-                    console.warn('[sheets] deleteRowCol op skipped:', e.code);
+        // One poisoned batch must never make the whole doc unreadable: on an
+        // unexpected failure, roll back to the pre-batch state, warn, and keep
+        // applying the remaining batches. Deterministic — the same batch is
+        // skipped on every replay.
+        const preBatch = result;
+        try {
+            const dataOpIds = collectDataOpSheetIds(batch);
+            if (dataOpIds) {
+                result = result.map((s) => (s.id && dataOpIds.has(s.id) ? withMaterializedData(s) : s));
+            }
+            // Special ops first: opToPatchOnSheets maps sheet id → array index, so
+            // addSheet/deleteSheet must settle the array before patches resolve.
+            for (const op of batch) {
+                if (op.op === 'addSheet') {
+                    const newSheet = asSheet(op.value);
+                    if (!newSheet) {
+                        console.warn('[sheets] addSheet op has malformed value', op.value);
+                        continue;
+                    }
+                    result = [...result, newSheet];
+                } else if (op.op === 'deleteSheet' && op.id) {
+                    result = result.filter((s) => s.id !== op.id);
+                } else if (op.op === 'insertRowCol' && op.id) {
+                    const v = asInsertValue(op.value);
+                    if (!v) {
+                        console.warn('[sheets] insertRowCol op has malformed value', op.value);
+                        continue;
+                    }
+                    // RowColError is a UI-layer signal (readOnly / maxExceeded). On
+                    // the BE replay path (export, preview, server-side read) there
+                    // is no user to alert, so skip rather than propagate.
+                    try {
+                        result = applySheetsInsertRowCol(result, { ...v, id: op.id });
+                    } catch (e) {
+                        if (!(e instanceof RowColError)) throw e;
+                        console.warn('[sheets] insertRowCol op skipped:', e.code);
+                    }
+                } else if (op.op === 'deleteRowCol' && op.id) {
+                    const v = asDeleteValue(op.value);
+                    if (!v) {
+                        console.warn('[sheets] deleteRowCol op has malformed value', op.value);
+                        continue;
+                    }
+                    try {
+                        result = applySheetsDeleteRowCol(result, { ...v, id: op.id });
+                    } catch (e) {
+                        if (!(e instanceof RowColError)) throw e;
+                        console.warn('[sheets] deleteRowCol op skipped:', e.code);
+                    }
                 }
             }
+            const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
+            const [patches] = opToPatchOnSheets(result, normalOps);
+            result = applyPatches(result, patches);
+        } catch (e) {
+            console.warn('[sheets] op batch failed to apply, skipping batch:', e);
+            result = preBatch;
         }
-        const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
-        const [patches] = opToPatchOnSheets(result, normalOps);
-        result = applyPatches(result, patches);
     }
     return result.map(withSyncedCelldataIfData);
 }

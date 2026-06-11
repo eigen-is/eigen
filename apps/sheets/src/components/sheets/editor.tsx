@@ -237,8 +237,6 @@ function SheetEditorInner({
                         defaultRowHeight={20}
                         defaultFontSize={10}
                         defaultColWidth={100}
-                        column={26}
-                        row={100}
                         hooks={{
                             ...(canWrite && mediaFolderId ? { onInsertImage: () => setImagePickerOpen(true) } : {}),
                             resolveImageUrl: resolveMediaUrl,

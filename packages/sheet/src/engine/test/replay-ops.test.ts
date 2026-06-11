@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Op, Sheet } from '@workspace/lib/sheets';
+import { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../defaults';
 import { replaySheetsOps } from '../replay-ops';
 import type { EditorSheetConfigExtras } from '../types';
 
@@ -275,7 +276,10 @@ describe('replaySheetsOps', () => {
             ],
         ];
         const result = replaySheetsOps([sheet], ops);
-        expect(result[0].data!.length).toBe(2);
+        // Materialization expands to the default editor grid (the dimensions
+        // the op was recorded against), then the insert adds one row.
+        expect(result[0].data!.length).toBe(DEFAULT_SHEET_ROW_COUNT + 1);
+        expect(result[0].data![0].length).toBe(DEFAULT_SHEET_COLUMN_COUNT);
         expect(result[0].data![1][0]?.v).toBe('a');
         // celldata is resynced from the materialized data so downstream consumers see the shifted row.
         expect(result[0].celldata).toEqual([{ r: 1, c: 0, v: { v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } } }]);
@@ -307,6 +311,54 @@ describe('replaySheetsOps', () => {
         // Row insert was skipped (no shift), but the companion patch still applied.
         expect(result[0].data!.length).toBe(1);
         expect(result[0].data![0][0]?.v).toBe('b');
+    });
+
+    test('cell op beyond the celldata extent applies over the default editor grid', () => {
+        // Reproduces the unloadable-doc bug: a fresh doc whose tab was killed
+        // before the first flushSnapshot has pending ops but no snapshot, so
+        // replay starts from the default sheets (celldata-only, no row/column).
+        // The editor that emitted the ops worked on a grid expanded to the
+        // default dimensions — patches at row/col ≥ 1 must still resolve.
+        const cell = (v: string) => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
+        const ops: Op[][] = [[{ op: 'replace', id: 'sheet-1', path: ['data', 1, 1], value: cell('b2') }]];
+        const result = replaySheetsOps(createDefaultSheets(), ops);
+        expect(result[0].data!.length).toBe(DEFAULT_SHEET_ROW_COUNT);
+        expect(result[0].data![0].length).toBe(DEFAULT_SHEET_COLUMN_COUNT);
+        expect(result[0].data![1][1]?.v).toBe('b2');
+    });
+
+    test('a batch whose patches cannot resolve is skipped, earlier and later batches still apply', () => {
+        const cell = (v: string) => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
+        const sheet: Sheet = { id: 's1', name: 'Sheet1', order: 0, data: [[cell('a')]], config: {} };
+        const ops: Op[][] = [
+            [{ op: 'replace', id: 's1', path: ['data', 0, 0, 'v'], value: 'first' }],
+            // data is already materialized at 1×1, so row 5 can't resolve —
+            // applyPatches throws and the batch must be skipped, not the doc.
+            [{ op: 'replace', id: 's1', path: ['data', 5, 0, 'v'], value: 'poison' }],
+            [{ op: 'replace', id: 's1', path: ['name'], value: 'after' }],
+        ];
+        const result = replaySheetsOps([sheet], ops);
+        expect(result[0].data!.length).toBe(1);
+        expect(result[0].data![0][0]?.v).toBe('first');
+        expect(result[0].name).toBe('after');
+    });
+
+    test('addSheet mid-replay with a celldata-only value is materialized for later data ops', () => {
+        // copySheet emits addSheet values carrying celldata only (data is
+        // deleted, row/column absent when the source sheet had none). A later
+        // batch's data-path op on that sheet must trigger materialization —
+        // the up-front pass only sees the base sheets.
+        const cell = (v: string) => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
+        const s1: Sheet = { id: 's1', name: 'A', order: 0, data: [[cell('a')]], config: {} };
+        const newSheet: Sheet = { id: 's2', name: 'B', order: 1, celldata: [{ r: 0, c: 0, v: cell('b') }], config: {} };
+        const ops: Op[][] = [
+            [{ op: 'addSheet', id: 's2', path: [], value: newSheet }],
+            [{ op: 'replace', id: 's2', path: ['data', 1, 1], value: cell('b2') }],
+        ];
+        const result = replaySheetsOps([s1], ops);
+        expect(result).toHaveLength(2);
+        expect(result[1].data![0][0]?.v).toBe('b');
+        expect(result[1].data![1][1]?.v).toBe('b2');
     });
 
     test('multiple batches apply sequentially', () => {
