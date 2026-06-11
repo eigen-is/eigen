@@ -9127,51 +9127,25 @@ export const en = {
         { text: 'Date time', value: 'dd/MM/yyyy HH:mm:ss', example: '26/09/2008 15:59:00' },
         { text: 'Duration', value: '[h]:mm:ss', example: '24:01:00' },
     ],
+    // Examples rendered for the fixed sample Tue 1930-08-05 13:30:30, matching
+    // the custom date/time dialog's preview sample.
     dateFmtList: [
-        {
-            name: '1930-08-05',
-            value: 'yyyy-MM-dd',
-        },
-        {
-            name: '1930/8/5',
-            value: 'yyyy/MM/dd',
-        },
-        {
-            name: '8/5/1930',
-            value: 'M/d/yyyy',
-        },
-        {
-            name: '08-05',
-            value: 'MM-dd',
-        },
-        {
-            name: '8-5',
-            value: 'M-d',
-        },
-        {
-            name: '13:30:30',
-            value: 'h:mm:ss',
-        },
-        {
-            name: '13:30',
-            value: 'h:mm',
-        },
-        {
-            name: 'PM 01:30',
-            value: 'AM/PM hh:mm',
-        },
-        {
-            name: 'PM 1:30',
-            value: 'AM/PM h:mm',
-        },
-        {
-            name: 'PM 1:30:30',
-            value: 'AM/PM h:mm:ss',
-        },
-        {
-            name: '08-05 PM 01:30',
-            value: 'MM-dd AM/PM hh:mm',
-        },
+        { name: '5-Aug-1930', value: 'd-MMM-yyyy' },
+        { name: '5 Aug 1930', value: 'd MMM yyyy' },
+        { name: '5 August 1930', value: 'd MMMM yyyy' },
+        { name: '05/08/1930', value: 'dd/MM/yyyy' },
+        { name: '05/08/30', value: 'dd/MM/yy' },
+        { name: '05/08', value: 'dd/MM' },
+        { name: '1930-08-05', value: 'yyyy-MM-dd' },
+        { name: '13:30', value: 'HH:mm' },
+        { name: '13:30:30', value: 'HH:mm:ss' },
+        { name: '1:30 PM', value: 'h:mm AM/PM' },
+        { name: '1:30:30 PM', value: 'h:mm:ss AM/PM' },
+        { name: '05/08 13:30', value: 'dd/MM HH:mm' },
+        { name: '05/08/1930 13:30', value: 'dd/MM/yyyy HH:mm' },
+        { name: 'Tuesday, 5 August 1930', value: 'dddd, d MMMM yyyy' },
+        { name: 'Tuesday, 5 August 1930 at 13:30:30', value: 'dddd, d MMMM yyyy "at" HH:mm:ss' },
+        { name: '24:01:00 (elapsed)', value: '[h]:mm:ss' },
     ],
     fontFamily: {
         MicrosoftYaHei: 'YaHei',
