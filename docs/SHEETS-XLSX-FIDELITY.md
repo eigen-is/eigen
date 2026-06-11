@@ -93,8 +93,8 @@ one branch per cycle, `--no-ff`. Reviews are two-stage where deliverables warran
 Local-only artifacts (gitignored, `docs/superpowers/`): the Cycle 0 gap matrix + filter
 assessment (`audit/`), per-cycle spec records (`specs/`), and all verification screenshots
 (`audit/screens/`). The real benchmark workbooks live in the local drive data and must never
-enter git. The audit script (`apps/api/scripts/audit-xlsx.ts`, untracked) regenerates the
-4-stage report for any xlsx.
+enter git. The audit script (`apps/api/scripts/audit-xlsx.ts`) regenerates the 4-stage report
+for any xlsx.
 
 Synthetic-fixture tests are the committed regression net: `apps/api/src/test/sheets-import.test.ts`
 builds workbooks with exceljs in-test and asserts on the converted snapshot through the full
