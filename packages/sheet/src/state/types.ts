@@ -179,9 +179,9 @@ export type AlternateFormatEntry = {
 
 // Editor-runtime Sheet: lib's canonical fields plus state-only extras (selection
 // state, calc chain, filter criteria, dynamic-array spill ranges, …) that never
-// reach the wire shape. `config` is widened to state's SheetConfig. Frozen panes
-// and the autofilter range live on the lib Sheet — they persist and the xlsx
-// importer emits them.
+// reach the wire shape. `config` is widened to state's SheetConfig. Frozen panes,
+// the autofilter range and data-validation rules live on the lib Sheet — they
+// persist and the xlsx importer emits them.
 export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
     color?: string;
@@ -201,7 +201,6 @@ export type Sheet = Omit<LibSheet, 'config'> & {
     isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
     alternateFormatRules?: AlternateFormatEntry[];
-    dataVerification?: Record<string, DataVerificationRule>;
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
     // Dynamic-array formula source list — entries describe spill ranges; engine
     // pushes here when a `=A1:A3*2`-style formula is evaluated. Same r/c/id
