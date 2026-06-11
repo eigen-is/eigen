@@ -4,13 +4,11 @@ import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '.
 import type { EditorSheetConfigExtras } from '../types';
 
 // Sheet shape with the editor-runtime extras the engine passes through but lib's
-// canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards,
-// frozen/filter/dataVerification state-only fields).
+// canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards, the
+// filter state-only field). frozen/dataVerification live on the lib Sheet.
 type TestSheet = Sheet & {
     config?: SheetConfig & EditorSheetConfigExtras;
-    frozen?: unknown;
     filter?: unknown;
-    dataVerification?: unknown;
 };
 
 const cell = (v: string | number) => ({ v, m: String(v), ct: { fa: 'General', t: 'g' } });
@@ -320,7 +318,7 @@ describe('applySheetsInsertRowCol — passthrough', () => {
                 config: {},
                 frozen: { type: 'rangeRow', range: { row_focus: 5, column_focus: 0 } },
                 filter: { '0': { cindex: 0, str: 0, edr: 1, rowhidden: {} } },
-                dataVerification: { '0_0': { type: 'list', value1: 'a,b' } },
+                dataVerification: { '0_0': { type: 'dropdown', type2: '', value1: 'a,b', value2: '' } },
             },
         ];
         const result = applySheetsInsertRowCol(sheets, {
