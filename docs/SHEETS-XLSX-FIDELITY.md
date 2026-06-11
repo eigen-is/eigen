@@ -65,6 +65,11 @@ last and wins.
 - Excel outline groups (`outlineLevel` row/col grouping with collapse buttons) are not imported —
   distinct from hidden rows.
 - Date condition input in the filter menu is a plain text field (no date picker).
+- Hidden column inside a filter range: its button rect coincides with its left neighbour's. The
+  canvas paints the later (hidden) column's glyph state on top while the hit-test resolves the
+  earlier (visible) column — so the drawn state can belong to a different column than the menu a
+  click opens, but only when the hidden column has an active filter. The old HTML overlay had the
+  inverse arbitrary choice (topmost DOM node won). Cosmetic; review nit from the canvas cycle.
 - By-values checkboxes stay visible (and are ignored) while a condition is active on a column —
   resolve in the Google-parity redesign (accordion makes the active mode explicit).
 - Engine `top10` CF evaluation uses `indexOf` over the sorted slice per cell (O(n²) on large
