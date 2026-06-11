@@ -577,58 +577,7 @@ export const FilterMenu: React.FC = () => {
                     return null;
                 })}
                 <div className="h-px my-1 bg-border" />
-                <div className="flex items-center gap-2 px-1 py-1">
-                    <Button
-                        size="sm"
-                        onClick={() => {
-                            if (col == null) return;
-                            setContext((draftCtx) => {
-                                // A selected condition takes precedence over the by-values
-                                // checkboxes — one filter mode per column, like Google Sheets.
-                                const byCondition =
-                                    conditionName === 'none'
-                                        ? undefined
-                                        : {
-                                              conditionName,
-                                              values: conditionValues.slice(0, filterConditionArity(conditionName)),
-                                          };
-                                const rowHidden = byCondition
-                                    ? getFilterConditionHiddenRows(
-                                          draftCtx,
-                                          col,
-                                          startRow,
-                                          endRow,
-                                          startCol,
-                                          byCondition,
-                                      )
-                                    : hiddenRows.current.reduce(
-                                          (pre, curr) => {
-                                              pre[curr] = 0;
-                                              return pre;
-                                          },
-                                          {} as Record<string, number>,
-                                      );
-                                saveFilter(
-                                    draftCtx,
-                                    byCondition != null || hiddenRows.current.length > 0,
-                                    rowHidden,
-                                    byCondition,
-                                    startRow,
-                                    endRow,
-                                    col,
-                                    startCol,
-                                    endCol,
-                                );
-                                hiddenRows.current = [];
-                                draftCtx.filterContextMenu = undefined;
-                            });
-                        }}
-                    >
-                        {filter.filterConform}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={close}>
-                        {filter.filterCancel}
-                    </Button>
+                <div className="flex items-center justify-between px-1 py-1">
                     <Button
                         variant="destructive"
                         size="sm"
@@ -640,6 +589,59 @@ export const FilterMenu: React.FC = () => {
                     >
                         {filter.clearFilter}
                     </Button>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={close}>
+                            {filter.filterCancel}
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() => {
+                                if (col == null) return;
+                                setContext((draftCtx) => {
+                                    // A selected condition takes precedence over the by-values
+                                    // checkboxes — one filter mode per column, like Google Sheets.
+                                    const byCondition =
+                                        conditionName === 'none'
+                                            ? undefined
+                                            : {
+                                                  conditionName,
+                                                  values: conditionValues.slice(0, filterConditionArity(conditionName)),
+                                              };
+                                    const rowHidden = byCondition
+                                        ? getFilterConditionHiddenRows(
+                                              draftCtx,
+                                              col,
+                                              startRow,
+                                              endRow,
+                                              startCol,
+                                              byCondition,
+                                          )
+                                        : hiddenRows.current.reduce(
+                                              (pre, curr) => {
+                                                  pre[curr] = 0;
+                                                  return pre;
+                                              },
+                                              {} as Record<string, number>,
+                                          );
+                                    saveFilter(
+                                        draftCtx,
+                                        byCondition != null || hiddenRows.current.length > 0,
+                                        rowHidden,
+                                        byCondition,
+                                        startRow,
+                                        endRow,
+                                        col,
+                                        startCol,
+                                        endCol,
+                                    );
+                                    hiddenRows.current = [];
+                                    draftCtx.filterContextMenu = undefined;
+                                });
+                            }}
+                        >
+                            {filter.filterConform}
+                        </Button>
+                    </div>
                 </div>
             </PopoverContent>
         </Popover>
