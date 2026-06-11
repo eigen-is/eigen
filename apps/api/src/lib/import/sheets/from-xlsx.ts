@@ -540,7 +540,10 @@ type XlsxDataValidation = {
 const DV_TYPE: Record<string, string> = {
     list: 'dropdown',
     whole: 'number_integer',
-    decimal: 'number_decimal',
+    // Excel "decimal" accepts ANY real number, like the engine's `number` type;
+    // the engine's `number_decimal` rejects integers and would block typing 5
+    // into a "decimal between 1..10" cell.
+    decimal: 'number',
     textLength: 'text_length',
     date: 'date',
 };
