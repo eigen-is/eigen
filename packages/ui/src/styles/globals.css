@@ -3,10 +3,14 @@
 @import "./eigen-prose.css";
 @import "./slide-text.css";
 
-@source "../../../apps/**/*.{ts,tsx}";
-@source "../../../packages/sheet/src/components/**/*.{ts,tsx}";
-@source "../../../packages/lib/**/*.{ts,tsx}";
-@source "../../../components/**/*.{ts,tsx}";
+/* @source is relative to THIS file — the repo root is four levels up, not three.
+   The old three-up globs pointed at nonexistent dirs, so classes used ONLY in
+   workspace packages consumed through node_modules symlinks (e.g. packages/sheet's
+   LinkEditCard z-30) were silently missing from every app's CSS; each app's own
+   classes only worked via Tailwind's automatic Vite-root detection. */
+@source "../../../../apps/**/*.{ts,tsx}";
+@source "../../../../packages/sheet/src/**/*.{ts,tsx}";
+@source "../../../../packages/lib/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
 @plugin "tailwindcss-animate";
