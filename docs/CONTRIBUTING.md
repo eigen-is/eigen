@@ -67,7 +67,8 @@ Reach out at [reinder@eigen.is](mailto:reinder@eigen.is) or just open an issue s
 
 ### Sponsor
 
-If you or your company want to support the project, reach out at
+If you or your company want to support the project, you can sponsor Eigen through
+[GitHub Sponsors](https://github.com/sponsors/eigen-is). Questions? Reach out at
 [reinder@eigen.is](mailto:reinder@eigen.is).
 
 ### Issues first, PRs for small fixes
