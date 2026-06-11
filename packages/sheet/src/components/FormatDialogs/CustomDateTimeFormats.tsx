@@ -134,6 +134,7 @@ export function CustomDateTimeFormats() {
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
+                                aria-label="Insert token"
                                 className="ml-auto inline-flex items-center rounded-md px-1 py-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             >
                                 <ChevronDown className="size-4" />
