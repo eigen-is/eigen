@@ -147,12 +147,7 @@ export function goToLink(
         const address = resolveWebLink(linkAddress);
         if (address != null) window.open(address, '_blank', 'noopener,noreferrer');
     } else if (linkType === 'sheet') {
-        let sheetId: string | undefined;
-        for (const sheet of ctx.sheets) {
-            if (linkAddress === sheet.name) {
-                sheetId = sheet.id;
-            }
-        }
+        const sheetId = ctx.sheets.find((sheet) => sheet.name === linkAddress)?.id;
         if (sheetId != null) changeSheet(ctx, sheetId);
     } else {
         const range = cloneDeep(getcellrange(ctx, linkAddress));
@@ -171,11 +166,10 @@ export function isLinkValid(ctx: Context, linkType: string, linkAddress: string)
     if (!linkAddress) return { isValid: false, tooltip: '' };
     const { insertLink } = locale(ctx);
     if (linkType === 'webpage') {
+        // Valid means "navigation would open it": the same resolveWebLink gate
+        // goToLink uses, plus a structural parse — one fact, one place.
         const address = resolveWebLink(linkAddress);
-        if (
-            address == null ||
-            (!/^mailto:/i.test(address) && !/^http[s]?:\/\/[\w\-.]+[\w-]*([\w\-./?%&=]+)?$/i.test(address))
-        ) {
+        if (address == null || !URL.canParse(address)) {
             return { isValid: false, tooltip: insertLink.tooltipInfo1 };
         }
     }

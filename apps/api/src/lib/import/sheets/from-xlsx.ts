@@ -1,5 +1,6 @@
 /// <reference path="../modules.d.ts" />
 
+import { formatInputDate } from '@workspace/lib/date';
 import type {
     BorderSide,
     CellBorderInfo,
@@ -12,7 +13,7 @@ import type {
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { functionCopy, iscelldata, parseA1Range, toA1, update } from '@workspace/sheet/engine';
+import { functionCopy, iscelldata, parseA1Range, toA1, unquoteSheetName, update } from '@workspace/sheet/engine';
 import type {
     Alignment,
     AutoFilter,
@@ -489,6 +490,14 @@ function convertDxfFormat(style: XlsxCfRule['style'], theme: ThemePalette): Defa
     return { textColor, cellColor };
 }
 
+// Excel string literals arrive wrapped in double quotes with embedded quotes
+// doubled ('"say ""hi"""'). Returns the unescaped inner text, or null when the
+// operand isn't a quoted literal.
+function unquoteXlsxLiteral(txt: string): string | null {
+    if (!(txt.startsWith('"') && txt.endsWith('"') && txt.length >= 2)) return null;
+    return txt.slice(1, -1).replace(/""/g, '"');
+}
+
 // cellIs operands arrive as raw formula text: numeric literals, quoted strings, or
 // refs/functions (→ null, handled via the formula-rule fallback). Quoted percent strings
 // like "5%" come from Google Sheets exports that serialize a percent-format threshold as
@@ -496,12 +505,10 @@ function convertDxfFormat(style: XlsxCfRule['style'], theme: ThemePalette): Defa
 function parseCfLiteral(operand: string): string | null {
     const txt = operand.trim();
     if (/^-?(\d+\.?\d*|\.\d+)$/.test(txt)) return txt;
-    if (txt.startsWith('"') && txt.endsWith('"') && txt.length >= 2) {
-        const inner = txt.slice(1, -1).replace(/""/g, '"');
-        const pct = inner.match(/^(-?\d+(?:\.\d+)?)%$/);
-        return pct ? String(Number(pct[1]) / 100) : inner;
-    }
-    return null;
+    const inner = unquoteXlsxLiteral(txt);
+    if (inner == null) return null;
+    const pct = inner.match(/^(-?\d+(?:\.\d+)?)%$/);
+    return pct ? String(Number(pct[1]) / 100) : inner;
 }
 
 // exceljs read-back drops the containsText rule's `text` attribute but keeps the formula
@@ -596,14 +603,16 @@ function convertDataValidations(worksheet: Worksheet): NonNullable<Sheet['dataVe
     const maxRow = worksheet.rowCount + DV_ROW_MARGIN;
     const maxCol = worksheet.columnCount + DV_COL_MARGIN;
     const rules: NonNullable<Sheet['dataVerification']> = {};
-    for (const [address, dv] of Object.entries(model)) {
+    // Object.keys, not entries: a column-wide rule pre-expands to ~1M model keys
+    // and the tuple arrays would be pure transient garbage.
+    for (const address of Object.keys(model)) {
         // Model keys are single-cell addresses (ranges arrive pre-expanded).
         const parsed = parseA1Range(address);
         if (!parsed) continue;
         if (parsed.start.row >= maxRow || parsed.start.col >= maxCol) continue;
         // Mapping per entry yields a fresh rule object per cell key — exceljs aliases
         // one object across an expanded range, and the engine mutates rules in place.
-        const rule = mapDataValidation(dv);
+        const rule = mapDataValidation(model[address]);
         if (!rule) continue;
         rules[`${parsed.start.row}_${parsed.start.col}`] = rule;
     }
@@ -666,12 +675,10 @@ function numericOperand(raw: unknown): string | null {
 
 // Date operands arrive as JS Dates built from the serial in UTC terms (excelToDate).
 // The engine's validateCellData parses value1/value2 with isdatetime + dayjs, which
-// accept YYYY-MM-DD.
+// accept the YYYY-MM-DD that formatInputDate emits (toISOString-based, UTC).
 function dateOperand(raw: unknown): string | null {
     if (!(raw instanceof Date) || Number.isNaN(raw.getTime())) return null;
-    const month = String(raw.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(raw.getUTCDate()).padStart(2, '0');
-    return `${raw.getUTCFullYear()}-${month}-${day}`;
+    return formatInputDate(raw);
 }
 
 // A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-list form; anything
@@ -680,10 +687,8 @@ function dateOperand(raw: unknown): string | null {
 // are dropped program-wide; a garbage one-option dropdown is worse than no rule.
 function listSource(raw: unknown): string | null {
     if (typeof raw !== 'string' || raw.length === 0) return null;
-    if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
-        const inner = raw.slice(1, -1).replace(/""/g, '"');
-        return inner.length > 0 ? inner : null;
-    }
+    const inner = unquoteXlsxLiteral(raw);
+    if (inner != null) return inner.length > 0 ? inner : null;
     const ref = raw.startsWith('=') ? raw.slice(1) : raw;
     return iscelldata(ref) ? ref : null;
 }
@@ -812,13 +817,13 @@ function mapHyperlink(target: string | undefined): { linkType: string; linkAddre
     if (location.length === 0) return null;
     // Quoted sheet name ('My Sheet', 'It''s') with an optional !ref tail. Sheet
     // names may legally contain '!', so don't split the quoted form on it.
-    const quoted = location.match(/^'((?:[^']|'')*)'(!.+)?$/);
+    const quoted = location.match(/^('(?:[^']|'')*')(!.+)?$/);
     if (quoted) {
         // goToLink's sheet branch matches sheet names by exact equality → strip
         // the quotes; cellrange keeps the quoted form (getcellrange parses it).
         return quoted[2]
             ? { linkType: 'cellrange', linkAddress: location }
-            : { linkType: 'sheet', linkAddress: quoted[1].replace(/''/g, "'") };
+            : { linkType: 'sheet', linkAddress: unquoteSheetName(quoted[1]) };
     }
     return location.includes('!')
         ? { linkType: 'cellrange', linkAddress: location }

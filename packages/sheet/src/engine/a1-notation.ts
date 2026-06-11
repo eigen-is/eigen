@@ -25,7 +25,7 @@ const RANGE_REGEXP = new RegExp(
     `^${sheetNamePattern}?([$])?([A-Za-z]+)([$])?([0-9]+)(?::([$])?([A-Za-z]+)([$])?([0-9]+))?$`,
 );
 
-function unquoteSheetName(raw: string): string {
+export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
 }
 
