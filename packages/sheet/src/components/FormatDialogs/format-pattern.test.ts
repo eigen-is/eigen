@@ -15,6 +15,7 @@ import {
     type DateTokenId,
     type FormatSegment,
     NUMBER_FORMAT_PRESETS,
+    previewPattern,
     serializeSegments,
     tokenizePattern,
 } from './format-pattern';
@@ -232,5 +233,37 @@ describe('NUMBER_FORMAT_PRESETS samples', () => {
 
     test('an invalid pattern makes update throw — the dialog error state relies on this', () => {
         expect(() => update('#,##0.00"', 1234.56)).toThrow();
+    });
+});
+
+describe('previewPattern', () => {
+    test('a valid pattern renders the sample', () => {
+        expect(previewPattern('dd/MM/yyyy', DATETIME_SAMPLE_SERIAL)).toEqual({ ok: true, text: '05/08/1930' });
+    });
+
+    test('a millisecond token appended after the year is an error, not a throw', () => {
+        expect(previewPattern('dd/MM/yyyy000', DATETIME_SAMPLE_SERIAL)).toEqual({
+            ok: false,
+            error: 'Illegal format',
+        });
+    });
+
+    test('adjacent .-and-, literals are an error, not a throw', () => {
+        expect(previewPattern('dd.,MM/yyyy', DATETIME_SAMPLE_SERIAL)).toEqual({ ok: false, error: 'Illegal format' });
+    });
+
+    test('a quoted literal that round-trips to a raw separator run previews as an error', () => {
+        // 'dd".,"MM' renders fine quoted, but the tokenizer extracts the '.,'
+        // literal and the serializer re-emits it raw as 'dd.,MM' — illegal.
+        const roundTripped = serializeSegments(tokenizePattern('dd".,"MM'));
+        expect(roundTripped).toBe('dd.,MM');
+        expect(previewPattern(roundTripped, DATETIME_SAMPLE_SERIAL)).toEqual({
+            ok: false,
+            error: 'Illegal format',
+        });
+    });
+
+    test('an unterminated quote in a number pattern is an error, not a throw', () => {
+        expect(previewPattern('#,##0.00"', 1234.56)).toEqual({ ok: false, error: 'Illegal character: #,##0.00"' });
     });
 });

@@ -12,7 +12,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Check, ChevronDown } from 'lucide-react';
 import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { is_date, update } from '../../engine/format';
+import { is_date } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
 import { getFlowdata, locale, updateFormat } from '../../state';
 import {
@@ -20,6 +20,7 @@ import {
     DATETIME_SAMPLE_SERIAL,
     type FormatSegment,
     getDateToken,
+    previewPattern,
     serializeSegments,
     tokenizePattern,
 } from './format-pattern';
@@ -88,7 +89,7 @@ export function CustomDateTimeFormats() {
     );
 
     const pattern = serializeSegments(segments);
-    const preview = pattern ? update(pattern, DATETIME_SAMPLE_SERIAL) : '';
+    const preview = pattern ? previewPattern(pattern, DATETIME_SAMPLE_SERIAL) : { ok: true as const, text: '' };
 
     const replaceSegment = (index: number, segment: FormatSegment) => {
         setSegments((prev) => prev.map((s, i) => (i === index ? segment : s)));
@@ -170,9 +171,13 @@ export function CustomDateTimeFormats() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                    {format.preview}: <span className="text-foreground">{preview}</span>
-                </div>
+                {preview.ok ? (
+                    <div className="text-sm text-muted-foreground">
+                        {format.preview}: <span className="text-foreground">{preview.text}</span>
+                    </div>
+                ) : (
+                    <div className="text-sm text-destructive">{preview.error}</div>
+                )}
             </div>
             <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
                 {dateFmtList.map(({ name, value }) => (
@@ -194,7 +199,7 @@ export function CustomDateTimeFormats() {
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
                     {button.cancel}
                 </Button>
-                <Button size="sm" disabled={!pattern} onClick={apply}>
+                <Button size="sm" disabled={!pattern || !preview.ok} onClick={apply}>
                     {button.apply}
                 </Button>
             </DialogFooter>

@@ -6,7 +6,7 @@ import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
 import { getFlowdata, locale, updateFormat } from '../../state';
-import { NUMBER_FORMAT_PRESETS } from './format-pattern';
+import { NUMBER_FORMAT_PRESETS, previewPattern } from './format-pattern';
 import { useAnchorCell } from './useAnchorCell';
 
 export function CustomNumberFormats() {
@@ -21,13 +21,7 @@ export function CustomNumberFormats() {
         anchorFa && anchorFa !== 'General' && anchorFa !== '@' ? anchorFa : '#,##0.00',
     );
 
-    let sample = '';
-    let error: string | null = null;
-    try {
-        sample = update(pattern, sampleValue);
-    } catch (e) {
-        error = (e as Error).message;
-    }
+    const sample = previewPattern(pattern, sampleValue);
 
     const apply = () => {
         setContext((ctx) => {
@@ -45,12 +39,12 @@ export function CustomNumberFormats() {
             </DialogHeader>
             <div className="flex flex-col gap-1.5 shrink-0">
                 <Input className="font-mono" value={pattern} onChange={(e) => setPattern(e.target.value)} />
-                {error ? (
-                    <div className="text-sm text-destructive">{error}</div>
-                ) : (
+                {sample.ok ? (
                     <div className="text-sm text-muted-foreground">
-                        {format.sample}: <span className="text-foreground">{sample}</span>
+                        {format.sample}: <span className="text-foreground">{sample.text}</span>
                     </div>
+                ) : (
+                    <div className="text-sm text-destructive">{sample.error}</div>
                 )}
             </div>
             <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
@@ -70,7 +64,7 @@ export function CustomNumberFormats() {
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
                     {button.cancel}
                 </Button>
-                <Button size="sm" disabled={!pattern || error != null} onClick={apply}>
+                <Button size="sm" disabled={!pattern || !sample.ok} onClick={apply}>
                     {button.apply}
                 </Button>
             </DialogFooter>

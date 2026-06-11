@@ -5,6 +5,8 @@
 // uppercase M is month and lowercase m is minute, h is 12-hour and H is
 // 24-hour (numfmt itself decides 12h/24h by AM/PM presence at render time).
 
+import { update } from '../../engine/format';
+
 export type DateTokenId =
     | 'day'
     | 'month'
@@ -259,6 +261,20 @@ export function serializeSegments(segments: FormatSegment[]): string {
         }
     }
     return out;
+}
+
+// Guarded sample rendering for the dialogs' Preview/Sample line: numfmt throws
+// on illegal patterns (e.g. a 000 run straight after yyyy, or adjacent '.,'),
+// and a throw during render would blank the whole app.
+export function previewPattern(
+    pattern: string,
+    value: number,
+): { ok: true; text: string } | { ok: false; error: string } {
+    try {
+        return { ok: true, text: update(pattern, value) };
+    } catch (e) {
+        return { ok: false, error: (e as Error).message };
+    }
 }
 
 export type CurrencyVariantId = 'symbolFirst' | 'symbolFirstRounded' | 'symbolLast' | 'symbolLastRounded';
