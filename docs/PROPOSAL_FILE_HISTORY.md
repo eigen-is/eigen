@@ -4,12 +4,16 @@
 > renamed, moved, copied, trashed,* and Eigendoc-specific ops like *sticky-moved*.
 > Two new tables in the mount's `metadata.db`: `file_events` (the timeline) and
 > `path_watchers` (who wants notifications). Any user with read access can **Watch**
-> a file or folder; folder watches cascade to descendants. Events fan out through
-> the existing `NotificationCenter` + `home-relay.sendToHome` pipeline — one
-> notification per file with `tag`-based coalescing, not one per event. UX surfaces
-> a bell toggle in the file menu and in each Eigendoc toolbar, a *Recent Activity*
-> section in the Drive properties panel, and a *Watched* row in the unified app
-> sidebar. The only new SSE plumbing is one extra case in the existing notification
+> a file or folder; folder watches cascade to descendants. Collab edits are
+> attributed server-side — the WebSocket connection already knows the user — so
+> docs, sheets, slides, and stickies all get *"Alice edited X"* in v1. Events fan
+> out through the existing `NotificationCenter` + `home-relay.sendToHome` pipeline —
+> one notification per file with `tag`-based coalescing, not one per event. An
+> optional per-user email channel (off / immediate / daily digest) renders the same
+> notification rows per home — no outbox, no second queue. UX surfaces a bell
+> toggle in the file menu and in each Eigendoc toolbar, a *Recent Activity* section
+> in the Drive details sidebar, and a *Watched* row in the unified app sidebar.
+> The only new SSE plumbing is one extra case in the existing notification
 > handler — no new event types, no new cross-domain infrastructure.
 
 ## Goals
@@ -23,7 +27,10 @@
    thin endpoint.
 4. Fan-out reuses the existing `NotificationCenter` so users see one notification
    per file with a running coalesced count, not one toast per keystroke.
-5. The shape extends to future event types by adding a string to a union — not a
+5. Optional email delivery per user — *off* (default), *immediate*, or *daily
+   digest* — composed per home from the same notification rows. Mail targets the
+   user's verified secondary address when one exists, else the primary.
+6. The shape extends to future event types by adding a string to a union — not a
    new table.
 
 ## Non-goals
@@ -39,14 +46,12 @@
   a notification preference to an existing read grant.
 - **Persisting history past permanent delete.** FK cascade cleans it up. Trashed
   paths keep their history; restore brings it back.
-- **Migration of pre-feature events.** Eigen is pre-release; no backfill — the
-  timeline starts at upgrade time.
-- **Per-actor `'edited'` events on docs and sheets in v1.** TipTap Collaboration
-  and the sheet engine own their Yjs updates internally; there is no client-side
-  debounce surface to hook today, and Yjs awareness isn't yet mapped to user IDs
-  on the server. Stickies and slides emit attributed semantic events from the
-  client (drag handlers go through a single `yjsDoc.transact` boundary); docs and
-  sheets get `'edited'` in v2.
+- **Backfill of pre-feature events.** No backfill — the timeline starts at the
+  upgrade that ships the feature.
+- **Per-type semantic vocabulary for docs and sheets.** `sheet-column-inserted`,
+  `doc-section-edited`, … stay out of v1. Docs and sheets *do* get attributed
+  generic `'edited'` events in v1 (see § Collab edits) — only the richer verbs are
+  deferred.
 
 ## Why now
 
@@ -89,9 +94,10 @@ actor is known — see § Actor for the threading.
 
 ### Two emission paths
 
-Most events come from the server itself. Eigendoc-internal events (sticky moves, slide
-reorders) the server can't see — Yjs updates are opaque blobs — so the apps emit them
-explicitly via one endpoint.
+Most events come from the server itself, including attributed `'edited'` events for
+all collab types (the WebSocket connection knows the user — see § Collab edits).
+What the server can't see is *semantic* detail inside a Yjs update — which sticky
+moved where — so the apps emit those explicitly via one endpoint.
 
 ```
                        SERVER                                  CLIENT
@@ -104,6 +110,7 @@ explicitly via one endpoint.
         │ drive.updateACL()                 │    │ (server validates write access  │
         │ drive.trashPath() / restorePath() │    │  before recording)              │
         │ comment posted (in chat domain)   │    │                                 │
+        │ collab edit (Yjs origin → user)   │    │                                 │
         └────────────────┬──────────────────┘    └────────────────┬────────────────┘
                          │                                        │
                          └─────────────────┬──────────────────────┘
@@ -138,8 +145,9 @@ Three reasons keep history co-located with paths:
 
 ## Data model
 
-Added to mount `metadata.db` (existing schema bump — Eigen is pre-release, no migration
-boilerplate per project convention):
+Added to mount `metadata.db` via a versioned additive migration on the mount
+`DatabaseConfig` (Eigen is live — every schema change goes through the migration
+mechanism; this one is `CREATE TABLE` only, no data rewrite):
 
 ```typescript
 // apps/api/src/lib/drive/history-schema.ts
@@ -168,6 +176,7 @@ export type FileEventType =
     | 'renamed'   | 'moved'     | 'copied'
     | 'acl-changed'
     | 'trashed'   | 'restored'  | 'deleted'
+    | 'version-restored'
     | 'commented'
     // Eigendoc-emitted (client posts these via POST .../history):
     | 'sticky-added' | 'sticky-moved' | 'sticky-removed'
@@ -196,14 +205,18 @@ carry the calling user — they run against `this.owner = home.user`, which for 
 Recording `this.owner` would attribute every team-drive action to the team. That's not
 acceptable.
 
-Of fifteen route-callable `Drive` methods, three (`updateACL`, `inviteToChat`,
-`receiveACLChange`) already accept an explicit actor. The remaining twelve
-(`createFolder`, `create`, `uploadFiles`, `createFileFromData`, `deletePath`,
-`restorePath`, `permanentlyDelete`, `emptyTrash`, `movePath`, `renamePath`, `copyPath`,
-`writeFileContent`) need an optional `user: User` parameter. `SharedDrive` wrappers
-already hold `this.user` (the request caller) and thread it through. The escape-hatch
-routes (`/shared/by-me`, `/shared/with-me`) are read-only listings, so they don't need
-history recording at all.
+Three methods already accept an explicit actor: `updateACL`, `inviteToChat`, and
+the relay-inbound `receiveACLChange` (not route-callable). Twelve route-callable
+mutation methods (`createFolder`, `create`, `uploadFiles`, `createFileFromData`,
+`deletePath`, `restorePath`, `permanentlyDelete`, `emptyTrash`, `movePath`,
+`renamePath`, `copyPath`, `writeFileContent`) need an optional `user: User`
+parameter — `Drive.create` already carries a partial `createdBy?: string`; fold it
+into the new param rather than carrying both. Version restore is a thirteenth
+threading site (`SharedDrive.restoreContainer → Drive.restoreContainer →
+versioning/restore.ts` takes no user today); thread it or record at the route.
+`SharedDrive` wrappers already hold `this.user` (the request caller) and thread it
+through. The escape-hatch routes (`/shared/by-me`, `/shared/with-me`) are
+read-only listings, so they don't need history recording at all.
 
 When `user` is omitted — the case for internal scaffolding like
 `ChatRoom.create` → `drive.touchFile` / `drive.createFolder('media')` — history is
@@ -229,7 +242,8 @@ Every place in `Drive` that already calls `this.emit(DRIVE_*, path)` gains a sib
 | `copyPath` (root and descendants)             | `copied`        | `{ sourceOwnerId, sourceMountId, sourcePathId }` |
 | `updateACL`                                   | `acl-changed`   | `{ added, removed }` (email diff)                |
 | `deletePath` / `restorePath` / `permanentlyDelete` | `trashed` / `restored` / `deleted` | — |
-| `ChatRoom.postMessage` (embedded chat only)   | `commented`     | `{ commentPreview }` (first ~80 chars)           |
+| version restore (`versioning/restore.ts`)     | `version-restored` | `{ versionName }`                             |
+| `ChatRoom.postMessage` (embedded + standalone) | `commented`    | `{ commentPreview }` (first ~80 chars)           |
 
 Two notes on coverage:
 
@@ -250,9 +264,21 @@ Two notes on coverage:
   the existing code already does) but no history row. The owner-side `acl-changed`
   event is the canonical record.
 
-The Yjs `throttledTouchUpdatedAt` in `CollabDocument` is **not** hooked. Without an
-awareness → user mapping the actor would be unknown (or worse, attributed to the
-home owner). Docs and sheets land in v2 once awareness IDs are linked to user IDs.
+### Collab edits: attributed server-side
+
+An earlier revision deferred docs/sheets `'edited'` to v2, assuming the server
+couldn't attribute Yjs updates without an awareness → user mapping. That premise
+was wrong: `CollabDocument.subscribe(user, conn)` already receives the
+authenticated user (and currently discards it), and the existing
+`doc.on('update', (update, origin))` handler receives the originating WebSocket as
+`origin` for every client-driven change. So: keep a `Map<conn, User>` populated in
+`subscribe`/`unsubscribe`, resolve `origin` → user with one lookup next to the
+existing `throttledTouchUpdatedAt()`, and record an attributed `'edited'` row,
+throttled per (doc, user) to ~10 minutes. Yjs only fires `update` on real changes
+(sync-handshake noise filters itself out), and server-origin updates (version
+restores) have a non-connection origin, so they're excluded automatically. No
+awareness mapping, no protocol changes — docs, sheets, slides, and stickies are
+all covered in v1.
 
 ### Client-side: one endpoint for Eigendoc semantic ops
 
@@ -279,8 +305,8 @@ Apps decide when to call:
 |----------|-----------------------------------------------------------------------------------------|
 | Stickies | On column / task drag end (single `yjsDoc.transact` in `use-drag-and-drop.ts`)          |
 | Slides   | On slide reorder / add / remove (single `yjsDoc.transact` in `use-slide-dnd.ts`)        |
-| Docs     | v2 — no client-side debounce surface today (TipTap Collaboration owns Yjs internally)   |
-| Sheets   | v2 — sheet engine owns its Yjs updates; no exposed mutation boundary                    |
+| Docs     | Covered by the server-side attributed `'edited'`; per-section verbs are future work     |
+| Sheets   | Covered by the server-side attributed `'edited'`; sheet-op verbs are future work        |
 
 A small `useRecordHistory(ownerId, mountId, pathId)` hook in
 `packages/lib/src/core/drive/hooks/` wraps the POST so app code does
@@ -325,6 +351,22 @@ For each returned user, the owner-side mount re-verifies read access via
 `canReadFromAncestors` (defensive — a watcher whose share was revoked after subscribing
 is silently skipped). Then `sendToHome(watcherUserId, { type: 'notification',
 notification: { ... } })`. No watch-cleanup job in v1; defensive verification is enough.
+
+Event-specific chains: `mount.trashPath` re-parents the item to the mount root
+*before* `Drive.deletePath` emits, so `'trashed'` fans out over the **pre-trash**
+chain (`oldParentId`), not the current one. `'moved'` fans out over **both** the
+old and new parent chains (watchers of the old folder learn the file left).
+`'deleted'` is **notification-only** — the FK cascade deletes its history row and
+watcher rows instantly, so watchers (item + `trashedFrom` chain) are enumerated
+before the paths row is removed, and no `file_events` row is written. Other events
+on paths sitting in trash don't fan out.
+
+Burst guard: a 100-file upload or recursive copy is 100 distinct tags, so per-tag
+coalescing never engages. Fan-out batches burst-class events
+(`created`/`uploaded`/`copied`) from one actor in one parent within ~60 s into a
+single folder-level notification (tag on the parent folder) — mandatory before the
+immediate email channel. Cross-mount "moves" don't exist as a primitive
+(copy + trash → new pathId); watches stay on the source — accepted v1 limitation.
 
 ### ACL semantics
 
@@ -383,12 +425,13 @@ updates; the bell list catches up on the next refetch. Other call sites (`share`
 ### Existing comment notifications stay as-is
 
 `ChatRoom.postMessage` already emits `mention-comment` and `comment-reply`
-notifications via `sendToHome`. Those stay; the proposal does **not** add a parallel
-`file-event` notification for `'commented'`. Adding one would double-toast every
-comment (`comment-reply:…` and `file-event:…` use different tags, so they wouldn't
-collide). The `'commented'` event still lives in the history timeline (so the
-properties panel's *Recent Activity* shows it), but the notification channel for
-comments remains the existing one.
+notifications via `sendToHome`. Those stay. For `'commented'` events, watcher
+fan-out targets only watchers **not already covered** by the existing
+participant/mention notifications (chat.ts already enumerates that set) — a
+watcher who never commented still hears about new comments, but nobody gets
+double-toasted. The `'commented'` event always lives in the history timeline —
+recorded against the **container** path (`containerPath ?? path`), not the
+`.eigenchat` child — so *Recent Activity* on the doc shows it.
 
 ### Tag parsing
 
@@ -405,8 +448,44 @@ flow).
 `getDocumentUrl()` (and the `get*Url` helpers it delegates to) doesn't currently
 accept query params. The simplest path: append `?showHistory=1` post-hoc in
 `resolveNotificationLink` for the `file-event` case, and have each Eigendoc app's
-root route effect read the param on mount and open the properties panel. One extra
+root route effect read the param on mount and open the activity panel. One extra
 line per Eigendoc app shell; no helper-API changes.
+
+## Email channel (per home)
+
+The notification rows **are** the email queue — email is a second delivery channel
+over the same per-home fact, not a parallel pipeline. No outbox table, no
+server-level composing, nothing that can drift.
+
+Storage is a v2 migration on the per-user `notifications.db`: a single-row
+`notification_settings` table (`watchEmailCadence: 'never' | 'immediate' | 'daily'`,
+default `'never'`, plus a `lastDigestAt` watermark) and a nullable `emailedAt`
+column on `notifications` (immediate-send throttle marker, survives restarts).
+
+- **Immediate**: the relay delivery path that just called `persist()` has the
+  watcher's home open. It reads the home's own cadence and, if `immediate` and the
+  row's previous `emailedAt` is older than ~30 min (mirrors toast coalescing),
+  composes and sends right there — the mail is a rendering of the notification it
+  sits next to (title, actor, link parsed from the tag) via `renderEigenEmail`.
+  No scheduler, no queue, no discovery.
+- **Daily digest**: one stateless hourly `scheduleInterval` tick in `jobs.ts`
+  walks the user list — only during the digest-hour window (1–2 waves/day; opening
+  a home is a full `Home.init`, so a 24×/day sweep just to read `'never'` would be
+  wasteful; the tick's fire-at-startup is absorbed by the guard) — and asks each
+  home, through the home-relay seam, to `flushEmailDigest()`. The home reads its
+  own cadence and watermark, queries its own **unread** `file-event` rows since
+  `lastDigestAt`, composes one digest (grouped per file, deep links), sends, and
+  advances the watermark to the query-snapshot time. The guard
+  `now ≥ today's digest hour && lastDigestAt < today's digest hour` self-heals
+  missed ticks after downtime. Switching cadence to `daily` initializes the
+  watermark to `now` (no backlog dump). Read-in-app means skipped-in-email — mail
+  only covers what the user actually missed.
+
+Delivery targets the user's verified secondary email address when present
+(separate account-level feature), else the primary address. Known trade-off: tag
+coalescing keeps the latest event per file, so a digest line reads "Roadmap 2026 —
+Alice edited, 2 h ago" rather than per-event counts; richer lines can later pull
+counts through the relay — additive, not structural.
 
 ## UX
 
@@ -422,8 +501,8 @@ existing Eigen verbs. Backend matches: `path_watchers` table, `Watchers` domain 
 |---------------------------------------|--------------------------------------------------------|
 | Drive row context menu                | "Watch" / "Stop watching" item in `DriveItemMenuItems` |
 | Open Eigendoc app toolbar             | Bell `TooltipButton`, `active` when watched            |
-| Drive properties panel — header strip | Bell button next to share button                       |
-| Drive properties panel — *Recent Activity* footer | Inline "You're watching this · Stop watching" link |
+| Drive details sidebar — header strip  | Bell button next to share button                       |
+| Drive details sidebar — *Recent Activity* footer | Inline "You're watching this · Stop watching" link |
 
 `DriveItemMenuItems` is the single source for per-item actions across Drive and the
 Eigendoc apps, so adding one menu item lights up all of them. The toolbar bell is a
@@ -432,10 +511,11 @@ sourced from a shared `<WatchToggleButton>` in `packages/ui/src/components/layou
 
 ### Recent Activity in the properties panel
 
-The Drive properties panel (`packages/ui/src/components/layout/properties-panel/`)
-gains a new *Recent Activity* section component. The panel itself already exists; the
-section is new ground. Shows the **5 most recent events** for the selected item — and
-for folders, events on any descendant.
+The Drive details sidebar (`packages/ui/src/components/layout/drive/drive-detail.tsx` —
+note: `layout/properties-panel/` is the slides object-properties panel, not this)
+gains a new *Recent Activity* section component. The sidebar itself already exists;
+the section is new ground. Shows the **5 most recent events** for the selected item —
+and for folders, events on any descendant.
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -534,10 +614,6 @@ Invalidation functions exported beside the hooks: `invalidateFileHistory`,
 Out of scope for v1, but worth recording so the next round of design knows what's
 already been weighed:
 
-- **Per-actor `'edited'` events on docs and sheets.** Requires linking Yjs awareness
-  client IDs to user IDs in `CollabDocument` (carry the user ID through awareness
-  state on connect; persist the mapping in the doc db). Once landed, the existing
-  `throttledTouchUpdatedAt` becomes an attributed `'edited'` insert.
 - **Sheet-specific and doc-specific event vocabulary.** `sheet-column-inserted`,
   `sheet-rows-deleted`, `doc-section-edited`, … as discrete types instead of the
   generic `'edited'` + `details.summary`. Cheap to fan out later.
@@ -548,6 +624,8 @@ already been weighed:
   asked.
 - **Mute window.** Per-file "mute notifications for 1 hour" toggle. The topbar bell's
   mark-all-read plus `tag`-based coalescing covers the spam case for now.
+- **Hourly digest cadence.** v1 ships never/immediate/daily (Google Drive's model);
+  an hourly bucket is a cheap addition if users ask for it.
 - **Watcher-side mirror table.** Local single-query "all my watches", removing the
   per-owner fan-out the FE currently does. Adds dual-write complexity; only worth it
   if the FE-side aggregation becomes a real bottleneck.
@@ -564,10 +642,14 @@ already been weighed:
 | `apps/api/src/lib/drive/sharedDrive.ts`                               | Pass `this.user` through to the twelve newly-actor-aware Drive methods; ACL-checked wrappers for `/watch` and `/history` |
 | `apps/api/src/routes/drive.ts`                                        | `/watch`, `/history` routes                   |
 | `apps/api/src/lib/notification-center/notification-center.ts`         | Optional `coalesce` flag on `persist`; skip SSE broadcast on within-window upserts |
+| `apps/api/src/lib/collab/collabDocument.ts`                           | `Map<conn, User>` in subscribe/unsubscribe; throttled attributed `'edited'` record in the `doc.on('update')` handler |
+| `apps/api/src/lib/notification-center/` (schema + db-config)          | v2 migration: `notification_settings` single-row table + `emailedAt` column; `flushEmailDigest()`; immediate send at relay delivery |
+| `apps/api/src/lib/scheduler/jobs.ts`                                  | Hourly `watch-email-digest` tick (relay-driven per-home flush) |
+| `apps/api/src/lib/core/mail-composers.ts`                             | Watch notification + digest email composers |
 | `packages/lib/src/core/notification/resolve-link.ts`                  | `file-event` tag → app URL with `?showHistory=1` |
 | `packages/lib/src/core/drive/hooks/use-file-history.ts`               | `useFileHistory`, `useRecordHistory`, invalidations |
 | `packages/lib/src/core/drive/hooks/use-watch-path.ts`                 | `useIsPathWatched`, `useWatchPath`, `useUnwatchPath`, `useUserWatches` |
-| `packages/ui/src/components/layout/properties-panel/recent-activity.tsx` | Recent Activity section (new component)    |
+| `packages/ui/src/components/layout/drive/recent-activity.tsx`         | Recent Activity section (new component, rendered by `drive-detail.tsx`) |
 | `packages/ui/src/components/layout/toolbar/watch-toggle-button.tsx`   | Shared bell `TooltipButton`                   |
 | `packages/ui/src/components/layout/drive/drive-item-menu.tsx`         | "Watch" / "Stop watching" menu entry          |
 | `packages/ui/src/components/layout/sidebar/app-sidebar.tsx`           | *Watched* row                                 |
