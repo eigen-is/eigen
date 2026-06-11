@@ -9,6 +9,18 @@ import { loadYjsState } from '../lib/collab/yjs-loader';
 import { getHome } from '../lib/home/get-home';
 import { assertJson, authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+// exceljs's writeBuffer returns a Buffer view over a larger ArrayBuffer; copy into a
+// standalone ArrayBuffer so it can back a File body byte-exactly.
+async function workbookToBuffer(workbook: ExcelJS.Workbook): Promise<ArrayBuffer> {
+    const buffer = await workbook.xlsx.writeBuffer();
+    const view = new Uint8Array(buffer);
+    const out = new ArrayBuffer(view.byteLength);
+    new Uint8Array(out).set(view);
+    return out;
+}
+
 async function buildXlsxBuffer(
     cells: {
         a1: string;
@@ -36,11 +48,7 @@ async function buildXlsxBuffer(
             worksheet.getColumn(col).width = width;
         }
     }
-    const buffer = await workbook.xlsx.writeBuffer();
-    const view = new Uint8Array(buffer);
-    const out = new ArrayBuffer(view.byteLength);
-    new Uint8Array(out).set(view);
-    return out;
+    return workbookToBuffer(workbook);
 }
 
 async function readSnapshot(ownerId: string, mountId: string, pathId: string): Promise<Sheet[]> {
@@ -68,16 +76,8 @@ describe('Sheets xlsx import/convert', () => {
         rootId = root.id;
     });
 
-    test('convert .xlsx to eigensheets replicates the workbook content', async () => {
-        const buffer = await buildXlsxBuffer([
-            { a1: 'A1', value: 'Name' },
-            { a1: 'B1', value: 'Count' },
-            { a1: 'A2', value: 'Apples' },
-            { a1: 'B2', value: 42 },
-        ]);
-        const xlsxFile = new File([buffer], 'inventory.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
+    async function uploadAndConvert(buffer: ArrayBuffer, filename: string): Promise<DrivePath> {
+        const xlsxFile = new File([buffer], filename, { type: XLSX_MIME });
         const uploaded = await driveUpload<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -85,13 +85,31 @@ describe('Sheets xlsx import/convert', () => {
             rootId,
             xlsxFile,
         );
-
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
             `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
             { method: 'POST' },
         );
-        const converted = await assertJson<DrivePath>(res);
+        return assertJson<DrivePath>(res);
+    }
+
+    async function convertBuffer(buffer: ArrayBuffer, filename: string): Promise<Sheet[]> {
+        const converted = await uploadAndConvert(buffer, filename);
+        return readSnapshot(ctx.alice.user.id, mountId, converted.id);
+    }
+
+    async function convertWorkbook(workbook: ExcelJS.Workbook, filename: string): Promise<Sheet[]> {
+        return convertBuffer(await workbookToBuffer(workbook), filename);
+    }
+
+    test('convert .xlsx to eigensheets replicates the workbook content', async () => {
+        const buffer = await buildXlsxBuffer([
+            { a1: 'A1', value: 'Name' },
+            { a1: 'B1', value: 'Count' },
+            { a1: 'A2', value: 'Apples' },
+            { a1: 'B2', value: 42 },
+        ]);
+        const converted = await uploadAndConvert(buffer, 'inventory.xlsx');
         expect(converted.type).toBe('sheets');
         expect(converted.name).toBe('inventory.eigensheets');
         expect(converted.parentId).toBe(rootId);
@@ -111,22 +129,7 @@ describe('Sheets xlsx import/convert', () => {
             { a1: 'A1', value: 'Old' },
             { a1: 'B1', value: 1 },
         ]);
-        const initialFile = new File([initial], 'initial.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            initialFile,
-        );
-        const convertRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const sheetsDoc = await assertJson<DrivePath>(convertRes);
+        const sheetsDoc = await uploadAndConvert(initial, 'initial.xlsx');
 
         const replacement = await buildXlsxBuffer(
             [
@@ -172,9 +175,7 @@ describe('Sheets xlsx import/convert', () => {
 
     test('convert rejects unsupported target types', async () => {
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'x' }]);
-        const xlsxFile = new File([buffer], 'any.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
+        const xlsxFile = new File([buffer], 'any.xlsx', { type: XLSX_MIME });
         const uploaded = await driveUpload<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -216,24 +217,7 @@ describe('Sheets xlsx import/convert', () => {
             'Sheet1',
             ['A1:B2'],
         );
-        const xlsxFile = new File([buffer], 'merged.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertBuffer(buffer, 'merged.xlsx');
         expect(sheets[0].config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
 
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
@@ -250,24 +234,7 @@ describe('Sheets xlsx import/convert', () => {
             { a1: 'A3', value: 3 },
             { a1: 'A4', value: { formula: 'SUM(A1:A3)', result: 6 } },
         ]);
-        const xlsxFile = new File([buffer], 'formula.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertBuffer(buffer, 'formula.xlsx');
         const formulaCell = (sheets[0].celldata ?? []).find((c) => c.r === 3 && c.c === 0);
         expect(formulaCell?.v?.f).toBe('=SUM(A1:A3)');
     });
@@ -289,27 +256,7 @@ describe('Sheets xlsx import/convert', () => {
             cell.value = date;
             cell.numFmt = numFmt;
         }
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'dates.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'dates.xlsx');
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
 
         // Serial value and raw format string are preserved; only the cached display was wrong.
@@ -346,27 +293,7 @@ describe('Sheets xlsx import/convert', () => {
         const formula = ws.getCell('D1');
         formula.value = { formula: 'A3*2', result: 90 };
         formula.numFmt = '[$€]#,##0';
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'numbers.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'numbers.xlsx');
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
 
         // Raw value and format are preserved; only the cached display changes.
@@ -391,22 +318,7 @@ describe('Sheets xlsx import/convert', () => {
     test('large sheet import stores a zstd-compressed blob and reads back intact', async () => {
         const cells = Array.from({ length: 300 }, (_, i) => ({ a1: `A${i + 1}`, value: `value-${i}` }));
         const buffer = await buildXlsxBuffer(cells);
-        const xlsxFile = new File([buffer], 'large.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
+        const converted = await uploadAndConvert(buffer, 'large.xlsx');
 
         // Write path: at least one stored blob (update or snapshot) must be a zstd frame.
         const home = await getHome(ctx.alice.user.id);
@@ -440,22 +352,7 @@ describe('Sheets xlsx import/convert', () => {
     test('import with a non-xlsx body returns 400, not 500', async () => {
         // Create a target sheet to import into
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]);
-        const xlsxFile = new File([buffer], 'target.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const convertRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const sheetsDoc = await assertJson<DrivePath>(convertRes);
+        const sheetsDoc = await uploadAndConvert(buffer, 'target.xlsx');
 
         const notXlsx = new TextEncoder().encode('this is not a valid xlsx file');
         const res = await authedRequest(
@@ -468,23 +365,7 @@ describe('Sheets xlsx import/convert', () => {
 
     test('convert scales column widths from character units to pixels', async () => {
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'wide' }], 'Sheet1', [], [{ col: 1, width: 15 }]);
-        const xlsxFile = new File([buffer], 'colwidth.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertBuffer(buffer, 'colwidth.xlsx');
         expect(sheets[0].config?.columnlen?.['0']).toBe(Math.round(15 * 8));
     });
 
@@ -494,23 +375,7 @@ describe('Sheets xlsx import/convert', () => {
             { a1: 'B1', value: 'small', fontSize: 8 },
             { a1: 'C1', value: 'default' },
         ]);
-        const xlsxFile = new File([buffer], 'fontsizes.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertBuffer(buffer, 'fontsizes.xlsx');
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.fs).toBe(24);
         expect(byCoord.get('0:1')?.fs).toBe(8);
@@ -527,23 +392,7 @@ describe('Sheets xlsx import/convert', () => {
             },
             { a1: 'B1', value: 'no border' },
         ]);
-        const xlsxFile = new File([buffer], 'borders.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertBuffer(buffer, 'borders.xlsx');
         const bi = sheets[0].config?.borderInfo;
         expect(bi).toBeDefined();
         const a1Border = bi?.find((b) => b.rangeType === 'cell' && b.value.row_index === 0 && b.value.col_index === 0);
@@ -563,23 +412,7 @@ describe('Sheets xlsx import/convert', () => {
             { a1: 'A1', value: 'text' },
             { a1: 'B1', value: 42 },
         ]);
-        const xlsxFile = new File([buffer], 'align.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertBuffer(buffer, 'align.xlsx');
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.ht).toBeUndefined();
         expect(byCoord.get('0:1')?.ht).toBe(2);
@@ -595,27 +428,7 @@ describe('Sheets xlsx import/convert', () => {
         const cell2 = ws.getCell('B1');
         cell2.value = 'World';
         cell2.fill = { type: 'pattern', pattern: 'none' };
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'themed.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'themed.xlsx');
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.fc).toBe('#FF0000');
         expect(byCoord.get('0:0')?.bg).toBe('#0000FF');
@@ -637,27 +450,7 @@ describe('Sheets xlsx import/convert', () => {
         ws.getCell('A5').alignment = { textRotation: 'vertical' };
         ws.getCell('B1').value = 'georgia';
         ws.getCell('B1').font = { name: 'Georgia' };
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'styled.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'styled.xlsx');
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.rt).toBe(45);
         expect(byCoord.get('1:0')?.rt).toBe(90);
@@ -683,27 +476,7 @@ describe('Sheets xlsx import/convert', () => {
         ws.getCell('A4').font = { name: 'Wingdings' };
         ws.getCell('A5').value = 'native';
         ws.getCell('A5').font = { name: 'Inter' };
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'fonts.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'fonts.xlsx');
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.ff).toBe('Inter');
         expect(byCoord.get('1:0')?.ff).toBe('Source Serif 4');
@@ -718,27 +491,7 @@ describe('Sheets xlsx import/convert', () => {
         workbook.addWorksheet('Sheet A').getCell('A1').value = 'Alpha';
         workbook.addWorksheet('Sheet B').getCell('A1').value = 'Beta';
         workbook.addWorksheet('Sheet C').getCell('A1').value = 'Gamma';
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'multi.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'multi.xlsx');
         expect(sheets).toHaveLength(3);
         expect(sheets[0].name).toBe('Sheet A');
         expect(sheets[1].name).toBe('Sheet B');
@@ -762,27 +515,7 @@ describe('Sheets xlsx import/convert', () => {
             hyperlink: 'https://example.com',
         } as unknown as ExcelJS.CellHyperlinkValue;
         cell.alignment = { wrapText: true };
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'richlinks.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'richlinks.xlsx');
         const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
         expect(a1?.v?.v).toBe('GSV Assets\nCanva');
     });
@@ -796,27 +529,7 @@ describe('Sheets xlsx import/convert', () => {
         // range element; exceljs expands ranges back to per-column flags on read.
         ws.getColumn(3).hidden = true;
         ws.getColumn(4).hidden = true;
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'hiddencols.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'hiddencols.xlsx');
         expect(sheets[0].config?.colhidden).toEqual({ '2': 0, '3': 0 });
         expect(sheets[0].config?.rowhidden).toBeUndefined();
     });
@@ -834,27 +547,7 @@ describe('Sheets xlsx import/convert', () => {
         ws.getRow(5).hidden = true;
         ws.getRow(5).height = 15;
         ws.getCell('A7').value = 'bottom';
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'hiddenrows.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'hiddenrows.xlsx');
         expect(sheets[0].config?.rowhidden).toEqual({ '1': 0, '4': 0 });
         expect(sheets[0].config?.colhidden).toBeUndefined();
     });
@@ -872,27 +565,7 @@ describe('Sheets xlsx import/convert', () => {
         both.views = [{ state: 'frozen', xSplit: 3, ySplit: 2 }];
         const plain = workbook.addWorksheet('Plain');
         plain.getCell('A1').value = 'free';
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'frozen.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'frozen.xlsx');
 
         // Excel semantics: ySplit=N freezes the top N rows, xSplit=M the left M columns.
         // Engine range carries the 0-based index of the LAST frozen row/col.
@@ -916,27 +589,7 @@ describe('Sheets xlsx import/convert', () => {
         filtered.getRow(4).hidden = true;
         const plain = workbook.addWorksheet('Plain');
         plain.getCell('A1').value = 'free';
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], 'autofilter.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const sheets = await convertWorkbook(workbook, 'autofilter.xlsx');
 
         expect(sheets[0].filterRange).toEqual({ row: [1, 9], column: [1, 3] });
         // No <filterColumn> criteria → no per-column entries. A fresh filter enable in
@@ -946,30 +599,6 @@ describe('Sheets xlsx import/convert', () => {
         expect(sheets[0].config?.rowhidden).toEqual({ '3': 0 });
         expect(sheets[1].filterRange).toBeUndefined();
     });
-
-    async function convertWorkbook(workbook: ExcelJS.Workbook, filename: string): Promise<Sheet[]> {
-        const buf = await workbook.xlsx.writeBuffer();
-        const view = new Uint8Array(buf);
-        const out = new ArrayBuffer(view.byteLength);
-        new Uint8Array(out).set(view);
-        const xlsxFile = new File([out], filename, {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            xlsxFile,
-        );
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const converted = await assertJson<DrivePath>(res);
-        return readSnapshot(ctx.alice.user.id, mountId, converted.id);
-    }
 
     test('convert imports cellIs rules with resolved dxf colors and percent-string coercion', async () => {
         const workbook = new ExcelJS.Workbook();
@@ -1255,22 +884,7 @@ describe('Sheets xlsx import/convert', () => {
 
     test('import into another user document without write permission returns 403', async () => {
         const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
-        const initialFile = new File([initial], 'alice.xlsx', {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            rootId,
-            initialFile,
-        );
-        const convertRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-            { method: 'POST' },
-        );
-        const sheetsDoc = await assertJson<DrivePath>(convertRes);
+        const sheetsDoc = await uploadAndConvert(initial, 'alice.xlsx');
 
         const replacement = await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]);
         const res = await authedRequest(

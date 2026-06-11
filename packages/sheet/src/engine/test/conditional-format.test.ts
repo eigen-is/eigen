@@ -162,13 +162,13 @@ describe('engine/conditional-format — comparison rules', () => {
         expect(styles['0_1']?.cellColor).toBe('#00ff00');
     });
 
-    test('notBetween matches numeric cells outside the bounds only', () => {
-        const data = buildMatrix([[1, 5, 9]]);
+    test('notBetween matches numeric cells outside the bounds only, boundaries excluded', () => {
+        const data = buildMatrix([[1, 2, 5, 8, 9]]);
         const styles = evaluateConditionalFormat(
             [
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    cellrange: [{ row: [0, 0], column: [0, 4] }],
                     format: { cellColor: '#ff8800' },
                     conditionName: 'notBetween',
                     conditionRange: [],
@@ -178,8 +178,11 @@ describe('engine/conditional-format — comparison rules', () => {
             data,
         );
         expect(styles['0_0']?.cellColor).toBe('#ff8800');
+        // between is inclusive, so its complement must not match the bound values.
         expect(styles['0_1']).toBeUndefined();
-        expect(styles['0_2']?.cellColor).toBe('#ff8800');
+        expect(styles['0_2']).toBeUndefined();
+        expect(styles['0_3']).toBeUndefined();
+        expect(styles['0_4']?.cellColor).toBe('#ff8800');
     });
 
     test("a later rule without a text color does not erase an earlier rule's text color", () => {
