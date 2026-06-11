@@ -99,7 +99,7 @@ export function SearchReplace() {
     );
 
     return (
-        <div className="flex flex-col min-h-0 flex-1 w-[32rem] gap-4">
+        <div className="flex flex-col min-h-0 flex-1 gap-4">
             <DialogHeader>
                 <DialogTitle>{findAndReplace.find}</DialogTitle>
             </DialogHeader>

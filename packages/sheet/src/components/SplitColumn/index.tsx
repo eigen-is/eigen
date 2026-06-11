@@ -1,6 +1,6 @@
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { DialogFooter } from '@workspace/ui/components/dialog';
+import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -64,7 +64,9 @@ export function SplitColumn() {
 
     return (
         <div className="select-none [&_table]:border-collapse [&_td]:border [&_td]:border-border">
-            <div className="text-base">{splitText.splitTextTitle}</div>
+            <DialogHeader>
+                <DialogTitle>{splitText.splitTextTitle}</DialogTitle>
+            </DialogHeader>
             <div className="mt-2.5">{splitText.splitDelimiters}</div>
             <div className="border p-1.5 my-1.5 space-y-1 text-sm">
                 {splitText.splitSymbols.map((o) => (
