@@ -7,7 +7,6 @@ import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import {
-    getFlowdata,
     handleBold,
     handleFont,
     handleHorizontalAlign,
@@ -17,6 +16,7 @@ import {
     handleTextSize,
     resolveFontName,
 } from '../../state';
+import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 import { FontSizeStepper } from './font-size-stepper';
 
 // Quick-format controls mirrored from the docs toolbar, driving the exact same
@@ -26,16 +26,14 @@ import { FontSizeStepper } from './font-size-stepper';
 export function FormatToolbar() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
     const hasSpace = useMediaQuery('(min-width: 1360px)');
+    // Reflect the anchor cell so the swatches + active alignment track the selection,
+    // the way the docs toolbar follows the caret.
+    const cell = useAnchorCell();
 
     if (!hasSpace || !context.allowEdit) return null;
 
-    // Reflect the focused cell so the swatches + active alignment track the selection,
-    // the way the docs toolbar follows the caret. `ht` is stored as '1'/'0'/'2' by the
-    // align handler but as a number on defaults/imports — coerce before comparing.
-    const selection = context.selections?.[0];
-    const focusRow = selection?.row_focus ?? selection?.row?.[0];
-    const focusCol = selection?.column_focus ?? selection?.column?.[0];
-    const cell = focusRow != null && focusCol != null ? getFlowdata(context)?.[focusRow]?.[focusCol] : null;
+    // `ht` is stored as '1'/'0'/'2' by the align handler but as a number on
+    // defaults/imports — coerce before comparing.
     const textColor = cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
     const align = cell?.ht == null ? undefined : Number(cell.ht); // 0 = center, 1 = left, 2 = right

@@ -3,8 +3,8 @@ import { WorkbookContext } from '../../context';
 import type { Cell } from '../../engine/types';
 import { getFlowdata } from '../../state';
 
-// Cell under the selection anchor — the cell whose format/value seeds the
-// custom-format dialogs (same focus-or-range-start rule as FormatToolbar).
+// Cell under the selection anchor (focus, or range start without one) — seeds
+// the custom-format dialogs and drives the FormatToolbar swatches.
 export function useAnchorCell(): Cell | null | undefined {
     const { context } = useContext(WorkbookContext);
     const selection = context.selections?.[0];

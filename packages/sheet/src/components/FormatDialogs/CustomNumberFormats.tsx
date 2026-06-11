@@ -5,7 +5,7 @@ import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { getFlowdata, locale, updateFormat } from '../../state';
+import { handleNumberFormat, locale } from '../../state';
 import { NUMBER_FORMAT_PRESETS, previewPattern } from './format-pattern';
 import { useAnchorCell } from './useAnchorCell';
 
@@ -25,9 +25,7 @@ export function CustomNumberFormats() {
 
     const apply = () => {
         setContext((ctx) => {
-            const d = getFlowdata(ctx);
-            if (d == null) return;
-            updateFormat(ctx, refs.cellInput.current!, d, 'ct', pattern);
+            handleNumberFormat(ctx, refs.cellInput.current!, pattern);
         });
         hideDialog();
     };

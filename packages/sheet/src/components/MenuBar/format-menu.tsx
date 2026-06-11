@@ -24,6 +24,7 @@ import {
     handleHorizontalAlign,
     handleItalic,
     handleMerge,
+    handleNumberFormat,
     handleStrikeThrough,
     handleTextBackground,
     handleTextColor,
@@ -71,9 +72,7 @@ function NumberFormatSubmenu() {
                             key={value}
                             onClick={() => {
                                 setContext((ctx) => {
-                                    const d = getFlowdata(ctx);
-                                    if (d == null) return;
-                                    updateFormat(ctx, refs.cellInput.current!, d, 'ct', value);
+                                    handleNumberFormat(ctx, refs.cellInput.current!, value);
                                 });
                             }}
                         >

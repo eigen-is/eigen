@@ -736,20 +736,18 @@ export function cancelPaintModel(ctx: Context) {
     ctx.formatPainterOn = false;
 }
 
-export function handleCurrencyFormat(ctx: Context, cellInput: HTMLDivElement) {
-    const flowdata = getFlowdata(ctx);
-    if (!flowdata) return;
+export function handleNumberFormat(ctx: Context, cellInput: HTMLDivElement, pattern: string) {
+    setAttr(ctx, cellInput, 'ct', pattern);
+}
 
+export function handleCurrencyFormat(ctx: Context, cellInput: HTMLDivElement) {
     const currency = ctx.currency || '€';
 
-    updateFormat(ctx, cellInput, flowdata, 'ct', `${currency} #.00`);
+    handleNumberFormat(ctx, cellInput, `${currency} #.00`);
 }
 
 export function handlePercentageFormat(ctx: Context, cellInput: HTMLDivElement) {
-    const flowdata = getFlowdata(ctx);
-    if (!flowdata) return;
-
-    updateFormat(ctx, cellInput, flowdata, 'ct', '0.00%');
+    handleNumberFormat(ctx, cellInput, '0.00%');
 }
 
 export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
