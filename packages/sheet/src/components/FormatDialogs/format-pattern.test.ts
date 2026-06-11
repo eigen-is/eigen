@@ -12,14 +12,15 @@ import {
     CURRENCY_VARIANTS,
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
+    type DateTokenId,
     type FormatSegment,
     NUMBER_FORMAT_PRESETS,
     serializeSegments,
     tokenizePattern,
 } from './format-pattern';
 
-function token(tokenId: string, pattern: string): FormatSegment {
-    return { kind: 'token', token: tokenId as Extract<FormatSegment, { kind: 'token' }>['token'], pattern };
+function token(tokenId: DateTokenId, pattern: string): FormatSegment {
+    return { kind: 'token', token: tokenId, pattern };
 }
 
 function literal(text: string): FormatSegment {
