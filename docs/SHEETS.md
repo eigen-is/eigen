@@ -16,6 +16,27 @@ apps/sheets/src/components/sheets/
 └── toolbar.tsx                 # File menu + share/mode + comment toggle buttons (passed as leftItems/rightItems)
 ```
 
+### Canvas renderer
+
+`state/canvas.ts` is a thin facade: the `Canvas` class (`drawMain` / `drawRowHeader` /
+`drawColumnHeader` / `drawFreezeLine`) plus the `defaultStyle` re-export, consumed only by
+`components/Sheet/index.tsx` (one `drawMain` per freeze region). The drawing itself lives in
+`state/render/`:
+
+```
+state/render/
+├── types.ts        # RenderPass (per-drawMain shared state) + defaultStyle + shared shapes
+├── geometry.ts     # Pure viewport math (visible ranges, cell edges, HALF_PIXEL/BORDER_FIX) — unit-tested
+├── headers.ts      # Row/column header strips
+├── phases.ts       # collectVisibleCells → renderCells → renderMergedCells
+├── cells.ts        # nullCellRender/cellRender (background, indicators, checkbox, text, grid lines)
+├── cell-text.ts    # Text painter + overflow-span variant (layout stays in modules/text.ts)
+├── data-bar.ts     # Conditional-format data bar
+├── overflow.ts     # Text-spill map + trace + the shared per-row cache (hold/schedule-clear)
+├── borders.ts      # config.borderInfo pass + dash patterns
+└── filter-ui.ts    # Autofilter range border + buttons (lazy Path2D glyphs — module eval is DOM-free)
+```
+
 ## Yjs Sync
 
 | Key     | Type    | Purpose                                   |
