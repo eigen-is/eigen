@@ -220,7 +220,7 @@ function MailHeader({ email, formattedDate }: { email: Email; formattedDate: str
                             <PopoverContent
                                 align="start"
                                 collisionPadding={8}
-                                className="w-[28rem] max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+                                className="w-[28rem] max-w-[calc(100vw-2rem)]"
                             >
                                 <MailHeaderDetails email={email} formattedDate={formattedDate} />
                             </PopoverContent>

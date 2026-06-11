@@ -126,13 +126,12 @@ export const FilterMenu: React.FC = () => {
     const { context, setContext, settings } = useContext(WorkbookContext);
     const contextRef = useRef<Context>(context);
     const { filterContextMenu } = context;
-    const { startRow, startCol, endRow, endCol, col, listBoxMaxHeight } = filterContextMenu || {
+    const { startRow, startCol, endRow, endCol, col } = filterContextMenu || {
         startRow: null,
         startCol: null,
         endRow: null,
         endCol: null,
         col: null,
-        listBoxMaxHeight: 400,
     };
     const { filter } = locale(context);
     const [data, setData] = useState<{
@@ -285,7 +284,7 @@ export const FilterMenu: React.FC = () => {
                 side="bottom"
                 align="start"
                 collisionPadding={8}
-                className="w-auto p-1 text-sm"
+                className="flex w-auto flex-col p-1 text-sm"
                 onContextMenu={(e) => e.stopPropagation()}
             >
                 {settings.filterContextMenu?.map((name, i) => {
@@ -487,7 +486,8 @@ export const FilterMenu: React.FC = () => {
                     }
                     if (name === 'filter-by-value') {
                         return (
-                            <div key={name} className="mt-1 px-1">
+                            // min-h-0 lets this section absorb the popover's viewport clamp; only the list scrolls.
+                            <div key={name} className="mt-1 flex min-h-0 flex-col px-1">
                                 <div className="flex items-center justify-between mb-1.5">
                                     <div className="text-xs">
                                         <button
@@ -526,7 +526,7 @@ export const FilterMenu: React.FC = () => {
                                         searchValues(e.target.value);
                                     }}
                                 />
-                                <div className="overflow-y-auto" style={{ maxHeight: listBoxMaxHeight }}>
+                                <div className="min-h-0 overflow-y-auto">
                                     <DateSelectTree
                                         dates={data.dates}
                                         onExpand={onExpand}

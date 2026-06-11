@@ -75,7 +75,6 @@ export type Context = {
         startCol: number;
         endCol: number;
         hiddenRows: number[];
-        listBoxMaxHeight: number;
     };
 
     currentSheetId: string;

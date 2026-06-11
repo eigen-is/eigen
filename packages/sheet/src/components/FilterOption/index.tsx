@@ -53,7 +53,6 @@ export function FilterOptions() {
                     startCol: filterOptions.startCol,
                     endCol: filterOptions.endCol,
                     hiddenRows: Object.keys(draftCtx.filter[i]?.rowhidden ?? {}).map((r) => parseInt(r, 10)),
-                    listBoxMaxHeight: 400,
                 };
             });
         },
