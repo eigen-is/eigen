@@ -992,7 +992,9 @@ describe('Sheets xlsx import/convert', () => {
         const rules = sheets[0].dataVerification ?? {};
 
         expect(rules['0_0']).toMatchObject({ type: 'number_integer', type2: 'between', value1: '1', value2: '10' });
-        expect(rules['1_0']).toMatchObject({ type: 'number_decimal', type2: 'moreThanThe', value1: '2.5', value2: '' });
+        // Excel "decimal" accepts any real number → engine `number`, not
+        // `number_decimal` (which rejects integers).
+        expect(rules['1_0']).toMatchObject({ type: 'number', type2: 'moreThanThe', value1: '2.5', value2: '' });
         expect(rules['2_0']).toMatchObject({ type: 'text_length', type2: 'lessThanOrEqualTo', value1: '5' });
         // exceljs hands date operands over as JS Dates (excelToDate, UTC); the engine's
         // validateCellData parses value1/value2 through isdatetime + dayjs → YYYY-MM-DD.
