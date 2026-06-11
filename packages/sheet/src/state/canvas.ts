@@ -1,4 +1,4 @@
-import { isEmpty, isPlainObject, sortedIndex } from 'es-toolkit/compat';
+import { isEmpty, isPlainObject } from 'es-toolkit/compat';
 import type { ComputeMap } from '../engine/conditional-format';
 import type { CellMatrix } from '../engine/types';
 import { type Context, getFlowdata } from './context';
@@ -8,6 +8,15 @@ import { getRealCellValue, normalizedAttr } from './modules/cell';
 import { isInlineStringCell } from './modules/inline-string';
 import type { CellTextInfo } from './modules/text';
 import { clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet, getMeasureText } from './modules/text';
+import {
+    colEndX,
+    colStartX,
+    HALF_PIXEL,
+    headerVisibleRange,
+    mainVisibleRange,
+    rowEndY,
+    rowStartY,
+} from './render/geometry';
 import { getSheetIndex, indexToColumnChar } from './utils';
 
 export const defaultStyle = {
@@ -99,11 +108,6 @@ function setLineDash(
 type CellOverflowItem = { r: number; stc: number; edc: number };
 type CellOverflowMap = Record<number, Record<number, CellOverflowItem> | undefined>;
 
-// 1px canvas strokes land crisp only when centered on a half-pixel; every
-// grid/border line shifts by this amount (inherited fortune-sheet convention,
-// formerly the `bodrder05` parameter threaded through every render call).
-const HALF_PIXEL = 0.5;
-
 // Everything one drawMain pass shares with the per-cell render calls. Built
 // once at the top of drawMain; freeze regions each get their own pass.
 type RenderPass = {
@@ -177,15 +181,11 @@ export class Canvas {
         renderCtx.textBaseline = defaultStyle.textBaseline;
         renderCtx.fillStyle = defaultStyle.fillStyle;
 
-        let dataset_row_st = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
-        let dataset_row_ed = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight + drawHeight);
-
-        if (dataset_row_st === -1) {
-            dataset_row_st = 0;
-        }
-        if (dataset_row_ed === -1) {
-            dataset_row_ed = this.sheetCtx.visibledatarow.length - 1;
-        }
+        const { start: dataset_row_st, end: dataset_row_ed } = headerVisibleRange(
+            this.sheetCtx.visibledatarow,
+            scrollHeight,
+            drawHeight,
+        );
 
         renderCtx.save();
         renderCtx.beginPath();
@@ -196,12 +196,8 @@ export class Canvas {
         let start_r = 0;
         let preEndR: number | undefined;
         for (let r = dataset_row_st; r <= dataset_row_ed; r += 1) {
-            if (r === 0) {
-                start_r = -scrollHeight - 1;
-            } else {
-                start_r = this.sheetCtx.visibledatarow[r - 1] - scrollHeight - 1;
-            }
-            end_r = this.sheetCtx.visibledatarow[r] - scrollHeight;
+            start_r = rowStartY(this.sheetCtx.visibledatarow, r, scrollHeight);
+            end_r = rowEndY(this.sheetCtx.visibledatarow, r, scrollHeight);
 
             const firstOffset = dataset_row_st === r ? -2 : 0;
             const lastOffset = dataset_row_ed === r ? -2 : 0;
@@ -313,15 +309,11 @@ export class Canvas {
         renderCtx.textBaseline = defaultStyle.textBaseline;
         renderCtx.fillStyle = defaultStyle.fillStyle;
 
-        let dataset_col_st = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth);
-        let dataset_col_ed = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth + drawWidth);
-
-        if (dataset_col_st === -1) {
-            dataset_col_st = 0;
-        }
-        if (dataset_col_ed === -1) {
-            dataset_col_ed = this.sheetCtx.visibledatacolumn.length - 1;
-        }
+        const { start: dataset_col_st, end: dataset_col_ed } = headerVisibleRange(
+            this.sheetCtx.visibledatacolumn,
+            scrollWidth,
+            drawWidth,
+        );
 
         renderCtx.save();
         renderCtx.beginPath();
@@ -332,12 +324,8 @@ export class Canvas {
         let start_c = 0;
         let preEndC: number | undefined;
         for (let c = dataset_col_st; c <= dataset_col_ed; c += 1) {
-            if (c === 0) {
-                start_c = -scrollWidth;
-            } else {
-                start_c = this.sheetCtx.visibledatacolumn[c - 1] - scrollWidth;
-            }
-            end_c = this.sheetCtx.visibledatacolumn[c] - scrollWidth;
+            start_c = colStartX(this.sheetCtx.visibledatacolumn, c, scrollWidth);
+            end_c = colEndX(this.sheetCtx.visibledatacolumn, c, scrollWidth);
 
             const abc = indexToColumnChar(c);
             // Triggered before column header cell render; return false to skip
@@ -486,56 +474,26 @@ export class Canvas {
         }
 
         // Table render area: start/end row/column indices
-        let rowStart: number;
-        let rowEnd: number;
-        let colStart: number;
-        let colEnd: number;
-
-        rowStart = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
-        rowEnd = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight + drawHeight);
-
-        if (rowStart === -1) {
-            rowStart = 0;
-        }
-
-        rowStart += rowOffsetCell;
-
-        if (rowEnd === -1) {
-            rowEnd = this.sheetCtx.visibledatarow.length - 1;
-        }
-
-        rowEnd += rowOffsetCell;
-
-        if (rowEnd >= this.sheetCtx.visibledatarow.length) {
-            rowEnd = this.sheetCtx.visibledatarow.length - 1;
-        }
-
-        colStart = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth);
-        colEnd = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth + drawWidth);
-
-        if (colStart === -1) {
-            colStart = 0;
-        }
-
-        colStart += columnOffsetCell;
-
-        if (colEnd === -1) {
-            colEnd = this.sheetCtx.visibledatacolumn.length - 1;
-        }
-
-        colEnd += columnOffsetCell;
-
-        if (colEnd >= this.sheetCtx.visibledatacolumn.length) {
-            colEnd = this.sheetCtx.visibledatacolumn.length - 1;
-        }
+        const { start: rowStart, end: rowEnd } = mainVisibleRange(
+            this.sheetCtx.visibledatarow,
+            scrollHeight,
+            drawHeight,
+            rowOffsetCell,
+        );
+        const { start: colStart, end: colEnd } = mainVisibleRange(
+            this.sheetCtx.visibledatacolumn,
+            scrollWidth,
+            drawWidth,
+            columnOffsetCell,
+        );
 
         // Table render area: start/end coordinates
-        const rowEndY = this.sheetCtx.visibledatarow[rowEnd];
-        const colEndX = this.sheetCtx.visibledatacolumn[colEnd];
+        const lastRowBottom = this.sheetCtx.visibledatarow[rowEnd];
+        const lastColRight = this.sheetCtx.visibledatacolumn[colEnd];
 
         // Initialize table canvas area
         renderCtx.fillStyle = '#ffffff';
-        renderCtx.fillRect(offsetLeft - 1, offsetTop - 1, colEndX - scrollWidth, rowEndY - scrollHeight);
+        renderCtx.fillRect(offsetLeft - 1, offsetTop - 1, lastColRight - scrollWidth, lastRowBottom - scrollHeight);
         renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
         renderCtx.fillStyle = defaultStyle.fillStyle;
 
@@ -557,18 +515,16 @@ export class Canvas {
         this.sheetCtx.hooks.beforeRenderCellArea?.(flowdata, renderCtx);
 
         for (let r = rowStart; r <= rowEnd; r += 1) {
-            const startY = r === 0 ? -scrollHeight - 1 : this.sheetCtx.visibledatarow[r - 1] - scrollHeight - 1;
-
-            const endY = this.sheetCtx.visibledatarow[r] - scrollHeight;
+            const startY = rowStartY(this.sheetCtx.visibledatarow, r, scrollHeight);
+            const endY = rowEndY(this.sheetCtx.visibledatarow, r, scrollHeight);
 
             if (this.sheetCtx.config?.rowhidden?.[r] != null) {
                 continue;
             }
 
             for (let c = colStart; c <= colEnd; c += 1) {
-                const startX = c === 0 ? -scrollWidth : this.sheetCtx.visibledatacolumn[c - 1] - scrollWidth;
-
-                const endX = this.sheetCtx.visibledatacolumn[c] - scrollWidth;
+                const startX = colStartX(this.sheetCtx.visibledatacolumn, c, scrollWidth);
+                const endX = colEndX(this.sheetCtx.visibledatacolumn, c, scrollWidth);
 
                 if (this.sheetCtx.config?.colhidden?.[c] != null) {
                     continue;
@@ -728,20 +684,10 @@ export class Canvas {
                 continue;
             }
 
-            if (c === 0) {
-                startX = -scrollWidth;
-            } else {
-                startX = this.sheetCtx.visibledatacolumn[c - 1] - scrollWidth;
-            }
-
-            if (r === 0) {
-                startY = -scrollHeight - 1;
-            } else {
-                startY = this.sheetCtx.visibledatarow[r - 1] - scrollHeight - 1;
-            }
-
-            endY = this.sheetCtx.visibledatarow[r + mainCell.mc.rs - 1] - scrollHeight;
-            endX = this.sheetCtx.visibledatacolumn[c + mainCell.mc.cs - 1] - scrollWidth;
+            startX = colStartX(this.sheetCtx.visibledatacolumn, c, scrollWidth);
+            startY = rowStartY(this.sheetCtx.visibledatarow, r, scrollHeight);
+            endY = rowEndY(this.sheetCtx.visibledatarow, r + mainCell.mc.rs - 1, scrollHeight);
+            endX = colEndX(this.sheetCtx.visibledatacolumn, c + mainCell.mc.cs - 1, scrollWidth);
 
             if (value == null || value.toString().length === 0) {
                 this.nullCellRender(pass, r, c, startY, startX, endY, endX, true);
@@ -837,10 +783,10 @@ export class Canvas {
         // Clear right gray area when last column is rendered to prevent overflow
         if (colEnd === this.sheetCtx.visibledatacolumn.length - 1) {
             renderCtx.clearRect(
-                colEndX - scrollWidth + offsetLeft - 1,
+                lastColRight - scrollWidth + offsetLeft - 1,
                 offsetTop - 1,
                 this.sheetCtx.ch_width - this.sheetCtx.visibledatacolumn[colEnd],
-                rowEndY - scrollHeight,
+                lastRowBottom - scrollHeight,
             );
         }
 
@@ -1017,10 +963,8 @@ export class Canvas {
                     });
                     const textMetrics = textMetricsObj?.textWidthAll ?? 0;
 
-                    // canvas.measureText(value).width;
-
-                    const startX = c - 1 < 0 ? 0 : this.sheetCtx.visibledatacolumn[c - 1];
-                    const endX = this.sheetCtx.visibledatacolumn[c];
+                    const startX = colStartX(this.sheetCtx.visibledatacolumn, c, 0);
+                    const endX = colEndX(this.sheetCtx.visibledatacolumn, c, 0);
 
                     let stc = c;
                     let edc = c;
@@ -1646,13 +1590,10 @@ export class Canvas {
     private cellOverflowRender(pass: RenderPass, r: number, c: number, stc: number, edc: number) {
         const { renderCtx, scrollHeight, scrollWidth, offsetLeft, offsetTop, cfCompute, flowdata } = pass;
         // Overflow cell start/end row/column coordinates
-        const startY = r === 0 ? -scrollHeight - 1 : this.sheetCtx.visibledatarow[r - 1] - scrollHeight - 1;
-
-        const endY = this.sheetCtx.visibledatarow[r] - scrollHeight;
-
-        const startX = stc === 0 ? -scrollWidth : this.sheetCtx.visibledatacolumn[stc - 1] - scrollWidth;
-
-        const endX = this.sheetCtx.visibledatacolumn[edc] - scrollWidth;
+        const startY = rowStartY(this.sheetCtx.visibledatarow, r, scrollHeight);
+        const endY = rowEndY(this.sheetCtx.visibledatarow, r, scrollHeight);
+        const startX = colStartX(this.sheetCtx.visibledatacolumn, stc, scrollWidth);
+        const endX = colEndX(this.sheetCtx.visibledatacolumn, edc, scrollWidth);
 
         const cell = flowdata[r][c];
         const cellWidth = endX - startX - 2;
@@ -1738,8 +1679,8 @@ export class Canvas {
             };
         }
 
-        let start_curC = curC - 1 < 0 ? 0 : this.sheetCtx.visibledatacolumn[curC - 1];
-        let end_curC = this.sheetCtx.visibledatacolumn[curC];
+        let start_curC = colStartX(this.sheetCtx.visibledatacolumn, curC, 0);
+        let end_curC = colEndX(this.sheetCtx.visibledatacolumn, curC, 0);
 
         const w = textMetrics - (end_curC - start_curC);
 
@@ -1755,8 +1696,8 @@ export class Canvas {
             start_curC -= w;
         }
 
-        const start_traceC = traceC - 1 < 0 ? 0 : this.sheetCtx.visibledatacolumn[traceC - 1];
-        const end_traceC = this.sheetCtx.visibledatacolumn[traceC];
+        const start_traceC = colStartX(this.sheetCtx.visibledatacolumn, traceC, 0);
+        const end_traceC = colEndX(this.sheetCtx.visibledatacolumn, traceC, 0);
 
         if (traceDir === 'forward') {
             if (start_curC < start_traceC) {
