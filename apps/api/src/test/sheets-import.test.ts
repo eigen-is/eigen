@@ -1060,6 +1060,27 @@ describe('Sheets xlsx import/convert', () => {
         expect(rules['3_0']).toMatchObject({ hintShow: false, hintValue: '' });
     });
 
+    test('convert clamps validation emission to the used extent plus a margin', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Sheet1');
+        for (let i = 1; i <= 5; i++) worksheet.getCell(`A${i}`).value = `row${i}`;
+        // Range-level rules round-trip through write→read as one pre-expanded model
+        // entry per cell — a column-wide rule ("C1:C1048576") would otherwise emit
+        // ~1M rule objects into the snapshot. `dataValidations` is missing from
+        // exceljs's typings, same as `conditionalFormattings`.
+        (
+            worksheet as unknown as { dataValidations: { add: (range: string, dv: ExcelJS.DataValidation) => void } }
+        ).dataValidations.add('C1:C5000', { type: 'list', allowBlank: true, formulae: ['"Yes,No"'] });
+        const sheets = await convertWorkbook(workbook, 'dv-clamp.xlsx');
+
+        const rules = sheets[0].dataVerification ?? {};
+        // rowCount is 5 → rules survive up to 0-based row 1004 (5 + 1000-row margin).
+        expect(rules['0_2']).toMatchObject({ type: 'dropdown', value1: 'Yes,No' });
+        expect(rules['1004_2']).toMatchObject({ type: 'dropdown', value1: 'Yes,No' });
+        expect(rules['1005_2']).toBeUndefined();
+        expect(Object.keys(rules).length).toBe(1005);
+    });
+
     test('import into another user document without write permission returns 403', async () => {
         const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
         const sheetsDoc = await uploadAndConvert(initial, 'alice.xlsx');
