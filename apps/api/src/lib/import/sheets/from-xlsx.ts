@@ -5,13 +5,14 @@ import type {
     CellBorderInfo,
     ConditionalFormatConditionName,
     ConditionalFormatRule,
+    DataVerificationRule,
     DefaultConditionalFormatRule,
     Cell as FortuneCell,
     Sheet,
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { functionCopy, parseA1Range, toA1, update } from '@workspace/sheet/engine';
+import { functionCopy, iscelldata, parseA1Range, toA1, update } from '@workspace/sheet/engine';
 import type {
     Alignment,
     AutoFilter,
@@ -225,6 +226,9 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
 
     const conditionalFormatRules = convertConditionalFormats(worksheet, theme);
     if (conditionalFormatRules.length > 0) sheet.conditionalFormatRules = conditionalFormatRules;
+
+    const dataVerification = convertDataValidations(worksheet);
+    if (Object.keys(dataVerification).length > 0) sheet.dataVerification = dataVerification;
 
     return sheet;
 }
@@ -514,6 +518,164 @@ function autoFilterToFilterRange(autoFilter: AutoFilter | undefined): SingleRang
         typeof a === 'string' ? a : toA1(a.row - 1, a.column - 1);
     const ref = typeof autoFilter === 'string' ? autoFilter : `${toRef(autoFilter.from)}:${toRef(autoFilter.to)}`;
     return a1ToSingleRange(ref);
+}
+
+// Loose shape of a parsed <dataValidation>. `worksheet.dataValidations.model` is a real
+// property (lib/doc/worksheet.js) missing from exceljs's typings — same situation as
+// `conditionalFormattings`. It maps cell addresses to rules with sqref ranges
+// pre-expanded to per-cell keys, all cells of a range sharing ONE rule object. exceljs
+// pre-coerces formulae on read: whole/textLength → parseInt, decimal → parseFloat,
+// date → JS Date, list/custom → raw formula string; `operator` defaults to 'between'
+// for the operand-carrying types.
+type XlsxDataValidation = {
+    type: string;
+    operator?: string;
+    formulae?: unknown[];
+    showInputMessage?: boolean;
+    showErrorMessage?: boolean;
+    prompt?: string;
+    errorStyle?: string;
+};
+
+const DV_TYPE: Record<string, string> = {
+    list: 'dropdown',
+    whole: 'number_integer',
+    // Excel "decimal" accepts ANY real number, like the engine's `number` type;
+    // the engine's `number_decimal` rejects integers and would block typing 5
+    // into a "decimal between 1..10" cell.
+    decimal: 'number',
+    textLength: 'text_length',
+    date: 'date',
+};
+
+// xlsx operator → engine type2 (see DataVerificationRule in @workspace/lib/sheets).
+const DV_OPERATOR: Record<string, string> = {
+    between: 'between',
+    notBetween: 'notBetween',
+    equal: 'equal',
+    notEqual: 'notEqualTo',
+    greaterThan: 'moreThanThe',
+    lessThan: 'lessThan',
+    greaterThanOrEqual: 'greaterOrEqualTo',
+    lessThanOrEqual: 'lessThanOrEqualTo',
+};
+
+const DV_DATE_OPERATOR: Record<string, string> = {
+    ...DV_OPERATOR,
+    greaterThan: 'laterThan',
+    lessThan: 'earlierThan',
+    greaterThanOrEqual: 'noEarlierThan',
+    lessThanOrEqual: 'noLaterThan',
+};
+
+// Column-wide validations ("D2:D1048576") are common in real workbooks, and exceljs
+// pre-expands the sqref to one model entry per cell — emitting a rule object for each
+// would put a multi-hundred-MB dataVerification map into the snapshot JSON while the
+// converted grid only covers the data extent anyway. DV-only blank rows below the data
+// are a legit pattern (pre-validated entry rows), hence the generous margins.
+const DV_ROW_MARGIN = 1000;
+const DV_COL_MARGIN = 100;
+
+function convertDataValidations(worksheet: Worksheet): NonNullable<Sheet['dataVerification']> {
+    const model =
+        (worksheet as unknown as { dataValidations?: { model?: Record<string, XlsxDataValidation> } }).dataValidations
+            ?.model ?? {};
+
+    // rowCount/columnCount are bounded by the row/cell elements present in the file
+    // (the structural extent the rest of the converter trusts, e.g. the rowhidden pass).
+    const maxRow = worksheet.rowCount + DV_ROW_MARGIN;
+    const maxCol = worksheet.columnCount + DV_COL_MARGIN;
+    const rules: NonNullable<Sheet['dataVerification']> = {};
+    for (const [address, dv] of Object.entries(model)) {
+        // Model keys are single-cell addresses (ranges arrive pre-expanded).
+        const parsed = parseA1Range(address);
+        if (!parsed) continue;
+        if (parsed.start.row >= maxRow || parsed.start.col >= maxCol) continue;
+        // Mapping per entry yields a fresh rule object per cell key — exceljs aliases
+        // one object across an expanded range, and the engine mutates rules in place.
+        const rule = mapDataValidation(dv);
+        if (!rule) continue;
+        rules[`${parsed.start.row}_${parsed.start.col}`] = rule;
+    }
+    return rules;
+}
+
+function mapDataValidation(dv: XlsxDataValidation): DataVerificationRule | null {
+    const type = DV_TYPE[dv.type];
+    if (type == null) return null; // custom / any have no engine equivalent
+
+    const rule: DataVerificationRule = {
+        type,
+        type2: '',
+        value1: '',
+        value2: '',
+        checked: false,
+        // showErrorMessage with Excel's default "stop" style blocks invalid input;
+        // warning/information let the value through. The error text itself is dropped —
+        // the engine generates its own failure copy.
+        prohibitInput: dv.showErrorMessage === true && (dv.errorStyle == null || dv.errorStyle === 'stop'),
+        hintShow: false,
+        hintValue: '',
+    };
+    if (dv.showInputMessage && dv.prompt) {
+        rule.hintShow = true;
+        rule.hintValue = dv.prompt;
+    }
+
+    if (type === 'dropdown') {
+        // type2 '' is the dialog's single-select value (multi-select is 'true');
+        // Excel dropdowns are always single-select.
+        const source = listSource(dv.formulae?.[0]);
+        if (source == null) return null;
+        rule.value1 = source;
+        return rule;
+    }
+
+    const operator = dv.operator ?? 'between';
+    const type2 = (type === 'date' ? DV_DATE_OPERATOR : DV_OPERATOR)[operator];
+    if (type2 == null) return null;
+    rule.type2 = type2;
+
+    const toOperand = type === 'date' ? dateOperand : numericOperand;
+    const value1 = toOperand(dv.formulae?.[0]);
+    if (value1 == null) return null;
+    rule.value1 = value1;
+    if (operator === 'between' || operator === 'notBetween') {
+        const value2 = toOperand(dv.formulae?.[1]);
+        if (value2 == null) return null;
+        rule.value2 = value2;
+    }
+    return rule;
+}
+
+// exceljs's read coercion turns a non-literal operand (e.g. a cell ref) into NaN —
+// there is no literal to validate against, so the caller drops the rule.
+function numericOperand(raw: unknown): string | null {
+    return typeof raw === 'number' && !Number.isNaN(raw) ? String(raw) : null;
+}
+
+// Date operands arrive as JS Dates built from the serial in UTC terms (excelToDate).
+// The engine's validateCellData parses value1/value2 with isdatetime + dayjs, which
+// accept YYYY-MM-DD.
+function dateOperand(raw: unknown): string | null {
+    if (!(raw instanceof Date) || Number.isNaN(raw.getTime())) return null;
+    const month = String(raw.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(raw.getUTCDate()).padStart(2, '0');
+    return `${raw.getUTCFullYear()}-${month}-${day}`;
+}
+
+// A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-list form; anything
+// else is kept as a live range ref when valid — getDropdownList resolves refs (incl.
+// quoted cross-sheet names) natively, so source edits keep propagating. Defined names
+// are dropped program-wide; a garbage one-option dropdown is worse than no rule.
+function listSource(raw: unknown): string | null {
+    if (typeof raw !== 'string' || raw.length === 0) return null;
+    if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
+        const inner = raw.slice(1, -1).replace(/""/g, '"');
+        return inner.length > 0 ? inner : null;
+    }
+    const ref = raw.startsWith('=') ? raw.slice(1) : raw;
+    return iscelldata(ref) ? ref : null;
 }
 
 function buildMergeStructures(merges: string[]): {

@@ -232,4 +232,8 @@ export type Sheet = {
     // state/types.ts); a criteria-less filter — what a fresh enable writes and all
     // the xlsx importer emits — is just this range.
     filterRange?: SingleRange;
+    // Data-validation rules keyed "r_c" (0-based). Written by the editor's
+    // DataVerification dialog and the xlsx importer; the runtime (cell focus,
+    // updateCell, canvas painter) reads them straight off the sheet.
+    dataVerification?: Record<string, DataVerificationRule>;
 };
