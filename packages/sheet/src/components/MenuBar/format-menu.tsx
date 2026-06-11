@@ -7,6 +7,7 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { Check } from 'lucide-react';
 import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
@@ -34,15 +35,27 @@ import {
 } from '../../state';
 import { ConditionRules } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
-import { FormatSearch } from '../FormatSearch';
+import { CustomCurrencies } from '../FormatDialogs/CustomCurrencies';
+import { CustomDateTimeFormats } from '../FormatDialogs/CustomDateTimeFormats';
+import { CustomNumberFormats } from '../FormatDialogs/CustomNumberFormats';
+import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 import { CustomBorder } from './CustomBorder';
 
 function NumberFormatSubmenu() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
-    const { showDialog, hideDialog } = useDialog();
+    const { showDialog } = useDialog();
     const toolbarFormat = locale(context).format;
     const { currency } = settings;
     const defaultFormat = locale(context).defaultFmt(currency);
+
+    const anchor = useAnchorCell();
+    const activeFa = anchor?.ct?.fa ?? 'General';
+
+    const customItems = [
+        { text: toolbarFormat.customCurrency, dialog: <CustomCurrencies /> },
+        { text: toolbarFormat.customDateTime, dialog: <CustomDateTimeFormats /> },
+        { text: toolbarFormat.customNumber, dialog: <CustomNumberFormats /> },
+    ];
 
     return (
         <DropdownMenuSub>
@@ -52,36 +65,6 @@ function NumberFormatSubmenu() {
                     if (value === 'split') {
                         // biome-ignore lint/suspicious/noArrayIndexKey: separator in static defaultFormat list
                         return <DropdownMenuSeparator key={`split-${ii}`} />;
-                    }
-                    if (value === 'fmtOtherSelf') {
-                        return (
-                            <DropdownMenuSub key={value}>
-                                <DropdownMenuSubTrigger>{text}</DropdownMenuSubTrigger>
-                                <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
-                                    <DropdownMenuItem
-                                        onClick={() => {
-                                            showDialog(<FormatSearch onCancel={hideDialog} type="currency" />);
-                                        }}
-                                    >
-                                        {toolbarFormat.moreCurrency}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => {
-                                            showDialog(<FormatSearch onCancel={hideDialog} type="number" />);
-                                        }}
-                                    >
-                                        {toolbarFormat.moreNumber}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => {
-                                            showDialog(<FormatSearch onCancel={hideDialog} type="date" />);
-                                        }}
-                                    >
-                                        {toolbarFormat.moreDateTime}
-                                    </DropdownMenuItem>
-                                </DropdownMenuSubContent>
-                            </DropdownMenuSub>
-                        );
                     }
                     return (
                         <DropdownMenuItem
@@ -94,13 +77,21 @@ function NumberFormatSubmenu() {
                                 });
                             }}
                         >
-                            <div className="flex items-center justify-between w-full">
-                                <span>{text}</span>
-                                <span className="text-xs opacity-50 pl-6">{example}</span>
-                            </div>
+                            <span className="flex w-4 shrink-0 items-center justify-center">
+                                {value === activeFa && <Check className="size-4" />}
+                            </span>
+                            <span>{text}</span>
+                            <span className="ml-auto pl-6 text-xs opacity-50">{example}</span>
                         </DropdownMenuItem>
                     );
                 })}
+                <DropdownMenuSeparator />
+                {customItems.map(({ text, dialog }) => (
+                    <DropdownMenuItem key={text} onClick={() => showDialog(dialog)}>
+                        <span className="w-4 shrink-0" />
+                        <span>{text}</span>
+                    </DropdownMenuItem>
+                ))}
             </DropdownMenuSubContent>
         </DropdownMenuSub>
     );
