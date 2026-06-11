@@ -7,6 +7,7 @@ import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import * as collabSchema from '../lib/collab/schema';
 import { loadYjsState } from '../lib/collab/yjs-loader';
 import { getHome } from '../lib/home/get-home';
+import { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { assertJson, authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -27,6 +28,7 @@ async function buildXlsxBuffer(
         value: string | number | { formula: string; result?: string | number };
         fontSize?: number;
         border?: Partial<ExcelJS.Borders>;
+        dataValidation?: ExcelJS.DataValidation;
     }[],
     sheetName = 'Sheet1',
     merges: string[] = [],
@@ -34,11 +36,12 @@ async function buildXlsxBuffer(
 ): Promise<ArrayBuffer> {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(sheetName);
-    for (const { a1, value, fontSize, border } of cells) {
+    for (const { a1, value, fontSize, border, dataValidation } of cells) {
         const cell = worksheet.getCell(a1);
         cell.value = value;
         if (fontSize) cell.font = { size: fontSize };
         if (border) cell.border = border;
+        if (dataValidation) cell.dataValidation = dataValidation;
     }
     for (const range of merges) {
         worksheet.mergeCells(range);
@@ -880,6 +883,179 @@ describe('Sheets xlsx import/convert', () => {
             },
         ]);
         expect(sheets[1].conditionalFormatRules).toBeUndefined();
+    });
+
+    test('convert imports literal-list data validations as one dropdown rule per cell', async () => {
+        const listRule: ExcelJS.DataValidation = { type: 'list', allowBlank: true, formulae: ['"Red,Green,Blue"'] };
+        const buffer = await buildXlsxBuffer([
+            { a1: 'A1', value: 'plain' },
+            { a1: 'B2', value: 'Red', dataValidation: listRule },
+            { a1: 'B3', value: 'Green', dataValidation: listRule },
+            { a1: 'B4', value: '', dataValidation: listRule },
+        ]);
+        const sheets = await convertBuffer(buffer, 'dv-list.xlsx');
+
+        // sqref ranges arrive pre-expanded to per-cell keys; value1 holds the literal
+        // with the outer quotes stripped; type2 '' is the dialog's single-select value.
+        const expected = {
+            type: 'dropdown',
+            type2: '',
+            value1: 'Red,Green,Blue',
+            value2: '',
+            checked: false,
+            prohibitInput: false,
+            hintShow: false,
+            hintValue: '',
+        };
+        expect(sheets[0].dataVerification).toEqual({ '1_1': expected, '2_1': expected, '3_1': expected });
+    });
+
+    test('convert clones the shared exceljs validation object per cell key', async () => {
+        // exceljs expands a sqref range to per-cell model entries that all alias ONE
+        // rule object; the engine mutates rules in place (checkboxChange), so the
+        // converter must emit a fresh object per key. JSON snapshot round-trips would
+        // mask aliasing — assert on the converter output directly.
+        const listRule: ExcelJS.DataValidation = { type: 'list', allowBlank: true, formulae: ['"A,B"'] };
+        const buffer = await buildXlsxBuffer([
+            { a1: 'B2', value: 'A', dataValidation: listRule },
+            { a1: 'B3', value: 'B', dataValidation: listRule },
+        ]);
+        const sheets = await xlsxToSheets(Buffer.from(buffer));
+        const rules = sheets[0].dataVerification;
+        if (!rules) throw new Error('expected dataVerification rules');
+        expect(rules['1_1']).toEqual(rules['2_1']);
+        expect(rules['1_1']).not.toBe(rules['2_1']);
+    });
+
+    test('convert keeps range-ref list sources verbatim for live cross-sheet resolution', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const main = workbook.addWorksheet('Main');
+        main.getCell('C1').value = 'pick';
+        main.getCell('C1').dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            formulae: ["'Other Sheet'!$B$1:$B$5"],
+        };
+        const other = workbook.addWorksheet('Other Sheet');
+        for (let i = 1; i <= 5; i++) other.getCell(`B${i}`).value = `Option ${i}`;
+        const sheets = await convertWorkbook(workbook, 'dv-ref.xlsx');
+
+        // The engine's getDropdownList resolves range refs (incl. quoted sheet names)
+        // live, so source edits propagate — don't inline the values at import.
+        expect(sheets[0].dataVerification?.['0_2']).toMatchObject({
+            type: 'dropdown',
+            type2: '',
+            value1: "'Other Sheet'!$B$1:$B$5",
+        });
+        expect(sheets[1].dataVerification).toBeUndefined();
+    });
+
+    test('convert maps numeric, text-length and date validations onto engine types and operators', async () => {
+        const buffer = await buildXlsxBuffer([
+            {
+                a1: 'A1',
+                value: 5,
+                dataValidation: { type: 'whole', operator: 'between', allowBlank: true, formulae: [1, 10] },
+            },
+            {
+                a1: 'A2',
+                value: 3.5,
+                dataValidation: { type: 'decimal', operator: 'greaterThan', allowBlank: true, formulae: [2.5] },
+            },
+            {
+                a1: 'A3',
+                value: 'abc',
+                dataValidation: { type: 'textLength', operator: 'lessThanOrEqual', allowBlank: true, formulae: [5] },
+            },
+            {
+                a1: 'A4',
+                value: '',
+                dataValidation: {
+                    type: 'date',
+                    operator: 'between',
+                    allowBlank: true,
+                    formulae: [new Date(Date.UTC(2024, 0, 1)), new Date(Date.UTC(2024, 11, 31))],
+                },
+            },
+            {
+                a1: 'A5',
+                value: '',
+                dataValidation: {
+                    type: 'date',
+                    operator: 'greaterThan',
+                    allowBlank: true,
+                    formulae: [new Date(Date.UTC(2024, 5, 15))],
+                },
+            },
+        ]);
+        const sheets = await convertBuffer(buffer, 'dv-operators.xlsx');
+        const rules = sheets[0].dataVerification ?? {};
+
+        expect(rules['0_0']).toMatchObject({ type: 'number_integer', type2: 'between', value1: '1', value2: '10' });
+        expect(rules['1_0']).toMatchObject({ type: 'number_decimal', type2: 'moreThanThe', value1: '2.5', value2: '' });
+        expect(rules['2_0']).toMatchObject({ type: 'text_length', type2: 'lessThanOrEqualTo', value1: '5' });
+        // exceljs hands date operands over as JS Dates (excelToDate, UTC); the engine's
+        // validateCellData parses value1/value2 through isdatetime + dayjs → YYYY-MM-DD.
+        expect(rules['3_0']).toMatchObject({
+            type: 'date',
+            type2: 'between',
+            value1: '2024-01-01',
+            value2: '2024-12-31',
+        });
+        expect(rules['4_0']).toMatchObject({ type: 'date', type2: 'laterThan', value1: '2024-06-15', value2: '' });
+    });
+
+    test('convert skips custom, defined-name list and non-literal operand validations', async () => {
+        const buffer = await buildXlsxBuffer([
+            { a1: 'A1', value: 1, dataValidation: { type: 'custom', formulae: ['A1>0'] } },
+            // Defined names are dropped program-wide; a garbage one-option dropdown is
+            // worse than no rule.
+            { a1: 'A2', value: 'x', dataValidation: { type: 'list', allowBlank: true, formulae: ['MyNamedRange'] } },
+            // Cell-ref operand: exceljs's parseInt coercion yields NaN — no literal to
+            // validate against.
+            { a1: 'A3', value: 7, dataValidation: { type: 'whole', operator: 'greaterThan', formulae: ['$B$1'] } },
+            { a1: 'B1', value: 'Red', dataValidation: { type: 'list', allowBlank: true, formulae: ['"Red,Blue"'] } },
+        ]);
+        const sheets = await convertBuffer(buffer, 'dv-skips.xlsx');
+        expect(Object.keys(sheets[0].dataVerification ?? {})).toEqual(['0_1']);
+
+        const allSkipped = await buildXlsxBuffer([
+            { a1: 'A1', value: 1, dataValidation: { type: 'custom', formulae: ['A1>0'] } },
+        ]);
+        const skippedSheets = await convertBuffer(allSkipped, 'dv-all-skipped.xlsx');
+        expect(skippedSheets[0].dataVerification).toBeUndefined();
+    });
+
+    test('convert maps validation messages onto hint and prohibit-input flags', async () => {
+        const list: Pick<ExcelJS.DataValidation, 'type' | 'allowBlank' | 'formulae'> = {
+            type: 'list',
+            allowBlank: true,
+            formulae: ['"Yes,No"'],
+        };
+        const buffer = await buildXlsxBuffer([
+            {
+                a1: 'A1',
+                value: '',
+                dataValidation: { ...list, showInputMessage: true, promptTitle: 'Pick', prompt: 'Choose Yes or No' },
+            },
+            // showErrorMessage without errorStyle means Excel's default "stop" style →
+            // block invalid input. warning/information styles let the value through.
+            { a1: 'A2', value: '', dataValidation: { ...list, showErrorMessage: true, error: 'Invalid choice' } },
+            {
+                a1: 'A3',
+                value: '',
+                dataValidation: { ...list, showErrorMessage: true, errorStyle: 'warning', error: 'Are you sure?' },
+            },
+            { a1: 'A4', value: '', dataValidation: { ...list, showInputMessage: true } },
+        ]);
+        const sheets = await convertBuffer(buffer, 'dv-messages.xlsx');
+        const rules = sheets[0].dataVerification ?? {};
+
+        expect(rules['0_0']).toMatchObject({ hintShow: true, hintValue: 'Choose Yes or No', prohibitInput: false });
+        expect(rules['1_0']).toMatchObject({ hintShow: false, hintValue: '', prohibitInput: true });
+        expect(rules['2_0']).toMatchObject({ prohibitInput: false });
+        // showInputMessage without prompt text has nothing to show.
+        expect(rules['3_0']).toMatchObject({ hintShow: false, hintValue: '' });
     });
 
     test('import into another user document without write permission returns 403', async () => {
