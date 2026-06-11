@@ -7,7 +7,7 @@ import { useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { getFlowdata, locale, updateFormat } from '../../state';
+import { handleNumberFormat, locale } from '../../state';
 import { buildCurrencyPattern, CURRENCY_VARIANTS, type CurrencyVariantId } from './format-pattern';
 
 export function CustomCurrencies() {
@@ -24,16 +24,26 @@ export function CustomCurrencies() {
     // list — a prefilled or clicked symbol keeps the full list visible.
     const [query, setQuery] = useState('');
 
-    const currencies = useMemo(() => {
-        const sorted = [...currencyDetail].sort((a, b) => {
-            if (a.name === 'EUR') return -1;
-            if (b.name === 'EUR') return 1;
-            return a.name.localeCompare(b.name);
-        });
-        const needle = query.trim().toLowerCase();
-        if (!needle) return sorted;
-        return sorted.filter((c) => c.name.toLowerCase().includes(needle));
-    }, [currencyDetail, query]);
+    const allCurrencies = useMemo(
+        () =>
+            [...currencyDetail]
+                .sort((a, b) => {
+                    if (a.name === 'EUR') return -1;
+                    if (b.name === 'EUR') return 1;
+                    return a.name.localeCompare(b.name);
+                })
+                .map((c) => ({
+                    ...c,
+                    example: update(
+                        buildCurrencyPattern(c.value, c.pos === 'after' ? 'symbolLast' : 'symbolFirst'),
+                        1000.12,
+                    ),
+                })),
+        [currencyDetail],
+    );
+
+    const needle = query.trim().toLowerCase();
+    const currencies = needle ? allCurrencies.filter((c) => c.name.toLowerCase().includes(needle)) : allCurrencies;
 
     const selectCurrency = (currency: { name: string; pos?: string; value: string }) => {
         const rounded = variantId === 'symbolFirstRounded' || variantId === 'symbolLastRounded';
@@ -54,9 +64,7 @@ export function CustomCurrencies() {
     const apply = () => {
         const fa = buildCurrencyPattern(symbol, variantId);
         setContext((ctx) => {
-            const d = getFlowdata(ctx);
-            if (d == null) return;
-            updateFormat(ctx, refs.cellInput.current!, d, 'ct', fa);
+            handleNumberFormat(ctx, refs.cellInput.current!, fa);
         });
         hideDialog();
     };
@@ -101,15 +109,7 @@ export function CustomCurrencies() {
                         tabIndex={0}
                     >
                         <span>{currency.name}</span>
-                        <span className="text-muted-foreground">
-                            {update(
-                                buildCurrencyPattern(
-                                    currency.value,
-                                    currency.pos === 'after' ? 'symbolLast' : 'symbolFirst',
-                                ),
-                                1000.12,
-                            )}
-                        </span>
+                        <span className="text-muted-foreground">{currency.example}</span>
                     </div>
                 ))}
             </div>

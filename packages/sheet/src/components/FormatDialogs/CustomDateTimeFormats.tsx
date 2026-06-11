@@ -14,7 +14,7 @@ import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { is_date } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { getFlowdata, locale, updateFormat } from '../../state';
+import { handleNumberFormat, locale } from '../../state';
 import {
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
@@ -97,9 +97,7 @@ export function CustomDateTimeFormats() {
 
     const apply = () => {
         setContext((ctx) => {
-            const d = getFlowdata(ctx);
-            if (d == null) return;
-            updateFormat(ctx, refs.cellInput.current!, d, 'ct', pattern);
+            handleNumberFormat(ctx, refs.cellInput.current!, pattern);
         });
         hideDialog();
     };
