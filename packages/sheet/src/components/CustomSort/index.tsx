@@ -1,6 +1,6 @@
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { DialogFooter } from '@workspace/ui/components/dialog';
+import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -48,8 +48,11 @@ export function CustomSort() {
     }, [col_end, col_start, context.sheets, isTitleChange, row_start, sheetIndex, sort.columnOperation]);
 
     return (
-        <>
-            <div className="text-base mb-4">
+        <div className="flex flex-col gap-4">
+            <DialogHeader>
+                <DialogTitle>{sort.custom}</DialogTitle>
+            </DialogHeader>
+            <div className="text-sm">
                 <span>
                     <span>{sort.sortRangeTitle}</span>
                     {indexToColumnChar(col_start)}
@@ -115,6 +118,6 @@ export function CustomSort() {
                     {sort.confirm}
                 </Button>
             </DialogFooter>
-        </>
+        </div>
     );
 }
