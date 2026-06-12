@@ -38,6 +38,9 @@
 - **Generic cross-domain activity feed.** Mail, calendar, contacts each have their
   own timeline shapes; this proposal is *Drive-paths only*. A future *Recent
   activity* in Space app can union the per-mount logs but isn't part of v1.
+  Per-user **recents** (recently opened files, recently used addresses) are the
+  *viewer-side* sibling — private LRU, not a shared timeline — designed in
+  [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md).
 - **Replay / undo.** History is descriptive, not reversible. Yjs `doc_updates`
   keep the byte-level revisions for collab docs; that's an orthogonal concern.
 - **Per-event subscription filters.** Watch is on/off per path; users don't pick
@@ -211,7 +214,10 @@ mutation methods (`createFolder`, `create`, `uploadFiles`, `createFileFromData`,
 `deletePath`, `restorePath`, `permanentlyDelete`, `emptyTrash`, `movePath`,
 `renamePath`, `copyPath`, `writeFileContent`) need an optional `user: User`
 parameter — `Drive.create` already carries a partial `createdBy?: string`; fold it
-into the new param rather than carrying both. Version restore is a thirteenth
+into the new param rather than carrying both, and upgrade `updateACL`'s existing
+`{ name, email } | null` actor to the full `User` (history needs `actorUserId`; the
+viewer-side recents touch in [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md)
+rides the same threading). Version restore is a thirteenth
 threading site (`SharedDrive.restoreContainer → Drive.restoreContainer →
 versioning/restore.ts` takes no user today); thread it or record at the route.
 `SharedDrive` wrappers already hold `this.user` (the request caller) and thread it
@@ -319,7 +325,7 @@ A small `useRecordHistory(ownerId, mountId, pathId)` hook in
 ```
 POST   /drive/:ownerId/mounts/:mountId/paths/:pathId/watch    Watch (caller has read access)
 DELETE /drive/:ownerId/mounts/:mountId/paths/:pathId/watch    Unwatch
-GET    /drive/:ownerId/mounts/:mountId/paths/:pathId/watch    Is watched? (caller scope)
+GET    /drive/:ownerId/mounts/:mountId/paths/:pathId/watch    Is watched? → { direct, viaAncestor? }
 GET    /drive/:ownerId/mounts/:mountId/paths/:pathId/history  Paginated timeline (read access)
                                                               ?limit= &before=ISO
 GET    /drive/:ownerId/watches                                The caller's watches on this owner's mounts
@@ -443,13 +449,15 @@ add `'file-event'` to `isClickableNotification`, and add the case to
 calling the existing `driveApi(...).path({pathId}).get()` → `getDriveItemUrl(path)`
 flow).
 
-### Deep-linking with the history panel open
+### Click-through
 
-`getDocumentUrl()` (and the `get*Url` helpers it delegates to) doesn't currently
-accept query params. The simplest path: append `?showHistory=1` post-hoc in
-`resolveNotificationLink` for the `file-event` case, and have each Eigendoc app's
-root route effect read the param on mount and open the activity panel. One extra
-line per Eigendoc app shell; no helper-API changes.
+A `file-event` notification lands where the user actually wants to look. For
+collab docs, navigate to the document itself (existing `getDocumentUrl()` flow) —
+you click "Alice edited Roadmap" to see the roadmap, not a metadata panel. For
+plain-file and folder events (renamed, moved, uploaded, ACL), navigate to Drive
+with the item selected and `?showHistory=1` appended; Drive's route reads the
+param and opens the details sidebar — there the event list *is* the payload. No
+per-Eigendoc-app param handling, no helper-API changes.
 
 ## Email channel (per home)
 
@@ -457,10 +465,14 @@ The notification rows **are** the email queue — email is a second delivery cha
 over the same per-home fact, not a parallel pipeline. No outbox table, no
 server-level composing, nothing that can drift.
 
-Storage is a v2 migration on the per-user `notifications.db`: a single-row
-`notification_settings` table (`watchEmailCadence: 'never' | 'immediate' | 'daily'`,
-default `'never'`, plus a `lastDigestAt` watermark) and a nullable `emailedAt`
-column on `notifications` (immediate-send throttle marker, survives restarts).
+The cadence preference lives in the existing per-user `UserSettings` JsonStore
+(`settings.json` on `UserHome`, served by `GET/PUT /space/:ownerId/settings` with
+`useSpaceSettings` already wired) as an additive field — no migration:
+`notifications?: { watchEmailCadence?: 'never' | 'immediate' | 'daily' }`, absent =
+`never`. Operational state is a v2 migration on the per-user `notifications.db`: a
+nullable `emailedAt` column on `notifications` (per-row email marker — the
+tag-upsert leaves it untouched) and a `digest_state` single-row table
+(`lastDigestAt`, gating the daily wave).
 
 - **Immediate**: the relay delivery path that just called `persist()` has the
   watcher's home open. It reads the home's own cadence and, if `immediate` and the
@@ -473,13 +485,16 @@ column on `notifications` (immediate-send throttle marker, survives restarts).
   a home is a full `Home.init`, so a 24×/day sweep just to read `'never'` would be
   wasteful; the tick's fire-at-startup is absorbed by the guard) — and asks each
   home, through the home-relay seam, to `flushEmailDigest()`. The home reads its
-  own cadence and watermark, queries its own **unread** `file-event` rows since
-  `lastDigestAt`, composes one digest (grouped per file, deep links), sends, and
-  advances the watermark to the query-snapshot time. The guard
-  `now ≥ today's digest hour && lastDigestAt < today's digest hour` self-heals
-  missed ticks after downtime. Switching cadence to `daily` initializes the
-  watermark to `now` (no backlog dump). Read-in-app means skipped-in-email — mail
-  only covers what the user actually missed.
+  cadence from `home.settings`, selects its own **unread** `file-event` rows from
+  the last 24 h that carry activity since their last mail
+  (`emailedAt IS NULL OR emailedAt < createdAt`), composes one digest (grouped per
+  file, deep links), sends, and stamps `emailedAt` on the included rows. Per-row
+  `emailedAt` replaces a selection watermark: no init problem (the 24 h cap means
+  enabling `daily` can't dump an old backlog) and no mid-compose race. The
+  `digest_state.lastDigestAt` guard
+  (`now ≥ today's digest hour && lastDigestAt < today's digest hour`) gates the
+  wave and self-heals missed ticks after downtime. Read-in-app means
+  skipped-in-email — mail only covers what the user actually missed.
 
 Delivery targets the user's verified secondary email address when present
 (separate account-level feature), else the primary address. Known trade-off: tag
@@ -504,10 +519,18 @@ existing Eigen verbs. Backend matches: `path_watchers` table, `Watchers` domain 
 | Drive details sidebar — header strip  | Bell button next to share button                       |
 | Drive details sidebar — *Recent Activity* footer | Inline "You're watching this · Stop watching" link |
 
-`DriveItemMenuItems` is the single source for per-item actions across Drive and the
-Eigendoc apps, so adding one menu item lights up all of them. The toolbar bell is a
-new `TooltipButton` (its `active` prop already toggles filled/outline rendering),
-sourced from a shared `<WatchToggleButton>` in `packages/ui/src/components/layout/`.
+`DriveItemMenuItems` renders in two places — the Drive table's row context menu
+(right-click + the row's `⋯` button, `drive-table.tsx`) and the details sidebar's
+*More* dropdown (`drive-detail.tsx`) — so one menu item covers both. The Eigendoc
+editors' toolbar `FileMenu` is a separate component and deliberately gets no menu
+item: the toolbar bell is the watch surface there. The bell is a `TooltipButton`
+(its `active` prop already toggles filled/outline rendering), sourced from a
+shared `<WatchToggleButton>` in `packages/ui/src/components/layout/`, toggling
+optimistically with revert on error. The bell shows only a *direct* watch — for a
+path covered by an ancestor watch, the is-watched response carries the covering
+ancestor and the tooltip reads "Watching via *{folder}*" (a filled bell the user
+can't toggle off would lie; a redundant direct watch is harmless — fan-out
+dedupes).
 
 ### Recent Activity in the properties panel
 
@@ -543,6 +566,9 @@ and for folders, events on any descendant.
 Avatar via existing `UserAvatar`, time via `formatTimeAgo`, per-event icon and verb
 mapping in `packages/lib/src/core/drive/history-display.ts`. Rendering rules:
 
+- For a selected **file**, rows omit the file name (*"Laurens edited · 2 min ago"*) —
+  the name is already the panel's title. For **folders**, rows name the descendant
+  and link to it: *"Laurens edited Roadmap 2026"*.
 - Third-person past tense for everything: *"Laurens edited Roadmap 2026"*,
   *"Reinder created My todo"*.
 - For ACL events where the viewer is one of the recipients, append
@@ -643,7 +669,8 @@ already been weighed:
 | `apps/api/src/routes/drive.ts`                                        | `/watch`, `/history` routes                   |
 | `apps/api/src/lib/notification-center/notification-center.ts`         | Optional `coalesce` flag on `persist`; skip SSE broadcast on within-window upserts |
 | `apps/api/src/lib/collab/collabDocument.ts`                           | `Map<conn, User>` in subscribe/unsubscribe; throttled attributed `'edited'` record in the `doc.on('update')` handler |
-| `apps/api/src/lib/notification-center/` (schema + db-config)          | v2 migration: `notification_settings` single-row table + `emailedAt` column; `flushEmailDigest()`; immediate send at relay delivery |
+| `apps/api/src/lib/notification-center/` (schema + db-config)          | v2 migration: `emailedAt` column + `digest_state` single-row table; `flushEmailDigest()`; immediate send at relay delivery |
+| `packages/lib/src/types/settings.ts`                                  | Additive `notifications.watchEmailCadence` field on `UserSettings` |
 | `apps/api/src/lib/scheduler/jobs.ts`                                  | Hourly `watch-email-digest` tick (relay-driven per-home flush) |
 | `apps/api/src/lib/core/mail-composers.ts`                             | Watch notification + digest email composers |
 | `packages/lib/src/core/notification/resolve-link.ts`                  | `file-event` tag → app URL with `?showHistory=1` |
@@ -655,4 +682,4 @@ already been weighed:
 | `packages/ui/src/components/layout/sidebar/app-sidebar.tsx`           | *Watched* row                                 |
 | `apps/stickies/src/components/stickies/hooks/use-drag-and-drop.ts`    | Calls `recordHistory(...)` for sticky moves   |
 | `apps/slides/src/components/slides/hooks/use-slide-dnd.ts`            | Calls `recordHistory(...)` for slide reorders |
-| `apps/[doc|sheet|stickies|slides]/src/.../route shell`                | Reads `?showHistory=1` and opens the panel    |
+| Drive route (`apps/drive`)                                            | Reads `?showHistory=1`: select item + open details sidebar |
