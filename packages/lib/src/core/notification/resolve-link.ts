@@ -1,5 +1,6 @@
 import { driveApi, getCalendarAppUrl, getDriveAppUrl, getDriveItemUrl, getMailAppUrl } from '@workspace/lib/api';
 import { getMonthRange } from '@workspace/lib/calendar';
+import { isChatType, isCollabType } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 
 function parseDriveTag(
@@ -140,8 +141,12 @@ export async function resolveNotificationLink(
                 .get();
             if (response.error || !response.data) return getDriveAppUrl();
             const path = response.data;
-            const itemUrl = getDriveItemUrl(path);
-            if (itemUrl) return itemUrl;
+            // Only collab/chat types navigate directly into their app; plain files and folders
+            // land on the fs view with history open so the user sees what changed.
+            if (isCollabType(path.type) || isChatType(path.type)) {
+                const itemUrl = getDriveItemUrl(path);
+                if (itemUrl) return itemUrl;
+            }
             return getDriveAppUrl(
                 `fs/${parsed.ownerId}/${parsed.mountId}/${path.parentId ?? path.id}?pid=${path.id}&showHistory=1`,
             );
