@@ -9,7 +9,7 @@ import type {
     SingleRange,
 } from '@workspace/lib/sheets';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
-import { iscelldata, toA1 } from '@workspace/sheet/engine';
+import { columnIndexToLabel, iscelldata, rowIndexToLabel, toA1 } from '@workspace/sheet/engine';
 import type {
     Border,
     ConditionalFormattingRule,
@@ -302,6 +302,13 @@ function singleRangeToA1({ row, column }: SingleRange): string {
     return start === end ? start : `${start}:${end}`;
 }
 
+function singleRangeToAbsoluteA1({ row, column }: SingleRange): string {
+    const abs = (r: number, c: number) => `$${columnIndexToLabel(c)}$${rowIndexToLabel(r)}`;
+    const start = abs(row[0], column[0]);
+    const end = abs(row[1], column[1]);
+    return start === end ? start : `${start}:${end}`;
+}
+
 // Write-side cfRule model. exceljs's declared ConditionalFormattingRule union is narrower
 // than what its writer accepts (the cellIs typing lists four of the eight operators,
 // dataBar omits `color`) — mirror of the importer's loose XlsxCfRule read shape.
@@ -406,9 +413,22 @@ function toCfRule(rule: ConditionalFormatRule, priority: number): XlsxCfWriteRul
         return { type: 'aboveAverage', priority, aboveAverage: name === 'aboveAverage', style };
     }
 
-    // duplicateValue: exceljs 4.4.0 has no cfRule writer for duplicate/uniqueValues (it
-    // would emit an invalid empty <conditionalFormatting>); occurrenceDate: editor-only,
-    // no xlsx equivalent. Both recorded in the SHEETS-XLSX-FIDELITY backlog.
+    if (name === 'duplicateValue') {
+        // exceljs 4.4.0 has no cfRule writer for duplicate/uniqueValues (it would emit an
+        // invalid empty <conditionalFormatting>) — encode the standard COUNTIF recipe
+        // instead: Excel shifts the relative anchor per target cell while the absolute
+        // range refs stay pinned, so the expression counts the target cell's value across
+        // all of the rule's ranges. Semantically exact in Excel; our importer re-imports
+        // it as a formula rule (accepted drift, SHEETS-XLSX-FIDELITY backlog).
+        const compare = rule.conditionValue[0] === '0' ? '>1' : rule.conditionValue[0] === '1' ? '=1' : null;
+        if (compare == null) return null; // the engine evaluator ignores other values too
+        const anchor = toA1(rule.cellrange[0].row[0], rule.cellrange[0].column[0]);
+        const countifs = rule.cellrange.map((range) => `COUNTIF(${singleRangeToAbsoluteA1(range)},${anchor})`);
+        return { type: 'expression', priority, formulae: [countifs.join('+') + compare], style };
+    }
+
+    // occurrenceDate: editor-only, no xlsx equivalent — recorded in the
+    // SHEETS-XLSX-FIDELITY backlog.
     return null;
 }
 
