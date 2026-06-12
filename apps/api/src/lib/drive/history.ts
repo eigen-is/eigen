@@ -114,28 +114,4 @@ export class FileHistory {
             )
         `);
     }
-
-    // Test-only helper for inserting rows with a custom createdAt epoch.
-    // Used by file-history.test.ts to verify the 90-day prune without sleeping.
-    insertForTest(
-        pathId: string,
-        eventType: string,
-        actorUserId: string,
-        actorEmail: string,
-        details: unknown,
-        createdAtEpoch: number,
-    ): void {
-        this.db.run(sql`
-            INSERT INTO ${fileEvents} (id, pathId, eventType, actorUserId, actorEmail, details, createdAt)
-            VALUES (
-                ${randomUUID()},
-                ${pathId},
-                ${eventType},
-                ${actorUserId},
-                ${actorEmail},
-                ${details != null ? JSON.stringify(details) : null},
-                ${createdAtEpoch}
-            )
-        `);
-    }
 }

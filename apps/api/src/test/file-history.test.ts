@@ -1,23 +1,29 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
+import { fileEvents } from '../lib/mount/schema';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-file-history-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
 const MOUNT_ID = 'test-mount';
 
 function createGetLocalDatabase(baseDir: string) {
-    return async <S extends SchemaType>(
+    const captured = new Map<string, ManagedDatabase<SchemaType>>();
+    const getter = async <S extends SchemaType>(
         config: DatabaseConfig<S>,
         relativePath: string,
     ): Promise<ManagedDatabase<S>> => {
         const fullPath = join(baseDir, relativePath);
         const db = new ManagedDatabase(config, fullPath);
         await db.open(0);
+        captured.set(relativePath, db as ManagedDatabase<SchemaType>);
         return db;
     };
+    return { getter, captured };
 }
 
 beforeAll(() => {
@@ -33,12 +39,15 @@ afterAll(() => {
 describe('FileHistory', () => {
     let mount: Mount;
     let rootId: string;
+    let metaDb: ManagedDatabase<SchemaType>;
 
     beforeAll(async () => {
         const config = createDefaultMountConfig(MOUNT_ID, 'local-key');
-        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        const { getter, captured } = createGetLocalDatabase(TEST_DIR);
+        mount = new Mount(OWNER_ID, TEST_DIR, config, getter);
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;
+        metaDb = captured.get(`mounts/${MOUNT_ID}/metadata.db`)!;
     });
 
     test('record and list a renamed event', async () => {
@@ -76,7 +85,6 @@ describe('FileHistory', () => {
             actor: { id: 'u2', email: 'u2@test' },
         });
 
-        // List from the top-level folder — should include descendant events
         const events = await mount.history.list(folderId);
         expect(events.length).toBeGreaterThanOrEqual(2);
 
@@ -85,12 +93,11 @@ describe('FileHistory', () => {
             expect(events[i - 1].createdAt.getTime()).toBeGreaterThanOrEqual(events[i].createdAt.getTime());
         }
 
-        // Verify pathName resolves to the descendant file name
-        const fileEvents = events.filter((e) => e.pathId === fileId);
-        expect(fileEvents.length).toBe(2);
-        expect(fileEvents[0].pathName).toBe('deep.txt');
+        // pathName should resolve to the descendant file name
+        const fileEventsForFile = events.filter((e) => e.pathId === fileId);
+        expect(fileEventsForFile.length).toBe(2);
+        expect(fileEventsForFile[0].pathName).toBe('deep.txt');
 
-        // Verify limit is respected
         const limited = await mount.history.list(folderId, { limit: 1 });
         expect(limited).toHaveLength(1);
     });
@@ -103,20 +110,17 @@ describe('FileHistory', () => {
             actor: { id: 'u3', email: 'u3@test' },
         });
 
-        // Confirm event exists
         const before = await mount.history.list(fileId);
         expect(before).toHaveLength(1);
 
-        // Permanently delete the file (not trash — need to bypass trash for direct cascade test)
-        // Use trashPath then permanentlyDeleteFromTrash
         await mount.trashPath(fileId);
         await mount.permanentlyDeleteFromTrash(fileId);
 
-        // The FK cascade should have removed the file_events rows
-        // Access the raw db via the history's internal structure by listing — but the path is gone
-        // so we do a raw select via the mount's exposed db through the internal schema
-        // We can't easily access mount.db directly, so we verify via list returning empty
-        // (the path row is gone so the CTE won't match anything)
+        // Raw select proves the FK cascade actually deleted the file_events rows —
+        // list() would also return [] via the CTE even if the rows survived (path is gone).
+        const surviving = metaDb.db.select().from(fileEvents).where(eq(fileEvents.pathId, fileId)).all();
+        expect(surviving).toHaveLength(0);
+
         const after = await mount.history.list(fileId);
         expect(after).toHaveLength(0);
     });
@@ -168,14 +172,7 @@ describe('FileHistory', () => {
     test('prune trims per-path rows beyond 500 and drops rows older than 90 days', async () => {
         const fileId = await mount.touchFile(rootId, 'prune-test.txt', 'text/plain');
 
-        // Access the raw db through the internal handle exposed via history
-        // We need to insert rows directly to set up the test scenario.
-        // The history object holds a reference to the db; we reach it through a helper
-        // that returns the raw db. Since FileHistory doesn't expose db publicly,
-        // we use mount.history.record in a loop for the 500+ rows test,
-        // and for the old-row test we use a separate file with a raw insert via touchFile + db.
-
-        // Insert 502 events for the file (2 should be trimmed after prune)
+        // Insert 502 events; prune should trim back to 500
         for (let i = 0; i < 502; i++) {
             await mount.history.record({
                 pathId: fileId,
@@ -189,14 +186,7 @@ describe('FileHistory', () => {
 
         mount.history.prune();
 
-        // prune is synchronous; verify the result
         const afterPrune = await mount.history.list(fileId, { limit: 600 });
-        expect(afterPrune.length).toBeLessThanOrEqual(500);
-
-        // For the old-rows test: create a separate file and insert an old event directly
-        // We expose a test helper by checking the prune clears rows older than 90 days.
-        // Since we can't easily do a raw INSERT with a custom createdAt here without
-        // exposing the db, we verify the prune removed 2 rows (502 -> 500).
         expect(afterPrune.length).toBe(500);
     });
 });
@@ -204,30 +194,40 @@ describe('FileHistory', () => {
 describe('FileHistory old-row prune', () => {
     let mount: Mount;
     let rootId: string;
+    let metaDb: ManagedDatabase<SchemaType>;
 
     beforeAll(async () => {
         const config = createDefaultMountConfig('test-prune-old', 'local-key');
-        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        const { getter, captured } = createGetLocalDatabase(TEST_DIR);
+        mount = new Mount(OWNER_ID, TEST_DIR, config, getter);
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;
+        metaDb = captured.get('mounts/test-prune-old/metadata.db')!;
     });
 
     test('prune drops rows older than 90 days', async () => {
         const fileId = await mount.touchFile(rootId, 'old-event.txt', 'text/plain');
 
-        // Record a normal event first
         await mount.history.record({
             pathId: fileId,
             eventType: 'created',
             actor: { id: 'u7', email: 'u7@test' },
         });
 
-        // Insert a raw old row directly via the mount db (exposed via testDb accessor)
+        // Insert a row backdated 91 days to verify the 90-day prune without sleeping
         const oldDate = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000);
-        const oldEpoch = Math.floor(oldDate.getTime() / 1000);
-
-        // Access mount's internal db via the history's test accessor
-        mount.history.insertForTest(fileId, 'edited', 'u7', 'u7@test', null, oldEpoch);
+        metaDb.db
+            .insert(fileEvents)
+            .values({
+                id: randomUUID(),
+                pathId: fileId,
+                eventType: 'edited',
+                actorUserId: 'u7',
+                actorEmail: 'u7@test',
+                details: null,
+                createdAt: oldDate,
+            })
+            .run();
 
         const beforePrune = await mount.history.list(fileId, { limit: 600 });
         expect(beforePrune.length).toBe(2);
@@ -235,7 +235,6 @@ describe('FileHistory old-row prune', () => {
         mount.history.prune();
 
         const afterPrune = await mount.history.list(fileId, { limit: 600 });
-        // The old row should be pruned, only the new one remains
         expect(afterPrune.length).toBe(1);
         expect(afterPrune[0].eventType).toBe('created');
     });
