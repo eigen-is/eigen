@@ -932,6 +932,17 @@ export class Mount {
         return results.map((r) => this.toDrivePath(r));
     }
 
+    // trashedFrom is trash bookkeeping, not part of DrivePath — permanentlyDelete
+    // needs the original parent to notify the old folder's watchers.
+    async getTrashedFrom(pathId: string): Promise<string | null> {
+        const row = await this.db
+            .select({ trashedFrom: paths.trashedFrom })
+            .from(paths)
+            .where(eq(paths.id, pathId))
+            .get();
+        return row?.trashedFrom ?? null;
+    }
+
     async restorePath(pathId: string): Promise<DrivePath> {
         const row = await this.db.select().from(paths).where(eq(paths.id, pathId)).get();
         if (!row) throw new ApiError(404, 'Path not found');

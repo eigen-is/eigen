@@ -1,9 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import type { FileEvent, FileEventInput, FileEventType } from '@workspace/lib/types/file-history';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import {
+    type FileEvent,
+    type FileEventInput,
+    type FileEventType,
+    fileEventVerb,
+    type PathWatchStatus,
+    type WatchedItem,
+} from '@workspace/lib/types/file-history';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { sendToHome } from '../home/home-relay';
 import type * as schema from '../mount/schema';
-import { fileEvents, paths } from '../mount/schema';
+import { fileEvents, paths, pathWatchers } from '../mount/schema';
+import { getMemberships, getUserById, type User } from '../user';
+import { canReadFromAncestors } from './acl';
 
 const HISTORY_MAX_AGE_DAYS = 90;
 const HISTORY_MAX_PER_PATH = 500;
@@ -93,6 +104,161 @@ export class FileHistory {
             pathName: row.pathName,
             pathType: row.pathType as FileEvent['pathType'],
         }));
+    }
+
+    addWatcher(pathId: string, userId: string): void {
+        this.db.insert(pathWatchers).values({ pathId, userId, createdAt: new Date() }).onConflictDoNothing().run();
+    }
+
+    removeWatcher(pathId: string, userId: string): void {
+        this.db
+            .delete(pathWatchers)
+            .where(and(eq(pathWatchers.pathId, pathId), eq(pathWatchers.userId, userId)))
+            .run();
+    }
+
+    getWatchStatus(pathId: string, userId: string): PathWatchStatus {
+        const direct = this.db
+            .select({ pathId: pathWatchers.pathId })
+            .from(pathWatchers)
+            .where(and(eq(pathWatchers.pathId, pathId), eq(pathWatchers.userId, userId)))
+            .get();
+
+        // Nearest watched ancestor: walk the parentId chain upward, excluding the path itself
+        const [ancestor] = this.db.all<{ pathId: string; name: string }>(sql`
+            WITH RECURSIVE chain(id, depth) AS (
+                SELECT ${sql.raw('parentId')}, 1 FROM ${paths} WHERE id = ${pathId} AND ${sql.raw('parentId')} IS NOT NULL
+                UNION ALL
+                SELECT p.${sql.raw('parentId')}, c.depth + 1 FROM ${paths} p JOIN chain c ON p.id = c.id
+                WHERE p.${sql.raw('parentId')} IS NOT NULL
+            )
+            SELECT pw.pathId AS pathId, p.name AS name
+            FROM chain c
+            JOIN ${pathWatchers} pw ON pw.pathId = c.id AND pw.userId = ${userId}
+            JOIN ${paths} p ON p.id = c.id
+            ORDER BY c.depth ASC
+            LIMIT 1
+        `);
+
+        return {
+            direct: !!direct,
+            ...(ancestor ? { viaAncestor: { pathId: ancestor.pathId, name: ancestor.name } } : {}),
+        };
+    }
+
+    listWatchedBy(userId: string): WatchedItem[] {
+        const rows = this.db.all<{
+            pathId: string;
+            name: string;
+            type: string;
+            mimeType: string;
+            watchedAt: number;
+            lastEventAt: number | null;
+            lastEventType: string | null;
+            lastActorEmail: string | null;
+        }>(sql`
+            SELECT pw.pathId AS pathId, p.name AS name, p.type AS type, p.mimeType AS mimeType,
+                   pw.createdAt AS watchedAt,
+                   e.createdAt AS lastEventAt, e.eventType AS lastEventType, e.actorEmail AS lastActorEmail
+            FROM ${pathWatchers} pw
+            JOIN ${paths} p ON p.id = pw.pathId
+            LEFT JOIN ${fileEvents} e ON e.id = (
+                SELECT id FROM ${fileEvents} WHERE pathId = pw.pathId ORDER BY createdAt DESC LIMIT 1
+            )
+            WHERE pw.userId = ${userId}
+        `);
+
+        return rows.map((row) => ({
+            ownerId: this.ownerId,
+            mountId: this.mountId,
+            pathId: row.pathId,
+            name: row.name,
+            type: row.type as WatchedItem['type'],
+            mimeType: row.mimeType,
+            watchedAt: new Date(row.watchedAt * 1000),
+            lastEventAt: row.lastEventAt != null ? new Date(row.lastEventAt * 1000) : null,
+            lastEventType: row.lastEventType as FileEventType | null,
+            lastActorEmail: row.lastActorEmail,
+        }));
+    }
+
+    // Watchers on each root path and on every ancestor of each root (inclusive
+    // upward CTE per root), deduped, with the acting user removed.
+    collectWatcherIds(rootPathIds: string[], excludeUserId: string): string[] {
+        const ids = new Set<string>();
+        for (const rootId of rootPathIds) {
+            const rows = this.db.all<{ userId: string }>(sql`
+                WITH RECURSIVE chain(id) AS (
+                    SELECT id FROM ${paths} WHERE id = ${rootId}
+                    UNION ALL
+                    SELECT p.${sql.raw('parentId')} FROM ${paths} p JOIN chain c ON p.id = c.id
+                    WHERE p.${sql.raw('parentId')} IS NOT NULL
+                )
+                SELECT DISTINCT pw.userId AS userId FROM ${pathWatchers} pw JOIN chain ON pw.pathId = chain.id
+                WHERE pw.userId != ${excludeUserId}
+            `);
+            for (const row of rows) ids.add(row.userId);
+        }
+        return [...ids];
+    }
+
+    // Per-watcher delivery with ACL re-verification: a watcher whose share was
+    // revoked since watching is silently skipped. verifyAncestors is the chain
+    // that justifies the notification — callers capture it BEFORE mutations that
+    // rewrite the parent chain (trash re-parents to the mount root).
+    async notifyWatchers(
+        watcherIds: string[],
+        opts: {
+            eventType: FileEventType;
+            actor: User;
+            itemName: string;
+            tagPathId: string; // the path the tag points at (parent for burst events)
+            verifyAncestors: DrivePath[];
+            excludeEmails?: Set<string>;
+        },
+    ): Promise<void> {
+        for (const watcherId of watcherIds) {
+            const watcher = await getUserById(watcherId);
+            if (!watcher) continue;
+            if (opts.excludeEmails?.has(watcher.email.toLowerCase())) continue;
+            const memberships = await getMemberships(watcherId);
+            if (!canReadFromAncestors(opts.verifyAncestors, watcher, memberships)) continue;
+            await sendToHome(watcherId, {
+                type: 'notification',
+                notification: {
+                    type: 'file-event',
+                    actorEmail: opts.actor.email,
+                    title: `${opts.actor.name} ${fileEventVerb(opts.eventType)} ${stripEigenExtension(opts.itemName)}`,
+                    tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
+                    coalesce: true,
+                },
+            }).catch(() => {});
+        }
+    }
+
+    async fanOut(opts: {
+        eventType: FileEventType;
+        actor: User;
+        path: DrivePath; // affected item (pre-mutation shape where relevant)
+        chainRootIds: (string | null)[]; // parent chains to walk (e.g. [parentId]; moved: both)
+        burst?: boolean; // created/uploaded/copied: tag on the parent folder
+        excludeEmails?: Set<string>;
+        verifyAncestors: DrivePath[];
+    }): Promise<void> {
+        // Events on items already in trash never fan out ('trashed' itself passes
+        // the pre-trash snapshot, whose trashedAt is still null).
+        if (opts.path.trashedAt && opts.eventType !== 'trashed') return;
+        const chainRoots = opts.chainRootIds.filter((id): id is string => id !== null);
+        const watcherIds = this.collectWatcherIds([opts.path.id, ...chainRoots], opts.actor.id);
+        if (watcherIds.length === 0) return;
+        await this.notifyWatchers(watcherIds, {
+            eventType: opts.eventType,
+            actor: opts.actor,
+            itemName: opts.path.name,
+            tagPathId: opts.burst ? (opts.chainRootIds[0] ?? opts.path.id) : opts.path.id,
+            verifyAncestors: opts.verifyAncestors,
+            excludeEmails: opts.excludeEmails,
+        });
     }
 
     // Synchronous; called fire-and-forget from Mount.init.

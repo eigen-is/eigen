@@ -1,5 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { FileEvent } from '@workspace/lib/types/file-history';
+import type { FileEvent, PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
@@ -551,4 +551,38 @@ export const driveRouter = new Elysia({ name: 'drive' })
             });
         },
         { auth: true, query: t.Object({ limit: t.Optional(t.String()), before: t.Optional(t.String()) }) },
+    )
+    // Watching (file/folder notification subscriptions; folder watches cascade)
+    .post(
+        '/drive/:ownerId/:mountId/path/:pathId/watch',
+        async ({ params, user }) => {
+            requireNonGuest(user);
+            const drive = await getSharedDrive(params.ownerId, user);
+            return drive.watchPath(params.mountId, params.pathId, user);
+        },
+        { auth: true },
+    )
+    .delete(
+        '/drive/:ownerId/:mountId/path/:pathId/watch',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            return drive.unwatchPath(params.mountId, params.pathId, user);
+        },
+        { auth: true },
+    )
+    .get(
+        '/drive/:ownerId/:mountId/path/:pathId/watch',
+        async ({ params, user }): Promise<PathWatchStatus> => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            return drive.getWatchStatus(params.mountId, params.pathId, user);
+        },
+        { auth: true },
+    )
+    .get(
+        '/drive/:ownerId/watches',
+        async ({ params, user }): Promise<WatchedItem[]> => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            return drive.getWatches(user);
+        },
+        { auth: true },
     );
