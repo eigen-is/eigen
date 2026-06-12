@@ -150,6 +150,7 @@ export function DriveItemMenuItems({
                     Rename
                 </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator />
             <DropdownMenuItem
                 onClick={run(() => (isWatched ? unwatchMutation.mutate() : watchMutation.mutate()))}
                 className="flex items-center"
