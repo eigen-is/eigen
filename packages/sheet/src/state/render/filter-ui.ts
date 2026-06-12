@@ -1,20 +1,22 @@
 // Autofilter UI: the filter-range border and the per-column buttons, drawn
 // inside every drawMain pass so freeze-region pinning and clipping match the
 // cells underneath. Geometry comes from filterOptions.items plus the shared
-// button constants — the same values the mousedown hit-test uses. Colors
-// resolve from the theme tokens the HTML buttons used (border-primary /
-// bg-background / bg-primary).
+// button constants — the same values the mousedown hit-test uses. Button
+// styling matches Google Sheets: a bare strainer glyph when idle, the sheets
+// app green on hover (14% wash, mirroring the --app-sheets-color-soft mix,
+// which canvas can't parse as color-mix()), and a filled green box with the
+// funnel when the column has an active filter.
 
 import { FILTER_BUTTON_HEIGHT, FILTER_BUTTON_WIDTH } from '../modules/filter';
 import { HALF_PIXEL, sheetToCanvasX, sheetToCanvasY } from './geometry';
 import type { RenderPass } from './types';
 
-// Filter-button glyphs (24×24 viewBox): lucide chevron-down and the filled
-// funnel the HTML buttons used. Created lazily — Path2D needs a DOM.
-let filterGlyphs: { chevron: Path2D; funnel: Path2D } | undefined;
+// Filter-button glyphs (24×24 viewBox): the Google-style strainer (three
+// shrinking lines) and the filled funnel. Created lazily — Path2D needs a DOM.
+let filterGlyphs: { strainer: Path2D; funnel: Path2D } | undefined;
 function getFilterGlyphs() {
     filterGlyphs ??= {
-        chevron: new Path2D('m6 9 6 6 6-6'),
+        strainer: new Path2D('M4 7h16M7 12h10M10 17h4'),
         funnel: new Path2D(
             'M18.14 4a1.5 1.5 0 0 1 1.16 2.44L14.7 12.15v6.4l-5.37-2.56v-3.96L4.5 6.31A1.5 1.5 0 0 1 5.76 4h12.38z',
         ),
@@ -26,7 +28,7 @@ function getFilterGlyphs() {
 // four freeze-region passes); the microtask flush makes a theme switch
 // re-resolve on the next redraw, exactly as per-pass resolution did.
 let cachedColors:
-    | { primary: string; primaryForeground: string; background: string; selectionHandle: string }
+    | { appColor: string; mutedForeground: string; background: string; selectionHandle: string }
     | undefined;
 
 export function drawFilterUI(pass: RenderPass) {
@@ -37,8 +39,8 @@ export function drawFilterUI(pass: RenderPass) {
     if (cachedColors == null) {
         const style = getComputedStyle(renderCtx.canvas);
         cachedColors = {
-            primary: style.getPropertyValue('--primary').trim(),
-            primaryForeground: style.getPropertyValue('--primary-foreground').trim(),
+            appColor: style.getPropertyValue('--app-sheets-color').trim(),
+            mutedForeground: style.getPropertyValue('--muted-foreground').trim(),
             background: style.getPropertyValue('--background').trim(),
             selectionHandle: style.getPropertyValue('--selection-handle').trim(),
         };
@@ -46,7 +48,7 @@ export function drawFilterUI(pass: RenderPass) {
             cachedColors = undefined;
         });
     }
-    const { primary, primaryForeground, background, selectionHandle } = cachedColors;
+    const { appColor, mutedForeground, background, selectionHandle } = cachedColors;
     const glyphs = getFilterGlyphs();
 
     renderCtx.save();
@@ -78,35 +80,46 @@ export function drawFilterUI(pass: RenderPass) {
         const by = sheetToCanvasY(item.top, scrollHeight, offsetTop);
         const active = sheetCtx.filter[item.col - options.startCol] != null;
         const hovered = sheetCtx.filterButtonHover === item.col;
-        const filled = active || hovered;
 
-        renderCtx.beginPath();
-        renderCtx.roundRect(bx + HALF_PIXEL, by + HALF_PIXEL, FILTER_BUTTON_WIDTH - 1, FILTER_BUTTON_HEIGHT - 1, 2);
-        renderCtx.fillStyle = filled ? primary : background;
-        renderCtx.fill();
-        renderCtx.strokeStyle = primary;
-        renderCtx.lineWidth = 1;
-        renderCtx.stroke();
-
-        const glyphColor = filled ? primaryForeground : primary;
         if (active) {
-            // 13×13 funnel, centered (the active-filter glyph)
+            // Filled green box (opaque, covers any cell ink underneath)
+            renderCtx.beginPath();
+            renderCtx.roundRect(bx + HALF_PIXEL, by + HALF_PIXEL, FILTER_BUTTON_WIDTH - 1, FILTER_BUTTON_HEIGHT - 1, 3);
+            renderCtx.fillStyle = appColor;
+            renderCtx.fill();
+        } else if (hovered) {
+            // Background knockout first, then a 14% green wash — the canvas
+            // equivalent of --app-sheets-color-soft (color-mix doesn't parse
+            // as a canvas fillStyle).
+            renderCtx.beginPath();
+            renderCtx.roundRect(bx + HALF_PIXEL, by + HALF_PIXEL, FILTER_BUTTON_WIDTH - 1, FILTER_BUTTON_HEIGHT - 1, 3);
+            renderCtx.fillStyle = background;
+            renderCtx.fill();
+            renderCtx.save();
+            renderCtx.globalAlpha = 0.14;
+            renderCtx.fillStyle = appColor;
+            renderCtx.fill();
+            renderCtx.restore();
+        }
+
+        if (active) {
+            // 13×13 funnel knocked out of the green box, centered
             renderCtx.save();
             renderCtx.translate(bx + (FILTER_BUTTON_WIDTH - 13) / 2, by + (FILTER_BUTTON_HEIGHT - 13) / 2);
             renderCtx.scale(13 / 24, 13 / 24);
-            renderCtx.fillStyle = glyphColor;
+            renderCtx.fillStyle = background;
             renderCtx.fill(glyphs.funnel);
             renderCtx.restore();
         } else {
-            // 12×12 chevron-down, centered (lucide stroke conventions)
+            // 12×12 strainer, centered; green on hover, muted otherwise
             renderCtx.save();
             renderCtx.translate(bx + (FILTER_BUTTON_WIDTH - 12) / 2, by + (FILTER_BUTTON_HEIGHT - 12) / 2);
             renderCtx.scale(12 / 24, 12 / 24);
-            renderCtx.strokeStyle = glyphColor;
-            renderCtx.lineWidth = 2;
+            renderCtx.strokeStyle = hovered ? appColor : mutedForeground;
+            renderCtx.lineWidth = 2.5;
             renderCtx.lineCap = 'round';
             renderCtx.lineJoin = 'round';
-            renderCtx.stroke(glyphs.chevron);
+            renderCtx.stroke(glyphs.strainer);
             renderCtx.restore();
         }
     }
