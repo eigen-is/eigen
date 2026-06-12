@@ -29,6 +29,7 @@ import type {
     RichText,
     Cell as XlsxCell,
 } from 'exceljs';
+import JSZip from 'jszip';
 import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
@@ -256,7 +257,43 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
     }
 
     const arrayBuffer = await workbook.xlsx.writeBuffer();
-    return Buffer.from(arrayBuffer);
+    return stripInternalHyperlinkRels(Buffer.from(arrayBuffer));
+}
+
+// exceljs rels EVERY hyperlink (worksheet-xform prepare), so location-form internal
+// links come out with a redundant TargetMode="External" rel and an r:id on the
+// element. Per ECMA-376 the r:id wins over location, so Excel/Google chase the rel
+// — and `'Sheet'!A1` is not a resolvable URI (Google shows "Invalid link"). Excel
+// itself authors internal links location-only; strip the junk down to that form.
+async function stripInternalHyperlinkRels(buffer: Buffer): Promise<Buffer> {
+    const zip = await JSZip.loadAsync(buffer);
+    let changed = false;
+    for (const path of Object.keys(zip.files)) {
+        const sheetFile = path.match(/^xl\/worksheets\/(sheet\d+)\.xml$/);
+        if (!sheetFile) continue;
+        const ids: string[] = [];
+        const xml = await zip.files[path].async('string');
+        const stripped = xml.replace(/<hyperlink\b[^>]*>/g, (el) => {
+            const rid = el.includes('location="') ? el.match(/ r:id="(rId\d+)"/) : null;
+            if (!rid) return el;
+            ids.push(rid[1]);
+            return el.replace(rid[0], '');
+        });
+        if (ids.length === 0) continue;
+        changed = true;
+        zip.file(path, stripped);
+        const relsPath = `xl/worksheets/_rels/${sheetFile[1]}.xml.rels`;
+        const relsFile = zip.file(relsPath);
+        if (relsFile) {
+            let rels = await relsFile.async('string');
+            for (const id of ids) {
+                rels = rels.replace(new RegExp(`<Relationship [^>]*Id="${id}"[^>]*/>`), '');
+            }
+            zip.file(relsPath, rels);
+        }
+    }
+    if (!changed) return buffer;
+    return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
 function applyCellValue(cell: XlsxCell, v: FortuneCell): void {

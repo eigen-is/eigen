@@ -1393,6 +1393,42 @@ describe('Sheets xlsx export — hyperlinks', () => {
         });
     });
 
+    test('strips the junk external rel exceljs pairs with location-form internal links', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'web', m: 'web' } },
+                    { r: 1, c: 0, v: { v: 'jump', m: 'jump' } },
+                ],
+                hyperlink: {
+                    '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' },
+                    '1_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
+                },
+            },
+            { name: 'My Sheet', celldata: [] },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+
+        // Per ECMA-376 an r:id on the hyperlink element wins over location, so
+        // Excel/Google chase the rel — and `'My Sheet'!A1` is not a resolvable URI
+        // (Google shows "Invalid link"). Excel authors internal links location-only;
+        // the export must match that form exactly.
+        const xml = await readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+        const locationLinks = xml.match(/<hyperlink\b[^>]*location="[^>]*>/g) ?? [];
+        expect(locationLinks).toHaveLength(1);
+        expect(locationLinks[0]).not.toContain('r:id');
+
+        // The webpage rel stays; the internal target leaves the rels part entirely.
+        const rels = await readZipEntry(buffer, 'xl/worksheets/_rels/sheet1.xml.rels');
+        expect(rels).toContain('Target="https://example.com"');
+        expect(rels).not.toContain('My Sheet');
+
+        // The stripped form still round-trips through our own importer.
+        const rt = await xlsxToSheets(buffer);
+        expect(rt[0].hyperlink?.['1_0']).toEqual({ linkType: 'cellrange', linkAddress: "'My Sheet'!A1" });
+    });
+
     test('drops the link on formula cells — exceljs models a hyperlink as the cell value', async () => {
         const sheets: Sheet[] = [
             {
