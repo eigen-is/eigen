@@ -176,13 +176,20 @@ describe('FileHistory', () => {
     test('prune trims per-path rows beyond 500', async () => {
         const fileId = await mount.touchFile(rootId, 'prune-test.txt', 'text/plain');
 
-        // Insert 502 events; prune should trim back to 500
+        // Seed 502 events via raw insert; prune should trim back to 500
         for (let i = 0; i < 502; i++) {
-            await mount.history.record({
-                pathId: fileId,
-                eventType: 'edited',
-                actor: { id: 'u6', email: 'u6@test' },
-            });
+            metaDb.db
+                .insert(fileEvents)
+                .values({
+                    id: randomUUID(),
+                    pathId: fileId,
+                    eventType: 'edited',
+                    actorUserId: 'u6',
+                    actorEmail: 'u6@test',
+                    details: null,
+                    createdAt: new Date(),
+                })
+                .run();
         }
 
         const beforePrune = await mount.history.list(fileId, { limit: 600 });
