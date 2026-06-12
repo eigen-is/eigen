@@ -103,6 +103,50 @@ bun run check          # lint + typecheck + test
 - **Self-review before declaring done** — review your diff against the checklist in CODE-STANDARDS.md
 - **Keep docs up to date** — update `docs/` and this file when changes affect architecture
 
+## Working Method (multi-step changes)
+
+The standard way to run feature work, proven over the sheets xlsx-fidelity program (cycles 0–8;
+worked example in [SHEETS-XLSX-FIDELITY.md](docs/SHEETS-XLSX-FIDELITY.md) § Working method).
+Scale it to the job: a one-line fix needs none of this, a feature needs most of it, a program
+of changes needs all of it.
+
+1. **Evidence first, spec sign-off before code** — start multi-step work with an audit pass on
+   real data (a gap matrix with measured counts, not assumptions), then a written spec with
+   explicit decision points, and get sign-off BEFORE implementing. Local-only artifacts (specs,
+   audits, verification screenshots) live in gitignored `docs/superpowers/`.
+2. **Own branch per unit of work** — merge `--no-ff` to main only when verified; never push
+   without an explicit go. If the main checkout is busy (another session), work from a git
+   worktree.
+3. **TDD, red first** — a failing test before the implementation, always. Tests pin the
+   CONTRACT (full round-trips, output-level assertions), never library internals; they are the
+   committed regression net.
+4. **Delegate to subagents with complete briefs — keep the controller context small.** The
+   orchestrating session plans, briefs, reviews results, and merges; implementation, review,
+   and browser verification each run in their OWN subagent so no single context drowns in file
+   dumps. Every brief includes: required reading (this file + `docs/CODE-STANDARDS.md` + 2–3
+   sibling files in the target dir), exact file pointers and encodings, scoped test commands,
+   and the hard rules — stay strictly in scope, diagnose failures by reading source (never
+   blind-retry), never `git push`.
+5. **Independent review before merge** — a reviewer subagent that did NOT write the code, in
+   two stages: spec compliance first, then quality (bugs, edge cases, conventions). Signal over
+   volume: report only genuinely real findings; "clean" is a valid verdict.
+6. **Real-world verification is mandatory** — drive the running dev app headless against REAL
+   documents with a throwaway test user, and read the screenshots: verdicts come from pixels
+   plus behavioral probes (scroll, click, reload-persistence), not from data-shape assertions
+   alone. Data pipelines verify as closed round-trips with feature counts; pure refactors are
+   pixel-gated (byte-identical screenshots before/after); files consumed by external software
+   (xlsx, ics, eml, …) get spot-opened in the real consumer. Full recipe — test-user
+   conventions, auth cookie injection, upload/convert API, HMR workarounds — in
+   [VERIFICATION.md](docs/VERIFICATION.md).
+7. **Simplify pass after** — review the whole diff from four angles (reuse, simplification,
+   efficiency, altitude), apply what's worth it, and re-gate with the same tests/pixels.
+   Per-step reviews catch local issues; this pass catches cross-cutting drift.
+8. **Docs in the same cycle** — update the domain doc and any status/backlog before calling the
+   work done; record accepted drifts and out-of-scope decisions where the next session will
+   look for them.
+9. **Design changes go in small rounds** — one or two visual changes at a time, screenshots
+   first, a human verdict before merge.
+
 ## Architecture Patterns
 
 ### Backend
