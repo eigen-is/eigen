@@ -68,7 +68,7 @@ export function useUserWatches(ownerIds: string[]) {
             // Error tolerance: don't propagate errors to the aggregate; return empty array
             throwOnError: false,
         })),
-        combine: (results) => results.map((r) => (r.status === 'error' ? ([] as WatchedItem[]) : (r.data ?? []))),
+        combine: (results) => results.flatMap((r) => (r.status === 'error' ? [] : (r.data ?? []))),
     });
 }
 

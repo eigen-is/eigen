@@ -15,6 +15,7 @@ export function WatchToggleButton({ ownerId, mountId, pathId }: WatchToggleButto
     const unwatch = useUnwatchPath(ownerId, mountId, pathId);
 
     const direct = status?.direct ?? false;
+    const isPending = watch.isPending || unwatch.isPending;
     const tooltip = direct
         ? 'Stop watching'
         : status?.viaAncestor
@@ -26,6 +27,7 @@ export function WatchToggleButton({ ownerId, mountId, pathId }: WatchToggleButto
             icon={direct ? BellRing : Bell}
             tooltipText={tooltip}
             active={direct}
+            disabled={isPending}
             onClick={() => (direct ? unwatch.mutate() : watch.mutate())}
         />
     );

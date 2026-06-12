@@ -27,14 +27,16 @@ function WatchedRoute() {
     const { data: myTeams, isLoading: isTeamsLoading } = useMyTeams();
     const teams = myTeams?.map((t) => teamOwnerId(t.id)) ?? [];
 
-    // Watches on alice's share live in alice's mount; include her ownerId so those watches are fetched.
-    const { data: sharedWithMe } = useSharedPaths(userId, 'with-me');
-    const ownerIds = [...new Set([userId, ...teams, ...(sharedWithMe?.map((p) => p.ownerId) ?? [])])];
+    // Watches on alice's share live in alice's mount; include her ownerId so those watches
+    // are fetched. Wait for the share list so the owner set is complete on the first fetch.
+    const { data: sharedWithMe, isLoading: isSharedLoading } = useSharedPaths(userId, 'with-me');
+    const ownerIds = isSharedLoading
+        ? []
+        : [...new Set([userId, ...teams, ...(sharedWithMe?.map((p) => p.ownerId) ?? [])])];
 
-    // useUserWatches returns WatchedItem[][] — one array per ownerId
-    const watchArrays = useUserWatches(ownerIds);
+    const watches = useUserWatches(ownerIds);
 
-    const items: WatchedItem[] = (watchArrays as WatchedItem[][]).flat().sort((a, b) => {
+    const items: WatchedItem[] = [...watches].sort((a, b) => {
         const aDate = a.lastEventAt ?? a.watchedAt;
         const bDate = b.lastEventAt ?? b.watchedAt;
         return bDate.getTime() - aDate.getTime();
@@ -67,7 +69,7 @@ function WatchedRoute() {
         }
     };
 
-    if (isTeamsLoading) return <LoadingState />;
+    if (isTeamsLoading || isSharedLoading) return <LoadingState />;
 
     const gridCols = 'grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_25%]';
 

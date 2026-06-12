@@ -25,7 +25,7 @@ export function RecentActivity({ path, onItemOpen: _onItemOpen, highlight }: Rec
         }
     }, [highlight]);
 
-    if (events.length === 0 && !watchStatus) return null;
+    // No timeline and no watch to manage — nothing worth a section.
     if (events.length === 0 && !watchStatus?.direct && !watchStatus?.viaAncestor) return null;
 
     const isFolder = path.type === 'folder';
