@@ -887,6 +887,67 @@ describe('Sheets xlsx export — range borders', () => {
         expect(vertical.getCell('C2').border).toEqual({ left: thin });
     });
 
+    test('keeps the first-branch side for single-row horizontal and single-column vertical ranges', async () => {
+        const entry = (
+            borderType: RangeBorderInfo['borderType'],
+            row: number[],
+            column: number[],
+        ): RangeBorderInfo => ({
+            rangeType: 'range',
+            borderType,
+            color: '#000000',
+            style: '1',
+            range: [{ row, column }],
+        });
+        const sheets: Sheet[] = [
+            {
+                name: 'OneRow',
+                celldata: [{ r: 1, c: 0, v: { v: 'x' } }],
+                config: { borderInfo: [entry('border-horizontal', [1, 1], [0, 2])] },
+            },
+            {
+                name: 'OneCol',
+                celldata: [{ r: 0, c: 1, v: { v: 'x' } }],
+                config: { borderInfo: [entry('border-vertical', [0, 2], [1, 1])] },
+            },
+            // Two-row/two-col boundary: first row takes `.b`, last row `.t` (and
+            // first col `.r`, last col `.l`) — same edges as the strict inner-edge
+            // expansion, pinned here as the editor's first-branch-wins semantics.
+            {
+                name: 'TwoRow',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                config: { borderInfo: [entry('border-horizontal', [0, 1], [0, 0])] },
+            },
+            {
+                name: 'TwoCol',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                config: { borderInfo: [entry('border-vertical', [0, 0], [0, 1])] },
+            },
+        ];
+        const wb = await exportAndReload(sheets);
+        const thin = side('thin', 'FF000000');
+
+        // The editor compute's first branch wins (state/modules/border.ts): a
+        // single-row horizontal range draws the bottom edge of each cell.
+        const oneRow = getSheet(wb, 'OneRow');
+        for (const a1 of ['A2', 'B2', 'C2']) {
+            expect(oneRow.getCell(a1).border).toEqual({ bottom: thin });
+        }
+
+        const oneCol = getSheet(wb, 'OneCol');
+        for (const a1 of ['B1', 'B2', 'B3']) {
+            expect(oneCol.getCell(a1).border).toEqual({ right: thin });
+        }
+
+        const twoRow = getSheet(wb, 'TwoRow');
+        expect(twoRow.getCell('A1').border).toEqual({ bottom: thin });
+        expect(twoRow.getCell('A2').border).toEqual({ top: thin });
+
+        const twoCol = getSheet(wb, 'TwoCol');
+        expect(twoCol.getCell('A1').border).toEqual({ right: thin });
+        expect(twoCol.getCell('B1').border).toEqual({ left: thin });
+    });
+
     test('applies entries in array order: none clears, cell entries override, slash skipped', async () => {
         const sheets: Sheet[] = [
             {
@@ -1241,5 +1302,58 @@ describe('Sheets xlsx export — hyperlinks', () => {
         const b2 = (rt[0].celldata ?? []).find((c) => c.r === 1 && c.c === 1);
         expect(b2?.v?.v).toBe('https://example.com/docs');
         expect(b2?.v?.hl).toEqual({ r: 1, c: 1, id: 'sheet-0' });
+    });
+
+    test('keeps ct.s rich text runs as the display of a hyperlink cell', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    {
+                        r: 0,
+                        c: 0,
+                        v: {
+                            ct: {
+                                fa: 'General',
+                                t: 'inlineStr',
+                                s: [
+                                    { v: 'Eigen ', bl: 1 },
+                                    { v: 'docs', fc: '#0000FF' },
+                                ],
+                            },
+                        },
+                    },
+                ],
+                hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } },
+            },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buffer);
+        const value = getSheet(wb, 'Sheet1').getCell('A1').value;
+        if (typeof value !== 'object' || value === null || !('hyperlink' in value)) {
+            throw new Error('expected a hyperlink cell value');
+        }
+        expect(value.hyperlink).toBe('https://example.com/docs');
+        // exceljs's CellHyperlinkValue declares text: string, but its writer shares
+        // rich display text intact (cell-xform.js prepare → SharedStringsXform.add
+        // dispatches on `.richText`) and its reader hands the runs back.
+        const text: unknown = value.text;
+        if (typeof text !== 'object' || text === null || !('richText' in text)) {
+            throw new Error('expected rich text display runs');
+        }
+        const runs = (text as ExcelJS.CellRichTextValue).richText;
+        expect(runs).toHaveLength(2);
+        expect(runs[0].text).toBe('Eigen ');
+        expect(runs[0].font).toMatchObject({ bold: true });
+        expect(runs[1].text).toBe('docs');
+        expect(runs[1].font).toMatchObject({ color: { argb: 'FF0000FF' } });
+
+        // Importer round-trip: the concatenated text and the link both survive.
+        const rt = await xlsxToSheets(buffer);
+        expect(rt[0].hyperlink).toEqual({ '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } });
+        const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+        expect(a1?.v?.v).toBe('Eigen docs');
+        expect(a1?.v?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
     });
 });

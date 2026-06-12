@@ -128,15 +128,21 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
                 const target = hyperlinkTarget(link, sheet.name);
                 // Blocked scheme or unbuildable location: the cell stays plain text.
                 if (target == null) continue;
+                // Keep the display applyCellValue produced: ct.s runs survive inside
+                // a hyperlink value — exceljs's CellHyperlinkValue declares
+                // `text: string`, but its writer stores the display via
+                // SharedStringsXform.add, which dispatches on `.richText`, so the
+                // runs land intact in sharedStrings.xml.
+                const richText = inlineSegmentsToRichText(cell?.ct?.s);
                 const display = cell?.m != null ? String(cell.m) : cell?.v != null ? String(cell.v) : '';
                 const [r, c] = key.split('_').map(Number);
                 worksheet.getCell(r + 1, c + 1).value = {
                     // exceljs detects hyperlink values by `text && hyperlink` — an
                     // empty display string would degrade the cell to a plain object,
                     // so fall back to the link address.
-                    text: display !== '' ? display : link.linkAddress,
+                    text: richText ? { richText } : display !== '' ? display : link.linkAddress,
                     hyperlink: target,
-                };
+                } as XlsxCell['value'];
             }
         }
 
