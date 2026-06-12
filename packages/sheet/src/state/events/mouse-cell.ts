@@ -11,7 +11,7 @@ import {
     rangeSetValue,
 } from '../modules';
 import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, setEditingCell, updateCell } from '../modules/cell';
-import { getFilterButtonAtPosition } from '../modules/filter';
+import { FILTER_BUTTON_HEIGHT, getFilterButtonAtPosition } from '../modules/filter';
 import { showLinkCard } from '../modules/hyperlink';
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
 import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
@@ -21,6 +21,8 @@ import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { fixPositionOnFrozenCells } from './mouse-resize';
 
+// Returns true when the filter button consumed the click (the caller must then
+// skip the cell-input focus, whose auto-scroll would close the just-opened menu).
 export function handleCellAreaMouseDown(
     ctx: Context,
     globalCache: GlobalCache,
@@ -56,7 +58,7 @@ export function handleCellAreaMouseDown(
                 // Viewport-space anchor from the click's offset inside the button —
                 // freeze-correct by construction (click and button share a region).
                 x: rect.left + mouseX - (x - filterButton.left),
-                y: rect.top + mouseY - (y - filterButton.top) + filterButton.height,
+                y: rect.top + mouseY - (y - filterButton.top) + FILTER_BUTTON_HEIGHT,
                 col: filterButton.col,
                 startRow,
                 endRow,
@@ -69,7 +71,7 @@ export function handleCellAreaMouseDown(
             // Keep the browser from focusing the overlay on this mousedown — that
             // focus shift would dismiss the just-opened menu via onFocusOutside.
             e.preventDefault();
-            return;
+            return true;
         }
     }
 

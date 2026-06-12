@@ -58,7 +58,7 @@ export const SheetOverlay: React.FC = () => {
             if (e.button !== 2) {
                 // onContextMenu event will not call onMouseDown
                 setContext((draftCtx) => {
-                    handleCellAreaMouseDown(
+                    const consumed = handleCellAreaMouseDown(
                         draftCtx,
                         refs.globalCache,
                         nativeEvent,
@@ -73,7 +73,7 @@ export const SheetOverlay: React.FC = () => {
                     // which would snap the grid and close the menu via its
                     // close-on-scroll listener.
                     if (
-                        draftCtx.filterContextMenu == null &&
+                        !consumed &&
                         draftCtx.selections?.[0] != null &&
                         Object.keys(draftCtx.selections[0]).length > 0 &&
                         refs.cellInput.current
