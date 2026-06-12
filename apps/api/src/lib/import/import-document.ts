@@ -5,6 +5,7 @@ import { writeEigendocToYjs } from '../document/doc';
 import { writeSheetsToYjs } from '../document/sheets';
 import type { Drive, SharedDrive } from '../drive';
 import type { Mount } from '../mount';
+import type { User } from '../user';
 import type { DocxImage } from './doc/from-docx';
 import { xlsxToSheets } from './sheets/from-xlsx';
 
@@ -44,6 +45,7 @@ export async function convertToDocument(
     mount: Mount,
     sourcePath: DrivePath,
     targetType: 'eigensheets' | 'eigendoc',
+    user?: User,
 ): Promise<DrivePath> {
     if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');
 
@@ -57,7 +59,7 @@ export async function convertToDocument(
         }
         const sheets = await parseXlsxOrThrow(buffer);
         const name = sourcePath.name.replace(/\.xlsx$/i, '');
-        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets');
+        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets', user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
         writeSheetsToYjs(collabDoc.doc, sheets);
         return newPath;
@@ -69,7 +71,7 @@ export async function convertToDocument(
         }
         const { json, images, schema } = await parseDocxOrThrow(buffer);
         const name = sourcePath.name.replace(/\.docx$/i, '');
-        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc');
+        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
         writeEigendocToYjs(collabDoc.doc, json, schema);
         await saveDocImages(mount, newPath, images);

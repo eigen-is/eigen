@@ -11,8 +11,6 @@ const HISTORY_MAX_PER_PATH = 500;
 export class FileHistory {
     constructor(
         private db: BunSQLiteDatabase<typeof schema>,
-        // ownerId and mountId are used in Task 3 (fan-out notification tags).
-        // Stored now so the constructor signature is stable across tasks.
         readonly ownerId: string,
         readonly mountId: string,
     ) {}
