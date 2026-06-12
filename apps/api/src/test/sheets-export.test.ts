@@ -7,6 +7,7 @@ import type {
     Sheet,
 } from '@workspace/lib/sheets';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { sheetsToXlsx } from '../lib/export/sheets/xlsx';
 import { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 
@@ -15,6 +16,15 @@ async function exportAndReload(sheets: Sheet[]): Promise<ExcelJS.Workbook> {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer);
     return wb;
+}
+
+// Raw-XML read for asserts the exceljs cell surface can't make (the Excel-native
+// <hyperlink location=…> form and the rel TargetMode).
+async function readZipEntry(buffer: Buffer, path: string): Promise<string> {
+    const zip = await JSZip.loadAsync(buffer);
+    const xml = await zip.file(path)?.async('string');
+    if (!xml) throw new Error(`${path} missing from workbook zip`);
+    return xml;
 }
 
 // The committed regression net: every export feature must close the full loop back
@@ -1056,5 +1066,180 @@ describe('Sheets xlsx export — inline rich text', () => {
         const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
         expect(ws.getCell('A1').value).toBe('plain');
         expect(ws.getCell('A2').value).toBe('fallback');
+    });
+});
+
+describe('Sheets xlsx export — hyperlinks', () => {
+    test('exports webpage and mailto links as external rels with the display text preserved', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'Jira ticket', m: 'Jira ticket' } },
+                    { r: 1, c: 0, v: { v: 'Mail Erik' } },
+                    { r: 2, c: 0, v: { v: 'scheme-less' } },
+                ],
+                hyperlink: {
+                    '0_0': { linkType: 'webpage', linkAddress: 'https://jira.example.com/browse/PLATFORMS-1452' },
+                    '1_0': { linkType: 'webpage', linkAddress: 'mailto:erikjan@example.com' },
+                    '2_0': { linkType: 'webpage', linkAddress: 'example.com/page' },
+                },
+            },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buffer);
+        const ws = getSheet(wb, 'Sheet1');
+        expect(ws.getCell('A1').value).toEqual({
+            text: 'Jira ticket',
+            hyperlink: 'https://jira.example.com/browse/PLATFORMS-1452',
+        });
+        expect(ws.getCell('A2').value).toEqual({ text: 'Mail Erik', hyperlink: 'mailto:erikjan@example.com' });
+        // Scheme-less addresses export the resolved form FE navigation would open.
+        expect(ws.getCell('A3').value).toEqual({ text: 'scheme-less', hyperlink: 'https://example.com/page' });
+
+        const rels = await readZipEntry(buffer, 'xl/worksheets/_rels/sheet1.xml.rels');
+        expect(rels).toContain('Target="mailto:erikjan@example.com"');
+        expect(rels).toContain('TargetMode="External"');
+
+        // Full importer round-trip: linkType/linkAddress and the hl backref restored.
+        const rt = await xlsxToSheets(buffer);
+        expect(rt[0].hyperlink).toEqual({
+            '0_0': { linkType: 'webpage', linkAddress: 'https://jira.example.com/browse/PLATFORMS-1452' },
+            '1_0': { linkType: 'webpage', linkAddress: 'mailto:erikjan@example.com' },
+            '2_0': { linkType: 'webpage', linkAddress: 'https://example.com/page' },
+        });
+        const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+        expect(a1?.v?.v).toBe('Jira ticket');
+        expect(a1?.v?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
+    });
+
+    test('blocked schemes export as plain text with no link written', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [{ r: 0, c: 0, v: { v: 'click me' } }],
+                hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'javascript:alert(1)' } },
+            },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buffer);
+        expect(getSheet(wb, 'Sheet1').getCell('A1').value).toBe('click me');
+        const xml = await readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+        expect(xml).not.toContain('<hyperlink');
+        expect(xml).not.toContain('javascript:');
+
+        const rt = await xlsxToSheets(buffer);
+        expect(rt[0].hyperlink).toBeUndefined();
+    });
+
+    test('exports sheet links in Excel-native location form anchored at A1', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'go to data', m: 'go to data' } },
+                    { r: 1, c: 0, v: { v: 'quoted name' } },
+                ],
+                hyperlink: {
+                    '0_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
+                    '1_0': { linkType: 'sheet', linkAddress: "It's" },
+                },
+            },
+            { name: 'My Sheet', celldata: [] },
+            { name: "It's", celldata: [] },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        // The Excel-native internal form is the location attribute — the exceljs cell
+        // surface only shows the (redundant) rel target, so assert the raw XML.
+        const xml = await readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+        // exceljs escapes the quoting as &apos; in attribute values.
+        expect(xml).toContain('location="&apos;My Sheet&apos;!A1"');
+        expect(xml).toContain('location="&apos;It&apos;&apos;s&apos;!A1"');
+
+        // Closed round-trip through the importer: sheet links re-import as
+        // cellrange@A1 — accepted drift recorded in the spec.
+        const rt = await xlsxToSheets(buffer);
+        expect(rt[0].hyperlink).toEqual({
+            '0_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!A1" },
+            '1_0': { linkType: 'cellrange', linkAddress: "'It''s'!A1" },
+        });
+        const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+        expect(a1?.v?.v).toBe('go to data');
+        expect(a1?.v?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
+    });
+
+    test('exports cellrange links with range tails reduced to the top-left cell', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'range' } },
+                    { r: 1, c: 0, v: { v: 'bare' } },
+                    { r: 2, c: 0, v: { v: 'quoted' } },
+                ],
+                hyperlink: {
+                    '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!B2:C3' },
+                    '1_0': { linkType: 'cellrange', linkAddress: 'D4' },
+                    '2_0': { linkType: 'cellrange', linkAddress: "'Sheet 2'!A1" },
+                },
+            },
+            { name: 'Sheet2', celldata: [] },
+            { name: 'Sheet 2', celldata: [] },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const xml = await readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+        // A range tail reduces to its top-left cell (the location form only admits
+        // a single cell ref — accepted drift); bare refs gain the own sheet's name.
+        expect(xml).toContain('location="Sheet2!B2"');
+        expect(xml).toContain('location="&apos;Sheet1&apos;!D4"');
+        expect(xml).toContain('location="&apos;Sheet 2&apos;!A1"');
+
+        const rt = await xlsxToSheets(buffer);
+        expect(rt[0].hyperlink).toEqual({
+            '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!B2' },
+            '1_0': { linkType: 'cellrange', linkAddress: "'Sheet1'!D4" },
+            '2_0': { linkType: 'cellrange', linkAddress: "'Sheet 2'!A1" },
+        });
+    });
+
+    test('drops the link on formula cells — exceljs models a hyperlink as the cell value', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [{ r: 0, c: 0, v: { f: '=SUM(B1:B3)', v: 6 } }],
+                hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
+            },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buffer);
+        expect(getSheet(wb, 'Sheet1').getCell('A1').formula).toBe('SUM(B1:B3)');
+        const xml = await readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+        expect(xml).not.toContain('<hyperlink');
+    });
+
+    test('exports a hyperlink whose cell has no celldata entry with the address as text', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [],
+                hyperlink: { '1_1': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } },
+            },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buffer);
+        expect(getSheet(wb, 'Sheet1').getCell('B2').value).toEqual({
+            text: 'https://example.com/docs',
+            hyperlink: 'https://example.com/docs',
+        });
+
+        const rt = await xlsxToSheets(buffer);
+        expect(rt[0].hyperlink).toEqual({ '1_1': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } });
+        const b2 = (rt[0].celldata ?? []).find((c) => c.r === 1 && c.c === 1);
+        expect(b2?.v?.v).toBe('https://example.com/docs');
+        expect(b2?.v?.hl).toEqual({ r: 1, c: 1, id: 'sheet-0' });
     });
 });

@@ -10,6 +10,7 @@ export {
     columnLabelToIndex,
     parseA1,
     parseA1Range,
+    quoteSheetName,
     rowIndexToLabel,
     rowLabelToIndex,
     toA1,

@@ -8,8 +8,16 @@ import type {
     Sheet,
     SingleRange,
 } from '@workspace/lib/sheets';
+import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
-import { columnIndexToLabel, iscelldata, rowIndexToLabel, toA1 } from '@workspace/sheet/engine';
+import {
+    columnIndexToLabel,
+    iscelldata,
+    parseA1Range,
+    quoteSheetName,
+    rowIndexToLabel,
+    toA1,
+} from '@workspace/sheet/engine';
 import type {
     Border,
     ConditionalFormattingRule,
@@ -104,6 +112,31 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
                 const cell = worksheet.getCell(r + 1, c + 1);
                 applyCellValue(cell, v);
                 applyCellStyle(cell, v);
+            }
+        }
+
+        if (sheet.hyperlink) {
+            const cellByKey = new Map<string, FortuneCell>();
+            for (const { r, c, v } of sheet.celldata ?? []) {
+                if (v) cellByKey.set(`${r}_${c}`, v);
+            }
+            for (const [key, link] of Object.entries(sheet.hyperlink)) {
+                const cell = cellByKey.get(key);
+                // exceljs models a hyperlink as the cell VALUE ({text, hyperlink}),
+                // so a formula cell can't carry one — the formula wins.
+                if (cell?.f) continue;
+                const target = hyperlinkTarget(link, sheet.name);
+                // Blocked scheme or unbuildable location: the cell stays plain text.
+                if (target == null) continue;
+                const display = cell?.m != null ? String(cell.m) : cell?.v != null ? String(cell.v) : '';
+                const [r, c] = key.split('_').map(Number);
+                worksheet.getCell(r + 1, c + 1).value = {
+                    // exceljs detects hyperlink values by `text && hyperlink` — an
+                    // empty display string would degrade the cell to a plain object,
+                    // so fall back to the link address.
+                    text: display !== '' ? display : link.linkAddress,
+                    hyperlink: target,
+                };
             }
         }
 
@@ -294,6 +327,43 @@ function inlineSegmentsToRichText(segments: InlineStringSegment[] | undefined): 
         runs.push(Object.keys(font).length > 0 ? { text: seg.v, font } : { text: seg.v });
     }
     return runs.length > 0 ? runs : null;
+}
+
+// Mirror of exceljs's hyperlink-xform isInternalLink detection: a target matching
+// this pattern is written as <hyperlink location=…> (the Excel-native internal
+// form); anything else becomes an external rel. The pattern only admits a single
+// trailing cell ref, so internal targets must end in one. Known exceljs edge
+// (accepted): a webpage URL containing exactly one '!' with a cell-ref-shaped
+// tail would be misdetected as internal by the same pattern — vanishingly rare.
+const INTERNAL_LOCATION = /^[^!]+![a-zA-Z]+\d+$/;
+
+function hyperlinkTarget(link: { linkType: string; linkAddress: string }, ownSheetName: string): string | null {
+    if (link.linkType === 'webpage') return resolveWebLink(link.linkAddress);
+
+    const location =
+        link.linkType === 'sheet'
+            ? // linkAddress is the bare sheet name; a location needs a !ref tail.
+              `${quoteSheetName(link.linkAddress)}!A1`
+            : cellrangeLocation(link.linkAddress, ownSheetName);
+    // A target that fails exceljs's pattern (e.g. a sheet name containing '!')
+    // would be written as a corrupt external rel — drop the link instead.
+    return location != null && INTERNAL_LOCATION.test(location) ? location : null;
+}
+
+// cellrange linkAddress is stored verbatim from import/editor ('Sheet 2'!A1,
+// Sheet2!B2:C3, bare A1). Keep the stored sheet prefix, reduce a range tail to
+// its top-left cell (accepted drift — the location form only admits a single
+// cell ref), and give bare refs the own sheet's quoted name (a location needs one).
+function cellrangeLocation(linkAddress: string, ownSheetName: string): string | null {
+    const quoted = linkAddress.match(/^('(?:[^']|'')*')!(.+)$/);
+    const bang = linkAddress.indexOf('!');
+    const [prefix, ref] = quoted
+        ? [quoted[1], quoted[2]]
+        : bang >= 0
+          ? [linkAddress.slice(0, bang), linkAddress.slice(bang + 1)]
+          : [quoteSheetName(ownSheetName), linkAddress];
+    const parsed = parseA1Range(ref);
+    return parsed ? `${prefix}!${toA1(parsed.start.row, parsed.start.col)}` : null;
 }
 
 function singleRangeToA1({ row, column }: SingleRange): string {
