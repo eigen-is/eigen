@@ -6,6 +6,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import { Badge } from '@workspace/ui/components/badge';
 import { Separator } from '@workspace/ui/components/separator';
 import {
+    Bell,
     Download,
     FileText,
     Home,
@@ -205,6 +206,21 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                     label={currentApp === 'drive' ? 'Shared with me' : `${SHARING_NOUN[currentApp]} shared with me`}
                     condensed={condensed}
                 />
+                {currentApp === 'drive' ? (
+                    <SidebarItem
+                        icon={<Bell className="h-4 w-4" />}
+                        to="/watched"
+                        label="Watched"
+                        condensed={condensed}
+                    />
+                ) : (
+                    <SidebarItem
+                        icon={<Bell className="h-4 w-4" />}
+                        href={getDriveAppUrl('watched')}
+                        label="Watched"
+                        condensed={condensed}
+                    />
+                )}
             </SidebarSection>
 
             <Separator />

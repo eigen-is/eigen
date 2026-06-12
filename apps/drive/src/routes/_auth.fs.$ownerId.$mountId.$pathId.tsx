@@ -26,13 +26,14 @@ export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
         const sharePathId = typeof search.sharePathId === 'string' ? search.sharePathId : undefined;
         const shareEmail = typeof search.shareEmail === 'string' ? search.shareEmail : undefined;
-        return { pid, uid, sharePathId, shareEmail } as DriveSearchParams;
+        const showHistory = search.showHistory === '1' || search.showHistory === true;
+        return { pid, uid, sharePathId, shareEmail, showHistory } as DriveSearchParams & { showHistory?: boolean };
     },
 });
 
 function DriveRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    const { pid, sharePathId, shareEmail } = Route.useSearch();
+    const { pid, sharePathId, shareEmail, showHistory } = Route.useSearch();
     const navigate = useNavigate();
     const { isMobile } = useLayout();
     const { rootPath } = useContext(DriveContext);
@@ -178,6 +179,7 @@ function DriveRoute() {
                 showBreadcrumb={true}
                 pid={pid}
                 unreadPathIds={unreadChatIds}
+                highlightHistory={showHistory}
             />
             {shareTargetPath && (
                 <DriveAccessDialog

@@ -1,7 +1,8 @@
-import { useMutation } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
-import type { ClientFileEventType, FileEventDetailsMap } from '@workspace/lib/types/file-history';
+import type { ClientFileEventType, FileEvent, FileEventDetailsMap } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
+import { driveKeys } from './use-drive';
 
 // Discriminated client-event shape — mirrors the POST /history route's typebox union.
 // Not exported: domain barrels export values only; apps derive their variant from
@@ -20,4 +21,24 @@ export function useRecordHistory(ownerId: string, mountId: string, pathId: strin
         },
         onError: onMutationError,
     });
+}
+
+// GET FILE HISTORY — last N events for a path (file: direct events; folder: descendant events included)
+export function useFileHistory(ownerId: string, mountId: string, pathId: string, limit = 5) {
+    return useQuery<FileEvent[]>({
+        queryKey: driveKeys.fileHistory(ownerId, mountId, pathId),
+        queryFn: async () => {
+            const response = await driveApi({ ownerId })({ mountId })
+                .path({ pathId })
+                .history.get({ query: { limit: String(limit) } });
+            if (response.error) throw new AppError(response);
+            return response.data || [];
+        },
+        enabled: !!ownerId && !!mountId && !!pathId,
+        staleTime: 30_000,
+    });
+}
+
+export function invalidateFileHistory(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: driveKeys.history(ownerId) });
 }

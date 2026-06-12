@@ -4,6 +4,7 @@ import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
 import { DriveAccessList } from '@workspace/ui/components/layout/drive';
+import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch-toggle-button';
 import { formatFileSize } from '@workspace/ui/lib/formatFileSize';
 import { Download, MoreVertical, UserRoundPlus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -12,6 +13,7 @@ import { useOptionalPreview } from '../preview-provider/preview-provider';
 import { DriveItemMenuItems } from './drive-item-menu';
 import { DrivePreview } from './drive-preview';
 import { getFilePresentation } from './file-presentation';
+import { RecentActivity } from './recent-activity';
 
 type DriveDetailToolbarProps = {
     onClose?: () => void;
@@ -39,6 +41,7 @@ type DriveDetailProps = {
     onExport?: (path: DrivePath, format: string) => void;
     onEmailCollaborators?: (path: DrivePath) => void;
     allowDelete?: boolean;
+    highlightHistory?: boolean;
 };
 
 export function DriveDetail({
@@ -53,6 +56,7 @@ export function DriveDetail({
     onExport,
     onEmailCollaborators,
     allowDelete,
+    highlightHistory,
 }: DriveDetailProps) {
     const preview = useOptionalPreview();
 
@@ -103,6 +107,7 @@ export function DriveDetail({
                                 onClick={() => onShareClick(path)}
                             />
                         )}
+                        <WatchToggleButton ownerId={path.ownerId} mountId={path.mountId} pathId={path.id} />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="icon" className="h-8 w-8" aria-label="More actions">
@@ -128,6 +133,7 @@ export function DriveDetail({
                     </div>
                 </div>
                 <DetailsSection path={path} />
+                <RecentActivity path={path} onItemOpen={onItemOpen} highlight={highlightHistory} />
                 <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
                 <DriveAccessList path={path} onShareClick={onShareClick} />
             </div>
