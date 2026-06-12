@@ -304,3 +304,47 @@ describe('Sheets HTML export — cell styling', () => {
         expect(html).not.toContain('writing-mode:vertical');
     });
 });
+
+describe('Sheets HTML export — hyperlinks', () => {
+    test('webpage hyperlinks render as anchors with the href attribute-escaped', () => {
+        const sheet: Sheet = {
+            ...makeSheet([
+                { r: 0, c: 0, v: { v: 'Jira ticket', m: 'Jira ticket' } },
+                { r: 0, c: 1, v: { v: 'scheme-less' } },
+            ]),
+            hyperlink: {
+                '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/browse?a=1&b=2' },
+                '0_1': { linkType: 'webpage', linkAddress: 'example.com' },
+            },
+        };
+        const html = renderSheetsHtml([sheet]);
+        expect(html).toContain(
+            '<a href="https://example.com/browse?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">Jira ticket</a>',
+        );
+        // Scheme-less addresses get the same https:// resolution FE navigation uses.
+        expect(html).toContain(
+            '<a href="https://example.com" target="_blank" rel="noopener noreferrer">scheme-less</a>',
+        );
+    });
+
+    test('blocked schemes and internal links stay plain text', () => {
+        const sheet: Sheet = {
+            ...makeSheet([
+                { r: 0, c: 0, v: { v: 'click me' } },
+                { r: 0, c: 1, v: { v: 'go to sheet' } },
+                { r: 0, c: 2, v: { v: 'go to range' } },
+            ]),
+            hyperlink: {
+                '0_0': { linkType: 'webpage', linkAddress: 'javascript:alert(1)' },
+                // Internal links have no meaningful target in standalone HTML.
+                '0_1': { linkType: 'sheet', linkAddress: 'Sheet2' },
+                '0_2': { linkType: 'cellrange', linkAddress: 'Sheet2!B2' },
+            },
+        };
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toContain('<a ');
+        expect(html).not.toContain('javascript:');
+        expect(html).toContain('click me');
+        expect(html).toContain('go to sheet');
+    });
+});

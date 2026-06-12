@@ -1,5 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import type { BorderInfo, Cell, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
+import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     type CellFormatStyle,
@@ -70,7 +71,9 @@ export async function generateSheetsExportHtml(mount: Mount, drivePath: DrivePat
     const title = stripEigenExtension(drivePath.name);
     const sheets = await readSheetsContent(mount, drivePath);
     const bodyHtml = renderSheetsHtml(sheets);
-    const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true });
+    // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
+    // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.
+    const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true, ADD_ATTR: ['target'] });
     return wrapInDocument(title, sanitized);
 }
 
@@ -223,7 +226,15 @@ function renderSheet(sheet: Sheet, isLast: boolean, engine: FormulaEngine, resol
             const style = cellStyle ? `${BASE_TD_STYLE};${cellStyle}` : BASE_TD_STYLE;
             attrs.push(`style="${style}"`);
 
-            const display = getCellDisplay(v);
+            // Webpage links render as anchors gated by the same scheme allowlist as
+            // FE navigation; blocked schemes and internal sheet/cellrange links (no
+            // meaningful target in standalone HTML) stay plain text.
+            const link = sheet.hyperlink?.[`${r}_${c}`];
+            const href = link?.linkType === 'webpage' ? resolveWebLink(link.linkAddress) : null;
+            let display = getCellDisplay(v);
+            if (href != null) {
+                display = `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${display}</a>`;
+            }
             const dataBarLayer = cfStyle?.dataBar ? renderDataBar(cfStyle.dataBar, display) : null;
             const inner = wrapForRotation(v, dataBarLayer ?? display);
             const attrStr = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
