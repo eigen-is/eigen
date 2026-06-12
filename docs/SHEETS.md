@@ -19,8 +19,9 @@ apps/sheets/src/components/sheets/
 ### Canvas renderer
 
 `state/canvas.ts` is a thin facade: the `Canvas` class (`drawMain` / `drawRowHeader` /
-`drawColumnHeader` / `drawFreezeLine`) plus the `defaultStyle` re-export, consumed only by
-`components/Sheet/index.tsx` (one `drawMain` per freeze region). The drawing itself lives in
+`drawColumnHeader` / `drawFreezeLine`), consumed only by `components/Sheet/index.tsx` (one
+`drawMain` per freeze region). The facade also owns the render-cache idle timer (measure-text +
+cell-overflow caches clear after 100 ms without a draw). The drawing itself lives in
 `state/render/`:
 
 ```
@@ -32,7 +33,7 @@ state/render/
 ├── cells.ts        # nullCellRender/cellRender (background, indicators, checkbox, text, grid lines)
 ├── cell-text.ts    # Text painter + overflow-span variant (layout stays in modules/text.ts)
 ├── data-bar.ts     # Conditional-format data bar
-├── overflow.ts     # Text-spill map + trace + the shared per-row cache (hold/schedule-clear)
+├── overflow.ts     # Text-spill map + trace + the shared per-row cache (cleared via the facade's idle timer)
 ├── borders.ts      # config.borderInfo pass + dash patterns
 └── filter-ui.ts    # Autofilter range border + buttons (lazy Path2D glyphs — module eval is DOM-free)
 ```
