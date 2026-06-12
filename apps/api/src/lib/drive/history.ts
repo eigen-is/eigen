@@ -217,23 +217,27 @@ export class FileHistory {
             excludeEmails?: Set<string>;
         },
     ): Promise<void> {
-        for (const watcherId of watcherIds) {
-            const watcher = await getUserById(watcherId);
-            if (!watcher) continue;
-            if (opts.excludeEmails?.has(watcher.email.toLowerCase())) continue;
-            const memberships = await getMemberships(watcherId);
-            if (!canReadFromAncestors(opts.verifyAncestors, watcher, memberships)) continue;
-            await sendToHome(watcherId, {
-                type: 'notification',
-                notification: {
-                    type: 'file-event',
-                    actorEmail: opts.actor.email,
-                    title: `${opts.actor.name} ${fileEventVerb(opts.eventType)} ${stripEigenExtension(opts.itemName)}`,
-                    tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
-                    coalesce: true,
-                },
-            }).catch(() => {});
-        }
+        // Per-watcher lookups run concurrently — a shared folder with many watchers
+        // would otherwise add serial auth-db round-trips to every mutation request.
+        await Promise.all(
+            watcherIds.map(async (watcherId) => {
+                const watcher = await getUserById(watcherId);
+                if (!watcher) return;
+                if (opts.excludeEmails?.has(watcher.email.toLowerCase())) return;
+                const memberships = await getMemberships(watcherId);
+                if (!canReadFromAncestors(opts.verifyAncestors, watcher, memberships)) return;
+                await sendToHome(watcherId, {
+                    type: 'notification',
+                    notification: {
+                        type: 'file-event',
+                        actorEmail: opts.actor.email,
+                        title: `${opts.actor.name} ${fileEventVerb(opts.eventType)} ${stripEigenExtension(opts.itemName)}`,
+                        tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
+                        coalesce: true,
+                    },
+                }).catch(() => {});
+            }),
+        );
     }
 
     async fanOut(opts: {
@@ -255,7 +259,7 @@ export class FileHistory {
             eventType: opts.eventType,
             actor: opts.actor,
             itemName: opts.path.name,
-            tagPathId: opts.burst ? (opts.chainRootIds[0] ?? opts.path.id) : opts.path.id,
+            tagPathId: opts.burst ? (chainRoots[0] ?? opts.path.id) : opts.path.id,
             verifyAncestors: opts.verifyAncestors,
             excludeEmails: opts.excludeEmails,
         });
