@@ -6,7 +6,7 @@ import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
 import type { CalcChainEntry, Cell, Freezen, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
-import { type ComputedBorderEntry, getBorderInfoCompute } from './border';
+import { BORDER_STYLE_NAMES, type ComputedBorderEntry, getBorderInfoCompute } from './border';
 import {
     getCellValue,
     getDataBySelectionNoCopy,
@@ -1327,23 +1327,7 @@ export function moveHighlightRange(
 
 function getHtmlBorderStyle(type: string | number, color: string) {
     let style = '';
-    const borderType: Record<string, string> = {
-        '0': 'none',
-        '1': 'Thin',
-        '2': 'Hair',
-        '3': 'Dotted',
-        '4': 'Dashed',
-        '5': 'DashDot',
-        '6': 'DashDotDot',
-        '7': 'Double',
-        '8': 'Medium',
-        '9': 'MediumDashed',
-        '10': 'MediumDashDot',
-        '11': 'MediumDashDotDot',
-        '12': 'SlantedDashDot',
-        '13': 'Thick',
-    };
-    type = borderType[type.toString()];
+    type = BORDER_STYLE_NAMES[type.toString()];
 
     if (type.indexOf('Medium') > -1) {
         style += '1pt ';

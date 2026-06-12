@@ -21,6 +21,25 @@ export type ComputedBorderEntry = {
 };
 export type ComputedBorderMap = Record<string, ComputedBorderEntry>;
 
+// The xlsx border-style ordinal → style name; consumed by the canvas border
+// pass (dash pattern / line width) and the copy-as-HTML serializer.
+export const BORDER_STYLE_NAMES: Record<string, string> = {
+    '0': 'none',
+    '1': 'Thin',
+    '2': 'Hair',
+    '3': 'Dotted',
+    '4': 'Dashed',
+    '5': 'DashDot',
+    '6': 'DashDotDot',
+    '7': 'Double',
+    '8': 'Medium',
+    '9': 'MediumDashed',
+    '10': 'MediumDashDot',
+    '11': 'MediumDashDotDot',
+    '12': 'SlantedDashDot',
+    '13': 'Thick',
+};
+
 export function getBorderInfoComputeRange(
     ctx: Context,
     dataset_row_st: number,

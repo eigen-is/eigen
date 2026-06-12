@@ -19,6 +19,17 @@ function coercesToNumber(val: unknown) {
     return !Number.isNaN(Number(val));
 }
 
+// The right/bottom cell grid lines all share the same 1px default-color stroke.
+function strokeGridLine(renderCtx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {
+    renderCtx.beginPath();
+    renderCtx.moveTo(x1, y1);
+    renderCtx.lineTo(x2, y2);
+    renderCtx.lineWidth = 1;
+    renderCtx.strokeStyle = defaultStyle.strokeStyle;
+    renderCtx.stroke();
+    renderCtx.closePath();
+}
+
 // Empty cell rendering
 export function nullCellRender(
     pass: RenderPass,
@@ -104,25 +115,25 @@ export function nullCellRender(
     if (!overflowInfo.colIn || overflowInfo.colLast) {
         // Right border
         if (drawGridLines) {
-            renderCtx.beginPath();
-            renderCtx.moveTo(endX + offsetLeft - 2 + HALF_PIXEL, startY + offsetTop);
-            renderCtx.lineTo(endX + offsetLeft - 2 + HALF_PIXEL, endY + offsetTop);
-            renderCtx.lineWidth = 1;
-            renderCtx.strokeStyle = defaultStyle.strokeStyle;
-            renderCtx.stroke();
-            renderCtx.closePath();
+            strokeGridLine(
+                renderCtx,
+                endX + offsetLeft - 2 + HALF_PIXEL,
+                startY + offsetTop,
+                endX + offsetLeft - 2 + HALF_PIXEL,
+                endY + offsetTop,
+            );
         }
     }
 
     // Bottom border
     if (drawGridLines) {
-        renderCtx.beginPath();
-        renderCtx.moveTo(startX + offsetLeft - 1, endY + offsetTop - 2 + HALF_PIXEL);
-        renderCtx.lineTo(endX + offsetLeft - 1, endY + offsetTop - 2 + HALF_PIXEL);
-        renderCtx.lineWidth = 1;
-        renderCtx.strokeStyle = defaultStyle.strokeStyle;
-        renderCtx.stroke();
-        renderCtx.closePath();
+        strokeGridLine(
+            renderCtx,
+            startX + offsetLeft - 1,
+            endY + offsetTop - 2 + HALF_PIXEL,
+            endX + offsetLeft - 1,
+            endY + offsetTop - 2 + HALF_PIXEL,
+        );
     }
 
     // After cell render
@@ -374,24 +385,24 @@ export function cellRender(
 
     if (drawRightGridLine && drawGridLines) {
         // Right border
-        renderCtx.beginPath();
-        renderCtx.moveTo(endX + offsetLeft - 2 + HALF_PIXEL, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 2 + HALF_PIXEL, endY + offsetTop);
-        renderCtx.lineWidth = 1;
-        renderCtx.strokeStyle = defaultStyle.strokeStyle;
-        renderCtx.stroke();
-        renderCtx.closePath();
+        strokeGridLine(
+            renderCtx,
+            endX + offsetLeft - 2 + HALF_PIXEL,
+            startY + offsetTop,
+            endX + offsetLeft - 2 + HALF_PIXEL,
+            endY + offsetTop,
+        );
     }
 
     // Bottom border
     if (drawGridLines) {
-        renderCtx.beginPath();
-        renderCtx.moveTo(startX + offsetLeft - 1, endY + offsetTop - 2 + HALF_PIXEL);
-        renderCtx.lineTo(endX + offsetLeft - 1, endY + offsetTop - 2 + HALF_PIXEL);
-        renderCtx.lineWidth = 1;
-        renderCtx.strokeStyle = defaultStyle.strokeStyle;
-        renderCtx.stroke();
-        renderCtx.closePath();
+        strokeGridLine(
+            renderCtx,
+            startX + offsetLeft - 1,
+            endY + offsetTop - 2 + HALF_PIXEL,
+            endX + offsetLeft - 1,
+            endY + offsetTop - 2 + HALF_PIXEL,
+        );
     }
 
     // After cell render
