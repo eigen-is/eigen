@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { formatTimeAgo } from '@workspace/lib/date';
-import { useUserWatches } from '@workspace/lib/drive';
+import { useSharedPaths, useUserWatches } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import { isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
@@ -25,7 +25,11 @@ function WatchedRoute() {
     const userId = user!.id;
 
     const { data: myTeams, isLoading: isTeamsLoading } = useMyTeams();
-    const ownerIds = [userId, ...(myTeams?.map((t) => teamOwnerId(t.id)) ?? [])];
+    const teams = myTeams?.map((t) => teamOwnerId(t.id)) ?? [];
+
+    // Watches on alice's share live in alice's mount; include her ownerId so those watches are fetched.
+    const { data: sharedWithMe } = useSharedPaths(userId, 'with-me');
+    const ownerIds = [...new Set([userId, ...teams, ...(sharedWithMe?.map((p) => p.ownerId) ?? [])])];
 
     // useUserWatches returns WatchedItem[][] — one array per ownerId
     const watchArrays = useUserWatches(ownerIds);
