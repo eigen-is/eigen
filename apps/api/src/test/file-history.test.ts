@@ -169,7 +169,7 @@ describe('FileHistory', () => {
         expect(events).toHaveLength(2);
     });
 
-    test('prune trims per-path rows beyond 500 and drops rows older than 90 days', async () => {
+    test('prune trims per-path rows beyond 500', async () => {
         const fileId = await mount.touchFile(rootId, 'prune-test.txt', 'text/plain');
 
         // Insert 502 events; prune should trim back to 500
