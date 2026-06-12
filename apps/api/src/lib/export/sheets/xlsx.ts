@@ -89,8 +89,11 @@ export async function exportSheetsToXlsx(mount: Mount, drivePath: DrivePath): Pr
 export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
+    // Internal-link labels per worksheet (1-based, matching sheetN.xml), injected
+    // as the `display` attribute by rewriteInternalHyperlinks below.
+    const internalLinkLabels = new Map<number, Map<string, string>>();
 
-    for (const sheet of sheets) {
+    for (const [sheetIndex, sheet] of sheets.entries()) {
         const worksheet = workbook.addWorksheet(sheet.name);
         const config = sheet.config ?? {};
 
@@ -146,6 +149,12 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
                     text: richText ? { richText } : display !== '' ? display : link.linkAddress,
                     hyperlink: target,
                 } as XlsxCell['value'];
+                if (link.linkType !== 'webpage') {
+                    const label = richText ? richText.map((run) => run.text).join('') : display;
+                    const labels = internalLinkLabels.get(sheetIndex + 1) ?? new Map<string, string>();
+                    internalLinkLabels.set(sheetIndex + 1, labels);
+                    labels.set(toA1(r, c), label !== '' ? label : link.linkAddress);
+                }
             }
         }
 
@@ -257,32 +266,45 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
     }
 
     const arrayBuffer = await workbook.xlsx.writeBuffer();
-    return stripInternalHyperlinkRels(Buffer.from(arrayBuffer));
+    return rewriteInternalHyperlinks(Buffer.from(arrayBuffer), internalLinkLabels);
 }
 
 // exceljs rels EVERY hyperlink (worksheet-xform prepare), so location-form internal
 // links come out with a redundant TargetMode="External" rel and an r:id on the
 // element. Per ECMA-376 the r:id wins over location, so Excel/Google chase the rel
 // — and `'Sheet'!A1` is not a resolvable URI (Google shows "Invalid link"). Excel
-// itself authors internal links location-only; strip the junk down to that form.
-async function stripInternalHyperlinkRels(buffer: Buffer): Promise<Buffer> {
+// and Google author internal links location-only, with the link label in the
+// display attribute; rewrite our elements to that exact form — strip the junk
+// rel, inject display.
+async function rewriteInternalHyperlinks(
+    buffer: Buffer,
+    labelsBySheet: Map<number, Map<string, string>>,
+): Promise<Buffer> {
     const zip = await JSZip.loadAsync(buffer);
     let changed = false;
     for (const path of Object.keys(zip.files)) {
-        const sheetFile = path.match(/^xl\/worksheets\/(sheet\d+)\.xml$/);
+        const sheetFile = path.match(/^xl\/worksheets\/sheet(\d+)\.xml$/);
         if (!sheetFile) continue;
+        const labels = labelsBySheet.get(Number(sheetFile[1]));
         const ids: string[] = [];
         const xml = await zip.files[path].async('string');
         const stripped = xml.replace(/<hyperlink\b[^>]*>/g, (el) => {
             const rid = el.includes('location="') ? el.match(/ r:id="(rId\d+)"/) : null;
             if (!rid) return el;
             ids.push(rid[1]);
-            return el.replace(rid[0], '');
+            let out = el.replace(rid[0], '');
+            // Google's importer labels internal links from the display attribute
+            // (its own xlsx exports carry it); without one it shows its rewritten
+            // #gid=N target as the cell text. exceljs never writes display.
+            const ref = out.match(/ ref="([^"]+)"/);
+            const label = ref ? labels?.get(ref[1]) : undefined;
+            if (label != null) out = out.replace('/>', ` display="${escapeXmlAttribute(label)}"/>`);
+            return out;
         });
         if (ids.length === 0) continue;
         changed = true;
         zip.file(path, stripped);
-        const relsPath = `xl/worksheets/_rels/${sheetFile[1]}.xml.rels`;
+        const relsPath = `xl/worksheets/_rels/sheet${sheetFile[1]}.xml.rels`;
         const relsFile = zip.file(relsPath);
         if (relsFile) {
             let rels = await relsFile.async('string');
@@ -294,6 +316,15 @@ async function stripInternalHyperlinkRels(buffer: Buffer): Promise<Buffer> {
     }
     if (!changed) return buffer;
     return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+}
+
+function escapeXmlAttribute(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
 }
 
 function applyCellValue(cell: XlsxCell, v: FortuneCell): void {

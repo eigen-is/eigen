@@ -1393,17 +1393,19 @@ describe('Sheets xlsx export — hyperlinks', () => {
         });
     });
 
-    test('strips the junk external rel exceljs pairs with location-form internal links', async () => {
+    test('strips the junk external rel and labels location-form internal links via display', async () => {
         const sheets: Sheet[] = [
             {
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'web', m: 'web' } },
                     { r: 1, c: 0, v: { v: 'jump', m: 'jump' } },
+                    { r: 2, c: 0, v: { v: 'R&D "stuff"', m: 'R&D "stuff"' } },
                 ],
                 hyperlink: {
                     '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' },
                     '1_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
+                    '2_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
                 },
             },
             { name: 'My Sheet', celldata: [] },
@@ -1413,11 +1415,16 @@ describe('Sheets xlsx export — hyperlinks', () => {
         // Per ECMA-376 an r:id on the hyperlink element wins over location, so
         // Excel/Google chase the rel — and `'My Sheet'!A1` is not a resolvable URI
         // (Google shows "Invalid link"). Excel authors internal links location-only;
-        // the export must match that form exactly.
+        // the export must match that form exactly. Google's importer additionally
+        // labels internal links from the `display` attribute (its own xlsx exports
+        // carry it) — without one it shows its rewritten `#gid=N` target as the
+        // cell text.
         const xml = await readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
         const locationLinks = xml.match(/<hyperlink\b[^>]*location="[^>]*>/g) ?? [];
-        expect(locationLinks).toHaveLength(1);
-        expect(locationLinks[0]).not.toContain('r:id');
+        expect(locationLinks).toHaveLength(2);
+        for (const el of locationLinks) expect(el).not.toContain('r:id');
+        expect(locationLinks[0]).toContain('display="jump"');
+        expect(locationLinks[1]).toContain('display="R&amp;D &quot;stuff&quot;"');
 
         // The webpage rel stays; the internal target leaves the rels part entirely.
         const rels = await readZipEntry(buffer, 'xl/worksheets/_rels/sheet1.xml.rels');
