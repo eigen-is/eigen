@@ -20,6 +20,7 @@ import {
     isContainerType,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
+import type { FileEvent } from '@workspace/lib/types/file-history';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
@@ -184,7 +185,7 @@ export default class Drive {
         return await mount.listFolder(pathId);
     }
 
-    async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
+    async createFolder(mountId: string, parentId: string, folderName: string, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
         if (!isContainerType(parent.type)) {
@@ -200,16 +201,17 @@ export default class Drive {
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
+        if (user) {
+            await mount.history.record({
+                pathId: folder.id,
+                eventType: 'created',
+                actor: { id: user.id, email: user.email },
+            });
+        }
         return folder;
     }
 
-    async create(
-        mountId: string,
-        parentId: string,
-        name: string,
-        type: EigenDocType,
-        createdBy?: string,
-    ): Promise<DrivePath> {
+    async create(mountId: string, parentId: string, name: string, type: EigenDocType, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new ApiError(403, 'No write permission');
@@ -219,8 +221,8 @@ export default class Drive {
         const pathId = await mount.createFolder(parentId, safeName, type);
         if (type === DRIVE_TYPE_CHAT) {
             await ChatRoom.create(this, mountId, pathId);
-            if (createdBy) {
-                await this.seedCommentRow(mountId, pathId, parentId, createdBy);
+            if (user) {
+                await this.seedCommentRow(mountId, pathId, parentId, user.email);
             }
         } else {
             await CollabDocument.create(this, mountId, pathId);
@@ -228,6 +230,13 @@ export default class Drive {
         const created = await mount.getPath(pathId);
         if (!created) throw new ApiError(500, `Failed to create ${type}`);
         this.emit(SSEventType.DRIVE_FILE_CREATED, created);
+        if (user) {
+            await mount.history.record({
+                pathId: created.id,
+                eventType: 'created',
+                actor: { id: user.id, email: user.email },
+            });
+        }
         return created;
     }
 
@@ -257,7 +266,13 @@ export default class Drive {
         return chatRoom.init();
     }
 
-    async uploadFiles(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath[]> {
+    async uploadFiles(
+        mountId: string,
+        parentId: string,
+        request: Request,
+        maxSize: number,
+        user?: User,
+    ): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
         if (parent.type !== DRIVE_TYPE_FOLDER) {
@@ -293,7 +308,15 @@ export default class Drive {
                 );
 
                 uploaded.push(
-                    await this.finalizeUpload(mount, pathId, originalName, safeName, result.mimeType, result.tempId),
+                    await this.finalizeUpload(
+                        mount,
+                        pathId,
+                        originalName,
+                        safeName,
+                        result.mimeType,
+                        result.tempId,
+                        user,
+                    ),
                 );
             } catch (e) {
                 await mount.cleanupTemp(result.tempId);
@@ -310,6 +333,7 @@ export default class Drive {
         name: string,
         mimeType: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
@@ -334,14 +358,14 @@ export default class Drive {
             }
 
             const pathId = await mount.createFileFromTemp(parentId, safeName, mimeType, size, hash, tempId);
-            return await this.finalizeUpload(mount, pathId, originalName, safeName, mimeType, tempId);
+            return await this.finalizeUpload(mount, pathId, originalName, safeName, mimeType, tempId, user);
         } catch (e) {
             await mount.cleanupTemp(tempId);
             throw e;
         }
     }
 
-    async deletePath(mountId: string, pathId: string): Promise<void> {
+    async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
 
@@ -369,9 +393,12 @@ export default class Drive {
 
         const trashedItem = await mount.trashPath(pathId);
         this.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
+        if (user) {
+            await mount.history.record({ pathId, eventType: 'trashed', actor: { id: user.id, email: user.email } });
+        }
     }
 
-    async restorePath(mountId: string, pathId: string): Promise<void> {
+    async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
@@ -388,6 +415,9 @@ export default class Drive {
         }
 
         this.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
+        if (user) {
+            await mount.history.record({ pathId, eventType: 'restored', actor: { id: user.id, email: user.email } });
+        }
     }
 
     async listTrash(mountId: string): Promise<DrivePath[]> {
@@ -395,7 +425,7 @@ export default class Drive {
         return mount.listTrash();
     }
 
-    async permanentlyDelete(mountId: string, pathId: string): Promise<void> {
+    async permanentlyDelete(mountId: string, pathId: string, _user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
@@ -409,15 +439,15 @@ export default class Drive {
         }
     }
 
-    async emptyTrash(mountId: string): Promise<void> {
+    async emptyTrash(mountId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const items = await mount.listTrash();
         for (const item of items) {
-            await this.permanentlyDelete(mountId, item.id);
+            await this.permanentlyDelete(mountId, item.id, user);
         }
     }
 
-    async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
+    async movePath(mountId: string, pathId: string, targetParentId: string, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
 
@@ -450,12 +480,21 @@ export default class Drive {
         const movedPath = await mount.getPath(pathId);
         if (!movedPath) throw new ApiError(500, 'Failed to move path');
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, oldParentId ?? undefined);
+        if (user) {
+            await mount.history.record({
+                pathId,
+                eventType: 'moved',
+                actor: { id: user.id, email: user.email },
+                details: { oldParentId: oldParentId!, newParentId: targetParentId },
+            });
+        }
         return movedPath;
     }
 
-    async renamePath(mountId: string, pathId: string, newName: string): Promise<void> {
+    async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
+        const oldName = item.name;
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
@@ -465,6 +504,14 @@ export default class Drive {
         await propagateACLChange(item, item.acl, item.acl, null);
         const renamedItem = await mount.getPath(pathId);
         if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
+        if (user) {
+            await mount.history.record({
+                pathId,
+                eventType: 'renamed',
+                actor: { id: user.id, email: user.email },
+                details: { oldName, newName },
+            });
+        }
     }
 
     async downloadFile(mountId: string, pathId: string) {
@@ -473,8 +520,20 @@ export default class Drive {
         return await mount.readFile(pathId);
     }
 
-    async copyPath(mountId: string, srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
-        return this.getMount(mountId).copyPath(srcPathId, destParentId, name);
+    async copyPath(
+        mountId: string,
+        srcPathId: string,
+        destParentId: string,
+        name: string,
+        user?: User,
+    ): Promise<DrivePath> {
+        const actor = user ? { id: user.id, email: user.email } : undefined;
+        const copied = await this.getMount(mountId).copyPath(srcPathId, destParentId, name, actor);
+        this.emit(
+            isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
+            copied,
+        );
+        return copied;
     }
 
     async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
@@ -548,6 +607,7 @@ export default class Drive {
         mountId: string,
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
@@ -587,6 +647,14 @@ export default class Drive {
         const updated = await mount.getPath(pathId);
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
+        if (user) {
+            await mount.history.record({
+                pathId,
+                eventType: 'uploaded',
+                actor: { id: user.id, email: user.email },
+                details: { size: updated.size ?? 0 },
+            });
+        }
 
         if (thumbnailSource !== null) {
             this.regenerateThumbnailAsync(
@@ -664,7 +732,7 @@ export default class Drive {
         acl: DriveACL[] | null,
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
-        actor?: { name: string; email: string } | null,
+        actor?: User | null,
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
@@ -703,6 +771,18 @@ export default class Drive {
         if (updatedItem) {
             await propagateACLChange(updatedItem, oldACL, normalizedACL, actor ?? null);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
+        }
+        if (actor) {
+            const oldEmails = new Set((oldACL || []).map((e) => e.id.toLowerCase()));
+            const newEmails = new Set((normalizedACL || []).map((e) => e.id.toLowerCase()));
+            const added = [...newEmails].filter((e) => !oldEmails.has(e));
+            const removed = [...oldEmails].filter((e) => !newEmails.has(e));
+            await mount.history.record({
+                pathId,
+                eventType: 'acl-changed',
+                actor: { id: actor.id, email: actor.email },
+                details: { added, removed },
+            });
         }
     }
 
@@ -788,7 +868,7 @@ export default class Drive {
         mountId: string,
         chatId: string,
         email: string,
-        actor: { name: string; email: string } | null = null,
+        actor: User | null = null,
     ): Promise<{
         alreadyHasAccess: boolean;
         targetPathId: string;
@@ -888,11 +968,27 @@ export default class Drive {
         return listVersions(this.getMount(mountId), containerId);
     }
 
-    async restoreContainer(mountId: string, containerId: string, snapshotName: string): Promise<void> {
+    async restoreContainer(mountId: string, containerId: string, snapshotName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const container = await mount.getPath(containerId);
         if (!container) throw new ApiError(404, `Container ${containerId} not found`);
-        return restoreContainer(this, mount, container, snapshotName);
+        await restoreContainer(this, mount, container, snapshotName);
+        if (user) {
+            await mount.history.record({
+                pathId: containerId,
+                eventType: 'version-restored',
+                actor: { id: user.id, email: user.email },
+                details: { versionName: snapshotName },
+            });
+        }
+    }
+
+    async getFileHistory(
+        mountId: string,
+        pathId: string,
+        opts?: { limit?: number; before?: Date },
+    ): Promise<FileEvent[]> {
+        return this.getMount(mountId).history.list(pathId, opts);
     }
 
     async openDatabase<S extends SchemaType>(
@@ -1174,6 +1270,7 @@ export default class Drive {
         safeName: string,
         mimeType: string,
         tempId: string,
+        user?: User,
     ): Promise<DrivePath> {
         if (originalName) {
             await mount.updatePath(pathId, { details: { originalName } });
@@ -1182,6 +1279,14 @@ export default class Drive {
         const uploadedFile = await mount.getPath(pathId);
         if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
+        if (user) {
+            await mount.history.record({
+                pathId,
+                eventType: 'uploaded',
+                actor: { id: user.id, email: user.email },
+                details: { size: uploadedFile.size ?? 0 },
+            });
+        }
 
         if (uploadedFile.size === 0) {
             // 0-byte placeholders (Finder's two-step copy) can't yield a thumbnail.

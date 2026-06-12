@@ -132,6 +132,7 @@ export async function saveAttachmentsToDrive(
             filename,
             att.contentType,
             content,
+            user,
         );
         results.push(result);
     }

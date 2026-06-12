@@ -145,8 +145,8 @@ export async function handlePut(args: {
     }
 
     const path = existing
-        ? await drive.writeFileContent(mountId, existing.id, data)
-        : await drive.createFileFromData(mountId, parent.id, name, mimeTypeFromName(name), data);
+        ? await drive.writeFileContent(mountId, existing.id, data, user)
+        : await drive.createFileFromData(mountId, parent.id, name, mimeTypeFromName(name), data, user);
 
     return new Response(null, {
         status: existing ? 204 : 201,
@@ -187,7 +187,7 @@ export async function handleMkcol(args: {
     }
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
-    await drive.createFolder(mountId, parent.id, name);
+    await drive.createFolder(mountId, parent.id, name, user);
     return new Response(null, { status: 201 });
 }
 
@@ -208,7 +208,7 @@ export async function handleDelete(args: {
         throw new ApiError(423, 'Container internals are read-only');
     }
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
-    await drive.deletePath(mountId, path.id);
+    await drive.deletePath(mountId, path.id, user);
     drive.lockManager.releaseAllForPath(path.id);
     return new Response(null, { status: 204 });
 }

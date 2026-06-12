@@ -2,10 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import type { FileEvent } from '@workspace/lib/types/file-history';
 import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import { fileEvents } from '../lib/mount/schema';
+import type { TestContext } from './setup';
+import { authedRequest, driveDelete, drivePost, drivePut, driveUpload, getTestContext } from './setup';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-file-history-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -237,5 +240,215 @@ describe('FileHistory old-row prune', () => {
         const afterPrune = await mount.history.list(fileId, { limit: 600 });
         expect(afterPrune.length).toBe(1);
         expect(afterPrune[0].eventType).toBe('created');
+    });
+});
+
+describe('Drive history recording', () => {
+    let ctx: TestContext;
+    let aliceToken: string;
+    let aliceOwnerId: string;
+    let aliceMountId: string;
+    let aliceRootId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        aliceToken = ctx.alice.user.sessionToken;
+        aliceOwnerId = ctx.alice.user.id;
+
+        const mountsRes = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/mounts`);
+        const mountsData = (await mountsRes.json()) as { id: string }[];
+        aliceMountId = mountsData[0].id;
+
+        const rootRes = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/root`);
+        const root = (await rootRes.json()) as { id: string };
+        aliceRootId = root.id;
+    });
+
+    test('create folder records created', async () => {
+        const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'HistFolder',
+        });
+        const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${folder.id}/history`);
+        expect(res.status).toBe(200);
+        const events = (await res.json()) as FileEvent[];
+        expect(events.some((e) => e.eventType === 'created')).toBe(true);
+        const created = events.find((e) => e.eventType === 'created')!;
+        expect(created.actorEmail).toBe('alice@test.eigen.is');
+    });
+
+    test('rename records renamed with old/new names', async () => {
+        const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'RenameMe',
+        });
+        await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${folder.id}/rename`, { newName: 'Renamed' });
+        const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${folder.id}/history`);
+        const events = (await res.json()) as FileEvent[];
+        const renamed = events.find((e) => e.eventType === 'renamed');
+        expect(renamed).toBeDefined();
+        expect(renamed!.details).toEqual({ oldName: 'RenameMe', newName: 'Renamed' });
+    });
+
+    test('upload records uploaded with size', async () => {
+        const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'UploadFolder',
+        });
+        const content = 'hello world';
+        const file = new File([content], 'test.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(aliceToken, aliceOwnerId, aliceMountId, folder.id, file);
+        const res = await authedRequest(
+            aliceToken,
+            `/drive/${aliceOwnerId}/${aliceMountId}/path/${uploaded.id}/history`,
+        );
+        const events = (await res.json()) as FileEvent[];
+        const uploadedEvent = events.find((e) => e.eventType === 'uploaded');
+        expect(uploadedEvent).toBeDefined();
+        expect((uploadedEvent!.details as { size: number }).size).toBeGreaterThan(0);
+    });
+
+    test('move records moved with parent ids', async () => {
+        const folder1 = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'MoveSource',
+        });
+        const folder2 = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'MoveDest',
+        });
+        const file = new File(['content'], 'moveme.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(aliceToken, aliceOwnerId, aliceMountId, folder1.id, file);
+
+        await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${uploaded.id}/move`, {
+            targetParentId: folder2.id,
+        });
+        const res = await authedRequest(
+            aliceToken,
+            `/drive/${aliceOwnerId}/${aliceMountId}/path/${uploaded.id}/history`,
+        );
+        const events = (await res.json()) as FileEvent[];
+        const moved = events.find((e) => e.eventType === 'moved');
+        expect(moved).toBeDefined();
+        expect((moved!.details as { oldParentId: string; newParentId: string }).oldParentId).toBe(folder1.id);
+        expect((moved!.details as { oldParentId: string; newParentId: string }).newParentId).toBe(folder2.id);
+    });
+
+    test('acl PUT records acl-changed with added emails', async () => {
+        const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'ShareMe',
+        });
+        await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${folder.id}/acl`, {
+            acl: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+        const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${folder.id}/history`);
+        const events = (await res.json()) as FileEvent[];
+        const aclChanged = events.find((e) => e.eventType === 'acl-changed');
+        expect(aclChanged).toBeDefined();
+        expect((aclChanged!.details as { added: string[]; removed: string[] }).added).toContain(ctx.bob.user.email);
+    });
+
+    test('trash records trashed; restore records restored', async () => {
+        const file = new File(['content'], 'trashme.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(aliceToken, aliceOwnerId, aliceMountId, aliceRootId, file);
+
+        await driveDelete(aliceToken, aliceOwnerId, aliceMountId, `path/${uploaded.id}`);
+
+        const restoreRes = await authedRequest(
+            aliceToken,
+            `/drive/${aliceOwnerId}/${aliceMountId}/trash/${uploaded.id}/restore`,
+            { method: 'POST' },
+        );
+        expect(restoreRes.status).toBe(200);
+
+        const res = await authedRequest(
+            aliceToken,
+            `/drive/${aliceOwnerId}/${aliceMountId}/path/${uploaded.id}/history`,
+        );
+        const events = (await res.json()) as FileEvent[];
+        expect(events.some((e) => e.eventType === 'trashed')).toBe(true);
+        expect(events.some((e) => e.eventType === 'restored')).toBe(true);
+    });
+
+    test('copy records copied on root and descendants', async () => {
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(aliceOwnerId);
+
+        const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'CopySource',
+        });
+        const subFile = new File(['content'], 'subfile.txt', { type: 'text/plain' });
+        await driveUpload(aliceToken, aliceOwnerId, aliceMountId, folder.id, subFile);
+
+        const destFolder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'CopyDest',
+        });
+
+        const actor = { id: ctx.alice.user.id, email: ctx.alice.user.email, name: ctx.alice.user.name } as never;
+        const copied = await home.drive.copyPath(aliceMountId, folder.id, destFolder.id, 'CopiedFolder', actor);
+
+        const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${copied.id}/history`);
+        const events = (await res.json()) as FileEvent[];
+        expect(events.some((e) => e.eventType === 'copied')).toBe(true);
+    });
+
+    test('folder history endpoint includes descendant events', async () => {
+        const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'ParentFolder',
+        });
+        const file = new File(['content'], 'child.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(aliceToken, aliceOwnerId, aliceMountId, folder.id, file);
+
+        await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${uploaded.id}/rename`, {
+            newName: 'renamed.txt',
+        });
+
+        const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${folder.id}/history`);
+        const events = (await res.json()) as FileEvent[];
+        expect(events.some((e) => e.pathId === uploaded.id)).toBe(true);
+    });
+
+    test('403 for bob without access', async () => {
+        const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'NoAccessFolder',
+        });
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/drive/${aliceOwnerId}/${aliceMountId}/path/${folder.id}/history`,
+        );
+        expect(res.status).toBe(403);
+    });
+
+    test('200 with read share', async () => {
+        const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'SharedForHistory',
+        });
+        await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${folder.id}/acl`, {
+            acl: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/drive/${aliceOwnerId}/${aliceMountId}/path/${folder.id}/history`,
+        );
+        expect(res.status).toBe(200);
+    });
+
+    test('version-restored after save+restore', async () => {
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(aliceOwnerId);
+
+        const newPath = await home.drive.create(
+            aliceMountId,
+            aliceRootId,
+            'VersionTestDoc',
+            'doc',
+            ctx.alice.user as never,
+        );
+        const version = await home.drive.saveVersion(aliceMountId, newPath.id);
+        await home.drive.restoreContainer(aliceMountId, newPath.id, version.name, ctx.alice.user as never);
+
+        const res = await authedRequest(
+            aliceToken,
+            `/drive/${aliceOwnerId}/${aliceMountId}/path/${newPath.id}/history`,
+        );
+        const events = (await res.json()) as FileEvent[];
+        const versionRestored = events.find((e) => e.eventType === 'version-restored');
+        expect(versionRestored).toBeDefined();
+        expect((versionRestored!.details as { versionName: string }).versionName).toBe(version.name);
     });
 });
