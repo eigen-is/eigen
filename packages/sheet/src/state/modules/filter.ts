@@ -104,39 +104,25 @@ export function orderbydatafiler(
 
 // The per-column autofilter button: 20×15, right edge on the column's right
 // edge, at the top of the filter header row. Drawn on the canvas (freeze-aware
-// for free) and hit-tested in the mousedown path from the same rects.
+// for free) and hit-tested in the mousedown path from the same
+// filterOptions.items geometry plus these constants.
 export const FILTER_BUTTON_WIDTH = 20;
 export const FILTER_BUTTON_HEIGHT = 15;
 
-export type FilterButtonRect = {
-    col: number;
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-};
-
-// Button rects in sheet coordinates (scroll-independent), derived from the
-// filterOptions geometry that createFilterOptions maintains for the current
-// sheet — the single geometry source for canvas draw and hit-test.
-export function getFilterButtonRects(ctx: Context): FilterButtonRect[] {
-    const options = ctx.filterOptions;
-    if (options == null) return [];
-    return options.items.map((item) => ({
-        col: item.col,
-        left: item.left,
-        top: item.top,
-        width: FILTER_BUTTON_WIDTH,
-        height: FILTER_BUTTON_HEIGHT,
-    }));
-}
-
 // x/y are freeze-corrected sheet coordinates (the space fixPositionOnFrozenCells
-// produces in the mouse handlers).
-export function getFilterButtonAtPosition(ctx: Context, x: number, y: number): FilterButtonRect | undefined {
-    return getFilterButtonRects(ctx).find(
-        (rect) => x >= rect.left && x < rect.left + rect.width && y >= rect.top && y < rect.top + rect.height,
-    );
+// produces in the mouse handlers). Every button sits on the filter header row
+// (createFilterOptions gives all items the same top), so a y outside that band
+// rejects without scanning the columns.
+export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
+    const options = ctx.filterOptions;
+    if (options == null) return undefined;
+    if (y < options.top || y >= options.top + FILTER_BUTTON_HEIGHT) return undefined;
+    for (const item of options.items) {
+        if (x >= item.left && x < item.left + FILTER_BUTTON_WIDTH) {
+            return item;
+        }
+    }
+    return undefined;
 }
 
 // Create filter options
