@@ -71,10 +71,6 @@ last and wins.
   earlier (visible) column — so the drawn state can belong to a different column than the menu a
   click opens, but only when the hidden column has an active filter. The old HTML overlay had the
   inverse arbitrary choice (topmost DOM node won). Cosmetic; review nit from the canvas cycle.
-- `RenderPass.dynamicArrayCompute` is a vestigial always-empty map (created as `{}`, never
-  written, only read in cells/phases) inherited from the old canvas.ts. Keeping it was correct
-  under the pixel gate; delete it plus its dead read branches in the next non-gated sheet
-  cleanup. Review nit from the renderer-cleanup cycle.
 - By-values checkboxes stay visible (and are ignored) while a condition is active on a column —
   resolve in the Google-parity redesign (accordion makes the active mode explicit).
 - Engine `top10` CF evaluation uses `indexOf` over the sorted slice per cell (O(n²) on large

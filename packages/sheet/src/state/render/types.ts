@@ -6,8 +6,6 @@ export const defaultStyle = {
     fillStyle: '#000000',
     textBaseline: 'middle',
     strokeStyle: 'rgba(0, 0, 0, 0.1)',
-    rowFillStyle: '#5e5e5e',
-    textAlign: 'center',
 } as const;
 
 // Overflow map: per-row map of cell-column → the source-cell that overflows
@@ -25,7 +23,6 @@ export type CellRenderItem = {
     startY: number;
     endY: number;
     endX: number;
-    firstcolumnlen: number;
 };
 
 // Per-cell-key rects consumed by the border pass.
@@ -48,7 +45,6 @@ export type RenderPass = {
     colEnd: number;
     flowdata: CellMatrix;
     cfCompute: ComputeMap | null;
-    dynamicArrayCompute: Record<string, { v: unknown }>;
     cellOverflowMap: CellOverflowMap;
     drawGridLines: boolean;
 };

@@ -33,11 +33,6 @@ export function collectVisibleCells(pass: RenderPass): { cells: CellRenderItem[]
                 continue;
             }
 
-            let firstcolumnlen = sheetCtx.defaultcollen;
-            if (sheetCtx.config?.columnlen?.[c]) {
-                firstcolumnlen = sheetCtx.config.columnlen[c];
-            }
-
             const cell = flowdata?.[r]?.[c];
             if (cell?.mc) {
                 borderOffset[`${r}_${c}`] = { startY, startX, endY, endX };
@@ -50,7 +45,7 @@ export function collectVisibleCells(pass: RenderPass): { cells: CellRenderItem[]
 
                     if (mergeMain == null) {
                         mergeCache[key] = cells.length;
-                        cells.push({ r, c, startX, startY, endY, endX, firstcolumnlen });
+                        cells.push({ r, c, startX, startY, endY, endX });
                     } else {
                         if (mergeMain.c === c) {
                             mergeMain.endY += endY - startY - 1;
@@ -58,7 +53,6 @@ export function collectVisibleCells(pass: RenderPass): { cells: CellRenderItem[]
 
                         if (mergeMain.r === r) {
                             mergeMain.endX += endX - startX;
-                            mergeMain.firstcolumnlen += firstcolumnlen;
                         }
                     }
 
@@ -66,7 +60,7 @@ export function collectVisibleCells(pass: RenderPass): { cells: CellRenderItem[]
                 }
             }
 
-            cells.push({ r, c, startY, startX, endY, endX, firstcolumnlen });
+            cells.push({ r, c, startY, startX, endY, endX });
             borderOffset[`${r}_${c}`] = { startY, startX, endY, endX };
         }
     }
@@ -77,7 +71,7 @@ export function collectVisibleCells(pass: RenderPass): { cells: CellRenderItem[]
 // Render every collected cell. Merge members defer to the reprocess pass
 // and are returned (their anchor re-renders over the full span).
 export function renderCells(pass: RenderPass, cells: CellRenderItem[]): CellRenderItem[] {
-    const { flowdata, dynamicArrayCompute } = pass;
+    const { flowdata } = pass;
     const mergedCells: CellRenderItem[] = [];
 
     for (const item of cells) {
@@ -103,10 +97,6 @@ export function renderCells(pass: RenderPass, cells: CellRenderItem[]): CellRend
             if (value == null || value.toString().length === 0) {
                 nullCellRender(pass, r, c, startY, startX, endY, endX);
             } else {
-                if (`${r}_${c}` in dynamicArrayCompute) {
-                    value = dynamicArrayCompute[`${r}_${c}`].v;
-                }
-
                 cellRender(pass, r, c, startY, startX, endY, endX, value);
             }
         }
@@ -117,7 +107,7 @@ export function renderCells(pass: RenderPass, cells: CellRenderItem[]): CellRend
 
 // Re-render each merge over its anchor cell's full span.
 export function renderMergedCells(pass: RenderPass, mergedCells: CellRenderItem[]) {
-    const { sheetCtx, flowdata, dynamicArrayCompute, scrollWidth, scrollHeight } = pass;
+    const { sheetCtx, flowdata, scrollWidth, scrollHeight } = pass;
 
     for (const item of mergedCells) {
         const cell = flowdata[item.r][item.c];
@@ -146,9 +136,6 @@ export function renderMergedCells(pass: RenderPass, mergedCells: CellRenderItem[
         if (value == null || value.toString().length === 0) {
             nullCellRender(pass, r, c, startY, startX, endY, endX, true);
         } else {
-            if (`${r}_${c}` in dynamicArrayCompute) {
-                value = dynamicArrayCompute[`${r}_${c}`].v;
-            }
             cellRender(pass, r, c, startY, startX, endY, endX, value, true);
         }
     }
