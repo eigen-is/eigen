@@ -227,11 +227,14 @@ export class Mount {
         if (retentionDays > 0) {
             this.purgeTrash(retentionDays).catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
         }
-        try {
-            this.history.prune();
-        } catch (e) {
-            console.error('[Mount] Failed to prune file history:', e);
-        }
+        // Off the init path — the prune's table scans shouldn't delay mount readiness
+        setTimeout(() => {
+            try {
+                this.history.prune();
+            } catch (e) {
+                console.error('[Mount] Failed to prune file history:', e);
+            }
+        }, 0);
     }
 
     get dataDir(): string {

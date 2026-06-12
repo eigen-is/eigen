@@ -65,8 +65,6 @@ export function useUserWatches(ownerIds: string[]) {
             },
             enabled: !!ownerId,
             staleTime: 60_000,
-            // Error tolerance: don't propagate errors to the aggregate; return empty array
-            throwOnError: false,
         })),
         combine: (results) => results.flatMap((r) => (r.status === 'error' ? [] : (r.data ?? []))),
     });

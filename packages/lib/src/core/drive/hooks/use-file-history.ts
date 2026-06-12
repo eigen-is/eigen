@@ -23,14 +23,16 @@ export function useRecordHistory(ownerId: string, mountId: string, pathId: strin
     });
 }
 
-// GET FILE HISTORY — last N events for a path (file: direct events; folder: descendant events included)
-export function useFileHistory(ownerId: string, mountId: string, pathId: string, limit = 5) {
+// GET FILE HISTORY — last 5 events for a path (file: direct events; folder: descendant
+// events included). The limit is fixed because it isn't part of the queryKey: two
+// callers with different limits would collide in the cache.
+export function useFileHistory(ownerId: string, mountId: string, pathId: string) {
     return useQuery<FileEvent[]>({
         queryKey: driveKeys.fileHistory(ownerId, mountId, pathId),
         queryFn: async () => {
             const response = await driveApi({ ownerId })({ mountId })
                 .path({ pathId })
-                .history.get({ query: { limit: String(limit) } });
+                .history.get({ query: { limit: 5 } });
             if (response.error) throw new AppError(response);
             return response.data || [];
         },

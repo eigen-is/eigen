@@ -60,12 +60,8 @@ export class FileHistory {
 
     // File: direct events. Folder/container: events on the path and every descendant
     // (recursive CTE downward), newest first.
-    async list(pathId: string, opts?: { limit?: number; before?: Date }): Promise<FileEvent[]> {
+    async list(pathId: string, opts?: { limit?: number }): Promise<FileEvent[]> {
         const limit = opts?.limit ?? 50;
-
-        // Build the before clause conditionally — drizzle sql template uses ${} interpolation
-        const beforeClause =
-            opts?.before != null ? sql`AND e.createdAt < ${Math.floor(opts.before.getTime() / 1000)}` : sql``;
 
         const rows = this.db.all<{
             id: string;
@@ -88,7 +84,6 @@ export class FileHistory {
             FROM ${fileEvents} e
             JOIN subtree st ON e.pathId = st.id
             JOIN ${paths} p ON p.id = e.pathId
-            WHERE 1=1 ${beforeClause}
             ORDER BY e.createdAt DESC
             LIMIT ${limit}
         `);
@@ -155,11 +150,10 @@ export class FileHistory {
             watchedAt: number;
             lastEventAt: number | null;
             lastEventType: string | null;
-            lastActorEmail: string | null;
         }>(sql`
             SELECT pw.pathId AS pathId, p.name AS name, p.type AS type, p.mimeType AS mimeType,
                    pw.createdAt AS watchedAt,
-                   e.createdAt AS lastEventAt, e.eventType AS lastEventType, e.actorEmail AS lastActorEmail
+                   e.createdAt AS lastEventAt, e.eventType AS lastEventType
             FROM ${pathWatchers} pw
             JOIN ${paths} p ON p.id = pw.pathId
             LEFT JOIN ${fileEvents} e ON e.id = (
@@ -178,28 +172,27 @@ export class FileHistory {
             watchedAt: new Date(row.watchedAt * 1000),
             lastEventAt: row.lastEventAt != null ? new Date(row.lastEventAt * 1000) : null,
             lastEventType: row.lastEventType as FileEventType | null,
-            lastActorEmail: row.lastActorEmail,
         }));
     }
 
-    // Watchers on each root path and on every ancestor of each root (inclusive
-    // upward CTE per root), deduped, with the acting user removed.
+    // Watchers on the root paths and on every ancestor of each root (one inclusive
+    // upward CTE seeded with all roots), deduped, with the acting user removed.
     collectWatcherIds(rootPathIds: string[], excludeUserId: string): string[] {
-        const ids = new Set<string>();
-        for (const rootId of rootPathIds) {
-            const rows = this.db.all<{ userId: string }>(sql`
-                WITH RECURSIVE chain(id) AS (
-                    SELECT id FROM ${paths} WHERE id = ${rootId}
-                    UNION ALL
-                    SELECT p.${sql.raw('parentId')} FROM ${paths} p JOIN chain c ON p.id = c.id
-                    WHERE p.${sql.raw('parentId')} IS NOT NULL
-                )
-                SELECT DISTINCT pw.userId AS userId FROM ${pathWatchers} pw JOIN chain ON pw.pathId = chain.id
-                WHERE pw.userId != ${excludeUserId}
-            `);
-            for (const row of rows) ids.add(row.userId);
-        }
-        return [...ids];
+        const rootList = sql.join(
+            rootPathIds.map((id) => sql`${id}`),
+            sql`, `,
+        );
+        const rows = this.db.all<{ userId: string }>(sql`
+            WITH RECURSIVE chain(id) AS (
+                SELECT id FROM ${paths} WHERE id IN (${rootList})
+                UNION
+                SELECT p.${sql.raw('parentId')} FROM ${paths} p JOIN chain c ON p.id = c.id
+                WHERE p.${sql.raw('parentId')} IS NOT NULL
+            )
+            SELECT DISTINCT pw.userId AS userId FROM ${pathWatchers} pw JOIN chain ON pw.pathId = chain.id
+            WHERE pw.userId != ${excludeUserId}
+        `);
+        return rows.map((row) => row.userId);
     }
 
     // Per-watcher delivery with ACL re-verification: a watcher whose share was
@@ -247,7 +240,10 @@ export class FileHistory {
         chainRootIds: (string | null)[]; // parent chains to walk (e.g. [parentId]; moved: both)
         burst?: boolean; // created/uploaded/copied: tag on the parent folder
         excludeEmails?: Set<string>;
-        verifyAncestors: DrivePath[];
+        // Thunks resolve only when there are watchers — zero watchers (the common
+        // case) costs zero breadcrumb walks. Mutations that rewrite the parent
+        // chain (trash/move) pass pre-captured arrays instead.
+        verifyAncestors: DrivePath[] | (() => Promise<DrivePath[]>);
     }): Promise<void> {
         // Events on items already in trash never fan out ('trashed' itself passes
         // the pre-trash snapshot, whose trashedAt is still null).
@@ -260,7 +256,8 @@ export class FileHistory {
             actor: opts.actor,
             itemName: opts.path.name,
             tagPathId: opts.burst ? (chainRoots[0] ?? opts.path.id) : opts.path.id,
-            verifyAncestors: opts.verifyAncestors,
+            verifyAncestors:
+                typeof opts.verifyAncestors === 'function' ? await opts.verifyAncestors() : opts.verifyAncestors,
             excludeEmails: opts.excludeEmails,
         });
     }

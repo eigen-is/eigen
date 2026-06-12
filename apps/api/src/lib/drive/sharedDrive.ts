@@ -1,10 +1,9 @@
 import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
-import {
-    type ClientFileEventType,
-    type FileEventDetailsMap,
-    isClientFileEventType,
-    type PathWatchStatus,
-    type WatchedItem,
+import type {
+    ClientFileEventType,
+    FileEventDetailsMap,
+    PathWatchStatus,
+    WatchedItem,
 } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -437,7 +436,7 @@ export default class SharedDrive {
         );
     }
 
-    public async getFileHistory(mountId: string, pathId: string, opts?: { limit?: number; before?: Date }) {
+    public async getFileHistory(mountId: string, pathId: string, opts?: { limit?: number }) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getFileHistory(mountId, pathId, opts));
     }
 
@@ -450,22 +449,18 @@ export default class SharedDrive {
         eventType: ClientFileEventType,
         details: FileEventDetailsMap[ClientFileEventType],
     ): Promise<void> {
-        // Defence in depth — the route's typebox union is the primary gate.
-        if (!isClientFileEventType(eventType)) {
-            throw new ApiError(400, `Event type not client-postable: ${eventType}`);
-        }
         return this.withWritePermission(mountId, pathId, () =>
             this.sharedDrive.recordClientFileEvent(mountId, pathId, this.user, eventType, details),
         );
     }
 
-    public async watchPath(mountId: string, pathId: string, _user: User): Promise<{ success: boolean }> {
+    public async watchPath(mountId: string, pathId: string, _user: User): Promise<void> {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.watchPath(mountId, pathId, this.user));
     }
 
     // No permission gate: unwatching and reading one's own watch state must keep
     // working after a share is revoked.
-    public async unwatchPath(mountId: string, pathId: string, _user: User): Promise<{ success: boolean }> {
+    public async unwatchPath(mountId: string, pathId: string, _user: User): Promise<void> {
         return this.sharedDrive.unwatchPath(mountId, pathId, this.user);
     }
 
