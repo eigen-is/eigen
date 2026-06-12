@@ -28,6 +28,7 @@ import {
     type SyncCallbacks,
     sanitizeFtsQuery,
 } from '../core';
+import { FileHistory } from '../drive/history';
 import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
@@ -125,6 +126,8 @@ export class Mount {
     // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
     private uploadQueue?: UploadQueue;
 
+    public history!: FileHistory;
+
     constructor(ownerId: string, baseDir: string, config: MountConfig, getLocalDatabase: LocalDatabaseGetter) {
         this.ownerId = ownerId;
         this.id = config.id;
@@ -194,6 +197,7 @@ export class Mount {
         const dbPath = path.join('mounts', this.config.id, 'metadata.db');
         const managedDb = await this.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
         this.db = managedDb.db;
+        this.history = new FileHistory(this.db, this.ownerId, this.id);
 
         await this.ensureRootFolder();
 
@@ -222,6 +226,11 @@ export class Mount {
         const retentionDays = getServerSettings().quotas.trashRetentionDays;
         if (retentionDays > 0) {
             this.purgeTrash(retentionDays).catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
+        }
+        try {
+            this.history.prune();
+        } catch (e) {
+            console.error('[Mount] Failed to prune file history:', e);
         }
     }
 
