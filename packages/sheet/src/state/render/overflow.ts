@@ -5,26 +5,18 @@ import { isEmpty } from 'es-toolkit/compat';
 import { type Context, getFlowdata } from '../context';
 import { normalizedAttr } from '../modules/cell';
 import { isInlineStringCell } from '../modules/inline-string';
-import { clearMeasureTextCache, getCellTextInfo } from '../modules/text';
+import { getCellTextInfo } from '../modules/text';
 import { colEndX, colStartX } from './geometry';
 import type { CellOverflowMap } from './types';
 
 // Module-level cache that persists across Canvas instances.
 // Previously this lived on the Canvas class and was reset to {} on every
-// new Canvas(), making it completely useless. drawMain holds it open while
-// drawing and schedules invalidation after 100ms of idle time.
+// new Canvas(), making it completely useless. The drawMain facade holds it
+// open while drawing and clears it after 100ms of idle time.
 let cellOverflowMapCache: CellOverflowMap = {};
-let cacheClearTimeout: ReturnType<typeof setTimeout> | undefined;
 
-export function holdRenderCaches() {
-    clearTimeout(cacheClearTimeout);
-}
-
-export function scheduleRenderCacheClear() {
-    cacheClearTimeout = setTimeout(() => {
-        clearMeasureTextCache();
-        cellOverflowMapCache = {};
-    }, 100);
+export function clearCellOverflowCache() {
+    cellOverflowMapCache = {};
 }
 
 // Get overflow cells for the render range

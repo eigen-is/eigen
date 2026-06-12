@@ -5,15 +5,20 @@
 
 import { type Context, getFlowdata } from './context';
 import { getComputeMap } from './modules/conditionFormat';
-import { defaultFont } from './modules/text';
+import { clearMeasureTextCache, defaultFont } from './modules/text';
 import { drawCellBorders } from './render/borders';
 import { drawFilterUI } from './render/filter-ui';
 import { mainVisibleRange } from './render/geometry';
 import { drawColumnHeader, drawRowHeader } from './render/headers';
-import { computeCellOverflowMap, holdRenderCaches, scheduleRenderCacheClear } from './render/overflow';
+import { clearCellOverflowCache, computeCellOverflowMap } from './render/overflow';
 import { collectVisibleCells, renderCells, renderMergedCells } from './render/phases';
 import type { RenderPass } from './render/types';
 import { defaultStyle } from './render/types';
+import { getSheetIndex } from './utils';
+
+// The render caches (measured text, overflow rows) survive the multi-pass
+// draw bursts; 100ms without a drawMain call invalidates them.
+let renderCacheClearTimeout: ReturnType<typeof setTimeout> | undefined;
 
 export class Canvas {
     private canvasElement: HTMLCanvasElement;
@@ -63,7 +68,7 @@ export class Canvas {
             return;
         }
 
-        holdRenderCaches();
+        clearTimeout(renderCacheClearTimeout);
 
         drawWidth ??= this.sheetCtx.tableContentSize[0];
         drawHeight ??= this.sheetCtx.tableContentSize[1];
@@ -105,6 +110,8 @@ export class Canvas {
         renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
         renderCtx.fillStyle = defaultStyle.fillStyle;
 
+        const sheetIndex = getSheetIndex(this.sheetCtx, this.sheetCtx.currentSheetId);
+
         const pass: RenderPass = {
             sheetCtx: this.sheetCtx,
             renderCtx,
@@ -120,6 +127,7 @@ export class Canvas {
             colEnd,
             flowdata,
             cfCompute: getComputeMap(this.sheetCtx),
+            dataVerification: sheetIndex == null ? undefined : this.sheetCtx.sheets[sheetIndex].dataVerification,
             // Overflow cell configuration for render area
             cellOverflowMap: computeCellOverflowMap(this.sheetCtx, renderCtx, colStart, colEnd, rowStart, rowEnd),
             drawGridLines: !this.sheetCtx.currentSheetIsPivot && this.sheetCtx.showGridLines,
@@ -127,10 +135,10 @@ export class Canvas {
 
         this.sheetCtx.hooks.beforeRenderCellArea?.(flowdata, renderCtx);
 
-        const { cells, borderOffset } = collectVisibleCells(pass);
+        const cells = collectVisibleCells(pass);
         const mergedCells = renderCells(pass, cells);
         renderMergedCells(pass, mergedCells);
-        drawCellBorders(pass, borderOffset);
+        drawCellBorders(pass);
 
         // Clear right gray area when last column is rendered to prevent overflow
         if (colEnd === this.sheetCtx.visibledatacolumn.length - 1) {
@@ -146,7 +154,10 @@ export class Canvas {
 
         renderCtx.restore();
 
-        scheduleRenderCacheClear();
+        renderCacheClearTimeout = setTimeout(() => {
+            clearMeasureTextCache();
+            clearCellOverflowCache();
+        }, 100);
     }
 
     public drawFreezeLine({ horizontalTop, verticalLeft }: { horizontalTop?: number; verticalLeft?: number }) {

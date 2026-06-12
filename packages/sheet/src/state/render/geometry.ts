@@ -61,3 +61,13 @@ export function rowStartY(visibledatarow: number[], r: number, scrollHeight: num
 export function rowEndY(visibledatarow: number[], r: number, scrollHeight: number): number {
     return visibledatarow[r] - scrollHeight;
 }
+
+// Sheet coordinates map to the same -1-shifted canvas space the cells use:
+// scroll subtracted, header offset added.
+export function sheetToCanvasX(x: number, scrollWidth: number, offsetLeft: number): number {
+    return x - scrollWidth + offsetLeft - 1;
+}
+
+export function sheetToCanvasY(y: number, scrollHeight: number, offsetTop: number): number {
+    return y - scrollHeight + offsetTop - 1;
+}

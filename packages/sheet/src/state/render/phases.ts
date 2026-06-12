@@ -4,18 +4,16 @@
 import { getRealCellValue } from '../modules/cell';
 import { cellRender, nullCellRender } from './cells';
 import { colEndX, colStartX, rowEndY, rowStartY } from './geometry';
-import type { BorderOffsetMap, CellRenderItem, RenderPass } from './types';
+import type { CellRenderItem, RenderPass } from './types';
 
-// Walk the visible grid, recording a render item per drawable cell and a
-// rect per cell key for the border pass. Visible members of a merge
-// accumulate the merge's on-screen extent onto its first-seen item
-// (endY grows per spanned row, endX per spanned column — subtle inherited
-// logic, kept verbatim).
-export function collectVisibleCells(pass: RenderPass): { cells: CellRenderItem[]; borderOffset: BorderOffsetMap } {
+// Walk the visible grid, recording a render item per drawable cell. Visible
+// members of a merge accumulate the merge's on-screen extent onto its
+// first-seen item (endY grows per spanned row, endX per spanned column —
+// subtle inherited logic, kept verbatim).
+export function collectVisibleCells(pass: RenderPass): CellRenderItem[] {
     const { sheetCtx, flowdata, rowStart, rowEnd, colStart, colEnd, scrollWidth, scrollHeight } = pass;
     const cells: CellRenderItem[] = [];
     const mergeCache: Record<string, number> = {};
-    const borderOffset: BorderOffsetMap = {};
 
     for (let r = rowStart; r <= rowEnd; r += 1) {
         const startY = rowStartY(sheetCtx.visibledatarow, r, scrollHeight);
@@ -35,8 +33,6 @@ export function collectVisibleCells(pass: RenderPass): { cells: CellRenderItem[]
 
             const cell = flowdata?.[r]?.[c];
             if (cell?.mc) {
-                borderOffset[`${r}_${c}`] = { startY, startX, endY, endX };
-
                 if ('rs' in cell.mc) {
                     mergeCache[`r${r}c${c}`] = cells.length;
                 } else {
@@ -61,11 +57,10 @@ export function collectVisibleCells(pass: RenderPass): { cells: CellRenderItem[]
             }
 
             cells.push({ r, c, startY, startX, endY, endX });
-            borderOffset[`${r}_${c}`] = { startY, startX, endY, endX };
         }
     }
 
-    return { cells, borderOffset };
+    return cells;
 }
 
 // Render every collected cell. Merge members defer to the reprocess pass

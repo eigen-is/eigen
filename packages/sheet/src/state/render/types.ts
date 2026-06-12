@@ -1,6 +1,7 @@
 import type { ComputeMap } from '../../engine/conditional-format';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
+import type { Sheet } from '../types';
 
 export const defaultStyle = {
     fillStyle: '#000000',
@@ -25,9 +26,6 @@ export type CellRenderItem = {
     endX: number;
 };
 
-// Per-cell-key rects consumed by the border pass.
-export type BorderOffsetMap = Record<string, { startY: number; startX: number; endY: number; endX: number }>;
-
 // Everything one drawMain pass shares with the per-cell render calls. Built
 // once at the top of drawMain; freeze regions each get their own pass.
 export type RenderPass = {
@@ -45,6 +43,9 @@ export type RenderPass = {
     colEnd: number;
     flowdata: CellMatrix;
     cfCompute: ComputeMap | null;
+    // The current sheet's validation rules, resolved once per pass — the
+    // current sheet cannot change mid-frame.
+    dataVerification: Sheet['dataVerification'];
     cellOverflowMap: CellOverflowMap;
     drawGridLines: boolean;
 };
