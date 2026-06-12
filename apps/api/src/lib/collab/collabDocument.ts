@@ -31,6 +31,9 @@ const SNAPSHOT_BYTES = 1_000_000;
 // Long-term history lives under the container's `versions/` folder (see versioning routes).
 const MAX_DOC_SNAPSHOTS = 1;
 const TOUCH_THROTTLE_MS = 60_000;
+// One 'edited' history row per user per window. Per-instance state, so a doc
+// close+reopen within the window records an extra row — accepted spec trade-off.
+const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
 class DbProvider {
     private db: BunSQLiteDatabase<typeof schema>;
@@ -136,8 +139,10 @@ export default class CollabDocument {
         return this.connections.size;
     }
     private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
+    private connUsers: Map<ServerWebSocket<undefined>, User> = new Map();
     private closed: boolean = false;
     private lastTouchedAt = 0;
+    private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
     public dataDbPathId: string | null = null;
 
     constructor(drive: Drive, path: DrivePath) {
@@ -193,7 +198,10 @@ export default class CollabDocument {
             syncProtocol.writeUpdate(encoder, update);
             const message = encoding.toUint8Array(encoder);
             if (origin && typeof origin === 'object' && 'readyState' in origin) {
-                this.broadcastMessage(origin as ServerWebSocket<undefined>, message);
+                const conn = origin as ServerWebSocket<undefined>;
+                this.broadcastMessage(conn, message);
+                const user = this.connUsers.get(conn);
+                if (user) this.recordEditThrottled(user);
             } else {
                 for (const conn of this.connections) {
                     if (conn.readyState === 1) conn.send(Buffer.from(message));
@@ -235,6 +243,13 @@ export default class CollabDocument {
         this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
     }
 
+    private recordEditThrottled(user: User) {
+        const now = Date.now();
+        if (now - (this.lastEditRecordedAt.get(user.id) ?? 0) < EDIT_RECORD_THROTTLE_MS) return;
+        this.lastEditRecordedAt.set(user.id, now);
+        this.drive.recordFileEvent(this.path.mountId, this.path.id, user, 'edited').catch(() => {});
+    }
+
     public destruct() {
         if (this.closed) return;
         this.closed = true;
@@ -243,6 +258,7 @@ export default class CollabDocument {
             conn.close();
             this.connections.delete(conn);
         }
+        this.connUsers.clear();
         this.provider.destroy();
         this.awareness.destroy();
         this.doc.destroy();
@@ -267,11 +283,12 @@ export default class CollabDocument {
         restoreYjsDoc(this.doc, state, roots);
     }
 
-    public subscribe(_user: User, conn: ServerWebSocket<undefined>) {
+    public subscribe(user: User, conn: ServerWebSocket<undefined>) {
         if (this.closed) {
             return;
         }
         this.connections.add(conn);
+        this.connUsers.set(conn, user);
         this.sendSyncStep1(conn);
     }
 
@@ -280,6 +297,7 @@ export default class CollabDocument {
             return;
         }
         this.connections.delete(conn);
+        this.connUsers.delete(conn);
 
         const clientIds = this.connectionClientIds.get(conn);
         if (clientIds && clientIds.size > 0) {
@@ -291,6 +309,7 @@ export default class CollabDocument {
             if (connection.readyState > 1) {
                 // CLOSING or CLOSED
                 this.connections.delete(connection);
+                this.connUsers.delete(connection);
                 const staleIds = this.connectionClientIds.get(connection);
                 if (staleIds && staleIds.size > 0) {
                     awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(staleIds), null);

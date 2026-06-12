@@ -11,7 +11,7 @@ import type { Drive } from '../drive';
 import type { EffectiveMember } from '../drive/acl-propagation';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
-import { getUserByEmail } from '../user/';
+import { getUserByEmail, type User } from '../user/';
 import { formatEmoteForViewer, parseCommand } from './commands';
 import { type CommentIndex, openCommentIndex } from './comment-index';
 import { CHAT_ROOM_DB_CONFIG } from './db-config';
@@ -66,14 +66,14 @@ export class ChatRoom {
     }
 
     async postMessage(
-        authorId: string,
-        authorEmail: string,
+        author: User,
         content: string,
         type: ChatMessage['type'] = 'message',
         whisperTo?: string,
         replyTo?: string,
         attachments?: ChatAttachment[],
     ): Promise<ChatMessage> {
+        const { id: authorId, email: authorEmail } = author;
         if (content.startsWith('/') && type === 'message') {
             const cmd = parseCommand(content);
             switch (cmd.kind) {
@@ -194,6 +194,7 @@ export class ChatRoom {
             }
 
             // Activity notifications: whispers → recipient only, messages/emotes → previous participants + owner
+            const activityNotifiedEmails = new Set<string>();
             const activityType = this.containerPath ? 'comment-reply' : 'chat-message';
             const activityTag = this.containerPath
                 ? `${activityType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}`
@@ -239,8 +240,29 @@ export class ChatRoom {
                 for (const [email, userId] of participants) {
                     if (mentionedEmailSet.has(email)) continue;
                     if (!memberEmails.has(email)) continue;
+                    activityNotifiedEmails.add(email);
                     await notifyActivity(userId);
                 }
+            }
+
+            // File history: 'commented' on the container (or the standalone chat itself).
+            // Whisper content is private to its recipient — never expose it via history.
+            // Everyone the mention/activity notifications already covered is excluded
+            // from the watcher fan-out so nobody is notified twice.
+            if (type !== 'whisper') {
+                const coveredEmails = new Set<string>([
+                    authorEmail.toLowerCase(),
+                    ...mentionedEmailSet,
+                    ...activityNotifiedEmails,
+                ]);
+                await this.drive.recordFileEvent(
+                    targetPath.mountId,
+                    targetPath.id,
+                    author,
+                    'commented',
+                    { preview: content.slice(0, 80) },
+                    { excludeEmails: coveredEmails },
+                );
             }
         }
 

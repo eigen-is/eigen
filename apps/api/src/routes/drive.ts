@@ -552,6 +552,29 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true, query: t.Object({ limit: t.Optional(t.String()), before: t.Optional(t.String()) }) },
     )
+    // Client-emitted history events. The typebox union is the allowlist: only event
+    // types with a real client emitter are postable; everything else is server-only.
+    .post(
+        '/drive/:ownerId/:mountId/path/:pathId/history',
+        async ({ params, body, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            await drive.recordClientFileEvent(params.mountId, params.pathId, user, body.eventType, body.details);
+            return { success: true };
+        },
+        {
+            auth: true,
+            body: t.Union([
+                t.Object({
+                    eventType: t.Literal('sticky-moved'),
+                    details: t.Object({ stickyId: t.String(), oldColumn: t.String(), newColumn: t.String() }),
+                }),
+                t.Object({
+                    eventType: t.Literal('slide-reordered'),
+                    details: t.Object({ slideId: t.String(), newIndex: t.Number() }),
+                }),
+            ]),
+        },
+    )
     // Watching (file/folder notification subscriptions; folder watches cascade)
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/watch',

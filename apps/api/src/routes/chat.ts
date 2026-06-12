@@ -36,8 +36,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
             }
             const chat = await drive.getChat(params.mountId, params.chatId);
             return await chat.postMessage(
-                user.id,
-                user.email,
+                user,
                 body.content,
                 body.type || 'message',
                 body.whisperTo,

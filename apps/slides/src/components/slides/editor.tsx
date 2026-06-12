@@ -15,6 +15,7 @@ import {
     MediaResolverProvider,
     useCopyToMediaFolder,
     useMediaResolver,
+    useRecordHistory,
     useUploadFile,
 } from '@workspace/lib/drive';
 import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
@@ -155,7 +156,11 @@ function SlideEditorInner({
 
     const { isMobile } = useLayout();
     const { resolveMediaUrl, resolveMediaPath, startUpload } = useMediaResolver();
-    const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({ yjsDoc });
+    const recordHistory = useRecordHistory(ownerId, path.mountId, path.id);
+    const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({
+        yjsDoc,
+        onRecordEvent: recordHistory.mutate,
+    });
 
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);

@@ -1,5 +1,6 @@
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import type { FileEventDetailsMap } from '@workspace/lib/types/file-history';
 import { useState } from 'react';
 import type * as Y from 'yjs';
 import { normalizeBoard } from '../normalize-board';
@@ -15,9 +16,10 @@ type UseDragAndDropProps = {
     board: BoardData;
     cards: Record<string, CommentCard>;
     yjsDoc: Y.Doc | null;
+    onRecordEvent?: (event: { eventType: 'sticky-moved'; details: FileEventDetailsMap['sticky-moved'] }) => void;
 };
 
-export const useDragAndDrop = ({ board, cards, yjsDoc }: UseDragAndDropProps) => {
+export const useDragAndDrop = ({ board, cards, yjsDoc, onRecordEvent }: UseDragAndDropProps) => {
     const [dragState, setDragState] = useState<DragState>({
         activeId: null,
         activeType: null,
@@ -53,7 +55,8 @@ export const useDragAndDrop = ({ board, cards, yjsDoc }: UseDragAndDropProps) =>
         const columnsMap = yjsDoc.getMap('columns');
         const columnOrderArray = yjsDoc.getArray('columnOrder');
 
-        yjsDoc.transact(() => {
+        const movedColumns = yjsDoc.transact(() => {
+            let moved: { oldColumn: string; newColumn: string } | null = null;
             if (dragState.activeType === 'column') {
                 if (activeId !== overId) {
                     const currentOrder = columnOrderArray.toArray() as string[];
@@ -90,12 +93,19 @@ export const useDragAndDrop = ({ board, cards, yjsDoc }: UseDragAndDropProps) =>
                         if (sourceIndex !== -1 && destIndex !== -1) {
                             sourceTaskIds.delete(sourceIndex, 1);
                             destTaskIds.insert(destIndex, [activeId]);
+                            if (sourceColumnId !== destColumnId) {
+                                moved = { oldColumn: sourceColumnId, newColumn: destColumnId };
+                            }
                         }
                     }
                 }
             }
             normalizeBoard(yjsDoc);
+            return moved;
         });
+        if (movedColumns) {
+            onRecordEvent?.({ eventType: 'sticky-moved', details: { stickyId: activeId, ...movedColumns } });
+        }
         resetDragState();
     };
 
