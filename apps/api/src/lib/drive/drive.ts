@@ -20,7 +20,16 @@ import {
     isContainerType,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
-import type { FileEvent, PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
+import {
+    type ClientFileEventType,
+    type FileEvent,
+    type FileEventDetailsMap,
+    type FileEventInput,
+    type FileEventType,
+    isClientFileEventType,
+    type PathWatchStatus,
+    type WatchedItem,
+} from '@workspace/lib/types/file-history';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
@@ -1103,6 +1112,47 @@ export default class Drive {
         opts?: { limit?: number; before?: Date },
     ): Promise<FileEvent[]> {
         return this.getMount(mountId).history.list(pathId, opts);
+    }
+
+    // Called by: collab/collabDocument.ts ('edited'), chat/chat.ts ('commented'), and
+    // Drive.recordClientFileEvent below. Not route-callable — no SharedDrive wrapper.
+    async recordFileEvent<K extends FileEventType>(
+        mountId: string,
+        pathId: string,
+        actor: User,
+        eventType: K,
+        details?: K extends keyof FileEventDetailsMap ? FileEventDetailsMap[K] : undefined,
+        opts?: { excludeEmails?: Set<string>; dedupeWindowMs?: number },
+    ): Promise<void> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path || path.trashedAt) return;
+        await mount.history.record(
+            { pathId, eventType, actor: { id: actor.id, email: actor.email }, details } as FileEventInput,
+            { dedupeWindowMs: opts?.dedupeWindowMs },
+        );
+        await mount.history.fanOut({
+            eventType,
+            actor,
+            path,
+            chainRootIds: [path.parentId],
+            excludeEmails: opts?.excludeEmails,
+            verifyAncestors: await mount.getBreadcrumb(pathId),
+        });
+    }
+
+    async recordClientFileEvent(
+        mountId: string,
+        pathId: string,
+        user: User,
+        eventType: ClientFileEventType,
+        details: FileEventDetailsMap[ClientFileEventType],
+    ): Promise<void> {
+        // Defence in depth — the route's typebox union is the primary gate.
+        if (!isClientFileEventType(eventType)) {
+            throw new ApiError(400, `Event type not client-postable: ${eventType}`);
+        }
+        await this.recordFileEvent(mountId, pathId, user, eventType, details, { dedupeWindowMs: 30_000 });
     }
 
     async watchPath(mountId: string, pathId: string, user: User): Promise<{ success: boolean }> {

@@ -1,22 +1,29 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
-import type { PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
+import type { FileEvent, PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import type { SSEvent, SSEventNotificationCreated } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
+import * as encoding from 'lib0/encoding';
+import * as syncProtocol from 'y-protocols/sync';
+import * as Y from 'yjs';
 import { user as userSchema } from '../../auth-schema.ts';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getHome } from '../lib/home';
+import { getUserById } from '../lib/user';
 import type { TestContext } from './setup';
 import {
     assertJson,
     authedRequest,
+    chatPost,
+    driveGet,
     drivePost,
     drivePut,
     driveUpload,
     driveUploadMultiple,
+    findOrFail,
     getTestContext,
 } from './setup';
 
@@ -394,5 +401,260 @@ describe('File watch + fan-out', () => {
 
         const res = await watch(guestToken, folder.id);
         expect(res.status).toBe(403);
+    });
+});
+
+describe('File events: collab edits, client posts, comments', () => {
+    let ctx: TestContext;
+    let aliceToken: string;
+    let bobToken: string;
+    let aliceOwnerId: string;
+    let mountId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        aliceToken = ctx.alice.user.sessionToken;
+        bobToken = ctx.bob.user.sessionToken;
+        aliceOwnerId = ctx.alice.user.id;
+
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(aliceToken, `/drive/${aliceOwnerId}/mounts`),
+        );
+        mountId = mounts[0].id;
+        const root = await assertJson<{ id: string }>(
+            await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/root`),
+        );
+        rootId = root.id;
+    });
+
+    function createDoc(name: string, type: 'doc' | 'stickies' = 'doc'): Promise<DrivePath> {
+        return drivePost(aliceToken, aliceOwnerId, mountId, `folder/${rootId}/create/${type}`, { fileName: name });
+    }
+
+    async function shareWith(pathId: string, email: string, write = false): Promise<void> {
+        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${pathId}/acl`, {
+            acl: [{ id: email, read: true, write }],
+        });
+    }
+
+    async function history(pathId: string): Promise<FileEvent[]> {
+        return assertJson<FileEvent[]>(
+            await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/path/${pathId}/history`),
+        );
+    }
+
+    // recordFileEvent is fire-and-forget from the collab update handler — poll briefly.
+    async function waitForEdited(pathId: string, count: number): Promise<FileEvent[]> {
+        let edited: FileEvent[] = [];
+        for (let i = 0; i < 40; i++) {
+            edited = (await history(pathId)).filter((e) => e.eventType === 'edited');
+            if (edited.length >= count) return edited;
+            await new Promise((r) => setTimeout(r, 25));
+        }
+        return edited;
+    }
+
+    function syncUpdateMessage(doc: Y.Doc): Uint8Array {
+        const encoder = encoding.createEncoder();
+        encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collabDocument.ts)
+        syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(doc));
+        return encoding.toUint8Array(encoder);
+    }
+
+    function postClientEvent(token: string, pathId: string, body: Record<string, unknown>): Promise<Response> {
+        return authedRequest(token, `/drive/${aliceOwnerId}/${mountId}/path/${pathId}/history`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    }
+
+    describe('collab edited attribution', () => {
+        test('a WS-origin update records an edited event attributed to the connection user', async () => {
+            const doc = await createDoc('EditAttrib');
+            const home = await getHome(aliceOwnerId);
+            const collab = await home.drive.getCollabDocument(mountId, doc.id);
+            const aliceUser = await getUserById(ctx.alice.user.id);
+            expect(aliceUser).not.toBeNull();
+            const conn = { send() {}, readyState: 1 } as unknown as Parameters<typeof collab.handleMessage>[0];
+            collab.subscribe(aliceUser!, conn);
+
+            const edit = new Y.Doc();
+            edit.getMap('m').set('k', 'v');
+            collab.handleMessage(conn, syncUpdateMessage(edit), true);
+
+            const edited = await waitForEdited(doc.id, 1);
+            expect(edited).toHaveLength(1);
+            expect(edited[0].actorEmail).toBe(ctx.alice.user.email);
+        });
+
+        test('edits from two users record two attributed rows', async () => {
+            const doc = await createDoc('EditTwoUsers');
+            const home = await getHome(aliceOwnerId);
+            const collab = await home.drive.getCollabDocument(mountId, doc.id);
+            const aliceUser = await getUserById(ctx.alice.user.id);
+            const bobUser = await getUserById(ctx.bob.user.id);
+            const connA = { send() {}, readyState: 1 } as unknown as Parameters<typeof collab.handleMessage>[0];
+            const connB = { send() {}, readyState: 1 } as unknown as Parameters<typeof collab.handleMessage>[0];
+            collab.subscribe(aliceUser!, connA);
+            collab.subscribe(bobUser!, connB);
+
+            const editA = new Y.Doc();
+            editA.getMap('m').set('a', '1');
+            collab.handleMessage(connA, syncUpdateMessage(editA), true);
+            const editB = new Y.Doc();
+            editB.getMap('m').set('b', '2');
+            collab.handleMessage(connB, syncUpdateMessage(editB), true);
+
+            const edited = await waitForEdited(doc.id, 2);
+            expect(edited.map((e) => e.actorEmail).sort()).toEqual([ctx.alice.user.email, ctx.bob.user.email].sort());
+        });
+
+        test('repeat edits from the same user within the throttle window record one row', async () => {
+            const doc = await createDoc('EditThrottle');
+            const home = await getHome(aliceOwnerId);
+            const collab = await home.drive.getCollabDocument(mountId, doc.id);
+            const aliceUser = await getUserById(ctx.alice.user.id);
+            const conn = { send() {}, readyState: 1 } as unknown as Parameters<typeof collab.handleMessage>[0];
+            collab.subscribe(aliceUser!, conn);
+
+            const first = new Y.Doc();
+            first.getMap('m').set('k1', 'v1');
+            collab.handleMessage(conn, syncUpdateMessage(first), true);
+            const second = new Y.Doc();
+            second.getMap('m').set('k2', 'v2');
+            collab.handleMessage(conn, syncUpdateMessage(second), true);
+
+            await waitForEdited(doc.id, 1);
+            // Let any stray second write land before asserting the negative
+            await new Promise((r) => setTimeout(r, 100));
+            const edited = (await history(doc.id)).filter((e) => e.eventType === 'edited');
+            expect(edited).toHaveLength(1);
+        });
+
+        test('server-origin updates do not record edited events', async () => {
+            const doc = await createDoc('EditServerOrigin');
+            const home = await getHome(aliceOwnerId);
+            const collab = await home.drive.getCollabDocument(mountId, doc.id);
+
+            collab.doc.transact(() => {
+                collab.doc.getMap('m').set('k', 'v');
+            });
+
+            await new Promise((r) => setTimeout(r, 150));
+            const edited = (await history(doc.id)).filter((e) => e.eventType === 'edited');
+            expect(edited).toHaveLength(0);
+        });
+    });
+
+    describe('client-posted history events', () => {
+        const stickyMoved = {
+            eventType: 'sticky-moved',
+            details: { stickyId: 's1', oldColumn: 'todo', newColumn: 'done' },
+        };
+
+        test('a writer can post a sticky-moved event with details', async () => {
+            const board = await createDoc('ClientSticky', 'stickies');
+            const res = await postClientEvent(aliceToken, board.id, stickyMoved);
+            expect(res.status).toBe(200);
+            expect(await res.json()).toEqual({ success: true });
+
+            const moved = (await history(board.id)).find((e) => e.eventType === 'sticky-moved');
+            expect(moved).toBeDefined();
+            expect(moved!.details).toEqual(stickyMoved.details);
+            expect(moved!.actorEmail).toBe(ctx.alice.user.email);
+        });
+
+        test('a read-only collaborator cannot post client events', async () => {
+            const board = await createDoc('ClientStickyRO', 'stickies');
+            await shareWith(board.id, ctx.bob.user.email);
+            const res = await postClientEvent(bobToken, board.id, stickyMoved);
+            expect(res.status).toBe(403);
+        });
+
+        test('server-only event types are rejected by the route schema', async () => {
+            const board = await createDoc('ClientStickyServerOnly', 'stickies');
+            const res = await postClientEvent(aliceToken, board.id, { eventType: 'created', details: {} });
+            expect(res.status).toBe(422);
+        });
+
+        test('identical client events within the dedupe window record one row', async () => {
+            const board = await createDoc('ClientStickyDedupe', 'stickies');
+            await postClientEvent(aliceToken, board.id, stickyMoved);
+            await postClientEvent(aliceToken, board.id, stickyMoved);
+            const moved = (await history(board.id)).filter((e) => e.eventType === 'sticky-moved');
+            expect(moved).toHaveLength(1);
+        });
+    });
+
+    describe('commented events', () => {
+        async function createCommentChat(docId: string, name: string): Promise<DrivePath> {
+            const children = await driveGet<DrivePath[]>(aliceToken, aliceOwnerId, mountId, `folder/${docId}`);
+            const chatFolder = findOrFail(children, (c) => c.name === 'chat');
+            return drivePost(aliceToken, aliceOwnerId, mountId, `folder/${chatFolder.id}/create/chat`, {
+                fileName: name,
+            });
+        }
+
+        test('a comment records a commented row on the container and notifies watchers once', async () => {
+            const doc = await createDoc('CommentWatch');
+            await shareWith(doc.id, ctx.bob.user.email);
+            await authedRequest(bobToken, `/drive/${aliceOwnerId}/${mountId}/path/${doc.id}/watch`, {
+                method: 'POST',
+            });
+            const chat = await createCommentChat(doc.id, 'c1');
+
+            await chatPost(aliceToken, aliceOwnerId, mountId, `${chat.id}/messages`, { content: 'first comment' });
+
+            const commented = (await history(doc.id)).filter((e) => e.eventType === 'commented');
+            expect(commented).toHaveLength(1);
+            expect(commented[0].pathId).toBe(doc.id);
+            expect(commented[0].details).toEqual({ preview: 'first comment' });
+            expect(commented[0].actorEmail).toBe(ctx.alice.user.email);
+
+            // bob (watcher, never commented) gets exactly ONE file-event row, no comment-reply
+            const notifications = await notificationsFor(ctx.bob.user.id);
+            const fileEvents = notifications.filter((n) => n.tag === fileEventTag(aliceOwnerId, mountId, doc.id));
+            expect(fileEvents).toHaveLength(1);
+            expect(fileEvents[0].title).toBe('Alice Test commented on CommentWatch');
+            expect(notifications.some((n) => n.type === 'comment-reply' && (n.tag ?? '').includes(doc.id))).toBe(false);
+        });
+
+        test('mentioned watchers get the mention notification, not the file-event', async () => {
+            const doc = await createDoc('CommentMention');
+            await shareWith(doc.id, ctx.charlie.user.email);
+            await authedRequest(
+                ctx.charlie.user.sessionToken,
+                `/drive/${aliceOwnerId}/${mountId}/path/${doc.id}/watch`,
+                { method: 'POST' },
+            );
+            const chat = await createCommentChat(doc.id, 'c2');
+
+            await chatPost(aliceToken, aliceOwnerId, mountId, `${chat.id}/messages`, {
+                content: `hey ${ctx.charlie.user.email}`,
+            });
+
+            const notifications = await notificationsFor(ctx.charlie.user.id);
+            expect(notifications.some((n) => n.type === 'mention-comment' && (n.tag ?? '').includes(doc.id))).toBe(
+                true,
+            );
+            expect(notifications.some((n) => n.tag === fileEventTag(aliceOwnerId, mountId, doc.id))).toBe(false);
+        });
+
+        test('whispers never record commented rows', async () => {
+            const doc = await createDoc('CommentWhisper');
+            await shareWith(doc.id, ctx.bob.user.email);
+            const chat = await createCommentChat(doc.id, 'c3');
+
+            await chatPost(aliceToken, aliceOwnerId, mountId, `${chat.id}/messages`, {
+                content: 'psst, secret',
+                type: 'whisper',
+                whisperTo: ctx.bob.user.email,
+            });
+
+            const commented = (await history(doc.id)).filter((e) => e.eventType === 'commented');
+            expect(commented).toHaveLength(0);
+        });
     });
 });

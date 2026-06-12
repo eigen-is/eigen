@@ -1,5 +1,11 @@
 import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
-import type { PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
+import {
+    type ClientFileEventType,
+    type FileEventDetailsMap,
+    isClientFileEventType,
+    type PathWatchStatus,
+    type WatchedItem,
+} from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -433,6 +439,24 @@ export default class SharedDrive {
 
     public async getFileHistory(mountId: string, pathId: string, opts?: { limit?: number; before?: Date }) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getFileHistory(mountId, pathId, opts));
+    }
+
+    // Param exists to match Drive.recordClientFileEvent's union signature; SharedDrive
+    // derives the actor from this.user, so the route's value is intentionally ignored.
+    public async recordClientFileEvent(
+        mountId: string,
+        pathId: string,
+        _user: User,
+        eventType: ClientFileEventType,
+        details: FileEventDetailsMap[ClientFileEventType],
+    ): Promise<void> {
+        // Defence in depth — the route's typebox union is the primary gate.
+        if (!isClientFileEventType(eventType)) {
+            throw new ApiError(400, `Event type not client-postable: ${eventType}`);
+        }
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.recordClientFileEvent(mountId, pathId, this.user, eventType, details),
+        );
     }
 
     public async watchPath(mountId: string, pathId: string, _user: User): Promise<{ success: boolean }> {

@@ -2,7 +2,7 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { useCommentLifecycle } from '@workspace/lib/comments';
-import { MediaResolverProvider } from '@workspace/lib/drive';
+import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
@@ -97,7 +97,13 @@ export function StickiesBoard({
     });
     const { allComments, cards, createCard, setOpenCardId } = lifecycle;
 
-    const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({ board, cards, yjsDoc });
+    const recordHistory = useRecordHistory(ownerId, path.mountId, path.id);
+    const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({
+        board,
+        cards,
+        yjsDoc,
+        onRecordEvent: recordHistory.mutate,
+    });
 
     const entryByChatName = useMemo(() => {
         const map = new Map<string, CommentEntry>();
