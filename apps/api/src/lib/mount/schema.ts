@@ -1,5 +1,5 @@
 import type { DriveACL, DrivePathDetails, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
-import type { FileEventType } from '@workspace/lib/types/file-history';
+import type { FileEventDetailsMap, FileEventType } from '@workspace/lib/types/file-history';
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
@@ -46,7 +46,7 @@ export const fileEvents = sqliteTable(
         eventType: text('eventType').notNull().$type<FileEventType>(),
         actorUserId: text('actorUserId').notNull(),
         actorEmail: text('actorEmail').notNull(),
-        details: text('details', { mode: 'json' }),
+        details: text('details', { mode: 'json' }).$type<FileEventDetailsMap[keyof FileEventDetailsMap] | null>(),
         createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     },
     (table) => ({
