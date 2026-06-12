@@ -14,7 +14,13 @@ export type PersistInput = {
     title: string;
     body?: string | null;
     tag?: string | null;
+    // Tag-coalescing: when a row with the same tag was created within the window,
+    // the upsert still refreshes the row but the SSE broadcast is skipped, so a
+    // burst of events yields one toast (the bell catches up on refetch).
+    coalesce?: boolean;
 };
+
+const COALESCE_WINDOW_MS = 30_000;
 
 function toNotification(row: typeof schema.notifications.$inferSelect): Notification {
     return {
@@ -55,6 +61,11 @@ export class NotificationCenter {
     persist(input: PersistInput): Notification {
         const id = randomUUID();
         const now = new Date();
+        // Select BEFORE the upsert — afterwards the row always exists with createdAt = now.
+        const prior =
+            input.coalesce && input.tag
+                ? this.db.select().from(schema.notifications).where(eq(schema.notifications.tag, input.tag)).get()
+                : undefined;
         const row = {
             id,
             type: input.type,
@@ -82,7 +93,9 @@ export class NotificationCenter {
             })
             .run();
 
-        this.home.broadcast(buildNotificationCreatedEvent(input.title, input.body, input.type, input.tag));
+        if (!prior || now.getTime() - prior.createdAt.getTime() >= COALESCE_WINDOW_MS) {
+            this.home.broadcast(buildNotificationCreatedEvent(input.title, input.body, input.type, input.tag));
+        }
         return row;
     }
 

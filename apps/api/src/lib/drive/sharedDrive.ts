@@ -1,4 +1,5 @@
 import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
+import type { PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -432,6 +433,34 @@ export default class SharedDrive {
 
     public async getFileHistory(mountId: string, pathId: string, opts?: { limit?: number; before?: Date }) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getFileHistory(mountId, pathId, opts));
+    }
+
+    public async watchPath(mountId: string, pathId: string, _user: User): Promise<{ success: boolean }> {
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.watchPath(mountId, pathId, this.user));
+    }
+
+    // No permission gate: unwatching and reading one's own watch state must keep
+    // working after a share is revoked.
+    public async unwatchPath(mountId: string, pathId: string, _user: User): Promise<{ success: boolean }> {
+        return this.sharedDrive.unwatchPath(mountId, pathId, this.user);
+    }
+
+    public async getWatchStatus(mountId: string, pathId: string, _user: User): Promise<PathWatchStatus> {
+        return this.sharedDrive.getWatchStatus(mountId, pathId, this.user);
+    }
+
+    public async getWatches(_user: User): Promise<WatchedItem[]> {
+        // Drop items the caller can no longer read (revoked shares keep their watch rows)
+        const items = await this.sharedDrive.getWatches(this.user);
+        const memberships = await this.getUserMemberships();
+        const results: WatchedItem[] = [];
+        for (const item of items) {
+            const ancestors = await this.sharedDrive.breadCrumb(item.mountId, item.pathId);
+            if (canReadFromAncestors(ancestors, this.user, memberships)) {
+                results.push(item);
+            }
+        }
+        return results;
     }
 
     // Team members always go through SharedDrive (no team user logs in),
