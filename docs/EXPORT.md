@@ -189,9 +189,18 @@ Eigensheets (`.eigensheets`) support XLSX, PDF, and HTML export via the same rou
 | `html`  | `Sheet[]` → `renderSheetsHtml` standalone HTML |
 
 The XLSX conversion reverses the XLSX import pipeline (`apps/api/src/lib/import/sheets/from-xlsx.ts`), using the
-same ExcelJS library. Cell values, formulas, styles (font, fill, alignment), borders, merged cells, column
-widths, and row heights are all round-tripped. `renderSheetsHtml` (`sheets/html.ts`) is shared with the quick
-preview and takes a `RenderMode` so the preview renders only the first sheet (see PREVIEWS.md).
+same ExcelJS library. Round-tripped: cell values, formulas, rich-text runs (`ct.s`), styles (font, fill,
+alignment, rotation), borders (cell-level and toolbar range borders via `range-borders.ts`; merged-region
+perimeters are unioned edge-aware into the ONE style ExcelJS shares across a merge), merged cells, column
+widths/row heights, hidden rows/cols, frozen panes (merged into the same view object as `showGridLines`),
+the autofilter range, conditional formatting (engine rule order becomes explicit xlsx priorities;
+`duplicateValue` exports as a COUNTIF expression — ExcelJS has no native writer for it), data validation
+(per-cell rules that ExcelJS re-merges into sqref rectangles), and hyperlinks. Webpage links are scheme-gated
+through `resolveWebLink` (`@workspace/lib/sheets/web-link`, the same gate the editor's link navigation uses);
+internal links are written in Excel-native `location` form. `renderSheetsHtml` (`sheets/html.ts`) is shared
+with the quick preview and takes a `RenderMode` so the preview renders only the first sheet (see PREVIEWS.md);
+it renders webpage hyperlinks as `target="_blank" rel="noopener noreferrer"` anchors through the same scheme
+gate (internal links stay plain text — no meaningful target in standalone HTML).
 
 ### File Structure
 
@@ -223,3 +232,7 @@ Invariants the importer must uphold:
   to `'General'` if Excel reports no explicit numFmt. Without an `fa`, numfmt falls through to the raw value —
   date serials show as numbers, percents lose their `%` sign, etc.
 - **Formula cells use leading `=`** — `f: '=SUM(A1:A3)'`, not `f: 'SUM(A1:A3)'`.
+
+Location-form internal hyperlinks (`<hyperlink location=…>` — what Excel itself and our own exporter write)
+never survive ExcelJS's read reconcile, so `from-xlsx.ts` re-reads them from the raw worksheet XML (via
+`jszip`, ExcelJS's own zip dependency) and routes them through the same mapping as `#`-prefixed rel targets.

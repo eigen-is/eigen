@@ -192,6 +192,12 @@ threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produ
 `evaluateFormula` callback. Cell values come from the saved snapshot's `cell.v` — formulas inside
 the sheet aren't recomputed; only the CF rule's own formula is evaluated against existing values.
 
+Webpage hyperlinks render as `target="_blank" rel="noopener noreferrer"` anchors, scheme-gated
+through the same `resolveWebLink` (`@workspace/lib/sheets/web-link`) the editor's link navigation
+uses; internal (`sheet`/`cellrange`) links stay plain text. Native xlsx export lives in
+`export/sheets/xlsx.ts` — coverage and encoding decisions in [EXPORT.md](EXPORT.md#sheets-export)
+and the cycle-8 row of [SHEETS-XLSX-FIDELITY.md](SHEETS-XLSX-FIDELITY.md).
+
 The engine is exposed as a `@workspace/sheet/engine` subpath export. Server-side
 consumers (`apps/api`) import only from this subpath, which restricts type-checking to the pure
 DOM-free subset that satisfies stricter compiler options (`verbatimModuleSyntax`,
