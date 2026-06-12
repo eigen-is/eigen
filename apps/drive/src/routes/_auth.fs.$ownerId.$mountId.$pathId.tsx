@@ -21,13 +21,13 @@ import { DriveContext } from './__root';
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
     component: DriveRoute,
-    validateSearch: (search: Record<string, unknown>) => {
+    validateSearch: (search: Record<string, unknown>): DriveSearchParams => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
         const sharePathId = typeof search.sharePathId === 'string' ? search.sharePathId : undefined;
         const shareEmail = typeof search.shareEmail === 'string' ? search.shareEmail : undefined;
         const showHistory = search.showHistory === '1' || search.showHistory === true;
-        return { pid, uid, sharePathId, shareEmail, showHistory } as DriveSearchParams & { showHistory?: boolean };
+        return { pid, uid, sharePathId, shareEmail, showHistory };
     },
 });
 

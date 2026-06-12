@@ -133,13 +133,12 @@ export default class CollabDocument {
     public doc!: Y.Doc;
     private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;
-    private connections: Set<ServerWebSocket<undefined>> = new Set();
+    private connections: Map<ServerWebSocket<undefined>, User> = new Map();
 
     public get connectionCount(): number {
         return this.connections.size;
     }
     private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
-    private connUsers: Map<ServerWebSocket<undefined>, User> = new Map();
     private closed: boolean = false;
     private lastTouchedAt = 0;
     private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
@@ -200,10 +199,10 @@ export default class CollabDocument {
             if (origin && typeof origin === 'object' && 'readyState' in origin) {
                 const conn = origin as ServerWebSocket<undefined>;
                 this.broadcastMessage(conn, message);
-                const user = this.connUsers.get(conn);
+                const user = this.connections.get(conn);
                 if (user) this.recordEditThrottled(user);
             } else {
-                for (const conn of this.connections) {
+                for (const conn of this.connections.keys()) {
                     if (conn.readyState === 1) conn.send(Buffer.from(message));
                 }
             }
@@ -225,7 +224,7 @@ export default class CollabDocument {
                     awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients),
                 );
                 const message = encoding.toUint8Array(encoder);
-                for (const conn of this.connections) {
+                for (const conn of this.connections.keys()) {
                     if (conn !== origin && conn.readyState === 1) {
                         conn.send(Buffer.from(message));
                     }
@@ -254,11 +253,10 @@ export default class CollabDocument {
         if (this.closed) return;
         this.closed = true;
         this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
-        for (const conn of this.connections) {
+        for (const conn of this.connections.keys()) {
             conn.close();
-            this.connections.delete(conn);
         }
-        this.connUsers.clear();
+        this.connections.clear();
         this.provider.destroy();
         this.awareness.destroy();
         this.doc.destroy();
@@ -287,8 +285,7 @@ export default class CollabDocument {
         if (this.closed) {
             return;
         }
-        this.connections.add(conn);
-        this.connUsers.set(conn, user);
+        this.connections.set(conn, user);
         this.sendSyncStep1(conn);
     }
 
@@ -297,7 +294,6 @@ export default class CollabDocument {
             return;
         }
         this.connections.delete(conn);
-        this.connUsers.delete(conn);
 
         const clientIds = this.connectionClientIds.get(conn);
         if (clientIds && clientIds.size > 0) {
@@ -305,11 +301,10 @@ export default class CollabDocument {
         }
         this.connectionClientIds.delete(conn);
 
-        for (const connection of this.connections) {
+        for (const connection of this.connections.keys()) {
             if (connection.readyState > 1) {
                 // CLOSING or CLOSED
                 this.connections.delete(connection);
-                this.connUsers.delete(connection);
                 const staleIds = this.connectionClientIds.get(connection);
                 if (staleIds && staleIds.size > 0) {
                     awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(staleIds), null);
@@ -374,7 +369,7 @@ export default class CollabDocument {
         if (this.closed) {
             return;
         }
-        for (const conn of this.connections) {
+        for (const conn of this.connections.keys()) {
             if (conn !== originConn && conn.readyState === 1) {
                 // OPEN
                 try {

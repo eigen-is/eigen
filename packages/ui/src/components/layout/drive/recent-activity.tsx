@@ -2,18 +2,16 @@ import { formatTimeAgo } from '@workspace/lib/date';
 import { FILE_EVENT_ICONS, useFileHistory, useIsPathWatched, useUnwatchPath, useWatchPath } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { fileEventVerb } from '@workspace/lib/types/file-history';
-import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useRef } from 'react';
 import { UserAvatar } from '../user-avatar';
 
 type RecentActivityProps = {
     path: DrivePath;
-    onItemOpen?: (path: DrivePath) => void;
     highlight?: boolean;
 };
 
-export function RecentActivity({ path, onItemOpen: _onItemOpen, highlight }: RecentActivityProps) {
-    const { data: events = [] } = useFileHistory(path.ownerId, path.mountId, path.id, 5);
+export function RecentActivity({ path, highlight }: RecentActivityProps) {
+    const { data: events = [] } = useFileHistory(path.ownerId, path.mountId, path.id);
     const { data: watchStatus } = useIsPathWatched(path.ownerId, path.mountId, path.id);
     const watchMutation = useWatchPath(path.ownerId, path.mountId, path.id);
     const unwatchMutation = useUnwatchPath(path.ownerId, path.mountId, path.id);
@@ -53,7 +51,7 @@ export function RecentActivity({ path, onItemOpen: _onItemOpen, highlight }: Rec
                                             <span className="font-medium">{event.pathName}</span>
                                         </>
                                     )}
-                                    <div className={cn('text-xs text-muted-foreground flex items-center gap-1 mt-0.5')}>
+                                    <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                                         <EventIcon className="h-3 w-3" />
                                         {formatTimeAgo(event.createdAt)}
                                     </div>

@@ -61,7 +61,7 @@ import {
     matchesACL,
     normalizeACL,
 } from './acl';
-import { type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
+import { diffACLEmails, type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
 import { LockManager } from './lock-manager';
 import { getUniqueFileName } from './naming';
 import { getSharedDatabase } from './shared';
@@ -210,21 +210,7 @@ export default class Drive {
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
-        if (user) {
-            await mount.history.record({
-                pathId: folder.id,
-                eventType: 'created',
-                actor: { id: user.id, email: user.email },
-            });
-            await mount.history.fanOut({
-                eventType: 'created',
-                actor: user,
-                path: folder,
-                chainRootIds: [parentId],
-                burst: true,
-                verifyAncestors: await mount.getBreadcrumb(folder.id),
-            });
-        }
+        if (user) await this.recordFileEvent(mountId, folder.id, user, 'created', undefined, { burst: true });
         return folder;
     }
 
@@ -247,21 +233,8 @@ export default class Drive {
         const created = await mount.getPath(pathId);
         if (!created) throw new ApiError(500, `Failed to create ${type}`);
         this.emit(SSEventType.DRIVE_FILE_CREATED, created);
-        if (user) {
-            await mount.history.record({
-                pathId: created.id,
-                eventType: 'created',
-                actor: { id: user.id, email: user.email },
-            });
-            // Not burst: a single new document deserves its own tag
-            await mount.history.fanOut({
-                eventType: 'created',
-                actor: user,
-                path: created,
-                chainRootIds: [parentId],
-                verifyAncestors: await mount.getBreadcrumb(created.id),
-            });
-        }
+        // Not burst: a single new document deserves its own tag
+        if (user) await this.recordFileEvent(mountId, created.id, user, 'created');
         return created;
     }
 
@@ -349,6 +322,20 @@ export default class Drive {
             }
         }
 
+        // One fan-out per batch: burst tags the parent folder, so N uploads
+        // collapse into a single watcher notification.
+        const lastUploaded = uploaded[uploaded.length - 1];
+        if (user && lastUploaded) {
+            await mount.history.fanOut({
+                eventType: 'uploaded',
+                actor: user,
+                path: lastUploaded,
+                chainRootIds: [parentId],
+                burst: true,
+                verifyAncestors: () => mount.getBreadcrumb(lastUploaded.id),
+            });
+        }
+
         return uploaded;
     }
 
@@ -383,7 +370,18 @@ export default class Drive {
             }
 
             const pathId = await mount.createFileFromTemp(parentId, safeName, mimeType, size, hash, tempId);
-            return await this.finalizeUpload(mount, pathId, originalName, safeName, mimeType, tempId, user);
+            const created = await this.finalizeUpload(mount, pathId, originalName, safeName, mimeType, tempId, user);
+            if (user) {
+                await mount.history.fanOut({
+                    eventType: 'uploaded',
+                    actor: user,
+                    path: created,
+                    chainRootIds: [created.parentId],
+                    burst: true,
+                    verifyAncestors: () => mount.getBreadcrumb(created.id),
+                });
+            }
+            return created;
         } catch (e) {
             await mount.cleanupTemp(tempId);
             throw e;
@@ -453,18 +451,9 @@ export default class Drive {
         }
 
         this.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
-        if (user) {
-            await mount.history.record({ pathId, eventType: 'restored', actor: { id: user.id, email: user.email } });
-            // restoredItem, not the pre-restore row: that one still has trashedAt set
-            // and a mount-root parentId, which would trip the guard and walk the wrong chain
-            await mount.history.fanOut({
-                eventType: 'restored',
-                actor: user,
-                path: restoredItem,
-                chainRootIds: [restoredItem.parentId],
-                verifyAncestors: await mount.getBreadcrumb(restoredItem.id),
-            });
-        }
+        // recordFileEvent re-fetches the path, so it sees the post-restore row
+        // (trashedAt cleared, original parentId) — the chain it walks is the restored one
+        if (user) await this.recordFileEvent(mountId, pathId, user, 'restored');
     }
 
     async listTrash(mountId: string): Promise<DrivePath[]> {
@@ -478,15 +467,13 @@ export default class Drive {
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
 
         // Notification-only ('deleted' has no history row — the FK cascade would kill
-        // it instantly). Capture watchers + the trashedFrom-chain that justifies the
-        // notification BEFORE the delete removes the path_watchers rows. The item
-        // itself joins the chain so direct-file-share watchers still verify.
+        // it instantly). Capture watchers + the trashedFrom id that justifies the
+        // notification BEFORE the delete removes the path_watchers rows.
         let watcherIds: string[] = [];
-        let verifyAncestors: DrivePath[] = [];
+        let trashedFrom: string | null = null;
         if (user) {
-            const trashedFrom = await mount.getTrashedFrom(pathId);
+            trashedFrom = await mount.getTrashedFrom(pathId);
             watcherIds = mount.history.collectWatcherIds(trashedFrom ? [pathId, trashedFrom] : [pathId], user.id);
-            verifyAncestors = [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item];
         }
 
         await mount.permanentlyDeleteFromTrash(pathId);
@@ -498,12 +485,14 @@ export default class Drive {
         }
 
         if (user && watcherIds.length > 0) {
+            // The item itself joins the chain so direct-file-share watchers still verify
+            // (the trashedFrom folder survives the delete, so its breadcrumb is intact).
             await mount.history.notifyWatchers(watcherIds, {
                 eventType: 'deleted',
                 actor: user,
                 itemName: item.name,
                 tagPathId: pathId,
-                verifyAncestors,
+                verifyAncestors: [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item],
             });
         }
     }
@@ -583,23 +572,7 @@ export default class Drive {
         await propagateACLChange(item, item.acl, item.acl, null);
         const renamedItem = await mount.getPath(pathId);
         if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
-        if (user) {
-            await mount.history.record({
-                pathId,
-                eventType: 'renamed',
-                actor: { id: user.id, email: user.email },
-                details: { oldName, newName },
-            });
-            if (renamedItem) {
-                await mount.history.fanOut({
-                    eventType: 'renamed',
-                    actor: user,
-                    path: renamedItem,
-                    chainRootIds: [renamedItem.parentId],
-                    verifyAncestors: await mount.getBreadcrumb(pathId),
-                });
-            }
-        }
+        if (user) await this.recordFileEvent(mountId, pathId, user, 'renamed', { oldName, newName });
     }
 
     async downloadFile(mountId: string, pathId: string) {
@@ -747,21 +720,7 @@ export default class Drive {
         const updated = await mount.getPath(pathId);
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
-        if (user) {
-            await mount.history.record({
-                pathId,
-                eventType: 'uploaded',
-                actor: { id: user.id, email: user.email },
-                details: { size: updated.size ?? 0 },
-            });
-            await mount.history.fanOut({
-                eventType: 'uploaded',
-                actor: user,
-                path: updated,
-                chainRootIds: [updated.parentId],
-                verifyAncestors: await mount.getBreadcrumb(pathId),
-            });
-        }
+        if (user) await this.recordFileEvent(mountId, pathId, user, 'uploaded', { size: updated.size ?? 0 });
 
         if (thumbnailSource !== null) {
             this.regenerateThumbnailAsync(
@@ -879,24 +838,9 @@ export default class Drive {
             await propagateACLChange(updatedItem, oldACL, normalizedACL, actor ?? null);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
             if (actor) {
-                const oldEmails = new Set((oldACL || []).map((e) => e.id.toLowerCase()));
-                const newEmails = new Set((normalizedACL || []).map((e) => e.id.toLowerCase()));
-                const added = [...newEmails].filter((e) => !oldEmails.has(e));
-                const removed = [...oldEmails].filter((e) => !newEmails.has(e));
+                const { added, removed } = diffACLEmails(oldACL, normalizedACL);
                 if (added.length || removed.length) {
-                    await mount.history.record({
-                        pathId,
-                        eventType: 'acl-changed',
-                        actor: { id: actor.id, email: actor.email },
-                        details: { added, removed },
-                    });
-                    await mount.history.fanOut({
-                        eventType: 'acl-changed',
-                        actor,
-                        path: updatedItem,
-                        chainRootIds: [updatedItem.parentId],
-                        verifyAncestors: await mount.getBreadcrumb(pathId),
-                    });
+                    await this.recordFileEvent(mountId, pathId, actor, 'acl-changed', { added, removed });
                 }
             }
         }
@@ -1090,54 +1034,43 @@ export default class Drive {
         if (!container) throw new ApiError(404, `Container ${containerId} not found`);
         await restoreContainer(this, mount, container, snapshotName);
         if (user) {
-            await mount.history.record({
-                pathId: containerId,
-                eventType: 'version-restored',
-                actor: { id: user.id, email: user.email },
-                details: { versionName: snapshotName },
-            });
-            await mount.history.fanOut({
-                eventType: 'version-restored',
-                actor: user,
-                path: container,
-                chainRootIds: [container.parentId],
-                verifyAncestors: await mount.getBreadcrumb(containerId),
+            await this.recordFileEvent(mountId, containerId, user, 'version-restored', {
+                versionName: snapshotName,
             });
         }
     }
 
-    async getFileHistory(
-        mountId: string,
-        pathId: string,
-        opts?: { limit?: number; before?: Date },
-    ): Promise<FileEvent[]> {
+    async getFileHistory(mountId: string, pathId: string, opts?: { limit?: number }): Promise<FileEvent[]> {
         return this.getMount(mountId).history.list(pathId, opts);
     }
 
-    // Called by: collab/collabDocument.ts ('edited'), chat/chat.ts ('commented'), and
-    // Drive.recordClientFileEvent below. Not route-callable — no SharedDrive wrapper.
+    // Single record + fan-out seam for mutations on a live path. Called by the Drive
+    // mutations above, collab/collabDocument.ts ('edited'), chat/chat.ts ('commented'),
+    // and Drive.recordClientFileEvent below. Not route-callable — no SharedDrive wrapper.
+    // Mutations that rewrite the parent chain (trash/move/permanent-delete) or recurse
+    // through mounts (copy) keep their own inline record + fan-out instead.
     async recordFileEvent<K extends FileEventType>(
         mountId: string,
         pathId: string,
         actor: User,
         eventType: K,
         details?: K extends keyof FileEventDetailsMap ? FileEventDetailsMap[K] : undefined,
-        opts?: { excludeEmails?: Set<string>; dedupeWindowMs?: number },
+        opts?: { excludeEmails?: Set<string>; dedupeWindowMs?: number; burst?: boolean },
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path || path.trashedAt) return;
-        await mount.history.record(
-            { pathId, eventType, actor: { id: actor.id, email: actor.email }, details } as FileEventInput,
-            { dedupeWindowMs: opts?.dedupeWindowMs },
-        );
+        await mount.history.record({ pathId, eventType, actor, details } as FileEventInput, {
+            dedupeWindowMs: opts?.dedupeWindowMs,
+        });
         await mount.history.fanOut({
             eventType,
             actor,
             path,
             chainRootIds: [path.parentId],
+            burst: opts?.burst,
             excludeEmails: opts?.excludeEmails,
-            verifyAncestors: await mount.getBreadcrumb(pathId),
+            verifyAncestors: () => mount.getBreadcrumb(pathId),
         });
     }
 
@@ -1155,16 +1088,14 @@ export default class Drive {
         await this.recordFileEvent(mountId, pathId, user, eventType, details, { dedupeWindowMs: 30_000 });
     }
 
-    async watchPath(mountId: string, pathId: string, user: User): Promise<{ success: boolean }> {
+    async watchPath(mountId: string, pathId: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId); // 404 on missing/trashed
         mount.history.addWatcher(pathId, user.id);
-        return { success: true };
     }
 
-    async unwatchPath(mountId: string, pathId: string, user: User): Promise<{ success: boolean }> {
+    async unwatchPath(mountId: string, pathId: string, user: User): Promise<void> {
         this.getMount(mountId).history.removeWatcher(pathId, user.id);
-        return { success: true };
     }
 
     async getWatchStatus(mountId: string, pathId: string, user: User): Promise<PathWatchStatus> {
@@ -1467,20 +1398,14 @@ export default class Drive {
         const uploadedFile = await mount.getPath(pathId);
         if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
+        // History row only — fan-out is the caller's job, so a multi-file upload
+        // notifies watchers once per batch instead of once per file.
         if (user) {
             await mount.history.record({
                 pathId,
                 eventType: 'uploaded',
                 actor: { id: user.id, email: user.email },
                 details: { size: uploadedFile.size ?? 0 },
-            });
-            await mount.history.fanOut({
-                eventType: 'uploaded',
-                actor: user,
-                path: uploadedFile,
-                chainRootIds: [uploadedFile.parentId],
-                burst: true,
-                verifyAncestors: await mount.getBreadcrumb(pathId),
             });
         }
 

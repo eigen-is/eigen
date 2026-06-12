@@ -36,7 +36,8 @@ function WatchedRoute() {
 
     const watches = useUserWatches(ownerIds);
 
-    const items: WatchedItem[] = [...watches].sort((a, b) => {
+    // combine's flatMap returns a fresh array per render, so sorting in place is safe
+    const items: WatchedItem[] = watches.sort((a, b) => {
         const aDate = a.lastEventAt ?? a.watchedAt;
         const bDate = b.lastEventAt ?? b.watchedAt;
         return bDate.getTime() - aDate.getTime();

@@ -545,12 +545,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/path/:pathId/history',
         async ({ params, query, user }): Promise<FileEvent[]> => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return drive.getFileHistory(params.mountId, params.pathId, {
-                limit: query.limit ? Number(query.limit) : undefined,
-                before: query.before ? new Date(query.before) : undefined,
-            });
+            return drive.getFileHistory(params.mountId, params.pathId, { limit: query.limit });
         },
-        { auth: true, query: t.Object({ limit: t.Optional(t.String()), before: t.Optional(t.String()) }) },
+        { auth: true, query: t.Object({ limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })) }) },
     )
     // Client-emitted history events. The typebox union is the allowlist: only event
     // types with a real client emitter are postable; everything else is server-only.
@@ -581,7 +578,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, user }) => {
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
-            return drive.watchPath(params.mountId, params.pathId, user);
+            await drive.watchPath(params.mountId, params.pathId, user);
+            return { success: true };
         },
         { auth: true },
     )
@@ -589,7 +587,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/path/:pathId/watch',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return drive.unwatchPath(params.mountId, params.pathId, user);
+            await drive.unwatchPath(params.mountId, params.pathId, user);
+            return { success: true };
         },
         { auth: true },
     )

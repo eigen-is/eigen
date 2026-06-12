@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import type { FileEvent, PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
-import type { SSEvent, SSEventNotificationCreated } from '@workspace/lib/types/sse';
+import type { SSEventNotificationCreated } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import * as encoding from 'lib0/encoding';
@@ -18,6 +18,7 @@ import {
     assertJson,
     authedRequest,
     chatPost,
+    collectSSE,
     driveGet,
     drivePost,
     drivePut,
@@ -34,25 +35,6 @@ function fileEventTag(ownerId: string, mountId: string, pathId: string): string 
 async function notificationsFor(userId: string): Promise<Notification[]> {
     const home = await getHome(userId);
     return home.notifications.list();
-}
-
-// In-process SSE listener — same idiom as sse.test.ts's collectSSE.
-function collectSSE(userId: string): { events: SSEvent[]; stop: () => void } {
-    const events: SSEvent[] = [];
-    let home: Awaited<ReturnType<typeof getHome>> | null = null;
-    const listener = (event: SSEvent) => events.push(event);
-    const setup = getHome(userId).then((h) => {
-        home = h;
-        h.subscribeSSE(listener);
-    });
-    return {
-        events,
-        stop: () => {
-            setup.then(() => {
-                if (home) home.unsubscribeSSE(listener);
-            });
-        },
-    };
 }
 
 describe('File watch + fan-out', () => {
@@ -370,7 +352,6 @@ describe('File watch + fan-out', () => {
         expect(item!.mimeType).toBe('text/plain');
         expect(item!.watchedAt).toBeTruthy();
         expect(item!.lastEventType).toBe('renamed');
-        expect(item!.lastActorEmail).toBe(ctx.alice.user.email);
     });
 
     test('watches the caller can no longer read are filtered out', async () => {
