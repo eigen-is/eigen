@@ -5,6 +5,7 @@ export * from './clipboard';
 export * from './collab';
 export * from './contact';
 export * from './drive';
+export * from './file-history';
 export * from './label';
 export * from './mail';
 export * from './mount';
