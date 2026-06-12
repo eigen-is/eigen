@@ -24,6 +24,8 @@ import type {
     Worksheet,
     Cell as XlsxCell,
 } from 'exceljs';
+import he from 'he';
+import JSZip from 'jszip';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -117,15 +119,21 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     await workbook.xlsx.load(buffer);
 
     const theme = extractThemePalette(workbook);
+    const locationLinks = await readLocationHyperlinks(buffer);
 
     const sheets: Sheet[] = [];
     for (const [index, worksheet] of workbook.worksheets.entries()) {
-        sheets.push(worksheetToSheet(worksheet, index, theme));
+        sheets.push(worksheetToSheet(worksheet, index, theme, locationLinks.get(worksheet.name)));
     }
     return sheets;
 }
 
-function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalette): Sheet {
+function worksheetToSheet(
+    worksheet: Worksheet,
+    index: number,
+    theme: ThemePalette,
+    locationLinks: Map<string, string> | undefined,
+): Sheet {
     const sheetId = `sheet-${index}`;
     const celldata: { r: number; c: number; v: FortuneCell }[] = [];
     const columnlen: NonNullable<SheetConfig['columnlen']> = {};
@@ -158,7 +166,13 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
             const c = colNumber - 1;
             const converted = convertCell(cell, theme);
-            const link = mapHyperlink(cell.hyperlink);
+            // Location-form targets (Excel-authored internal links, and our own
+            // exporter's output) route through the same internal mapping as
+            // rel-based '#' targets. exceljs's writer keeps a caller-provided '#'
+            // inside the location attribute, so strip one before prefixing.
+            const location = locationLinks?.get(cell.address);
+            const link =
+                location != null ? mapHyperlink(`#${location.replace(/^#/, '')}`) : mapHyperlink(cell.hyperlink);
             if (link) {
                 hyperlink[`${r}_${c}`] = link;
                 // saveHyperlink invariant: the linked cell carries an hl backref
@@ -805,11 +819,12 @@ function isEmptyCell(cell: FortuneCell): boolean {
 }
 
 // exceljs surfaces a cell's hyperlink target as a string: web/mailto targets
-// verbatim, internal locations with a leading '#' (the rel-based form, which is
-// what exceljs round-trips — Excel-authored <hyperlink location=…> entries
-// without a rel are dropped by exceljs's reconcile and never reach the cell).
-// External targets import verbatim; scheme safety is enforced at navigation
-// time by the engine's allowlist (state/modules/hyperlink.ts).
+// verbatim, internal locations with a leading '#' (the rel-based form).
+// Location-form entries never reach the cell through exceljs (see
+// readLocationHyperlinks) and arrive here re-prefixed with '#' so both internal
+// forms share this one mapping. External targets import verbatim; scheme safety
+// is enforced at navigation/export time by resolveWebLink
+// (@workspace/lib/sheets/web-link).
 function mapHyperlink(target: string | undefined): { linkType: string; linkAddress: string } | null {
     if (target == null || target.trim().length === 0) return null;
     if (!target.startsWith('#')) return { linkType: 'webpage', linkAddress: target };
@@ -828,6 +843,63 @@ function mapHyperlink(target: string | undefined): { linkType: string; linkAddre
     return location.includes('!')
         ? { linkType: 'cellrange', linkAddress: location }
         : { linkType: 'sheet', linkAddress: location };
+}
+
+// exceljs drops location-form hyperlinks on read: the worksheet parse keeps the
+// location attribute (hyperlink-xform.js parseOpen), but reconcile only maps
+// rel-based entries onto cells and then deletes the parsed collection
+// (worksheet-xform.js:469-474, 526) — the streaming reader never reads the
+// attribute at all. Excel itself authors internal links in exactly this form
+// (<hyperlink ref location=…> without a rel), so recover them straight from the
+// worksheet XML. Returns sheet name → (anchor cell ref → location target).
+async function readLocationHyperlinks(buffer: Buffer): Promise<Map<string, Map<string, string>>> {
+    const bySheet = new Map<string, Map<string, string>>();
+    const zip = await JSZip.loadAsync(buffer);
+    const workbookXml = await zip.file('xl/workbook.xml')?.async('string');
+    const relsXml = await zip.file('xl/_rels/workbook.xml.rels')?.async('string');
+    if (workbookXml == null || relsXml == null) return bySheet;
+
+    const relTargets = new Map<string, string>();
+    for (const tag of relsXml.match(/<Relationship\b[^>]*>/g) ?? []) {
+        const id = xmlAttribute(tag, 'Id');
+        const target = xmlAttribute(tag, 'Target');
+        if (id != null && target != null) relTargets.set(id, target);
+    }
+
+    for (const tag of workbookXml.match(/<sheet\b[^>]*>/g) ?? []) {
+        const name = xmlAttribute(tag, 'name');
+        const rId = xmlAttribute(tag, 'r:id');
+        const target = rId != null ? relTargets.get(rId) : undefined;
+        if (name == null || target == null) continue;
+        // Workbook-rel targets are relative to xl/ unless rooted.
+        const path = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
+        const sheetXml = await zip.file(path)?.async('string');
+        if (sheetXml == null) continue;
+        const links = parseLocationHyperlinks(sheetXml);
+        if (links.size > 0) bySheet.set(name, links);
+    }
+    return bySheet;
+}
+
+function parseLocationHyperlinks(sheetXml: string): Map<string, string> {
+    const links = new Map<string, string>();
+    const block = sheetXml.match(/<hyperlinks(?:\s[^>]*)?>([\s\S]*?)<\/hyperlinks>/);
+    if (!block) return links;
+    for (const tag of block[1].match(/<hyperlink\b[^>]*>/g) ?? []) {
+        const ref = xmlAttribute(tag, 'ref');
+        const location = xmlAttribute(tag, 'location');
+        if (ref == null || location == null) continue;
+        // ref may span a range; the anchor cell carries the link.
+        links.set(ref.split(':')[0], location);
+    }
+    return links;
+}
+
+// OOXML attributes are double-quoted; entity decoding goes through `he` (already
+// the mail parser's decoder), which covers the XML named + numeric entities.
+function xmlAttribute(tag: string, name: string): string | null {
+    const match = tag.match(new RegExp(`(?:^|\\s)${name}="([^"]*)"`));
+    return match ? he.decode(match[1]) : null;
 }
 
 function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boolean; display?: string } {
