@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-740 primitives across 6 kinds. `packages/sheet` internals are excluded.
+746 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -134,7 +134,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (193)
+## Hooks (198)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -242,11 +242,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useEmailCollaborators` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useEmptyTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useExportDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-export-document.ts |
+| `useFileHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
 | `useFolderContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useFolderLookup` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useImportDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-import-document.ts |
 | `useImportFromDrive` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-import-document.ts |
 | `useIsEffectiveOwner` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
+| `useIsPathWatched` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useListTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useMediaResolver` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `useMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
@@ -263,8 +265,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useRootFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useSharedPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useTextPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useUnwatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useUserWatches` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
+| `useWatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useFileContent` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-content.ts |
 | `useFileSave` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-save.ts |
 | `useHomeSize` | `@workspace/lib/home` | packages/lib/src/core/home/hooks/use-home.ts |
@@ -541,7 +546,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (235)
+## Utilities & constants (236)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -690,6 +695,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `FILE_EVENT_ICONS` | `@workspace/lib/drive` | packages/lib/src/core/drive/history-display.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |

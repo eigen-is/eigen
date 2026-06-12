@@ -2,6 +2,7 @@ import { MessageSquare, UserRoundPlus } from 'lucide-react';
 import { CountBadge } from '../count-badge';
 import { DocumentModeButton } from './document-mode-button';
 import { TooltipButton } from './tooltip-button';
+import { WatchToggleButton } from './watch-toggle-button';
 
 type DocumentShareClusterProps = {
     canWrite: boolean;
@@ -9,6 +10,7 @@ type DocumentShareClusterProps = {
     onToggleCommentPanel?: () => void;
     commentPanelOpen?: boolean;
     unresolvedCommentCount?: number;
+    watchTarget?: { ownerId: string; mountId: string; pathId: string };
 };
 
 export function DocumentShareCluster({
@@ -17,9 +19,11 @@ export function DocumentShareCluster({
     onToggleCommentPanel,
     commentPanelOpen,
     unresolvedCommentCount,
+    watchTarget,
 }: DocumentShareClusterProps) {
     return (
         <>
+            {watchTarget && <WatchToggleButton {...watchTarget} />}
             {onToggleCommentPanel && (
                 <div className="relative">
                     <TooltipButton

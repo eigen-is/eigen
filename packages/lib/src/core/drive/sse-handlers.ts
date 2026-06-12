@@ -12,6 +12,7 @@ import {
     invalidatePathRenamed,
     invalidateTrash,
 } from './hooks/use-drive';
+import { invalidateFileHistory } from './hooks/use-file-history';
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, userId?: string): boolean {
     if (!event?.type?.startsWith('drive:')) return false;
@@ -25,6 +26,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
             if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
             invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
             queryClient.invalidateQueries({ queryKey: collabKeys.document(path.ownerId, path.mountId, path.id) });
+            invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_FOLDER_CREATED:
@@ -32,26 +34,31 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
         case SSEventType.DRIVE_FILE_UPLOADED:
             invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
             invalidateSearchOwner(queryClient, path.ownerId);
+            invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_FOLDER_DELETED:
         case SSEventType.DRIVE_FILE_DELETED:
             invalidateItemDeleted(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             invalidateSearchOwner(queryClient, path.ownerId);
+            invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_PATH_RENAMED:
             invalidatePathRenamed(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             invalidateSearchOwner(queryClient, path.ownerId);
+            invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_PATH_MOVED:
             invalidatePathMoved(queryClient, path.ownerId, path.mountId, path.id, path.parentId, event.oldParentId);
+            invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_ACL_UPDATED:
             if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
             invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
+            invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_PATH_TRASHED:
@@ -67,12 +74,14 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
             }
             invalidateTrash(queryClient, path.ownerId, path.mountId);
             invalidateSearchOwner(queryClient, path.ownerId);
+            invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
         case SSEventType.DRIVE_PATH_RESTORED:
             invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
             invalidateTrash(queryClient, path.ownerId, path.mountId);
             invalidateSearchOwner(queryClient, path.ownerId);
+            invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
         default:

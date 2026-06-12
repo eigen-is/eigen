@@ -129,7 +129,11 @@ export function Toolbar({
             }
             right={
                 <div className="flex items-center gap-1">
-                    <DocumentShareCluster canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} />
+                    <DocumentShareCluster
+                        canWrite={canWrite}
+                        onAccessDialogOpen={onAccessDialogOpen}
+                        watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                    />
                 </div>
             }
         />
