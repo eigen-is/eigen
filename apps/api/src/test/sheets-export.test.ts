@@ -1065,6 +1065,134 @@ describe('Sheets xlsx export — range borders', () => {
     });
 });
 
+describe('Sheets xlsx export — merged-cell borders', () => {
+    const side = (style: ExcelJS.BorderStyle, argb: string) => ({ style, color: { argb } });
+    const thin = (color: string) => ({ style: 1, color });
+
+    // exceljs merge constituents SHARE the master's style object, so the perimeter
+    // sides supplied per constituent (the importer's per-cell entries) must compose
+    // into one border — a per-cell write would let the last constituent clobber the
+    // anchor's left edge (the Budget & Hours / Deliverable Tracker regression).
+    test('unions a 1×3 merged box perimeter into every constituent', async () => {
+        const black = thin('#000000');
+        const sheets: Sheet[] = [
+            {
+                name: 'Band',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'anchor', mc: { r: 0, c: 0, rs: 1, cs: 3 } } },
+                    { r: 0, c: 1, v: { mc: { r: 0, c: 0 } } },
+                    { r: 0, c: 2, v: { mc: { r: 0, c: 0 } } },
+                ],
+                config: {
+                    merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 3 } },
+                    borderInfo: [
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: black, t: black, b: black } },
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 1, t: black, b: black } },
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 2, t: black, b: black, r: black } },
+                    ],
+                },
+            },
+        ];
+        const wb = await exportAndReload(sheets);
+        const ws = getSheet(wb, 'Band');
+        const expected = side('thin', 'FF000000');
+        for (const a1 of ['A1', 'B1', 'C1']) {
+            expect(ws.getCell(a1).border).toEqual({
+                left: expected,
+                right: expected,
+                top: expected,
+                bottom: expected,
+            });
+        }
+    });
+
+    // Sides only count from the constituents on the merge's matching edge (the
+    // editor's render compute ignores non-edge sides under a merge,
+    // packages/sheet/src/state/modules/border.ts), and same-side conflicts resolve
+    // last-write-wins per SIDE.
+    test('2×2 merge: drops interior sides and resolves per-side conflicts last-write-wins', async () => {
+        const red = thin('#FF0000');
+        const green = thin('#00FF00');
+        const blue = thin('#0000FF');
+        const sheets: Sheet[] = [
+            {
+                name: 'Box',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'anchor', mc: { r: 0, c: 0, rs: 2, cs: 2 } } },
+                    { r: 0, c: 1, v: { mc: { r: 0, c: 0 } } },
+                    { r: 1, c: 0, v: { mc: { r: 0, c: 0 } } },
+                    { r: 1, c: 1, v: { mc: { r: 0, c: 0 } } },
+                ],
+                config: {
+                    merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } },
+                    borderInfo: [
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: red, t: red } },
+                        // l here sits on the merge's INNER vertical edge — must be dropped.
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 1, l: green, t: blue, r: blue } },
+                        { rangeType: 'cell', value: { row_index: 1, col_index: 0, l: blue, b: red } },
+                        { rangeType: 'cell', value: { row_index: 1, col_index: 1, r: red, b: blue } },
+                    ],
+                },
+            },
+        ];
+        const wb = await exportAndReload(sheets);
+        const ws = getSheet(wb, 'Box');
+        for (const a1 of ['A1', 'B1', 'A2', 'B2']) {
+            expect(ws.getCell(a1).border).toEqual({
+                left: side('thin', 'FF0000FF'), // (1,0) wrote after (0,0); (0,1)'s green is interior
+                top: side('thin', 'FF0000FF'), // (0,1) wrote after (0,0)
+                right: side('thin', 'FFFF0000'), // (1,1) wrote after (0,1)
+                bottom: side('thin', 'FF0000FF'), // (1,1) wrote after (1,0)
+            });
+        }
+    });
+
+    test('round-trips a merged box perimeter including the left edge', async () => {
+        const black = thin('#000000');
+        const sheets: Sheet[] = [
+            {
+                name: 'Band',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'anchor', mc: { r: 0, c: 0, rs: 1, cs: 3 } } },
+                    { r: 0, c: 1, v: { mc: { r: 0, c: 0 } } },
+                    { r: 0, c: 2, v: { mc: { r: 0, c: 0 } } },
+                ],
+                config: {
+                    merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 3 } },
+                    borderInfo: [
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: black, t: black, b: black } },
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 1, t: black, b: black } },
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 2, t: black, b: black, r: black } },
+                    ],
+                },
+            },
+        ];
+        const rt = await roundTrip(sheets);
+        expect(rt[0].config?.merge?.['0_0']).toEqual({ r: 0, c: 0, rs: 1, cs: 3 });
+        const byCell = new Map<string, CellBorderInfo['value']>(
+            (rt[0].config?.borderInfo ?? []).map((b) => {
+                if (b.rangeType !== 'cell') throw new Error('expected cell entries');
+                return [`${b.value.row_index}_${b.value.col_index}`, b.value];
+            }),
+        );
+        // The render-critical assert: the LEFT-edge constituent (here the value-bearing
+        // anchor) re-imports its left side — the editor renders the merge's left edge
+        // from the leftmost constituent's `l` only.
+        const anchor = byCell.get('0_0');
+        expect(anchor?.l).toEqual(black);
+        expect(anchor?.t).toEqual(black);
+        expect(anchor?.b).toEqual(black);
+        // The written union styleId is shared by every constituent, so the re-import
+        // carries the box on the slaves too (merge cells bypass the empty-cell skip).
+        for (const key of ['0_1', '0_2']) {
+            const sides = byCell.get(key);
+            expect(sides?.t).toEqual(black);
+            expect(sides?.b).toEqual(black);
+        }
+        expect(byCell.get('0_2')?.r).toEqual(black);
+    });
+});
+
 describe('Sheets xlsx export — inline rich text', () => {
     test('exports ct.s segments as richText runs with mapped fonts', async () => {
         const sheets: Sheet[] = [

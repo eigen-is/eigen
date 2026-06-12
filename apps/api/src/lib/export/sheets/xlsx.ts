@@ -5,6 +5,7 @@ import type {
     DefaultConditionalFormatRule,
     Cell as FortuneCell,
     InlineStringSegment,
+    MergeCell,
     Sheet,
     SingleRange,
 } from '@workspace/lib/sheets';
@@ -20,6 +21,7 @@ import {
 } from '@workspace/sheet/engine';
 import type {
     Border,
+    Borders,
     ConditionalFormattingRule,
     DataValidation,
     DataValidationOperator,
@@ -31,7 +33,7 @@ import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { resolveFontFamily } from './fonts';
-import { expandBorderInfo } from './range-borders';
+import { type CellBorderSides, expandBorderInfo } from './range-borders';
 
 // Excel's date epoch is 1899-12-30 (Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -169,15 +171,38 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
         }
 
         if (config.borderInfo) {
+            // exceljs merge constituents SHARE the master's style object (lib/doc/
+            // cell.js merge() assigns `this.style = master.style`), so writing
+            // `cell.border` per constituent would clobber the shared border — the
+            // last constituent wins and the merge loses e.g. its left edge. Compose
+            // ONE border per merge instead: a side counts only from constituents on
+            // the merge's matching edge (the editor's render compute ignores
+            // non-edge sides under a merge, packages/sheet state/modules/border.ts);
+            // same-side conflicts resolve last-write-wins per side in map order.
+            const mergeAt = mergeConstituents(config.merge);
+            const mergeBorders = new Map<string, CellBorderSides>();
             for (const [key, sides] of expandBorderInfo(config.borderInfo)) {
-                const border = {
-                    ...(sides.l && { left: toBorderSide(sides.l) }),
-                    ...(sides.r && { right: toBorderSide(sides.r) }),
-                    ...(sides.t && { top: toBorderSide(sides.t) }),
-                    ...(sides.b && { bottom: toBorderSide(sides.b) }),
-                };
-                if (Object.keys(border).length === 0) continue;
                 const [r, c] = key.split('_').map(Number);
+                const merge = mergeAt.get(key);
+                if (merge) {
+                    const union = mergeBorders.get(`${merge.r}_${merge.c}`) ?? {};
+                    if (sides.l && c === merge.c) union.l = sides.l;
+                    if (sides.r && c === merge.c + merge.cs - 1) union.r = sides.r;
+                    if (sides.t && r === merge.r) union.t = sides.t;
+                    if (sides.b && r === merge.r + merge.rs - 1) union.b = sides.b;
+                    mergeBorders.set(`${merge.r}_${merge.c}`, union);
+                    continue;
+                }
+                const border = toBorder(sides);
+                if (border) worksheet.getCell(r + 1, c + 1).border = border;
+            }
+            for (const [key, sides] of mergeBorders) {
+                const border = toBorder(sides);
+                if (!border) continue;
+                const [r, c] = key.split('_').map(Number);
+                // One write through the anchor lands on every constituent via the
+                // shared style — Excel renders the merge perimeter from the edge
+                // cells' sides and ignores the sides facing inward.
                 worksheet.getCell(r + 1, c + 1).border = border;
             }
         }
@@ -302,6 +327,28 @@ function toBorderSide(side: BorderSide): Partial<Border> {
         style: REVERSE_BORDER_STYLE[side.style] ?? 'thin',
         color: { argb: hexToArgb(side.color) },
     };
+}
+
+function toBorder(sides: CellBorderSides): Partial<Borders> | null {
+    const border = {
+        ...(sides.l && { left: toBorderSide(sides.l) }),
+        ...(sides.r && { right: toBorderSide(sides.r) }),
+        ...(sides.t && { top: toBorderSide(sides.t) }),
+        ...(sides.b && { bottom: toBorderSide(sides.b) }),
+    };
+    return Object.keys(border).length > 0 ? border : null;
+}
+
+function mergeConstituents(merge: Record<string, MergeCell> | undefined): Map<string, MergeCell> {
+    const byCell = new Map<string, MergeCell>();
+    for (const m of Object.values(merge ?? {})) {
+        for (let r = m.r; r < m.r + m.rs; r += 1) {
+            for (let c = m.c; c < m.c + m.cs; c += 1) {
+                byCell.set(`${r}_${c}`, m);
+            }
+        }
+    }
+    return byCell;
 }
 
 // Inline-string segments carry the cell's hex defaults or rgb(…) strings produced by
