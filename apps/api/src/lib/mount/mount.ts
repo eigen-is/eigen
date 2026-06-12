@@ -483,16 +483,33 @@ export class Mount {
         return fileId;
     }
 
-    async copyPath(srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
+    async copyPath(
+        srcPathId: string,
+        destParentId: string,
+        name: string,
+        actor?: { id: string; email: string },
+    ): Promise<DrivePath> {
         const src = await this.getPath(srcPathId);
         if (!src || src.trashedAt) throw new ApiError(404, 'Source not found');
 
         if (isContainerType(src.type)) {
             const containerType: DriveContainerType | undefined = src.type === DRIVE_TYPE_FOLDER ? undefined : src.type;
             const newId = await this.createFolder(destParentId, name, containerType);
+            if (actor) {
+                await this.history.record({
+                    pathId: newId,
+                    eventType: 'copied',
+                    actor,
+                    details: {
+                        sourceOwnerId: this.history.ownerId,
+                        sourceMountId: this.history.mountId,
+                        sourcePathId: srcPathId,
+                    },
+                });
+            }
             const children = await this.listFolder(srcPathId);
             for (const child of children) {
-                await this.copyPath(child.id, newId, child.name);
+                await this.copyPath(child.id, newId, child.name, actor);
             }
             const created = await this.getPath(newId);
             if (!created) throw new ApiError(500, 'Failed to copy folder');
@@ -506,6 +523,18 @@ export class Mount {
         const { size, hash } = await writeTempWithHash(this.getTempPath(tempId), srcFile);
         try {
             const newId = await this.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
+            if (actor) {
+                await this.history.record({
+                    pathId: newId,
+                    eventType: 'copied',
+                    actor,
+                    details: {
+                        sourceOwnerId: this.history.ownerId,
+                        sourceMountId: this.history.mountId,
+                        sourcePathId: srcPathId,
+                    },
+                });
+            }
             const created = await this.getPath(newId);
             if (!created) throw new ApiError(500, 'Failed to copy file');
             return created;

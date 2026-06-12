@@ -1,4 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { FileEvent } from '@workspace/lib/types/file-history';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
@@ -78,7 +79,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.createFolder(params.mountId, params.pathId, body.folderName);
+            return await drive.createFolder(params.mountId, params.pathId, body.folderName, user);
         },
         {
             body: t.Object({ folderName: t.String() }),
@@ -89,7 +90,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId/create/:type',
         async ({ params, body, user }): Promise<DrivePath> => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.create(params.mountId, params.pathId, body.fileName, params.type, user.email);
+            return await drive.create(params.mountId, params.pathId, body.fileName, params.type, user);
         },
         {
             body: t.Object({ fileName: t.String() }),
@@ -116,7 +117,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, request, user }) => {
             const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.uploadFiles(params.mountId, params.pathId, request, maxSize);
+            return await drive.uploadFiles(params.mountId, params.pathId, request, maxSize, user);
         },
         { auth: true, parse: 'none' },
     )
@@ -305,7 +306,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/versions/:snapshotName/restore',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.restoreContainer(params.mountId, params.pathId, params.snapshotName);
+            await drive.restoreContainer(params.mountId, params.pathId, params.snapshotName, user);
             return { success: true };
         },
         // Constrain the user-supplied snapshot name to the snapshot filename shape so
@@ -333,7 +334,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/path/:pathId',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.deletePath(params.mountId, params.pathId);
+            await drive.deletePath(params.mountId, params.pathId, user);
             return { success: true };
         },
         { auth: true },
@@ -342,7 +343,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/path/:pathId/rename',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.renamePath(params.mountId, params.pathId, body.newName);
+            await drive.renamePath(params.mountId, params.pathId, body.newName, user);
             return { success: true };
         },
         {
@@ -354,7 +355,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/path/:pathId/move',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.movePath(params.mountId, params.pathId, body.targetParentId);
+            return await drive.movePath(params.mountId, params.pathId, body.targetParentId, user);
         },
         {
             body: t.Object({ targetParentId: t.String() }),
@@ -369,10 +370,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // getSharedDrive returns raw Drive for own-owner — pass actor explicitly so
             // propagateACLChange can fire user/guest share emails. SharedDrive ignores
             // this param and uses this.user instead.
-            await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted, {
-                name: user.name,
-                email: user.email,
-            });
+            await drive.updateACL(
+                params.mountId,
+                params.pathId,
+                body.acl,
+                body.visibility,
+                body.sharingRestricted,
+                user,
+            );
             return { success: true };
         },
         {
@@ -492,7 +497,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/trash/:pathId/restore',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.restorePath(params.mountId, params.pathId);
+            await drive.restorePath(params.mountId, params.pathId, user);
             return { success: true };
         },
         { auth: true },
@@ -501,7 +506,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/trash/:pathId',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.permanentlyDelete(params.mountId, params.pathId);
+            await drive.permanentlyDelete(params.mountId, params.pathId, user);
             return { success: true };
         },
         { auth: true },
@@ -530,8 +535,19 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/trash',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.emptyTrash(params.mountId);
+            await drive.emptyTrash(params.mountId, user);
             return { success: true };
         },
         { auth: true },
+    )
+    .get(
+        '/drive/:ownerId/:mountId/path/:pathId/history',
+        async ({ params, query, user }): Promise<FileEvent[]> => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            return drive.getFileHistory(params.mountId, params.pathId, {
+                limit: query.limit ? Number(query.limit) : undefined,
+                before: query.before ? new Date(query.before) : undefined,
+            });
+        },
+        { auth: true, query: t.Object({ limit: t.Optional(t.String()), before: t.Optional(t.String()) }) },
     );

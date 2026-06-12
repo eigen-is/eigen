@@ -118,15 +118,15 @@ export async function handleMove(args: {
     });
 
     if (destExisting) {
-        await drive.deletePath(args.mountId, destExisting.id);
+        await drive.deletePath(args.mountId, destExisting.id, args.user);
         drive.lockManager.releaseAllForPath(destExisting.id);
     }
 
     if (src.parentId !== destParent.id) {
-        await drive.movePath(args.mountId, src.id, destParent.id);
+        await drive.movePath(args.mountId, src.id, destParent.id, args.user);
     }
     if (src.name !== newName) {
-        await drive.renamePath(args.mountId, src.id, newName);
+        await drive.renamePath(args.mountId, src.id, newName, args.user);
     }
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
@@ -148,16 +148,16 @@ export async function handleCopy(args: {
     });
 
     if (destExisting) {
-        await drive.deletePath(args.mountId, destExisting.id);
+        await drive.deletePath(args.mountId, destExisting.id, args.user);
         drive.lockManager.releaseAllForPath(destExisting.id);
     }
 
     // RFC 4918 §9.8.3: Depth: 0 on a collection COPY means copy the collection
     // itself but NOT its members. Files are unaffected (they have no children).
     if (args.depth === '0' && src.type !== 'file') {
-        await drive.createFolder(args.mountId, destParent.id, newName);
+        await drive.createFolder(args.mountId, destParent.id, newName, args.user);
     } else {
-        await drive.copyPath(args.mountId, src.id, destParent.id, newName);
+        await drive.copyPath(args.mountId, src.id, destParent.id, newName, args.user);
     }
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
