@@ -29,6 +29,11 @@ export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
 }
 
+// Inverse of unquoteSheetName: single-quote wrap with embedded quotes doubled.
+export function quoteSheetName(name: string): string {
+    return `'${name.replace(/'/g, "''")}'`;
+}
+
 export function parseA1(ref: string): CellRef | null {
     const match = ref.match(CELL_REF_REGEXP);
     if (!match) return null;

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import * as collabSchema from '../lib/collab/schema';
@@ -52,6 +53,29 @@ async function buildXlsxBuffer(
         }
     }
     return workbookToBuffer(workbook);
+}
+
+// Excel authors internal links as <hyperlink ref location=…> WITHOUT a rel.
+// exceljs can't write that form through its API (it always pairs a rel), so
+// splice the entries into the first worksheet's XML directly.
+async function injectLocationHyperlinks(
+    buffer: ArrayBuffer,
+    links: { ref: string; location: string }[],
+): Promise<ArrayBuffer> {
+    const zip = await JSZip.loadAsync(buffer);
+    const path = 'xl/worksheets/sheet1.xml';
+    const xml = await zip.file(path)?.async('string');
+    if (!xml) throw new Error(`${path} missing from workbook zip`);
+    const entries = links
+        .map(({ ref, location }) => `<hyperlink ref="${ref}" location="${location.replace(/&/g, '&amp;')}"/>`)
+        .join('');
+    // Append to an existing <hyperlinks> block, else insert one at its schema
+    // position (right before <pageMargins>).
+    const patched = xml.includes('</hyperlinks>')
+        ? xml.replace('</hyperlinks>', `${entries}</hyperlinks>`)
+        : xml.replace('<pageMargins', `<hyperlinks>${entries}</hyperlinks><pageMargins`);
+    zip.file(path, patched);
+    return zip.generateAsync({ type: 'arraybuffer' });
 }
 
 async function readSnapshot(ownerId: string, mountId: string, pathId: string): Promise<Sheet[]> {
@@ -1125,6 +1149,43 @@ describe('Sheets xlsx import/convert', () => {
             '2_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!B2" },
             '3_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
         });
+    });
+
+    test('convert imports Excel-authored location-form hyperlinks without rels', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Sheet1');
+        workbook.addWorksheet('Sheet2');
+        workbook.addWorksheet('My Sheet');
+        workbook.addWorksheet('A & B');
+        ws.getCell('A1').value = 'unquoted';
+        ws.getCell('A2').value = 'quoted';
+        ws.getCell('A3').value = 'range tail';
+        ws.getCell('A4').value = 'entities';
+        ws.getCell('B7').value = 'range ref';
+        // A rel-based external link in the same sheet must keep importing unchanged.
+        ws.getCell('A5').value = { text: 'web', hyperlink: 'https://example.com' };
+        const buffer = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+            { ref: 'A1', location: 'Sheet2!A1' },
+            { ref: 'A2', location: "'My Sheet'!B2" },
+            { ref: 'A3', location: "'My Sheet'!A1:B2" },
+            { ref: 'A4', location: "'A & B'!C3" },
+            // Range refs hang the link on the anchor cell.
+            { ref: 'B7:C8', location: 'Sheet2!D4' },
+        ]);
+        const sheets = await convertBuffer(buffer, 'location-links.xlsx');
+
+        expect(sheets[0].hyperlink).toEqual({
+            '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!A1' },
+            '1_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!B2" },
+            '2_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!A1:B2" },
+            '3_0': { linkType: 'cellrange', linkAddress: "'A & B'!C3" },
+            '4_0': { linkType: 'webpage', linkAddress: 'https://example.com' },
+            '6_1': { linkType: 'cellrange', linkAddress: 'Sheet2!D4' },
+        });
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('0:0')?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
+        expect(byCoord.get('2:0')?.v).toBe('range tail');
+        expect(byCoord.get('6:1')?.hl).toEqual({ r: 6, c: 1, id: 'sheet-0' });
     });
 
     test('convert imports hyperlinks on rich-text cells with flattened display text', async () => {
