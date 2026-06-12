@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import { fileEvents } from '../lib/mount/schema';
-import type { User } from '../lib/user';
+import { getUserById } from '../lib/user';
 import type { TestContext } from './setup';
 import { authedRequest, driveDelete, driveGet, drivePost, drivePut, driveUpload, getTestContext } from './setup';
 
@@ -380,8 +380,9 @@ describe('Drive history recording', () => {
             folderName: 'CopyDest',
         });
 
-        const actor = ctx.alice.user as unknown as User;
-        const copied = await home.drive.copyPath(aliceMountId, folder.id, destFolder.id, 'CopiedFolder', actor);
+        const actor = await getUserById(ctx.alice.user.id);
+        expect(actor).not.toBeNull();
+        const copied = await home.drive.copyPath(aliceMountId, folder.id, destFolder.id, 'CopiedFolder', actor!);
 
         // Root folder copy records 'copied'
         const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${copied.id}/history`);
@@ -453,15 +454,11 @@ describe('Drive history recording', () => {
         const { getHome } = await import('../lib/home');
         const home = await getHome(aliceOwnerId);
 
-        const newPath = await home.drive.create(
-            aliceMountId,
-            aliceRootId,
-            'VersionTestDoc',
-            'doc',
-            ctx.alice.user as unknown as User,
-        );
+        const alice = await getUserById(ctx.alice.user.id);
+        expect(alice).not.toBeNull();
+        const newPath = await home.drive.create(aliceMountId, aliceRootId, 'VersionTestDoc', 'doc', alice!);
         const version = await home.drive.saveVersion(aliceMountId, newPath.id);
-        await home.drive.restoreContainer(aliceMountId, newPath.id, version.name, ctx.alice.user as unknown as User);
+        await home.drive.restoreContainer(aliceMountId, newPath.id, version.name, alice!);
 
         const res = await authedRequest(
             aliceToken,
