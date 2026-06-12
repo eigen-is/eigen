@@ -284,7 +284,7 @@ export const FilterMenu: React.FC = () => {
                 side="bottom"
                 align="start"
                 collisionPadding={8}
-                className="flex w-auto flex-col p-1 text-sm"
+                className="flex w-auto min-w-96 flex-col p-1 text-sm"
                 onContextMenu={(e) => e.stopPropagation()}
             >
                 {settings.filterContextMenu?.map((name, i) => {
