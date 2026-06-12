@@ -1,5 +1,12 @@
 # Proposal: File History + Watch
 
+> **Status (2026-06-12): Phase 1 (in-app history + watch) IMPLEMENTED** — tables, recording,
+> attribution, fan-out, and UI shipped as described below (route shapes follow the live
+> `/drive/:ownerId/:mountId/path/:pathId/...` convention; the client-event allowlist ships with
+> `sticky-moved` + `slide-reordered` only). The email channel (phase 2) and secondary email
+> (phase 3) are designed here but **not yet built**. See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md)
+> for the shipped `coalesce` flag + `file-event` source.
+
 > **TLDR**: Every Drive path grows a typed event log — *created, uploaded, edited,
 > renamed, moved, copied, trashed,* and Eigendoc-specific ops like *sticky-moved*.
 > Two new tables in the mount's `metadata.db`: `file_events` (the timeline) and
