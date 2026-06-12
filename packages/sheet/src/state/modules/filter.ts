@@ -147,10 +147,21 @@ export function createFilterOptions(
         return;
     }
 
+    // Imported xlsx autofilter ranges can extend past the materialized grid.
+    // The stored filterRange is kept verbatim (export fidelity); only the view
+    // clamps. filterOptions rows must stay inside the data matrix — the menu's
+    // value/color scans, sort, and condition apply all iterate them straight
+    // into flowdata[r], and a missing row crashes on undefined[col].
+    const lastRow = (ctx.sheets[sheetIndex].data?.length ?? 0) - 1;
+    const lastCol = ctx.visibledatacolumn.length - 1;
     const r1 = filterRange.row[0];
-    const r2 = filterRange.row[1];
+    const r2 = Math.min(filterRange.row[1], lastRow);
     const c1 = filterRange.column[0];
-    const c2 = filterRange.column[1];
+    const c2 = Math.min(filterRange.column[1], lastCol);
+    if (r1 > r2 || c1 > c2) {
+        delete ctx.filterOptions;
+        return;
+    }
 
     const row = ctx.visibledatarow[r2] ?? 0;
     const row_pre = r1 - 1 === -1 ? 0 : (ctx.visibledatarow[r1 - 1] ?? 0);
