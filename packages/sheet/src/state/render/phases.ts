@@ -111,8 +111,7 @@ export function renderMergedCells(pass: RenderPass, mergedCells: CellRenderItem[
         const mergeMaindata = cell.mc;
         if (!mergeMaindata) continue;
 
-        let value = null;
-        value = getRealCellValue(mergeMaindata.r, mergeMaindata.c, flowdata);
+        const value = getRealCellValue(mergeMaindata.r, mergeMaindata.c, flowdata);
 
         const r = mergeMaindata.r;
         const c = mergeMaindata.c;

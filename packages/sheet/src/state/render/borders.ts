@@ -1,27 +1,9 @@
 // Cell borders from config.borderInfo, drawn over the finished cells.
 
-import { getBorderInfoComputeRange } from '../modules/border';
+import { BORDER_STYLE_NAMES, getBorderInfoComputeRange } from '../modules/border';
 import { colEndX, colStartX, HALF_PIXEL, rowEndY, rowStartY } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
-
-// Border style index (the xlsx border-style ordinal) → style name.
-const BORDER_TYPE: Record<string, string> = {
-    '0': 'none',
-    '1': 'Thin',
-    '2': 'Hair',
-    '3': 'Dotted',
-    '4': 'Dashed',
-    '5': 'DashDot',
-    '6': 'DashDotDot',
-    '7': 'Double',
-    '8': 'Medium',
-    '9': 'MediumDashed',
-    '10': 'MediumDashDot',
-    '11': 'MediumDashDotDot',
-    '12': 'SlantedDashDot',
-    '13': 'Thick',
-};
 
 function setLineDash(
     canvasborder: CanvasRenderingContext2D,
@@ -32,7 +14,7 @@ function setLineDash(
     toX: number,
     toY: number,
 ) {
-    const typeName = BORDER_TYPE[type.toString()] ?? '';
+    const typeName = BORDER_STYLE_NAMES[type.toString()] ?? '';
 
     if (typeName === 'Hair') {
         canvasborder.setLineDash([1, 2]);
