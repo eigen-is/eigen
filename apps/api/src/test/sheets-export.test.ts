@@ -459,7 +459,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
-    test('skips occurrenceDate, icons and duplicateValue rules without emitting empty blocks', async () => {
+    test('skips occurrenceDate and icons rules without emitting empty blocks', async () => {
         const rules: ConditionalFormatRule[] = [
             {
                 type: 'default',
@@ -470,16 +470,6 @@ describe('Sheets xlsx export — conditional formatting', () => {
                 conditionValue: ['2024-01-01', '2024-12-31'],
             },
             { type: 'icons', cellrange: [{ row: [0, 4], column: [0, 0] }] },
-            // exceljs 4.4.0 has no cfRule writer for duplicate/uniqueValues — exporting one
-            // would emit an invalid empty <conditionalFormatting> wrapper.
-            {
-                type: 'default',
-                cellrange: [{ row: [0, 4], column: [0, 0] }],
-                format: { textColor: null, cellColor: '#DDDDDD' },
-                conditionName: 'duplicateValue',
-                conditionRange: [],
-                conditionValue: ['0'],
-            },
             {
                 type: 'default',
                 cellrange: [{ row: [0, 4], column: [0, 0] }],
@@ -495,11 +485,130 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const ws = getSheet(await exportAndReload(sheets), 'CF');
         const blocks = readCfBlocks(ws);
         expect(blocks).toHaveLength(1);
-        // Priority is computed over the full rule array, so gaps are expected.
         expect(blocks[0].rules[0]).toMatchObject({ type: 'cellIs', operator: 'equal', priority: 1 });
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual([rules[3]]);
+        expect(rt[0].conditionalFormatRules).toEqual([rules[2]]);
+    });
+
+    test('exports duplicate and unique value rules as COUNTIF expressions', async () => {
+        const rules: ConditionalFormatRule[] = [
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [0, 0] }], // A1:A5
+                format: { textColor: null, cellColor: '#FFDD00' },
+                conditionName: 'duplicateValue',
+                conditionRange: [],
+                conditionValue: ['0'], // duplicates
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [1, 3], column: [2, 2] }], // C2:C4
+                format: { textColor: '#AA0000', cellColor: null },
+                conditionName: 'duplicateValue',
+                conditionRange: [],
+                conditionValue: ['1'], // uniques
+            },
+        ];
+        const sheets: Sheet[] = [
+            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'CF');
+        const blocks = readCfBlocks(ws);
+        expect(blocks[0].rules[0]).toMatchObject({
+            type: 'expression',
+            priority: 2,
+            formulae: ['COUNTIF($A$1:$A$5,A1)>1'],
+        });
+        expect(blocks[1].rules[0]).toMatchObject({
+            type: 'expression',
+            priority: 1,
+            formulae: ['COUNTIF($C$2:$C$4,C2)=1'],
+        });
+
+        // Accepted rule-type drift: re-imports as engine formula rules with the same colors.
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual([
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [0, 0] }],
+                format: { textColor: null, cellColor: '#FFDD00' },
+                conditionName: 'formula',
+                conditionRange: [],
+                conditionValue: ['=COUNTIF($A$1:$A$5,A1)>1'],
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [1, 3], column: [2, 2] }],
+                format: { textColor: '#AA0000', cellColor: null },
+                conditionName: 'formula',
+                conditionRange: [],
+                conditionValue: ['=COUNTIF($C$2:$C$4,C2)=1'],
+            },
+        ]);
+    });
+
+    test('sums COUNTIFs across ranges for a multi-range duplicateValue rule', async () => {
+        const format = { textColor: null, cellColor: '#DDDDDD' };
+        const rules: ConditionalFormatRule[] = [
+            {
+                type: 'default',
+                // A1:A5, C1:C10 and the 1×1 range E1 (single absolute cell, no colon).
+                cellrange: [
+                    { row: [0, 4], column: [0, 0] },
+                    { row: [0, 9], column: [2, 2] },
+                    { row: [0, 0], column: [4, 4] },
+                ],
+                format,
+                conditionName: 'duplicateValue',
+                conditionRange: [],
+                conditionValue: ['0'],
+            },
+        ];
+        const sheets: Sheet[] = [
+            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'CF');
+        const blocks = readCfBlocks(ws);
+        expect(blocks[0]).toMatchObject({
+            ref: 'A1:A5 C1:C10 E1',
+            rules: [
+                {
+                    type: 'expression',
+                    formulae: ['COUNTIF($A$1:$A$5,A1)+COUNTIF($C$1:$C$10,A1)+COUNTIF($E$1,A1)>1'],
+                },
+            ],
+        });
+
+        // The importer re-anchors the expression per sqref range: one formula rule per
+        // cellrange entry, relative refs shifted, absolute COUNTIF ranges pinned.
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual([
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [0, 0] }],
+                format,
+                conditionName: 'formula',
+                conditionRange: [],
+                conditionValue: ['=COUNTIF($A$1:$A$5,A1)+COUNTIF($C$1:$C$10,A1)+COUNTIF($E$1,A1)>1'],
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 9], column: [2, 2] }],
+                format,
+                conditionName: 'formula',
+                conditionRange: [],
+                conditionValue: ['=COUNTIF($A$1:$A$5,C1)+COUNTIF($C$1:$C$10,C1)+COUNTIF($E$1,C1)>1'],
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 0], column: [4, 4] }],
+                format,
+                conditionName: 'formula',
+                conditionRange: [],
+                conditionValue: ['=COUNTIF($A$1:$A$5,E1)+COUNTIF($C$1:$C$10,E1)+COUNTIF($E$1,E1)>1'],
+            },
+        ]);
     });
 });
 
