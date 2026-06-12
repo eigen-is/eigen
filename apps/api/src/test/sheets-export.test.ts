@@ -1,13 +1,60 @@
 import { describe, expect, test } from 'bun:test';
-import type { Sheet } from '@workspace/lib/sheets';
+import type {
+    CellBorderInfo,
+    ConditionalFormatRule,
+    DataVerificationRule,
+    RangeBorderInfo,
+    Sheet,
+} from '@workspace/lib/sheets';
 import ExcelJS from 'exceljs';
 import { sheetsToXlsx } from '../lib/export/sheets/xlsx';
+import { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 
 async function exportAndReload(sheets: Sheet[]): Promise<ExcelJS.Workbook> {
     const buffer = await sheetsToXlsx(sheets);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer);
     return wb;
+}
+
+// The committed regression net: every export feature must close the full loop back
+// through the importer onto the engine encoding, not just the exceljs read-back.
+async function roundTrip(sheets: Sheet[]): Promise<Sheet[]> {
+    return xlsxToSheets(await sheetsToXlsx(sheets));
+}
+
+function getSheet(wb: ExcelJS.Workbook, name: string): ExcelJS.Worksheet {
+    const ws = wb.getWorksheet(name);
+    if (!ws) throw new Error(`${name} missing`);
+    return ws;
+}
+
+// Same untyped-but-real exceljs property the importer reads (lib/doc/worksheet.js).
+type CfReadBlock = {
+    ref: string;
+    rules: {
+        type: string;
+        priority: number;
+        operator?: string;
+        formulae?: (string | number)[];
+    }[];
+};
+
+function readCfBlocks(ws: ExcelJS.Worksheet): CfReadBlock[] {
+    return (ws as unknown as { conditionalFormattings?: CfReadBlock[] }).conditionalFormattings ?? [];
+}
+
+// exceljs's Partial<WorksheetView> union hides the frozen-variant fields.
+function readView(ws: ExcelJS.Worksheet): { state?: string; xSplit?: number; ySplit?: number } {
+    return (ws.views?.[0] ?? {}) as { state?: string; xSplit?: number; ySplit?: number };
+}
+
+// Fixture rules in the exact shape the importer emits, so round-trips can assert
+// deep equality against the input.
+function dvRule(
+    partial: Partial<DataVerificationRule> & Pick<DataVerificationRule, 'type' | 'type2' | 'value1'>,
+): DataVerificationRule {
+    return { value2: '', checked: false, prohibitInput: false, hintShow: false, hintValue: '', ...partial };
 }
 
 describe('Sheets xlsx export', () => {
@@ -81,5 +128,824 @@ describe('Sheets xlsx export', () => {
         const cell = ws.getCell('A1');
         expect(cell.alignment?.textRotation).toBe(-45);
         expect(cell.font?.name).toBe('Verdana');
+    });
+
+    test('number formats round-trip verbatim', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 14207.82, ct: { fa: '[$€]#,##0.00', t: 'n' } } },
+                    { r: 1, c: 0, v: { v: 0.4072, ct: { fa: '0.00%', t: 'n' } } },
+                    // Serial 45366 = 2024-03-15.
+                    { r: 2, c: 0, v: { v: 45366, ct: { fa: 'm/d/yyyy', t: 'd' } } },
+                ],
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
+        expect(ws.getCell('A1').numFmt).toBe('[$€]#,##0.00');
+        expect(ws.getCell('A2').numFmt).toBe('0.00%');
+        expect(ws.getCell('A3').numFmt).toBe('m/d/yyyy');
+
+        const rt = await roundTrip(sheets);
+        const byCoord = new Map((rt[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('0:0')?.ct).toEqual({ fa: '[$€]#,##0.00', t: 'n' });
+        expect(byCoord.get('1:0')?.ct).toEqual({ fa: '0.00%', t: 'n' });
+        expect(byCoord.get('2:0')?.ct).toEqual({ fa: 'm/d/yyyy', t: 'd' });
+        expect(byCoord.get('2:0')?.v).toBe(45366);
+    });
+});
+
+describe('Sheets xlsx export — hidden rows/cols', () => {
+    test('exports hidden rows (incl. data-less ones) and hidden columns', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'top' } },
+                    { r: 1, c: 0, v: { v: 'hidden with data' } },
+                    { r: 6, c: 4, v: { v: 'bottom' } },
+                ],
+                // Row 4 carries no cell data — Excel still hides it.
+                config: { rowhidden: { '1': 0, '4': 0 }, colhidden: { '2': 0, '3': 0 } },
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
+        expect(ws.getRow(2).hidden).toBe(true);
+        expect(ws.getRow(5).hidden).toBe(true);
+        expect(ws.getRow(1).hidden).toBeFalsy();
+        expect(ws.getColumn(3).hidden).toBe(true);
+        expect(ws.getColumn(4).hidden).toBe(true);
+        expect(ws.getColumn(1).hidden).toBeFalsy();
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].config?.rowhidden).toEqual({ '1': 0, '4': 0 });
+        expect(rt[0].config?.colhidden).toEqual({ '2': 0, '3': 0 });
+        // The data-less hidden row survives via a default-height row element, which
+        // must not materialize a rowlen entry on re-import.
+        expect(rt[0].config?.rowlen).toBeUndefined();
+    });
+});
+
+describe('Sheets xlsx export — frozen panes', () => {
+    test('maps both alias families onto frozen views', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'RangeRow',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                frozen: { type: 'rangeRow', range: { row_focus: 1, column_focus: 0 } },
+            },
+            {
+                name: 'BareRow',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                frozen: { type: 'row' },
+            },
+            {
+                name: 'Both',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                frozen: { type: 'both', range: { row_focus: 1, column_focus: 2 } },
+            },
+            {
+                name: 'RangeColumn',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                frozen: { type: 'rangeColumn', range: { row_focus: 0, column_focus: 0 } },
+            },
+            { name: 'Plain', celldata: [{ r: 0, c: 0, v: { v: 'x' } }] },
+        ];
+        const wb = await exportAndReload(sheets);
+        const rangeRow = readView(getSheet(wb, 'RangeRow'));
+        expect(rangeRow.state).toBe('frozen');
+        expect(rangeRow.ySplit).toBe(2);
+        const bareRow = readView(getSheet(wb, 'BareRow'));
+        expect(bareRow.state).toBe('frozen');
+        expect(bareRow.ySplit).toBe(1);
+        const both = readView(getSheet(wb, 'Both'));
+        expect(both.state).toBe('frozen');
+        expect(both.ySplit).toBe(2);
+        expect(both.xSplit).toBe(3);
+        const rangeColumn = readView(getSheet(wb, 'RangeColumn'));
+        expect(rangeColumn.state).toBe('frozen');
+        expect(rangeColumn.xSplit).toBe(1);
+        // exceljs surfaces `views` as null when the sheet never declared one.
+        expect(readView(getSheet(wb, 'Plain')).state).not.toBe('frozen');
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].frozen).toEqual({ type: 'rangeRow', range: { row_focus: 1, column_focus: 0 } });
+        // Bare aliases re-import in the range form (same semantics — see frozenTofreezen).
+        expect(rt[1].frozen).toEqual({ type: 'rangeRow', range: { row_focus: 0, column_focus: 0 } });
+        expect(rt[2].frozen).toEqual({ type: 'rangeBoth', range: { row_focus: 1, column_focus: 2 } });
+        expect(rt[3].frozen).toEqual({ type: 'rangeColumn', range: { row_focus: 0, column_focus: 0 } });
+        expect(rt[4].frozen).toBeUndefined();
+    });
+
+    test('frozen state and showGridLines share a single view object', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                showGridLines: false,
+                frozen: { type: 'rangeRow', range: { row_focus: 0, column_focus: 0 } },
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
+        expect(ws.views).toHaveLength(1);
+        expect(readView(ws)).toMatchObject({ state: 'frozen', ySplit: 1 });
+        expect(ws.views[0].showGridLines).toBe(false);
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].showGridLines).toBe(false);
+        expect(rt[0].frozen).toEqual({ type: 'rangeRow', range: { row_focus: 0, column_focus: 0 } });
+    });
+});
+
+describe('Sheets xlsx export — autofilter', () => {
+    test('exports the filter range as an A1 autoFilter ref', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Filtered',
+                celldata: [
+                    { r: 1, c: 1, v: { v: 'Name' } },
+                    { r: 2, c: 1, v: { v: 'Apples' } },
+                ],
+                filterRange: { row: [1, 9], column: [1, 3] },
+            },
+            { name: 'Plain', celldata: [{ r: 0, c: 0, v: { v: 'x' } }] },
+        ];
+        const wb = await exportAndReload(sheets);
+        expect(getSheet(wb, 'Filtered').autoFilter).toBe('B2:D10');
+        expect(getSheet(wb, 'Plain').autoFilter).toBeFalsy();
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].filterRange).toEqual({ row: [1, 9], column: [1, 3] });
+        expect(rt[1].filterRange).toBeUndefined();
+    });
+
+    test('exports an over-long filter range verbatim', async () => {
+        // [INT] Production Planning carries $A$5:$NE$438 while the data grid is tiny —
+        // the stored range is deliberate fidelity (the dba90dbb clamp is view-only).
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [{ r: 4, c: 0, v: { v: 'header' } }],
+                filterRange: { row: [4, 437], column: [0, 368] },
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
+        expect(ws.autoFilter).toBe('A5:NE438');
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].filterRange).toEqual({ row: [4, 437], column: [0, 368] });
+    });
+});
+
+describe('Sheets xlsx export — conditional formatting', () => {
+    test('exports cellIs rules with explicit last-wins priorities and pinned dxf colors', async () => {
+        const rules: ConditionalFormatRule[] = [
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                format: { textColor: null, cellColor: '#00FF00' },
+                conditionName: 'lessThanOrEqual',
+                conditionRange: [],
+                conditionValue: ['0.05'],
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                format: { textColor: '#FFFFFF', cellColor: '#FF0000' },
+                conditionName: 'greaterThan',
+                conditionRange: [],
+                conditionValue: ['10'],
+            },
+        ];
+        const sheets: Sheet[] = [
+            { name: 'CF', celldata: [{ r: 0, c: 1, v: { v: 12 } }], conditionalFormatRules: rules },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'CF');
+        const blocks = readCfBlocks(ws);
+        expect(blocks).toHaveLength(2);
+        // Engine order is last-write-wins; Excel priority 1 wins → last rule gets priority 1.
+        expect(blocks[0].rules[0]).toMatchObject({ type: 'cellIs', operator: 'lessThanOrEqual', priority: 2 });
+        expect(blocks[1].rules[0]).toMatchObject({ type: 'cellIs', operator: 'greaterThan', priority: 1 });
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual(rules);
+    });
+
+    test('exports between/notBetween with two formulae and re-quotes text operands', async () => {
+        const rules: ConditionalFormatRule[] = [
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 3], column: [0, 0] }],
+                format: { textColor: null, cellColor: '#112233' },
+                conditionName: 'between',
+                conditionRange: [],
+                conditionValue: ['2', '5'],
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 3], column: [0, 0] }],
+                format: { textColor: '#AA0000', cellColor: null },
+                conditionName: 'notEqual',
+                conditionRange: [],
+                conditionValue: ['say "hi"'],
+            },
+            {
+                type: 'default',
+                cellrange: [
+                    { row: [0, 3], column: [0, 0] },
+                    { row: [0, 3], column: [2, 2] },
+                ],
+                format: { textColor: '#0000FF', cellColor: null },
+                conditionName: 'textContains',
+                conditionRange: [],
+                conditionValue: ['say "hi"'],
+            },
+        ];
+        const sheets: Sheet[] = [
+            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 3 } }], conditionalFormatRules: rules },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'CF');
+        const blocks = readCfBlocks(ws);
+        expect(blocks[0].rules[0].formulae).toEqual(['2', '5']);
+        expect(blocks[1].rules[0].formulae).toEqual(['"say ""hi"""']);
+        // exceljs synthesizes the SEARCH formula from the (pre-escaped) text + range top-left.
+        expect(blocks[2].rules[0].formulae).toEqual(['NOT(ISERROR(SEARCH("say ""hi""",A1)))']);
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual(rules);
+    });
+
+    test('exports formula rules as expression sans leading equals', async () => {
+        const rules: ConditionalFormatRule[] = [
+            {
+                type: 'default',
+                cellrange: [{ row: [1, 3], column: [1, 1] }],
+                format: { textColor: '#0000FF', cellColor: null },
+                conditionName: 'formula',
+                conditionRange: [],
+                conditionValue: ['=LEN(B2)>2'],
+            },
+        ];
+        const sheets: Sheet[] = [
+            { name: 'CF', celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }], conditionalFormatRules: rules },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'CF');
+        expect(readCfBlocks(ws)[0].rules[0]).toMatchObject({ type: 'expression', formulae: ['LEN(B2)>2'] });
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual(rules);
+    });
+
+    test('exports the top10 family and above/below average', async () => {
+        const rules: ConditionalFormatRule[] = (
+            [
+                ['top10', ['7']],
+                ['top10_percent', ['15']],
+                ['last10', ['3']],
+                ['last10_percent', ['20']],
+                ['aboveAverage', []],
+                ['belowAverage', []],
+            ] as const
+        ).map(([conditionName, conditionValue]) => ({
+            type: 'default',
+            cellrange: [{ row: [0, 9], column: [0, 0] }],
+            format: { textColor: null, cellColor: '#FFEE00' },
+            conditionName,
+            conditionRange: [],
+            conditionValue: [...conditionValue],
+        }));
+        const sheets: Sheet[] = [
+            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 5 } }], conditionalFormatRules: rules },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'CF');
+        const flat = readCfBlocks(ws).flatMap((b) => b.rules);
+        expect(flat.filter((r) => r.type === 'top10')).toHaveLength(4);
+        expect(flat.filter((r) => r.type === 'aboveAverage')).toHaveLength(2);
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual(rules);
+    });
+
+    test('exports dataBar and colorScale with the stop order reversed back', async () => {
+        const rules: ConditionalFormatRule[] = [
+            { type: 'dataBar', cellrange: [{ row: [0, 4], column: [0, 0] }], format: ['#638EC6'] },
+            // Engine colorGradation is MAX→MID→MIN; xlsx colorScale lists MIN→MID→MAX.
+            {
+                type: 'colorGradation',
+                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                format: ['#FF0000', '#FFFF00', '#0000FF'],
+            },
+            { type: 'colorGradation', cellrange: [{ row: [0, 4], column: [2, 2] }], format: ['#FF0000', '#FFFFFF'] },
+        ];
+        const sheets: Sheet[] = [
+            {
+                name: 'CF',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 1 } },
+                    { r: 0, c: 1, v: { v: 2 } },
+                    { r: 0, c: 2, v: { v: 3 } },
+                ],
+                conditionalFormatRules: rules,
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'CF');
+        const blocks = readCfBlocks(ws);
+        const colorScale = blocks[1].rules[0] as unknown as { color: { argb: string }[]; cfvo: { type: string }[] };
+        expect(colorScale.color.map((c) => c.argb)).toEqual(['FF0000FF', 'FFFFFF00', 'FFFF0000']);
+        expect(colorScale.cfvo.map((c) => c.type)).toEqual(['min', 'percentile', 'max']);
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual(rules);
+    });
+
+    test('skips occurrenceDate, icons and duplicateValue rules without emitting empty blocks', async () => {
+        const rules: ConditionalFormatRule[] = [
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [0, 0] }],
+                format: { textColor: null, cellColor: '#CCCCCC' },
+                conditionName: 'occurrenceDate',
+                conditionRange: [],
+                conditionValue: ['2024-01-01', '2024-12-31'],
+            },
+            { type: 'icons', cellrange: [{ row: [0, 4], column: [0, 0] }] },
+            // exceljs 4.4.0 has no cfRule writer for duplicate/uniqueValues — exporting one
+            // would emit an invalid empty <conditionalFormatting> wrapper.
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [0, 0] }],
+                format: { textColor: null, cellColor: '#DDDDDD' },
+                conditionName: 'duplicateValue',
+                conditionRange: [],
+                conditionValue: ['0'],
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 4], column: [0, 0] }],
+                format: { textColor: '#00AA00', cellColor: null },
+                conditionName: 'equal',
+                conditionRange: [],
+                conditionValue: ['1'],
+            },
+        ];
+        const sheets: Sheet[] = [
+            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'CF');
+        const blocks = readCfBlocks(ws);
+        expect(blocks).toHaveLength(1);
+        // Priority is computed over the full rule array, so gaps are expected.
+        expect(blocks[0].rules[0]).toMatchObject({ type: 'cellIs', operator: 'equal', priority: 1 });
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual([rules[3]]);
+    });
+});
+
+describe('Sheets xlsx export — data validation', () => {
+    test('exports dropdown rules with quoted literals and verbatim range refs', async () => {
+        const literal = dvRule({ type: 'dropdown', type2: '', value1: 'Red,Green,Blue' });
+        const quoted = dvRule({ type: 'dropdown', type2: '', value1: 'say "hi",plain' });
+        const ref = dvRule({ type: 'dropdown', type2: '', value1: "'Other Sheet'!$B$1:$B$5" });
+        const sheets: Sheet[] = [
+            {
+                name: 'Main',
+                celldata: [
+                    { r: 1, c: 1, v: { v: 'Red' } },
+                    { r: 2, c: 1, v: { v: 'Green' } },
+                ],
+                dataVerification: { '1_1': literal, '2_1': literal, '3_1': quoted, '4_1': ref },
+            },
+            { name: 'Other Sheet', celldata: [{ r: 0, c: 1, v: { v: 'Option 1' } }] },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'Main');
+        expect(ws.getCell('B2').dataValidation).toMatchObject({
+            type: 'list',
+            allowBlank: true,
+            formulae: ['"Red,Green,Blue"'],
+        });
+        expect(ws.getCell('B4').dataValidation.formulae).toEqual(['"say ""hi"",plain"']);
+        expect(ws.getCell('B5').dataValidation.formulae).toEqual(["'Other Sheet'!$B$1:$B$5"]);
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].dataVerification).toEqual({ '1_1': literal, '2_1': literal, '3_1': quoted, '4_1': ref });
+    });
+
+    test('exports numeric, text-length and date rules with reversed operators', async () => {
+        const rules: Record<string, DataVerificationRule> = {
+            '0_0': dvRule({ type: 'number_integer', type2: 'between', value1: '1', value2: '10' }),
+            '1_0': dvRule({ type: 'number', type2: 'moreThanThe', value1: '2.5' }),
+            '2_0': dvRule({ type: 'number', type2: 'notEqualTo', value1: '0' }),
+            '3_0': dvRule({ type: 'text_length', type2: 'lessThanOrEqualTo', value1: '5' }),
+            '4_0': dvRule({ type: 'date', type2: 'between', value1: '2024-01-01', value2: '2024-12-31' }),
+            '5_0': dvRule({ type: 'date', type2: 'noLaterThan', value1: '2024-06-15' }),
+            '6_0': dvRule({ type: 'date', type2: 'earlierThan', value1: '2024-03-01' }),
+        };
+        const sheets: Sheet[] = [{ name: 'DV', celldata: [{ r: 0, c: 0, v: { v: 5 } }], dataVerification: rules }];
+        const ws = getSheet(await exportAndReload(sheets), 'DV');
+        expect(ws.getCell('A1').dataValidation).toMatchObject({
+            type: 'whole',
+            operator: 'between',
+            formulae: [1, 10],
+        });
+        expect(ws.getCell('A2').dataValidation).toMatchObject({
+            type: 'decimal',
+            operator: 'greaterThan',
+            formulae: [2.5],
+        });
+        expect(ws.getCell('A3').dataValidation).toMatchObject({ type: 'decimal', operator: 'notEqual' });
+        expect(ws.getCell('A4').dataValidation).toMatchObject({
+            type: 'textLength',
+            operator: 'lessThanOrEqual',
+            formulae: [5],
+        });
+        expect(ws.getCell('A6').dataValidation).toMatchObject({ type: 'date', operator: 'lessThanOrEqual' });
+        expect(ws.getCell('A7').dataValidation).toMatchObject({ type: 'date', operator: 'lessThan' });
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].dataVerification).toEqual(rules);
+    });
+
+    test('re-imports number_decimal as number (accepted drift) and drops NaN operands', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'DV',
+                celldata: [{ r: 0, c: 0, v: { v: 1.5 } }],
+                dataVerification: {
+                    '0_0': dvRule({ type: 'number_decimal', type2: 'between', value1: '1', value2: '10' }),
+                    '1_0': dvRule({ type: 'number', type2: 'moreThanThe', value1: 'abc' }),
+                    '2_0': dvRule({ type: 'number', type2: 'moreThanThe', value1: '' }),
+                },
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'DV');
+        expect(ws.getCell('A1').dataValidation).toMatchObject({ type: 'decimal', formulae: [1, 10] });
+        expect(ws.getCell('A2').dataValidation).toBeUndefined();
+        expect(ws.getCell('A3').dataValidation).toBeUndefined();
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].dataVerification).toEqual({
+            '0_0': dvRule({ type: 'number', type2: 'between', value1: '1', value2: '10' }),
+        });
+    });
+
+    test('exports text_content rules as per-cell custom formulae', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'DV',
+                celldata: [{ r: 1, c: 1, v: { v: 'foobar' } }],
+                dataVerification: {
+                    '1_1': dvRule({ type: 'text_content', type2: 'include', value1: 'foo' }),
+                    '2_1': dvRule({ type: 'text_content', type2: 'exclude', value1: 'bar' }),
+                    '3_1': dvRule({ type: 'text_content', type2: 'equal', value1: 'say "hi"' }),
+                },
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'DV');
+        expect(ws.getCell('B2').dataValidation).toMatchObject({
+            type: 'custom',
+            formulae: ['ISNUMBER(SEARCH("foo",B2))'],
+        });
+        expect(ws.getCell('B3').dataValidation.formulae).toEqual(['NOT(ISNUMBER(SEARCH("bar",B3)))']);
+        expect(ws.getCell('B4').dataValidation.formulae).toEqual(['EXACT(B4,"say ""hi""")']);
+
+        // Custom rules have no engine equivalent — accepted one-way drift (D4).
+        const rt = await roundTrip(sheets);
+        expect(rt[0].dataVerification).toBeUndefined();
+    });
+
+    test('skips checkbox and validity rules while keeping cell values', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'DV',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'done' } },
+                    { r: 1, c: 0, v: { v: '06-12345678' } },
+                ],
+                dataVerification: {
+                    '0_0': dvRule({ type: 'checkbox', type2: '', value1: 'selected', checked: true }),
+                    '1_0': dvRule({ type: 'validity', type2: 'phoneNumber', value1: '' }),
+                },
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'DV');
+        expect(ws.getCell('A1').dataValidation).toBeUndefined();
+        expect(ws.getCell('A2').dataValidation).toBeUndefined();
+        expect(ws.getCell('A1').value).toBe('done');
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].dataVerification).toBeUndefined();
+    });
+
+    test('exports hint prompts and prohibit-input error style', async () => {
+        const hinted = dvRule({
+            type: 'dropdown',
+            type2: '',
+            value1: 'Yes,No',
+            hintShow: true,
+            hintValue: 'Choose Yes or No',
+        });
+        const blocking = dvRule({ type: 'dropdown', type2: '', value1: 'Yes,No', prohibitInput: true });
+        const sheets: Sheet[] = [
+            {
+                name: 'DV',
+                celldata: [{ r: 0, c: 0, v: { v: 'Yes' } }],
+                dataVerification: { '0_0': hinted, '1_0': blocking },
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'DV');
+        expect(ws.getCell('A1').dataValidation).toMatchObject({
+            showInputMessage: true,
+            prompt: 'Choose Yes or No',
+        });
+        expect(ws.getCell('A1').dataValidation.showErrorMessage).toBeFalsy();
+        expect(ws.getCell('A2').dataValidation).toMatchObject({ showErrorMessage: true, errorStyle: 'stop' });
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].dataVerification).toEqual({ '0_0': hinted, '1_0': blocking });
+    });
+});
+
+describe('Sheets xlsx export — range borders', () => {
+    const side = (style: ExcelJS.BorderStyle, argb: string) => ({ style, color: { argb } });
+
+    test('expands border-all and border-outside over the range', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'All',
+                celldata: [{ r: 1, c: 1, v: { v: 'x' } }],
+                config: {
+                    borderInfo: [
+                        {
+                            rangeType: 'range',
+                            borderType: 'border-all',
+                            color: '#FF0000',
+                            style: '8',
+                            range: [{ row: [1, 2], column: [1, 2] }],
+                        },
+                    ],
+                },
+            },
+            {
+                name: 'Outside',
+                celldata: [{ r: 1, c: 1, v: { v: 'x' } }],
+                config: {
+                    borderInfo: [
+                        {
+                            rangeType: 'range',
+                            borderType: 'border-outside',
+                            color: '#000000',
+                            style: '1',
+                            range: [{ row: [1, 3], column: [1, 3] }],
+                        },
+                    ],
+                },
+            },
+        ];
+        const wb = await exportAndReload(sheets);
+        const all = getSheet(wb, 'All');
+        const medium = side('medium', 'FFFF0000');
+        for (const a1 of ['B2', 'C2', 'B3', 'C3']) {
+            expect(all.getCell(a1).border).toEqual({ left: medium, right: medium, top: medium, bottom: medium });
+        }
+        const outside = getSheet(wb, 'Outside');
+        const thin = side('thin', 'FF000000');
+        expect(outside.getCell('B2').border).toEqual({ top: thin, left: thin });
+        expect(outside.getCell('C2').border).toEqual({ top: thin });
+        expect(outside.getCell('D2').border).toEqual({ top: thin, right: thin });
+        expect(outside.getCell('B3').border).toEqual({ left: thin });
+        expect(outside.getCell('C3').border ?? {}).toEqual({});
+        expect(outside.getCell('D4').border).toEqual({ bottom: thin, right: thin });
+    });
+
+    test('expands inside, horizontal and vertical borders onto shared inner edges', async () => {
+        const entry = (
+            borderType: RangeBorderInfo['borderType'],
+            row: number[],
+            column: number[],
+        ): RangeBorderInfo => ({
+            rangeType: 'range',
+            borderType,
+            color: '#000000',
+            style: '1',
+            range: [{ row, column }],
+        });
+        const sheets: Sheet[] = [
+            {
+                name: 'Inside',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                config: { borderInfo: [entry('border-inside', [0, 1], [0, 1])] },
+            },
+            {
+                name: 'Horizontal',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                config: { borderInfo: [entry('border-horizontal', [0, 2], [0, 1])] },
+            },
+            {
+                name: 'Vertical',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                config: { borderInfo: [entry('border-vertical', [0, 1], [0, 2])] },
+            },
+        ];
+        const wb = await exportAndReload(sheets);
+        const thin = side('thin', 'FF000000');
+
+        const inside = getSheet(wb, 'Inside');
+        expect(inside.getCell('A1').border ?? {}).toEqual({});
+        expect(inside.getCell('B1').border).toEqual({ left: thin });
+        expect(inside.getCell('A2').border).toEqual({ top: thin });
+        expect(inside.getCell('B2').border).toEqual({ left: thin, top: thin });
+
+        const horizontal = getSheet(wb, 'Horizontal');
+        expect(horizontal.getCell('A1').border).toEqual({ bottom: thin });
+        expect(horizontal.getCell('A2').border).toEqual({ top: thin, bottom: thin });
+        expect(horizontal.getCell('B3').border).toEqual({ top: thin });
+
+        const vertical = getSheet(wb, 'Vertical');
+        expect(vertical.getCell('A1').border).toEqual({ right: thin });
+        expect(vertical.getCell('B1').border).toEqual({ left: thin, right: thin });
+        expect(vertical.getCell('C2').border).toEqual({ left: thin });
+    });
+
+    test('applies entries in array order: none clears, cell entries override, slash skipped', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Cleared',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                config: {
+                    borderInfo: [
+                        {
+                            rangeType: 'range',
+                            borderType: 'border-all',
+                            color: '#000000',
+                            style: '1',
+                            range: [{ row: [0, 1], column: [0, 1] }],
+                        },
+                        // border-none also clears the facing sides of adjacent outside cells,
+                        // matching the editor compute (state/modules/border.ts).
+                        {
+                            rangeType: 'range',
+                            borderType: 'border-none',
+                            color: '#000000',
+                            style: '1',
+                            range: [{ row: [0, 1], column: [1, 1] }],
+                        },
+                    ],
+                },
+            },
+            {
+                name: 'CellOverride',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                config: {
+                    borderInfo: [
+                        {
+                            rangeType: 'range',
+                            borderType: 'border-all',
+                            color: '#000000',
+                            style: '1',
+                            range: [{ row: [0, 0], column: [0, 0] }],
+                        },
+                        // A later cell entry re-specifies the cell: nil sides mean cleared.
+                        {
+                            rangeType: 'cell',
+                            value: { row_index: 0, col_index: 0, l: null, r: { style: 13, color: '#0000FF' } },
+                        },
+                    ],
+                },
+            },
+            {
+                name: 'Slash',
+                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
+                config: {
+                    borderInfo: [
+                        {
+                            rangeType: 'range',
+                            borderType: 'border-slash',
+                            color: '#000000',
+                            style: '1',
+                            range: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
+                        },
+                    ],
+                },
+            },
+        ];
+        const wb = await exportAndReload(sheets);
+        const thin = side('thin', 'FF000000');
+
+        const cleared = getSheet(wb, 'Cleared');
+        expect(cleared.getCell('A1').border).toEqual({ left: thin, top: thin, bottom: thin });
+        expect(cleared.getCell('A2').border).toEqual({ left: thin, top: thin, bottom: thin });
+        expect(cleared.getCell('B1').border ?? {}).toEqual({});
+        expect(cleared.getCell('B2').border ?? {}).toEqual({});
+
+        expect(getSheet(wb, 'CellOverride').getCell('A1').border).toEqual({ right: side('thick', 'FF0000FF') });
+        expect(getSheet(wb, 'Slash').getCell('A1').border ?? {}).toEqual({});
+    });
+
+    test('round-trips toolbar borders as per-cell entries', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 1, c: 1, v: { v: 'a' } },
+                    { r: 1, c: 2, v: { v: 'b' } },
+                    { r: 2, c: 1, v: { v: 'c' } },
+                    { r: 2, c: 2, v: { v: 'd' } },
+                ],
+                config: {
+                    borderInfo: [
+                        {
+                            rangeType: 'range',
+                            borderType: 'border-all',
+                            color: '#FF0000',
+                            style: '8',
+                            range: [{ row: [1, 2], column: [1, 2] }],
+                        },
+                    ],
+                },
+            },
+        ];
+        const rt = await roundTrip(sheets);
+        const expected = { style: 8, color: '#FF0000' };
+        const byCell = new Map<string, CellBorderInfo['value']>(
+            (rt[0].config?.borderInfo ?? []).map((b) => {
+                if (b.rangeType !== 'cell') throw new Error('expected cell entries');
+                return [`${b.value.row_index}_${b.value.col_index}`, b.value];
+            }),
+        );
+        expect(byCell.size).toBe(4);
+        for (const key of ['1_1', '1_2', '2_1', '2_2']) {
+            const sides = byCell.get(key);
+            expect(sides?.l).toEqual(expected);
+            expect(sides?.r).toEqual(expected);
+            expect(sides?.t).toEqual(expected);
+            expect(sides?.b).toEqual(expected);
+        }
+    });
+});
+
+describe('Sheets xlsx export — inline rich text', () => {
+    test('exports ct.s segments as richText runs with mapped fonts', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    {
+                        r: 0,
+                        c: 0,
+                        v: {
+                            ct: {
+                                fa: 'General',
+                                t: 'inlineStr',
+                                s: [
+                                    { v: 'Hello ', bl: 1, fc: '#FF0000' },
+                                    // The editor's CSS pipeline writes rgb(…) colors into segments.
+                                    { v: 'world', it: 1, un: 1, cl: 1, fs: 14, ff: 'Georgia', fc: 'rgb(0, 128, 255)' },
+                                ],
+                            },
+                        },
+                    },
+                ],
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
+        const value = ws.getCell('A1').value;
+        if (typeof value !== 'object' || value === null || !('richText' in value)) {
+            throw new Error('expected a richText cell value');
+        }
+        const runs = value.richText;
+        expect(runs).toHaveLength(2);
+        expect(runs[0].text).toBe('Hello ');
+        expect(runs[0].font).toMatchObject({ bold: true, color: { argb: 'FFFF0000' } });
+        expect(runs[1].text).toBe('world');
+        expect(runs[1].font).toMatchObject({
+            italic: true,
+            underline: true,
+            strike: true,
+            size: 14,
+            name: 'Georgia',
+            color: { argb: 'FF0080FF' },
+        });
+
+        // Minimum bar: the concatenated text must survive a full round-trip.
+        const rt = await roundTrip(sheets);
+        const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+        expect(a1?.v?.v).toBe('Hello world');
+    });
+
+    test('falls back to plain value when segments are empty or text-less', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'plain', ct: { fa: 'General', t: 'inlineStr', s: [] } } },
+                    { r: 1, c: 0, v: { v: 'fallback', ct: { fa: 'General', t: 'inlineStr', s: [{ bl: 1 }] } } },
+                ],
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
+        expect(ws.getCell('A1').value).toBe('plain');
+        expect(ws.getCell('A2').value).toBe('fallback');
     });
 });
