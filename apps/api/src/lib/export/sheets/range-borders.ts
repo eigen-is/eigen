@@ -71,12 +71,21 @@ export function expandBorderInfo(borderInfo: BorderInfo[]): Map<string, CellBord
                             if (c > c1) at(r, c).l = side;
                             break;
                         case 'border-horizontal':
-                            if (r > r1) at(r, c).t = side;
-                            if (r < r2) at(r, c).b = side;
+                            // First-branch-wins per row, like the editor compute: the
+                            // first row takes the edge below it, the last row the edge
+                            // above, inner rows both — so a single-row range still
+                            // exports its bottom edge. For multi-row ranges the edges
+                            // are identical to a strict inner-edge expansion.
+                            if (r === r1) at(r, c).b = side;
+                            else if (r === r2) at(r, c).t = side;
+                            else Object.assign(at(r, c), { t: side, b: side });
                             break;
                         case 'border-vertical':
-                            if (c > c1) at(r, c).l = side;
-                            if (c < c2) at(r, c).r = side;
+                            // Column mirror of border-horizontal: first column takes
+                            // the edge to its right, last column the edge to its left.
+                            if (c === c1) at(r, c).r = side;
+                            else if (c === c2) at(r, c).l = side;
+                            else Object.assign(at(r, c), { l: side, r: side });
                             break;
                         case 'border-left':
                             if (c === c1) at(r, c).l = side;
