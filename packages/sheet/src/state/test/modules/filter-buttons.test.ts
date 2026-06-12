@@ -82,3 +82,31 @@ describe('getFilterButtonAtPosition', () => {
         expect(getFilterButtonAtPosition(ctxWithFilter(RANGE, 'id_2'), 130, 22)).toBeUndefined();
     });
 });
+
+describe('createFilterOptions range clamp', () => {
+    // Imported xlsx autofilter ranges may extend past the materialized grid
+    // (the stored range is kept verbatim for export fidelity). filterOptions is
+    // what every consumer iterates — menu value/color scans, sort, condition
+    // apply — so its rows must never exceed the data matrix, or the menu loops
+    // read flowdata[r] of a missing row and crash on undefined[col].
+    test('endRow beyond the data matrix clamps to the last data row', () => {
+        const ctx = contextFactory() as Context;
+        createFilterOptions(ctx, { row: [1, 5000], column: [1, 2] }, undefined);
+        expect(ctx.filterOptions?.endRow).toBe(3);
+        expect(ctx.filterOptions?.startRow).toBe(1);
+    });
+
+    test('endCol beyond the grid clamps to the last column', () => {
+        const ctx = contextFactory() as Context;
+        createFilterOptions(ctx, { row: [1, 3], column: [1, 5000] }, undefined);
+        expect(ctx.filterOptions?.endCol).toBe(4);
+        expect(ctx.filterOptions?.items.at(-1)?.col).toBe(4);
+    });
+
+    test('a range entirely past the grid yields no filterOptions', () => {
+        const ctx = contextFactory() as Context;
+        createFilterOptions(ctx, { row: [5000, 6000], column: [1, 2] }, undefined);
+        expect(ctx.filterOptions).toBeUndefined();
+        expect(getFilterButtonAtPosition(ctx, 130, 22)).toBeUndefined();
+    });
+});
