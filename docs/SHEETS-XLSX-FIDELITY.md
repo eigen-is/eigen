@@ -37,10 +37,15 @@ last (winning) engine rule gets priority 1.
 
 ## Remaining cycles (signed-off order)
 
-- **Filter menu visual redesign (Google parity)** — deliberately deferred for design iteration
-  in small steps with Reinder; the functional condition tier is in. Reference: Google's
-  per-column menu (sort A–Z/Z–A, sort by colour, filter by colour, filter by condition, filter
-  by values with search).
+None — the program is complete. The last item closed 2026-06-12:
+
+- ~~Filter menu visual redesign (Google parity)~~ Reinder kept the menu as-is ("the filter
+  menu is fine"); the canvas filter BUTTONS were restyled to Google's look instead (merge
+  `dde86ce9`, design-approved from per-state screenshots): idle = bare `--muted-foreground`
+  strainer glyph (no box), hover = `--app-sheets-color` strainer on a rounded chip with a 14%
+  wash (canvas can't parse the `-soft` color-mix), active filter = filled app-green box with
+  the funnel knocked out in `--background`. Geometry/hit-tests untouched. The by-values-vs-
+  condition accordion idea from the backlog stays parked there.
 
 ## Backlog
 
