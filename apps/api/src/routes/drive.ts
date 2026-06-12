@@ -149,6 +149,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 sourcePath.details?.originalName || sourcePath.name,
                 sourcePath.mimeType,
                 file,
+                user,
             );
         },
         {
@@ -180,7 +181,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            return await convertToDocument(drive, mount, path, params.targetType);
+            return await convertToDocument(drive, mount, path, params.targetType, user);
         },
         { auth: true },
     )

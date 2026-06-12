@@ -480,12 +480,12 @@ export default class Drive {
         const movedPath = await mount.getPath(pathId);
         if (!movedPath) throw new ApiError(500, 'Failed to move path');
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, oldParentId ?? undefined);
-        if (user) {
+        if (user && oldParentId) {
             await mount.history.record({
                 pathId,
                 eventType: 'moved',
                 actor: { id: user.id, email: user.email },
-                details: { oldParentId: oldParentId!, newParentId: targetParentId },
+                details: { oldParentId, newParentId: targetParentId },
             });
         }
         return movedPath;
@@ -771,18 +771,20 @@ export default class Drive {
         if (updatedItem) {
             await propagateACLChange(updatedItem, oldACL, normalizedACL, actor ?? null);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
-        }
-        if (actor) {
-            const oldEmails = new Set((oldACL || []).map((e) => e.id.toLowerCase()));
-            const newEmails = new Set((normalizedACL || []).map((e) => e.id.toLowerCase()));
-            const added = [...newEmails].filter((e) => !oldEmails.has(e));
-            const removed = [...oldEmails].filter((e) => !newEmails.has(e));
-            await mount.history.record({
-                pathId,
-                eventType: 'acl-changed',
-                actor: { id: actor.id, email: actor.email },
-                details: { added, removed },
-            });
+            if (actor) {
+                const oldEmails = new Set((oldACL || []).map((e) => e.id.toLowerCase()));
+                const newEmails = new Set((normalizedACL || []).map((e) => e.id.toLowerCase()));
+                const added = [...newEmails].filter((e) => !oldEmails.has(e));
+                const removed = [...oldEmails].filter((e) => !newEmails.has(e));
+                if (added.length || removed.length) {
+                    await mount.history.record({
+                        pathId,
+                        eventType: 'acl-changed',
+                        actor: { id: actor.id, email: actor.email },
+                        details: { added, removed },
+                    });
+                }
+            }
         }
     }
 

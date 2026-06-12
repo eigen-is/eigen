@@ -7,8 +7,9 @@ import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import { fileEvents } from '../lib/mount/schema';
+import type { User } from '../lib/user';
 import type { TestContext } from './setup';
-import { authedRequest, driveDelete, drivePost, drivePut, driveUpload, getTestContext } from './setup';
+import { authedRequest, driveDelete, driveGet, drivePost, drivePut, driveUpload, getTestContext } from './setup';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-file-history-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -373,18 +374,38 @@ describe('Drive history recording', () => {
             folderName: 'CopySource',
         });
         const subFile = new File(['content'], 'subfile.txt', { type: 'text/plain' });
-        await driveUpload(aliceToken, aliceOwnerId, aliceMountId, folder.id, subFile);
+        const sourceChild = await driveUpload(aliceToken, aliceOwnerId, aliceMountId, folder.id, subFile);
 
         const destFolder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
             folderName: 'CopyDest',
         });
 
-        const actor = { id: ctx.alice.user.id, email: ctx.alice.user.email, name: ctx.alice.user.name } as never;
+        const actor = ctx.alice.user as unknown as User;
         const copied = await home.drive.copyPath(aliceMountId, folder.id, destFolder.id, 'CopiedFolder', actor);
 
+        // Root folder copy records 'copied'
         const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${copied.id}/history`);
         const events = (await res.json()) as FileEvent[];
         expect(events.some((e) => e.eventType === 'copied')).toBe(true);
+
+        // Descendant in the copied folder also records 'copied' with sourcePathId = the source child's id
+        const copiedChildren = await driveGet<{ id: string; name: string }[]>(
+            aliceToken,
+            aliceOwnerId,
+            aliceMountId,
+            `folder/${copied.id}`,
+        );
+        const copiedChild = copiedChildren.find((c) => c.name === 'subfile.txt');
+        expect(copiedChild).toBeDefined();
+
+        const childHistoryRes = await authedRequest(
+            aliceToken,
+            `/drive/${aliceOwnerId}/${aliceMountId}/path/${copiedChild!.id}/history`,
+        );
+        const childEvents = (await childHistoryRes.json()) as FileEvent[];
+        const childCopied = childEvents.filter((e) => e.eventType === 'copied');
+        expect(childCopied).toHaveLength(1);
+        expect((childCopied[0].details as { sourcePathId: string }).sourcePathId).toBe(sourceChild.id);
     });
 
     test('folder history endpoint includes descendant events', async () => {
@@ -437,10 +458,10 @@ describe('Drive history recording', () => {
             aliceRootId,
             'VersionTestDoc',
             'doc',
-            ctx.alice.user as never,
+            ctx.alice.user as unknown as User,
         );
         const version = await home.drive.saveVersion(aliceMountId, newPath.id);
-        await home.drive.restoreContainer(aliceMountId, newPath.id, version.name, ctx.alice.user as never);
+        await home.drive.restoreContainer(aliceMountId, newPath.id, version.name, ctx.alice.user as unknown as User);
 
         const res = await authedRequest(
             aliceToken,
