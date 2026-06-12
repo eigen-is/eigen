@@ -123,7 +123,7 @@ export function renderEigenEmail(input: EmailShellInput): string {
     const footer = input.footerLine ? renderFooter(input.footerLine) : '';
     const title = `<h2 style="margin:0 0 20px;font-size:18px;font-weight:600;color:${EMAIL_TEXT};font-family:${EMAIL_FONT}">${escapeHtml(input.title)}</h2>`;
     return `<div style="font-family:${EMAIL_FONT};padding:0 16px">
-  <div style="border:1px solid ${EMAIL_BORDER};border-radius:${EMAIL_RADIUS};padding:24px;margin:16px 0;color:${EMAIL_TEXT}">
+  <div style="background:#ffffff;border:1px solid ${EMAIL_BORDER};border-radius:${EMAIL_RADIUS};padding:24px;margin:16px 0;color:${EMAIL_TEXT}">
     ${banner}${title}
     ${autolinkUrls(input.bodyHtml)}
     ${pills}

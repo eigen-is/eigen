@@ -6,6 +6,11 @@ type ShadowContentProps = {
     content: string;
     className?: string;
     contentType?: 'html' | 'text';
+    // Author-styled HTML (real formatted mail) is written against a light background but
+    // rarely declares one, so explicit text colors go dark-on-dark in the dark theme.
+    // 'light' renders it on a light canvas regardless of app theme (what mail clients do);
+    // 'theme' keeps unstyled/derived content theme-native.
+    scheme?: 'light' | 'theme';
 };
 
 // HTML content is sanitized server-side using DOMPurify before storage.
@@ -14,6 +19,7 @@ export function ShadowContent({
     content,
     className,
     contentType = 'html',
+    scheme = 'theme',
     ...props
 }: ShadowContentProps & React.HTMLAttributes<HTMLDivElement>) {
     const shadowHostRef = useRef<HTMLDivElement>(null);
@@ -23,6 +29,11 @@ export function ShadowContent({
     useEffect(() => {
         const hostElement = shadowHostRef.current;
         if (!hostElement) return;
+
+        if (scheme === 'light') {
+            hostElement.style.colorScheme = 'light';
+            return;
+        }
 
         const syncTheme = () => {
             const isDark = document.documentElement.classList.contains('dark');
@@ -34,7 +45,7 @@ export function ShadowContent({
         const observer = new MutationObserver(syncTheme);
         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
         return () => observer.disconnect();
-    }, []);
+    }, [scheme]);
 
     useEffect(() => {
         const hostElement = shadowHostRef.current;
@@ -56,11 +67,12 @@ export function ShadowContent({
         if (contentType === 'html') {
             contentContainer.innerHTML = content;
 
-            // Strip @media (prefers-color-scheme) blocks that conflict with the app theme.
-            // These media queries check the OS preference, not the app's theme, so they can
-            // apply e.g. light text on a light background when OS is dark but app is light.
-            const isDark = document.documentElement.classList.contains('dark');
-            const removeScheme = isDark ? 'light' : 'dark';
+            // Strip @media (prefers-color-scheme) blocks that conflict with the rendered
+            // canvas. The media queries check the OS preference, not what we render on:
+            // a forced-light canvas must drop the dark blocks; theme-native content drops
+            // whichever side disagrees with the app theme.
+            const renderDark = scheme === 'theme' && document.documentElement.classList.contains('dark');
+            const removeScheme = renderDark ? 'light' : 'dark';
             const mqRegex = new RegExp(
                 `@media\\s*\\([^)]*prefers-color-scheme:\\s*${removeScheme}[^)]*\\)\\s*\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\}`,
                 'gi',
@@ -81,6 +93,7 @@ export function ShadowContent({
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         color: light-dark(#333, #e8eaed);
         line-height: 1.5;
+        ${scheme === 'light' ? 'background: #fff; padding: 16px; border-radius: 8px;' : ''}
       }
       a { color: #2563eb; text-decoration: none; }
       a:hover { text-decoration: underline; }
@@ -94,7 +107,7 @@ export function ShadowContent({
         // Append style and content to shadow DOM
         shadowRoot.appendChild(styleElement);
         shadowRoot.appendChild(contentContainer);
-    }, [content, contentType]);
+    }, [content, contentType, scheme]);
 
     return <div ref={shadowHostRef} className={cn('shadow-host', className)} {...props} />;
 }

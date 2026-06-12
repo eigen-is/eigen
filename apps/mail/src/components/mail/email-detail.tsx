@@ -279,7 +279,12 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
                     {/* Email body */}
                     <div className="prose prose-sm max-w-none">
                         {email.html || email.textAsHtml ? (
-                            <ShadowContent content={emailContent} contentType="html" className="w-full" />
+                            <ShadowContent
+                                content={emailContent}
+                                contentType="html"
+                                scheme={email.html ? 'light' : 'theme'}
+                                className="w-full"
+                            />
                         ) : (
                             <div style={{ whiteSpace: 'pre-wrap' }}>{emailContent}</div>
                         )}
