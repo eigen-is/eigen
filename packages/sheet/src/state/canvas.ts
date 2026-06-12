@@ -15,8 +15,6 @@ import { collectVisibleCells, renderCells, renderMergedCells } from './render/ph
 import type { RenderPass } from './render/types';
 import { defaultStyle } from './render/types';
 
-export { defaultStyle };
-
 export class Canvas {
     private canvasElement: HTMLCanvasElement;
 
@@ -122,7 +120,6 @@ export class Canvas {
             colEnd,
             flowdata,
             cfCompute: getComputeMap(this.sheetCtx),
-            dynamicArrayCompute: {},
             // Overflow cell configuration for render area
             cellOverflowMap: computeCellOverflowMap(this.sheetCtx, renderCtx, colStart, colEnd, rowStart, rowEnd),
             drawGridLines: !this.sheetCtx.currentSheetIsPivot && this.sheetCtx.showGridLines,

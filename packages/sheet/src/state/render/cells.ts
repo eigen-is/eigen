@@ -5,7 +5,7 @@
 import { normalizedAttr } from '../modules/cell';
 import { checkCF } from '../modules/conditionFormat';
 import { validateCellData } from '../modules/dataVerification';
-import { defaultFont, getCellTextInfo, getMeasureText } from '../modules/text';
+import { getCellTextInfo, getMeasureText } from '../modules/text';
 import { getSheetIndex } from '../utils';
 import { cellOverflowRender, cellTextRender } from './cell-text';
 import { drawDataBar } from './data-bar';
@@ -31,18 +31,8 @@ export function nullCellRender(
     endX: number,
     isMerge = false,
 ) {
-    const {
-        sheetCtx,
-        renderCtx,
-        cfCompute,
-        offsetLeft,
-        offsetTop,
-        dynamicArrayCompute,
-        cellOverflowMap,
-        colEnd,
-        flowdata,
-        drawGridLines,
-    } = pass;
+    const { sheetCtx, renderCtx, cfCompute, offsetLeft, offsetTop, cellOverflowMap, colEnd, flowdata, drawGridLines } =
+        pass;
     const checksCF = checkCF(r, c, cfCompute);
 
     // Background color
@@ -84,24 +74,6 @@ export function nullCellRender(
     }
 
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
-
-    if (`${r}_${c}` in dynamicArrayCompute) {
-        const value = dynamicArrayCompute[`${r}_${c}`].v;
-
-        renderCtx.fillStyle = '#000000';
-        // Text width and height
-        const fontset = defaultFont(sheetCtx.defaultFontSize);
-        renderCtx.font = fontset;
-
-        // Horizontal align (default: left)
-        const horizonAlignPos = startX + 4 + offsetLeft;
-
-        // Vertical align (default: bottom)
-        const verticalAlignPos = endY + offsetTop - 2;
-        renderCtx.textBaseline = 'bottom';
-
-        renderCtx.fillText(value == null ? '' : String(value), horizonAlignPos, verticalAlignPos);
-    }
 
     // Comment indicator triangle
     if (flowdata?.[r]?.[c]?.commentCardIds?.length) {
