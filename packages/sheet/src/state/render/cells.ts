@@ -6,7 +6,6 @@ import { normalizedAttr } from '../modules/cell';
 import { checkCF } from '../modules/conditionFormat';
 import { validateCellData } from '../modules/dataVerification';
 import { getCellTextInfo, getMeasureText } from '../modules/text';
-import { getSheetIndex } from '../utils';
 import { cellOverflowRender, cellTextRender } from './cell-text';
 import { drawDataBar } from './data-bar';
 import { BORDER_FIX, HALF_PIXEL } from './geometry';
@@ -152,8 +151,18 @@ export function cellRender(
     value: string | number | boolean | null | undefined,
     isMerge = false,
 ) {
-    const { sheetCtx, renderCtx, cfCompute, offsetLeft, offsetTop, cellOverflowMap, colEnd, flowdata, drawGridLines } =
-        pass;
+    const {
+        sheetCtx,
+        renderCtx,
+        cfCompute,
+        offsetLeft,
+        offsetTop,
+        dataVerification,
+        cellOverflowMap,
+        colEnd,
+        flowdata,
+        drawGridLines,
+    } = pass;
     const cell = flowdata[r][c];
     const cellWidth = endX - startX - 2;
     const cellHeight = endY - startY - 2;
@@ -202,10 +211,6 @@ export function cellRender(
     }
 
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
-
-    const index = getSheetIndex(sheetCtx, sheetCtx.currentSheetId) as number;
-
-    const { dataVerification } = sheetCtx.sheets[index];
 
     if (dataVerification?.[`${r}_${c}`] && !validateCellData(sheetCtx, dataVerification[`${r}_${c}`], value)) {
         // Data validation error indicator (red triangle top-left)

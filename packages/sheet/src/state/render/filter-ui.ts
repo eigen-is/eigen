@@ -6,6 +6,7 @@
 // bg-background / bg-primary).
 
 import { FILTER_BUTTON_HEIGHT, FILTER_BUTTON_WIDTH } from '../modules/filter';
+import { HALF_PIXEL, sheetToCanvasX, sheetToCanvasY } from './geometry';
 import type { RenderPass } from './types';
 
 // Filter-button glyphs (24×24 viewBox): lucide chevron-down and the filled
@@ -53,16 +54,12 @@ export function drawFilterUI(pass: RenderPass) {
     renderCtx.rect(offsetLeft - 1, offsetTop - 1, drawWidth + 1, drawHeight + 1);
     renderCtx.clip();
 
-    // Sheet coords map to the same -1-shifted canvas space the cells use.
-    const toCanvasX = (x: number) => x - scrollWidth + offsetLeft - 1;
-    const toCanvasY = (y: number) => y - scrollHeight + offsetTop - 1;
-
     // Range border (was the border-selection-handle overlay div)
     renderCtx.strokeStyle = selectionHandle;
     renderCtx.lineWidth = 1;
     renderCtx.strokeRect(
-        toCanvasX(options.left) - 0.5,
-        toCanvasY(options.top) - 0.5,
+        sheetToCanvasX(options.left, scrollWidth, offsetLeft) - HALF_PIXEL,
+        sheetToCanvasY(options.top, scrollHeight, offsetTop) - HALF_PIXEL,
         options.width + 1,
         options.height + 1,
     );
@@ -77,14 +74,14 @@ export function drawFilterUI(pass: RenderPass) {
             continue;
         }
 
-        const bx = toCanvasX(item.left);
-        const by = toCanvasY(item.top);
+        const bx = sheetToCanvasX(item.left, scrollWidth, offsetLeft);
+        const by = sheetToCanvasY(item.top, scrollHeight, offsetTop);
         const active = sheetCtx.filter[item.col - options.startCol] != null;
         const hovered = sheetCtx.filterButtonHover === item.col;
         const filled = active || hovered;
 
         renderCtx.beginPath();
-        renderCtx.roundRect(bx + 0.5, by + 0.5, FILTER_BUTTON_WIDTH - 1, FILTER_BUTTON_HEIGHT - 1, 2);
+        renderCtx.roundRect(bx + HALF_PIXEL, by + HALF_PIXEL, FILTER_BUTTON_WIDTH - 1, FILTER_BUTTON_HEIGHT - 1, 2);
         renderCtx.fillStyle = filled ? primary : background;
         renderCtx.fill();
         renderCtx.strokeStyle = primary;

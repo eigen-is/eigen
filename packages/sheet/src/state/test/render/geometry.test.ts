@@ -5,7 +5,16 @@
 // viewport extends past the last entry.
 
 import { describe, expect, test } from 'bun:test';
-import { colEndX, colStartX, headerVisibleRange, mainVisibleRange, rowEndY, rowStartY } from '../../render/geometry';
+import {
+    colEndX,
+    colStartX,
+    headerVisibleRange,
+    mainVisibleRange,
+    rowEndY,
+    rowStartY,
+    sheetToCanvasX,
+    sheetToCanvasY,
+} from '../../render/geometry';
 
 // factory geometry: 5 rows of 20px, 5 columns of 74px
 const ROWS = [20, 40, 60, 80, 100];
@@ -61,5 +70,15 @@ describe('cell edges', () => {
         expect(colStartX(COLS, 0, 0)).toBe(-0);
         expect(colStartX(COLS, 3, 0)).toBe(222);
         expect(colEndX(COLS, 3, 0)).toBe(296);
+    });
+});
+
+describe('sheet-to-canvas mapping', () => {
+    test('subtracts the scroll and adds the header offset into the -1-shifted canvas space', () => {
+        // rowHeaderWidth 46 / columnHeaderHeight 20 (state/settings defaults)
+        expect(sheetToCanvasX(148, 30, 46)).toBe(148 - 30 + 46 - 1);
+        expect(sheetToCanvasY(20, 10, 20)).toBe(20 - 10 + 20 - 1);
+        expect(sheetToCanvasX(0, 0, 46)).toBe(45);
+        expect(sheetToCanvasY(0, 0, 20)).toBe(19);
     });
 });

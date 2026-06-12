@@ -1,9 +1,9 @@
 // Cell borders from config.borderInfo, drawn over the finished cells.
 
 import { getBorderInfoComputeRange } from '../modules/border';
-import { HALF_PIXEL } from './geometry';
+import { colEndX, colStartX, HALF_PIXEL, rowEndY, rowStartY } from './geometry';
 import { overflowColIn } from './overflow';
-import type { BorderOffsetMap, RenderPass } from './types';
+import type { RenderPass } from './types';
 
 // Border style index (the xlsx border-style ordinal) → style name.
 const BORDER_TYPE: Record<string, string> = {
@@ -71,13 +71,23 @@ function setLineDash(
     }
 }
 
-export function drawCellBorders(pass: RenderPass, borderOffset: BorderOffsetMap) {
+export function drawCellBorders(pass: RenderPass) {
     const { sheetCtx } = pass;
     if ((sheetCtx.config?.borderInfo?.length ?? 0) === 0) {
         return;
     }
 
-    const { renderCtx, rowStart, rowEnd, colStart, colEnd, offsetLeft: oL, offsetTop: oT } = pass;
+    const {
+        renderCtx,
+        rowStart,
+        rowEnd,
+        colStart,
+        colEnd,
+        scrollWidth,
+        scrollHeight,
+        offsetLeft: oL,
+        offsetTop: oT,
+    } = pass;
 
     const renderBorder = (
         style: number | string,
@@ -103,10 +113,16 @@ export function drawCellBorders(pass: RenderPass, borderOffset: BorderOffsetMap)
         const bdRow = Number(x.substring(0, sepIdx));
         const bdCol = Number(x.substring(sepIdx + 1));
 
-        const bdOffset = borderOffset[x];
-        if (!bdOffset) continue;
+        // Same membership the per-pass rect map used to pin: inside the pass's
+        // visible range (the compute already clamps to it) and not hidden —
+        // hidden rows/columns never produced a cell rect.
+        if (bdRow < rowStart || bdRow > rowEnd || bdCol < colStart || bdCol > colEnd) continue;
+        if (sheetCtx.config?.rowhidden?.[bdRow] != null || sheetCtx.config?.colhidden?.[bdCol] != null) continue;
 
-        const { startY, startX, endY, endX } = bdOffset;
+        const startY = rowStartY(sheetCtx.visibledatarow, bdRow, scrollHeight);
+        const startX = colStartX(sheetCtx.visibledatacolumn, bdCol, scrollWidth);
+        const endY = rowEndY(sheetCtx.visibledatarow, bdRow, scrollHeight);
+        const endX = colEndX(sheetCtx.visibledatacolumn, bdCol, scrollWidth);
 
         const leftX = startX - 2 + HALF_PIXEL + oL;
         const rightX = endX - 2 + HALF_PIXEL + oL;
@@ -123,9 +139,10 @@ export function drawCellBorders(pass: RenderPass, borderOffset: BorderOffsetMap)
             let slashEndX = rightX;
             let slashEndY = bottomY;
             if (mergeCell) {
-                const mergeCellOffset = borderOffset[`${bdRow + mergeCell.rs - 1}_${bdCol + mergeCell.cs - 1}`];
-                slashEndX = mergeCellOffset.endX - 2 + HALF_PIXEL + oL;
-                slashEndY = mergeCellOffset.endY - 2 + HALF_PIXEL + oT;
+                slashEndX =
+                    colEndX(sheetCtx.visibledatacolumn, bdCol + mergeCell.cs - 1, scrollWidth) - 2 + HALF_PIXEL + oL;
+                slashEndY =
+                    rowEndY(sheetCtx.visibledatarow, bdRow + mergeCell.rs - 1, scrollHeight) - 2 + HALF_PIXEL + oT;
             }
             renderBorder(bdInfo.s.style, bdInfo.s.color, 'v', leftX, topY, slashEndX, slashEndY);
         }
