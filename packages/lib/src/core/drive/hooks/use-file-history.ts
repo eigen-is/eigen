@@ -11,7 +11,7 @@ type RecordHistoryInput = {
     [K in ClientFileEventType]: { eventType: K; details: FileEventDetailsMap[K] };
 }[ClientFileEventType];
 
-// RECORD CLIENT-EMITTED HISTORY EVENT (sticky-moved, slide-reordered)
+// RECORD CLIENT-EMITTED HISTORY EVENT (the sticky-* card events)
 export function useRecordHistory(ownerId: string, mountId: string, pathId: string) {
     return useMutation({
         mutationFn: async (input: RecordHistoryInput) => {

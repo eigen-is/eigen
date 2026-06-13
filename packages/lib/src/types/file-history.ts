@@ -11,32 +11,19 @@ export type FileEventDetailsMap = {
     'sticky-added': { card: string; toColumn: string };
     'sticky-moved': { card: string; toColumn: string };
     'sticky-removed': { card: string };
-    'slide-added': { slideId: string };
-    'slide-removed': { slideId: string };
-    'slide-reordered': { slideId: string; newIndex: number };
-    'sheet-rows-inserted': { count: number };
-    'sheet-rows-deleted': { count: number };
-    'sheet-cols-inserted': { count: number };
-    'sheet-cols-deleted': { count: number };
 };
 
 export type FileEventType = 'created' | 'edited' | 'trashed' | 'restored' | 'deleted' | keyof FileEventDetailsMap;
 
 // Client-postable subset; everything else is server-only (the POST route rejects the rest).
-// v1 ships only the two types that have real emitters (no-placeholders rule); the
-// sticky/slide add/remove vocabulary stays in FileEventType for the wire format and
-// joins this list when an emitter lands.
+// Only types with a real emitter AND human-meaningful content (a card name) live here.
+// Lower-signal structural verbs (slide reorder/add/remove, sheet row/col ops, doc edits)
+// are deferred to the in-doc history feature that consumes them — see
+// docs/PROPOSAL_FILE_HISTORY.md. Until then those changes surface as the generic 'edited'.
 export const CLIENT_FILE_EVENT_TYPES = [
     'sticky-added',
     'sticky-moved',
     'sticky-removed',
-    'slide-added',
-    'slide-removed',
-    'slide-reordered',
-    'sheet-rows-inserted',
-    'sheet-rows-deleted',
-    'sheet-cols-inserted',
-    'sheet-cols-deleted',
 ] as const satisfies readonly FileEventType[];
 
 export type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];
@@ -107,13 +94,6 @@ const FILE_EVENT_VERBS: Record<FileEventType, string> = {
     'sticky-added': 'added a card to',
     'sticky-moved': 'moved a card in',
     'sticky-removed': 'removed a card from',
-    'slide-added': 'added a slide to',
-    'slide-removed': 'removed a slide from',
-    'slide-reordered': 'reordered slides in',
-    'sheet-rows-inserted': 'inserted rows in',
-    'sheet-rows-deleted': 'deleted rows from',
-    'sheet-cols-inserted': 'inserted columns in',
-    'sheet-cols-deleted': 'deleted columns from',
 };
 
 export function fileEventVerb(eventType: FileEventType): string {
@@ -139,13 +119,6 @@ const FILE_EVENT_SUMMARIES: Record<FileEventType, string> = {
     'sticky-added': 'added a card',
     'sticky-moved': 'moved a card',
     'sticky-removed': 'removed a card',
-    'slide-added': 'added a slide',
-    'slide-removed': 'removed a slide',
-    'slide-reordered': 'reordered slides',
-    'sheet-rows-inserted': 'inserted rows',
-    'sheet-rows-deleted': 'deleted rows',
-    'sheet-cols-inserted': 'inserted columns',
-    'sheet-cols-deleted': 'deleted columns',
 };
 
 export function fileEventSummary(eventType: FileEventType): string {

@@ -15,7 +15,6 @@ import {
     MediaResolverProvider,
     useCopyToMediaFolder,
     useMediaResolver,
-    useRecordHistory,
     useUploadFile,
 } from '@workspace/lib/drive';
 import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
@@ -156,11 +155,7 @@ function SlideEditorInner({
 
     const { isMobile } = useLayout();
     const { resolveMediaUrl, resolveMediaPath, startUpload } = useMediaResolver();
-    const recordHistory = useRecordHistory(ownerId, path.mountId, path.id);
-    const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({
-        yjsDoc,
-        onRecordEvent: recordHistory.mutate,
-    });
+    const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({ yjsDoc });
 
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
@@ -692,10 +687,7 @@ function SlideEditorInner({
                         onAccessDialogOpen={onAccessDialogOpen}
                         onAddText={handleAddText}
                         onAddImage={() => setImagePickerOpen(true)}
-                        onAddSlide={() => {
-                            const slideId = addSlide();
-                            if (slideId) recordHistory.mutate({ eventType: 'slide-added', details: { slideId } });
-                        }}
+                        onAddSlide={() => addSlide()}
                         onPresent={handlePresent}
                         onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
                         commentPanelOpen={commentPanelOpen}
@@ -715,14 +707,7 @@ function SlideEditorInner({
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
                         dragActiveId={dragState.activeId}
-                        onDeleteSlide={
-                            canWrite
-                                ? (slideId: string) => {
-                                      deleteSlide(slideId);
-                                      recordHistory.mutate({ eventType: 'slide-removed', details: { slideId } });
-                                  }
-                                : undefined
-                        }
+                        onDeleteSlide={canWrite ? deleteSlide : undefined}
                         onDuplicateSlide={canWrite ? duplicateSlide : undefined}
                         mobile={isMobile}
                     />

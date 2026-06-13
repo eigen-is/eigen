@@ -1,5 +1,4 @@
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import type { FileEventDetailsMap } from '@workspace/lib/types/file-history';
 import { useState } from 'react';
 import type * as Y from 'yjs';
 
@@ -9,10 +8,9 @@ type DragState = {
 
 type UseSlideDndProps = {
     yjsDoc: Y.Doc | null;
-    onRecordEvent?: (event: { eventType: 'slide-reordered'; details: FileEventDetailsMap['slide-reordered'] }) => void;
 };
 
-export const useSlideDnd = ({ yjsDoc, onRecordEvent }: UseSlideDndProps) => {
+export const useSlideDnd = ({ yjsDoc }: UseSlideDndProps) => {
     const [dragState, setDragState] = useState<DragState>({ activeId: null });
 
     const handleDragStart = (event: DragStartEvent) => {
@@ -30,7 +28,7 @@ export const useSlideDnd = ({ yjsDoc, onRecordEvent }: UseSlideDndProps) => {
 
         if (activeId !== overId) {
             const slideOrderArray = yjsDoc.getArray('slideOrder');
-            const reorderedTo = yjsDoc.transact(() => {
+            yjsDoc.transact(() => {
                 const currentOrder = slideOrderArray.toArray() as string[];
                 const oldIndex = currentOrder.indexOf(activeId);
                 const newIndex = currentOrder.indexOf(overId);
@@ -40,16 +38,8 @@ export const useSlideDnd = ({ yjsDoc, onRecordEvent }: UseSlideDndProps) => {
                     newOrder.splice(oldIndex, 1);
                     newOrder.splice(newIndex, 0, activeId);
                     slideOrderArray.insert(0, newOrder);
-                    return newIndex;
                 }
-                return null;
             });
-            if (reorderedTo !== null) {
-                onRecordEvent?.({
-                    eventType: 'slide-reordered',
-                    details: { slideId: activeId, newIndex: reorderedTo },
-                });
-            }
         }
         setDragState({ activeId: null });
     };
