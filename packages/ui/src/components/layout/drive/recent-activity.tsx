@@ -5,9 +5,6 @@ import { type FileEvent, fileEventVerb } from '@workspace/lib/types/file-history
 import { useEffect, useRef } from 'react';
 import { UserAvatar } from '../user-avatar';
 
-const MAX_TITLE = 36;
-const truncate = (s: string) => (s.length > MAX_TITLE ? `${s.slice(0, MAX_TITLE - 1)}…` : s);
-
 type RecentActivityProps = {
     path: DrivePath;
     highlight?: boolean;
@@ -41,15 +38,16 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
                         <li key={event.id} className="flex items-start gap-2 text-sm">
                             <UserAvatar email={event.actorEmail} size="sm" className="mt-0.5 shrink-0" />
                             <div className="min-w-0 flex-1">
-                                <span className="font-medium">{event.actorEmail.split('@')[0]}</span>{' '}
-                                <ActivityPhrase
-                                    event={event}
-                                    showName={showName}
-                                    name={stripEigenExtension(event.pathName)}
-                                />
-                                <div className="text-xs text-muted-foreground mt-0.5">
-                                    {formatTimeAgo(event.createdAt)}
+                                {/* One line, clipped with an ellipsis — same as the panel's other rows. */}
+                                <div className="truncate">
+                                    <span className="font-medium">{event.actorEmail.split('@')[0]}</span>{' '}
+                                    <ActivityPhrase
+                                        event={event}
+                                        showName={showName}
+                                        name={stripEigenExtension(event.pathName)}
+                                    />
                                 </div>
+                                <div className="text-xs text-muted-foreground">{formatTimeAgo(event.createdAt)}</div>
                             </div>
                         </li>
                     );
@@ -62,7 +60,7 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
 // Bold only the names: the user (rendered by the caller), card/column/file/folder
 // titles. Verbs and connectors stay plain weight.
 function Name({ children }: { children: string }) {
-    return <span className="font-medium">{truncate(children)}</span>;
+    return <span className="font-medium">{children}</span>;
 }
 
 function ActivityPhrase({ event, showName, name }: { event: FileEvent; showName: boolean; name: string }) {
