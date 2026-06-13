@@ -692,7 +692,10 @@ function SlideEditorInner({
                         onAccessDialogOpen={onAccessDialogOpen}
                         onAddText={handleAddText}
                         onAddImage={() => setImagePickerOpen(true)}
-                        onAddSlide={() => addSlide()}
+                        onAddSlide={() => {
+                            const slideId = addSlide();
+                            if (slideId) recordHistory.mutate({ eventType: 'slide-added', details: { slideId } });
+                        }}
                         onPresent={handlePresent}
                         onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
                         commentPanelOpen={commentPanelOpen}
@@ -712,7 +715,14 @@ function SlideEditorInner({
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
                         dragActiveId={dragState.activeId}
-                        onDeleteSlide={canWrite ? deleteSlide : undefined}
+                        onDeleteSlide={
+                            canWrite
+                                ? (slideId: string) => {
+                                      deleteSlide(slideId);
+                                      recordHistory.mutate({ eventType: 'slide-removed', details: { slideId } });
+                                  }
+                                : undefined
+                        }
                         onDuplicateSlide={canWrite ? duplicateSlide : undefined}
                         mobile={isMobile}
                     />
