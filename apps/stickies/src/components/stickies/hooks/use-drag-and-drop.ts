@@ -104,7 +104,13 @@ export const useDragAndDrop = ({ board, cards, yjsDoc, onRecordEvent }: UseDragA
             return moved;
         });
         if (movedColumns) {
-            onRecordEvent?.({ eventType: 'sticky-moved', details: { stickyId: activeId, ...movedColumns } });
+            onRecordEvent?.({
+                eventType: 'sticky-moved',
+                details: {
+                    card: cards[activeId]?.title ?? '',
+                    toColumn: board.columns[movedColumns.newColumn]?.title ?? '',
+                },
+            });
         }
         resetDragState();
     };

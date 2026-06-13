@@ -532,7 +532,7 @@ describe('File events: collab edits, client posts, comments', () => {
     describe('client-posted history events', () => {
         const stickyMoved = {
             eventType: 'sticky-moved',
-            details: { stickyId: 's1', oldColumn: 'todo', newColumn: 'done' },
+            details: { card: 'Buy milk', toColumn: 'Done' },
         };
 
         test('a writer can post a sticky-moved event with details', async () => {

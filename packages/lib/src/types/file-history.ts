@@ -9,7 +9,7 @@ export type FileEventDetailsMap = {
     'version-restored': { versionName: string };
     commented: { preview: string };
     'sticky-added': { stickyId: string; column: string };
-    'sticky-moved': { stickyId: string; oldColumn: string; newColumn: string };
+    'sticky-moved': { card: string; toColumn: string };
     'sticky-removed': { stickyId: string; column: string };
     'slide-added': { slideId: string };
     'slide-removed': { slideId: string };
