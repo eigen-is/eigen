@@ -104,3 +104,31 @@ const FILE_EVENT_VERBS: Record<FileEventType, string> = {
 export function fileEventVerb(eventType: FileEventType): string {
     return FILE_EVENT_VERBS[eventType];
 }
+
+// Standalone past-tense summary that reads without a trailing object — for places
+// with no room for the item name (the Watched list's "last activity" column, and
+// a selected file's own events where the panel title already shows the name).
+const FILE_EVENT_SUMMARIES: Record<FileEventType, string> = {
+    created: 'created',
+    uploaded: 'uploaded',
+    edited: 'edited',
+    renamed: 'renamed',
+    moved: 'moved',
+    copied: 'copied',
+    'acl-changed': 'updated sharing',
+    trashed: 'trashed',
+    restored: 'restored',
+    deleted: 'deleted',
+    'version-restored': 'restored a version',
+    commented: 'commented',
+    'sticky-added': 'added a card',
+    'sticky-moved': 'moved a card',
+    'sticky-removed': 'removed a card',
+    'slide-added': 'added a slide',
+    'slide-removed': 'removed a slide',
+    'slide-reordered': 'reordered slides',
+};
+
+export function fileEventSummary(eventType: FileEventType): string {
+    return FILE_EVENT_SUMMARIES[eventType];
+}

@@ -1,7 +1,7 @@
 import { formatTimeAgo } from '@workspace/lib/date';
 import { useFileHistory } from '@workspace/lib/drive';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
-import { type FileEvent, fileEventVerb } from '@workspace/lib/types/file-history';
+import { type FileEvent, fileEventSummary, fileEventVerb } from '@workspace/lib/types/file-history';
 import { useEffect, useRef } from 'react';
 import { UserAvatar } from '../user-avatar';
 
@@ -14,11 +14,13 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
     const { data: events = [] } = useFileHistory(path.ownerId, path.mountId, path.id);
     const sectionRef = useRef<HTMLDivElement>(null);
 
+    // events.length is a dep so the scroll fires once the async history resolves
+    // (the section is unmounted while the list is empty, so highlight alone misses).
     useEffect(() => {
         if (highlight && sectionRef.current) {
             sectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
-    }, [highlight]);
+    }, [highlight, events.length]);
 
     if (events.length === 0) return null;
 
@@ -104,15 +106,12 @@ function ActivityPhrase({ event, showName, name }: { event: FileEvent; showName:
                 <>updated sharing</>
             );
         default:
+            // With a name, the object-expecting verb ("restored a version of <Name>");
+            // without, the standalone summary so nothing dangles ("restored a version").
+            if (!showName) return fileEventSummary(event.eventType);
             return (
                 <>
-                    {fileEventVerb(event.eventType)}
-                    {showName ? (
-                        <>
-                            {' '}
-                            <Name>{name}</Name>
-                        </>
-                    ) : null}
+                    {fileEventVerb(event.eventType)} <Name>{name}</Name>
                 </>
             );
     }

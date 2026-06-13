@@ -252,14 +252,15 @@ describe('File watch + fan-out', () => {
 
         await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/path/${file.id}`, { method: 'DELETE' });
 
-        // ACL change on the trashed item records history but must not notify (trashed guard)
+        // An event on a trashed item is dropped entirely (recordFileEvent returns on
+        // path.trashedAt) — neither recorded nor fanned out.
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/acl`, {
             acl: [{ id: ctx.charlie.user.email, read: true, write: false }],
         });
 
         const notifications = await notificationsFor(ctx.bob.user.id);
         const latest = notifications.find((n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id));
-        // Still the trash notification — the acl-changed fan-out was suppressed
+        // Still the trash notification — the acl-changed event never fired
         expect(latest?.title).toBe('Alice Test trashed silent.txt');
     });
 
@@ -588,6 +589,18 @@ describe('File events: collab edits, client posts, comments', () => {
             expect(thread.id).toBeDefined();
             const evts = await history(board.id);
             expect(evts.some((e) => e.pathName === 'comment-internal')).toBe(false);
+        });
+
+        test('entities inside a standalone chat container are also suppressed', async () => {
+            const chat = await drivePost(aliceToken, aliceOwnerId, mountId, `folder/${rootId}/create/chat`, {
+                fileName: 'TeamChat',
+            });
+            const sub = await drivePost(aliceToken, aliceOwnerId, mountId, `folder/${chat.id}`, {
+                folderName: 'media2',
+            });
+            expect(sub.id).toBeDefined();
+            const evts = await history(chat.id);
+            expect(evts.some((e) => e.pathName === 'media2')).toBe(false);
         });
     });
 
