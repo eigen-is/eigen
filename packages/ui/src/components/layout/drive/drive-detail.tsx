@@ -133,9 +133,9 @@ export function DriveDetail({
                     </div>
                 </div>
                 <DetailsSection path={path} />
-                <RecentActivity path={path} highlight={highlightHistory} />
                 <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
                 <DriveAccessList path={path} onShareClick={onShareClick} />
+                <RecentActivity path={path} highlight={highlightHistory} />
             </div>
         </div>
     );

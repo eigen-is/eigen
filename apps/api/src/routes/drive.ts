@@ -563,7 +563,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             body: t.Union([
                 t.Object({
                     eventType: t.Literal('sticky-moved'),
-                    details: t.Object({ stickyId: t.String(), oldColumn: t.String(), newColumn: t.String() }),
+                    details: t.Object({ card: t.String(), toColumn: t.String() }),
                 }),
                 t.Object({
                     eventType: t.Literal('slide-reordered'),
