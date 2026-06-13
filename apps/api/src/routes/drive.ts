@@ -562,7 +562,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             auth: true,
             body: t.Union([
                 t.Object({
-                    eventType: t.Literal('sticky-moved'),
+                    eventType: t.Union([t.Literal('sticky-added'), t.Literal('sticky-moved')]),
                     details: t.Object({ card: t.String(), toColumn: t.String() }),
                 }),
                 t.Object({

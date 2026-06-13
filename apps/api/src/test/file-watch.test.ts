@@ -567,6 +567,28 @@ describe('File events: collab edits, client posts, comments', () => {
             const moved = (await history(board.id)).filter((e) => e.eventType === 'sticky-moved');
             expect(moved).toHaveLength(1);
         });
+
+        test('a writer can post a sticky-added event with the card title', async () => {
+            const board = await createDoc('ClientStickyAdd', 'stickies');
+            const details = { card: 'Write tests', toColumn: 'Todo' };
+            const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-added', details });
+            expect(res.status).toBe(200);
+            const added = (await history(board.id)).find((e) => e.eventType === 'sticky-added');
+            expect(added?.details).toEqual(details);
+        });
+
+        // Per-card comment threads + attachment media are created inside the container;
+        // they must never surface in its activity timeline (the leaking "created
+        // comment-…" rows the design suppresses).
+        test('entities created inside an eigendoc container stay out of the timeline', async () => {
+            const board = await createDoc('SuppressBoard', 'stickies');
+            const thread = await drivePost(aliceToken, aliceOwnerId, mountId, `folder/${board.id}/create/chat`, {
+                fileName: 'comment-internal',
+            });
+            expect(thread.id).toBeDefined();
+            const evts = await history(board.id);
+            expect(evts.some((e) => e.pathName === 'comment-internal')).toBe(false);
+        });
     });
 
     describe('commented events', () => {
