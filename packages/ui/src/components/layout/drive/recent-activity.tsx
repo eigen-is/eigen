@@ -82,8 +82,32 @@ function ActivityPhrase({ event, showName, name }: { event: FileEvent; showName:
                 </>
             );
         }
+        case 'sticky-removed':
+            return (
+                <>
+                    removed <Name>{event.details?.card || 'a card'}</Name>
+                </>
+            );
+        case 'slide-added':
+            return <>added a slide</>;
+        case 'slide-removed':
+            return <>removed a slide</>;
         case 'slide-reordered':
             return <>reordered a slide</>;
+        case 'sheet-rows-inserted':
+        case 'sheet-rows-deleted':
+        case 'sheet-cols-inserted':
+        case 'sheet-cols-deleted': {
+            const count = event.details?.count ?? 1;
+            const unit = event.eventType.startsWith('sheet-rows') ? 'row' : 'column';
+            const verb = event.eventType.endsWith('inserted') ? 'inserted' : 'deleted';
+            return (
+                <>
+                    {verb} {count} {unit}
+                    {count === 1 ? '' : 's'}
+                </>
+            );
+        }
         case 'commented': {
             // Shared across all eigendoc types — the comment text is the payload.
             const preview = event.details?.preview;

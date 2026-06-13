@@ -194,6 +194,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             slideOrderArray.push([slideId]);
         });
         setActiveSlideId(slideId);
+        return slideId;
     }, []);
 
     const deleteSlide = useCallback(

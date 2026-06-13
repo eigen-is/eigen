@@ -578,6 +578,25 @@ describe('File events: collab edits, client posts, comments', () => {
             expect(added?.details).toEqual(details);
         });
 
+        test('the semantic event vocabulary (removed/slide/sheet) is accepted and recorded', async () => {
+            const board = await createDoc('ClientVocab', 'stickies');
+            const cases = [
+                { eventType: 'sticky-removed', details: { card: 'Old card' } },
+                { eventType: 'slide-added', details: { slideId: 's1' } },
+                { eventType: 'slide-removed', details: { slideId: 's2' } },
+                { eventType: 'sheet-rows-inserted', details: { count: 3 } },
+                { eventType: 'sheet-cols-deleted', details: { count: 1 } },
+            ];
+            for (const c of cases) {
+                const res = await postClientEvent(aliceToken, board.id, c);
+                expect(res.status).toBe(200);
+            }
+            const recorded = await history(board.id);
+            for (const c of cases) {
+                expect(recorded.find((e) => e.eventType === c.eventType)?.details).toEqual(c.details);
+            }
+        });
+
         // Per-card comment threads + attachment media are created inside the container;
         // they must never surface in its activity timeline (the leaking "created
         // comment-…" rows the design suppresses).

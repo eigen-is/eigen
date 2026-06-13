@@ -336,7 +336,14 @@ export function StickiesBoard({
                                 title="Delete Card"
                                 description="This will permanently delete the card. This action cannot be undone."
                                 onDelete={() => {
-                                    if (deleteCardId) deleteCardFromBoard(deleteCardId);
+                                    if (deleteCardId) {
+                                        const removed = cards[deleteCardId];
+                                        deleteCardFromBoard(deleteCardId);
+                                        recordHistory.mutate({
+                                            eventType: 'sticky-removed',
+                                            details: { card: removed?.title ?? '' },
+                                        });
+                                    }
                                     setDeleteCardId(null);
                                 }}
                             />

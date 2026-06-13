@@ -10,10 +10,14 @@ export type FileEventDetailsMap = {
     commented: { preview: string };
     'sticky-added': { card: string; toColumn: string };
     'sticky-moved': { card: string; toColumn: string };
-    'sticky-removed': { stickyId: string; column: string };
+    'sticky-removed': { card: string };
     'slide-added': { slideId: string };
     'slide-removed': { slideId: string };
     'slide-reordered': { slideId: string; newIndex: number };
+    'sheet-rows-inserted': { count: number };
+    'sheet-rows-deleted': { count: number };
+    'sheet-cols-inserted': { count: number };
+    'sheet-cols-deleted': { count: number };
 };
 
 export type FileEventType = 'created' | 'edited' | 'trashed' | 'restored' | 'deleted' | keyof FileEventDetailsMap;
@@ -25,7 +29,14 @@ export type FileEventType = 'created' | 'edited' | 'trashed' | 'restored' | 'del
 export const CLIENT_FILE_EVENT_TYPES = [
     'sticky-added',
     'sticky-moved',
+    'sticky-removed',
+    'slide-added',
+    'slide-removed',
     'slide-reordered',
+    'sheet-rows-inserted',
+    'sheet-rows-deleted',
+    'sheet-cols-inserted',
+    'sheet-cols-deleted',
 ] as const satisfies readonly FileEventType[];
 
 export type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];
@@ -99,6 +110,10 @@ const FILE_EVENT_VERBS: Record<FileEventType, string> = {
     'slide-added': 'added a slide to',
     'slide-removed': 'removed a slide from',
     'slide-reordered': 'reordered slides in',
+    'sheet-rows-inserted': 'inserted rows in',
+    'sheet-rows-deleted': 'deleted rows from',
+    'sheet-cols-inserted': 'inserted columns in',
+    'sheet-cols-deleted': 'deleted columns from',
 };
 
 export function fileEventVerb(eventType: FileEventType): string {
@@ -127,6 +142,10 @@ const FILE_EVENT_SUMMARIES: Record<FileEventType, string> = {
     'slide-added': 'added a slide',
     'slide-removed': 'removed a slide',
     'slide-reordered': 'reordered slides',
+    'sheet-rows-inserted': 'inserted rows',
+    'sheet-rows-deleted': 'deleted rows',
+    'sheet-cols-inserted': 'inserted columns',
+    'sheet-cols-deleted': 'deleted columns',
 };
 
 export function fileEventSummary(eventType: FileEventType): string {

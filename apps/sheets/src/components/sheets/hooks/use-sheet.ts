@@ -1,4 +1,5 @@
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { useRecordHistory } from '@workspace/lib/drive';
 import type { Op, Sheet, WorkbookInstance } from '@workspace/sheet';
 import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,6 +12,7 @@ export function useSheet(
     pathId: string,
     workbookRef: React.RefObject<WorkbookInstance | null>,
 ) {
+    const recordHistory = useRecordHistory(ownerId, mountId, pathId);
     const [initialData, setInitialData] = useState<Sheet[] | null>(null);
     const [synced, setSynced] = useState(false);
     const [snapshotVersion, setSnapshotVersion] = useState(0);
@@ -151,19 +153,38 @@ export function useSheet(
         };
     }, [ownerId, mountId, pathId, workbookRef, flushSnapshot]);
 
-    const handleOp = useCallback((ops: Op[]) => {
-        const doc = docRef.current;
-        if (!doc || ops.length === 0) return;
-        isLocalOpRef.current = true;
-        try {
-            doc.transact(() => {
-                doc.getArray('ops').push([ops]);
-            });
-        } catch (e) {
-            isLocalOpRef.current = false;
-            throw e;
-        }
-    }, []);
+    const handleOp = useCallback(
+        (ops: Op[]) => {
+            const doc = docRef.current;
+            if (!doc || ops.length === 0) return;
+            isLocalOpRef.current = true;
+            try {
+                doc.transact(() => {
+                    doc.getArray('ops').push([ops]);
+                });
+            } catch (e) {
+                isLocalOpRef.current = false;
+                throw e;
+            }
+            // Record structural row/column changes for the activity timeline (local ops only).
+            for (const op of ops) {
+                if (op.op === 'insertRowCol') {
+                    const value = op.value as { type?: string; count?: number };
+                    recordHistory.mutate({
+                        eventType: value.type === 'column' ? 'sheet-cols-inserted' : 'sheet-rows-inserted',
+                        details: { count: value.count ?? 1 },
+                    });
+                } else if (op.op === 'deleteRowCol') {
+                    const value = op.value as { type?: string; start?: number; end?: number };
+                    recordHistory.mutate({
+                        eventType: value.type === 'column' ? 'sheet-cols-deleted' : 'sheet-rows-deleted',
+                        details: { count: (value.end ?? 0) - (value.start ?? 0) + 1 },
+                    });
+                }
+            }
+        },
+        [recordHistory.mutate],
+    );
 
     const onDataChange = useCallback((data: Sheet[]) => {
         latestDataRef.current = data;
