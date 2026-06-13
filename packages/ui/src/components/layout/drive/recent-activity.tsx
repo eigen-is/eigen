@@ -1,9 +1,12 @@
 import { formatTimeAgo } from '@workspace/lib/date';
-import { FILE_EVENT_ICONS, useFileHistory } from '@workspace/lib/drive';
+import { useFileHistory } from '@workspace/lib/drive';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type FileEvent, fileEventVerb } from '@workspace/lib/types/file-history';
 import { useEffect, useRef } from 'react';
 import { UserAvatar } from '../user-avatar';
+
+const MAX_TITLE = 36;
+const truncate = (s: string) => (s.length > MAX_TITLE ? `${s.slice(0, MAX_TITLE - 1)}…` : s);
 
 type RecentActivityProps = {
     path: DrivePath;
@@ -29,8 +32,6 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
             <h3 className="eigen-section-label mt-6 mb-2">Recent activity</h3>
             <ul className="space-y-2">
                 {events.map((event) => {
-                    const EventIcon = FILE_EVENT_ICONS[event.eventType];
-                    const actorLabel = event.actorEmail.split('@')[0];
                     // Name the acted-on item except for the selected file's own events,
                     // where the panel title already shows it. A folder's own events keep
                     // the name so "created MyFolder" isn't a bare verb.
@@ -40,14 +41,13 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
                         <li key={event.id} className="flex items-start gap-2 text-sm">
                             <UserAvatar email={event.actorEmail} size="sm" className="mt-0.5 shrink-0" />
                             <div className="min-w-0 flex-1">
-                                <span className="font-medium">{actorLabel}</span>{' '}
+                                <span className="font-medium">{event.actorEmail.split('@')[0]}</span>{' '}
                                 <ActivityPhrase
                                     event={event}
                                     showName={showName}
                                     name={stripEigenExtension(event.pathName)}
                                 />
-                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                    <EventIcon className="h-3 w-3" />
+                                <div className="text-xs text-muted-foreground mt-0.5">
                                     {formatTimeAgo(event.createdAt)}
                                 </div>
                             </div>
@@ -59,60 +59,58 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
     );
 }
 
-function Strong({ children }: { children: string }) {
-    return <span className="font-medium">{children}</span>;
+// Bold only the names: the user (rendered by the caller), card/column/file/folder
+// titles. Verbs and connectors stay plain weight.
+function Name({ children }: { children: string }) {
+    return <span className="font-medium">{truncate(children)}</span>;
 }
 
-// The phrase after the actor name. Semantic eigendoc events carry their own
-// object (card/column) and read as full sentences; drive/collab events are a
-// verb plus the acted-on item name when one adds information.
 function ActivityPhrase({ event, showName, name }: { event: FileEvent; showName: boolean; name: string }) {
     switch (event.eventType) {
         case 'sticky-added':
         case 'sticky-moved': {
             const details = event.details;
             return (
-                <span>
-                    {event.eventType === 'sticky-added' ? 'added' : 'moved'}{' '}
-                    <Strong>{details?.card || 'a card'}</Strong>
+                <>
+                    {event.eventType === 'sticky-added' ? 'added' : 'moved'} <Name>{details?.card || 'a card'}</Name>
                     {details?.toColumn ? (
                         <>
                             {' to '}
-                            <Strong>{details.toColumn}</Strong>
+                            <Name>{details.toColumn}</Name>
                         </>
                     ) : null}
-                </span>
+                </>
             );
         }
         case 'slide-reordered':
-            return <span>reordered a slide</span>;
+            return <>reordered a slide</>;
         case 'commented':
             return showName ? (
-                <span>
-                    commented on <Strong>{name}</Strong>
-                </span>
+                <>
+                    commented on <Name>{name}</Name>
+                </>
             ) : (
-                <span>added a comment</span>
+                <>added a comment</>
             );
         case 'acl-changed':
             return showName ? (
-                <span>
-                    updated sharing for <Strong>{name}</Strong>
-                </span>
+                <>
+                    updated sharing for <Name>{name}</Name>
+                </>
             ) : (
-                <span>updated sharing</span>
+                <>updated sharing</>
             );
         default:
             return (
-                <span>
+                <>
                     {fileEventVerb(event.eventType)}
                     {showName ? (
                         <>
                             {' '}
-                            <Strong>{name}</Strong>
+                            <Name>{name}</Name>
                         </>
                     ) : null}
-                </span>
+                </>
             );
     }
 }
