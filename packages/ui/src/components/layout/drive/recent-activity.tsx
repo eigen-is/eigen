@@ -82,14 +82,19 @@ function ActivityPhrase({ event, showName, name }: { event: FileEvent; showName:
         }
         case 'slide-reordered':
             return <>reordered a slide</>;
-        case 'commented':
+        case 'commented': {
+            // Shared across all eigendoc types — the comment text is the payload.
+            const preview = event.details?.preview;
+            const quote = preview ? `: ${preview}` : '';
             return showName ? (
                 <>
                     commented on <Name>{name}</Name>
+                    {quote}
                 </>
             ) : (
-                <>added a comment</>
+                <>commented{quote}</>
             );
+        }
         case 'acl-changed':
             return showName ? (
                 <>
