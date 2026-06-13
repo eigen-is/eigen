@@ -142,11 +142,15 @@ export function StickiesBoard({
                 }
                 taskIds.insert(0, [card.id]);
             });
+            recordHistory.mutate({
+                eventType: 'sticky-added',
+                details: { card: patch.title ?? '', toColumn: board.columns[targetColumnId]?.title ?? '' },
+            });
             setScrollToTopOf((prev) => ({ columnId: targetColumnId, n: (prev?.n ?? 0) + 1 }));
             setAddTargetColumn(null);
             setAddOpen(false);
         },
-        [yjsDoc, addTargetColumn, createCard],
+        [yjsDoc, addTargetColumn, createCard, recordHistory.mutate, board.columns],
     );
 
     const handleAddCard = useCallback((columnId: string) => {

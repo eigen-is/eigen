@@ -8,7 +8,7 @@ export type FileEventDetailsMap = {
     'acl-changed': { added: string[]; removed: string[] };
     'version-restored': { versionName: string };
     commented: { preview: string };
-    'sticky-added': { stickyId: string; column: string };
+    'sticky-added': { card: string; toColumn: string };
     'sticky-moved': { card: string; toColumn: string };
     'sticky-removed': { stickyId: string; column: string };
     'slide-added': { slideId: string };
@@ -22,7 +22,11 @@ export type FileEventType = 'created' | 'edited' | 'trashed' | 'restored' | 'del
 // v1 ships only the two types that have real emitters (no-placeholders rule); the
 // sticky/slide add/remove vocabulary stays in FileEventType for the wire format and
 // joins this list when an emitter lands.
-export const CLIENT_FILE_EVENT_TYPES = ['sticky-moved', 'slide-reordered'] as const satisfies readonly FileEventType[];
+export const CLIENT_FILE_EVENT_TYPES = [
+    'sticky-added',
+    'sticky-moved',
+    'slide-reordered',
+] as const satisfies readonly FileEventType[];
 
 export type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];
 

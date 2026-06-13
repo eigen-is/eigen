@@ -68,11 +68,13 @@ function Strong({ children }: { children: string }) {
 // verb plus the acted-on item name when one adds information.
 function ActivityPhrase({ event, showName, name }: { event: FileEvent; showName: boolean; name: string }) {
     switch (event.eventType) {
+        case 'sticky-added':
         case 'sticky-moved': {
             const details = event.details;
             return (
                 <span>
-                    moved <Strong>{details?.card || 'a card'}</Strong>
+                    {event.eventType === 'sticky-added' ? 'added' : 'moved'}{' '}
+                    <Strong>{details?.card || 'a card'}</Strong>
                     {details?.toColumn ? (
                         <>
                             {' to '}

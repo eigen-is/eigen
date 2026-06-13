@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type DrivePath, type DrivePathType, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     type FileEvent,
     type FileEventInput,
@@ -26,7 +26,26 @@ export class FileHistory {
         readonly mountId: string,
     ) {}
 
+    // Entities living inside an eigendoc container (per-card comment threads,
+    // attachment media, the chat/ + media/ subfolders) are container scaffolding
+    // and never belong in the timeline — the container speaks through its own
+    // events + client-emitted sticky-*/slide-* events. Walks the parentId chain
+    // for a collab-type ancestor strictly above the path.
+    private isContainerInternal(pathId: string): boolean {
+        const ancestors = this.db.all<{ type: string }>(sql`
+            WITH RECURSIVE chain(id) AS (
+                SELECT ${sql.raw('parentId')} FROM ${paths} WHERE id = ${pathId} AND ${sql.raw('parentId')} IS NOT NULL
+                UNION
+                SELECT p.${sql.raw('parentId')} FROM ${paths} p JOIN chain c ON p.id = c.id
+                WHERE p.${sql.raw('parentId')} IS NOT NULL
+            )
+            SELECT p.type AS type FROM ${paths} p JOIN chain c ON p.id = c.id
+        `);
+        return ancestors.some((a) => isCollabType(a.type as DrivePathType));
+    }
+
     async record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): Promise<void> {
+        if (this.isContainerInternal(input.pathId)) return;
         if (opts?.dedupeWindowMs) {
             const last = this.db
                 .select()
@@ -248,6 +267,7 @@ export class FileHistory {
         // Events on items already in trash never fan out ('trashed' itself passes
         // the pre-trash snapshot, whose trashedAt is still null).
         if (opts.path.trashedAt && opts.eventType !== 'trashed') return;
+        if (this.isContainerInternal(opts.path.id)) return;
         const chainRoots = opts.chainRootIds.filter((id): id is string => id !== null);
         const watcherIds = this.collectWatcherIds([opts.path.id, ...chainRoots], opts.actor.id);
         if (watcherIds.length === 0) return;
