@@ -642,6 +642,43 @@ driveKeys.pathWatched   = (ownerId, mountId, pathId) => [...driveKeys.watches(ow
 Invalidation functions exported beside the hooks: `invalidateFileHistory`,
 `invalidateWatches`.
 
+## Future: history logs *inside* the eigendoc apps
+
+A planned follow-up surfaces activity/history *in-app* (a panel in docs/sheets/
+slides/stickies), not just the drive detail sidebar. Four decisions were settled
+while shipping the drive-level feature, recorded here so the next round doesn't
+re-derive them:
+
+1. **Liveness rides SSE + the existing relay — no new channel.** Today the activity
+   panel is *not* live for the two event classes that matter in-app: collab
+   `'edited'` and the client-emitted `sticky-*` events record a row but broadcast
+   nothing (`sse-handlers.ts` only invalidates `fileHistory` on `drive:*` mutation
+   events). To make it live, broadcast a small `history:changed { ownerId, mountId,
+   pathId }` on the owner's home when those record, and **relay it to watchers the
+   same way ACL changes and notifications already do** (`sendToHome`). The owner's
+   own open panels update from `home.broadcast`; shared users update via the relay.
+   This is the established pattern — there is no need for a separate collab-WebSocket
+   activity channel.
+2. **Unify with the version timeline — extend it, don't add a second one.**
+   Eigendocs already have an in-app, per-doc timeline: the **Version History menu**
+   (restorable snapshots) in the editor `FileMenu`. It shows *when* but not
+   *who/what* — version rows carry no actor. The in-doc history feature should add
+   actor + verb rows to *that* surface, interleaved with snapshots, rather than
+   standing up a parallel "History" panel beside it.
+3. **Granularity reality — rich events only where there's content.** Semantic events
+   work only where the client has a discrete action *and* a human-meaningful name —
+   i.e. stickies (card + column). Free-text docs and sheet cells have no clean client
+   boundary, and you **cannot** derive verbs from the Yjs update log (it's a transient
+   sync buffer, consolidated/deleted on snapshot; sheets clears its ops array on every
+   flush). So in-doc history is either coarse (`'edited'`) for docs/sheets, or needs
+   *server-side* op interpretation — a different build than the client-POST pattern.
+   This is why v1 ships rich events for stickies only and lets everything else fall
+   back to `'edited'`.
+4. **Retention is a feed cap, not a history cap.** The 500-rows/path + 90-day prune
+   suits a "recent activity" feed; an authoritative in-doc history likely wants a
+   larger or tiered policy (the version system already uses tiered retention in
+   `versioning/retention.ts`).
+
 ## Future considerations
 
 Out of scope for v1, but worth recording so the next round of design knows what's

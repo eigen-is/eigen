@@ -578,22 +578,23 @@ describe('File events: collab edits, client posts, comments', () => {
             expect(added?.details).toEqual(details);
         });
 
-        test('the semantic event vocabulary (removed/slide/sheet) is accepted and recorded', async () => {
+        test('sticky-removed is accepted and recorded with the card title', async () => {
             const board = await createDoc('ClientVocab', 'stickies');
-            const cases = [
-                { eventType: 'sticky-removed', details: { card: 'Old card' } },
-                { eventType: 'slide-added', details: { slideId: 's1' } },
-                { eventType: 'slide-removed', details: { slideId: 's2' } },
-                { eventType: 'sheet-rows-inserted', details: { count: 3 } },
-                { eventType: 'sheet-cols-deleted', details: { count: 1 } },
-            ];
-            for (const c of cases) {
-                const res = await postClientEvent(aliceToken, board.id, c);
-                expect(res.status).toBe(200);
-            }
+            const details = { card: 'Old card' };
+            const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-removed', details });
+            expect(res.status).toBe(200);
             const recorded = await history(board.id);
-            for (const c of cases) {
-                expect(recorded.find((e) => e.eventType === c.eventType)?.details).toEqual(c.details);
+            expect(recorded.find((e) => e.eventType === 'sticky-removed')?.details).toEqual(details);
+        });
+
+        test('deferred semantic types (slide-reordered, sheet-rows-inserted) are rejected by the route', async () => {
+            const board = await createDoc('ClientDeferred', 'stickies');
+            for (const body of [
+                { eventType: 'slide-reordered', details: { slideId: 's1', newIndex: 2 } },
+                { eventType: 'sheet-rows-inserted', details: { count: 3 } },
+            ]) {
+                const res = await postClientEvent(aliceToken, board.id, body);
+                expect(res.status).toBe(422);
             }
         });
 

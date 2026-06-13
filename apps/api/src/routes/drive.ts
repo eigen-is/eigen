@@ -569,23 +569,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
                     eventType: t.Literal('sticky-removed'),
                     details: t.Object({ card: t.String() }),
                 }),
-                t.Object({
-                    eventType: t.Union([t.Literal('slide-added'), t.Literal('slide-removed')]),
-                    details: t.Object({ slideId: t.String() }),
-                }),
-                t.Object({
-                    eventType: t.Literal('slide-reordered'),
-                    details: t.Object({ slideId: t.String(), newIndex: t.Number() }),
-                }),
-                t.Object({
-                    eventType: t.Union([
-                        t.Literal('sheet-rows-inserted'),
-                        t.Literal('sheet-rows-deleted'),
-                        t.Literal('sheet-cols-inserted'),
-                        t.Literal('sheet-cols-deleted'),
-                    ]),
-                    details: t.Object({ count: t.Number() }),
-                }),
             ]),
         },
     )
