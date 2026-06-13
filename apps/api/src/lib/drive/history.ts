@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { type DrivePath, type DrivePathType, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type DrivePath, type DrivePathType, isDocumentType, stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     type FileEvent,
     type FileEventInput,
@@ -26,11 +26,11 @@ export class FileHistory {
         readonly mountId: string,
     ) {}
 
-    // Entities living inside an eigendoc container (per-card comment threads,
+    // Entities living inside an eigendoc/chat container (per-card comment threads,
     // attachment media, the chat/ + media/ subfolders) are container scaffolding
     // and never belong in the timeline — the container speaks through its own
     // events + client-emitted sticky-*/slide-* events. Walks the parentId chain
-    // for a collab-type ancestor strictly above the path.
+    // for a document-type (collab or chat) ancestor strictly above the path.
     private isContainerInternal(pathId: string): boolean {
         const ancestors = this.db.all<{ type: string }>(sql`
             WITH RECURSIVE chain(id) AS (
@@ -41,7 +41,7 @@ export class FileHistory {
             )
             SELECT p.type AS type FROM ${paths} p JOIN chain c ON p.id = c.id
         `);
-        return ancestors.some((a) => isCollabType(a.type as DrivePathType));
+        return ancestors.some((a) => isDocumentType(a.type as DrivePathType));
     }
 
     async record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): Promise<void> {

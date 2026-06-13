@@ -6,7 +6,7 @@ import { useSharedPaths, useUserWatches } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import { isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
-import { fileEventVerb, type WatchedItem } from '@workspace/lib/types/file-history';
+import { fileEventSummary, type WatchedItem } from '@workspace/lib/types/file-history';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { LoadingState } from '@workspace/ui/components/layout/app/loading-state';
@@ -36,8 +36,7 @@ function WatchedRoute() {
 
     const watches = useUserWatches(ownerIds);
 
-    // combine's flatMap returns a fresh array per render, so sorting in place is safe
-    const items: WatchedItem[] = watches.sort((a, b) => {
+    const items: WatchedItem[] = [...watches].sort((a, b) => {
         const aDate = a.lastEventAt ?? a.watchedAt;
         const bDate = b.lastEventAt ?? b.watchedAt;
         return bDate.getTime() - aDate.getTime();
@@ -98,12 +97,20 @@ function WatchedRoute() {
                         {items.map((item) => (
                             <div
                                 key={`${item.ownerId}:${item.mountId}:${item.pathId}`}
+                                role="button"
+                                tabIndex={0}
                                 className={cn(
                                     'grid',
                                     gridCols,
                                     'border-b transition-colors eigen-list-item cursor-pointer',
                                 )}
                                 onClick={() => onRowActivate(item)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        onRowActivate(item);
+                                    }
+                                }}
                             >
                                 <div className="px-2 py-1.5 flex items-center min-w-0">
                                     {getFileIcon(item.mimeType, item.type, {
@@ -114,7 +121,7 @@ function WatchedRoute() {
                                 </div>
                                 <div className="hidden sm:flex items-center px-2 py-1.5 text-muted-foreground whitespace-nowrap">
                                     {item.lastEventType && item.lastEventAt
-                                        ? `${fileEventVerb(item.lastEventType)} ${formatTimeAgo(item.lastEventAt)}`
+                                        ? `${fileEventSummary(item.lastEventType)} ${formatTimeAgo(item.lastEventAt)}`
                                         : formatTimeAgo(item.watchedAt)}
                                 </div>
                             </div>
