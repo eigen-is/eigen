@@ -75,52 +75,34 @@ export type WatchedItem = {
     lastEventType: FileEventType | null;
 };
 
-// Third-person past-tense verb for notification titles + activity rows.
-// (Lives here, not in a UI module, because the server composes notification titles
-// with it — same precedent as stripEigenExtension in types/drive.ts.)
-const FILE_EVENT_VERBS: Record<FileEventType, string> = {
-    created: 'created',
-    uploaded: 'uploaded',
-    edited: 'edited',
-    renamed: 'renamed',
-    moved: 'moved',
-    copied: 'copied',
-    'acl-changed': 'updated sharing for',
-    trashed: 'trashed',
-    restored: 'restored',
-    deleted: 'deleted',
-    'version-restored': 'restored a version of',
-    commented: 'commented on',
-    'sticky-added': 'added a card to',
-    'sticky-moved': 'moved a card in',
-    'sticky-removed': 'removed a card from',
+// Third-person past-tense phrasing for notification titles + activity rows.
+// `verb` expects a trailing object ("created <name>"); `summary` stands alone
+// ("created") for places with no room for the item name (the Watched list's "last
+// activity" column, and a selected file's own events where the panel title already
+// shows the name). (Lives here, not in a UI module, because the server composes
+// notification titles with verb — same precedent as stripEigenExtension in types/drive.ts.)
+const FILE_EVENT_PHRASES: Record<FileEventType, { verb: string; summary: string }> = {
+    created: { verb: 'created', summary: 'created' },
+    uploaded: { verb: 'uploaded', summary: 'uploaded' },
+    edited: { verb: 'edited', summary: 'edited' },
+    renamed: { verb: 'renamed', summary: 'renamed' },
+    moved: { verb: 'moved', summary: 'moved' },
+    copied: { verb: 'copied', summary: 'copied' },
+    'acl-changed': { verb: 'updated sharing for', summary: 'updated sharing' },
+    trashed: { verb: 'trashed', summary: 'trashed' },
+    restored: { verb: 'restored', summary: 'restored' },
+    deleted: { verb: 'deleted', summary: 'deleted' },
+    'version-restored': { verb: 'restored a version of', summary: 'restored a version' },
+    commented: { verb: 'commented on', summary: 'commented' },
+    'sticky-added': { verb: 'added a card to', summary: 'added a card' },
+    'sticky-moved': { verb: 'moved a card in', summary: 'moved a card' },
+    'sticky-removed': { verb: 'removed a card from', summary: 'removed a card' },
 };
 
 export function fileEventVerb(eventType: FileEventType): string {
-    return FILE_EVENT_VERBS[eventType];
+    return FILE_EVENT_PHRASES[eventType].verb;
 }
 
-// Standalone past-tense summary that reads without a trailing object — for places
-// with no room for the item name (the Watched list's "last activity" column, and
-// a selected file's own events where the panel title already shows the name).
-const FILE_EVENT_SUMMARIES: Record<FileEventType, string> = {
-    created: 'created',
-    uploaded: 'uploaded',
-    edited: 'edited',
-    renamed: 'renamed',
-    moved: 'moved',
-    copied: 'copied',
-    'acl-changed': 'updated sharing',
-    trashed: 'trashed',
-    restored: 'restored',
-    deleted: 'deleted',
-    'version-restored': 'restored a version',
-    commented: 'commented',
-    'sticky-added': 'added a card',
-    'sticky-moved': 'moved a card',
-    'sticky-removed': 'removed a card',
-};
-
 export function fileEventSummary(eventType: FileEventType): string {
-    return FILE_EVENT_SUMMARIES[eventType];
+    return FILE_EVENT_PHRASES[eventType].summary;
 }

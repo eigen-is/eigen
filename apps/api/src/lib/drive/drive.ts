@@ -422,7 +422,7 @@ export default class Drive {
         const trashedItem = await mount.trashPath(pathId);
         this.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
         if (user) {
-            await mount.history.record({ pathId, eventType: 'trashed', actor: { id: user.id, email: user.email } });
+            await mount.history.record({ pathId, eventType: 'trashed', actor: user });
             // path: pre-trash snapshot — trashedAt is still null so the fan-out guard passes
             await mount.history.fanOut({
                 eventType: 'trashed',
@@ -545,7 +545,7 @@ export default class Drive {
             await mount.history.record({
                 pathId,
                 eventType: 'moved',
-                actor: { id: user.id, email: user.email },
+                actor: user,
                 details: { oldParentId, newParentId: targetParentId },
             });
             await mount.history.fanOut({
@@ -589,8 +589,7 @@ export default class Drive {
         user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const actor = user ? { id: user.id, email: user.email } : undefined;
-        const copied = await mount.copyPath(srcPathId, destParentId, name, actor);
+        const copied = await mount.copyPath(srcPathId, destParentId, name, user);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
             copied,
@@ -1404,7 +1403,7 @@ export default class Drive {
             await mount.history.record({
                 pathId,
                 eventType: 'uploaded',
-                actor: { id: user.id, email: user.email },
+                actor: user,
                 details: { size: uploadedFile.size ?? 0 },
             });
         }
