@@ -42,7 +42,7 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
                             <div className="min-w-0 flex-1">
                                 {/* One line, clipped with an ellipsis — same as the panel's other rows. */}
                                 <div className="truncate">
-                                    <span className="font-medium">{event.actorEmail.split('@')[0]}</span>{' '}
+                                    <Name>{event.actorEmail.split('@')[0]}</Name>{' '}
                                     <ActivityPhrase
                                         event={event}
                                         showName={showName}
