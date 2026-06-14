@@ -45,6 +45,7 @@ export type DriveLayoutProps = {
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     pid?: string;
     unreadPathIds?: Set<string>;
+    highlightHistory?: boolean;
 };
 
 export function DriveLayout({
@@ -73,6 +74,7 @@ export function DriveLayout({
     pid = undefined,
     showBreadcrumb = false,
     unreadPathIds,
+    highlightHistory,
 }: DriveLayoutProps) {
     const { isMobile } = useLayout();
     const dialogs = useDriveDialogs();
@@ -279,6 +281,7 @@ export function DriveLayout({
         onConvert: handleConvertPath,
         onExport: handleExportPath,
         onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
+        highlightHistory,
     };
 
     const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));

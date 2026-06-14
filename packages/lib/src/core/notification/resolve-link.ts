@@ -1,5 +1,6 @@
 import { driveApi, getCalendarAppUrl, getDriveAppUrl, getDriveItemUrl, getMailAppUrl } from '@workspace/lib/api';
 import { getMonthRange } from '@workspace/lib/calendar';
+import { isChatType, isCollabType } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 
 function parseDriveTag(
@@ -34,6 +35,12 @@ function parseCalendarInviteTag(tag: string): { eventId: string; startTime: numb
     const parts = tag.split(':');
     if (parts[0] !== 'calendar-invite' || !parts[1]) return null;
     return { eventId: parts[1], startTime: parts[2] ? Number(parts[2]) || 0 : 0 };
+}
+
+function parseFileEventTag(tag: string): { ownerId: string; mountId: string; pathId: string } | null {
+    const parts = tag.split(':');
+    if (parts[0] !== 'file-event' || !parts[1] || !parts[2] || !parts[3]) return null;
+    return { ownerId: parts[1], mountId: parts[2], pathId: parts[3] };
 }
 
 async function resolveDriveLink(tag: string, hasChatName = false): Promise<string> {
@@ -85,6 +92,7 @@ export function isClickableNotification(type: string): boolean {
         'calendar-invite-cancelled',
         'mail',
         'access-request',
+        'file-event',
     ].includes(type);
 }
 
@@ -124,6 +132,25 @@ export async function resolveNotificationLink(
 
         case 'access-request':
             return resolveAccessRequestLink(tag);
+
+        case 'file-event': {
+            const parsed = parseFileEventTag(tag);
+            if (!parsed) return getDriveAppUrl();
+            const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
+                .path({ pathId: parsed.pathId })
+                .get();
+            if (response.error || !response.data) return getDriveAppUrl();
+            const path = response.data;
+            // Only collab/chat types navigate directly into their app; plain files and folders
+            // land on the fs view with history open so the user sees what changed.
+            if (isCollabType(path.type) || isChatType(path.type)) {
+                const itemUrl = getDriveItemUrl(path);
+                if (itemUrl) return itemUrl;
+            }
+            return getDriveAppUrl(
+                `fs/${parsed.ownerId}/${parsed.mountId}/${path.parentId ?? path.id}?pid=${path.id}&showHistory=1`,
+            );
+        }
 
         default:
             return null;

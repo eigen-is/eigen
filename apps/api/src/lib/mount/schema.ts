@@ -1,6 +1,7 @@
 import type { DriveACL, DrivePathDetails, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
+import type { FileEventDetailsMap, FileEventType } from '@workspace/lib/types/file-history';
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
@@ -34,3 +35,36 @@ export const pendingUploads = sqliteTable('pending_uploads', {
     enqueuedAt: integer('enqueuedAt').notNull(),
     nextAttemptAt: integer('nextAttemptAt').notNull(),
 });
+
+export const fileEvents = sqliteTable(
+    'file_events',
+    {
+        id: text('id').primaryKey(),
+        pathId: text('pathId')
+            .notNull()
+            .references(() => paths.id, { onDelete: 'cascade' }),
+        eventType: text('eventType').notNull().$type<FileEventType>(),
+        actorUserId: text('actorUserId').notNull(),
+        actorEmail: text('actorEmail').notNull(),
+        details: text('details', { mode: 'json' }).$type<FileEventDetailsMap[keyof FileEventDetailsMap] | null>(),
+        createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+    },
+    (table) => ({
+        pathCreated: index('idx_file_events_path_created').on(table.pathId, table.createdAt),
+    }),
+);
+
+export const pathWatchers = sqliteTable(
+    'path_watchers',
+    {
+        pathId: text('pathId')
+            .notNull()
+            .references(() => paths.id, { onDelete: 'cascade' }),
+        userId: text('userId').notNull(),
+        createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+    },
+    (table) => ({
+        pk: primaryKey({ columns: [table.pathId, table.userId] }),
+        userIdx: index('idx_path_watchers_user').on(table.userId),
+    }),
+);

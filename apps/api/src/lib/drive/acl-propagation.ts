@@ -32,6 +32,20 @@ export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Prom
 
 export type EffectiveMember = { email: string; read: boolean; write: boolean };
 
+// Canonical ACL diff (lowercased entry ids, all entry types). History details and
+// propagation both derive from this — one source of truth for "who was added/removed".
+export function diffACLEmails(
+    oldACL: DriveACL[] | null,
+    newACL: DriveACL[] | null,
+): { added: string[]; removed: string[] } {
+    const oldEmails = new Set((oldACL ?? []).map((e) => e.id.toLowerCase()));
+    const newEmails = new Set((newACL ?? []).map((e) => e.id.toLowerCase()));
+    return {
+        added: [...newEmails].filter((e) => !oldEmails.has(e)),
+        removed: [...oldEmails].filter((e) => !newEmails.has(e)),
+    };
+}
+
 // Resolves ACL entries to individual user emails with permissions.
 // Teams are expanded to their members. Deduplicated by email (most permissive wins).
 export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, EffectiveMember>> {
@@ -98,10 +112,7 @@ export async function propagateACLChange(
     }
 
     if (actor && newACL) {
-        const oldEmails = new Set((oldACL ?? []).map((e) => e.id.toLowerCase()));
-        const addedUserEmails = newACL
-            .filter((e) => parseOwnerId(e.id).type === 'user' && !oldEmails.has(e.id.toLowerCase()))
-            .map((e) => e.id);
+        const addedUserEmails = diffACLEmails(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');
         if (addedUserEmails.length > 0) {
             await emailNewlyAddedAclEntries(path, addedUserEmails, actor);
         }

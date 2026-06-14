@@ -28,6 +28,7 @@ import {
     type SyncCallbacks,
     sanitizeFtsQuery,
 } from '../core';
+import { FileHistory } from '../drive/history';
 import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
@@ -125,6 +126,8 @@ export class Mount {
     // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
     private uploadQueue?: UploadQueue;
 
+    public history!: FileHistory;
+
     constructor(ownerId: string, baseDir: string, config: MountConfig, getLocalDatabase: LocalDatabaseGetter) {
         this.ownerId = ownerId;
         this.id = config.id;
@@ -194,6 +197,7 @@ export class Mount {
         const dbPath = path.join('mounts', this.config.id, 'metadata.db');
         const managedDb = await this.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
         this.db = managedDb.db;
+        this.history = new FileHistory(this.db, this.ownerId, this.id);
 
         await this.ensureRootFolder();
 
@@ -223,6 +227,14 @@ export class Mount {
         if (retentionDays > 0) {
             this.purgeTrash(retentionDays).catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
         }
+        // Off the init path — the prune's table scans shouldn't delay mount readiness
+        setTimeout(() => {
+            try {
+                this.history.prune();
+            } catch (e) {
+                console.error('[Mount] Failed to prune file history:', e);
+            }
+        }, 0);
     }
 
     get dataDir(): string {
@@ -474,16 +486,33 @@ export class Mount {
         return fileId;
     }
 
-    async copyPath(srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
+    async copyPath(
+        srcPathId: string,
+        destParentId: string,
+        name: string,
+        actor?: { id: string; email: string },
+    ): Promise<DrivePath> {
         const src = await this.getPath(srcPathId);
         if (!src || src.trashedAt) throw new ApiError(404, 'Source not found');
 
         if (isContainerType(src.type)) {
             const containerType: DriveContainerType | undefined = src.type === DRIVE_TYPE_FOLDER ? undefined : src.type;
             const newId = await this.createFolder(destParentId, name, containerType);
+            if (actor) {
+                await this.history.record({
+                    pathId: newId,
+                    eventType: 'copied',
+                    actor,
+                    details: {
+                        sourceOwnerId: this.history.ownerId,
+                        sourceMountId: this.history.mountId,
+                        sourcePathId: srcPathId,
+                    },
+                });
+            }
             const children = await this.listFolder(srcPathId);
             for (const child of children) {
-                await this.copyPath(child.id, newId, child.name);
+                await this.copyPath(child.id, newId, child.name, actor);
             }
             const created = await this.getPath(newId);
             if (!created) throw new ApiError(500, 'Failed to copy folder');
@@ -497,6 +526,18 @@ export class Mount {
         const { size, hash } = await writeTempWithHash(this.getTempPath(tempId), srcFile);
         try {
             const newId = await this.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
+            if (actor) {
+                await this.history.record({
+                    pathId: newId,
+                    eventType: 'copied',
+                    actor,
+                    details: {
+                        sourceOwnerId: this.history.ownerId,
+                        sourceMountId: this.history.mountId,
+                        sourcePathId: srcPathId,
+                    },
+                });
+            }
             const created = await this.getPath(newId);
             if (!created) throw new ApiError(500, 'Failed to copy file');
             return created;
@@ -892,6 +933,17 @@ export class Mount {
             .all();
 
         return results.map((r) => this.toDrivePath(r));
+    }
+
+    // trashedFrom is trash bookkeeping, not part of DrivePath — permanentlyDelete
+    // needs the original parent to notify the old folder's watchers.
+    async getTrashedFrom(pathId: string): Promise<string | null> {
+        const row = await this.db
+            .select({ trashedFrom: paths.trashedFrom })
+            .from(paths)
+            .where(eq(paths.id, pathId))
+            .get();
+        return row?.trashedFrom ?? null;
     }
 
     async restorePath(pathId: string): Promise<DrivePath> {

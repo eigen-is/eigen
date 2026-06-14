@@ -20,6 +20,16 @@ import {
     isContainerType,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
+import {
+    type ClientFileEventType,
+    type FileEvent,
+    type FileEventDetailsMap,
+    type FileEventInput,
+    type FileEventType,
+    isClientFileEventType,
+    type PathWatchStatus,
+    type WatchedItem,
+} from '@workspace/lib/types/file-history';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
@@ -51,7 +61,7 @@ import {
     matchesACL,
     normalizeACL,
 } from './acl';
-import { type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
+import { diffACLEmails, type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
 import { LockManager } from './lock-manager';
 import { getUniqueFileName } from './naming';
 import { getSharedDatabase } from './shared';
@@ -184,7 +194,7 @@ export default class Drive {
         return await mount.listFolder(pathId);
     }
 
-    async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
+    async createFolder(mountId: string, parentId: string, folderName: string, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
         if (!isContainerType(parent.type)) {
@@ -200,16 +210,11 @@ export default class Drive {
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
+        if (user) await this.recordFileEvent(mountId, folder.id, user, 'created', undefined, { burst: true });
         return folder;
     }
 
-    async create(
-        mountId: string,
-        parentId: string,
-        name: string,
-        type: EigenDocType,
-        createdBy?: string,
-    ): Promise<DrivePath> {
+    async create(mountId: string, parentId: string, name: string, type: EigenDocType, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new ApiError(403, 'No write permission');
@@ -219,8 +224,8 @@ export default class Drive {
         const pathId = await mount.createFolder(parentId, safeName, type);
         if (type === DRIVE_TYPE_CHAT) {
             await ChatRoom.create(this, mountId, pathId);
-            if (createdBy) {
-                await this.seedCommentRow(mountId, pathId, parentId, createdBy);
+            if (user) {
+                await this.seedCommentRow(mountId, pathId, parentId, user.email);
             }
         } else {
             await CollabDocument.create(this, mountId, pathId);
@@ -228,6 +233,8 @@ export default class Drive {
         const created = await mount.getPath(pathId);
         if (!created) throw new ApiError(500, `Failed to create ${type}`);
         this.emit(SSEventType.DRIVE_FILE_CREATED, created);
+        // Not burst: a single new document deserves its own tag
+        if (user) await this.recordFileEvent(mountId, created.id, user, 'created');
         return created;
     }
 
@@ -257,7 +264,13 @@ export default class Drive {
         return chatRoom.init();
     }
 
-    async uploadFiles(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath[]> {
+    async uploadFiles(
+        mountId: string,
+        parentId: string,
+        request: Request,
+        maxSize: number,
+        user?: User,
+    ): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
         if (parent.type !== DRIVE_TYPE_FOLDER) {
@@ -293,12 +306,34 @@ export default class Drive {
                 );
 
                 uploaded.push(
-                    await this.finalizeUpload(mount, pathId, originalName, safeName, result.mimeType, result.tempId),
+                    await this.finalizeUpload(
+                        mount,
+                        pathId,
+                        originalName,
+                        safeName,
+                        result.mimeType,
+                        result.tempId,
+                        user,
+                    ),
                 );
             } catch (e) {
                 await mount.cleanupTemp(result.tempId);
                 throw e;
             }
+        }
+
+        // One fan-out per batch: burst tags the parent folder, so N uploads
+        // collapse into a single watcher notification.
+        const lastUploaded = uploaded[uploaded.length - 1];
+        if (user && lastUploaded) {
+            await mount.history.fanOut({
+                eventType: 'uploaded',
+                actor: user,
+                path: lastUploaded,
+                chainRootIds: [parentId],
+                burst: true,
+                verifyAncestors: () => mount.getBreadcrumb(lastUploaded.id),
+            });
         }
 
         return uploaded;
@@ -310,6 +345,7 @@ export default class Drive {
         name: string,
         mimeType: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
@@ -334,14 +370,25 @@ export default class Drive {
             }
 
             const pathId = await mount.createFileFromTemp(parentId, safeName, mimeType, size, hash, tempId);
-            return await this.finalizeUpload(mount, pathId, originalName, safeName, mimeType, tempId);
+            const created = await this.finalizeUpload(mount, pathId, originalName, safeName, mimeType, tempId, user);
+            if (user) {
+                await mount.history.fanOut({
+                    eventType: 'uploaded',
+                    actor: user,
+                    path: created,
+                    chainRootIds: [created.parentId],
+                    burst: true,
+                    verifyAncestors: () => mount.getBreadcrumb(created.id),
+                });
+            }
+            return created;
         } catch (e) {
             await mount.cleanupTemp(tempId);
             throw e;
         }
     }
 
-    async deletePath(mountId: string, pathId: string): Promise<void> {
+    async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
 
@@ -349,6 +396,11 @@ export default class Drive {
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
+
+        // Capture BEFORE trashPath re-parents the item to the mount root — the
+        // post-trash breadcrumb would lose the old folder's ACL and silently skip
+        // exactly the folder-watchers this event is for.
+        const preTrashChain = user ? await mount.getBreadcrumb(pathId) : [];
 
         // Close collab docs BEFORE setting trashedAt (they use listFolderAll internally)
         if (isContainerType(item.type)) {
@@ -369,9 +421,20 @@ export default class Drive {
 
         const trashedItem = await mount.trashPath(pathId);
         this.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
+        if (user) {
+            await mount.history.record({ pathId, eventType: 'trashed', actor: user });
+            // path: pre-trash snapshot — trashedAt is still null so the fan-out guard passes
+            await mount.history.fanOut({
+                eventType: 'trashed',
+                actor: user,
+                path: item,
+                chainRootIds: [item.parentId],
+                verifyAncestors: preTrashChain,
+            });
+        }
     }
 
-    async restorePath(mountId: string, pathId: string): Promise<void> {
+    async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
@@ -388,6 +451,9 @@ export default class Drive {
         }
 
         this.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
+        // recordFileEvent re-fetches the path, so it sees the post-restore row
+        // (trashedAt cleared, original parentId) — the chain it walks is the restored one
+        if (user) await this.recordFileEvent(mountId, pathId, user, 'restored');
     }
 
     async listTrash(mountId: string): Promise<DrivePath[]> {
@@ -395,10 +461,20 @@ export default class Drive {
         return mount.listTrash();
     }
 
-    async permanentlyDelete(mountId: string, pathId: string): Promise<void> {
+    async permanentlyDelete(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
+
+        // Notification-only ('deleted' has no history row — the FK cascade would kill
+        // it instantly). Capture watchers + the trashedFrom id that justifies the
+        // notification BEFORE the delete removes the path_watchers rows.
+        let watcherIds: string[] = [];
+        let trashedFrom: string | null = null;
+        if (user) {
+            trashedFrom = await mount.getTrashedFrom(pathId);
+            watcherIds = mount.history.collectWatcherIds(trashedFrom ? [pathId, trashedFrom] : [pathId], user.id);
+        }
 
         await mount.permanentlyDeleteFromTrash(pathId);
 
@@ -407,17 +483,29 @@ export default class Drive {
         } else {
             this.emit(SSEventType.DRIVE_FILE_DELETED, item);
         }
-    }
 
-    async emptyTrash(mountId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const items = await mount.listTrash();
-        for (const item of items) {
-            await this.permanentlyDelete(mountId, item.id);
+        if (user && watcherIds.length > 0) {
+            // The item itself joins the chain so direct-file-share watchers still verify
+            // (the trashedFrom folder survives the delete, so its breadcrumb is intact).
+            await mount.history.notifyWatchers(watcherIds, {
+                eventType: 'deleted',
+                actor: user,
+                itemName: item.name,
+                tagPathId: pathId,
+                verifyAncestors: [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item],
+            });
         }
     }
 
-    async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
+    async emptyTrash(mountId: string, user?: User): Promise<void> {
+        const mount = this.getMount(mountId);
+        const items = await mount.listTrash();
+        for (const item of items) {
+            await this.permanentlyDelete(mountId, item.id, user);
+        }
+    }
+
+    async movePath(mountId: string, pathId: string, targetParentId: string, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
 
@@ -446,16 +534,35 @@ export default class Drive {
             if (!ancestor) break;
         }
 
+        // Old chain BEFORE the move — reading via either chain qualifies a watcher
+        const oldChain = user ? await mount.getBreadcrumb(pathId) : [];
+
         await mount.updatePath(pathId, { parentId: targetParentId });
         const movedPath = await mount.getPath(pathId);
         if (!movedPath) throw new ApiError(500, 'Failed to move path');
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, oldParentId ?? undefined);
+        if (user && oldParentId) {
+            await mount.history.record({
+                pathId,
+                eventType: 'moved',
+                actor: user,
+                details: { oldParentId, newParentId: targetParentId },
+            });
+            await mount.history.fanOut({
+                eventType: 'moved',
+                actor: user,
+                path: movedPath,
+                chainRootIds: [oldParentId, targetParentId],
+                verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(pathId))],
+            });
+        }
         return movedPath;
     }
 
-    async renamePath(mountId: string, pathId: string, newName: string): Promise<void> {
+    async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
+        const oldName = item.name;
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
@@ -465,6 +572,7 @@ export default class Drive {
         await propagateACLChange(item, item.acl, item.acl, null);
         const renamedItem = await mount.getPath(pathId);
         if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
+        if (user) await this.recordFileEvent(mountId, pathId, user, 'renamed', { oldName, newName });
     }
 
     async downloadFile(mountId: string, pathId: string) {
@@ -473,8 +581,31 @@ export default class Drive {
         return await mount.readFile(pathId);
     }
 
-    async copyPath(mountId: string, srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
-        return this.getMount(mountId).copyPath(srcPathId, destParentId, name);
+    async copyPath(
+        mountId: string,
+        srcPathId: string,
+        destParentId: string,
+        name: string,
+        user?: User,
+    ): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        const copied = await mount.copyPath(srcPathId, destParentId, name, user);
+        this.emit(
+            isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
+            copied,
+        );
+        // Fan out only at the copy root — descendants are brand-new paths, no watchers yet
+        if (user) {
+            await mount.history.fanOut({
+                eventType: 'copied',
+                actor: user,
+                path: copied,
+                chainRootIds: [destParentId],
+                burst: true,
+                verifyAncestors: await mount.getBreadcrumb(copied.id),
+            });
+        }
+        return copied;
     }
 
     async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
@@ -548,6 +679,7 @@ export default class Drive {
         mountId: string,
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
@@ -587,6 +719,7 @@ export default class Drive {
         const updated = await mount.getPath(pathId);
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
+        if (user) await this.recordFileEvent(mountId, pathId, user, 'uploaded', { size: updated.size ?? 0 });
 
         if (thumbnailSource !== null) {
             this.regenerateThumbnailAsync(
@@ -664,7 +797,7 @@ export default class Drive {
         acl: DriveACL[] | null,
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
-        actor?: { name: string; email: string } | null,
+        actor?: User | null,
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
@@ -703,6 +836,12 @@ export default class Drive {
         if (updatedItem) {
             await propagateACLChange(updatedItem, oldACL, normalizedACL, actor ?? null);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
+            if (actor) {
+                const { added, removed } = diffACLEmails(oldACL, normalizedACL);
+                if (added.length || removed.length) {
+                    await this.recordFileEvent(mountId, pathId, actor, 'acl-changed', { added, removed });
+                }
+            }
         }
     }
 
@@ -788,7 +927,7 @@ export default class Drive {
         mountId: string,
         chatId: string,
         email: string,
-        actor: { name: string; email: string } | null = null,
+        actor: User | null = null,
     ): Promise<{
         alreadyHasAccess: boolean;
         targetPathId: string;
@@ -888,11 +1027,86 @@ export default class Drive {
         return listVersions(this.getMount(mountId), containerId);
     }
 
-    async restoreContainer(mountId: string, containerId: string, snapshotName: string): Promise<void> {
+    async restoreContainer(mountId: string, containerId: string, snapshotName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const container = await mount.getPath(containerId);
         if (!container) throw new ApiError(404, `Container ${containerId} not found`);
-        return restoreContainer(this, mount, container, snapshotName);
+        await restoreContainer(this, mount, container, snapshotName);
+        if (user) {
+            await this.recordFileEvent(mountId, containerId, user, 'version-restored', {
+                versionName: snapshotName,
+            });
+        }
+    }
+
+    async getFileHistory(mountId: string, pathId: string, opts?: { limit?: number }): Promise<FileEvent[]> {
+        return this.getMount(mountId).history.list(pathId, opts);
+    }
+
+    // Single record + fan-out seam for mutations on a live path. Called by the Drive
+    // mutations above, collab/collabDocument.ts ('edited'), chat/chat.ts ('commented'),
+    // and Drive.recordClientFileEvent below. Not route-callable — no SharedDrive wrapper.
+    // Mutations that rewrite the parent chain (trash/move/permanent-delete) or recurse
+    // through mounts (copy) keep their own inline record + fan-out instead.
+    async recordFileEvent<K extends FileEventType>(
+        mountId: string,
+        pathId: string,
+        actor: User,
+        eventType: K,
+        details?: K extends keyof FileEventDetailsMap ? FileEventDetailsMap[K] : undefined,
+        opts?: { excludeEmails?: Set<string>; dedupeWindowMs?: number; burst?: boolean },
+    ): Promise<void> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path || path.trashedAt) return;
+        await mount.history.record({ pathId, eventType, actor, details } as FileEventInput, {
+            dedupeWindowMs: opts?.dedupeWindowMs,
+        });
+        await mount.history.fanOut({
+            eventType,
+            actor,
+            path,
+            chainRootIds: [path.parentId],
+            burst: opts?.burst,
+            excludeEmails: opts?.excludeEmails,
+            verifyAncestors: () => mount.getBreadcrumb(pathId),
+        });
+    }
+
+    async recordClientFileEvent(
+        mountId: string,
+        pathId: string,
+        user: User,
+        eventType: ClientFileEventType,
+        details: FileEventDetailsMap[ClientFileEventType],
+    ): Promise<void> {
+        // Defence in depth — the route's typebox union is the primary gate.
+        if (!isClientFileEventType(eventType)) {
+            throw new ApiError(400, `Event type not client-postable: ${eventType}`);
+        }
+        await this.recordFileEvent(mountId, pathId, user, eventType, details, { dedupeWindowMs: 30_000 });
+    }
+
+    async watchPath(mountId: string, pathId: string, user: User): Promise<void> {
+        const mount = this.getMount(mountId);
+        await mount.getActivePath(pathId); // 404 on missing/trashed
+        mount.history.addWatcher(pathId, user.id);
+    }
+
+    async unwatchPath(mountId: string, pathId: string, user: User): Promise<void> {
+        this.getMount(mountId).history.removeWatcher(pathId, user.id);
+    }
+
+    async getWatchStatus(mountId: string, pathId: string, user: User): Promise<PathWatchStatus> {
+        return this.getMount(mountId).history.getWatchStatus(pathId, user.id);
+    }
+
+    async getWatches(user: User): Promise<WatchedItem[]> {
+        const items: WatchedItem[] = [];
+        for (const mount of this.mounts.values()) {
+            items.push(...mount.history.listWatchedBy(user.id));
+        }
+        return items;
     }
 
     async openDatabase<S extends SchemaType>(
@@ -1174,6 +1388,7 @@ export default class Drive {
         safeName: string,
         mimeType: string,
         tempId: string,
+        user?: User,
     ): Promise<DrivePath> {
         if (originalName) {
             await mount.updatePath(pathId, { details: { originalName } });
@@ -1182,6 +1397,16 @@ export default class Drive {
         const uploadedFile = await mount.getPath(pathId);
         if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
+        // History row only — fan-out is the caller's job, so a multi-file upload
+        // notifies watchers once per batch instead of once per file.
+        if (user) {
+            await mount.history.record({
+                pathId,
+                eventType: 'uploaded',
+                actor: user,
+                details: { size: uploadedFile.size ?? 0 },
+            });
+        }
 
         if (uploadedFile.size === 0) {
             // 0-byte placeholders (Finder's two-step copy) can't yield a thumbnail.

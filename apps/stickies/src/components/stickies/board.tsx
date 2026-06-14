@@ -2,7 +2,7 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { useCommentLifecycle } from '@workspace/lib/comments';
-import { MediaResolverProvider } from '@workspace/lib/drive';
+import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
@@ -97,7 +97,13 @@ export function StickiesBoard({
     });
     const { allComments, cards, createCard, setOpenCardId } = lifecycle;
 
-    const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({ board, cards, yjsDoc });
+    const recordHistory = useRecordHistory(ownerId, path.mountId, path.id);
+    const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({
+        board,
+        cards,
+        yjsDoc,
+        onRecordEvent: recordHistory.mutate,
+    });
 
     const entryByChatName = useMemo(() => {
         const map = new Map<string, CommentEntry>();
@@ -136,11 +142,15 @@ export function StickiesBoard({
                 }
                 taskIds.insert(0, [card.id]);
             });
+            recordHistory.mutate({
+                eventType: 'sticky-added',
+                details: { card: patch.title ?? '', toColumn: board.columns[targetColumnId]?.title ?? '' },
+            });
             setScrollToTopOf((prev) => ({ columnId: targetColumnId, n: (prev?.n ?? 0) + 1 }));
             setAddTargetColumn(null);
             setAddOpen(false);
         },
-        [yjsDoc, addTargetColumn, createCard],
+        [yjsDoc, addTargetColumn, createCard, recordHistory.mutate, board.columns],
     );
 
     const handleAddCard = useCallback((columnId: string) => {
@@ -326,7 +336,14 @@ export function StickiesBoard({
                                 title="Delete Card"
                                 description="This will permanently delete the card. This action cannot be undone."
                                 onDelete={() => {
-                                    if (deleteCardId) deleteCardFromBoard(deleteCardId);
+                                    if (deleteCardId) {
+                                        const removed = cards[deleteCardId];
+                                        deleteCardFromBoard(deleteCardId);
+                                        recordHistory.mutate({
+                                            eventType: 'sticky-removed',
+                                            details: { card: removed?.title ?? '' },
+                                        });
+                                    }
                                     setDeleteCardId(null);
                                 }}
                             />
