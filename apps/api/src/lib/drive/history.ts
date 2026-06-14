@@ -231,23 +231,31 @@ export class FileHistory {
     ): Promise<void> {
         // Per-watcher lookups run concurrently — a shared folder with many watchers
         // would otherwise add serial auth-db round-trips to every mutation request.
+        // Each watcher is isolated and best-effort: delivery happens after the mutation
+        // already committed, so one watcher's auth-db hiccup must neither reject the
+        // fan-out (which would 500 the committed write / abort emptyTrash mid-loop) nor
+        // drop the other watchers — a bare Promise.all would do both on the first reject.
         await Promise.all(
             watcherIds.map(async (watcherId) => {
-                const watcher = await getUserById(watcherId);
-                if (!watcher) return;
-                if (opts.excludeEmails?.has(watcher.email.toLowerCase())) return;
-                const memberships = await getMemberships(watcherId);
-                if (!canReadFromAncestors(opts.verifyAncestors, watcher, memberships)) return;
-                await sendToHome(watcherId, {
-                    type: 'notification',
-                    notification: {
-                        type: 'file-event',
-                        actorEmail: opts.actor.email,
-                        title: `${opts.actor.name} ${fileEventVerb(opts.eventType)} ${stripEigenExtension(opts.itemName)}`,
-                        tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
-                        coalesce: true,
-                    },
-                }).catch(() => {});
+                try {
+                    const watcher = await getUserById(watcherId);
+                    if (!watcher) return;
+                    if (opts.excludeEmails?.has(watcher.email.toLowerCase())) return;
+                    const memberships = await getMemberships(watcherId);
+                    if (!canReadFromAncestors(opts.verifyAncestors, watcher, memberships)) return;
+                    await sendToHome(watcherId, {
+                        type: 'notification',
+                        notification: {
+                            type: 'file-event',
+                            actorEmail: opts.actor.email,
+                            title: `${opts.actor.name} ${fileEventVerb(opts.eventType)} ${stripEigenExtension(opts.itemName)}`,
+                            tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
+                            coalesce: true,
+                        },
+                    });
+                } catch {
+                    // best-effort delivery — never surface to the triggering mutation
+                }
             }),
         );
     }
