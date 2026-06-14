@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types';
+import type { SSEvent } from '@workspace/lib/types/sse';
 
 const TEST_DATA_ROOT = join(import.meta.dir, '../../../../data-test');
 // clear TEST_DATA_ROOT - remove all files and directories from previous test runs
@@ -36,8 +37,29 @@ if (!setupResponse.ok) {
 
 const { auth } = await import('../lib/auth/auth');
 const { treaty } = await import('@elysiajs/eden');
+const { getHome } = await import('../lib/home');
 
 type App = typeof app;
+
+// In-process SSE listener: subscribes to a user's Home broadcast stream and
+// collects every event until stop() is called.
+export function collectSSE(userId: string): { events: SSEvent[]; stop: () => void } {
+    const events: SSEvent[] = [];
+    let home: Awaited<ReturnType<typeof getHome>> | null = null;
+    const listener = (event: SSEvent) => events.push(event);
+    const setup = getHome(userId).then((h) => {
+        home = h;
+        h.subscribeSSE(listener);
+    });
+    return {
+        events,
+        stop: () => {
+            setup.then(() => {
+                if (home) home.unsubscribeSSE(listener);
+            });
+        },
+    };
+}
 
 type TestUser = {
     id: string;

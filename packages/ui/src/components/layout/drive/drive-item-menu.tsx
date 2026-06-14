@@ -1,5 +1,6 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
+import { useIsPathWatched, useUnwatchPath, useWatchPath } from '@workspace/lib/drive';
 import { type DrivePath, isFolderType, isOpenable } from '@workspace/lib/types';
 import {
     DropdownMenuItem,
@@ -10,6 +11,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import {
     ArrowRight,
+    Bell,
     Download,
     ExternalLink,
     Eye,
@@ -69,6 +71,11 @@ export function DriveItemMenuItems({
     const canConvertDocx = item.type === 'file' && nameLower.endsWith('.docx') && !!onConvert;
     const canExport = (item.type === 'doc' || item.type === 'slides' || item.type === 'sheets') && !!onExport;
     const accessible = !!item.acl?.length || item.visibility !== 'private';
+
+    const { data: watchStatus } = useIsPathWatched(item.ownerId, item.mountId, item.id);
+    const watchMutation = useWatchPath(item.ownerId, item.mountId, item.id);
+    const unwatchMutation = useUnwatchPath(item.ownerId, item.mountId, item.id);
+    const isWatched = watchStatus?.direct ?? false;
 
     const run = (fn: () => void) => () => {
         fn();
@@ -143,6 +150,14 @@ export function DriveItemMenuItems({
                     Rename
                 </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+                onClick={run(() => (isWatched ? unwatchMutation.mutate() : watchMutation.mutate()))}
+                className="flex items-center"
+            >
+                <Bell className="h-4 w-4 mr-2" />
+                {isWatched ? 'Stop watching' : 'Watch'}
+            </DropdownMenuItem>
 
             {onShareClick && (
                 <>

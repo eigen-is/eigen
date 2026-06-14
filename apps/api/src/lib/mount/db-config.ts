@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 4,
+    currentVersion: 5,
     schema,
     migrations: [
         {
@@ -97,6 +97,33 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     nextAttemptAt INTEGER NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_pending_uploads_next ON pending_uploads(nextAttemptAt);
+            `),
+        },
+        {
+            // File history + watch (Phase 1). Additive; never touches existing rows.
+            version: 5,
+            up: (db) =>
+                db.exec(`
+                CREATE TABLE IF NOT EXISTS file_events (
+                    id TEXT PRIMARY KEY,
+                    pathId TEXT NOT NULL,
+                    eventType TEXT NOT NULL,
+                    actorUserId TEXT NOT NULL,
+                    actorEmail TEXT NOT NULL,
+                    details TEXT,
+                    createdAt INTEGER NOT NULL DEFAULT (unixepoch()),
+                    FOREIGN KEY (pathId) REFERENCES paths(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_file_events_path_created ON file_events(pathId, createdAt);
+
+                CREATE TABLE IF NOT EXISTS path_watchers (
+                    pathId TEXT NOT NULL,
+                    userId TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL DEFAULT (unixepoch()),
+                    PRIMARY KEY (pathId, userId),
+                    FOREIGN KEY (pathId) REFERENCES paths(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_path_watchers_user ON path_watchers(userId);
             `),
         },
     ],

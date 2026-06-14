@@ -31,6 +31,9 @@ const SNAPSHOT_BYTES = 1_000_000;
 // Long-term history lives under the container's `versions/` folder (see versioning routes).
 const MAX_DOC_SNAPSHOTS = 1;
 const TOUCH_THROTTLE_MS = 60_000;
+// One 'edited' history row per user per window. Per-instance state, so a doc
+// close+reopen within the window records an extra row — accepted spec trade-off.
+const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
 class DbProvider {
     private db: BunSQLiteDatabase<typeof schema>;
@@ -130,7 +133,7 @@ export default class CollabDocument {
     public doc!: Y.Doc;
     private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;
-    private connections: Set<ServerWebSocket<undefined>> = new Set();
+    private connections: Map<ServerWebSocket<undefined>, User> = new Map();
 
     public get connectionCount(): number {
         return this.connections.size;
@@ -138,6 +141,7 @@ export default class CollabDocument {
     private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
     private closed: boolean = false;
     private lastTouchedAt = 0;
+    private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
     public dataDbPathId: string | null = null;
 
     constructor(drive: Drive, path: DrivePath) {
@@ -193,9 +197,12 @@ export default class CollabDocument {
             syncProtocol.writeUpdate(encoder, update);
             const message = encoding.toUint8Array(encoder);
             if (origin && typeof origin === 'object' && 'readyState' in origin) {
-                this.broadcastMessage(origin as ServerWebSocket<undefined>, message);
+                const conn = origin as ServerWebSocket<undefined>;
+                this.broadcastMessage(conn, message);
+                const user = this.connections.get(conn);
+                if (user) this.recordEditThrottled(user);
             } else {
-                for (const conn of this.connections) {
+                for (const conn of this.connections.keys()) {
                     if (conn.readyState === 1) conn.send(Buffer.from(message));
                 }
             }
@@ -217,7 +224,7 @@ export default class CollabDocument {
                     awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients),
                 );
                 const message = encoding.toUint8Array(encoder);
-                for (const conn of this.connections) {
+                for (const conn of this.connections.keys()) {
                     if (conn !== origin && conn.readyState === 1) {
                         conn.send(Buffer.from(message));
                     }
@@ -235,14 +242,21 @@ export default class CollabDocument {
         this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
     }
 
+    private recordEditThrottled(user: User) {
+        const now = Date.now();
+        if (now - (this.lastEditRecordedAt.get(user.id) ?? 0) < EDIT_RECORD_THROTTLE_MS) return;
+        this.lastEditRecordedAt.set(user.id, now);
+        this.drive.recordFileEvent(this.path.mountId, this.path.id, user, 'edited').catch(() => {});
+    }
+
     public destruct() {
         if (this.closed) return;
         this.closed = true;
         this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
-        for (const conn of this.connections) {
+        for (const conn of this.connections.keys()) {
             conn.close();
-            this.connections.delete(conn);
         }
+        this.connections.clear();
         this.provider.destroy();
         this.awareness.destroy();
         this.doc.destroy();
@@ -267,11 +281,11 @@ export default class CollabDocument {
         restoreYjsDoc(this.doc, state, roots);
     }
 
-    public subscribe(_user: User, conn: ServerWebSocket<undefined>) {
+    public subscribe(user: User, conn: ServerWebSocket<undefined>) {
         if (this.closed) {
             return;
         }
-        this.connections.add(conn);
+        this.connections.set(conn, user);
         this.sendSyncStep1(conn);
     }
 
@@ -287,7 +301,7 @@ export default class CollabDocument {
         }
         this.connectionClientIds.delete(conn);
 
-        for (const connection of this.connections) {
+        for (const connection of this.connections.keys()) {
             if (connection.readyState > 1) {
                 // CLOSING or CLOSED
                 this.connections.delete(connection);
@@ -355,7 +369,7 @@ export default class CollabDocument {
         if (this.closed) {
             return;
         }
-        for (const conn of this.connections) {
+        for (const conn of this.connections.keys()) {
             if (conn !== originConn && conn.readyState === 1) {
                 // OPEN
                 try {

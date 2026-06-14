@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-729 primitives across 6 kinds. `packages/sheet` internals are excluded.
+746 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -134,7 +134,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (192)
+## Hooks (198)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -242,11 +242,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useEmailCollaborators` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useEmptyTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useExportDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-export-document.ts |
+| `useFileHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
 | `useFolderContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useFolderLookup` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useImportDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-import-document.ts |
 | `useImportFromDrive` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-import-document.ts |
 | `useIsEffectiveOwner` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
+| `useIsPathWatched` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useListTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useMediaResolver` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `useMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
@@ -256,14 +258,18 @@ rather than inlining `queryClient.invalidateQueries`.
 | `usePathInfo` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `usePathInfos` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `usePermanentlyDelete` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useRecordHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
 | `useRenamePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useRequestAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useRestorePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useRootFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useSharedPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useTextPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useUnwatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useUserWatches` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
+| `useWatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useFileContent` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-content.ts |
 | `useFileSave` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-save.ts |
 | `useHomeSize` | `@workspace/lib/home` | packages/lib/src/core/home/hooks/use-home.ts |
@@ -331,7 +337,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (197)
+## Types (204)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -390,6 +396,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChatMessage` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessageType` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatReadState` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
+| `ClientFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CollabDocumentInfo` | `@workspace/lib/types` | packages/lib/src/types/collab.ts |
 | `CommentEntry` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `Contact` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
@@ -430,6 +437,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EmailSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EventData` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `FileEditorContent` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `FileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
+| `FileEventDetailsMap` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
+| `FileEventInput` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
+| `FileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FreeBusyBlock` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `FullOrganization` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `HeaderLines` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -453,6 +464,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `OwnerType` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `ParsedMail` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `ParsedOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `PathWatchStatus` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `PublicConfig` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `Reminder` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
@@ -482,6 +494,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UpdateSharedCalendarInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `UserSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `WaitlistEntry` | `@workspace/lib/types` | packages/lib/src/types/waitlist.ts |
+| `WatchedItem` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `WebdavDeadProp` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `YjsRootKind` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `BackgroundFill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
@@ -533,7 +546,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (232)
+## Utilities & constants (236)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -700,6 +713,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SLIDE_BASE_WIDTH` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `handleSpaceSSEvent` | `@workspace/lib/space` | packages/lib/src/core/space/sse-handlers.ts |
 | `handleTeamSSEvent` | `@workspace/lib/team` | packages/lib/src/core/team/sse-handlers.ts |
+| `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `DRIVE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -721,11 +735,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_DOCUMENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `fileEventSummary` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
+| `fileEventVerb` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `IMIP_METHODS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `isAttachmentReference` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `isChatType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isClientFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `isCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isDocumentType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

@@ -1,27 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { SSEvent, SSEventDrive } from '@workspace/lib/types/sse';
-import { getHome } from '../lib/home';
-import { authedRequest, getTestContext } from './setup';
+import type { SSEventDrive } from '@workspace/lib/types/sse';
+import { authedRequest, collectSSE, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
-
-function collectSSE(userId: string): { events: SSEvent[]; stop: () => void } {
-    const events: SSEvent[] = [];
-    let home: Awaited<ReturnType<typeof getHome>> | null = null;
-    const listener = (event: SSEvent) => events.push(event);
-    const setup = getHome(userId).then((h) => {
-        home = h;
-        h.subscribeSSE(listener);
-    });
-    return {
-        events,
-        stop: () => {
-            setup.then(() => {
-                if (home) home.unsubscribeSSE(listener);
-            });
-        },
-    };
-}
 
 describe('SSE', () => {
     let ctx: TestCtx;

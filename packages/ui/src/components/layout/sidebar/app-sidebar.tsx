@@ -6,6 +6,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import { Badge } from '@workspace/ui/components/badge';
 import { Separator } from '@workspace/ui/components/separator';
 import {
+    Bell,
     Download,
     FileText,
     Home,
@@ -169,6 +170,7 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
             ? { to: driveHomePath ? `/${driveHomePath}` : '/' }
             : { href: getDriveAppUrl(driveHomePath) };
     const trashProps = currentApp === 'drive' ? { to: '/trash' } : { href: getDriveAppUrl('trash') };
+    const watchedProps = currentApp === 'drive' ? { to: '/watched' } : { href: getDriveAppUrl('watched') };
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
@@ -203,6 +205,12 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                     icon={<Download className="h-4 w-4" />}
                     to="/shared/with-me"
                     label={currentApp === 'drive' ? 'Shared with me' : `${SHARING_NOUN[currentApp]} shared with me`}
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Bell className="h-4 w-4" />}
+                    {...watchedProps}
+                    label="Watched"
                     condensed={condensed}
                 />
             </SidebarSection>

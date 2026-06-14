@@ -36,8 +36,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
             }
             const chat = await drive.getChat(params.mountId, params.chatId);
             return await chat.postMessage(
-                user.id,
-                user.email,
+                user,
                 body.content,
                 body.type || 'message',
                 body.whisperTo,
@@ -91,10 +90,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
         '/chat/:ownerId/:mountId/:chatId/invite',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.inviteToChat(params.mountId, params.chatId, body.email, {
-                name: user.name,
-                email: user.email,
-            });
+            return await drive.inviteToChat(params.mountId, params.chatId, body.email, user);
         },
         {
             body: t.Object({ email: t.String() }),

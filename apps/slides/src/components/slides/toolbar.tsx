@@ -122,6 +122,7 @@ export function Toolbar({
                         onToggleCommentPanel={onToggleCommentPanel}
                         commentPanelOpen={commentPanelOpen}
                         unresolvedCommentCount={unresolvedCommentCount}
+                        watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                     />
                 }
             />

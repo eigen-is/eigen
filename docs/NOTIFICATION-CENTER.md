@@ -81,6 +81,14 @@ The `tag` column with `UNIQUE` constraint enables `INSERT ... ON CONFLICT(tag) D
 the same chat produce one notification (refreshed, not duplicated). `NULL` tags are exempt (SQLite treats NULLs as
 distinct).
 
+### Coalesce flag
+
+`persist()` accepts an optional `coalesce: boolean` on `PersistInput`. When set and the tag-upsert hit an existing
+row updated within the last 30 s, the SSE broadcast is skipped — the DB row still updates (title, `read = false`,
+`createdAt`), so the bell stays correct, but rapid events on one tag don't toast-storm. The window slides: a
+sustained sub-30 s event stream suppresses broadcasts for its whole duration; the bell catches up on the next
+refetch. Only `file-event` notifications set it today; all other callers keep the always-broadcast default.
+
 ## API Routes
 
 Router: `apps/api/src/routes/notification.ts`, prefix `/notifications/`, all `{auth: true}`.
@@ -110,6 +118,7 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 | Chat activity          | `ChatRoom.postMessage()` (regular msg)   | `chat-message`              | `chat-message:{ownerId}:{mountId}:{chatId}`         |
 | Comment activity       | `ChatRoom.postMessage()` (embedded chat) | `comment-reply`             | `comment-reply:{ownerId}:{mountId}:{containerId}`   |
 | Access request         | `POST .../request-access` route          | `access-request`            | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
+| File event (watch)     | `FileHistory.notifyWatchers()` via relay | `file-event`                | `file-event:{ownerId}:{mountId}:{pathId}` — burst events (`created`/`uploaded`/`copied`) tag the parent folder; always sent with `coalesce: true`. See [AGENTS.md § File history + watch](../AGENTS.md) |
 
 `actorEmail` is set on all sources — the sharer, organizer, mail sender, mention author, or access requester.
 
@@ -132,6 +141,9 @@ Links are constructed client-side based on notification `type` and `tag`:
 - `calendar-share`, `calendar-unshare`, `calendar-invite`, `calendar-invite-updated`, `calendar-invite-cancelled` →
   `getCalendarAppUrl()`
 - `mail` → `getMailAppUrl('box/inbox')`
+- `file-event` → async: fetches `DrivePath`; collab/chat docs open in their app via `getDriveItemUrl()`; plain
+  files and folders land on Drive at `/fs/{ownerId}/{mountId}/{parentId}?pid={pathId}&showHistory=1` (item
+  selected, details sidebar open, Recent Activity scrolled into view)
 - `unshare` → not clickable (resource no longer accessible)
 
 Link resolution logic lives in `packages/lib/src/core/notification/resolve-link.ts`. No URLs stored in the

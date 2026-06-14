@@ -195,9 +195,10 @@ function SheetEditorInner({
                 onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
                 commentPanelOpen={commentPanelOpen}
                 unresolvedCommentCount={unresolvedCount}
+                watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
             />
         ),
-        [canWrite, onAccessDialogOpen, commentPanelOpen, unresolvedCount],
+        [canWrite, onAccessDialogOpen, commentPanelOpen, unresolvedCount, path.ownerId, path.mountId, path.id],
     );
 
     if (!synced || !initialData) {
