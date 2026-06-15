@@ -1,4 +1,4 @@
-import { apps } from '@workspace/lib/apps';
+import { appByName } from '@workspace/lib/apps';
 import { type LucideIcon, MonitorSmartphone, Rocket, Settings, Shield } from 'lucide-react';
 
 export type SectionConfig = {
@@ -11,9 +11,8 @@ export type SectionConfig = {
 
 // App-backed sections take their icon and brand colour from the shared app
 // registry, so the help center stays in sync with the rest of Eigen.
-const appsByName = new Map(apps.map((a) => [a.name, a]));
-function app(name: string): Pick<SectionConfig, 'icon' | 'color'> {
-    const entry = appsByName.get(name);
+function app(name: keyof typeof appByName): Pick<SectionConfig, 'icon' | 'color'> {
+    const entry = appByName[name];
     if (!entry) throw new Error(`Help section references unknown app: ${name}`);
     return { icon: entry.icon, color: entry.color };
 }
