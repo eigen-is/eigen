@@ -94,6 +94,10 @@ const apps = [
         icon: UsersRound,
         description: 'Find your contacts',
     },
-];
+] as const;
 
-export { apps };
+const appByName: Record<(typeof apps)[number]['name'], (typeof apps)[number]> = Object.fromEntries(
+    apps.map((app) => [app.name, app]),
+) as Record<(typeof apps)[number]['name'], (typeof apps)[number]>;
+
+export { appByName, apps };

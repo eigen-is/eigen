@@ -2,6 +2,7 @@ import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import { formatTimeAgo } from '@workspace/lib/date';
 import {
     isClickableNotification,
+    resolveNotificationApp,
     resolveNotificationLink,
     useDismissNotification,
     useMarkAllNotificationsRead,
@@ -12,7 +13,7 @@ import {
 import type { Notification } from '@workspace/lib/types/notification';
 import { cn } from '@workspace/ui/lib/utils';
 import { Bell, Check, X } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Button } from '../../button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
 import { CountBadge } from '../count-badge';
@@ -33,6 +34,14 @@ function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationI
         if (url) window.location.href = url;
     };
 
+    function getAppIcon(notification: Notification): ReactNode | undefined {
+        const app = resolveNotificationApp(notification);
+        if (app?.icon) {
+            const AppIcon = app.icon;
+            return <AppIcon className="size-5" style={{ color: app.color }} />;
+        }
+    }
+
     return (
         <div
             role="button"
@@ -50,36 +59,36 @@ function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationI
                 }
             }}
         >
-            {notification.actorEmail && (
-                <div className="shrink-0 pt-0.5">
-                    <UserAvatar email={notification.actorEmail} size="sm" />
-                </div>
-            )}
-            <div className="flex-1 min-w-0">
-                <p
-                    className={cn(
-                        'text-sm leading-tight truncate',
-                        !notification.read ? 'font-medium' : 'text-muted-foreground',
-                    )}
-                >
+            <div className="shrink-0 pt-0.5">{getAppIcon(notification)}</div>
+
+            <div className={cn('flex-1 min-w-0 gap-0.5', notification.read && 'text-muted-foreground')}>
+                <p className={cn('leading-tight line-clamp-2', notification.body ? 'text-xs' : 'text-sm')}>
                     {notification.title}
                 </p>
-                {notification.body && (
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{notification.body}</p>
-                )}
-                <p className="text-xs text-muted-foreground/70 mt-0.5">{formatTimeAgo(notification.createdAt)}</p>
+                {notification.body && <p className="text-sm line-clamp-3">{notification.body}</p>}
+                <p className="text-xs  flex gap-1 items-center mt-1">
+                    {notification.actorEmail && (
+                        <UserAvatar
+                            email={notification.actorEmail}
+                            size="xs"
+                            className={notification.read ? 'opacity-75' : ''}
+                        />
+                    )}
+                    <span>{formatTimeAgo(notification.createdAt)}</span>
+                </p>
             </div>
             <Button
                 variant="ghost"
                 size="icon"
                 aria-label="Dismiss notification"
-                className="shrink-0 h-6 w-6 opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100"
+                title="Dismiss"
+                className="shrink-0 size-6 opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100"
                 onClick={(e) => {
                     e.stopPropagation();
                     onDismiss(notification.id);
                 }}
             >
-                <X className="h-3 w-3" />
+                <X className="size-3" />
             </Button>
         </div>
     );
@@ -127,6 +136,7 @@ export function NotificationBell() {
                         notifications.map((n) => (
                             <div key={n.id} className="group/item border-b last:border-b-0">
                                 <NotificationItem
+                                    key={n.id}
                                     notification={n}
                                     onMarkRead={(id) => markRead.mutate(id)}
                                     onDismiss={(id) => dismiss.mutate(id)}

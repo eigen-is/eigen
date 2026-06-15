@@ -11,7 +11,7 @@ export type UserAvatarProps = Omit<HTMLAttributes<HTMLDivElement>, 'popover'> & 
     imageUrl?: string;
     userId?: string;
     className?: string;
-    size?: 'sm' | 'md' | 'lg';
+    size?: 'xs' | 'sm' | 'md' | 'lg';
     tooltip?: boolean;
     popover?: boolean;
 };
@@ -30,9 +30,10 @@ export function UserAvatar({
     const { displayName, avatarSrc } = useResolvedUser({ userId, email, name, imageUrl });
 
     const sizeClasses = {
-        sm: 'h-6 w-6',
-        md: 'h-8 w-8',
-        lg: 'h-10 w-10',
+        xs: 'size-4',
+        sm: 'size-6',
+        md: 'size-8',
+        lg: 'size-10',
     };
 
     const avatar = (

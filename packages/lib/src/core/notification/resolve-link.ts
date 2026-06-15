@@ -2,6 +2,7 @@ import { driveApi, getCalendarAppUrl, getDriveAppUrl, getDriveItemUrl, getMailAp
 import { getMonthRange } from '@workspace/lib/calendar';
 import { isChatType, isCollabType } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
+import { appByName } from '../apps';
 
 function parseDriveTag(
     tag: string,
@@ -154,5 +155,38 @@ export async function resolveNotificationLink(
 
         default:
             return null;
+    }
+}
+
+export function resolveNotificationApp(
+    notification: Pick<Notification, 'type'>,
+): (typeof appByName)[keyof typeof appByName] | null {
+    switch (notification.type) {
+        case 'mention-comment':
+        case 'comment-reply':
+        case 'mention-chat':
+        case 'chat-message':
+            return appByName.Chat;
+
+        case 'calendar-invite':
+        case 'calendar-invite-updated':
+        case 'calendar-invite-cancelled':
+        case 'calendar-share':
+        case 'calendar-unshare': {
+            return appByName.Calendar;
+        }
+
+        case 'mail': {
+            return appByName.Mail;
+        }
+
+        case 'share':
+        case 'access-request':
+        case 'file-event': {
+            return appByName.Drive;
+        }
+
+        default:
+            return appByName.Space;
     }
 }
