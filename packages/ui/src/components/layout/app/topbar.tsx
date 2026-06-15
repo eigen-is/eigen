@@ -5,6 +5,7 @@ import { apps } from '@workspace/lib/apps.ts';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
+import { cn } from '@workspace/ui/lib/utils.ts';
 import { Grip, LifeBuoy, LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
@@ -98,29 +99,39 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                     <Grip className="h-5 w-5" />
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align={isMobile ? 'end' : 'start'} forceMount>
-                {appList.map((app) => {
-                    const isActive = app.name.toLowerCase() === appName.toLowerCase();
-                    const Icon = app.icon;
-                    return (
-                        <DropdownMenuItem key={app.name} asChild className={isActive ? 'bg-muted font-medium' : ''}>
-                            <a href={app.href}>
-                                <Icon />
-                                {app.name}
-                            </a>
-                        </DropdownMenuItem>
-                    );
-                })}
+            <DropdownMenuContent className="min-w-56 p-4" align={isMobile ? 'end' : 'start'} forceMount>
+                <div className="grid grid-cols-3 w-full gap-2">
+                    {appList.map((app) => {
+                        const isActive = app.name.toLowerCase() === appName.toLowerCase();
+                        const Icon = app.icon;
+                        return (
+                            <DropdownMenuItem
+                                key={app.name}
+                                asChild
+                                className={cn(
+                                    'rounded-sm px-5 py-5 border rounded-md flex flex-col items-center gap-2 w-full',
+                                    isActive ? 'bg-muted font-medium' : '',
+                                )}
+                                style={{ color: app.color }}
+                            >
+                                <a href={app.href}>
+                                    <Icon className="size-6" style={{ color: app.color }} />
+                                    {app.name}
+                                </a>
+                            </DropdownMenuItem>
+                        );
+                    })}
+                </div>
+
                 {isAdmin && !isGuest && (
-                    <>
-                        <DropdownMenuSeparator />
+                    <div className="border-t pt-4 mt-4">
                         <DropdownMenuItem asChild>
                             <a href={getAdminAppUrl()}>
-                                <Shield />
+                                <Shield className="size-6" />
                                 Admin
                             </a>
                         </DropdownMenuItem>
-                    </>
+                    </div>
                 )}
             </DropdownMenuContent>
         </DropdownMenu>
