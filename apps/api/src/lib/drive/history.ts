@@ -6,6 +6,7 @@ import {
     type FileEventType,
     fileEventVerb,
     type PathWatchStatus,
+    toFileEventType,
     type WatchedItem,
 } from '@workspace/lib/types/file-history';
 import { and, desc, eq, sql } from 'drizzle-orm';
@@ -110,7 +111,7 @@ export class FileHistory {
         return rows.map((row) => ({
             id: row.id,
             pathId: row.pathId,
-            eventType: row.eventType as FileEventType,
+            eventType: toFileEventType(row.eventType),
             actorUserId: row.actorUserId,
             actorEmail: row.actorEmail,
             details: row.details != null ? (JSON.parse(row.details) as never) : null,
@@ -190,7 +191,7 @@ export class FileHistory {
             mimeType: row.mimeType,
             watchedAt: new Date(row.watchedAt * 1000),
             lastEventAt: row.lastEventAt != null ? new Date(row.lastEventAt * 1000) : null,
-            lastEventType: row.lastEventType as FileEventType | null,
+            lastEventType: row.lastEventType == null ? null : toFileEventType(row.lastEventType),
         }));
     }
 

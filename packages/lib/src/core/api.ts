@@ -6,20 +6,11 @@ import {
     DRIVE_TYPE_SHEETS,
     DRIVE_TYPE_SLIDES,
     DRIVE_TYPE_STICKIES,
+    type DriveItemRef,
     type DrivePath,
-    type DrivePathType,
     isFolderType,
     isInlineEditable,
 } from '../types/drive';
-
-type DriveItemRef = {
-    id: string;
-    ownerId: string;
-    mountId: string;
-    name: string;
-    type: DrivePathType;
-    mimeType: string;
-};
 
 // Resolve API host to an absolute URL. A relative VITE_API_HOST (e.g. "/eigen") gets
 // prefixed with window.location.origin at module load — that lets the same bundle work

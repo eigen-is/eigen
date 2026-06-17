@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { FileEvent } from '@workspace/lib/types/file-history';
+import { type FileEvent, fileEventSummary, fileEventVerb, toFileEventType } from '@workspace/lib/types/file-history';
 import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
@@ -38,6 +38,29 @@ afterAll(() => {
     try {
         rmSync(TEST_DIR, { recursive: true, force: true });
     } catch {}
+});
+
+describe('file event phrasing', () => {
+    test('known event types resolve to their phrase', () => {
+        expect(fileEventSummary('edited')).toBe('edited');
+        expect(fileEventVerb('renamed')).toBe('renamed');
+    });
+
+    test('known event types pass through toFileEventType unchanged', () => {
+        expect(toFileEventType('renamed')).toBe('renamed');
+        expect(toFileEventType('commented')).toBe('commented');
+    });
+
+    // Persisted rows can hold a verb outside today's union — older builds, or the deferred
+    // slide/sheet structural verbs that (per CLIENT_FILE_EVENT_TYPES) surface as the generic
+    // 'edited' until the in-doc history feature consumes them. toFileEventType coerces those
+    // at the read seam so FileEvent/WatchedItem stay honestly typed and the activity timeline
+    // can't hit "reading 'summary' of undefined".
+    test('unknown/deferred event types coerce to edited at the read seam', () => {
+        expect(toFileEventType('sheet-rows-inserted')).toBe('edited');
+        expect(toFileEventType('slide-removed')).toBe('edited');
+        expect(toFileEventType('totally-made-up')).toBe('edited');
+    });
 });
 
 describe('FileHistory', () => {

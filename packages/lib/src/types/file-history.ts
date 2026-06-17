@@ -99,6 +99,15 @@ const FILE_EVENT_PHRASES: Record<FileEventType, { verb: string; summary: string 
     'sticky-removed': { verb: 'removed a card from', summary: 'removed a card' },
 };
 
+// Persisted rows can hold an eventType outside today's union — older builds, or the
+// deferred slide/sheet structural verbs that (per CLIENT_FILE_EVENT_TYPES) surface as
+// the generic 'edited' until the in-doc history feature consumes them. Coerce unknowns
+// to 'edited' here, at the read seam (history.ts reads file_events), so every typed
+// FileEvent/WatchedItem stays honest and the phrasing helpers stay total over the union.
+export function toFileEventType(raw: string): FileEventType {
+    return Object.hasOwn(FILE_EVENT_PHRASES, raw) ? (raw as FileEventType) : 'edited';
+}
+
 export function fileEventVerb(eventType: FileEventType): string {
     return FILE_EVENT_PHRASES[eventType].verb;
 }

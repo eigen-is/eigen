@@ -328,6 +328,17 @@ export type DrivePath = {
     updatedAt: Date;
 };
 
+// The identity subset of DrivePath needed to resolve a URL or open an item
+// (getDriveItemUrl, openDocument). DrivePath is assignable to it.
+export type DriveItemRef = {
+    id: string;
+    ownerId: string;
+    mountId: string;
+    name: string;
+    type: DrivePathType;
+    mimeType: string;
+};
+
 export type DriveSearchParams = {
     pid?: string;
     uid?: string;
