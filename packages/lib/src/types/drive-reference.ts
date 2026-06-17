@@ -1,4 +1,4 @@
-import type { DrivePathType } from './drive';
+import type { DriveItemRef, DrivePathType } from './drive';
 
 export type AttachmentReference = {
     type: 'reference';
@@ -10,14 +10,7 @@ export type AttachmentReference = {
     mimeType: string;
 };
 
-export function toAttachmentReference(path: {
-    ownerId: string;
-    mountId: string;
-    id: string;
-    name: string;
-    type: DrivePathType;
-    mimeType: string;
-}): AttachmentReference {
+export function toAttachmentReference(path: DriveItemRef): AttachmentReference {
     return {
         type: 'reference',
         ownerId: path.ownerId,
