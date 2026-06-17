@@ -54,7 +54,7 @@ describe('file event phrasing', () => {
     // Persisted rows can hold a verb outside today's union — older builds, or the deferred
     // slide/sheet structural verbs that (per CLIENT_FILE_EVENT_TYPES) surface as the generic
     // 'edited' until the in-doc history feature consumes them. toFileEventType coerces those
-    // at the read seam so FileEvent/WatchedItem stay honestly typed and the activity timeline
+    // at the read seam so FileEvent stays honestly typed and the activity timeline
     // can't hit "reading 'summary' of undefined".
     test('unknown/deferred event types coerce to edited at the read seam', () => {
         expect(toFileEventType('sheet-rows-inserted')).toBe('edited');

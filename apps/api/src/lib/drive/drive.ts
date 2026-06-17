@@ -28,7 +28,6 @@ import {
     type FileEventType,
     isClientFileEventType,
     type PathWatchStatus,
-    type WatchedItem,
 } from '@workspace/lib/types/file-history';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -1101,12 +1100,15 @@ export default class Drive {
         return this.getMount(mountId).history.getWatchStatus(pathId, user.id);
     }
 
-    async getWatches(user: User): Promise<WatchedItem[]> {
-        const items: WatchedItem[] = [];
+    async getWatches(user: User): Promise<DrivePath[]> {
+        const paths: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
-            items.push(...mount.history.listWatchedBy(user.id));
+            for (const pathId of mount.history.listWatchedPathIds(user.id)) {
+                const path = await mount.getPath(pathId);
+                if (path) paths.push(path);
+            }
         }
-        return items;
+        return paths;
     }
 
     async openDatabase<S extends SchemaType>(

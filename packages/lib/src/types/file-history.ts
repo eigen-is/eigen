@@ -63,24 +63,12 @@ export type PathWatchStatus = {
     viaAncestor?: { pathId: string; name: string };
 };
 
-export type WatchedItem = {
-    ownerId: string;
-    mountId: string;
-    pathId: string;
-    name: string;
-    type: DrivePathType;
-    mimeType: string;
-    watchedAt: Date;
-    lastEventAt: Date | null;
-    lastEventType: FileEventType | null;
-};
-
 // Third-person past-tense phrasing for notification titles + activity rows.
 // `verb` expects a trailing object ("created <name>"); `summary` stands alone
-// ("created") for places with no room for the item name (the Watched list's "last
-// activity" column, and a selected file's own events where the panel title already
-// shows the name). (Lives here, not in a UI module, because the server composes
-// notification titles with verb — same precedent as stripEigenExtension in types/drive.ts.)
+// ("created") for places with no room for the item name (a selected file's own
+// events where the panel title already shows the name). (Lives here, not in a UI
+// module, because the server composes notification titles with verb — same
+// precedent as stripEigenExtension in types/drive.ts.)
 const FILE_EVENT_PHRASES: Record<FileEventType, { verb: string; summary: string }> = {
     created: { verb: 'created', summary: 'created' },
     uploaded: { verb: 'uploaded', summary: 'uploaded' },
@@ -103,7 +91,7 @@ const FILE_EVENT_PHRASES: Record<FileEventType, { verb: string; summary: string 
 // deferred slide/sheet structural verbs that (per CLIENT_FILE_EVENT_TYPES) surface as
 // the generic 'edited' until the in-doc history feature consumes them. Coerce unknowns
 // to 'edited' here, at the read seam (history.ts reads file_events), so every typed
-// FileEvent/WatchedItem stays honest and the phrasing helpers stay total over the union.
+// FileEvent stays honest and the phrasing helpers stay total over the union.
 export function toFileEventType(raw: string): FileEventType {
     return Object.hasOwn(FILE_EVENT_PHRASES, raw) ? (raw as FileEventType) : 'edited';
 }

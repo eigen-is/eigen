@@ -1,5 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { FileEvent, PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
+import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
@@ -602,7 +602,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .get(
         '/drive/:ownerId/watches',
-        async ({ params, user }): Promise<WatchedItem[]> => {
+        async ({ params, user }): Promise<DrivePath[]> => {
             const drive = await getSharedDrive(params.ownerId, user);
             return drive.getWatches(user);
         },

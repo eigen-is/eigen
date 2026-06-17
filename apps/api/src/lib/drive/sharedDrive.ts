@@ -1,10 +1,5 @@
 import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
-import type {
-    ClientFileEventType,
-    FileEventDetailsMap,
-    PathWatchStatus,
-    WatchedItem,
-} from '@workspace/lib/types/file-history';
+import type { ClientFileEventType, FileEventDetailsMap, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -468,15 +463,15 @@ export default class SharedDrive {
         return this.sharedDrive.getWatchStatus(mountId, pathId, this.user);
     }
 
-    public async getWatches(_user: User): Promise<WatchedItem[]> {
+    public async getWatches(_user: User): Promise<DrivePath[]> {
         // Drop items the caller can no longer read (revoked shares keep their watch rows)
-        const items = await this.sharedDrive.getWatches(this.user);
+        const paths = await this.sharedDrive.getWatches(this.user);
         const memberships = await this.getUserMemberships();
-        const results: WatchedItem[] = [];
-        for (const item of items) {
-            const ancestors = await this.sharedDrive.breadCrumb(item.mountId, item.pathId);
+        const results: DrivePath[] = [];
+        for (const path of paths) {
+            const ancestors = await this.sharedDrive.breadCrumb(path.mountId, path.id);
             if (canReadFromAncestors(ancestors, this.user, memberships)) {
-                results.push(item);
+                results.push(path);
             }
         }
         return results;

@@ -1,6 +1,7 @@
 import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
-import type { PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { PathWatchStatus } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys } from './use-drive';
 
@@ -58,7 +59,7 @@ export function useUserWatches(ownerIds: string[]) {
     return useQueries({
         queries: ownerIds.map((ownerId) => ({
             queryKey: driveKeys.watches(ownerId),
-            queryFn: async (): Promise<WatchedItem[]> => {
+            queryFn: async (): Promise<DrivePath[]> => {
                 const response = await driveApi({ ownerId }).watches.get();
                 if (response.error) throw new AppError(response);
                 return response.data || [];

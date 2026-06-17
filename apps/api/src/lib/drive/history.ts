@@ -7,7 +7,6 @@ import {
     fileEventVerb,
     type PathWatchStatus,
     toFileEventType,
-    type WatchedItem,
 } from '@workspace/lib/types/file-history';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -161,38 +160,13 @@ export class FileHistory {
         };
     }
 
-    listWatchedBy(userId: string): WatchedItem[] {
-        const rows = this.db.all<{
-            pathId: string;
-            name: string;
-            type: string;
-            mimeType: string;
-            watchedAt: number;
-            lastEventAt: number | null;
-            lastEventType: string | null;
-        }>(sql`
-            SELECT pw.pathId AS pathId, p.name AS name, p.type AS type, p.mimeType AS mimeType,
-                   pw.createdAt AS watchedAt,
-                   e.createdAt AS lastEventAt, e.eventType AS lastEventType
-            FROM ${pathWatchers} pw
-            JOIN ${paths} p ON p.id = pw.pathId
-            LEFT JOIN ${fileEvents} e ON e.id = (
-                SELECT id FROM ${fileEvents} WHERE pathId = pw.pathId ORDER BY createdAt DESC LIMIT 1
-            )
-            WHERE pw.userId = ${userId}
-        `);
-
-        return rows.map((row) => ({
-            ownerId: this.ownerId,
-            mountId: this.mountId,
-            pathId: row.pathId,
-            name: row.name,
-            type: row.type as WatchedItem['type'],
-            mimeType: row.mimeType,
-            watchedAt: new Date(row.watchedAt * 1000),
-            lastEventAt: row.lastEventAt != null ? new Date(row.lastEventAt * 1000) : null,
-            lastEventType: row.lastEventType == null ? null : toFileEventType(row.lastEventType),
-        }));
+    listWatchedPathIds(userId: string): string[] {
+        return this.db
+            .select({ pathId: pathWatchers.pathId })
+            .from(pathWatchers)
+            .where(eq(pathWatchers.userId, userId))
+            .all()
+            .map((r) => r.pathId);
     }
 
     // Watchers on the root paths and on every ancestor of each root (one inclusive
