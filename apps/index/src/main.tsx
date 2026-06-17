@@ -1,11 +1,11 @@
 import { createRouter, RouterProvider } from '@tanstack/react-router';
-import ReactDOM from 'react-dom/client';
 import { routeTree } from './routeTree.gen';
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@workspace/lib/auth';
 import { Toaster } from '@workspace/ui/components/sonner';
+import { mountReactApp } from '@workspace/ui/lib/mountReactApp';
 
 const router = createRouter({
     routeTree,
@@ -33,10 +33,4 @@ function App() {
     );
 }
 
-const rootElement = document.getElementById('app')!;
-
-if (rootElement.hasChildNodes()) {
-    ReactDOM.hydrateRoot(rootElement, <App />);
-} else {
-    ReactDOM.createRoot(rootElement).render(<App />);
-}
+mountReactApp('app', <App />);
