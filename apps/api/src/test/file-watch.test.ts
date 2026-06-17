@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
-import type { FileEvent, PathWatchStatus, WatchedItem } from '@workspace/lib/types/file-history';
+import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import type { SSEventNotificationCreated } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -237,11 +237,9 @@ describe('File watch + fan-out', () => {
         expect(deleted?.title).toBe('Alice Test deleted gone.txt');
 
         // path_watchers cascade: bob's watch on the file is gone, the folder watch survives
-        const watches = await assertJson<WatchedItem[]>(
-            await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`),
-        );
-        expect(watches.some((w) => w.pathId === file.id)).toBe(false);
-        expect(watches.some((w) => w.pathId === folder.id)).toBe(true);
+        const watches = await assertJson<DrivePath[]>(await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`));
+        expect(watches.some((w) => w.id === file.id)).toBe(false);
+        expect(watches.some((w) => w.id === folder.id)).toBe(true);
     });
 
     test('events on items already in trash do not fan out', async () => {
@@ -327,7 +325,7 @@ describe('File watch + fan-out', () => {
         expect((await watchStatus(bobToken, folder.id)).direct).toBe(false);
     });
 
-    test('GET /drive/:ownerId/watches lists watched items with last-event info', async () => {
+    test('GET /drive/:ownerId/watches lists watched items as hydrated paths', async () => {
         const folder = await createFolder('WatchList');
         await shareWith(folder.id, ctx.bob.user.email);
         const file = await driveUpload(
@@ -341,18 +339,14 @@ describe('File watch + fan-out', () => {
 
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/rename`, { newName: 'listed2.txt' });
 
-        const watches = await assertJson<WatchedItem[]>(
-            await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`),
-        );
-        const item = watches.find((w) => w.pathId === file.id);
+        const watches = await assertJson<DrivePath[]>(await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`));
+        const item = watches.find((w) => w.id === file.id);
         expect(item).toBeDefined();
         expect(item!.ownerId).toBe(aliceOwnerId);
         expect(item!.mountId).toBe(mountId);
         expect(item!.name).toBe('listed2.txt');
         expect(item!.type).toBe('file');
         expect(item!.mimeType).toBe('text/plain');
-        expect(item!.watchedAt).toBeTruthy();
-        expect(item!.lastEventType).toBe('renamed');
     });
 
     test('watches the caller can no longer read are filtered out', async () => {
@@ -362,10 +356,8 @@ describe('File watch + fan-out', () => {
 
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${folder.id}/acl`, { acl: [] });
 
-        const watches = await assertJson<WatchedItem[]>(
-            await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`),
-        );
-        expect(watches.some((w) => w.pathId === folder.id)).toBe(false);
+        const watches = await assertJson<DrivePath[]>(await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`));
+        expect(watches.some((w) => w.id === folder.id)).toBe(false);
     });
 
     test('guests cannot watch', async () => {

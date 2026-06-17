@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-748 primitives across 6 kinds. `packages/sheet` internals are excluded.
+747 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -337,7 +337,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (205)
+## Types (204)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -495,7 +495,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UpdateSharedCalendarInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `UserSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `WaitlistEntry` | `@workspace/lib/types` | packages/lib/src/types/waitlist.ts |
-| `WatchedItem` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `WebdavDeadProp` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `YjsRootKind` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `BackgroundFill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
