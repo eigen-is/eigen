@@ -1,28 +1,52 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
-import { AuthProvider } from '@workspace/lib/auth';
+import { createMemoryHistory } from '@tanstack/react-router';
+import { attachRouterServerSsrUtils, RouterServer } from '@tanstack/react-router/ssr/server';
 import { renderToString } from 'react-dom/server';
 import { type PageArticle, setPrerenderBody } from './content/manifest';
-import { routeTree } from './routeTree.gen';
+import { createAppRouter } from './router';
 
-// SSR entry — renders one route to an HTML string. Loaded by scripts/prerender.tsx
-// through Vite's ssrLoadModule. The auth + query providers are required because
-// the unified Topbar (used by /support and /blog) calls useAuth and TanStack Query
-// hooks. `article` is the page's own body — the prerender hands it in so the route
-// component can render it synchronously (the server has no DOM to read it from).
-export async function render(url: string, article: PageArticle | null): Promise<string> {
+// SSR entry — renders one route to HTML and produces TanStack Router's
+// dehydration <script>. Loaded by scripts/prerender.tsx through Vite's
+// ssrLoadModule. `article` is the page's own body — the prerender hands it in
+// so the route component can render it synchronously (the server has no DOM to
+// read it from).
+//
+// We follow TanStack's canonical SSR handshake (see createRequestHandler +
+// renderRouterToString in @tanstack/router-core / @tanstack/react-router):
+//   load → dehydrate → renderToString(<RouterServer/>) → setRenderFinished →
+//   takeBufferedHtml. Emitting the dehydrated router state on `window.$_TSR`
+//   lets RouterClient hydrate the matched tree IN PLACE, reproducing the same
+//   React.Suspense boundary the server emits around the <Outlet/>. Without it
+//   the client renders a different tree shape (no Suspense markers) and React
+//   discards the prerendered DOM, mounting a second copy beside it.
+export async function render(
+    url: string,
+    article: PageArticle | null,
+): Promise<{ appHtml: string; dehydrationHtml: string }> {
     setPrerenderBody(article);
-    const queryClient = new QueryClient();
-    const router = createRouter({
-        routeTree,
-        history: createMemoryHistory({ initialEntries: [url] }),
-    });
+    const router = createAppRouter(createMemoryHistory({ initialEntries: [url] }));
+    // manifest is undefined: this app has no SSR route-asset manifest. dehydrate
+    // only walks manifest.routes when a manifest is given (ssr-server.ts), so
+    // undefined is the correct minimal value — the dehydrated payload carries
+    // `manifest: void 0` and hydration reads no per-route assets.
+    attachRouterServerSsrUtils({ router, manifest: undefined });
+    // attachRouterServerSsrUtils always assigns router.serverSsr; the router type
+    // marks it optional because it is populated post-construction, so narrow once.
+    const { serverSsr } = router;
+    if (!serverSsr) throw new Error('attachRouterServerSsrUtils did not attach serverSsr');
     await router.load();
-    return renderToString(
-        <QueryClientProvider client={queryClient}>
-            <AuthProvider>
-                <RouterProvider router={router} />
-            </AuthProvider>
-        </QueryClientProvider>,
-    );
+    // Dehydrate BEFORE the render so the serialized matches are queued, then the
+    // render walks the same matches and emits the Suspense boundary.
+    await serverSsr.dehydrate();
+    const appHtml = renderToString(<RouterServer router={router} />);
+    // setRenderFinished lifts the script barrier; the buffered scripts are then
+    // flushed to the injected-HTML buffer on a queueMicrotask (ScriptBuffer.
+    // liftBarrier in ssr-server.ts). renderRouterToString calls takeBufferedHtml
+    // synchronously because it returns a streamed Response; our non-streaming
+    // prerender must await that one microtask first, or takeBufferedHtml() comes
+    // back empty (verified empirically against the installed 1.168.2 source).
+    serverSsr.setRenderFinished();
+    await Promise.resolve();
+    const dehydrationHtml = serverSsr.takeBufferedHtml() ?? '';
+    serverSsr.cleanup();
+    return { appHtml, dehydrationHtml };
 }

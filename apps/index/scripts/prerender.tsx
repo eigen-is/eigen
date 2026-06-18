@@ -161,13 +161,13 @@ async function main() {
     });
     try {
         const { render } = (await vite.ssrLoadModule('/src/entry-server.tsx')) as {
-            render: (url: string, article: PageArticle | null) => Promise<string>;
+            render: (url: string, article: PageArticle | null) => Promise<{ appHtml: string; dehydrationHtml: string }>;
         };
         const shell = readFileSync(join(DIST, 'index.html'), 'utf-8');
         const all = routes();
         for (const route of all) {
             const article = route.article ? readArticle(route.article) : null;
-            const appHtml = await render(route.path, article);
+            const { appHtml, dehydrationHtml } = await render(route.path, article);
             // React 19 auto-emits <link rel="preload"> for rendered <img> elements.
             // renderToString produces this app fragment with no <head>, so those links
             // land at the top of #app — but in the browser React hoists them to <head>.
@@ -186,7 +186,12 @@ async function main() {
                     '</head>',
                     `${hoisted}<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>${jsonLd(route.meta)}</head>`,
                 )
-                .replace('<div id="app"></div>', `<div id="app">${appBody}</div>${inlined}`);
+                // Append TanStack Router's dehydration <script> (sets window.$_TSR)
+                // after the inlined body. It's a plain inline script in the body, so it
+                // runs during HTML parse — before the deferred entry module
+                // (<script src="/src/main.tsx"> / the hashed bundle in <head>) — so
+                // $_TSR exists by the time RouterClient's hydrate() reads it.
+                .replace('<div id="app"></div>', `<div id="app">${appBody}</div>${inlined}${dehydrationHtml}`);
             writeFileSync(outFile(route.path), page);
             console.log(`Prerendered ${route.path}`);
         }
