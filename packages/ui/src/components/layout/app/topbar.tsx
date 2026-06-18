@@ -99,7 +99,7 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                     <Grip className="h-5 w-5" />
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="min-w-56 p-4" align={isMobile ? 'end' : 'start'} forceMount>
+            <DropdownMenuContent className="min-w-56 p-3" align={isMobile ? 'end' : 'start'} forceMount>
                 <div className="grid grid-cols-3 w-full gap-2">
                     {appList.map((app) => {
                         const isActive = app.name.toLowerCase() === appName.toLowerCase();
@@ -109,13 +109,12 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                                 key={app.name}
                                 asChild
                                 className={cn(
-                                    'rounded-sm px-5 py-5 border rounded-md flex flex-col items-center gap-2 w-full',
+                                    'px-3 py-3 border rounded-md flex flex-col items-center gap-1.5 w-full text-sm',
                                     isActive ? 'bg-muted font-medium' : '',
                                 )}
-                                style={{ color: app.color }}
                             >
                                 <a href={app.href}>
-                                    <Icon className="size-6" style={{ color: app.color }} />
+                                    <Icon className="size-4.5" style={{ color: app.color }} />
                                     {app.name}
                                 </a>
                             </DropdownMenuItem>
@@ -124,10 +123,10 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                 </div>
 
                 {isAdmin && !isGuest && (
-                    <div className="border-t pt-4 mt-4">
+                    <div className="border-t pt-3 mt-3">
                         <DropdownMenuItem asChild>
                             <a href={getAdminAppUrl()}>
-                                <Shield className="size-6" />
+                                <Shield className="size-4.5" />
                                 Admin
                             </a>
                         </DropdownMenuItem>
