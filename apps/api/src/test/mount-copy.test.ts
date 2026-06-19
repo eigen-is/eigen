@@ -64,4 +64,17 @@ describe('Mount.copyPath', () => {
         const bytes = await (await mount.readFile(children[0]!.id))!.text();
         expect(bytes).toBe('abc');
     });
+
+    test('isSelfOrDescendant detects self, descendants, and unrelated', async () => {
+        const parent = await mount.createFolder(rootId, 'g-parent');
+        const child = await mount.createFolder(parent, 'g-child');
+        const grandchild = await mount.createFolder(child, 'g-grandchild');
+        const sibling = await mount.createFolder(rootId, 'g-sibling');
+
+        expect(await mount.isSelfOrDescendant(parent, parent)).toBe(true);
+        expect(await mount.isSelfOrDescendant(parent, child)).toBe(true);
+        expect(await mount.isSelfOrDescendant(parent, grandchild)).toBe(true);
+        expect(await mount.isSelfOrDescendant(parent, sibling)).toBe(false);
+        expect(await mount.isSelfOrDescendant(child, parent)).toBe(false);
+    });
 });

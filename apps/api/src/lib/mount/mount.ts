@@ -306,6 +306,19 @@ export class Mount {
         return path;
     }
 
+    // True if `candidateId` is `ancestorId` itself or any descendant of it.
+    // Used to reject moving/copying a folder into its own subtree (which would
+    // also make copyPath recurse forever).
+    async isSelfOrDescendant(ancestorId: string, candidateId: string): Promise<boolean> {
+        if (ancestorId === candidateId) return true;
+        let current = await this.getPath(candidateId);
+        while (current?.parentId) {
+            if (current.parentId === ancestorId) return true;
+            current = await this.getPath(current.parentId);
+        }
+        return false;
+    }
+
     async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
         name = name.normalize('NFC');
         const result = await this.db

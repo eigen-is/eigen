@@ -523,14 +523,8 @@ export default class Drive {
             throw new ApiError(403, 'No write permission on target folder');
         }
 
-        // Prevent moving a folder into its own descendant
-        let ancestor = targetParent;
-        while (ancestor.parentId) {
-            if (ancestor.parentId === pathId) {
-                throw new ApiError(400, 'Cannot move a folder into its own descendant');
-            }
-            ancestor = (await mount.getPath(ancestor.parentId))!;
-            if (!ancestor) break;
+        if (await mount.isSelfOrDescendant(pathId, targetParentId)) {
+            throw new ApiError(400, 'Cannot move a folder into itself or its own descendant');
         }
 
         // Old chain BEFORE the move — reading via either chain qualifies a watcher
