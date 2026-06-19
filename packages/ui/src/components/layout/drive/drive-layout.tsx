@@ -88,8 +88,8 @@ export function DriveLayout({
     const { isMobile } = useLayout();
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
-    const copyPath = useCopyPath(ownerId, mountId);
-    const duplicatePath = useDuplicatePath(ownerId, mountId);
+    const copyPath = useCopyPath();
+    const duplicatePath = useDuplicatePath();
     const deletePathsMutation = useDeletePaths(ownerId, mountId);
     const convertMutation = useConvertDocument(ownerId, mountId);
 
@@ -153,9 +153,9 @@ export function DriveLayout({
 
     const handleDuplicate = useCallback(
         (items: DrivePath[]) => {
-            if (currentPath?.id && items.length) duplicatePath.mutate({ items, parentId: currentPath.id });
+            if (items.length) duplicatePath.mutate({ items });
         },
-        [currentPath?.id, duplicatePath],
+        [duplicatePath],
     );
 
     const handlePickDestination = useCallback(
@@ -309,7 +309,7 @@ export function DriveLayout({
         onMove: allowMove ? handleMovePath : undefined,
         onMoveTo: allowMove ? handleMoveTo : undefined,
         onCopyTo: handleCopyTo,
-        onDuplicate: handleDuplicate,
+        onDuplicate: allowMove ? handleDuplicate : undefined,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         sortFn,
         unreadPathIds,
