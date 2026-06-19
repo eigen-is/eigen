@@ -18,6 +18,7 @@ function TeamDriveRoute() {
             pid={pid}
             uid={uid}
             mid={mid}
+            allowMove={true}
             onNavigate={(search) => navigate({ to: Route.fullPath, params: { ownerId, mountId }, search })}
             onNavigateBack={() => navigate({ to: Route.fullPath, params: { ownerId, mountId } })}
         />

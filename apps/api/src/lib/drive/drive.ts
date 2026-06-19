@@ -11,6 +11,7 @@ import {
 import {
     DRIVE_EXTENSIONS,
     type DriveACL,
+    type DriveContainerType,
     type DrivePath,
     type DrivePathDetails,
     type DriveVisibility,
@@ -193,7 +194,13 @@ export default class Drive {
         return await mount.listFolder(pathId);
     }
 
-    async createFolder(mountId: string, parentId: string, folderName: string, user?: User): Promise<DrivePath> {
+    async createFolder(
+        mountId: string,
+        parentId: string,
+        folderName: string,
+        user?: User,
+        containerType: DriveContainerType = 'folder',
+    ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
         if (!isContainerType(parent.type)) {
@@ -205,7 +212,7 @@ export default class Drive {
         }
 
         const safeName = folderName.replace(/[/\\]/g, '_');
-        const pathId = await mount.createFolder(parentId, safeName);
+        const pathId = await mount.createFolder(parentId, safeName, containerType);
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
@@ -348,7 +355,10 @@ export default class Drive {
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
-        if (parent.type !== DRIVE_TYPE_FOLDER) throw new ApiError(400, 'Target is not a folder');
+        // Containers (eigendocs/chats) are valid parents too — the copy-across bridge
+        // writes their internals (data.db, comments.db) here. Mirrors createFolder's
+        // isContainerType gate; only a leaf file can never be a parent.
+        if (!isContainerType(parent.type)) throw new ApiError(400, 'Target is not a folder');
 
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new ApiError(403, 'No write permission');
@@ -523,14 +533,8 @@ export default class Drive {
             throw new ApiError(403, 'No write permission on target folder');
         }
 
-        // Prevent moving a folder into its own descendant
-        let ancestor = targetParent;
-        while (ancestor.parentId) {
-            if (ancestor.parentId === pathId) {
-                throw new ApiError(400, 'Cannot move a folder into its own descendant');
-            }
-            ancestor = (await mount.getPath(ancestor.parentId))!;
-            if (!ancestor) break;
+        if (await mount.isSelfOrDescendant(pathId, targetParentId)) {
+            throw new ApiError(400, 'Cannot move a folder into itself or its own descendant');
         }
 
         // Old chain BEFORE the move — reading via either chain qualifies a watcher
@@ -558,6 +562,11 @@ export default class Drive {
         return movedPath;
     }
 
+    // Guards copy/move against subtree cycles.
+    async isSelfOrDescendant(mountId: string, ancestorId: string, candidateId: string): Promise<boolean> {
+        return this.getMount(mountId).isSelfOrDescendant(ancestorId, candidateId);
+    }
+
     async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
@@ -578,6 +587,11 @@ export default class Drive {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId);
         return await mount.readFile(pathId);
+    }
+
+    // Flushes a container's live data.db before a copy.
+    async flushContainerDb(mountId: string, containerId: string): Promise<void> {
+        await this.getMount(mountId).flushContainerDb(containerId);
     }
 
     async copyPath(

@@ -108,6 +108,7 @@ function DriveRoute() {
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
+            allowMove={false}
             allowedCreateTypes={new Set<EigenDocType>()}
             showBreadcrumb={false}
             allowRename={to === 'by-me'}

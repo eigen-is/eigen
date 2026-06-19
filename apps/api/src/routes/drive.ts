@@ -7,6 +7,8 @@ import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { contentDisposition, setCacheHeaders } from '../lib/core/http';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
+import { copyPathAcross } from '../lib/drive/copy-across';
+import { getUniqueFileName } from '../lib/drive/naming';
 import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
@@ -130,25 +132,45 @@ export const driveRouter = new Elysia({ name: 'drive' })
         { auth: true },
     )
     .post(
-        '/drive/:ownerId/:mountId/file/:pathId/copy',
+        '/drive/:ownerId/:mountId/path/:pathId/copy',
         async ({ params, body, user }) => {
             const sourceDrive = await getSharedDrive(params.ownerId, user);
-            const sourcePath = await sourceDrive.getPath(params.mountId, params.pathId);
-            if (!sourcePath) throw new ApiError(404, 'Source file not found');
+            const src = await sourceDrive.getPath(params.mountId, params.pathId);
+            if (!src) throw new ApiError(404, 'Source not found');
 
             const maxSize = await getUploadMaxSize(body.targetOwnerId, user.id, body.targetMountId);
-            if (sourcePath.size > maxSize) throw new ApiError(413, 'Source file too large');
+            if (src.size > maxSize) throw new ApiError(413, 'Source file too large');
 
-            const file = await sourceDrive.downloadFile(params.mountId, params.pathId);
-            if (!file) throw new ApiError(404, 'Source file data not found');
+            const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
 
-            const targetDrive = await getSharedDrive(body.targetOwnerId, user);
-            return await targetDrive.createFileFromData(
+            // Reject copying a folder into itself or its own descendant (also prevents
+            // infinite recursion in the same-mount copyPath). Only possible same-mount.
+            if (
+                sameMount &&
+                (await sourceDrive.isSelfOrDescendant(params.mountId, params.pathId, body.targetParentId))
+            ) {
+                throw new ApiError(400, 'Cannot copy a folder into itself or its own descendant');
+            }
+
+            // Dedup the root name against the target folder. Done here (not in
+            // Drive.copyPath) so WebDAV COPY keeps its overwrite/409 semantics.
+            const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
+            const desired = (body.name ?? src.name).replace(/[/\\]/g, '_');
+            const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
+            const used = new Set(siblings.map((s) => s.name.toLowerCase()));
+            const finalName = used.has(desired.toLowerCase()) ? getUniqueFileName(desired, used) : desired;
+
+            if (sameMount) {
+                return await sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, finalName, user);
+            }
+            return await copyPathAcross(
+                sourceDrive,
+                params.mountId,
+                params.pathId,
+                targetDrive,
                 body.targetMountId,
                 body.targetParentId,
-                sourcePath.details?.originalName || sourcePath.name,
-                sourcePath.mimeType,
-                file,
+                finalName,
                 user,
             );
         },
@@ -157,6 +179,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 targetOwnerId: t.String(),
                 targetMountId: t.String(),
                 targetParentId: t.String(),
+                name: t.Optional(t.String()),
             }),
             auth: true,
         },

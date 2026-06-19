@@ -329,7 +329,7 @@ export function useCopyFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
         }) => {
             const results = [];
             for (const pathId of pathIds) {
-                const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).copy.post({
+                const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).copy.post({
                     targetOwnerId,
                     targetMountId,
                     targetParentId,
@@ -369,7 +369,7 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
             const results = await Promise.allSettled(
                 paths.map(async (path) => {
                     const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
-                        .file({ pathId: path.id })
+                        .path({ pathId: path.id })
                         .copy.post({
                             targetOwnerId: ownerId,
                             targetMountId: mountId,
@@ -391,6 +391,88 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
                     failedCount === results.length
                         ? 'Failed to copy files'
                         : `Failed to copy ${failedCount} of ${results.length} files`,
+                );
+            }
+            return succeeded;
+        },
+        onError: onMutationError,
+    });
+}
+
+export function useCopyPath() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({
+            items,
+            targetOwnerId,
+            targetMountId,
+            targetParentId,
+        }: {
+            items: DrivePath[];
+            targetOwnerId: string;
+            targetMountId: string;
+            targetParentId: string;
+        }) => {
+            const results = await Promise.allSettled(
+                items.map(async (item) => {
+                    const response = await driveApi({ ownerId: item.ownerId })({ mountId: item.mountId })
+                        .path({ pathId: item.id })
+                        .copy.post({ targetOwnerId, targetMountId, targetParentId });
+                    if (response.error) throw new AppError(response);
+                    return response.data;
+                }),
+            );
+            const succeeded = results
+                .filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled')
+                .map((r) => r.value);
+            if (succeeded.length > 0) {
+                invalidateItemCreated(queryClient, targetOwnerId, targetMountId, targetParentId);
+            }
+            const failedCount = results.length - succeeded.length;
+            if (failedCount > 0) {
+                throw new Error(
+                    failedCount === results.length
+                        ? 'Failed to copy items'
+                        : `Failed to copy ${failedCount} of ${results.length} items`,
+                );
+            }
+            return succeeded;
+        },
+        onError: onMutationError,
+    });
+}
+
+export function useDuplicatePath() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ items }: { items: DrivePath[] }) => {
+            const results = await Promise.allSettled(
+                items.map(async (item) => {
+                    if (!item.parentId) throw new Error('Cannot duplicate a root item');
+                    const response = await driveApi({ ownerId: item.ownerId })({ mountId: item.mountId })
+                        .path({ pathId: item.id })
+                        .copy.post({
+                            targetOwnerId: item.ownerId,
+                            targetMountId: item.mountId,
+                            targetParentId: item.parentId,
+                            name: `Copy of ${item.name}`,
+                        });
+                    if (response.error) throw new AppError(response);
+                    return response.data;
+                }),
+            );
+            const succeeded = results
+                .filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled')
+                .map((r) => r.value);
+            for (const item of succeeded) {
+                invalidateItemCreated(queryClient, item.ownerId, item.mountId, item.parentId);
+            }
+            const failedCount = results.length - succeeded.length;
+            if (failedCount > 0) {
+                throw new Error(
+                    failedCount === results.length
+                        ? 'Failed to duplicate items'
+                        : `Failed to duplicate ${failedCount} of ${results.length} items`,
                 );
             }
             return succeeded;

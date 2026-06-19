@@ -64,4 +64,31 @@ describe('Mount.copyPath', () => {
         const bytes = await (await mount.readFile(children[0]!.id))!.text();
         expect(bytes).toBe('abc');
     });
+
+    test('isSelfOrDescendant detects self, descendants, and unrelated', async () => {
+        const parent = await mount.createFolder(rootId, 'g-parent');
+        const child = await mount.createFolder(parent, 'g-child');
+        const grandchild = await mount.createFolder(child, 'g-grandchild');
+        const sibling = await mount.createFolder(rootId, 'g-sibling');
+
+        expect(await mount.isSelfOrDescendant(parent, parent)).toBe(true);
+        expect(await mount.isSelfOrDescendant(parent, child)).toBe(true);
+        expect(await mount.isSelfOrDescendant(parent, grandchild)).toBe(true);
+        expect(await mount.isSelfOrDescendant(parent, sibling)).toBe(false);
+        expect(await mount.isSelfOrDescendant(child, parent)).toBe(false);
+    });
+
+    test('copying a doc container skips the versions/ folder', async () => {
+        // Build a container-shaped dir: type 'doc' with data.db + versions/
+        const docId = await mount.createFolder(rootId, 'My Doc.eigendoc', 'doc');
+        await mount.createFile(docId, 'data.db', 'application/octet-stream', 4, Buffer.from('YJS!'));
+        const versionsId = await mount.createFolder(docId, 'versions');
+        await mount.createFile(versionsId, '2020.db', 'application/octet-stream', 3, Buffer.from('old'));
+
+        const copied = await mount.copyPath(docId, rootId, 'My Doc copy.eigendoc');
+        expect(copied.type).toBe('doc');
+        const children = await mount.listFolder(copied.id);
+        const names = children.map((c) => c.name).sort();
+        expect(names).toEqual(['data.db']);
+    });
 });
