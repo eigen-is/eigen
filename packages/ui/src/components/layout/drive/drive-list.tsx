@@ -120,6 +120,9 @@ type DriveListProps = CreateCallbacks & {
     allowUpload?: boolean;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
+    onMoveTo?: (items: DrivePath[]) => void;
+    onCopyTo?: (items: DrivePath[]) => void;
+    onDuplicate?: (items: DrivePath[]) => void;
     onQuickLook?: (path: DrivePath) => void;
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     unreadPathIds?: Set<string>;
@@ -151,6 +154,9 @@ export function DriveList({
     allowUpload = false,
     onRename,
     onMove,
+    onMoveTo,
+    onCopyTo,
+    onDuplicate,
     onQuickLook,
     sortFn,
     unreadPathIds,
@@ -287,6 +293,9 @@ export function DriveList({
                 allowDelete={allowDelete}
                 onRename={onRename}
                 onMove={onMove}
+                onMoveTo={onMoveTo}
+                onCopyTo={onCopyTo}
+                onDuplicate={onDuplicate}
                 onSelectionChange={setSelectedItems}
                 ancestorBreadcrumb={breadcrumbPaths ?? []}
                 showParentRow={(breadcrumbPaths?.length ?? 0) > 1}
