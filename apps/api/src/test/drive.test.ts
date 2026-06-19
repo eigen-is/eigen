@@ -10,7 +10,10 @@ import {
     teamOwnerId,
 } from '@workspace/lib/types';
 import { getServerConfig } from '../lib/config/server-config';
+import { copyPathAcross } from '../lib/drive/copy-across';
+import { getSharedDrive } from '../lib/drive/get-drive';
 import { getHome } from '../lib/home/get-home';
+import { getUserById } from '../lib/user';
 import {
     assertJson,
     authedRequest,
@@ -3349,6 +3352,121 @@ describe('Drive', () => {
             // Plain-text fallback carries the path-derived URL.
             expect(mail.text).toMatch(/\/doc\//);
             spy.mockRestore();
+        });
+    });
+
+    describe('copyPathAcross (cross-mount/owner bridge)', () => {
+        let teamOwner: string;
+        let teamMountId: string;
+        let teamRootId: string;
+
+        beforeAll(async () => {
+            const config = getServerConfig();
+            const orgId = config!.orgId;
+
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: orgId }),
+            });
+
+            const teamRes = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Copy Bridge Team', organizationId: orgId }),
+            });
+            const team = (await teamRes.json()) as OrgTeam;
+            teamOwner = teamOwnerId(team.id);
+
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team.id, userId: ctx.alice.user.id }),
+            });
+
+            await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwner}/mount`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Copy Bridge Drive', storageType: 'local', maxSizeMB: 500 }),
+            });
+
+            const mountsRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/mounts`);
+            const mounts = await assertJson<MountInfo[]>(mountsRes);
+            teamMountId = mounts[0].id;
+
+            const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
+            teamRootId = root.id;
+        });
+
+        test('copies a personal file into a team drive', async () => {
+            const file = new File(['cross-owner payload'], 'bridge-file.txt', { type: 'text/plain' });
+            const uploaded = await driveUpload(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                aliceRootId,
+                file,
+            );
+
+            const actor = await getUserById(ctx.alice.user.id);
+            expect(actor).not.toBeNull();
+            const source = await getSharedDrive(ctx.alice.user.id, actor!);
+            const target = await getSharedDrive(teamOwner, actor!);
+
+            const copied = await copyPathAcross(
+                source,
+                aliceMountId,
+                uploaded.id,
+                target,
+                teamMountId,
+                teamRootId,
+                'bridge-file.txt',
+                actor!,
+            );
+
+            expect(copied.ownerId).toBe(teamOwner);
+            expect(copied.name).toBe('bridge-file.txt');
+
+            const listing = await driveGet<DrivePath[]>(
+                ctx.alice.user.sessionToken,
+                teamOwner,
+                teamMountId,
+                `folder/${teamRootId}`,
+            );
+            expect(listing.some((p) => p.id === copied.id && p.name === 'bridge-file.txt')).toBe(true);
+        });
+
+        test('copies a personal eigendoc container into a team drive with its data.db', async () => {
+            const doc = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/create/doc`,
+                { fileName: 'bridge-doc' },
+            );
+
+            const actor = await getUserById(ctx.alice.user.id);
+            const source = await getSharedDrive(ctx.alice.user.id, actor!);
+            const target = await getSharedDrive(teamOwner, actor!);
+
+            const copied = await copyPathAcross(
+                source,
+                aliceMountId,
+                doc.id,
+                target,
+                teamMountId,
+                teamRootId,
+                doc.name,
+                actor!,
+            );
+
+            expect(copied.ownerId).toBe(teamOwner);
+            expect(copied.type).toBe(DRIVE_TYPE_DOC);
+
+            // The container is only valid if its internal data.db came across.
+            const home = await getHome(teamOwner);
+            const children = await home.drive.getFolderContents(teamMountId, copied.id);
+            expect(children.some((c) => c.name === 'data.db')).toBe(true);
         });
     });
 });

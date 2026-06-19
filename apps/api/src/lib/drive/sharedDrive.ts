@@ -139,6 +139,12 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.downloadFile(mountId, pathId));
     }
 
+    public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
+        return this.withReadPermission(mountId, containerId, () =>
+            this.sharedDrive.flushContainerDb(mountId, containerId),
+        );
+    }
+
     public async copyPath(
         mountId: string,
         srcPathId: string,

@@ -355,7 +355,10 @@ export default class Drive {
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
-        if (parent.type !== DRIVE_TYPE_FOLDER) throw new ApiError(400, 'Target is not a folder');
+        // Containers (eigendocs/chats) are valid parents too — the copy-across bridge
+        // writes their internals (data.db, comments.db) here. Mirrors createFolder's
+        // isContainerType gate; only a leaf file can never be a parent.
+        if (!isContainerType(parent.type)) throw new ApiError(400, 'Target is not a folder');
 
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new ApiError(403, 'No write permission');
@@ -579,6 +582,11 @@ export default class Drive {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId);
         return await mount.readFile(pathId);
+    }
+
+    // Called by: copy-across bridge. Flushes a container's live data.db before a copy.
+    async flushContainerDb(mountId: string, containerId: string): Promise<void> {
+        await this.getMount(mountId).flushContainerDb(containerId);
     }
 
     async copyPath(
