@@ -1,8 +1,16 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
-import { useConvertDocument, useDeletePaths, useExportDocument, useMovePath } from '@workspace/lib/drive';
+import {
+    useConvertDocument,
+    useCopyPath,
+    useDeletePaths,
+    useDuplicatePath,
+    useExportDocument,
+    useMovePath,
+} from '@workspace/lib/drive';
 import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
 import { useCallback, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
@@ -12,6 +20,7 @@ import { DriveCreateFolder } from './drive-create-folder';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
 import { DriveEmailCollaborators } from './drive-email-collaborators';
 import { DriveList, DriveListToolbar } from './drive-list';
+import { DriveLocationPicker } from './drive-location-picker';
 import { DriveRenameItem } from './drive-rename-item';
 import { defaultDriveSort } from './drive-table';
 import { DriveUploadFiles } from './drive-upload-files';
@@ -79,6 +88,8 @@ export function DriveLayout({
     const { isMobile } = useLayout();
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
+    const copyPath = useCopyPath(ownerId, mountId);
+    const duplicatePath = useDuplicatePath(ownerId, mountId);
     const deletePathsMutation = useDeletePaths(ownerId, mountId);
     const convertMutation = useConvertDocument(ownerId, mountId);
 
@@ -124,6 +135,57 @@ export function DriveLayout({
             await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
         },
         [allowMove, movePath],
+    );
+
+    const handleMoveTo = useCallback(
+        (items: DrivePath[]) => {
+            if (allowMove && items.length) dialogs.copyMove.openDialog(items, 'move');
+        },
+        [allowMove, dialogs.copyMove.openDialog],
+    );
+
+    const handleCopyTo = useCallback(
+        (items: DrivePath[]) => {
+            if (items.length) dialogs.copyMove.openDialog(items, 'copy');
+        },
+        [dialogs.copyMove.openDialog],
+    );
+
+    const handleDuplicate = useCallback(
+        (items: DrivePath[]) => {
+            if (currentPath?.id && items.length) duplicatePath.mutate({ items, parentId: currentPath.id });
+        },
+        [currentPath?.id, duplicatePath],
+    );
+
+    const handlePickDestination = useCallback(
+        (location: { ownerId: string; mountId: string; folderId: string }) => {
+            const items = dialogs.copyMove.items;
+            if (dialogs.copyMove.mode === 'move') {
+                if (location.ownerId !== ownerId || location.mountId !== mountId) {
+                    toast.error('Moving across drives isn’t supported yet — use Copy to…');
+                    return;
+                }
+                for (const item of items) movePath.mutate({ pathId: item.id, targetParentId: location.folderId });
+            } else {
+                copyPath.mutate({
+                    items,
+                    targetOwnerId: location.ownerId,
+                    targetMountId: location.mountId,
+                    targetParentId: location.folderId,
+                });
+            }
+            dialogs.copyMove.closeDialog();
+        },
+        [
+            dialogs.copyMove.items,
+            dialogs.copyMove.mode,
+            dialogs.copyMove.closeDialog,
+            ownerId,
+            mountId,
+            movePath,
+            copyPath,
+        ],
     );
 
     const handleDownloadPath = useCallback((path: DrivePath) => {
@@ -245,6 +307,9 @@ export function DriveLayout({
         allowUpload,
         onRename: allowRename ? handleRenamePath : undefined,
         onMove: allowMove ? handleMovePath : undefined,
+        onMoveTo: allowMove ? handleMoveTo : undefined,
+        onCopyTo: handleCopyTo,
+        onDuplicate: handleDuplicate,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         sortFn,
         unreadPathIds,
@@ -370,6 +435,18 @@ export function DriveLayout({
                     }}
                 />
             )}
+
+            <DriveLocationPicker
+                open={dialogs.copyMove.open}
+                onOpenChange={dialogs.copyMove.setOpen}
+                mode="folder"
+                title={dialogs.copyMove.mode === 'move' ? 'Move to' : 'Copy to'}
+                confirmLabel={dialogs.copyMove.mode === 'move' ? 'Move here' : 'Copy here'}
+                defaultOwnerId={ownerId}
+                defaultMountId={mountId}
+                defaultFolderId={currentPath?.id}
+                onConfirm={handlePickDestination}
+            />
 
             <ExportProgressDialog open={isExporting} />
         </>
