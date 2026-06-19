@@ -132,38 +132,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         { auth: true },
     )
     .post(
-        '/drive/:ownerId/:mountId/file/:pathId/copy',
-        async ({ params, body, user }) => {
-            const sourceDrive = await getSharedDrive(params.ownerId, user);
-            const sourcePath = await sourceDrive.getPath(params.mountId, params.pathId);
-            if (!sourcePath) throw new ApiError(404, 'Source file not found');
-
-            const maxSize = await getUploadMaxSize(body.targetOwnerId, user.id, body.targetMountId);
-            if (sourcePath.size > maxSize) throw new ApiError(413, 'Source file too large');
-
-            const file = await sourceDrive.downloadFile(params.mountId, params.pathId);
-            if (!file) throw new ApiError(404, 'Source file data not found');
-
-            const targetDrive = await getSharedDrive(body.targetOwnerId, user);
-            return await targetDrive.createFileFromData(
-                body.targetMountId,
-                body.targetParentId,
-                sourcePath.details?.originalName || sourcePath.name,
-                sourcePath.mimeType,
-                file,
-                user,
-            );
-        },
-        {
-            body: t.Object({
-                targetOwnerId: t.String(),
-                targetMountId: t.String(),
-                targetParentId: t.String(),
-            }),
-            auth: true,
-        },
-    )
-    .post(
         '/drive/:ownerId/:mountId/path/:pathId/copy',
         async ({ params, body, user }) => {
             const sourceDrive = await getSharedDrive(params.ownerId, user);

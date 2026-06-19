@@ -329,7 +329,7 @@ export function useCopyFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
         }) => {
             const results = [];
             for (const pathId of pathIds) {
-                const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).copy.post({
+                const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).copy.post({
                     targetOwnerId,
                     targetMountId,
                     targetParentId,
@@ -369,7 +369,7 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
             const results = await Promise.allSettled(
                 paths.map(async (path) => {
                     const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
-                        .file({ pathId: path.id })
+                        .path({ pathId: path.id })
                         .copy.post({
                             targetOwnerId: ownerId,
                             targetMountId: mountId,
