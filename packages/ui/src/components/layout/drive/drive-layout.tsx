@@ -139,9 +139,9 @@ export function DriveLayout({
 
     const handleMoveTo = useCallback(
         (items: DrivePath[]) => {
-            if (allowMove && items.length) dialogs.copyMove.openDialog(items, 'move');
+            if (items.length) dialogs.copyMove.openDialog(items, 'move');
         },
-        [allowMove, dialogs.copyMove.openDialog],
+        [dialogs.copyMove.openDialog],
     );
 
     const handleCopyTo = useCallback(
