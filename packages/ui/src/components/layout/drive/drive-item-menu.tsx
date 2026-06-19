@@ -12,11 +12,14 @@ import {
 import {
     ArrowRight,
     Bell,
+    Copy,
+    CopyPlus,
     Download,
     ExternalLink,
     Eye,
     FileDown,
     FileText,
+    FolderInput,
     Link,
     Mail,
     Pencil,
@@ -39,6 +42,9 @@ type DriveItemMenuItemsProps = {
     onConvert?: (item: DrivePath, target: 'eigensheets' | 'eigendoc') => void;
     onExport?: (item: DrivePath, format: string) => void;
     onRename?: (item: DrivePath) => void;
+    onMoveTo?: (items: DrivePath[]) => void;
+    onCopyTo?: (items: DrivePath[]) => void;
+    onDuplicate?: (items: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
     onDelete?: (items: DrivePath[]) => void;
@@ -57,6 +63,9 @@ export function DriveItemMenuItems({
     onConvert,
     onExport,
     onRename,
+    onMoveTo,
+    onCopyTo,
+    onDuplicate,
     onShareClick,
     onEmailCollaborators,
     onDelete,
@@ -103,9 +112,14 @@ export function DriveItemMenuItems({
                 </DropdownMenuItem>
             )}
 
-            {(canDownloadFile || canConvertXlsx || canConvertDocx || canExport || !!onRename) && (
-                <DropdownMenuSeparator />
-            )}
+            {(canDownloadFile ||
+                canConvertXlsx ||
+                canConvertDocx ||
+                canExport ||
+                !!onRename ||
+                !!onMoveTo ||
+                !!onCopyTo ||
+                !!onDuplicate) && <DropdownMenuSeparator />}
             {canDownloadFile && (
                 <DropdownMenuItem onClick={run(() => onDownload(item))} className="flex items-center">
                     <Download className="h-4 w-4 mr-2" />
@@ -148,6 +162,24 @@ export function DriveItemMenuItems({
                 <DropdownMenuItem onClick={run(() => onRename(item))} className="flex items-center">
                     <Pencil className="h-4 w-4 mr-2" />
                     Rename
+                </DropdownMenuItem>
+            )}
+            {onMoveTo && (
+                <DropdownMenuItem onClick={run(() => onMoveTo([item]))} className="flex items-center">
+                    <FolderInput className="h-4 w-4 mr-2" />
+                    Move to…
+                </DropdownMenuItem>
+            )}
+            {onCopyTo && (
+                <DropdownMenuItem onClick={run(() => onCopyTo([item]))} className="flex items-center">
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy to…
+                </DropdownMenuItem>
+            )}
+            {onDuplicate && (
+                <DropdownMenuItem onClick={run(() => onDuplicate([item]))} className="flex items-center">
+                    <CopyPlus className="h-4 w-4 mr-2" />
+                    Duplicate
                 </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
