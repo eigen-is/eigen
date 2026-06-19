@@ -399,6 +399,67 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
     });
 }
 
+export function useCopyPath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({
+            items,
+            targetOwnerId,
+            targetMountId,
+            targetParentId,
+        }: {
+            items: DrivePath[];
+            targetOwnerId: string;
+            targetMountId: string;
+            targetParentId: string;
+        }) => {
+            const results: DrivePath[] = [];
+            for (const item of items) {
+                const response = await driveApi({ ownerId })({ mountId }).path({ pathId: item.id }).copy.post({
+                    targetOwnerId,
+                    targetMountId,
+                    targetParentId,
+                });
+                if (response.error) throw new AppError(response);
+                results.push(response.data);
+            }
+            return results;
+        },
+        onSuccess: (_data, variables) =>
+            invalidateItemCreated(
+                queryClient,
+                variables.targetOwnerId,
+                variables.targetMountId,
+                variables.targetParentId,
+            ),
+        onError: onMutationError,
+    });
+}
+
+export function useDuplicatePath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ items, parentId }: { items: DrivePath[]; parentId: string }) => {
+            const results: DrivePath[] = [];
+            for (const item of items) {
+                const response = await driveApi({ ownerId })({ mountId })
+                    .path({ pathId: item.id })
+                    .copy.post({
+                        targetOwnerId: ownerId,
+                        targetMountId: mountId,
+                        targetParentId: parentId,
+                        name: `Copy of ${item.name}`,
+                    });
+                if (response.error) throw new AppError(response);
+                results.push(response.data);
+            }
+            return results;
+        },
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
+        onError: onMutationError,
+    });
+}
+
 export function useRenamePath(
     ownerId: string,
     mountId: string = DEFAULT_MOUNT_ID,
