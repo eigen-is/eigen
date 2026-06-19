@@ -11,6 +11,7 @@ import {
 import {
     DRIVE_EXTENSIONS,
     type DriveACL,
+    type DriveContainerType,
     type DrivePath,
     type DrivePathDetails,
     type DriveVisibility,
@@ -193,7 +194,13 @@ export default class Drive {
         return await mount.listFolder(pathId);
     }
 
-    async createFolder(mountId: string, parentId: string, folderName: string, user?: User): Promise<DrivePath> {
+    async createFolder(
+        mountId: string,
+        parentId: string,
+        folderName: string,
+        user?: User,
+        containerType: DriveContainerType = 'folder',
+    ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
         if (!isContainerType(parent.type)) {
@@ -205,7 +212,7 @@ export default class Drive {
         }
 
         const safeName = folderName.replace(/[/\\]/g, '_');
-        const pathId = await mount.createFolder(parentId, safeName);
+        const pathId = await mount.createFolder(parentId, safeName, containerType);
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);

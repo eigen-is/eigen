@@ -1,4 +1,11 @@
-import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
+import type {
+    DriveACL,
+    DriveContainerType,
+    DrivePath,
+    DrivePathDetails,
+    DriveVisibility,
+    EigenDocType,
+} from '@workspace/lib/types/drive';
 import type { ClientFileEventType, FileEventDetailsMap, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -183,9 +190,15 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getCollabDocument(mountId, pathId));
     }
 
-    public async createFolder(mountId: string, parentId: string, folderName: string, _user?: User): Promise<DrivePath> {
+    public async createFolder(
+        mountId: string,
+        parentId: string,
+        folderName: string,
+        _user?: User,
+        containerType?: DriveContainerType,
+    ): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createFolder(mountId, parentId, folderName, this.user),
+            this.sharedDrive.createFolder(mountId, parentId, folderName, this.user, containerType),
         );
     }
 

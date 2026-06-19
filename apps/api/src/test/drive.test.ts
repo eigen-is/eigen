@@ -10,6 +10,7 @@ import {
     teamOwnerId,
 } from '@workspace/lib/types';
 import { getServerConfig } from '../lib/config/server-config';
+import { getHome } from '../lib/home/get-home';
 import {
     assertJson,
     authedRequest,
@@ -119,6 +120,18 @@ describe('Drive', () => {
             );
             const deleted = contents.find((item: DrivePath) => item.id === folderId);
             expect(deleted).toBeUndefined();
+        });
+
+        test('createFolder can create a typed container', async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const created = await home.drive.createFolder(
+                aliceMountId,
+                aliceRootId,
+                'Typed.eigendoc',
+                undefined,
+                'doc',
+            );
+            expect(created.type).toBe('doc');
         });
     });
 
