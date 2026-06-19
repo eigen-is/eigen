@@ -562,7 +562,7 @@ export default class Drive {
         return movedPath;
     }
 
-    // Called by: copy route. Guards copy/move against subtree cycles.
+    // Guards copy/move against subtree cycles.
     async isSelfOrDescendant(mountId: string, ancestorId: string, candidateId: string): Promise<boolean> {
         return this.getMount(mountId).isSelfOrDescendant(ancestorId, candidateId);
     }
@@ -589,7 +589,7 @@ export default class Drive {
         return await mount.readFile(pathId);
     }
 
-    // Called by: copy-across bridge. Flushes a container's live data.db before a copy.
+    // Flushes a container's live data.db before a copy.
     async flushContainerDb(mountId: string, containerId: string): Promise<void> {
         await this.getMount(mountId).flushContainerDb(containerId);
     }

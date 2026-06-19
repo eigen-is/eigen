@@ -11,7 +11,7 @@ async function copyFile(
     sourcePathId: string,
     body: { targetOwnerId: string; targetMountId: string; targetParentId: string },
 ): Promise<Response> {
-    return authedRequest(sessionToken, `/drive/${sourceOwnerId}/${sourceMountId}/file/${sourcePathId}/copy`, {
+    return authedRequest(sessionToken, `/drive/${sourceOwnerId}/${sourceMountId}/path/${sourcePathId}/copy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -96,7 +96,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 targetMountId: mountId,
                 targetParentId: aliceRootId,
             });
-            expect([403, 404]).toContain(res.status);
+            expect(res.status).toBe(403);
         });
 
         test("rejects Alice copying into Bob's private drive", async () => {
@@ -114,7 +114,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 targetMountId: mountId,
                 targetParentId: bobRootId,
             });
-            expect([403, 404]).toContain(res.status);
+            expect(res.status).toBe(403);
         });
 
         test('returns 404 for a missing source', async () => {

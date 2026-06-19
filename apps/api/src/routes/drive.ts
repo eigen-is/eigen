@@ -138,6 +138,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const src = await sourceDrive.getPath(params.mountId, params.pathId);
             if (!src) throw new ApiError(404, 'Source not found');
 
+            const maxSize = await getUploadMaxSize(body.targetOwnerId, user.id, body.targetMountId);
+            if (src.size > maxSize) throw new ApiError(413, 'Source file too large');
+
             const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
 
             // Reject copying a folder into itself or its own descendant (also prevents
@@ -152,7 +155,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // Dedup the root name against the target folder. Done here (not in
             // Drive.copyPath) so WebDAV COPY keeps its overwrite/409 semantics.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
-            const desired = body.name ?? src.name;
+            const desired = (body.name ?? src.name).replace(/[/\\]/g, '_');
             const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
             const used = new Set(siblings.map((s) => s.name.toLowerCase()));
             const finalName = used.has(desired.toLowerCase()) ? getUniqueFileName(desired, used) : desired;

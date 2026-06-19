@@ -27,7 +27,7 @@ export async function copyPathAcross(
     if (isContainerType(src.type)) {
         const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
         if (isEigenDoc) await source.flushContainerDb(srcMountId, srcPathId);
-        const containerType = isEigenDoc ? src.type : 'folder';
+        const containerType = isEigenDoc ? src.type : DRIVE_TYPE_FOLDER;
         const created = await target.createFolder(destMountId, destParentId, name, user, containerType);
 
         const children = await source.getFolderContents(srcMountId, srcPathId);
