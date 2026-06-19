@@ -108,6 +108,7 @@ function WatchedRoute() {
             allowShare={false}
             allowCreateFolder={false}
             allowUpload={false}
+            allowMove={false}
             allowRename={false}
             showBreadcrumb={false}
             allowedCreateTypes={new Set<EigenDocType>()}
