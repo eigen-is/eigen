@@ -77,4 +77,18 @@ describe('Mount.copyPath', () => {
         expect(await mount.isSelfOrDescendant(parent, sibling)).toBe(false);
         expect(await mount.isSelfOrDescendant(child, parent)).toBe(false);
     });
+
+    test('copying a doc container skips the versions/ folder', async () => {
+        // Build a container-shaped dir: type 'doc' with data.db + versions/
+        const docId = await mount.createFolder(rootId, 'My Doc.eigendoc', 'doc');
+        await mount.createFile(docId, 'data.db', 'application/octet-stream', 4, Buffer.from('YJS!'));
+        const versionsId = await mount.createFolder(docId, 'versions');
+        await mount.createFile(versionsId, '2020.db', 'application/octet-stream', 3, Buffer.from('old'));
+
+        const copied = await mount.copyPath(docId, rootId, 'My Doc copy.eigendoc');
+        expect(copied.type).toBe('doc');
+        const children = await mount.listFolder(copied.id);
+        const names = children.map((c) => c.name).sort();
+        expect(names).toEqual(['data.db']);
+    });
 });
