@@ -3469,4 +3469,162 @@ describe('Drive', () => {
             expect(children.some((c) => c.name === 'data.db')).toBe(true);
         });
     });
+
+    describe('path copy route', () => {
+        let teamOwner: string;
+        let teamMountId: string;
+        let teamRootId: string;
+
+        beforeAll(async () => {
+            const config = getServerConfig();
+            const orgId = config!.orgId;
+
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: orgId }),
+            });
+
+            const teamRes = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Path Copy Route Team', organizationId: orgId }),
+            });
+            const team = (await teamRes.json()) as OrgTeam;
+            teamOwner = teamOwnerId(team.id);
+
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team.id, userId: ctx.alice.user.id }),
+            });
+
+            await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwner}/mount`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Path Copy Route Drive', storageType: 'local', maxSizeMB: 500 }),
+            });
+
+            const mountsRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/mounts`);
+            const mounts = await assertJson<MountInfo[]>(mountsRes);
+            teamMountId = mounts[0].id;
+
+            const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
+            teamRootId = root.id;
+        });
+
+        test('dedups the destination name on repeated same-parent copies', async () => {
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'DedupSource' },
+            );
+
+            const first = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `path/${folder.id}/copy`,
+                {
+                    targetOwnerId: ctx.alice.user.id,
+                    targetMountId: aliceMountId,
+                    targetParentId: aliceRootId,
+                    name: 'Copy of X',
+                },
+            );
+            expect(first.name).toBe('Copy of X');
+
+            const second = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `path/${folder.id}/copy`,
+                {
+                    targetOwnerId: ctx.alice.user.id,
+                    targetMountId: aliceMountId,
+                    targetParentId: aliceRootId,
+                    name: 'Copy of X',
+                },
+            );
+            expect(second.name).not.toBe(first.name);
+            expect(second.id).not.toBe(first.id);
+
+            const listing = await driveGetList(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+            );
+            expect(listing.filter((p) => p.name === 'Copy of X')).toHaveLength(1);
+            expect(listing.some((p) => p.id === second.id)).toBe(true);
+        });
+
+        test('rejects copying a folder into its own descendant with 400', async () => {
+            const parent = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'GuardParent' },
+            );
+            const child = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${parent.id}`,
+                { folderName: 'GuardChild' },
+            );
+
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${parent.id}/copy`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        targetOwnerId: ctx.alice.user.id,
+                        targetMountId: aliceMountId,
+                        targetParentId: child.id,
+                    }),
+                },
+            );
+            expect(res.status).toBe(400);
+        });
+
+        test('copies a personal file into a team drive through the route (bridge)', async () => {
+            const file = new File(['route bridge payload'], 'route-bridge.txt', { type: 'text/plain' });
+            const uploaded = await driveUpload(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                aliceRootId,
+                file,
+            );
+
+            const copied = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `path/${uploaded.id}/copy`,
+                {
+                    targetOwnerId: teamOwner,
+                    targetMountId: teamMountId,
+                    targetParentId: teamRootId,
+                },
+            );
+
+            expect(copied.ownerId).toBe(teamOwner);
+            expect(copied.name).toBe('route-bridge.txt');
+
+            const listing = await driveGetList(
+                ctx.alice.user.sessionToken,
+                teamOwner,
+                teamMountId,
+                `folder/${teamRootId}`,
+            );
+            expect(listing.some((p) => p.id === copied.id && p.name === 'route-bridge.txt')).toBe(true);
+        });
+    });
 });

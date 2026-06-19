@@ -562,6 +562,11 @@ export default class Drive {
         return movedPath;
     }
 
+    // Called by: copy route. Guards copy/move against subtree cycles.
+    async isSelfOrDescendant(mountId: string, ancestorId: string, candidateId: string): Promise<boolean> {
+        return this.getMount(mountId).isSelfOrDescendant(ancestorId, candidateId);
+    }
+
     async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
