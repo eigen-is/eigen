@@ -94,7 +94,7 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                     variant="ghost"
                     size="icon"
                     aria-label="Switch app"
-                    className="mr-1 h-8 w-8 text-white hover:bg-primary/20 hover:text-white"
+                    className="mr-1 h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                     <Grip className="h-5 w-5" />
                 </Button>
@@ -280,7 +280,10 @@ export function Topbar({ rootRoute }: TopbarProps) {
     const showBurger = isMobile && sidebarMode !== 'none';
 
     return (
-        <header className="bg-app shrink-0">
+        <header
+            className="bg-background border-b border-t-2 shrink-0"
+            style={{ borderTopColor: 'var(--app-current-color)' }}
+        >
             {/* 1fr·auto·1fr grid keeps the title / command palette at the bar's true
                 center, independent of the left (logo) and right (actions) block widths */}
             <div className="grid h-12 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
@@ -290,7 +293,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
                             variant="ghost"
                             size="icon"
                             onClick={() => setSidebarOpen(true)}
-                            className="mr-1 text-white hover:bg-primary/20 hover:text-white"
+                            className="mr-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
                             <Menu className="h-5 w-5" />
                             <span className="sr-only">Open menu</span>
@@ -302,7 +305,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
 
                 <div className="flex justify-center min-w-0">
                     {documentTitle && !isMobile && (
-                        <span className="text-white/70 truncate max-w-[400px]">{documentTitle}</span>
+                        <span className="text-muted-foreground truncate max-w-[400px]">{documentTitle}</span>
                     )}
                     {!documentTitle && !isMobile && <CommandPaletteTrigger />}
                 </div>

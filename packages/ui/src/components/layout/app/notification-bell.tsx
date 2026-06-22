@@ -104,7 +104,7 @@ export function NotificationBell() {
                     variant="ghost"
                     size="icon"
                     aria-label={count > 0 ? `Notifications, ${count} unread` : 'Notifications'}
-                    className="relative h-8 w-8 text-white hover:bg-primary/20 hover:text-white"
+                    className="relative h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                     <Bell className="h-4 w-4" />
                     <CountBadge count={count} />

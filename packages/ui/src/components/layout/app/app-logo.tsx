@@ -24,15 +24,15 @@ export function AppLogo({ appName = 'mail', className, logoHref }: AppLogoProps)
     return (
         <div className={cn('text-xl flex items-center select-none', className)}>
             {isSpace || href === undefined ? (
-                <Link to="/" className="text-white font-medium hover:opacity-75 transition-opacity">
+                <Link to="/" className="text-foreground font-medium hover:opacity-75 transition-opacity">
                     eigen
                 </Link>
             ) : (
-                <a href={href} className="text-white font-medium hover:opacity-75 transition-opacity">
+                <a href={href} className="text-foreground font-medium hover:opacity-75 transition-opacity">
                     eigen
                 </a>
             )}
-            <span className="text-white">
+            <span style={{ color: 'var(--app-current-color)' }}>
                 <Bar />
                 <a href={`/${app}`} className="hover:opacity-75 transition-opacity">
                     {app}
