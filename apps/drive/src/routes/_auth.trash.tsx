@@ -83,11 +83,9 @@ function TrashRoute() {
                         <EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />
                     ) : (
                         <div className="flex-1 overflow-auto text-sm">
-                            <div className={cn('grid', gridCols, 'border-b')}>
-                                <div className="text-muted-foreground h-10 px-2 flex items-center font-medium">
-                                    Name
-                                </div>
-                                <div className="text-muted-foreground h-10 px-2 hidden sm:flex items-center font-medium">
+                            <div className={cn('grid app-gutter-x', gridCols, 'border-b')}>
+                                <div className="eigen-section-label h-10 pr-2 flex items-center">Name</div>
+                                <div className="eigen-section-label h-10 pr-2 hidden sm:flex items-center justify-end">
                                     Trashed
                                 </div>
                             </div>
@@ -97,13 +95,13 @@ function TrashRoute() {
                                     <div
                                         key={item.id}
                                         className={cn(
-                                            'grid',
+                                            'grid app-gutter-x',
                                             gridCols,
                                             'border-b transition-colors eigen-list-item group',
                                         )}
                                         onContextMenu={(e) => contextMenu.handleContextMenu(e, item)}
                                     >
-                                        <div className="px-2 py-1.5 flex items-center min-w-0 relative">
+                                        <div className="pr-2 py-2.5 flex items-center min-w-0 relative">
                                             {getFileIcon(item.mimeType, item.type, {
                                                 className: 'h-4 w-4 mr-2 flex-shrink-0',
                                                 style: {
@@ -127,7 +125,7 @@ function TrashRoute() {
                                                 />
                                             </div>
                                         </div>
-                                        <div className="hidden sm:flex items-center px-2 py-1.5 text-muted-foreground whitespace-nowrap">
+                                        <div className="hidden sm:flex items-center justify-end pr-2 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
                                             {item.trashedAt ? formatDateTime(item.trashedAt) : '-'}
                                         </div>
                                     </div>
