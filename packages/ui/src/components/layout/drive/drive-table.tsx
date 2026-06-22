@@ -208,8 +208,8 @@ export function DriveTable({
             className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none"
         >
             {!hideHeader && (
-                <div className={cn('grid border-b', gridCols)}>
-                    <div className="eigen-section-label h-10 px-2 flex items-center">Name</div>
+                <div className={cn('grid border-b app-gutter-x', gridCols)}>
+                    <div className="eigen-section-label h-10 pr-2 flex items-center">Name</div>
                     {!hideOwner && (
                         <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center">
                             Owner
@@ -230,7 +230,7 @@ export function DriveTable({
             {hasParentItem && currentPath && (
                 <div
                     className={cn(
-                        'grid border-b transition-colors eigen-list-item',
+                        'grid border-b transition-colors eigen-list-item app-gutter-x',
                         gridCols,
                         (activeItemId === currentPath.parentId || selectedIndex === 0) && 'eigen-list-item-active',
                         currentPath.parentId &&
@@ -245,7 +245,7 @@ export function DriveTable({
                         }
                     }}
                 >
-                    <div className="px-2 py-1.5 flex items-center font-medium">
+                    <div className="pr-2 py-1.5 flex items-center font-medium">
                         <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground" />
                         <span>..</span>
                     </div>
@@ -266,7 +266,7 @@ export function DriveTable({
                     <div
                         key={item.id}
                         className={cn(
-                            'grid border-b transition-colors eigen-list-item',
+                            'grid border-b transition-colors eigen-list-item app-gutter-x',
                             gridCols,
                             (activeItemId === item.id || selectedIndex === adjustedIndex) && 'eigen-list-item-active',
                             (selection.isSelected(item.id) || externalSelectedIds?.has(item.id)) &&
@@ -302,7 +302,7 @@ export function DriveTable({
                             }
                         }}
                     >
-                        <div className="px-2 py-1.5 flex items-center min-w-0">
+                        <div className="pr-2 py-1.5 flex items-center min-w-0">
                             <div className="relative mr-2 flex-shrink-0">
                                 {getFileIcon?.(item.mimeType, item.type, {
                                     className: 'h-4 w-4',

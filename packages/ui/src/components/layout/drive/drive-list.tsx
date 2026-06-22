@@ -261,7 +261,7 @@ export function DriveList({
 
     const contentDiv = (
         <div
-            className="h-full flex flex-col relative border-r app-gutter-x"
+            className="h-full flex flex-col relative border-r"
             onDragOver={handleDragOver}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
