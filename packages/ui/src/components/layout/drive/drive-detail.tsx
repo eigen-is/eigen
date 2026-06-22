@@ -77,7 +77,7 @@ export function DriveDetail({
 
     return (
         <div className="flex flex-col h-full bg-background">
-            <div className="p-4 flex-1 overflow-auto">
+            <div className="app-gutter flex-1 overflow-auto">
                 <DrivePreview path={path} onActivate={onHeroClick} className="mb-4" />
                 <h2 className="text-xl font-medium truncate overflow-hidden mb-3">{stripEigenExtension(path.name)}</h2>
                 <div className="flex items-center gap-2 mb-4">

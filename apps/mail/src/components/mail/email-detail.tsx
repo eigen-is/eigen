@@ -261,7 +261,7 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
 
     return (
         <div className="flex flex-col h-full bg-background">
-            <div className="p-4 flex-1 overflow-auto" data-document="email-detail">
+            <div className="app-gutter flex-1 overflow-auto" data-document="email-detail">
                 {/* Email header */}
                 <div className="space-y-4 mb-6">
                     <div>

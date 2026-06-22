@@ -110,7 +110,7 @@ export const SheetTab: React.FC = () => {
 
     return (
         <div
-            className="flex h-8 select-none items-stretch gap-1 border-t bg-muted px-4 text-xs text-muted-foreground"
+            className="flex h-8 select-none items-stretch gap-1 border-t bg-muted app-gutter-x text-xs text-muted-foreground"
             onContextMenu={(e) => e.preventDefault()}
         >
             {context.allowEdit && (

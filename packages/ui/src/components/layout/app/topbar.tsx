@@ -280,10 +280,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
     const showBurger = isMobile && sidebarMode !== 'none';
 
     return (
-        <header
-            className="bg-background border-b border-t-2 shrink-0"
-            style={{ borderTopColor: 'var(--app-current-color)' }}
-        >
+        <header className="bg-background border-b shrink-0">
             {/* 1fr·auto·1fr grid keeps the title / command palette at the bar's true
                 center, independent of the left (logo) and right (actions) block widths */}
             <div className="grid h-12 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>

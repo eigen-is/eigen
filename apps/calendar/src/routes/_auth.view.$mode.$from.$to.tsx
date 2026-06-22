@@ -133,24 +133,28 @@ function CalendarView() {
             >
                 {isLoading ? (
                     <LoadingState />
-                ) : viewMode === 'month' ? (
-                    <MonthView
-                        currentDate={currentDate}
-                        events={allEvents}
-                        calendars={calendars}
-                        sharedCalendars={sharedCalendars}
-                        onDayClick={handleDayClick}
-                        initialEventId={eventId}
-                    />
                 ) : (
-                    <WeekView
-                        currentDate={currentDate}
-                        events={allEvents}
-                        calendars={calendars}
-                        sharedCalendars={sharedCalendars}
-                        onDayClick={handleDayClick}
-                        initialEventId={eventId}
-                    />
+                    <div className="h-full app-gutter">
+                        {viewMode === 'month' ? (
+                            <MonthView
+                                currentDate={currentDate}
+                                events={allEvents}
+                                calendars={calendars}
+                                sharedCalendars={sharedCalendars}
+                                onDayClick={handleDayClick}
+                                initialEventId={eventId}
+                            />
+                        ) : (
+                            <WeekView
+                                currentDate={currentDate}
+                                events={allEvents}
+                                calendars={calendars}
+                                sharedCalendars={sharedCalendars}
+                                onDayClick={handleDayClick}
+                                initialEventId={eventId}
+                            />
+                        )}
+                    </div>
                 )}
 
                 <CreateEventDialog

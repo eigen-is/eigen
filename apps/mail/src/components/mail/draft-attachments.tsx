@@ -13,7 +13,7 @@ type DraftAttachmentsProps = {
 export function DraftAttachments({ attachments, driveReferences, onRemove, onRemoveReference }: DraftAttachmentsProps) {
     if (attachments.length === 0 && driveReferences.length === 0) return null;
     return (
-        <div className="flex flex-wrap gap-2 px-4 pb-2">
+        <div className="flex flex-wrap gap-2 app-gutter-x pb-2">
             {attachments.map((att, i) => (
                 <SimpleAttachmentChip key={att.key} filename={att.filename} onRemove={() => onRemove(i)} />
             ))}

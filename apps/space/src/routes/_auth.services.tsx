@@ -138,7 +138,7 @@ function ServicesComponent() {
         <ColumnLayout>
             <Column id="detail" width="flex" toolbar={<ToolbarTitle>Integrations</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
-                    <div className="w-full max-w-3xl p-8">
+                    <div className="w-full max-w-3xl app-gutter">
                         <p className="text-sm text-muted-foreground mb-6">
                             Connect your calendars, mail, and drive to external clients like Thunderbird, Apple Mail,
                             Finder, rclone, or any app that supports CalDAV, IMAP, or WebDAV.

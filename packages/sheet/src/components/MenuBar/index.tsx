@@ -21,7 +21,7 @@ const triggerClass = cn('px-3 h-8 text-sm rounded-sm', 'hover:bg-muted focus-vis
 export function MenuBar({ leftItems, rightItems }: Props) {
     return (
         <div
-            className="grid items-center gap-1 px-4 h-12 border-b border-border bg-background"
+            className="grid items-center gap-1 app-gutter-x h-12 border-b border-border bg-background"
             style={{ gridTemplateColumns: '1fr auto 1fr' }}
         >
             <div className="flex items-center gap-1">

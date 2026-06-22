@@ -93,7 +93,7 @@ function TwoFaComponent() {
             <ColumnLayout>
                 <Column id="detail" width="flex" toolbar={toolbar}>
                     <div className="h-full overflow-y-auto">
-                        <div className="w-full max-w-3xl p-8">
+                        <div className="w-full max-w-3xl app-gutter">
                             <div className="space-y-6">
                                 <div className="flex items-center gap-3 text-sm">
                                     <ShieldCheck className="h-5 w-5 text-primary" />
@@ -165,7 +165,7 @@ function TwoFaComponent() {
         <ColumnLayout>
             <Column id="detail" width="flex" toolbar={toolbar}>
                 <div className="h-full overflow-y-auto">
-                    <div className="w-full max-w-3xl p-8">
+                    <div className="w-full max-w-3xl app-gutter">
                         <TwoFactorSetup
                             onInitialize2FA={handleInitialize2FA}
                             onVerifyTotp={handleVerifyTotp}

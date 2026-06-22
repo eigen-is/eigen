@@ -180,7 +180,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
 
     return (
-        <div className="p-6 space-y-6 h-full overflow-y-auto">
+        <div className="app-gutter space-y-6 h-full overflow-y-auto">
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-medium truncate">{team.name}</h2>
                 {!showSettingsForm && (

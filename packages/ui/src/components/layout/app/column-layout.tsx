@@ -56,7 +56,7 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
             {toolbar && (
                 <div
                     className={cn(
-                        'h-12 flex items-center px-4 shrink-0 border-r border-b transition-colors duration-200',
+                        'h-12 flex items-center app-gutter-x shrink-0 border-r border-b transition-colors duration-200',
                         toolbarBorder === 'always' || scrolled ? 'border-b-border' : 'border-b-transparent',
                     )}
                 >

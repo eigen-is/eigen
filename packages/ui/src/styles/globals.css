@@ -287,6 +287,12 @@
         padding-block: var(--app-gutter-y);
     }
 
+    /* Horizontal-only gutter — for list/table surfaces that want left/right
+       breathing room but manage their own vertical rhythm (e.g. the drive table). */
+    .app-gutter-x {
+        padding-inline: var(--app-gutter-x);
+    }
+
     /* DrivePreview hero: scaled-down server-rendered HTML preview for an
        eigendoc/slides/sheet/text file. The component wraps innerHTML in this
        class; rules below tame the wrapped body. */
