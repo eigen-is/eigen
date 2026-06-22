@@ -15,6 +15,7 @@ import { NotFound } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
+import { FILTER_LABELS } from '@workspace/ui/components/layout/sidebar/app-sidebar';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
     component: DriveRoute,
@@ -110,6 +111,7 @@ function DriveRoute() {
             allowMove={false}
             allowedCreateTypes={allowedCreateTypes}
             showBreadcrumb={false}
+            title={FILTER_LABELS[mimeType]}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}
         />

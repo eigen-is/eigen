@@ -90,6 +90,12 @@ const FILTER_ENTRIES: ReadonlyArray<FilterEntry> = [
     },
 ];
 
+// Drive mime slug (`image`, `application-eigenstickies`) → sidebar filter label,
+// so a filter view's toolbar title matches its nav entry exactly.
+export const FILTER_LABELS: Record<string, string> = Object.fromEntries(
+    FILTER_ENTRIES.map((entry) => [entry.driveMime, entry.label]),
+);
+
 function isFilterApp(name: string): name is FilterApp {
     return name === 'drive' || name === 'docs' || name === 'slides' || name === 'stickies' || name === 'sheets';
 }

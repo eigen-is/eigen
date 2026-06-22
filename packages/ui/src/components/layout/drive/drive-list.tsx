@@ -15,6 +15,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus, UploadIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
@@ -31,6 +32,7 @@ type DriveListToolbarProps = CreateCallbacks & {
     mountId: string;
     pathId?: string;
     showBreadcrumb?: boolean;
+    title?: string;
     onRowActivate?: (path: DrivePath) => void;
 };
 
@@ -39,6 +41,7 @@ export function DriveListToolbar({
     mountId,
     pathId,
     showBreadcrumb = true,
+    title,
     onRowActivate,
     onCreateFolder,
     onUploadFile,
@@ -88,6 +91,8 @@ export function DriveListToolbar({
                     onNavigate={handleBreadcrumbClick}
                     itemClassName="flex items-center"
                 />
+            ) : title ? (
+                <ToolbarTitle>{title}</ToolbarTitle>
             ) : (
                 <div className="flex-1" />
             )}

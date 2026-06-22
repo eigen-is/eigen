@@ -74,6 +74,7 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             allowedCreateTypes={new Set([config.createType])}
             getItemHref={getDriveItemUrl}
             showBreadcrumb={false}
+            title={`${config.labelPlural} shared ${to === 'by-me' ? 'by' : 'with'} me`}
             currentPath={rootPath}
             allowRename={to === 'by-me'}
         />

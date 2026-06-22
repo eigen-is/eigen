@@ -90,6 +90,7 @@ export function EigenDocListView({
             allowedCreateTypes={new Set([config.createType])}
             getItemHref={getDriveItemUrl}
             showBreadcrumb={false}
+            title={config.allLabel}
             currentPath={rootPath}
         />
     );
