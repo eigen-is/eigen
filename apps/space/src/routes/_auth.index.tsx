@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { apps } from '@workspace/lib/apps';
 import { Card, CardContent } from '@workspace/ui/components/card';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { EigenCyclingLogo } from '@workspace/ui/components/layout/braket';
 
 export const Route = createFileRoute('/_auth/')({
     component: HomeComponent,
@@ -13,9 +14,7 @@ function HomeComponent() {
             <Column id="detail" width="flex">
                 <div className="h-full overflow-y-auto">
                     <div className="flex flex-col items-center justify-center w-full px-4 py-8">
-                        <div className="text-4xl mb-6">
-                            <span className="font-medium text-app">eigen</span>
-                        </div>
+                        <EigenCyclingLogo className="text-3xl mb-6" />
 
                         <div className="text-md text-center mb-10">
                             <p className="mb-4">
