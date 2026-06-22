@@ -134,7 +134,7 @@ function CalendarView() {
                 {isLoading ? (
                     <LoadingState />
                 ) : (
-                    <div className="h-full app-gutter">
+                    <div className="h-full">
                         {viewMode === 'month' ? (
                             <MonthView
                                 currentDate={currentDate}
