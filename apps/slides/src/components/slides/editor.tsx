@@ -679,6 +679,7 @@ function SlideEditorInner({
                 id={'editor'}
                 width={'w-full'}
                 className="flex-1 h-full"
+                toolbarBorder="always"
                 toolbar={
                     <Toolbar
                         path={path}

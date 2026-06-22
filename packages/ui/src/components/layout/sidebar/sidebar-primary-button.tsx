@@ -7,17 +7,9 @@ type SidebarPrimaryButtonProps = ComponentProps<typeof Button> & {
     icon: LucideIcon;
     label: string;
     condensed?: boolean;
-    /** Wrap the button content in a custom trigger, e.g. a router `<Link>`. */
     renderTrigger?: (content: ReactNode) => ReactNode;
 };
 
-/**
- * The sidebar's primary action button ("New", "Compose", "Create …"). Carries
- * the per-app accent through `.bg-app`. Horizontal/vertical spacing is owned by
- * the sidebar's `.app-gutter` container, so this adds none of its own. It
- * forwards all Button props/ref, so it can be used directly, wrapped via
- * `renderTrigger`, or as an `asChild` dropdown trigger.
- */
 export function SidebarPrimaryButton({
     icon: Icon,
     label,

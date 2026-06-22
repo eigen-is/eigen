@@ -3,8 +3,6 @@ import { cn } from '../../../lib/utils';
 
 export type SidebarSectionProps = {
     title?: string;
-    /** Trailing element next to the title (e.g. an inline action button). In condensed mode
-     *  the title is hidden and the action sits centered on its own. */
     action?: ReactNode;
     children: ReactNode;
     condensed?: boolean;
