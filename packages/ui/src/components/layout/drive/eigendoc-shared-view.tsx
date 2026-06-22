@@ -70,6 +70,7 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
+            allowMove={false}
             allowedCreateTypes={new Set([config.createType])}
             getItemHref={getDriveItemUrl}
             showBreadcrumb={false}

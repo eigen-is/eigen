@@ -107,6 +107,7 @@ function DriveRoute() {
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
+            allowMove={false}
             allowedCreateTypes={allowedCreateTypes}
             showBreadcrumb={false}
             onQuickLook={onQuickLook}

@@ -306,6 +306,29 @@ export class Mount {
         return path;
     }
 
+    // True if `candidateId` is `ancestorId` itself or any descendant of it.
+    // Used to reject moving/copying a folder into its own subtree (which would
+    // also make copyPath recurse forever).
+    async isSelfOrDescendant(ancestorId: string, candidateId: string): Promise<boolean> {
+        if (ancestorId === candidateId) return true;
+        let current = await this.getPath(candidateId);
+        while (current?.parentId) {
+            if (current.parentId === ancestorId) return true;
+            current = await this.getPath(current.parentId);
+        }
+        return false;
+    }
+
+    // Flush the container's cached live data.db so an on-storage byte copy
+    // reflects pending Yjs ops. No-op if the doc isn't open or has no data.db.
+    // Mirrors the flush step in snapshotContainerDataDb.
+    async flushContainerDb(containerId: string): Promise<void> {
+        const dataDb = await this.getChildByName(containerId, 'data.db');
+        if (!dataDb) return;
+        const cached = this.documentDbs.get(dataDb.id);
+        if (cached) await (await cached()).flush();
+    }
+
     async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
         name = name.normalize('NFC');
         const result = await this.db
@@ -496,7 +519,9 @@ export class Mount {
         if (!src || src.trashedAt) throw new ApiError(404, 'Source not found');
 
         if (isContainerType(src.type)) {
-            const containerType: DriveContainerType | undefined = src.type === DRIVE_TYPE_FOLDER ? undefined : src.type;
+            const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
+            if (isEigenDoc) await this.flushContainerDb(srcPathId);
+            const containerType: DriveContainerType | undefined = isEigenDoc ? src.type : undefined;
             const newId = await this.createFolder(destParentId, name, containerType);
             if (actor) {
                 await this.history.record({
@@ -512,6 +537,9 @@ export class Mount {
             }
             const children = await this.listFolder(srcPathId);
             for (const child of children) {
+                // Inside an eigen-doc container, versions/ is snapshot history — a
+                // fresh copy starts clean rather than inheriting old snapshots.
+                if (isEigenDoc && child.type === DRIVE_TYPE_FOLDER && child.name === 'versions') continue;
                 await this.copyPath(child.id, newId, child.name, actor);
             }
             const created = await this.getPath(newId);

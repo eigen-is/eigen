@@ -1,4 +1,11 @@
-import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
+import type {
+    DriveACL,
+    DriveContainerType,
+    DrivePath,
+    DrivePathDetails,
+    DriveVisibility,
+    EigenDocType,
+} from '@workspace/lib/types/drive';
 import type { ClientFileEventType, FileEventDetailsMap, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -132,6 +139,12 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.downloadFile(mountId, pathId));
     }
 
+    public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
+        return this.withReadPermission(mountId, containerId, () =>
+            this.sharedDrive.flushContainerDb(mountId, containerId),
+        );
+    }
+
     public async copyPath(
         mountId: string,
         srcPathId: string,
@@ -183,9 +196,15 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getCollabDocument(mountId, pathId));
     }
 
-    public async createFolder(mountId: string, parentId: string, folderName: string, _user?: User): Promise<DrivePath> {
+    public async createFolder(
+        mountId: string,
+        parentId: string,
+        folderName: string,
+        _user?: User,
+        containerType?: DriveContainerType,
+    ): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createFolder(mountId, parentId, folderName, this.user),
+            this.sharedDrive.createFolder(mountId, parentId, folderName, this.user, containerType),
         );
     }
 
@@ -372,6 +391,12 @@ export default class SharedDrive {
             throw new ApiError(403, 'No write permission on target folder');
         }
         return this.sharedDrive.movePath(mountId, pathId, targetParentId, this.user);
+    }
+
+    public async isSelfOrDescendant(mountId: string, ancestorId: string, candidateId: string): Promise<boolean> {
+        return this.withReadPermission(mountId, ancestorId, () =>
+            this.sharedDrive.isSelfOrDescendant(mountId, ancestorId, candidateId),
+        );
     }
 
     public async breadCrumb(mountId: string, pathId: string) {

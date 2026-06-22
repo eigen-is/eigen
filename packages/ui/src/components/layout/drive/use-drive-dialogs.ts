@@ -40,6 +40,10 @@ export function useDriveDialogs() {
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
 
+    const [copyMoveOpen, setCopyMoveOpen] = useState(false);
+    const [copyMoveItems, setCopyMoveItems] = useState<DrivePath[]>([]);
+    const [copyMoveMode, setCopyMoveMode] = useState<'move' | 'copy'>('copy');
+
     const openDelete = useCallback((items: DrivePath | DrivePath[]) => {
         setDeleteItems(Array.isArray(items) ? items : [items]);
         setDeleteOpen(true);
@@ -85,6 +89,16 @@ export function useDriveDialogs() {
         setUploadFiles([]);
     }, []);
 
+    const openCopyMove = useCallback((items: DrivePath[], mode: 'move' | 'copy') => {
+        setCopyMoveItems(items);
+        setCopyMoveMode(mode);
+        setCopyMoveOpen(true);
+    }, []);
+    const closeCopyMove = useCallback(() => {
+        setCopyMoveOpen(false);
+        setCopyMoveItems([]);
+    }, []);
+
     return {
         createFolder,
         create,
@@ -122,6 +136,14 @@ export function useDriveDialogs() {
             setOpen: setUploadOpen,
             openDialog: openUpload,
             closeDialog: closeUpload,
+        },
+        copyMove: {
+            open: copyMoveOpen,
+            items: copyMoveItems,
+            mode: copyMoveMode,
+            setOpen: setCopyMoveOpen,
+            openDialog: openCopyMove,
+            closeDialog: closeCopyMove,
         },
     };
 }

@@ -17,6 +17,10 @@ type EigenDocListViewProps = {
     mid?: string;
     ownerId?: string;
     mountId?: string;
+    // Move-to/duplicate bind to the layout's single ownerId/mountId, so they're only
+    // safe in the mount-scoped variant where every item shares them. The owner-aggregate
+    // index spans mounts + shared paths, so it defaults off.
+    allowMove?: boolean;
     onNavigate: (search: DriveSearchParams) => void;
     onNavigateBack: () => void;
 };
@@ -28,6 +32,7 @@ export function EigenDocListView({
     mid,
     ownerId,
     mountId,
+    allowMove = false,
     onNavigate,
     onNavigateBack,
 }: EigenDocListViewProps) {
@@ -81,6 +86,7 @@ export function EigenDocListView({
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
+            allowMove={allowMove}
             allowedCreateTypes={new Set([config.createType])}
             getItemHref={getDriveItemUrl}
             showBreadcrumb={false}

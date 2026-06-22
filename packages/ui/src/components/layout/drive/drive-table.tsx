@@ -2,7 +2,7 @@ import { formatDateTime } from '@workspace/lib/date';
 import { DEFAULT_MOUNT_ID, type DrivePath, isFolderType, stripEigenExtension } from '@workspace/lib/types';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import { ChevronLeft, MoreVertical, Trash2 } from 'lucide-react';
+import { ChevronLeft, Copy, CopyPlus, FolderInput, MoreVertical, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
@@ -34,6 +34,9 @@ export type DriveTableProps = {
     onDelete?: (items: DrivePath[]) => void;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
+    onMoveTo?: (items: DrivePath[]) => void;
+    onCopyTo?: (items: DrivePath[]) => void;
+    onDuplicate?: (items: DrivePath[]) => void;
     onConvert?: (item: DrivePath, targetType: 'eigensheets' | 'eigendoc') => void;
     onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
@@ -67,6 +70,9 @@ export function DriveTable({
     onDelete,
     onRename,
     onMove,
+    onMoveTo,
+    onCopyTo,
+    onDuplicate,
     onConvert,
     onExport,
     onQuickLook,
@@ -378,11 +384,54 @@ export function DriveTable({
                         onConvert={onConvert}
                         onExport={onExport}
                         onRename={onRename}
+                        onMoveTo={onMoveTo}
+                        onCopyTo={onCopyTo}
+                        onDuplicate={onDuplicate}
                         onShareClick={onShareClick}
                         onEmailCollaborators={onEmailCollaborators}
                         onDelete={onDelete}
                         allowDelete={allowDelete}
                     />
+                )}
+                {!isSingleSelect && contextItems.length > 0 && (
+                    <>
+                        {onMoveTo && (
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onMoveTo(contextItems);
+                                    contextMenu.close();
+                                }}
+                                className="flex items-center"
+                            >
+                                <FolderInput className="h-4 w-4 mr-2" />
+                                Move {contextItems.length} items to…
+                            </DropdownMenuItem>
+                        )}
+                        {onCopyTo && (
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onCopyTo(contextItems);
+                                    contextMenu.close();
+                                }}
+                                className="flex items-center"
+                            >
+                                <Copy className="h-4 w-4 mr-2" />
+                                Copy {contextItems.length} items to…
+                            </DropdownMenuItem>
+                        )}
+                        {onDuplicate && (
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onDuplicate(contextItems);
+                                    contextMenu.close();
+                                }}
+                                className="flex items-center"
+                            >
+                                <CopyPlus className="h-4 w-4 mr-2" />
+                                Duplicate {contextItems.length} items
+                            </DropdownMenuItem>
+                        )}
+                    </>
                 )}
                 {!isSingleSelect && allowDelete && contextItems.length > 0 && (
                     <DropdownMenuItem

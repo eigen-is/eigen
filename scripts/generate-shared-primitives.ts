@@ -156,7 +156,10 @@ for (const entry of entries) {
         // (same @workspace/lib/<domain> import as the hook you already found). Listing them is redundant
         // noise, so they're excluded — the convention is documented in the header note instead.
         if (kind === 'Cache') continue;
-        collected.push({ name, kind, importPath, file: relative(ROOT, declFile) });
+        // Normalize to POSIX separators so the generated doc is identical across
+        // platforms (Windows `relative()` yields backslashes, which would otherwise
+        // flip every path and break `primitives:check`).
+        collected.push({ name, kind, importPath, file: relative(ROOT, declFile).replaceAll('\\', '/') });
     }
 }
 
