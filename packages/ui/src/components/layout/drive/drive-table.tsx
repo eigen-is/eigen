@@ -1,5 +1,5 @@
 import { formatDateTime } from '@workspace/lib/date';
-import { DEFAULT_MOUNT_ID, type DrivePath, isFolderType, stripEigenExtension } from '@workspace/lib/types';
+import { DEFAULT_MOUNT_ID, type DrivePath, stripEigenExtension } from '@workspace/lib/types';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronLeft, Copy, CopyPlus, FolderInput, MoreVertical, Trash2 } from 'lucide-react';
@@ -13,6 +13,7 @@ import { UnreadDot } from '../unread-dot';
 import { UserAvatar } from '../user-avatar';
 import { DriveItemMenuItems } from './drive-item-menu';
 import { DriveShareSummary } from './drive-share-summary';
+import { getFilePresentation } from './file-presentation';
 
 export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
     if (a.type === 'folder' && b.type !== 'folder') return -1;
@@ -259,6 +260,7 @@ export function DriveTable({
                 const adjustedIndex = hasParentItem ? index + 1 : index;
                 const itemHref = getItemHref?.(item);
                 const disabled = isItemDisabled?.(item) ?? false;
+                const presentation = getFilePresentation(item.mimeType, item.type);
 
                 return (
                     <div
@@ -303,12 +305,8 @@ export function DriveTable({
                         <div className="px-2 py-1.5 flex items-center min-w-0">
                             <div className="relative mr-2 flex-shrink-0">
                                 {getFileIcon?.(item.mimeType, item.type, {
-                                    className: 'h-4 w-4 text-muted-foreground',
-                                    ...(isFolderType(item.type)
-                                        ? {
-                                              fill: 'var(--app-drive-light-color)',
-                                          }
-                                        : {}),
+                                    className: 'h-4 w-4',
+                                    style: { color: presentation.colorVar, fill: presentation.fillColorVar },
                                 })}
                                 {unreadPathIds?.has(item.id) && <UnreadDot />}
                             </div>

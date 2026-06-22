@@ -87,6 +87,9 @@ export type FilePresentation = {
     icon: LucideIcon;
     colorVar: string;
     softColorVar: string;
+    // Soft fill for the icon interior — the same wash as a hovered list row
+    // (`var(--app-*-color-soft)`) — or 'none' for generic files that stay outline-only.
+    fillColorVar: string;
     label: string;
 };
 
@@ -96,6 +99,7 @@ export function getFilePresentation(mimeType: string, type: DrivePathType): File
             icon: Folder,
             colorVar: 'var(--app-drive-color)',
             softColorVar: 'var(--app-drive-color-soft)',
+            fillColorVar: 'var(--app-drive-color-soft)',
             label: 'Folder',
         };
     }
@@ -106,6 +110,7 @@ export function getFilePresentation(mimeType: string, type: DrivePathType): File
             icon: EIGEN_DOC_ICONS[eigenInfo.type],
             colorVar: `var(${eigenInfo.colorVar})`,
             softColorVar: `var(${eigenInfo.softColorVar})`,
+            fillColorVar: `var(${eigenInfo.softColorVar})`,
             label: eigenInfo.labelPlural,
         };
     }
@@ -114,6 +119,7 @@ export function getFilePresentation(mimeType: string, type: DrivePathType): File
         icon: getFileIconComponent(mimeType, type),
         colorVar: 'var(--muted-foreground)',
         softColorVar: 'var(--muted)',
+        fillColorVar: 'none',
         label: mimeType || 'File',
     };
 }

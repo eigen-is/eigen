@@ -9,7 +9,7 @@ import {
     useRestorePath,
 } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
@@ -17,7 +17,7 @@ import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { LoadingState } from '@workspace/ui/components/layout/app/loading-state';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { getFileIcon } from '@workspace/ui/components/layout/drive';
+import { getFileIcon, getFilePresentation } from '@workspace/ui/components/layout/drive';
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { cn } from '@workspace/ui/lib/utils';
@@ -91,40 +91,48 @@ function TrashRoute() {
                                     Trashed
                                 </div>
                             </div>
-                            {trashedItems.map((item) => (
-                                <div
-                                    key={item.id}
-                                    className={cn('grid', gridCols, 'border-b transition-colors eigen-list-item group')}
-                                    onContextMenu={(e) => contextMenu.handleContextMenu(e, item)}
-                                >
-                                    <div className="px-2 py-1.5 flex items-center min-w-0 relative">
-                                        {getFileIcon(item.mimeType, item.type, {
-                                            className: 'h-4 w-4 mr-2 text-muted-foreground flex-shrink-0',
-                                            ...(isFolderType(item.type)
-                                                ? { fill: 'var(--app-drive-light-color)' }
-                                                : {}),
-                                        })}
-                                        <span className="truncate">{stripEigenExtension(item.name)}</span>
-                                        <div className="invisible group-hover:visible absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-inherit">
-                                            <TooltipButton
-                                                icon={RotateCcw}
-                                                tooltipText="Restore"
-                                                className="h-7 w-7"
-                                                onClick={() => restorePath.mutate(item.id)}
-                                            />
-                                            <TooltipButton
-                                                icon={Trash2}
-                                                tooltipText="Delete permanently"
-                                                className="h-7 w-7 text-destructive hover:text-destructive"
-                                                onClick={() => openPermanentDelete(item.id, item.name)}
-                                            />
+                            {trashedItems.map((item) => {
+                                const presentation = getFilePresentation(item.mimeType, item.type);
+                                return (
+                                    <div
+                                        key={item.id}
+                                        className={cn(
+                                            'grid',
+                                            gridCols,
+                                            'border-b transition-colors eigen-list-item group',
+                                        )}
+                                        onContextMenu={(e) => contextMenu.handleContextMenu(e, item)}
+                                    >
+                                        <div className="px-2 py-1.5 flex items-center min-w-0 relative">
+                                            {getFileIcon(item.mimeType, item.type, {
+                                                className: 'h-4 w-4 mr-2 flex-shrink-0',
+                                                style: {
+                                                    color: presentation.colorVar,
+                                                    fill: presentation.fillColorVar,
+                                                },
+                                            })}
+                                            <span className="truncate">{stripEigenExtension(item.name)}</span>
+                                            <div className="invisible group-hover:visible absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-inherit">
+                                                <TooltipButton
+                                                    icon={RotateCcw}
+                                                    tooltipText="Restore"
+                                                    className="h-7 w-7"
+                                                    onClick={() => restorePath.mutate(item.id)}
+                                                />
+                                                <TooltipButton
+                                                    icon={Trash2}
+                                                    tooltipText="Delete permanently"
+                                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                                    onClick={() => openPermanentDelete(item.id, item.name)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="hidden sm:flex items-center px-2 py-1.5 text-muted-foreground whitespace-nowrap">
+                                            {item.trashedAt ? formatDateTime(item.trashedAt) : '-'}
                                         </div>
                                     </div>
-                                    <div className="hidden sm:flex items-center px-2 py-1.5 text-muted-foreground whitespace-nowrap">
-                                        {item.trashedAt ? formatDateTime(item.trashedAt) : '-'}
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
 
                             <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
                                 <DropdownMenuItem
