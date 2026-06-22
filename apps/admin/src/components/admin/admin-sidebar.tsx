@@ -11,7 +11,6 @@ import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-ite
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
-import { Separator } from '@workspace/ui/components/separator';
 import {
     ClipboardList,
     KeyRound,
@@ -58,11 +57,11 @@ export function AdminSidebar({
     };
 
     return (
-        <div className="h-full flex flex-col bg-background">
+        <div className="h-full flex flex-col">
             {isMobile && <SidebarHeader appName="admin" onClose={onClose} />}
 
-            <div className="overflow-auto flex-1 pt-2">
-                <SidebarSection condensed={condensed}>
+            <div className="flex flex-1 flex-col app-gutter">
+                <SidebarSection condensed={condensed} className="px-0">
                     {isOwner && (
                         <>
                             <SidebarItem
@@ -119,9 +118,9 @@ export function AdminSidebar({
                     />
                 </SidebarSection>
 
-                <Separator className="my-2" />
                 <SidebarSection
                     condensed={condensed}
+                    className="px-0"
                     title="Teams"
                     action={<TooltipButton icon={Plus} tooltipText="Create Team" onClick={() => setShowCreate(true)} />}
                 >

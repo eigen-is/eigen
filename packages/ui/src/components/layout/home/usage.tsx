@@ -42,7 +42,7 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
             <div>
                 {!condensed && (
                     <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-medium text-muted-foreground">Storage</span>
+                        <span className="text-xs font-normal text-muted-foreground">Storage</span>
                         <span className="text-xs text-muted-foreground">
                             {storageLoading ? (
                                 <EigenLoader />

@@ -1,5 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Button } from '@workspace/ui/components/button';
+import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { DriveCreateEigenDoc } from './drive-create-eigendoc';
@@ -15,17 +15,12 @@ export function EigenDocNewButton({ config, rootPath, condensed = false }: Eigen
     const [createOpen, setCreateOpen] = useState(false);
     return (
         <>
-            <div className="px-3 py-2">
-                <Button
-                    variant="default"
-                    size={condensed ? 'icon' : 'default'}
-                    className={condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}
-                    onClick={() => setCreateOpen(true)}
-                >
-                    <Plus className="h-4 w-4" />
-                    {!condensed && <span>{config.newLabel}</span>}
-                </Button>
-            </div>
+            <SidebarPrimaryButton
+                icon={Plus}
+                label={config.newLabel}
+                condensed={condensed}
+                onClick={() => setCreateOpen(true)}
+            />
             <DriveCreateEigenDoc
                 open={createOpen}
                 onOpenChange={setCreateOpen}

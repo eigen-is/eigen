@@ -16,7 +16,9 @@ export function SidebarSection({ title, action, children, condensed = false, cla
     return (
         <div className={cn('px-3 pt-3 pb-1', className)}>
             {showHeader && (
-                <div className={cn('flex items-center mb-1.5', condensed ? 'justify-center' : 'justify-between')}>
+                <div
+                    className={cn('flex items-center mb-1.5 px-2.5', condensed ? 'justify-center' : 'justify-between')}
+                >
                     {!condensed && title && <h3 className="eigen-section-label">{title}</h3>}
                     {condensed && title && !action && <span className="eigen-section-label">{title[0]}</span>}
                     {action}

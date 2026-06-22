@@ -7,7 +7,6 @@ import { EigenLoader, StorageUsage, TooltipButton } from '@workspace/ui';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
 import { CalendarPlus, Check, Pencil, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -131,61 +130,63 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
     };
 
     return (
-        <div className="h-full flex flex-col bg-background">
+        <div className="h-full flex flex-col">
             {isMobile && <SidebarHeader appName="calendar" onClose={onClose} />}
 
-            <SidebarPrimaryButton
-                icon={CalendarPlus}
-                label="Create event"
-                condensed={condensed}
-                onClick={() => setCreateEventOpen(true)}
-            />
-
-            <div className="overflow-auto flex-1">
-                <SidebarSection
+            <div className="flex flex-1 flex-col app-gutter">
+                <SidebarPrimaryButton
+                    icon={CalendarPlus}
+                    label="Create event"
                     condensed={condensed}
-                    title="My Calendars"
-                    action={<TooltipButton icon={Plus} tooltipText="Add new calendar" onClick={handleCreateCalendar} />}
-                >
-                    {calendarsLoading ? (
-                        <EigenLoader />
-                    ) : (
-                        calendars.map((cal) => (
-                            <div
-                                key={cal.id}
-                                className={cn(
-                                    'flex items-center gap-2 px-3 py-1.5 rounded-md group relative',
-                                    !condensed && 'pr-8 hover:bg-accent',
-                                )}
-                            >
-                                <CalendarCheckbox
-                                    color={cal.color}
-                                    checked={cal.visible}
-                                    onChange={() => updateCalendar.mutate({ id: cal.id, visible: !cal.visible })}
-                                />
-                                {!condensed && (
-                                    <>
-                                        <span className="text-sm truncate flex-1">{cal.name}</span>
-                                        <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
-                                            <TooltipButton
-                                                icon={Pencil}
-                                                tooltipText="Edit calendar"
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => handleEditCalendar(cal)}
-                                            />
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        ))
-                    )}
-                </SidebarSection>
+                    onClick={() => setCreateEventOpen(true)}
+                />
 
-                {personalShared.length > 0 && (
-                    <>
-                        <Separator />
-                        <SidebarSection condensed={condensed} title="Shared with me">
+                <div className="overflow-auto flex-1">
+                    <SidebarSection
+                        condensed={condensed}
+                        className="px-0"
+                        title="My Calendars"
+                        action={
+                            <TooltipButton icon={Plus} tooltipText="Add new calendar" onClick={handleCreateCalendar} />
+                        }
+                    >
+                        {calendarsLoading ? (
+                            <EigenLoader />
+                        ) : (
+                            calendars.map((cal) => (
+                                <div
+                                    key={cal.id}
+                                    className={cn(
+                                        'flex items-center gap-2 px-3 py-1.5 rounded-md group relative',
+                                        !condensed && 'pr-8 hover:bg-accent',
+                                    )}
+                                >
+                                    <CalendarCheckbox
+                                        color={cal.color}
+                                        checked={cal.visible}
+                                        onChange={() => updateCalendar.mutate({ id: cal.id, visible: !cal.visible })}
+                                    />
+                                    {!condensed && (
+                                        <>
+                                            <span className="text-sm truncate flex-1">{cal.name}</span>
+                                            <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
+                                                <TooltipButton
+                                                    icon={Pencil}
+                                                    tooltipText="Edit calendar"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleEditCalendar(cal)}
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </SidebarSection>
+
+                    {personalShared.length > 0 && (
+                        <SidebarSection condensed={condensed} className="px-0" title="Shared with me">
                             {sharedLoading ? (
                                 <EigenLoader />
                             ) : (
@@ -202,13 +203,10 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
                                 ))
                             )}
                         </SidebarSection>
-                    </>
-                )}
+                    )}
 
-                {teamShared.length > 0 && (
-                    <>
-                        <Separator />
-                        <SidebarSection condensed={condensed} title="Team Calendars">
+                    {teamShared.length > 0 && (
+                        <SidebarSection condensed={condensed} className="px-0" title="Team Calendars">
                             {sharedLoading ? (
                                 <EigenLoader />
                             ) : (
@@ -228,11 +226,11 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
                                 })
                             )}
                         </SidebarSection>
-                    </>
-                )}
-            </div>
+                    )}
+                </div>
 
-            <StorageUsage className="mt-auto" condensed={condensed} />
+                <StorageUsage className="mt-auto px-0" condensed={condensed} />
+            </div>
 
             <CalendarConfigDialog
                 open={configDialogOpen}

@@ -264,6 +264,12 @@
         --app-current-color: var(--app-drive-color);
         --app-current-color-soft: var(--app-drive-color-soft);
 
+        /* Project-wide content gutter. Adjust here to retune padding everywhere
+           the `.app-gutter` utility (or these vars) are used. Defaults match the
+           Tailwind px-3 / py-3 scale (symmetric). */
+        --app-gutter-x: 0.75rem;
+        --app-gutter-y: 0.75rem;
+
         scroll-behavior: smooth;
     }
 
@@ -271,7 +277,14 @@
        headers, and other small group labels. Typography only — callsites add
        any wrapping layout (height, padding, flex). */
     .eigen-section-label {
-        @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+        @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground;
+    }
+
+    /* Standard content gutter (sidebar, panels, …). The values live in
+       --app-gutter-* so the whole project retunes from one place. */
+    .app-gutter {
+        padding-inline: var(--app-gutter-x);
+        padding-block: var(--app-gutter-y);
     }
 
     /* DrivePreview hero: scaled-down server-rendered HTML preview for an

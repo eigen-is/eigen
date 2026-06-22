@@ -8,7 +8,6 @@ import { LabelManager } from '@workspace/ui/components/layout/labels/label-manag
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import { Separator } from '@workspace/ui/components/separator';
 import { UserRoundPlus, UsersRound } from 'lucide-react';
 
 type ContactsSidebarProps = {
@@ -25,60 +24,60 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false, 
     const getLabelPath = (label: Label) => `/label/${label.id.toLowerCase()}`;
 
     return (
-        <div className="h-full flex flex-col bg-background">
+        <div className="h-full flex flex-col">
             {isMobile && <SidebarHeader appName="contacts" onClose={onClose} />}
 
-            <SidebarPrimaryButton
-                icon={UserRoundPlus}
-                label="Create contact"
-                condensed={condensed}
-                renderTrigger={(content) => <Link to="/new">{content}</Link>}
-            />
+            <div className="flex flex-1 flex-col app-gutter">
+                <SidebarPrimaryButton
+                    icon={UserRoundPlus}
+                    label="Create contact"
+                    condensed={condensed}
+                    renderTrigger={(content) => <Link to="/new">{content}</Link>}
+                />
 
-            <div className="overflow-auto flex-1">
-                <SidebarSection condensed={condensed}>
-                    <SidebarItem
-                        icon={<UsersRound className="h-4 w-4" />}
-                        label="My Contacts"
-                        to="/$filterType/$filterId"
-                        params={{ filterType: 'book', filterId: 'all' }}
-                        condensed={condensed}
-                    />
-                    {myTeams.map((team) => (
+                <div className="overflow-auto flex-1">
+                    <SidebarSection condensed={condensed} className="px-0">
                         <SidebarItem
-                            key={team.id}
-                            icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4" />}
-                            label={team.name}
+                            icon={<UsersRound className="h-4 w-4" />}
+                            label="My Contacts"
                             to="/$filterType/$filterId"
-                            params={{ filterType: 'team', filterId: team.id }}
+                            params={{ filterType: 'book', filterId: 'all' }}
                             condensed={condensed}
                         />
-                    ))}
-                </SidebarSection>
+                        {myTeams.map((team) => (
+                            <SidebarItem
+                                key={team.id}
+                                icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4" />}
+                                label={team.name}
+                                to="/$filterType/$filterId"
+                                params={{ filterType: 'team', filterId: team.id }}
+                                condensed={condensed}
+                            />
+                        ))}
+                    </SidebarSection>
 
-                <Separator />
+                    {error ? (
+                        <div className="py-2 text-sm text-destructive">An error occurred while loading labels.</div>
+                    ) : loading ? (
+                        <EigenLoader />
+                    ) : labels.length === 0 ? (
+                        <div className="py-2 text-sm text-muted-foreground">
+                            No labels found. Add one with the + button.
+                        </div>
+                    ) : (
+                        <LabelManager
+                            labels={labels}
+                            getLabelPath={getLabelPath}
+                            className="px-0"
+                            condensed={condensed}
+                            dropAcceptTypes={onAssignLabel ? ['contact'] : undefined}
+                            onItemDrop={onAssignLabel}
+                        />
+                    )}
+                </div>
 
-                {error ? (
-                    <div className="px-3 py-2 text-sm text-destructive">An error occurred while loading labels.</div>
-                ) : loading ? (
-                    <EigenLoader />
-                ) : labels.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">
-                        No labels found. Add one with the + button.
-                    </div>
-                ) : (
-                    <LabelManager
-                        labels={labels}
-                        getLabelPath={getLabelPath}
-                        className="px-3"
-                        condensed={condensed}
-                        dropAcceptTypes={onAssignLabel ? ['contact'] : undefined}
-                        onItemDrop={onAssignLabel}
-                    />
-                )}
+                <StorageUsage className="mt-auto px-0" condensed={condensed} />
             </div>
-
-            <StorageUsage className="mt-auto" condensed={condensed} />
         </div>
     );
 }

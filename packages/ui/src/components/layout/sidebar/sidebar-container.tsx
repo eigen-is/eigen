@@ -31,9 +31,9 @@ export function SidebarContainer({ sidebar }: SidebarContainerProps) {
         <>
             <div
                 className={`
-                    ${isMobile ? (sidebarOpen ? 'fixed inset-0 z-50 bg-background' : 'hidden') : 'block'}
+                    ${isMobile ? (sidebarOpen ? 'fixed inset-0 z-50' : 'hidden') : 'block'}
                     ${isTablet ? 'w-16' : 'w-64'}
-                    border-r h-full overflow-y-auto overflow-x-hidden
+                    border-r h-full overflow-y-auto overflow-x-hidden bg-sidebar
                 `}
             >
                 {sidebarContent}

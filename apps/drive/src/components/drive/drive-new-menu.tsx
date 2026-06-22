@@ -1,7 +1,6 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
 import { DEFAULT_MOUNT_ID, usePathInfo } from '@workspace/lib/drive';
 import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
-import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -12,6 +11,7 @@ import { getCreateMenuItems } from '@workspace/ui/components/layout/drive/create
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
 import { DriveUploadFiles } from '@workspace/ui/components/layout/drive/drive-upload-files';
+import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
@@ -64,28 +64,19 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
 
     return (
         <>
-            <div className="px-3 py-2">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="default"
-                            size={condensed ? 'icon' : 'default'}
-                            className={condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}
-                        >
-                            <Plus className="h-4 w-4" />
-                            {!condensed && <span>New</span>}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align={condensed ? 'center' : 'start'}>
-                        {createItems.map(({ kind, icon: Icon, label, onSelect }) => (
-                            <DropdownMenuItem key={kind} onClick={onSelect}>
-                                <Icon className="h-4 w-4 mr-2" />
-                                {label}
-                            </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <SidebarPrimaryButton icon={Plus} label="New" condensed={condensed} />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align={condensed ? 'center' : 'start'}>
+                    {createItems.map(({ kind, icon: Icon, label, onSelect }) => (
+                        <DropdownMenuItem key={kind} onClick={onSelect}>
+                            <Icon className="h-4 w-4 mr-2" />
+                            {label}
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+            </DropdownMenu>
 
             <DriveCreateFolder
                 open={createFolderOpen}

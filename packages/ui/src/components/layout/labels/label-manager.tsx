@@ -3,9 +3,9 @@ import type { Label } from '@workspace/lib/types/label';
 import { TooltipButton } from '@workspace/ui';
 import { Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { cn } from '../../../lib/utils';
 import { SidebarItem } from '../sidebar';
 import { DroppableSidebarItem } from '../sidebar/droppable-sidebar-item';
+import { SidebarSection } from '../sidebar/sidebar-section';
 import { LabelDialog } from './label-dialog';
 import type { LabelManagerProps } from './types';
 
@@ -57,15 +57,13 @@ export function LabelManager({
     };
 
     return (
-        <div className={cn('py-2', className)}>
-            <div className={cn('flex items-center mb-2', condensed ? 'justify-center' : 'justify-between')}>
-                {!condensed && <h3 className="text-sm font-medium text-foreground px-3 select-none">Labels</h3>}
-                <div className="flex items-center gap-1">
-                    <TooltipButton icon={Plus} tooltipText="Add new label" onClick={handleAddLabel} />
-                </div>
-            </div>
-
-            <div className="space-y-1">
+        <>
+            <SidebarSection
+                condensed={condensed}
+                className={className}
+                title="Labels"
+                action={<TooltipButton icon={Plus} tooltipText="Add new label" onClick={handleAddLabel} />}
+            >
                 {labels.map((label) => {
                     const editButton = !condensed && (
                         <div className="editButton absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
@@ -106,7 +104,7 @@ export function LabelManager({
                         </SidebarItem>
                     );
                 })}
-            </div>
+            </SidebarSection>
 
             <LabelDialog
                 open={dialogOpen}
@@ -116,6 +114,6 @@ export function LabelManager({
                 onDelete={handleDeleteLabel}
                 labelCount={labels.length}
             />
-        </div>
+        </>
     );
 }
