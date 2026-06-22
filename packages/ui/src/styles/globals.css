@@ -280,6 +280,13 @@
         @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground;
     }
 
+    /* Title shown in a content toolbar (drive filter views, chat name, plain
+       page titles). Thin weight to match the breadcrumb page; callsites add
+       any wrapping layout. */
+    .eigen-toolbar-title {
+        @apply text-sm font-normal text-foreground truncate;
+    }
+
     /* Standard content gutter (sidebar, panels, …). The values live in
        --app-gutter-* so the whole project retunes from one place. */
     .app-gutter {
