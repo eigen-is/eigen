@@ -2,7 +2,6 @@ import { cn } from '@workspace/ui/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import { createContext, type ReactNode, useCallback, useContext, useRef, useState } from 'react';
 import { Button } from '../../button.tsx';
-import { Separator } from '../../separator.tsx';
 import { useLayout } from './layout-context.tsx';
 
 type ColumnContextType = {
@@ -61,12 +60,9 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
                     )}
                 >
                     {isMobile && onBack && (
-                        <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}>
-                                <ArrowLeft className="h-4 w-4" />
-                            </Button>
-                            <Separator orientation="vertical" className="h-6 mx-1" />
-                        </>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}>
+                            <ArrowLeft className="h-4 w-4" />
+                        </Button>
                     )}
                     {toolbar}
                 </div>

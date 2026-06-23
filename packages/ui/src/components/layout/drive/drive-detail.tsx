@@ -23,7 +23,7 @@ export function DriveDetailToolbar({ onClose }: DriveDetailToolbarProps) {
     const { isMobile } = useLayout();
 
     return (
-        <div className="flex items-center w-full">
+        <div className="flex items-center w-full justify-end">
             {!isMobile && onClose && <TooltipButton onClick={onClose} tooltipText="Close" icon={X} />}
         </div>
     );
