@@ -1,5 +1,5 @@
 import { formatDateTime } from '@workspace/lib/date';
-import { DEFAULT_MOUNT_ID, type DrivePath, isFolderType, stripEigenExtension } from '@workspace/lib/types';
+import { DEFAULT_MOUNT_ID, type DrivePath, stripEigenExtension } from '@workspace/lib/types';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronLeft, Copy, CopyPlus, FolderInput, MoreVertical, Trash2 } from 'lucide-react';
@@ -13,6 +13,7 @@ import { UnreadDot } from '../unread-dot';
 import { UserAvatar } from '../user-avatar';
 import { DriveItemMenuItems } from './drive-item-menu';
 import { DriveShareSummary } from './drive-share-summary';
+import { getFilePresentation } from './file-presentation';
 
 export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
     if (a.type === 'folder' && b.type !== 'folder') return -1;
@@ -207,8 +208,8 @@ export function DriveTable({
             className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none"
         >
             {!hideHeader && (
-                <div className={cn('grid border-b', gridCols)}>
-                    <div className="eigen-section-label h-10 px-2 flex items-center">Name</div>
+                <div className={cn('grid border-b app-gutter-x', gridCols)}>
+                    <div className="eigen-section-label h-10 pr-2 flex items-center">Name</div>
                     {!hideOwner && (
                         <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center">
                             Owner
@@ -229,7 +230,7 @@ export function DriveTable({
             {hasParentItem && currentPath && (
                 <div
                     className={cn(
-                        'grid border-b transition-colors eigen-list-item',
+                        'grid border-b transition-colors eigen-list-item app-gutter-x',
                         gridCols,
                         (activeItemId === currentPath.parentId || selectedIndex === 0) && 'eigen-list-item-active',
                         currentPath.parentId &&
@@ -244,7 +245,7 @@ export function DriveTable({
                         }
                     }}
                 >
-                    <div className="px-2 py-1.5 flex items-center font-medium">
+                    <div className="pr-2 py-1.5 flex items-center font-medium">
                         <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground" />
                         <span>..</span>
                     </div>
@@ -259,12 +260,13 @@ export function DriveTable({
                 const adjustedIndex = hasParentItem ? index + 1 : index;
                 const itemHref = getItemHref?.(item);
                 const disabled = isItemDisabled?.(item) ?? false;
+                const presentation = getFilePresentation(item.mimeType, item.type);
 
                 return (
                     <div
                         key={item.id}
                         className={cn(
-                            'grid border-b transition-colors eigen-list-item',
+                            'grid border-b transition-colors eigen-list-item app-gutter-x',
                             gridCols,
                             (activeItemId === item.id || selectedIndex === adjustedIndex) && 'eigen-list-item-active',
                             (selection.isSelected(item.id) || externalSelectedIds?.has(item.id)) &&
@@ -300,15 +302,11 @@ export function DriveTable({
                             }
                         }}
                     >
-                        <div className="px-2 py-1.5 flex items-center min-w-0">
+                        <div className="pr-2 py-1.5 flex items-center min-w-0">
                             <div className="relative mr-2 flex-shrink-0">
                                 {getFileIcon?.(item.mimeType, item.type, {
-                                    className: 'h-4 w-4 text-muted-foreground',
-                                    ...(isFolderType(item.type)
-                                        ? {
-                                              fill: 'var(--app-drive-light-color)',
-                                          }
-                                        : {}),
+                                    className: 'h-4 w-4',
+                                    style: { color: presentation.colorVar, fill: presentation.fillColorVar },
                                 })}
                                 {unreadPathIds?.has(item.id) && <UnreadDot />}
                             </div>

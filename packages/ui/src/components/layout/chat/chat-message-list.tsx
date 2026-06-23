@@ -430,14 +430,14 @@ export function ChatMessageList({
                     if (message.content.startsWith('inspect:')) {
                         const target = message.content.slice(8);
                         return (
-                            <div key={message.id} className="flex gap-3 px-5 py-2">
+                            <div key={message.id} className="flex gap-3 app-gutter-x py-2">
                                 <div className="w-9 shrink-0" />
                                 <InspectCard target={target} />
                             </div>
                         );
                     }
                     return (
-                        <div key={message.id} className="flex gap-3 px-5 py-2">
+                        <div key={message.id} className="flex gap-3 app-gutter-x py-2">
                             <div className="w-9 shrink-0" />
                             <p className="text-sm text-muted-foreground italic whitespace-pre-wrap">
                                 {message.content}
@@ -453,7 +453,7 @@ export function ChatMessageList({
                         <div
                             key={message.id}
                             className={cn(
-                                'flex gap-3 px-5 hover:bg-muted/50 transition-colors',
+                                'flex gap-3 app-gutter-x hover:bg-muted/50 transition-colors',
                                 grouped ? 'py-1' : 'pt-3',
                                 isHovered && 'bg-muted/50',
                             )}
@@ -497,7 +497,7 @@ export function ChatMessageList({
                         <div
                             key={message.id}
                             className={cn(
-                                'flex gap-3 px-5 hover:bg-primary/10 transition-colors bg-primary/5',
+                                'flex gap-3 app-gutter-x hover:bg-primary/10 transition-colors bg-primary/5',
                                 grouped ? 'pt-0.5' : 'pt-3',
                                 isHovered && 'bg-primary/10',
                             )}
@@ -537,7 +537,7 @@ export function ChatMessageList({
                     <div
                         key={message.id}
                         className={cn(
-                            'flex gap-3 px-5 hover:bg-muted/50 transition-colors',
+                            'flex gap-3 app-gutter-x hover:bg-muted/50 transition-colors',
                             grouped ? 'pt-0.5' : 'pt-3',
                             isHovered && 'bg-muted/50',
                         )}

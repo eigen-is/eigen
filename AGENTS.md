@@ -246,9 +246,10 @@ toolbar height across all pages.
 ```
 
 Use `width="flex"` for a single full-width column. For a plain page title in the toolbar, use the shared
-`ToolbarTitle` component (`@workspace/ui/components/layout/toolbar`) — `text-sm text-foreground font-medium
-truncate` — rather than hand-rolling a styled span. Richer toolbars (drive's path) compose a `BreadcrumbPage`
-(`font-normal`) instead.
+`ToolbarTitle` component (`@workspace/ui/components/layout/toolbar`), which applies the `.eigen-toolbar-title`
+class (`text-sm font-normal text-foreground truncate` — thin, matching the breadcrumb) rather than
+hand-rolling a styled span. Richer toolbars (drive's path) compose a `BreadcrumbPage` (`font-normal`), so
+the two read at the same weight.
 
 #### Hover-Only Icons Pattern
 

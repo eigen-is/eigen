@@ -20,6 +20,9 @@ export type EmailSettings = {
 
 export type UserSettings = {
     theme?: 'light' | 'dark' | 'system';
+    // Topbar chrome: 'theme' = neutral background bar (default); 'app' = solid
+    // app-colour bar (eigen.is parity). Absent → resolves to 'theme'.
+    chromeStyle?: 'theme' | 'app';
     mounts?: Record<string, MountSettings>;
     email?: EmailSettings;
 };

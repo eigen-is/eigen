@@ -20,9 +20,30 @@ function getCachedTheme(): 'light' | 'dark' | 'system' {
     return 'light';
 }
 
+// Keep in sync with themeFlashPlugin() in vite.shared.config.ts
+function applyChrome(chrome: 'theme' | 'app') {
+    document.documentElement.dataset.chrome = chrome;
+    try {
+        localStorage.setItem('eigen-chrome', chrome);
+    } catch {}
+}
+
+function getCachedChrome(): 'theme' | 'app' {
+    try {
+        const v = localStorage.getItem('eigen-chrome');
+        if (v === 'theme' || v === 'app') return v;
+    } catch {}
+    return 'theme';
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const { data: settings } = useSpaceSettings();
     const theme = settings?.theme ?? getCachedTheme();
+    const chrome = settings?.chromeStyle ?? getCachedChrome();
+
+    useEffect(() => {
+        applyChrome(chrome);
+    }, [chrome]);
 
     useEffect(() => {
         applyTheme(theme);

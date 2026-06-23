@@ -4,7 +4,6 @@ import { DEFAULT_MOUNT_ID, useListTrash, useRootFolder } from '@workspace/lib/dr
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import { Badge } from '@workspace/ui/components/badge';
-import { Separator } from '@workspace/ui/components/separator';
 import {
     Bell,
     Download,
@@ -22,6 +21,7 @@ import type { ReactNode } from 'react';
 import { useLayout } from '../app/layout-context';
 import { StorageUsage } from '../home/usage';
 import { UserAvatar } from '../user-avatar';
+import { SidebarBody } from './sidebar-body';
 import { SidebarHeader } from './sidebar-header';
 import { SidebarItem } from './sidebar-item';
 import { SidebarSection } from './sidebar-section';
@@ -91,6 +91,12 @@ const FILTER_ENTRIES: ReadonlyArray<FilterEntry> = [
     },
 ];
 
+// Drive mime slug (`image`, `application-eigenstickies`) → sidebar filter label,
+// so a filter view's toolbar title matches its nav entry exactly.
+export const FILTER_LABELS: Record<string, string> = Object.fromEntries(
+    FILTER_ENTRIES.map((entry) => [entry.driveMime, entry.label]),
+);
+
 function isFilterApp(name: string): name is FilterApp {
     return name === 'drive' || name === 'docs' || name === 'slides' || name === 'stickies' || name === 'sheets';
 }
@@ -132,14 +138,16 @@ function GuestAppSidebar({
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName={currentApp} onClose={onClose} />}
-            <SidebarSection condensed={condensed}>
-                <SidebarItem
-                    icon={<Download className="h-4 w-4" />}
-                    to="/shared/with-me"
-                    label="Shared with me"
-                    condensed={condensed}
-                />
-            </SidebarSection>
+            <SidebarBody>
+                <SidebarSection condensed={condensed}>
+                    <SidebarItem
+                        icon={<Download className="h-4 w-4" />}
+                        to="/shared/with-me"
+                        label="Shared with me"
+                        condensed={condensed}
+                    />
+                </SidebarSection>
+            </SidebarBody>
         </div>
     );
 }
@@ -175,60 +183,62 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName={appName} onClose={onClose} />}
-            {newButton}
 
-            <SidebarSection condensed={condensed}>
-                <SidebarItem
-                    icon={<Home className="h-4 w-4" />}
-                    {...driveHomeProps}
-                    label="Drive"
-                    condensed={condensed}
-                />
-            </SidebarSection>
+            <SidebarBody>
+                {newButton}
 
-            <Separator />
-            <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>
-                {FILTER_ENTRIES.map((entry) => (
-                    <FilterRow key={entry.label} entry={entry} currentApp={currentApp} condensed={condensed} />
-                ))}
-            </SidebarSection>
+                <SidebarSection condensed={condensed}>
+                    <SidebarItem
+                        icon={<Home className="h-4 w-4" />}
+                        {...driveHomeProps}
+                        label="Drive"
+                        condensed={condensed}
+                    />
+                </SidebarSection>
 
-            <Separator />
-            <SidebarSection condensed={condensed} title={condensed ? undefined : 'Sharing'}>
-                <SidebarItem
-                    icon={<UsersRound className="h-4 w-4" />}
-                    to="/shared/by-me"
-                    label={currentApp === 'drive' ? 'Shared by me' : `${SHARING_NOUN[currentApp]} shared by me`}
-                    condensed={condensed}
-                />
-                <SidebarItem
-                    icon={<Download className="h-4 w-4" />}
-                    to="/shared/with-me"
-                    label={currentApp === 'drive' ? 'Shared with me' : `${SHARING_NOUN[currentApp]} shared with me`}
-                    condensed={condensed}
-                />
-                <SidebarItem
-                    icon={<Bell className="h-4 w-4" />}
-                    {...watchedProps}
-                    label="Watched"
-                    condensed={condensed}
-                />
-            </SidebarSection>
+                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>
+                    {FILTER_ENTRIES.map((entry) => (
+                        <FilterRow key={entry.label} entry={entry} currentApp={currentApp} condensed={condensed} />
+                    ))}
+                </SidebarSection>
 
-            <Separator />
-            <SidebarSection condensed={condensed}>
-                <SidebarItem icon={<Trash2 className="h-4 w-4" />} {...trashProps} label="Trash" condensed={condensed}>
-                    {currentApp === 'drive' && !condensed && trashCount > 0 && (
-                        <Badge variant="secondary" className="ml-auto text-xs">
-                            {trashCount}
-                        </Badge>
-                    )}
-                </SidebarItem>
-            </SidebarSection>
+                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Sharing'}>
+                    <SidebarItem
+                        icon={<UsersRound className="h-4 w-4" />}
+                        to="/shared/by-me"
+                        label={currentApp === 'drive' ? 'Shared by me' : `${SHARING_NOUN[currentApp]} shared by me`}
+                        condensed={condensed}
+                    />
+                    <SidebarItem
+                        icon={<Download className="h-4 w-4" />}
+                        to="/shared/with-me"
+                        label={currentApp === 'drive' ? 'Shared with me' : `${SHARING_NOUN[currentApp]} shared with me`}
+                        condensed={condensed}
+                    />
+                    <SidebarItem
+                        icon={<Bell className="h-4 w-4" />}
+                        {...watchedProps}
+                        label="Watched"
+                        condensed={condensed}
+                    />
+                </SidebarSection>
 
-            {myTeams?.some((t) => t.mounts.length > 0) && (
-                <>
-                    <Separator />
+                <SidebarSection condensed={condensed}>
+                    <SidebarItem
+                        icon={<Trash2 className="h-4 w-4" />}
+                        {...trashProps}
+                        label="Trash"
+                        condensed={condensed}
+                    >
+                        {currentApp === 'drive' && !condensed && trashCount > 0 && (
+                            <Badge variant="secondary" className="ml-auto text-xs">
+                                {trashCount}
+                            </Badge>
+                        )}
+                    </SidebarItem>
+                </SidebarSection>
+
+                {myTeams?.some((t) => t.mounts.length > 0) && (
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Drives'}>
                         {myTeams.flatMap((team) =>
                             team.mounts
@@ -251,10 +261,10 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                                 }),
                         )}
                     </SidebarSection>
-                </>
-            )}
+                )}
 
-            <StorageUsage className="mt-auto" condensed={condensed} />
+                <StorageUsage className="mt-auto" condensed={condensed} />
+            </SidebarBody>
         </div>
     );
 }

@@ -110,7 +110,7 @@ type AdminUserDetailProps = {
 
 export function AdminUserDetail({ user }: AdminUserDetailProps) {
     return (
-        <div className="p-6 space-y-6">
+        <div className="app-gutter space-y-6">
             <UserDetailHero name={user.name} email={user.email} imageUrl={user.image} subtitle={user.email} />
 
             <div className="space-y-4">

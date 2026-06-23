@@ -256,48 +256,53 @@ export function EmailDraft({
                     handleSendEmail();
                 }}
             >
-                <div className="space-y-1 px-4 py-2 shrink-0">
-                    <div className="flex items-center border-b">
-                        <div className="w-16 text-sm text-muted-foreground py-2">To:</div>
+                <div className="space-y-1 app-gutter-x py-2 shrink-0">
+                    <div className="grid grid-cols-[4rem_1fr] items-center border-b">
+                        <label htmlFor="to" className="text-sm text-muted-foreground">
+                            To:
+                        </label>
                         <ContactAutosuggest
                             initialValue={state.to}
                             onChange={(val) => setField('to', val)}
                             appendMode
-                            className="flex-1"
                             inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                             disabled={isSending}
                             autoComplete="off"
                             id="to"
                         />
                     </div>
-                    <div className="flex items-center border-b">
-                        <div className="w-16 text-sm text-muted-foreground py-2">Cc:</div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center border-b">
+                        <label htmlFor="cc" className="text-sm text-muted-foreground">
+                            Cc:
+                        </label>
                         <ContactAutosuggest
                             initialValue={state.cc}
                             onChange={(val) => setField('cc', val)}
                             appendMode
-                            className="flex-1"
                             inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                             disabled={isSending}
                             autoComplete="off"
                             id="cc"
                         />
                     </div>
-                    <div className="flex items-center border-b">
-                        <div className="w-16 text-sm text-muted-foreground py-2">Bcc:</div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center border-b">
+                        <label htmlFor="bcc" className="text-sm text-muted-foreground">
+                            Bcc:
+                        </label>
                         <ContactAutosuggest
                             initialValue={state.bcc}
                             onChange={(val) => setField('bcc', val)}
                             appendMode
-                            className="flex-1"
                             inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                             disabled={isSending}
                             autoComplete="off"
                             id="bcc"
                         />
                     </div>
-                    <div className="flex items-center border-b">
-                        <div className="w-16 text-sm text-muted-foreground py-2">From:</div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center border-b">
+                        <label htmlFor="from" className="text-sm text-muted-foreground">
+                            From:
+                        </label>
                         <Input
                             id="from"
                             value={fromDisplay}
@@ -305,8 +310,10 @@ export function EmailDraft({
                             className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                         />
                     </div>
-                    <div className="flex items-center border-b">
-                        <div className="w-16 text-sm text-muted-foreground py-2">Subject:</div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center border-b">
+                        <label htmlFor="subject" className="text-sm text-muted-foreground">
+                            Subject:
+                        </label>
                         <Input
                             id="subject"
                             value={state.subject}
@@ -323,7 +330,7 @@ export function EmailDraft({
                     onRemoveReference={removeDriveReference}
                 />
                 <div
-                    className="flex-1 overflow-auto p-4 cursor-text"
+                    className="flex-1 overflow-auto app-gutter cursor-text"
                     onClick={(e) => {
                         if (e.target === e.currentTarget) {
                             const editable = e.currentTarget.querySelector<HTMLElement>('[contenteditable="true"]');

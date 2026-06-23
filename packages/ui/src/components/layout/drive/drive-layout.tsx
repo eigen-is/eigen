@@ -44,6 +44,8 @@ export type DriveLayoutProps = {
     allowDelete?: boolean;
     allowShare?: boolean;
     showBreadcrumb?: boolean;
+    // Toolbar title shown when there's no breadcrumb (filter/sharing/watched views).
+    title?: string;
     allowUpload?: boolean;
     // Omit to allow every EigenDocType; pass an empty set to disable create entirely.
     allowedCreateTypes?: ReadonlySet<EigenDocType>;
@@ -82,6 +84,7 @@ export function DriveLayout({
     sortFn = defaultDriveSort,
     pid = undefined,
     showBreadcrumb = false,
+    title,
     unreadPathIds,
     highlightHistory,
 }: DriveLayoutProps) {
@@ -321,6 +324,7 @@ export function DriveLayout({
             mountId={mountId}
             pathId={pathId}
             showBreadcrumb={showBreadcrumb}
+            title={title}
             onRowActivate={onRowActivate}
             onCreateFolder={allowCreateFolder ? dialogs.createFolder.openDialog : undefined}
             onUploadFile={allowUpload ? handleFileUpload : undefined}

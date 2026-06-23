@@ -658,6 +658,7 @@ const TiptapEditor = ({
             <Column
                 id={'doc-editor'}
                 width={'w-full'}
+                toolbarBorder="always"
                 toolbar={
                     <EditorToolbar
                         editor={editor}

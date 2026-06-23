@@ -157,7 +157,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto app-gutter">
                 {labelsError && (
                     <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
                         An error occurred while loading labels.

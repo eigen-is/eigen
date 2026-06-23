@@ -7,11 +7,11 @@ import { teamOwnerId } from '@workspace/lib/types';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
+import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
 import { MessageSquare, Plus } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -113,37 +113,36 @@ export function ChatSidebar({
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName="chat" onClose={onClose} />}
 
-            {!isGuest && (
-                <SidebarPrimaryButton
-                    icon={Plus}
-                    label="New chat"
-                    condensed={condensed}
-                    onClick={() => setCreateChatOpen(true)}
-                />
-            )}
+            <SidebarBody>
+                {!isGuest && (
+                    <SidebarPrimaryButton
+                        icon={Plus}
+                        label="New chat"
+                        condensed={condensed}
+                        onClick={() => setCreateChatOpen(true)}
+                    />
+                )}
 
-            {isLoading || !chats ? (
-                <div className="flex justify-center py-4">
-                    <EigenLoader />
-                </div>
-            ) : (
-                chats.length > 0 && (
-                    <SidebarSection condensed={condensed}>
-                        {chats.map((chat) => (
-                            <ChatItem
-                                key={chat.id}
-                                chat={chat}
-                                condensed={condensed}
-                                hasUnread={unreadChatIds.has(chat.id)}
-                            />
-                        ))}
-                    </SidebarSection>
-                )
-            )}
+                {isLoading || !chats ? (
+                    <div className="flex justify-center py-4">
+                        <EigenLoader />
+                    </div>
+                ) : (
+                    chats.length > 0 && (
+                        <SidebarSection condensed={condensed}>
+                            {chats.map((chat) => (
+                                <ChatItem
+                                    key={chat.id}
+                                    chat={chat}
+                                    condensed={condensed}
+                                    hasUnread={unreadChatIds.has(chat.id)}
+                                />
+                            ))}
+                        </SidebarSection>
+                    )
+                )}
 
-            {hasAnyTeamChats && (
-                <>
-                    <Separator />
+                {hasAnyTeamChats && (
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Chats'}>
                         {(myTeams ?? []).map((team) => (
                             <TeamChatItems
@@ -154,8 +153,8 @@ export function ChatSidebar({
                             />
                         ))}
                     </SidebarSection>
-                </>
-            )}
+                )}
+            </SidebarBody>
 
             {!isGuest && (
                 <DriveCreateEigenDoc

@@ -6,12 +6,12 @@ import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
+import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
-import { Separator } from '@workspace/ui/components/separator';
 import {
     ClipboardList,
     KeyRound,
@@ -58,10 +58,10 @@ export function AdminSidebar({
     };
 
     return (
-        <div className="h-full flex flex-col bg-background">
+        <div className="h-full flex flex-col">
             {isMobile && <SidebarHeader appName="admin" onClose={onClose} />}
 
-            <div className="overflow-auto flex-1 pt-2">
+            <SidebarBody>
                 <SidebarSection condensed={condensed}>
                     {isOwner && (
                         <>
@@ -119,7 +119,6 @@ export function AdminSidebar({
                     />
                 </SidebarSection>
 
-                <Separator className="my-2" />
                 <SidebarSection
                     condensed={condensed}
                     title="Teams"
@@ -139,7 +138,7 @@ export function AdminSidebar({
                             />
                         ))}
                 </SidebarSection>
-            </div>
+            </SidebarBody>
 
             <Dialog open={showCreate} onOpenChange={setShowCreate}>
                 <DialogContent>

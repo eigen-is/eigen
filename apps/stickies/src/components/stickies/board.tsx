@@ -231,6 +231,7 @@ export function StickiesBoard({
                 <LayoutColumn
                     id="board"
                     width="flex"
+                    toolbarBorder="always"
                     toolbar={
                         <Toolbar
                             path={path}

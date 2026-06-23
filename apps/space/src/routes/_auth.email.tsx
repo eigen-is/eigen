@@ -12,7 +12,7 @@ function RouteComponent() {
         <ColumnLayout>
             <Column id="detail" width="flex" toolbar={<ToolbarTitle>Mail</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
-                    <div className="w-full max-w-3xl p-8">
+                    <div className="w-full max-w-3xl app-gutter">
                         <SignatureSection />
                     </div>
                 </div>

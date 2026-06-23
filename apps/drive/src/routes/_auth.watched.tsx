@@ -111,6 +111,7 @@ function WatchedRoute() {
             allowMove={false}
             allowRename={false}
             showBreadcrumb={false}
+            title="Watched"
             allowedCreateTypes={new Set<EigenDocType>()}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}

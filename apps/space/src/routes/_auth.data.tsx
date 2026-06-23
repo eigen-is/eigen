@@ -12,7 +12,7 @@ function DataExportComponent() {
         <ColumnLayout>
             <Column id="detail" width="flex" toolbar={<ToolbarTitle>Data Export</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
-                    <div className="w-full max-w-3xl p-8">
+                    <div className="w-full max-w-3xl app-gutter">
                         <DownloadHome />
                     </div>
                 </div>

@@ -113,7 +113,7 @@ export function ContactDetail({ contact }: ContactDetailProps) {
 
     return (
         <div className="h-full flex flex-col overflow-hidden" data-document="contact-detail">
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-auto app-gutter">
                 <div className="flex flex-col md:flex-row gap-8">
                     <UserDetailHero
                         layout="profile"

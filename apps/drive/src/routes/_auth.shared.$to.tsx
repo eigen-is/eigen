@@ -111,6 +111,7 @@ function DriveRoute() {
             allowMove={false}
             allowedCreateTypes={new Set<EigenDocType>()}
             showBreadcrumb={false}
+            title={to === 'by-me' ? 'Shared by me' : 'Shared with me'}
             allowRename={to === 'by-me'}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}

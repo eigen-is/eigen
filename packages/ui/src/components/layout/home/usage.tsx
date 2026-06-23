@@ -36,13 +36,13 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
         <button
             type="button"
             aria-expanded={showDetails}
-            className={cn('w-full text-left p-3 select-none cursor-pointer', className)}
+            className={cn('w-full text-left py-3 select-none cursor-pointer', className)}
             onClick={() => setShowDetails(!showDetails)}
         >
             <div>
                 {!condensed && (
                     <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-medium text-muted-foreground">Storage</span>
+                        <span className="text-xs font-normal text-muted-foreground">Storage</span>
                         <span className="text-xs text-muted-foreground">
                             {storageLoading ? (
                                 <EigenLoader />

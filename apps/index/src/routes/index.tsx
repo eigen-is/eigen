@@ -1,13 +1,12 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { getSpaceAppUrl, publicApi } from '@workspace/lib/api';
-import { apps } from '@workspace/lib/apps';
 import { useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { Bar, Ket } from '@workspace/ui/components/layout/braket';
+import { EigenCyclingLogo } from '@workspace/ui/components/layout/braket';
 import { Textarea } from '@workspace/ui/components/textarea';
 import React, { useCallback } from 'react';
 import { toast } from 'sonner';
@@ -17,14 +16,12 @@ export const Route = createFileRoute('/')({
 });
 
 export function HomeComponent() {
-    const [appIndex, setAppIndex] = React.useState(0);
     const [showWaitlistForm, setShowWaitlistForm] = React.useState(false);
     const [email, setEmail] = React.useState('');
     const [notes, setNotes] = React.useState('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const { data: config } = usePublicConfig();
     const waitlistEnabled = config?.waitlistEnabled ?? false;
-    const app = apps[appIndex];
     const { isAuthenticated } = useAuth();
 
     // This page is prerendered and hydrates before the session check resolves, so
@@ -33,14 +30,6 @@ export function HomeComponent() {
     React.useEffect(() => {
         if (isAuthenticated) window.location.href = getSpaceAppUrl();
     }, [isAuthenticated]);
-
-    React.useEffect(() => {
-        const interval = setInterval(() => {
-            setAppIndex((prevIndex) => (prevIndex + 1) % apps.length);
-        }, 2000);
-
-        return () => clearInterval(interval);
-    }, [apps.length]);
 
     const resetForm = useCallback(() => {
         setIsSubmitting(false);
@@ -84,14 +73,7 @@ export function HomeComponent() {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
-            <div className="text-5xl mb-8" style={{ color: app.color }}>
-                <span className="font-medium">eigen</span>
-                <span className="font-normal">
-                    <Bar />
-                    {app.name.toLowerCase()}
-                    <Ket />
-                </span>
-            </div>
+            <EigenCyclingLogo className="text-5xl mb-8" />
             <div className="text-lg text-center mb-8 max-w-md">
                 <div>
                     <p className="mb-4">

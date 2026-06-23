@@ -1,6 +1,7 @@
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import { EigenLoader, StorageUsage } from '@workspace/ui';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
+import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -150,45 +151,47 @@ export function EmailSidebar({
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName="mail" onClose={onClose} />}
 
-            <EmailComposeButton condensed={condensed} />
+            <SidebarBody>
+                <EmailComposeButton condensed={condensed} />
 
-            <SidebarSection condensed={condensed}>
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                        <EigenLoader />
-                    </div>
-                ) : (
-                    standardMailboxList.map((item) => {
-                        const folderId =
-                            item.path === '' || item.path?.toLowerCase() === 'inbox' ? '' : item.path || '';
-                        if (onMoveToFolder) {
+                <SidebarSection condensed={condensed}>
+                    {isLoading ? (
+                        <div className="flex items-center justify-center py-4">
+                            <EigenLoader />
+                        </div>
+                    ) : (
+                        standardMailboxList.map((item) => {
+                            const folderId =
+                                item.path === '' || item.path?.toLowerCase() === 'inbox' ? '' : item.path || '';
+                            if (onMoveToFolder) {
+                                return (
+                                    <DroppableSidebarItem
+                                        key={item.path || item.name}
+                                        icon={item.icon}
+                                        label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
+                                        to={item.href}
+                                        condensed={condensed}
+                                        acceptTypes={['email']}
+                                        onDrop={(data) => onMoveToFolder(data.ids, folderId)}
+                                    />
+                                );
+                            }
                             return (
-                                <DroppableSidebarItem
+                                <SidebarItem
                                     key={item.path || item.name}
                                     icon={item.icon}
                                     label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
                                     to={item.href}
                                     condensed={condensed}
-                                    acceptTypes={['email']}
-                                    onDrop={(data) => onMoveToFolder(data.ids, folderId)}
                                 />
                             );
-                        }
-                        return (
-                            <SidebarItem
-                                key={item.path || item.name}
-                                icon={item.icon}
-                                label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
-                                to={item.href}
-                                condensed={condensed}
-                            />
-                        );
-                    })
-                )}
-            </SidebarSection>
+                        })
+                    )}
+                </SidebarSection>
 
-            {/* Storage usage indicator at the bottom of sidebar */}
-            <StorageUsage className="mt-auto" condensed={condensed} />
+                {/* Storage usage indicator at the bottom of sidebar */}
+                <StorageUsage className="mt-auto" condensed={condensed} />
+            </SidebarBody>
         </div>
     );
 }

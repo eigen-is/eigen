@@ -52,7 +52,7 @@ export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
 
     return label ? (
         <>
-            <div className="flex items-center justify-between h-12 px-4 border-b">
+            <div className="flex items-center justify-between h-12 app-gutter-x border-b">
                 <h1 className="text-base font-medium flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
                     {label.name}

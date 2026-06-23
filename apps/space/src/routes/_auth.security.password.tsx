@@ -25,7 +25,7 @@ function PasswordComponent() {
         <ColumnLayout>
             <Column id="detail" width="flex" toolbar={<ToolbarTitle>Change Password</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
-                    <div className="w-full max-w-3xl p-8">
+                    <div className="w-full max-w-3xl app-gutter">
                         <ChangePassword onPasswordChange={handlePasswordChange} />
                     </div>
                 </div>

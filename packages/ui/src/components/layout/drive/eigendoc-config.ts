@@ -14,6 +14,7 @@ export type EigenDocAppConfig = {
     icon: LucideIcon;
     newLabel: string;
     allLabel: string;
+    labelPlural: string;
     createType: EigenDocType;
 };
 
@@ -32,6 +33,7 @@ function buildConfig(type: EigenDocType): EigenDocAppConfig {
         icon: EIGEN_DOC_ICONS[type],
         newLabel: `New ${info.label.toLowerCase()}`,
         allLabel: `All ${info.labelPlural.toLowerCase()}`,
+        labelPlural: info.labelPlural,
         createType: info.type,
     };
 }

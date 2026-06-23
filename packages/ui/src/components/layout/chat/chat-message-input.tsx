@@ -217,14 +217,14 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
 
     if (readOnly) {
         return (
-            <div className={cn('border-t px-5 py-3', className)}>
+            <div className={cn('border-t app-gutter-x py-3', className)}>
                 <p className="text-xs text-muted-foreground text-center py-2">{readOnlyMessage}</p>
             </div>
         );
     }
 
     return (
-        <div className={cn('border-t px-5 py-3', className)} {...dropProps}>
+        <div className={cn('border-t app-gutter-x py-3', className)} {...dropProps}>
             <AttachmentDraftChips
                 items={[...(driveAttachments ?? []), ...files]}
                 className="mb-2"

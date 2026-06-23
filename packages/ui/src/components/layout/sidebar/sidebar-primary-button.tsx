@@ -1,13 +1,12 @@
 import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { Button } from '../../button';
 
-type SidebarPrimaryButtonProps = {
+type SidebarPrimaryButtonProps = ComponentProps<typeof Button> & {
     icon: LucideIcon;
     label: string;
     condensed?: boolean;
-    onClick?: () => void;
     renderTrigger?: (content: ReactNode) => ReactNode;
 };
 
@@ -15,8 +14,9 @@ export function SidebarPrimaryButton({
     icon: Icon,
     label,
     condensed = false,
-    onClick,
     renderTrigger,
+    className,
+    ...props
 }: SidebarPrimaryButtonProps) {
     const content = (
         <>
@@ -26,16 +26,18 @@ export function SidebarPrimaryButton({
     );
 
     return (
-        <div className="px-3 py-2">
-            <Button
-                variant="default"
-                size={condensed ? 'icon' : 'default'}
-                className={cn(condensed ? 'w-10 p-0' : 'w-full justify-start gap-3')}
-                onClick={onClick}
-                asChild={!!renderTrigger}
-            >
-                {renderTrigger ? renderTrigger(content) : content}
-            </Button>
-        </div>
+        <Button
+            variant="ghost"
+            size={condensed ? 'icon' : 'default'}
+            // Dark default button, except on the neutral (theme) topbar where it
+            // carries the brand colour. Driven by --sidebar-newbtn-* (set per
+            // data-chrome in globals.css); inline style so it beats the utility layer.
+            className={cn('hover:opacity-90', condensed ? 'w-10 p-0' : 'w-full justify-start gap-3', className)}
+            style={{ backgroundColor: 'var(--sidebar-newbtn-bg)', color: 'var(--sidebar-newbtn-fg)' }}
+            {...props}
+            asChild={!!renderTrigger}
+        >
+            {renderTrigger ? renderTrigger(content) : content}
+        </Button>
     );
 }

@@ -264,14 +264,82 @@
         --app-current-color: var(--app-drive-color);
         --app-current-color-soft: var(--app-drive-color-soft);
 
+        /* Project-wide content gutter. Adjust here to retune padding everywhere
+           the `.app-gutter` utility (or these vars) are used. Defaults match the
+           Tailwind px-3 / py-3 scale (symmetric). */
+        --app-gutter-x: 0.75rem;
+        --app-gutter-y: 0.75rem;
+
+        /* Topbar chrome tokens. Defaults here = the 'theme' variant (neutral
+           background bar that follows the light/dark theme), so the bar reads
+           correctly with no [data-chrome] set. The 'app' override below swaps to
+           a solid app-colour bar with white content (eigen.is parity). */
+        --topbar-bg: var(--background);
+        --topbar-border: var(--border);
+        --topbar-fg: var(--foreground);
+        --topbar-bracket: var(--app-current-color);
+        --topbar-icon: var(--muted-foreground);
+        --topbar-icon-hover-bg: var(--muted);
+        --topbar-icon-hover-fg: var(--foreground);
+        --topbar-title: var(--muted-foreground);
+        --topbar-pill-bg: color-mix(in oklab, var(--muted) 60%, transparent);
+        --topbar-pill-border: var(--border);
+        --topbar-pill-fg: var(--muted-foreground);
+        --topbar-pill-hover-bg: var(--muted);
+        --topbar-pill-hover-fg: var(--foreground);
+
+        /* Sidebar primary button: brand-colour on the neutral 'theme' bar
+           (default), dark default on the app-colour bar ('app' override below). */
+        --sidebar-newbtn-bg: var(--app-current-color);
+        --sidebar-newbtn-fg: #fff;
+
         scroll-behavior: smooth;
+    }
+
+    /* 'app' chrome: solid app-colour bar with white content (eigen.is parity). */
+    :root[data-chrome="app"] {
+        --topbar-bg: var(--app-current-color);
+        --topbar-border: transparent;
+        --topbar-fg: #fff;
+        --topbar-bracket: #fff;
+        --topbar-icon: #fff;
+        --topbar-icon-hover-bg: color-mix(in oklab, var(--primary) 20%, transparent);
+        --topbar-icon-hover-fg: #fff;
+        --topbar-title: rgba(255, 255, 255, 0.7);
+        --topbar-pill-bg: rgba(255, 255, 255, 0.1);
+        --topbar-pill-border: rgba(255, 255, 255, 0.15);
+        --topbar-pill-fg: rgba(255, 255, 255, 0.7);
+        --topbar-pill-hover-bg: rgba(255, 255, 255, 0.15);
+        --topbar-pill-hover-fg: #fff;
+        --sidebar-newbtn-bg: var(--primary);
+        --sidebar-newbtn-fg: var(--primary-foreground);
     }
 
     /* Compact uppercase label shared by sidebar section titles, table column
        headers, and other small group labels. Typography only — callsites add
        any wrapping layout (height, padding, flex). */
     .eigen-section-label {
-        @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+        @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground;
+    }
+
+    /* Title shown in a content toolbar (drive filter views, chat name, plain
+       page titles). Thin weight to match the breadcrumb page; callsites add
+       any wrapping layout. */
+    .eigen-toolbar-title {
+        @apply text-sm font-normal text-foreground truncate;
+    }
+
+    /* Standard content gutter (sidebar, panels, …). The values live in
+       --app-gutter-* so the whole project retunes from one place. */
+    .app-gutter {
+        padding-inline: var(--app-gutter-x);
+        padding-block: var(--app-gutter-y);
+    }
+
+    /* Horizontal-only gutter — for list/table surfaces that want left/right
+       breathing room but manage their own vertical rhythm (e.g. the drive table). */
+    .app-gutter-x {
+        padding-inline: var(--app-gutter-x);
     }
 
     /* DrivePreview hero: scaled-down server-rendered HTML preview for an
