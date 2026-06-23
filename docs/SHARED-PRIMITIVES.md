@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-749 primitives across 6 kinds. `packages/sheet` internals are excluded.
+753 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (97)
+## Components (99)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -54,6 +54,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DrivePreview` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-preview.tsx |
 | `DriveTable` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
 | `EigenApp` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-app.tsx |
+| `EigenCyclingLogo` | `@workspace/ui` | packages/ui/src/components/layout/braket/eigen-cycling-logo.tsx |
 | `EigenDocListView` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-list-view.tsx |
 | `EigenDocNewButton` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-new-button.tsx |
 | `EigenDocRoot` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
@@ -78,6 +79,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NotFound` | `@workspace/ui` | packages/ui/src/components/layout/app/not-found.tsx |
 | `RequestAccessView` | `@workspace/ui` | packages/ui/src/components/layout/app/request-access-view.tsx |
 | `ShadowContent` | `@workspace/ui` | packages/ui/src/components/layout/shadow-content.tsx |
+| `SidebarBody` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
 | `SidebarItem` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-item.tsx |
 | `SidebarSection` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
 | `StorageUsage` | `@workspace/ui` | packages/ui/src/components/layout/home/usage.tsx |
@@ -339,7 +341,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (204)
+## Types (205)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -529,6 +531,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LabelFilterHeaderProps` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-filter-header.tsx |
 | `LabelManagerProps` | `@workspace/ui` | packages/ui/src/components/layout/labels/types.ts |
 | `LayoutContextType` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
+| `SidebarBodyProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
 | `SidebarItemProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-item.tsx |
 | `SidebarSectionProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
 | `SlashTargetContext` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-utils.ts |
@@ -548,7 +551,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (237)
+## Utilities & constants (238)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -778,6 +781,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `eigenDocEditorValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `eigenDocValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `FilePresentation` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
+| `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `getAtSuggestQuery` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-utils.ts |
 | `getFileIcon` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
