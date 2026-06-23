@@ -4,6 +4,7 @@ import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EigenLoader, StorageUsage, TooltipButton } from '@workspace/ui';
+import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -133,7 +134,7 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
         <div className="h-full flex flex-col">
             {isMobile && <SidebarHeader appName="calendar" onClose={onClose} />}
 
-            <div className="flex flex-1 flex-col app-gutter">
+            <SidebarBody>
                 <SidebarPrimaryButton
                     icon={CalendarPlus}
                     label="Create event"
@@ -144,7 +145,6 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
                 <div className="overflow-auto flex-1">
                     <SidebarSection
                         condensed={condensed}
-                        className="px-0"
                         title="My Calendars"
                         action={
                             <TooltipButton icon={Plus} tooltipText="Add new calendar" onClick={handleCreateCalendar} />
@@ -186,7 +186,7 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
                     </SidebarSection>
 
                     {personalShared.length > 0 && (
-                        <SidebarSection condensed={condensed} className="px-0" title="Shared with me">
+                        <SidebarSection condensed={condensed} title="Shared with me">
                             {sharedLoading ? (
                                 <EigenLoader />
                             ) : (
@@ -206,7 +206,7 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
                     )}
 
                     {teamShared.length > 0 && (
-                        <SidebarSection condensed={condensed} className="px-0" title="Team Calendars">
+                        <SidebarSection condensed={condensed} title="Team Calendars">
                             {sharedLoading ? (
                                 <EigenLoader />
                             ) : (
@@ -229,8 +229,8 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
                     )}
                 </div>
 
-                <StorageUsage className="mt-auto px-0" condensed={condensed} />
-            </div>
+                <StorageUsage className="mt-auto" condensed={condensed} />
+            </SidebarBody>
 
             <CalendarConfigDialog
                 open={configDialogOpen}

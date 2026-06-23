@@ -7,6 +7,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
+import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
@@ -112,7 +113,7 @@ export function ChatSidebar({
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName="chat" onClose={onClose} />}
 
-            <div className="flex flex-1 flex-col app-gutter">
+            <SidebarBody>
                 {!isGuest && (
                     <SidebarPrimaryButton
                         icon={Plus}
@@ -128,7 +129,7 @@ export function ChatSidebar({
                     </div>
                 ) : (
                     chats.length > 0 && (
-                        <SidebarSection condensed={condensed} className="px-0">
+                        <SidebarSection condensed={condensed}>
                             {chats.map((chat) => (
                                 <ChatItem
                                     key={chat.id}
@@ -142,7 +143,7 @@ export function ChatSidebar({
                 )}
 
                 {hasAnyTeamChats && (
-                    <SidebarSection condensed={condensed} className="px-0" title={condensed ? undefined : 'Team Chats'}>
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Chats'}>
                         {(myTeams ?? []).map((team) => (
                             <TeamChatItems
                                 key={team.id}
@@ -153,7 +154,7 @@ export function ChatSidebar({
                         ))}
                     </SidebarSection>
                 )}
-            </div>
+            </SidebarBody>
 
             {!isGuest && (
                 <DriveCreateEigenDoc

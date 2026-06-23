@@ -21,6 +21,7 @@ import type { ReactNode } from 'react';
 import { useLayout } from '../app/layout-context';
 import { StorageUsage } from '../home/usage';
 import { UserAvatar } from '../user-avatar';
+import { SidebarBody } from './sidebar-body';
 import { SidebarHeader } from './sidebar-header';
 import { SidebarItem } from './sidebar-item';
 import { SidebarSection } from './sidebar-section';
@@ -137,14 +138,16 @@ function GuestAppSidebar({
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName={currentApp} onClose={onClose} />}
-            <SidebarSection condensed={condensed}>
-                <SidebarItem
-                    icon={<Download className="h-4 w-4" />}
-                    to="/shared/with-me"
-                    label="Shared with me"
-                    condensed={condensed}
-                />
-            </SidebarSection>
+            <SidebarBody>
+                <SidebarSection condensed={condensed}>
+                    <SidebarItem
+                        icon={<Download className="h-4 w-4" />}
+                        to="/shared/with-me"
+                        label="Shared with me"
+                        condensed={condensed}
+                    />
+                </SidebarSection>
+            </SidebarBody>
         </div>
     );
 }
@@ -181,10 +184,10 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName={appName} onClose={onClose} />}
 
-            <div className="flex flex-1 flex-col app-gutter">
+            <SidebarBody>
                 {newButton}
 
-                <SidebarSection condensed={condensed} className="px-0">
+                <SidebarSection condensed={condensed}>
                     <SidebarItem
                         icon={<Home className="h-4 w-4" />}
                         {...driveHomeProps}
@@ -193,13 +196,13 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                     />
                 </SidebarSection>
 
-                <SidebarSection condensed={condensed} className="px-0" title={condensed ? undefined : 'Filters'}>
+                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>
                     {FILTER_ENTRIES.map((entry) => (
                         <FilterRow key={entry.label} entry={entry} currentApp={currentApp} condensed={condensed} />
                     ))}
                 </SidebarSection>
 
-                <SidebarSection condensed={condensed} className="px-0" title={condensed ? undefined : 'Sharing'}>
+                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Sharing'}>
                     <SidebarItem
                         icon={<UsersRound className="h-4 w-4" />}
                         to="/shared/by-me"
@@ -220,7 +223,7 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                     />
                 </SidebarSection>
 
-                <SidebarSection condensed={condensed} className="px-0">
+                <SidebarSection condensed={condensed}>
                     <SidebarItem
                         icon={<Trash2 className="h-4 w-4" />}
                         {...trashProps}
@@ -236,11 +239,7 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                 </SidebarSection>
 
                 {myTeams?.some((t) => t.mounts.length > 0) && (
-                    <SidebarSection
-                        condensed={condensed}
-                        className="px-0"
-                        title={condensed ? undefined : 'Team Drives'}
-                    >
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Drives'}>
                         {myTeams.flatMap((team) =>
                             team.mounts
                                 .filter((mount) => currentApp !== 'drive' || mount.rootPathId)
@@ -264,8 +263,8 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                     </SidebarSection>
                 )}
 
-                <StorageUsage className="mt-auto px-0" condensed={condensed} />
-            </div>
+                <StorageUsage className="mt-auto" condensed={condensed} />
+            </SidebarBody>
         </div>
     );
 }

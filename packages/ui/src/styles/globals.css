@@ -290,8 +290,8 @@
 
         /* Sidebar primary button: dark default on the app-colour bar, brand-colour
            on the neutral 'theme' bar (override below). */
-        --sidebar-primary-bg: var(--primary);
-        --sidebar-primary-fg: var(--primary-foreground);
+        --sidebar-newbtn-bg: var(--primary);
+        --sidebar-newbtn-fg: var(--primary-foreground);
 
         scroll-behavior: smooth;
     }
@@ -311,8 +311,8 @@
         --topbar-pill-fg: var(--muted-foreground);
         --topbar-pill-hover-bg: var(--muted);
         --topbar-pill-hover-fg: var(--foreground);
-        --sidebar-primary-bg: var(--app-current-color);
-        --sidebar-primary-fg: #fff;
+        --sidebar-newbtn-bg: var(--app-current-color);
+        --sidebar-newbtn-fg: #fff;
     }
 
     /* Compact uppercase label shared by sidebar section titles, table column

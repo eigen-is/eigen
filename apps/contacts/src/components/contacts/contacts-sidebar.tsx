@@ -5,6 +5,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { Label } from '@workspace/lib/types/label';
 import { EigenLoader, SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
 import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
+import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -27,7 +28,7 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false, 
         <div className="h-full flex flex-col">
             {isMobile && <SidebarHeader appName="contacts" onClose={onClose} />}
 
-            <div className="flex flex-1 flex-col app-gutter">
+            <SidebarBody>
                 <SidebarPrimaryButton
                     icon={UserRoundPlus}
                     label="Create contact"
@@ -36,7 +37,7 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false, 
                 />
 
                 <div className="overflow-auto flex-1">
-                    <SidebarSection condensed={condensed} className="px-0">
+                    <SidebarSection condensed={condensed}>
                         <SidebarItem
                             icon={<UsersRound className="h-4 w-4" />}
                             label="My Contacts"
@@ -68,7 +69,6 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false, 
                         <LabelManager
                             labels={labels}
                             getLabelPath={getLabelPath}
-                            className="px-0"
                             condensed={condensed}
                             dropAcceptTypes={onAssignLabel ? ['contact'] : undefined}
                             onItemDrop={onAssignLabel}
@@ -76,8 +76,8 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false, 
                     )}
                 </div>
 
-                <StorageUsage className="mt-auto px-0" condensed={condensed} />
-            </div>
+                <StorageUsage className="mt-auto" condensed={condensed} />
+            </SidebarBody>
         </div>
     );
 }

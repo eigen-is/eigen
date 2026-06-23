@@ -1,6 +1,7 @@
 import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl } from '@workspace/lib/api';
 import { SidebarItem, StorageUsage } from '@workspace/ui';
+import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { BookUser, KeySquare, LockKeyholeIcon, Mail, MonitorSmartphone, Shield, UserRound } from 'lucide-react';
@@ -18,8 +19,8 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName="space" onClose={onClose} />}
 
-            <div className="flex flex-1 flex-col app-gutter">
-                <SidebarSection condensed={condensed} className="px-0">
+            <SidebarBody>
+                <SidebarSection condensed={condensed}>
                     <SidebarItem
                         icon={<UserRound className="h-4 w-4" />}
                         label="Home"
@@ -44,7 +45,7 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     />
                 </SidebarSection>
 
-                <SidebarSection condensed={condensed} className="px-0">
+                <SidebarSection condensed={condensed}>
                     <SidebarItem
                         icon={<LockKeyholeIcon className="h-4 w-4" />}
                         label="Change password"
@@ -61,7 +62,7 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     />
                 </SidebarSection>
 
-                <SidebarSection condensed={condensed} className="px-0" title={condensed ? undefined : 'App settings'}>
+                <SidebarSection condensed={condensed} title={condensed ? undefined : 'App settings'}>
                     <SidebarItem
                         icon={<Mail className="h-4 w-4" />}
                         label="Mail"
@@ -72,7 +73,7 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                 </SidebarSection>
 
                 {isAdmin && (
-                    <SidebarSection condensed={condensed} className="px-0">
+                    <SidebarSection condensed={condensed}>
                         <SidebarItem
                             icon={<Shield className="h-4 w-4" />}
                             label="Admin"
@@ -82,8 +83,8 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     </SidebarSection>
                 )}
 
-                <StorageUsage className="mt-auto px-0" condensed={condensed} />
-            </div>
+                <StorageUsage className="mt-auto" condensed={condensed} />
+            </SidebarBody>
         </div>
     );
 }

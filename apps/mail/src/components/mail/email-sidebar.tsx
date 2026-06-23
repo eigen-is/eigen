@@ -1,6 +1,7 @@
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import { EigenLoader, StorageUsage } from '@workspace/ui';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
+import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -150,10 +151,10 @@ export function EmailSidebar({
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName="mail" onClose={onClose} />}
 
-            <div className="flex flex-1 flex-col app-gutter">
+            <SidebarBody>
                 <EmailComposeButton condensed={condensed} />
 
-                <SidebarSection condensed={condensed} className="px-0">
+                <SidebarSection condensed={condensed}>
                     {isLoading ? (
                         <div className="flex items-center justify-center py-4">
                             <EigenLoader />
@@ -189,8 +190,8 @@ export function EmailSidebar({
                 </SidebarSection>
 
                 {/* Storage usage indicator at the bottom of sidebar */}
-                <StorageUsage className="mt-auto px-0" condensed={condensed} />
-            </div>
+                <StorageUsage className="mt-auto" condensed={condensed} />
+            </SidebarBody>
         </div>
     );
 }

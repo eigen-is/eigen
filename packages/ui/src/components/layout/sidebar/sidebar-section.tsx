@@ -12,7 +12,7 @@ export type SidebarSectionProps = {
 export function SidebarSection({ title, action, children, condensed = false, className }: SidebarSectionProps) {
     const showHeader = title || action;
     return (
-        <div className={cn('px-3 pt-3 pb-1', className)}>
+        <div className={cn('pt-3 pb-1', className)}>
             {showHeader && (
                 <div
                     className={cn('flex items-center mb-1.5 px-2.5', condensed ? 'justify-center' : 'justify-between')}

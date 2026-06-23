@@ -36,7 +36,7 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
         <button
             type="button"
             aria-expanded={showDetails}
-            className={cn('w-full text-left p-3 select-none cursor-pointer', className)}
+            className={cn('w-full text-left py-3 select-none cursor-pointer', className)}
             onClick={() => setShowDetails(!showDetails)}
         >
             <div>
