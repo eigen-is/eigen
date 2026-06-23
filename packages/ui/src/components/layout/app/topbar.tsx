@@ -6,7 +6,7 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { cn } from '@workspace/ui/lib/utils.ts';
-import { Grip, LifeBuoy, LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
+import { Grip, LifeBuoy, LogOut, Menu, Palette, PanelTop, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
 import {
@@ -94,7 +94,7 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                     variant="ghost"
                     size="icon"
                     aria-label="Switch app"
-                    className="mr-1 h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="mr-1 h-8 w-8 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
                 >
                     <Grip className="h-5 w-5" />
                 </Button>
@@ -244,6 +244,21 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                             </DropdownMenuRadioGroup>
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <PanelTop />
+                            Topbar
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            <DropdownMenuRadioGroup
+                                value={settings?.chromeStyle ?? 'app'}
+                                onValueChange={(v) => updateSettings.mutate({ chromeStyle: v as 'theme' | 'app' })}
+                            >
+                                <DropdownMenuRadioItem value="app">App colour</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="theme">Theme</DropdownMenuRadioItem>
+                            </DropdownMenuRadioGroup>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                         <a href={getSupportUrl()}>
@@ -280,7 +295,10 @@ export function Topbar({ rootRoute }: TopbarProps) {
     const showBurger = isMobile && sidebarMode !== 'none';
 
     return (
-        <header className="bg-background border-b shrink-0">
+        <header
+            className="border-b shrink-0"
+            style={{ backgroundColor: 'var(--topbar-bg)', borderColor: 'var(--topbar-border)' }}
+        >
             {/* 1fr·auto·1fr grid keeps the title / command palette at the bar's true
                 center, independent of the left (logo) and right (actions) block widths */}
             <div className="grid h-12 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
@@ -290,7 +308,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
                             variant="ghost"
                             size="icon"
                             onClick={() => setSidebarOpen(true)}
-                            className="mr-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            className="mr-1 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
                         >
                             <Menu className="h-5 w-5" />
                             <span className="sr-only">Open menu</span>
@@ -302,7 +320,9 @@ export function Topbar({ rootRoute }: TopbarProps) {
 
                 <div className="flex justify-center min-w-0">
                     {documentTitle && !isMobile && (
-                        <span className="text-muted-foreground truncate max-w-[400px]">{documentTitle}</span>
+                        <span className="truncate max-w-[400px]" style={{ color: 'var(--topbar-title)' }}>
+                            {documentTitle}
+                        </span>
                     )}
                     {!documentTitle && !isMobile && <CommandPaletteTrigger />}
                 </div>

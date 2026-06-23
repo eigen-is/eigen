@@ -270,7 +270,49 @@
         --app-gutter-x: 0.75rem;
         --app-gutter-y: 0.75rem;
 
+        /* Topbar chrome tokens. Defaults here = the 'app' variant (solid
+           app-colour bar, white content) so the bar reads correctly with no
+           [data-chrome] set — matches eigen.is. The 'theme' override below
+           swaps to a neutral, theme-following bar. */
+        --topbar-bg: var(--app-current-color);
+        --topbar-border: transparent;
+        --topbar-fg: #fff;
+        --topbar-bracket: #fff;
+        --topbar-icon: #fff;
+        --topbar-icon-hover-bg: color-mix(in oklab, var(--primary) 20%, transparent);
+        --topbar-icon-hover-fg: #fff;
+        --topbar-title: rgba(255, 255, 255, 0.7);
+        --topbar-pill-bg: rgba(255, 255, 255, 0.1);
+        --topbar-pill-border: rgba(255, 255, 255, 0.15);
+        --topbar-pill-fg: rgba(255, 255, 255, 0.7);
+        --topbar-pill-hover-bg: rgba(255, 255, 255, 0.15);
+        --topbar-pill-hover-fg: #fff;
+
+        /* Sidebar primary button: dark default on the app-colour bar, brand-colour
+           on the neutral 'theme' bar (override below). */
+        --sidebar-primary-bg: var(--primary);
+        --sidebar-primary-fg: var(--primary-foreground);
+
         scroll-behavior: smooth;
+    }
+
+    /* 'theme' chrome: neutral background bar that follows the light/dark theme. */
+    :root[data-chrome="theme"] {
+        --topbar-bg: var(--background);
+        --topbar-border: var(--border);
+        --topbar-fg: var(--foreground);
+        --topbar-bracket: var(--app-current-color);
+        --topbar-icon: var(--muted-foreground);
+        --topbar-icon-hover-bg: var(--muted);
+        --topbar-icon-hover-fg: var(--foreground);
+        --topbar-title: var(--muted-foreground);
+        --topbar-pill-bg: color-mix(in oklab, var(--muted) 60%, transparent);
+        --topbar-pill-border: var(--border);
+        --topbar-pill-fg: var(--muted-foreground);
+        --topbar-pill-hover-bg: var(--muted);
+        --topbar-pill-hover-fg: var(--foreground);
+        --sidebar-primary-bg: var(--app-current-color);
+        --sidebar-primary-fg: #fff;
     }
 
     /* Compact uppercase label shared by sidebar section titles, table column

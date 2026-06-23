@@ -27,13 +27,13 @@ export function SidebarPrimaryButton({
 
     return (
         <Button
-            variant="default"
+            variant="ghost"
             size={condensed ? 'icon' : 'default'}
-            className={cn(
-                'bg-app text-white hover:bg-app hover:opacity-90',
-                condensed ? 'w-10 p-0' : 'w-full justify-start gap-3',
-                className,
-            )}
+            // Dark default button, except on the neutral (theme) topbar where it
+            // carries the brand colour. Driven by --sidebar-primary-* (set per
+            // data-chrome in globals.css); inline style so it beats the utility layer.
+            className={cn('hover:opacity-90', condensed ? 'w-10 p-0' : 'w-full justify-start gap-3', className)}
+            style={{ backgroundColor: 'var(--sidebar-primary-bg)', color: 'var(--sidebar-primary-fg)' }}
             {...props}
             asChild={!!renderTrigger}
         >

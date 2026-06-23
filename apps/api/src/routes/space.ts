@@ -30,6 +30,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
         {
             body: t.Object({
                 theme: t.Optional(t.Union([t.Literal('light'), t.Literal('dark'), t.Literal('system')])),
+                chromeStyle: t.Optional(t.Union([t.Literal('theme'), t.Literal('app')])),
                 email: t.Optional(
                     t.Object({
                         signatures: t.Optional(

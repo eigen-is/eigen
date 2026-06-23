@@ -5,9 +5,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/component
 import { cn } from '@workspace/ui/lib/utils';
 import { Search } from 'lucide-react';
 
-// Topbar is a neutral (theme `background`) bar with a thin per-app accent stripe on top
-// (see topbar.tsx), so icons + the search pill use muted-on-background treatment that
-// follows the theme, matching NotificationBell and AppSwitcher.
+// Icons + the search pill read from the --topbar-* tokens (defined in globals.css,
+// switched by [data-chrome]), so they adapt to the app-colour or theme bar without
+// branching here — matching NotificationBell and AppSwitcher.
 //
 // Topbar renders this unconditionally, but the marketing-only index app (blog/support)
 // doesn't mount the CommandPaletteProvider — mirror PaletteRunner (app-shell.tsx) and
@@ -24,8 +24,9 @@ export function CommandPaletteTrigger() {
                 type="button"
                 onClick={() => setOpen(true)}
                 className={cn(
-                    'hidden md:flex items-center gap-2 rounded-md border border-border bg-muted/60 px-3 h-8',
-                    'text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
+                    'hidden md:flex items-center gap-2 rounded-md border px-3 h-8',
+                    'border-[var(--topbar-pill-border)] bg-[var(--topbar-pill-bg)] text-[var(--topbar-pill-fg)]',
+                    'text-sm hover:bg-[var(--topbar-pill-hover-bg)] hover:text-[var(--topbar-pill-hover-fg)] transition-colors',
                     'min-w-xs lg:min-w-md',
                 )}
             >
@@ -39,7 +40,7 @@ export function CommandPaletteTrigger() {
                         variant="ghost"
                         size="icon"
                         onClick={() => setOpen(true)}
-                        className="md:hidden h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        className="md:hidden h-8 w-8 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
                     >
                         <Search className="h-4 w-4" />
                     </Button>
