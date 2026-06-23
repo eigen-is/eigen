@@ -251,7 +251,7 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             <DropdownMenuRadioGroup
-                                value={settings?.chromeStyle ?? 'app'}
+                                value={settings?.chromeStyle ?? 'theme'}
                                 onValueChange={(v) => updateSettings.mutate({ chromeStyle: v as 'theme' | 'app' })}
                             >
                                 <DropdownMenuRadioItem value="app">App colour</DropdownMenuRadioItem>

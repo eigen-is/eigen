@@ -11,7 +11,7 @@ function themeFlashPlugin(): Plugin {
         transformIndexHtml(html) {
             return html.replace(
                 '<head>',
-                `<head><script>try{var t=localStorage.getItem("eigen-theme");var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark");var c=localStorage.getItem("eigen-chrome");document.documentElement.dataset.chrome=c==="theme"?"theme":"app"}catch{}</script>`,
+                `<head><script>try{var t=localStorage.getItem("eigen-theme");var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark");var c=localStorage.getItem("eigen-chrome");document.documentElement.dataset.chrome=c==="app"?"app":"theme"}catch{}</script>`,
             );
         },
     };

@@ -33,7 +33,7 @@ function getCachedChrome(): 'theme' | 'app' {
         const v = localStorage.getItem('eigen-chrome');
         if (v === 'theme' || v === 'app') return v;
     } catch {}
-    return 'app';
+    return 'theme';
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
