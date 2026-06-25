@@ -203,6 +203,13 @@
     }
 }
 
+@theme {
+    --font-weight-normal: 400;
+    --font-weight-medium: 450;
+    --font-weight-semibold: 525;
+    --font-weight-bold: 600;
+}
+
 @layer base {
     * {
         @apply border-border outline-ring/50;
@@ -215,6 +222,7 @@
 
     body {
         font-family: var(--font-sans);
+        font-weight: var(--font-weight-normal);
         touch-action: manipulation;
     }
 
@@ -399,7 +407,7 @@
         color: var(--color-primary-foreground);
         border-radius: 9999px;
         font-size: 13px;
-        font-weight: 500;
+        font-weight: var(--font-weight-medium);
         white-space: nowrap;
     }
 }

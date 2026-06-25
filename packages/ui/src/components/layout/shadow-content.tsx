@@ -101,7 +101,7 @@ export function ShadowContent({
 
       /* Add prose-like styling for better readability */
       p, ul, ol, blockquote { margin-bottom: 1em; }
-      h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; font-weight: 600; }
+      h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; font-weight: 500; }
     `;
 
         // Append style and content to shadow DOM
