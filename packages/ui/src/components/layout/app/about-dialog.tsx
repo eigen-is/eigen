@@ -1,7 +1,7 @@
-import { getLicensesUrl } from '@workspace/lib/api';
+import { getChangelogUrl, getLicensesUrl } from '@workspace/lib/api';
 import { formatInputDate } from '@workspace/lib/date';
 import { usePublicConfig } from '@workspace/lib/public';
-import { Github, Scale } from 'lucide-react';
+import { Github, Scale, ScrollText } from 'lucide-react';
 import { Button } from '../../button.tsx';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
 
@@ -30,14 +30,16 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
 
                 <div className="space-y-4 text-sm">
                     <div className="text-center text-xs text-muted-foreground">
-                        Version {config?.version ?? '—'}
-                        {config?.commit && (
-                            <>
-                                {' · '}
-                                {config.commit}
-                                {config.builtAt && ` · ${formatInputDate(config.builtAt)}`}
-                            </>
-                        )}
+                        <a href={getChangelogUrl()} target="_blank" rel="noreferrer" className="hover:text-foreground">
+                            Version {config?.version ?? '—'}
+                            {config?.commit && (
+                                <>
+                                    {' · '}
+                                    {config.commit}
+                                    {config.builtAt && ` · ${formatInputDate(config.builtAt)}`}
+                                </>
+                            )}
+                        </a>
                     </div>
 
                     <div className="flex justify-center text-xs text-muted-foreground">
@@ -61,6 +63,18 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
                         >
                             <Scale className="size-3.5" />
                             Open-source licenses
+                        </a>
+                    </div>
+
+                    <div className="flex justify-center text-xs text-muted-foreground">
+                        <a
+                            href={getChangelogUrl()}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 hover:text-foreground"
+                        >
+                            <ScrollText className="size-3.5" />
+                            Changelog
                         </a>
                     </div>
                 </div>

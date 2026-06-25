@@ -103,6 +103,9 @@ export function HomeComponent() {
                         <Link to="/blog" className="text-link hover:text-link/80 underline">
                             Blog
                         </Link>
+                        <Link to="/changelog" className="text-link hover:text-link/80 underline">
+                            Changelog
+                        </Link>
                         <a
                             href="https://github.com/eigen-is/eigen"
                             target="_blank"
