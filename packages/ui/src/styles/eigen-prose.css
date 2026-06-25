@@ -22,7 +22,7 @@
     h6 {
         margin-top: 1.5em;
         margin-bottom: 0.5em;
-        font-weight: 500;
+        font-weight: var(--font-weight-medium);
     }
 
     h1 {
@@ -58,7 +58,7 @@
     /* Inline text */
 
     strong {
-        font-weight: 700;
+        font-weight: var(--font-weight-bold);
     }
 
     em {
@@ -198,7 +198,7 @@
 
     th {
         background-color: #f9fafb;
-        font-weight: 500;
+        font-weight: var(--font-weight-medium);
     }
 
     table td > p,
