@@ -3,6 +3,89 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.0.6] - 2026-06-25
+
+Activity & history release. A per-file activity timeline with file and folder watching,
+copy/move/duplicate across drives, attachments on comment cards, a big spreadsheet import-fidelity
+pass, a filled-out help center, and a visual refresh, plus data-loss hardening for remote storage.
+
+### Added
+
+- **File activity & history** — every file in Drive now keeps a timeline of what happened to it
+  (created, uploaded, edited, renamed, moved, copied, commented) and who did it, shown in a Recent
+  Activity panel on the file's details; collaborative-document edits and comments are attributed to
+  the people who made them
+- **File & folder watching** — watch any file or folder to be notified when it changes; watching a
+  folder cascades to everything inside it, a new Watched view lists everything you are watching, and
+  bursts of changes are coalesced into a single notification
+- **Copy, move & duplicate** — right-click a file or folder (or a multi-selection) in Drive to
+  Move to…, Copy to…, or Duplicate; copy works anywhere, including across mounts and into team
+  drives, while move stays within a drive; folders copy recursively and collaborative documents
+  copy as independent, fully working documents
+- **Comment attachments** — attach files to comment cards in Docs, Slides, Sheets, and Stickies, and
+  to chat; paste or drag-and-drop files straight into the card form or the chat input
+- **Sheets** — XLSX import now preserves much more: hyperlinks, data-validation rules, conditional
+  formatting, autofilters, hidden rows and columns, and frozen panes; these survive a round-trip
+  back out to XLSX export
+- **Sheets** — a formatting toolbar with font family, size, bold, and italic; number formatting
+  gains Google-style custom-format dialogs for dates, numbers, and currency, and the Format → Number
+  menu matches Google's structure
+- **Sheets** — the column filter menu can now filter by condition (text contains, greater than, and
+  so on), not just by selecting values
+- **Stickies** — resolve a card, and reopen it later; resolved cards show a check
+- **Slides** — right-click a slide object for a context menu of its actions
+- **Help center** — the Eigen Support help center now has 120 articles, searchable from the command
+  palette through a new Help scope as well as on the site
+- **Drive** — files are served with HTTP range support, so video and audio scrub instantly in the
+  preview and interrupted downloads can resume
+- **Marketing site** — a new `/licenses` page lists the open-source software Eigen is built on
+
+### Changed
+
+- **Visual refresh** — a redesigned app switcher (a grid of large, app-coloured icons with names), a
+  lighter font-weight scale across the apps, Drive file icons tinted by app, an animated
+  `eigen|app>` wordmark on the landing page and Space home, and a topbar that can switch between
+  app-coloured and neutral chrome; toolbar titles are lighter, toolbar borders fade in on scroll,
+  and the Drive, Trash, and Calendar layouts were tidied up
+- **Landing page** — the marketing landing page is prerendered, so it paints instantly and is
+  friendlier to search engines; signed-in visitors are sent straight into the app
+- **Sheets** — inserting or deleting rows and columns no longer ships the whole sheet, keeping large
+  sheets responsive
+
+### Fixed
+
+- **Mail** — deleting a Trash email from the detail toolbar now asks for confirmation and then
+  permanently deletes, instead of silently doing nothing
+- **Mail** — HTML emails authored for a light background render on a light canvas in dark mode so
+  they stay readable; unread senders are bolder; and a failed mailbox load shows an error state
+  instead of an empty "no emails" message
+- **Drive** — the preview's next/previous arrows work again for files opened from the Shared and
+  file-type views
+- **Slides** — on medium-width screens the editing controls (undo/redo and add slide/text/image)
+  stay reachable through an Edit menu instead of disappearing
+- **Sheets** — imported dates render through their number format, an unknown filter condition
+  matches every row instead of hiding them all, and cell focus returns when a context menu closes
+- **Accessibility** — icon-only buttons now have accessible names and keyboard paths, and tall
+  popovers and menus clamp to the viewport and scroll instead of clipping
+- **Reliability** — uploads to S3-compatible storage are now write-behind, so a slow or failing
+  storage backend becomes background retry instead of a hung or failed request, with no loss of
+  durability; crash-recovered databases are re-synced and a stored document is never overwritten
+  with an empty or invalid working copy (continuing the storage-incident hardening from 0.0.5)
+
+### Security
+
+- **Drive** — a team's mount list is no longer readable by non-members
+- **Drive** — files served inline carry `nosniff` and a sandbox CSP, closing a stored-XSS vector for
+  uploaded HTML and SVG
+- **Auth** — guest one-time codes are consumed atomically so one code cannot create two sessions;
+  sign-in and 2FA are rate-limited to 10 per minute per IP
+- **Abuse** — rate limiting is keyed on the real client IP behind the reverse proxy (with avatar
+  fetches exempt), fixing a server-wide lockout
+- **Calendar** — cancelled events are excluded from free/busy, and replayed iMIP invitations (a
+  stale sequence number) are ignored
+- **Sheets** — hyperlink navigation is hardened with an allowed-scheme list, `noopener`, and
+  ReDoS-safe parsing
+
 ## [0.0.5] - 2026-06-04
 
 Version history release. Automatic, restorable version snapshots for every collaborative app
