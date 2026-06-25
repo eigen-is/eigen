@@ -58,6 +58,15 @@ function routes(): PrerenderRoute[] {
                 type: 'website',
             },
         },
+        {
+            path: '/changelog',
+            meta: {
+                title: 'Changelog - eigen',
+                description: 'Release notes and user-visible changes to eigen, newest first.',
+                url: `${BASE_URL}/changelog`,
+                type: 'website',
+            },
+        },
     ];
     for (const a of blogArticles) {
         list.push({
