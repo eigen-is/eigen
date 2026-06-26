@@ -22,7 +22,7 @@ export function AppLogo({ appName = 'mail', className, logoHref }: AppLogoProps)
     const href = logoHref ?? defaultHref;
 
     return (
-        <div className={cn('text-xl flex items-center select-none', className)}>
+        <div className={cn('text-xl flex items-center select-none whitespace-nowrap', className)}>
             {isSpace || href === undefined ? (
                 <Link to="/" className="text-[var(--topbar-fg)] font-medium hover:opacity-75 transition-opacity">
                     eigen
