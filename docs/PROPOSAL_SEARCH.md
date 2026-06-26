@@ -66,11 +66,19 @@
 > job; same-kind ranking is native `bm25()` within each scope; cross-mount (within-kind)
 > tiebreak is recency.
 >
-> **Deferred (post-v1):** Document body indexing (Yjs content extraction for docs /
-> slides / sheets / stickies via export loaders); chat message indexing; calendar event
-> indexing; shared-with-me search; vector / semantic search. Each later phase replicates
-> the inline-FTS pattern in its domain DB — additive write-path + route source per kind,
-> no palette change required.
+> **Deferred (post-v1):** Document body indexing — the Phase 2 worked design below covers docs /
+> slides / sheets / **stickies** / **chat** bodies (chat: the **latest ~100 KB of messages**,
+> extracted through the same content-loader → text-collector → `paths_content_fts` pipeline as the
+> Yjs docs) plus plain-text / code files; calendar event indexing; shared-with-me search;
+> vector / semantic search. Each later phase replicates the inline-FTS pattern in its domain DB —
+> additive write-path + route source per kind, no palette change required.
+>
+> **In-document search is a separate surface** — searching *within* the open document (jump to a
+> sticky / cell / heading / message) and the command palette's "current document" scope are
+> specified in [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md). This document owns
+> the drive-*wide* content index that makes a document findable by its body; that one owns
+> finding a location *inside* the doc you already have open. They share the per-type text
+> extractors but use different indexes and different UIs.
 >
 > **Documented divergence from the original proposal:** Drafts are indexed at `textShort`
 > granularity (the 200-char preview), matching received mail. If full-body draft search
@@ -113,13 +121,24 @@ Requirements:
 | Calendar | Event title, description, location      | Yes — in the calendar database        |
 | Chat     | Message content, author                 | Yes — in the per-room database        |
 | Docs     | Document body text                      | No — extract from Yjs state           |
-| Stickies | Card titles and descriptions            | No — deferred (needs stickies export) |
+| Stickies | Card titles and descriptions            | No — extract from Yjs state (small loader) |
 | Slides   | Slide text                              | No — extract from Yjs state           |
 | Sheets   | Cell text values                        | No — extract from Yjs state           |
 
 The first four are already plain text in SQLite. The collaborative types store content as binary
 Yjs state and need text extraction — see [Content extraction](#content-extraction-from-collaborative-documents).
-Stickies content waits for stickies export to ship (also below).
+Stickies needs only a small dedicated content loader (it does *not* have to wait for full stickies
+export). Chat is the outlier: its content is already plain text in a relational `messages` table,
+not Yjs — its body is folded into the same content index as the latest ~100 KB of messages
+(see [Phase 2](#phase-2--body-content-indexing-worked-design)).
+
+> **Two search surfaces, one set of extractors.** This document indexes document *bodies* into a
+> drive-wide content index so a file is **findable** by what it contains. Finding *where inside the
+> open document* a term appears — and the command palette's "current document" scope that fronts it
+> — is a different feature, specified in
+> [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md). The two reuse the same per-type
+> text extraction but write to different indexes (drive `metadata.db` vs. the per-document DB) and
+> render in different UIs.
 
 Contacts are deliberately **not** indexed — they are few and already fully cached on the
 frontend, so the command palette filters them client-side (see [Response shape](#response-shape)).
@@ -330,11 +349,15 @@ snapshot itself — they're caught and logged.
 | Docs (`.eigendoc`) | full ProseMirror text, all blocks | *not* capped at the preview's first-20-blocks |
 | Slides (`.eigenslides`) | text of all slide objects, all slides | *not* capped at the preview's first-8-slides |
 | Sheets (`.eigensheets`) | display values of all non-empty cells | sparse-`celldata` walk — see grid cliff below |
+| Stickies (`.eigenstickies`) | card `title` + `description` for every card, plus column titles | new small `readStickiesContent` loader — does *not* need full stickies export |
+| Chat (`.eigenchat`) | the **latest ~100 KB** of message text (+ author), newest-first | relational `messages` table, not Yjs — `readChatContent` query; see [chat](#chat-extraction-latest-100-kb) below |
 | Text / code files | raw file body | eligibility via the canonical `getTextPreviewMode` (`packages/lib/src/constants/preview.ts`); capped read |
 
-Deferred (unchanged from the proposal): stickies (no loader until stickies export ships), chat
-(Phase 3), uploaded **binary** docs (PDF / Office — need real text extractors), semantic / vector
-(Phase 6).
+Deferred: uploaded **binary** docs (PDF / Office — need real text extractors) and semantic / vector
+(Phase 6). Stickies and chat are **now in Phase 2 scope** (above): stickies needs only a small
+dedicated loader, and chat is already relational text, so neither has to wait. The separate
+*in-document* chat message FTS (full history, for searching within an open chat) is owned by
+[PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md), not this index.
 
 **Extraction — reuse the loaders, not the preview renderers, not the export.** The reusable kernel
 is the shared content loaders `readEigendocContent()` / `readSheetsContent()` / `readSlidesContent()`
@@ -345,6 +368,8 @@ by export and preview — so search's notion of "document text" can't drift from
 - **doc** — ProseMirror JSON → plain text (all blocks)
 - **slides** — concatenate every slide's text objects
 - **sheets** — iterate the **sparse `celldata`** and concatenate display values; skip formulas, use the stored `.v`
+- **stickies** — new `readStickiesContent(mount, path)`: load the Yjs state, walk `getMap('tasks')` for each card's `title` + `description` and `getMap('columns')` for column titles. Plain string fields — no `instanceof` needed, same duck-typing the `slides.ts` loader already uses
+- **chat** — new `readChatContent(mount, path)`: open the container's `data.db` (`CHAT_ROOM_DB_CONFIG`), query `messages` newest-first (`ORDER BY createdAt DESC` with `deletedAt IS NULL`), accumulate `content` (+ `authorEmail`) until the cap. Relational, not Yjs — but it slots into the same `extractText` dispatch and the same sweep pipeline as the Yjs types. See [chat extraction](#chat-extraction-latest-100-kb)
 - **text / code files** — `mount.readFile(pathId)` then `.text()`, **capped** via `readRange` (there is *no* size guard today — must not slurp a 500 MB file)
 
 Two traps this avoids, both confirmed in the code:
@@ -358,7 +383,27 @@ Two traps this avoids, both confirmed in the code:
 
 **Per-file cap.** Extract at most ~100 KB of text per file (≈16k tokens). Far larger than the preview
 caps (so content on slide 9 / row 200 is findable), but bounded so the FTS shadow tables and
-extraction cost stay predictable.
+extraction cost stay predictable. For the bounded types (doc / slides / sheets / stickies) the cap is
+a simple stop-after-100 KB walk; for chat the cap selects *which* messages (newest first) — see below.
+
+#### Chat extraction (latest 100 KB)
+
+Chat is the one body source that grows without bound and is **append-heavy** — a busy room
+accumulates messages forever, and the most recent ones are the most relevant for "find the chat that
+mentioned X". So `readChatContent` extracts the **latest ~100 KB**, not the first:
+
+- Open the container's `data.db` with `CHAT_ROOM_DB_CONFIG` (the same handle preview/export would
+  use — chat's `data.db` is a relational `ManagedDatabase`, **not** a Yjs doc).
+- `SELECT content, authorEmail FROM messages WHERE deletedAt IS NULL ORDER BY createdAt DESC` and
+  accumulate text until the ~100 KB cap, then stop. This reads the tail cheaply via the existing
+  `createdAt` index — no full-table scan, no densification.
+- Concatenate newest→oldest; order inside the FTS document doesn't affect `bm25()` matching.
+
+This is deliberately the **drive-wide** view of a chat — enough to surface the file in global search
+by its recent content. Searching the *full* history of an open chat (every message, however old) is
+the job of the per-room `messages_fts` in [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md);
+the two indexes are complementary, and once that per-room FTS exists the drive-wide collector may
+read its tail instead of re-querying `messages`.
 
 **Storage — a separate content FTS table, not a column on `paths`.** Keep `paths_fts` (name,
 trigger-maintained, instant) exactly as Phase 1b shipped it. Add a **separate `paths_content_fts`** in
@@ -378,7 +423,10 @@ callback *body* differs (`mount.ts:1230` vs `1250`). The **upload queue is S3-on
 `mount.ts:174`), so hooking *it* would silently skip both local backends; `onSync` is the universal
 seam.
 
-- **Containers** (doc / sheet / slide): mark-for-reindex inside the `onSync` callback.
+- **Containers** (doc / sheet / slide / **stickies / chat**): mark-for-reindex inside the `onSync`
+  callback. Chat's `data.db` is a relational `ManagedDatabase` (`CHAT_ROOM_DB_CONFIG`), so it drives
+  `onSync` exactly like a Yjs container — the seam is storage-agnostic, not Yjs-specific, so a new
+  chat message re-marks the chat file for re-extraction with no chat-specific plumbing.
 - **Plain files**: no `onSync` (they are not `ManagedDatabase`s) — mark in the file write-path
   (`Mount.createFile` / `createFileFromTemp` / `updatePath`).
 - `onSync` re-fires ~every 30s during active editing, so the mark is a cheap idempotent dirty-bit and
@@ -408,12 +456,16 @@ missed sweep just reruns), and backfill is simply "mark all dirty" once. Rejecte
 
 **Open — resume here.**
 
+- **Decided:** type scope is docs / sheets / slides / **stickies** / **chat** + plaintext / code
+  (stickies via a small dedicated loader; chat as the latest ~100 KB of messages). Only uploaded
+  binary docs (PDF / Office) and semantic / vector stay deferred.
+- **Decided:** per-file cap ~100 KB; for chat that means the newest ~100 KB.
 - Lock the durability model (dirty-flag + sweep vs fire-and-forget vs full queue). Leaning dirty-flag + sweep.
-- Confirm the v1 type scope (docs / sheets / slides + plaintext / code; defer stickies / chat / PDF / Office).
-- Pick the sweep cadence and the per-container re-extract rate-limit.
-- Pick the cap size (~100 KB?) and the staleness key (source `updatedAt` vs content hash).
-- Settle `paths_content_fts`'s exact shape (standalone vs external-content over a small `path_content`
-  table) — this decides whether `snippet()` highlighting is available later.
+- Pick the sweep cadence and the per-container re-extract rate-limit (chat is append-heavy — its
+  `onSync` fires on every flush of new messages, so the rate-limit matters most here).
+- Pick the staleness key (source `updatedAt` vs content hash).
+- Settle `paths_content_fts`'s exact shape — **leaning external-content over a small `path_content`
+  table** so `snippet()` highlighting is available later (the palette can show *why* a file matched).
 
 ## Search API
 
@@ -533,6 +585,12 @@ a single debounced query against this endpoint; the response arrives already gro
 each group maps straight to a palette section. Per-kind result rendering and navigation live in
 the palette. See [PROPOSAL_COMMAND_PALETTE.md](PROPOSAL_COMMAND_PALETTE.md).
 
+This endpoint is the *drive-wide* surface: it answers "which of my documents contain X". The
+complementary surface — "where **inside** the open document is X", plus the palette's "current
+document" scope that fronts it — is a separate provider and a separate set of indexes, specified in
+[PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md). It does *not* go through
+`/search/:ownerId`.
+
 ## Future: semantic / vector search
 
 FTS5 keyword search handles the large majority of self-hosted search needs — known-item lookup,
@@ -575,8 +633,8 @@ What not to do:
 |-------|---------------------------------------------------------------------------------------------------------|--------|
 | 1a    | Mail v3 migration (CREATE VIRTUAL TABLE + triggers + populate), `MailDB.searchMail` two-pass JOIN+hydrate, the `/search` route, index-on-write via FTS triggers. **Shipped — see status block.** | M |
 | 1b    | Drive name indexing — mount metadata.db v2 (`paths_fts` + 3 triggers, UPDATE gated on `name` change), `Mount.searchPaths`, `Drive.search` mount fan-out, `/search` route extended with a `file` source, eigendoc-internals exclusion. **Shipped — see status block.** | M |
-| 2     | Body-content indexing — docs / slides / sheets (thin text collector over the `lib/document/` loaders) **plus plain text / code file bodies**, written to a sibling `paths_content_fts` table, populated by a dirty-flag + sweep worker hooked on the storage-agnostic `onSync` (not the S3-only upload queue). **[Worked design](#phase-2--body-content-indexing-worked-design).** | M |
-| 3     | Chat message indexing — index message content                                                            | S      |
+| 2     | Body-content indexing — docs / slides / sheets / **stickies** / **chat** (thin text collectors over the `lib/document/` loaders; stickies gets a small new loader; chat extracts the latest ~100 KB from its relational `messages` table) **plus plain text / code file bodies**, written to a sibling `paths_content_fts` table, populated by a dirty-flag + sweep worker hooked on the storage-agnostic `onSync` (not the S3-only upload queue). **[Worked design](#phase-2--body-content-indexing-worked-design).** | M |
+| 3     | In-document / in-chat message FTS — per-room `messages_fts` over the **full** chat history (for searching within an open chat). Owned by [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md); listed here because it shares the FTS pattern. | S |
 | 4     | Calendar event indexing — `calendar.db` gains an `events_fts` + same trigger shape                       | S      |
 | 5     | Shared data — make items shared with the user searchable                                                 | S–M    |
 | 6     | Semantic / vector search (future, opt-in)                                                                | L      |
@@ -587,9 +645,14 @@ both. Each later phase deepens what's searchable with no change to the palette's
 Phases 2–6 follow the same inline-FTS pattern (Option C) — one virtual table + triggers per
 domain.
 
-**Stickies content** joins when stickies export ships and brings an `export/stickies/content.ts`
-loader — at that point the Phase 2 thin-collector approach extends to stickies. That work is
-tracked with stickies export, not scoped here.
+**Stickies content** is now in Phase 2 (above): it needs only a small dedicated
+`readStickiesContent` loader, so it no longer waits for full stickies export.
+
+**Recommended build order** across this proposal, the command palette, and
+[PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md): (0) the in-document *actions*
+cleanup (tiny, independent), then (1) **this** drive-wide content index (Phase 2), then (2)
+in-document content search. Full sequence and rationale in
+[PROPOSAL_IN_DOCUMENT_SEARCH.md §Recommended build order](PROPOSAL_IN_DOCUMENT_SEARCH.md#recommended-build-order-across-both-search-proposals).
 
 ## File structure
 
@@ -648,9 +711,13 @@ Note: `apps/api/src/lib/search/` no longer exists. The previous `SearchIndex` se
   maintain the FTS index atomically; no separate index write in the mutation flow, no separate
   sync job. The closing `INSERT INTO <fts> SELECT ... FROM <source>` in each migration is the
   backfill for pre-existing rows — no separate backfill step.
-- **Content extraction reuses the export loaders** — collaborative text is pulled from the
-  export pipeline's Yjs content loaders (not a separate Yjs walker) by a thin text collector,
-  run at snapshot creation rather than per edit. Stickies wait for stickies export.
+- **Content extraction reuses the shared content loaders** — collaborative text is pulled from the
+  `lib/document/` loaders (`readEigendocContent` / `readSheetsContent` / `readSlidesContent`, plus
+  new `readStickiesContent` / `readChatContent`) that preview and export already sit on — *not* a
+  separate Yjs walker, and *not* the capped HTML the preview generators emit — by a thin text
+  collector, run off the request path via a dirty-flag + sweep worker on the storage-agnostic
+  `onSync` seam. Stickies and chat are in Phase 2 (chat = latest ~100 KB of messages); only binary
+  docs and semantic search are deferred.
 - **Response grouped by kind** — a separate ranked, capped array per kind, mirroring the
   palette's sections; each group holds the canonical domain type for that kind (so per-app
   in-app search can reuse the endpoint); non-serialisable presentation stays off the wire.
