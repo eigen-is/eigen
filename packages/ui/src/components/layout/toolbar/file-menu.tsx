@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
+import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
@@ -85,6 +86,16 @@ export function FileMenu({
     const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
     const openConfig = OPEN_LABELS[createType];
     const navigate = useNavigate();
+
+    // Mounted by every eigendoc toolbar, so one publish gives ⌘K the open doc's actions
+    // across all four apps. The doc is published as the selection upstream
+    // (useEigenDocEditorRoute); usePaletteSelectionActions stabilises these handlers.
+    usePaletteSelectionActions({
+        onShare: onAccessDialogOpen,
+        onRename: canWrite ? () => setRenameOpen(true) : undefined,
+        onEmailCollaborators: canWrite ? () => setEmailOpen(true) : undefined,
+        onDelete: canWrite ? () => setDeleteOpen(true) : undefined,
+    });
 
     return (
         <>

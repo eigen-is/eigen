@@ -12,7 +12,7 @@ import { Search } from 'lucide-react';
 // Topbar renders this unconditionally, but the marketing-only index app (blog/support)
 // doesn't mount the CommandPaletteProvider — mirror PaletteRunner (app-shell.tsx) and
 // render nothing when no provider is in the tree.
-export function CommandPaletteTrigger() {
+export function CommandPaletteTrigger({ documentTitle }: { documentTitle?: string }) {
     const palette = useOptionalCommandPalette();
     if (!palette) return null;
     const { setOpen } = palette;
@@ -27,12 +27,12 @@ export function CommandPaletteTrigger() {
                     'hidden md:flex items-center gap-2 rounded-md border px-3 h-8',
                     'border-[var(--topbar-pill-border)] bg-[var(--topbar-pill-bg)] text-[var(--topbar-pill-fg)]',
                     'text-sm hover:bg-[var(--topbar-pill-hover-bg)] hover:text-[var(--topbar-pill-hover-fg)] transition-colors',
-                    'min-w-xs lg:min-w-md',
+                    'min-w-xs lg:min-w-md max-w-md',
                 )}
             >
-                <Search className="h-4 w-4" />
-                <span className="flex-1 text-left">Search and jump anywhere</span>
-                <kbd className="text-xs font-mono">{isDesktop && (isMac ? '⌘K' : 'CTRL+K')}</kbd>
+                <Search className="h-4 w-4 shrink-0" />
+                <span className="flex-1 text-left truncate min-w-0">{documentTitle || 'Search and jump anywhere'}</span>
+                <kbd className="text-xs font-mono shrink-0">{isDesktop && (isMac ? '⌘K' : 'CTRL+K')}</kbd>
             </button>
             <Tooltip>
                 <TooltipTrigger asChild>

@@ -19,7 +19,9 @@ export type ResultGroup =
 
 // A 1-item selection from an eigendoc viewer is identical in shape to a 1-item
 // Drive selection — both surface the same actions (Share, Mail to…, Copy link, …).
-export type PaletteSelection = { items: DrivePath[] } | null;
+// `isCurrentDocument` flags the eigendoc-viewer case so the "view this file" commands
+// (Open / Open in new tab / Quick preview) hide — you're already inside it.
+export type PaletteSelection = { items: DrivePath[]; isCurrentDocument?: boolean } | null;
 
 // Handlers a route publishes alongside the selection. Pure cross-app actions (Open
 // in new tab, Copy link, Mail to…) live in the catalog and don't need this — only

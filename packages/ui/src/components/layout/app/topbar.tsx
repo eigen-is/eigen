@@ -319,12 +319,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
                 </div>
 
                 <div className="flex justify-center min-w-0">
-                    {documentTitle && !isMobile && (
-                        <span className="truncate max-w-[400px]" style={{ color: 'var(--topbar-title)' }}>
-                            {documentTitle}
-                        </span>
-                    )}
-                    {!documentTitle && !isMobile && <CommandPaletteTrigger />}
+                    {!isMobile && <CommandPaletteTrigger documentTitle={documentTitle} />}
                 </div>
 
                 <div className="flex items-center justify-end gap-1 px-4">

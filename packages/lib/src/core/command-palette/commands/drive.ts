@@ -29,7 +29,10 @@ export const driveCommands: Command[] = [
         icon: ExternalLink,
         baseRank: BASE_RANKS.DRIVE_OPEN,
         group: 'selection',
-        availability: (ctx) => ctx.selection?.items.length === 1 && isOpenable(ctx.selection.items[0]),
+        availability: (ctx) =>
+            !ctx.selection?.isCurrentDocument &&
+            ctx.selection?.items.length === 1 &&
+            isOpenable(ctx.selection.items[0]),
         dynamicTitle: (ctx) => `Open ${selectionLabel(ctx)}`,
         run: (ctx) => {
             const item = ctx.selection?.items[0];
@@ -45,7 +48,12 @@ export const driveCommands: Command[] = [
         group: 'selection',
         availability: (ctx) => {
             const item = ctx.selection?.items[0];
-            return ctx.selection?.items.length === 1 && !!item && !!getDriveItemUrl(item);
+            return (
+                !ctx.selection?.isCurrentDocument &&
+                ctx.selection?.items.length === 1 &&
+                !!item &&
+                !!getDriveItemUrl(item)
+            );
         },
         dynamicTitle: (ctx) => `Open ${selectionLabel(ctx)} in new tab`,
         run: (ctx) => {
@@ -62,7 +70,10 @@ export const driveCommands: Command[] = [
         icon: Eye,
         baseRank: BASE_RANKS.DRIVE_QUICK_PREVIEW,
         group: 'selection',
-        availability: (ctx) => ctx.selection?.items.length === 1 && ctx.selection.items[0].type !== 'folder',
+        availability: (ctx) =>
+            !ctx.selection?.isCurrentDocument &&
+            ctx.selection?.items.length === 1 &&
+            ctx.selection.items[0].type !== 'folder',
         dynamicTitle: (ctx) => `Preview ${selectionLabel(ctx)}`,
         run: (ctx) => {
             const item = ctx.selection?.items[0];
