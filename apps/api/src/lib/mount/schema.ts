@@ -22,6 +22,11 @@ export const paths = sqliteTable('paths', {
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
     trashedAt: integer('trashedAt', { mode: 'timestamp' }),
     trashedFrom: text('trashedFrom'),
+    // Drive-wide content search (metadata.db v6). contentDirty is set on a real body
+    // write (plaintext at the file-write seam; containers via onSync) and drained by the
+    // content-reindex sweep. contentIndexedAt drives the 2-min per-container re-extract cap.
+    contentDirty: integer('contentDirty').notNull().default(0),
+    contentIndexedAt: integer('contentIndexedAt', { mode: 'timestamp' }),
 });
 
 // Write-behind upload queue for S3-backed mounts (Phase 1b). One row per storage key

@@ -1,9 +1,10 @@
+import { isSearchableTextFile } from '@workspace/lib/constants';
 import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 5,
+    currentVersion: 6,
     schema,
     migrations: [
         {
@@ -125,6 +126,67 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 );
                 CREATE INDEX IF NOT EXISTS idx_path_watchers_user ON path_watchers(userId);
             `),
+        },
+        {
+            // Drive-wide content index (Phase 2). Additive + regenerable: a sibling
+            // paths_content_fts over a dedicated path_content table keeps large body text
+            // off the hot `paths` row. The dirty bit + sweep populate it; the AFTER DELETE
+            // ON paths trigger clears the content row. The 5 container type values are the
+            // EIGEN_DOC_TYPES frozen at v6 — kept literal so this historical migration never
+            // shifts if that constant later changes.
+            version: 6,
+            up: (db) => {
+                db.exec(`
+                CREATE TABLE IF NOT EXISTS path_content (
+                    pathId TEXT PRIMARY KEY,
+                    body TEXT NOT NULL
+                );
+
+                CREATE VIRTUAL TABLE IF NOT EXISTS paths_content_fts USING fts5(
+                    body,
+                    content='path_content',
+                    content_rowid='rowid',
+                    tokenize='porter unicode61'
+                );
+
+                CREATE TRIGGER IF NOT EXISTS path_content_ai AFTER INSERT ON path_content BEGIN
+                    INSERT INTO paths_content_fts(rowid, body) VALUES (new.rowid, new.body);
+                END;
+                CREATE TRIGGER IF NOT EXISTS path_content_ad AFTER DELETE ON path_content BEGIN
+                    INSERT INTO paths_content_fts(paths_content_fts, rowid, body) VALUES ('delete', old.rowid, old.body);
+                END;
+                CREATE TRIGGER IF NOT EXISTS path_content_au AFTER UPDATE ON path_content BEGIN
+                    INSERT INTO paths_content_fts(paths_content_fts, rowid, body) VALUES ('delete', old.rowid, old.body);
+                    INSERT INTO paths_content_fts(rowid, body) VALUES (new.rowid, new.body);
+                END;
+
+                -- Atomic cleanup: a deleted path takes its content row (and FTS shadow) with it.
+                CREATE TRIGGER IF NOT EXISTS path_content_cleanup AFTER DELETE ON paths BEGIN
+                    DELETE FROM path_content WHERE pathId = old.id;
+                END;
+
+                ALTER TABLE paths ADD COLUMN contentDirty INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE paths ADD COLUMN contentIndexedAt INTEGER;
+
+                -- Backfill containers: mark every eigendoc-type row dirty so the first sweep
+                -- indexes pre-existing content. Touches ONLY contentDirty (not name/updatedAt),
+                -- so paths_fts is untouched.
+                UPDATE paths SET contentDirty = 1
+                WHERE trashedAt IS NULL
+                  AND type IN ('doc', 'sheets', 'slides', 'stickies', 'chat');
+            `);
+
+                // Backfill plaintext/code files through the canonical eligibility gate
+                // (getTextPreviewMode) so the rule lives in exactly one place. Raw bun:sqlite
+                // query/prepare on the migration db.
+                const files = db
+                    .query(`SELECT id, name, mimeType FROM paths WHERE type = 'file' AND trashedAt IS NULL`)
+                    .all() as { id: string; name: string; mimeType: string }[];
+                const mark = db.prepare(`UPDATE paths SET contentDirty = 1 WHERE id = ?`);
+                for (const f of files) {
+                    if (isSearchableTextFile(f.mimeType, f.name)) mark.run(f.id);
+                }
+            },
         },
     ],
 };
