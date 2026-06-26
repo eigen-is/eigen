@@ -454,18 +454,53 @@ missed sweep just reruns), and backfill is simply "mark all dirty" once. Rejecte
 `DRIVE_PATH_MOVED` SSE exclusion). A new `DRIVE_FILE_REINDEXED` SSE event after a sweep lets the FE
 `invalidateSearchOwner` so freshly-indexed content shows up.
 
-**Open — resume here.**
+**Comments — making a board/doc findable by its card comments (designed here; built in the
+comments-next step).** Per-card comment threads are embedded `.eigenchat` containers
+(`<parent>/chat/<card>.eigenchat/data.db`), kept out of the drive UI and `paths_fts` by the
+`docContainerDescendantIds` CTE — so a board is not currently findable by what its comments say. Rather
+than fan out across every thread DB at extract time, reuse the parent's existing `comments.db`
+(`CommentIndex`, one per container, already open and written on every comment post):
 
-- **Decided:** type scope is docs / sheets / slides / **stickies** / **chat** + plaintext / code
-  (stickies via a small dedicated loader; chat as the latest ~100 KB of messages). Only uploaded
-  binary docs (PDF / Office) and semantic / vector stay deferred.
-- **Decided:** per-file cap ~100 KB; for chat that means the newest ~100 KB.
-- Lock the durability model (dirty-flag + sweep vs fire-and-forget vs full queue). Leaning dirty-flag + sweep.
-- Pick the sweep cadence and the per-container re-extract rate-limit (chat is append-heavy — its
-  `onSync` fires on every flush of new messages, so the rate-limit matters most here).
-- Pick the staleness key (source `updatedAt` vs content hash).
-- Settle `paths_content_fts`'s exact shape — **leaning external-content over a small `path_content`
-  table** so `snippet()` highlighting is available later (the palette can show *why* a file matched).
+- **`COMMENT_INDEX_DB_CONFIG` v3** gives each `comments` row (one per thread, keyed by `chatName`) a
+  `recentText` column holding the **latest ~8 KB** of that thread's messages (append-and-trim,
+  newest-first) plus a `comments_fts` external-content FTS5 over it (3 triggers; the UPDATE gated on
+  `WHEN old.recentText IS NOT new.recentText` so the frequent metadata writes — `status`,
+  `lastActivityAt` — don't churn the shadow). Additive and **regenerable** (a one-time backfill replays
+  each thread's tail), so it respects the frozen-format rule exactly as `paths_content_fts` does.
+- **Maintenance** rides the seam that already exists: `ChatRoom.postMessage`'s embedded branch updates
+  `comments.db` via `updateCommentIndex` — there it also appends to `recentText` (trim to the ~8 KB cap)
+  and marks the **parent** container `contentDirty`, so the next sweep re-folds.
+- **The fold (this proposal):** when the sweep extracts a doc / stickies container, after its own body
+  it reads the parent's `comments.db` `recentText` in one in-memory query (newest-active threads first,
+  inside the same ~100 KB per-file budget) and appends it to the parent's `path_content.body`. The board
+  then surfaces in the Files section for a term that appears only in a card's comment.
+- **Searching the comments themselves** ("find the card whose comments mention X") is a single
+  `comments_fts MATCH` on that same in-memory `comments.db`; that surface lives in the current-document
+  scope and is specced in [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md). The per-room
+  `messages_fts` there stays the mechanism for **standalone** chat history; comment threads are served
+  by this `comments.db` aggregate, not a per-thread index.
+
+**Resolved (2026-06-26 — ready to build).**
+
+- **Type scope:** docs / sheets / slides / **stickies** / **chat** + plaintext / code (stickies via a
+  small dedicated loader; chat as the latest ~100 KB of messages). Only uploaded binary docs
+  (PDF / Office) and semantic / vector stay deferred.
+- **Per-file cap:** ~100 KB; for chat that means the newest ~100 KB.
+- **Durability:** dirty-flag + sweep. A persisted `contentDirty` bit on `paths`, set at the write seam
+  and drained by one server-wide `scheduleInterval` sweep iterating open mounts. Chosen over
+  fire-and-forget (no durable retry) and a full per-mount `ReindexQueue` (overkill — the index is
+  regenerable, so it needs no hard delivery guarantee).
+- **Sweep cadence / rate-limit:** sweep every **60 s**; re-extract any one container at most once per
+  **2 min** (the cap reads `contentIndexedAt`). The dirty bit coalesces the ~30 s `onSync` re-marks; the
+  cap stops an append-heavy chat or a long edit session from re-extracting a big file every sweep.
+- **Staleness key:** none beyond the bit. `contentDirty` is set only on real writes (`onSync` fires only
+  when the doc actually changed; plaintext/code marked in the file-write path), so it is already
+  change-gated — a separate `updatedAt` / content-hash compare would be redundant. `contentIndexedAt`
+  exists only to drive the 2-min cap.
+- **`paths_content_fts` shape:** external-content FTS5 over a small `path_content(pathId, body)` table
+  (FTS holds only the index; the body lives in `path_content`, cleanly pathId-keyed for upsert/delete;
+  `snippet()` stays available later). An `AFTER DELETE` trigger on `paths` clears the content row.
+- **Migration:** mount `metadata.db` → **v6**.
 
 ## Search API
 
