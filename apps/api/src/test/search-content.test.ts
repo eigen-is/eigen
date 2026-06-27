@@ -1,0 +1,232 @@
+import { beforeAll, describe, expect, test } from 'bun:test';
+import type { SearchResponse } from '@workspace/lib/types/search';
+import * as Y from 'yjs';
+import {
+    assertJson,
+    authedRequest,
+    chatPost,
+    driveDelete,
+    driveGet,
+    drivePost,
+    driveUpload,
+    getTestContext,
+} from './setup';
+
+describe('Drive content-index', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let mountId: string;
+    let rootId: string;
+    let home: Awaited<ReturnType<typeof import('../lib/home').getHome>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const { data: mounts } = await ctx.alice.api.drive({ ownerId: ctx.alice.user.id }).mounts.get();
+        mountId = mounts![0].id;
+        const root = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        rootId = root.id;
+        const { getHome } = await import('../lib/home');
+        home = await getHome(ctx.alice.user.id);
+    });
+
+    // Hits the real /search endpoint with ?sources=file so results come through
+    // the same FTS + path_content pipeline that production uses.
+    async function searchFile(term: string): Promise<SearchResponse> {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/search/${ctx.alice.user.id}?sources=file&q=${term}`,
+        );
+        return assertJson<SearchResponse>(res);
+    }
+
+    test('a sheet body becomes searchable after a reindex sweep, and honours the 2-min cap', async () => {
+        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-sheet', 'sheets');
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+        const sheets = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                config: {},
+                celldata: [{ r: 0, c: 0, v: { m: 'zarquon', v: 'zarquon' } }],
+            },
+        ];
+        collab.doc.transact(() => {
+            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+        });
+
+        // Fire onSync → marks the container contentDirty.
+        await home.drive.flushContainerDb(mountId, sheetsPath.id);
+        // Drain the dirty bit off the request path.
+        await home.drive.flushContentReindex();
+
+        expect(home.drive.search({ q: 'zarquon', limit: 20 }).some((h) => h.id === sheetsPath.id)).toBe(true);
+
+        // Second immediate reindex is a no-op (within the 2-min cap) — content stays indexed.
+        await home.drive.flushContentReindex();
+        expect(home.drive.search({ q: 'zarquon', limit: 20 }).some((h) => h.id === sheetsPath.id)).toBe(true);
+    });
+
+    test('DOC body is searchable', async () => {
+        const docPath = await home.drive.create(mountId, rootId, 'rt-doc', 'doc');
+        const collab = await home.drive.getCollabDocument(mountId, docPath.id);
+        const p = new Y.XmlElement('paragraph');
+        p.insert(0, [new Y.XmlText('flibberdoc content here')]);
+        collab.doc.getXmlFragment('default').insert(0, [p]);
+        await home.drive.flushContainerDb(mountId, docPath.id);
+        await home.drive.flushContentReindex();
+        expect((await searchFile('flibberdoc')).file.some((h) => h.id === docPath.id)).toBe(true);
+    });
+
+    // copyPath byte-copies the container's data.db (no onSync fires for the new container),
+    // so the copy must be marked contentDirty by copyPath itself or its body never indexes.
+    test('a COPIED doc body is searchable (copy marks the new container dirty)', async () => {
+        const src = await home.drive.create(mountId, rootId, 'rt-copysrc', 'doc');
+        const collab = await home.drive.getCollabDocument(mountId, src.id);
+        const p = new Y.XmlElement('paragraph');
+        p.insert(0, [new Y.XmlText('flibbercopy content here')]);
+        collab.doc.getXmlFragment('default').insert(0, [p]);
+        await home.drive.flushContainerDb(mountId, src.id);
+        await home.drive.flushContentReindex();
+
+        // The search term lives only in the body (neither name contains it), so a hit on the
+        // copy proves the copied container's body was indexed.
+        const copied = await home.drive.copyPath(mountId, src.id, rootId, 'rt-copydst');
+        await home.drive.flushContentReindex();
+        expect((await searchFile('flibbercopy')).file.some((h) => h.id === copied.id)).toBe(true);
+    });
+
+    test('SLIDES body is searchable', async () => {
+        const slidesPath = await home.drive.create(mountId, rootId, 'rt-slides', 'slides');
+        const collab = await home.drive.getCollabDocument(mountId, slidesPath.id);
+        collab.doc.transact(() => {
+            const objects = collab.doc.getMap('objects');
+            const slides = collab.doc.getMap('slides');
+            const order = collab.doc.getArray('slideOrder');
+            const o = new Y.Map();
+            o.set('id', 'o1');
+            o.set('slideId', 's1');
+            o.set('type', 'text');
+            o.set('text', 'flibberslide deck');
+            objects.set('o1', o);
+            const s = new Y.Map();
+            s.set('id', 's1');
+            const ids = new Y.Array();
+            ids.push(['o1']);
+            s.set('objectIds', ids);
+            slides.set('s1', s);
+            order.push(['s1']);
+        });
+        await home.drive.flushContainerDb(mountId, slidesPath.id);
+        await home.drive.flushContentReindex();
+        expect((await searchFile('flibberslide')).file.some((h) => h.id === slidesPath.id)).toBe(true);
+    });
+
+    test('STICKIES card title + description are searchable', async () => {
+        const stk = await home.drive.create(mountId, rootId, 'rt-stickies', 'stickies');
+        const collab = await home.drive.getCollabDocument(mountId, stk.id);
+        collab.doc.transact(() => {
+            const tasks = collab.doc.getMap('tasks');
+            const card = new Y.Map();
+            card.set('id', 't1');
+            card.set('title', 'flibbercard');
+            card.set('description', 'with flibberdesc inside');
+            tasks.set('t1', card);
+            const columns = collab.doc.getMap('columns');
+            const col = new Y.Map();
+            col.set('id', 'c1');
+            col.set('title', 'Backlog');
+            columns.set('c1', col);
+        });
+        await home.drive.flushContainerDb(mountId, stk.id);
+        await home.drive.flushContentReindex();
+        expect((await searchFile('flibbercard')).file.some((h) => h.id === stk.id)).toBe(true);
+        expect((await searchFile('flibberdesc')).file.some((h) => h.id === stk.id)).toBe(true);
+    });
+
+    // Chat flush decision: chatPost writes to the chat's data.db via ChatRoom.init() →
+    // drive.openDatabase(), which caches the ManagedDatabase in mount.documentDbs. A
+    // subsequent flushContainerDb finds the cached db and flushes it, triggering onSync →
+    // markContainerContentDirty. This is reliable because the same Home/Mount singleton
+    // is shared between the test process and the in-process API route handlers.
+    test('CHAT recent messages are searchable', async () => {
+        const chat = await drivePost(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/chat`,
+            { fileName: 'rt-chat' },
+        );
+        await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
+            content: 'flibberchat message body',
+        });
+        // flush triggers onSync → markContainerContentDirty on the chat container.
+        await home.drive.flushContainerDb(mountId, chat.id);
+        await home.drive.flushContentReindex();
+        expect((await searchFile('flibberchat')).file.some((h) => h.id === chat.id)).toBe(true);
+    });
+
+    // Plaintext files get contentDirty = 1 at upload time (write-path mark), so no
+    // flushContainerDb is needed — flushContentReindex() alone drains the dirty bit.
+    test('PLAINTEXT file body is searchable (no flush — write-path mark)', async () => {
+        const file = new File([new TextEncoder().encode('flibbertext inside a plaintext file')], 'notes.txt', {
+            type: 'text/plain',
+        });
+        const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+        await home.drive.flushContentReindex();
+        expect((await searchFile('flibbertext')).file.some((h) => h.id === uploaded.id)).toBe(true);
+    });
+
+    test('a NAME match outranks a body-only match (end to end)', async () => {
+        // File A: unique term only in body; File B: unique term in name only (content is 1 opaque byte).
+        const a = new File([new TextEncoder().encode('contains zonktoken in body')], 'plain-a.txt', {
+            type: 'text/plain',
+        });
+        const upA = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, a);
+        const b = new File([new Uint8Array([1])], 'zonktoken-named.txt', { type: 'text/plain' });
+        const upB = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, b);
+        await home.drive.flushContentReindex();
+        const ids = (await searchFile('zonktoken')).file.map((h) => h.id);
+        expect(ids).toContain(upA.id);
+        expect(ids).toContain(upB.id);
+        // name hits are merged before body-only hits, so upB (name match) must precede upA (body match).
+        expect(ids.indexOf(upB.id)).toBeLessThan(ids.indexOf(upA.id));
+    });
+
+    test('deleting a file removes its body from search', async () => {
+        const file = new File([new TextEncoder().encode('ephemeral zappotoken text')], 'gone.txt', {
+            type: 'text/plain',
+        });
+        const up = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+        await home.drive.flushContentReindex();
+        expect((await searchFile('zappotoken')).file.some((h) => h.id === up.id)).toBe(true);
+        // driveDelete trashes the path; search filters on trashedAt IS NULL so it disappears.
+        await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${up.id}`);
+        expect((await searchFile('zappotoken')).file.some((h) => h.id === up.id)).toBe(false);
+    });
+
+    test('the ~100 KB cap drops content past the limit', async () => {
+        const needle = 'caplimittoken';
+        // needle is appended after 150 KB of padding — well past the 100 KB read cap.
+        const big = `${'x'.repeat(150_000)} ${needle}`;
+        const file = new File([new TextEncoder().encode(big)], 'big.txt', { type: 'text/plain' });
+        const up = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+        await home.drive.flushContentReindex();
+        expect((await searchFile(needle)).file.some((h) => h.id === up.id)).toBe(false);
+    });
+
+    test('container internals never surface as body hits', async () => {
+        // A doc whose body contains a term must surface the CONTAINER, never its data.db child.
+        const docPath = await home.drive.create(mountId, rootId, 'rt-internal', 'doc');
+        const collab = await home.drive.getCollabDocument(mountId, docPath.id);
+        const p = new Y.XmlElement('paragraph');
+        p.insert(0, [new Y.XmlText('internalcheck token')]);
+        collab.doc.getXmlFragment('default').insert(0, [p]);
+        await home.drive.flushContainerDb(mountId, docPath.id);
+        await home.drive.flushContentReindex();
+        const hits = (await searchFile('internalcheck')).file;
+        // The container itself is found by its indexed body content.
+        expect(hits.some((h) => h.id === docPath.id)).toBe(true);
+        // No hit has the container as its parent — data.db / media / chat internals are excluded.
+        expect(hits.every((h) => h.parentId !== docPath.id)).toBe(true);
+    });
+});

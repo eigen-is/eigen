@@ -1463,3 +1463,70 @@ describe('LocalStorage safety', () => {
         expect(storage.rename('nonexistent', 'target')).rejects.toThrow('source path not found');
     });
 });
+
+describe('content search (upsertPathContent / clearPathContent / searchPaths body)', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-content-search', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        rootId = (await mount.getRootFolder())!.id;
+    });
+
+    test('searchPaths finds a file by its body content and ranks name over body', async () => {
+        // Two files: one whose NAME contains the term, one whose only BODY contains it.
+        const bodyHit = await mount.createFile(rootId, 'quarterly-notes.txt', 'text/plain', 0, undefined);
+        const nameHit = await mount.createFile(rootId, 'z004term-in-name.txt', 'text/plain', 0, undefined);
+        mount.upsertPathContent(bodyHit, 'budget figures for z004term and more');
+
+        const hits = mount.searchPaths({ q: 'z004term', limit: 20 });
+        const ids = hits.map((h) => h.id);
+        expect(ids).toContain(bodyHit);
+        expect(ids).toContain(nameHit);
+        // Name match outranks body-only match (structural boost).
+        expect(ids.indexOf(nameHit)).toBeLessThan(ids.indexOf(bodyHit));
+    });
+
+    test('clearPathContent and AFTER DELETE both remove the content row from search', async () => {
+        const f = await mount.createFile(rootId, 'plain.txt', 'text/plain', 0, undefined);
+        mount.upsertPathContent(f, 'zelphine appears here');
+        expect(mount.searchPaths({ q: 'zelphine', limit: 20 }).some((h) => h.id === f)).toBe(true);
+
+        mount.clearPathContent(f);
+        expect(mount.searchPaths({ q: 'zelphine', limit: 20 }).some((h) => h.id === f)).toBe(false);
+
+        // Re-add, then delete the PATH — the AFTER DELETE trigger must clear path_content.
+        mount.upsertPathContent(f, 'zelphine appears here');
+        await mount.deletePath(f);
+        expect(mount.searchPaths({ q: 'zelphine', limit: 20 }).some((h) => h.id === f)).toBe(false);
+    });
+});
+
+describe('content index dirty marks', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-content-dirty', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        rootId = (await mount.getRootFolder())!.id;
+    });
+
+    test('creating a plaintext file marks it contentDirty; a binary file does not', async () => {
+        const txt = await mount.createFile(rootId, 'marked.txt', 'text/plain', 0, undefined);
+        const png = await mount.createFile(rootId, 'image.png', 'image/png', 0, undefined);
+        const dirtyIds = mount.getContentDirtyPaths(0, 100).map((p) => p.id);
+        expect(dirtyIds).toContain(txt);
+        expect(dirtyIds).not.toContain(png);
+    });
+
+    test('getContentDirtyPaths honours the re-extract cap', async () => {
+        const txt = await mount.createFile(rootId, 'cap-test.txt', 'text/plain', 0, undefined);
+        expect(mount.getContentDirtyPaths(0, 100).map((p) => p.id)).toContain(txt);
+        mount.markContentIndexed(txt);
+        expect(mount.getContentDirtyPaths(120, 100).map((p) => p.id)).not.toContain(txt);
+    });
+});

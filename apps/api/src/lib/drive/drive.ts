@@ -45,6 +45,7 @@ import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
+import { extractText } from '../search/extract-text';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { StorageFile } from '../storage';
 import { getTeamMembers } from '../team';
@@ -125,7 +126,15 @@ export default class Drive {
     // Called by: Drive.init() bootstrap and TeamHome.addMount() (the latter is routed via
     // POST /team/:ownerId/mount). Not directly route-callable on the drive surface.
     async addMount(config: MountConfig): Promise<void> {
-        const mount = new Mount(this.owner.id, this.home.homeDir, config, this.home.getLocalDatabase.bind(this.home));
+        // Inject the body extractor so the mount's own reindex queue can drain itself — keeps the
+        // document-loader stack out of mount.ts (see ContentReindexQueue).
+        const mount = new Mount(
+            this.owner.id,
+            this.home.homeDir,
+            config,
+            this.home.getLocalDatabase.bind(this.home),
+            extractText,
+        );
         await mount.init();
         this.mounts.set(config.id, mount);
         if (config.isDefault) {
@@ -797,6 +806,14 @@ export default class Drive {
         // bm25 isn't comparable across mount indexes, so cross-mount tiebreak is recency.
         merged.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         return merged.slice(0, opts.limit);
+    }
+
+    // Force-drain every mount's content reindex queue and await completion. The queues otherwise
+    // self-drive (on dirty-mark + cap timer); this exists for tests and ad-hoc ops, not routes.
+    async flushContentReindex(): Promise<void> {
+        for (const mount of this.mounts.values()) {
+            await mount.flushContentReindex();
+        }
     }
 
     async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
