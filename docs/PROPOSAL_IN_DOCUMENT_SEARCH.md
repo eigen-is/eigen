@@ -263,8 +263,23 @@ client-side scan would silently miss everything the user hasn't scrolled to. So 
   consumes on mount (jumping into history at that message), deferring smooth in-place scroll.
 - A `LIKE '%q%'` query is an acceptable **interim** before the FTS migration (small self-hosted
   rooms), but the FTS table is the real answer and is cheap to add.
-- **Not** `comment-index.ts`: that is per-thread *metadata* (status, last-author, a 100-char snippet),
-  not message text — it cannot serve message search.
+- **Comment threads are searched elsewhere:** `comment-index.ts`'s metadata (status, last-author,
+  100-char snippet) can't serve message search, but its `comments.db` gains a `comments_fts` over a
+  capped per-thread message tail (v3) that does — for **comment** threads (see
+  [Comments](#comments--search-across-a-boards-cards)). This per-room `messages_fts` is for
+  **standalone** chat history.
+
+### Comments — search across a board's cards
+
+Stickies and docs carry per-card **comment threads** — embedded `.eigenchat` containers the client
+never bulk-loads. Searching them is server-side like chat, but it does **not** fan out across thread
+DBs: the parent's `comments.db` (one per container) gains a `comments_fts` over a capped per-thread
+message tail (`COMMENT_INDEX_DB_CONFIG` v3 — see [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md)), so the
+capability's `search` is a **single `MATCH` on one already-open in-memory DB**, returning `chatName` →
+card; `reveal` scrolls to the card and opens its comment panel. That same `recentText` is what
+PROPOSAL_SEARCH folds into the board's drive-wide entry, so both comment surfaces share one artifact
+and one write seam (`postMessage` → `updateCommentIndex`). Deep history of a single thread, if ever
+needed, falls back to that thread's own per-room `messages_fts`.
 
 | Domain | Where content lives client-side | `search` | Cross-cutting note |
 |---|---|---|---|
@@ -272,6 +287,7 @@ client-side scan would silently miss everything the user hasn't scrolled to. So 
 | Docs | full ProseMirror tree (`editor.state.doc`) | client-side walk | reuse comment-mark decoration pattern |
 | Sheets | live `WorkbookInstance` | wrap existing `searchAll` | extend active-sheet → all tabs |
 | Chat | only loaded pages (paginated) | **async** server query | needs per-room `messages_fts` + route |
+| Comments | embedded threads, not resident | **async** single `MATCH` on `comments.db` | shares the artifact PROPOSAL_SEARCH folds drive-wide |
 
 ## The actions half — close the one wiring gap
 
@@ -307,7 +323,7 @@ Optionally extend the action set for the doc context with **Export** and **Versi
 | 1 | **Actions half** — publish `usePaletteSelectionActions` from the eigendoc viewers (Rename / Share / Delete / Download / Email collaborators; optionally Export / Version history). Lights up doc actions in the global blend immediately. | S | — |
 | 2 | **Palette plumbing** — `doc:` scope + chip (gated on open doc), `doc-hit` result kind + row, `DocSearchCapability` type + `usePaletteDocSearch` hook + `doc-search` provider, "In document" section in `buildSections`. | S–M | command palette (shipped) |
 | 3 | **Client-side searchers** — Stickies (Y.Doc scan) and Docs (ProseMirror walk + reveal decoration); Sheets (wrap `searchAll`, extend to all tabs). | M | 2 |
-| 4 | **Chat in-document search** — per-room `messages_fts` (`CHAT_ROOM_DB_CONFIG` v2) + `ChatRoom.searchMessages` + `GET …/messages/search` route + async chat capability with jump-to-message reveal. | M | 2; mirrors PROPOSAL_SEARCH Phase 3 |
+| 4 | **Chat & comment in-document search** — per-room `messages_fts` (`CHAT_ROOM_DB_CONFIG` v2) + `ChatRoom.searchMessages` + `GET …/messages/search` for standalone chats; **comment-thread search** across a board via `comments.db` `comments_fts` (`COMMENT_INDEX_DB_CONFIG` v3); async capability with jump-to-message / jump-to-card reveal. | M | 2; mirrors PROPOSAL_SEARCH Phase 3 |
 
 Phase 1 ships value alone. Phases 3 and 4 light up domains independently behind the same scope — a
 domain with no published capability simply contributes no "In document" section.
@@ -398,8 +414,10 @@ apps/api/src/routes/chat.ts      # + GET …/messages/search
   is a small wiring fix (publish `selectionActions` from the viewers) and ships independently first.
 - **Distinct from drive-wide search** — different index, different provider, different UI. The two
   share only the per-type text extractors. This never touches `/search/:ownerId`.
-- **Chat has two indexes by design** — drive-wide latest-100 KB in `paths_content_fts`
-  (PROPOSAL_SEARCH) for findability; a per-room `messages_fts` that indexes the **full history
-  server-side** (here) for in-document search. Both are server-side; neither ships the full message
-  history to the client — searches return only ranked, capped hits.
+- **Chat content has three complementary server-side indexes** — drive-wide latest-100 KB in
+  `paths_content_fts` (PROPOSAL_SEARCH) makes a chat **file** findable; a per-room `messages_fts`
+  indexes a **standalone** chat's full history for in-document search (here); and the parent's
+  `comments.db` `comments_fts` indexes a capped per-thread tail of **card comments** (v3) for
+  board-level comment search plus the drive-wide fold. None ship the full message history to the
+  client — each returns only ranked, capped hits.
 ```

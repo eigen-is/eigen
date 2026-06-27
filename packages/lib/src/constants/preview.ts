@@ -48,6 +48,14 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
     return null;
 }
 
+// The subset of text preview modes whose RAW BODY is indexed by drive-wide content
+// search. Eigen container modes (eigendoc/eigenslides/eigensheets) are excluded here —
+// their bodies come from the Yjs loaders via the content-reindex sweep, not a raw read.
+export function isSearchableTextFile(mimeType: string, fileName: string): boolean {
+    const mode = getTextPreviewMode(mimeType, fileName);
+    return mode === 'markdown' || mode === 'plaintext' || mode === 'code';
+}
+
 export function isExiftoolExtension(fileName: string): boolean {
     return EXIFTOOL_EXTENSIONS.has(getExtension(fileName));
 }

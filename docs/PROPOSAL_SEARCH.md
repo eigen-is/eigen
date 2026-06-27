@@ -60,18 +60,40 @@
 >   12 drive-side tests covering the FTS5 schema, name find, rename re-index, trash
 >   removal, root exclusion, eigendoc-internals exclusion, and the endpoint surface.
 >
+> **Shipped — drive content index (Phase 2 — metadata.db v6):**
+> - A `path_content(pathId, body)` table with a sibling external-content `paths_content_fts`
+>   FTS5 over it, in each mount's `metadata.db` (v6) — separate from `paths_fts` so large body
+>   text never churns the name index. An `AFTER DELETE ON paths` trigger drops the content row
+>   with its path.
+> - Six body types: **doc / slides / sheets / stickies / chat** (via the shared `lib/document/`
+>   loaders + new `readStickiesContent` / `readChatContent`) and **plaintext / code files** (raw
+>   capped read, gated by `isSearchableTextFile`). Per-file cap ~100 KB (`CONTENT_INDEX_MAX_BYTES`);
+>   chat indexes the **newest** ~100 KB of messages.
+> - Durable + regenerable: a body write sets `contentDirty=1` (plaintext at the file-write seam;
+>   containers via the storage-agnostic `onSync`; copies + the v6 backfill mark explicitly). The bit
+>   on `paths` IS the queue — no separate table, no staged copy (a reindex re-reads live state, and
+>   the bit coalesces edits). Each mount's `ContentReindexQueue` (read-side mirror of the S3
+>   `UploadQueue`) drains it off the request path: kick-on-mark + a cap self-timer, no global poller,
+>   replays on mount open. Drain = `extractText` → upsert `path_content` → clear the bit + stamp
+>   `contentIndexedAt` (2-min per-container re-extract cap). Extraction never throws to the loop.
+> - `Mount.searchPaths` queries BOTH FTS tables and ranks **name hits above body-only hits**,
+>   reusing the same `docContainerDescendantIds` exclusion so container internals never surface.
+>   No SSE: search is a live per-query fetch (`useSearch`, 30 s `staleTime`) and the index is
+>   eventually consistent within the cap, so a push-invalidation buys nothing.
+> - **Out of scope (comments-next follow-up):** comment-thread indexing, per-room `messages_fts`
+>   (full chat history / in-document search), calendar, shared-with-me, vector.
+>
 > **Index location: Option C — inline FTS in the canonical per-scope DB.** Mail's FTS
 > lives inside `mail.db`; drive's lives inside each mount's `metadata.db`; calendar will
 > do the same on `calendar.db` when it ships. Cross-domain query fan-out is the route's
 > job; same-kind ranking is native `bm25()` within each scope; cross-mount (within-kind)
 > tiebreak is recency.
 >
-> **Deferred (post-v1):** Document body indexing — the Phase 2 worked design below covers docs /
-> slides / sheets / **stickies** / **chat** bodies (chat: the **latest ~100 KB of messages**,
-> extracted through the same content-loader → text-collector → `paths_content_fts` pipeline as the
-> Yjs docs) plus plain-text / code files; calendar event indexing; shared-with-me search;
-> vector / semantic search. Each later phase replicates the inline-FTS pattern in its domain DB —
-> additive write-path + route source per kind, no palette change required.
+> **Deferred (post-v1):** calendar event indexing; shared-with-me search; vector / semantic
+> search; comment-thread indexing + per-room `messages_fts` (in-document search). Each later phase
+> replicates the inline-FTS pattern in its domain DB — additive write-path + route source per
+> kind, no palette change required. (Document body indexing — **Phase 2** — is now **shipped**;
+> see the drive content index block above.)
 >
 > **In-document search is a separate surface** — searching *within* the open document (jump to a
 > sticky / cell / heading / message) and the command palette's "current document" scope are
@@ -436,36 +458,80 @@ seam.
   container** must be re-downloaded via `openDatabase` to read it (the same cost preview / export
   already pay), so the worker should drain promptly rather than let closed-S3 docs backlog.
 
-**Durability — dirty-flag + sweep (recommended).** On a durable write, set `contentDirty = 1` (cheap,
-same `metadata.db`). A `scheduleInterval` worker (existing primitive, `apps/api/src/lib/scheduler/`)
-sweeps dirty rows off the request path: load → `extractText` (capped) → upsert `paths_content_fts` →
-clear the bit + stamp `contentIndexedAt` → emit SSE. Crash-safe via the persisted bit, self-healing (a
-missed sweep just reruns), and backfill is simply "mark all dirty" once. Rejected alternatives:
+**Durability — dirty-flag + per-mount self-scheduled drain (as built).** On a durable write, set
+`contentDirty = 1` (cheap, same `metadata.db`). The bit IS the queue. Each mount owns a
+`ContentReindexQueue` (`apps/api/src/lib/mount/content-reindex-queue.ts`) — the read-side mirror of the
+S3 `UploadQueue` — that drains dirty rows off the request path: load → `extractText` (capped) → upsert
+`path_content` → clear the bit + stamp `contentIndexedAt`. It is kicked when a bit is set, self-times
+the next pass to when the earliest capped row comes due, and replays on mount open. Crash-safe via the
+persisted bit, self-healing, and backfill is simply "mark all dirty" once. Notes on the shape:
 
-- **Fire-and-forget at the seam** — no durable retry; one failed extraction leaves a file unindexed
+- **No global `scheduleInterval` poll** — the original recommendation; rejected because it turned
+  per-mount work into a server-wide loop that woke every tick with nothing to do.
+- **Fire-and-forget at the seam** — rejected: no replay; one failed extraction leaves a file unindexed
   until it happens to be edited again.
-- **A full per-mount `ReindexQueue`** mirroring the S3 `UploadQueue` (backoff / reconcile /
-  per-destination semaphore) — overkill. Unlike an upload, whose staged bytes are the *only* copy
-  until the PUT acks, a search index is **regenerable**; it does not need hard delivery guarantees.
+- **Not the *full* `UploadQueue`** (backoff / reconcile of staged copies / per-destination semaphore) —
+  unlike an upload, whose staged bytes are the *only* copy until the PUT acks, a search index is
+  **regenerable**, so the queue stays minimal: no staged copy, no attempt/backoff columns, a failed
+  extract is logged and the row marked done (it re-indexes on the next edit).
 
 **Lifecycle.** Delete clears the content row — an `AFTER DELETE` trigger on `paths` keeps it atomic
 (the content table is keyed by path id). Trash and move need nothing: search already excludes
 `trashedAt IS NOT NULL`, and a move changes neither name nor body (mirrors the existing
-`DRIVE_PATH_MOVED` SSE exclusion). A new `DRIVE_FILE_REINDEXED` SSE event after a sweep lets the FE
-`invalidateSearchOwner` so freshly-indexed content shows up.
+`DRIVE_PATH_MOVED` SSE exclusion). No reindex SSE: search is a live per-query fetch (`useSearch`,
+30 s `staleTime`) over an index that is eventually consistent within the cap, so push-invalidation of
+freshly-indexed content buys nothing.
 
-**Open — resume here.**
+**Comments — making a board/doc findable by its card comments (designed here; built in the
+comments-next step).** Per-card comment threads are embedded `.eigenchat` containers
+(`<parent>/chat/<card>.eigenchat/data.db`), kept out of the drive UI and `paths_fts` by the
+`docContainerDescendantIds` CTE — so a board is not currently findable by what its comments say. Rather
+than fan out across every thread DB at extract time, reuse the parent's existing `comments.db`
+(`CommentIndex`, one per container, already open and written on every comment post):
 
-- **Decided:** type scope is docs / sheets / slides / **stickies** / **chat** + plaintext / code
-  (stickies via a small dedicated loader; chat as the latest ~100 KB of messages). Only uploaded
-  binary docs (PDF / Office) and semantic / vector stay deferred.
-- **Decided:** per-file cap ~100 KB; for chat that means the newest ~100 KB.
-- Lock the durability model (dirty-flag + sweep vs fire-and-forget vs full queue). Leaning dirty-flag + sweep.
-- Pick the sweep cadence and the per-container re-extract rate-limit (chat is append-heavy — its
-  `onSync` fires on every flush of new messages, so the rate-limit matters most here).
-- Pick the staleness key (source `updatedAt` vs content hash).
-- Settle `paths_content_fts`'s exact shape — **leaning external-content over a small `path_content`
-  table** so `snippet()` highlighting is available later (the palette can show *why* a file matched).
+- **`COMMENT_INDEX_DB_CONFIG` v3** gives each `comments` row (one per thread, keyed by `chatName`) a
+  `recentText` column holding the **latest ~8 KB** of that thread's messages (append-and-trim,
+  newest-first) plus a `comments_fts` external-content FTS5 over it (3 triggers; the UPDATE gated on
+  `WHEN old.recentText IS NOT new.recentText` so the frequent metadata writes — `status`,
+  `lastActivityAt` — don't churn the shadow). Additive and **regenerable** (a one-time backfill replays
+  each thread's tail), so it respects the frozen-format rule exactly as `paths_content_fts` does.
+- **Maintenance** rides the seam that already exists: `ChatRoom.postMessage`'s embedded branch updates
+  `comments.db` via `updateCommentIndex` — there it also appends to `recentText` (trim to the ~8 KB cap)
+  and marks the **parent** container `contentDirty`, so the next sweep re-folds.
+- **The fold (this proposal):** when the sweep extracts a doc / stickies container, after its own body
+  it reads the parent's `comments.db` `recentText` in one in-memory query (newest-active threads first,
+  inside the same ~100 KB per-file budget) and appends it to the parent's `path_content.body`. The board
+  then surfaces in the Files section for a term that appears only in a card's comment.
+- **Searching the comments themselves** ("find the card whose comments mention X") is a single
+  `comments_fts MATCH` on that same in-memory `comments.db`; that surface lives in the current-document
+  scope and is specced in [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md). The per-room
+  `messages_fts` there stays the mechanism for **standalone** chat history; comment threads are served
+  by this `comments.db` aggregate, not a per-thread index.
+
+**Resolved (2026-06-26 — ready to build).**
+
+- **Type scope:** docs / sheets / slides / **stickies** / **chat** + plaintext / code (stickies via a
+  small dedicated loader; chat as the latest ~100 KB of messages). Only uploaded binary docs
+  (PDF / Office) and semantic / vector stay deferred.
+- **Per-file cap:** ~100 KB; for chat that means the newest ~100 KB.
+- **Durability + driver:** the persisted `contentDirty` bit on `paths` IS the queue (set at the write
+  seams; no separate table — a reindex re-reads live state so there is nothing to freeze, and the bit
+  coalesces edits). Each mount owns a self-scheduled `ContentReindexQueue` that drains it, built as the
+  read-side mirror of the S3 `UploadQueue`: kicked when a bit is set, self-times the next pass, replays
+  on mount open. Chosen over a server-wide `scheduleInterval` poll (turned per-mount work global, woke
+  with nothing to do) and over fire-and-forget (no replay).
+- **Rate-limit:** re-extract any one container at most once per **2 min** (the cap reads
+  `contentIndexedAt`); the queue self-times the next drain to exactly when the earliest capped row comes
+  due. The dirty bit coalesces the ~30 s `onSync` re-marks; the cap stops an append-heavy chat or a long
+  edit session from re-extracting a big body each flush.
+- **Staleness key:** none beyond the bit. `contentDirty` is set only on real writes (`onSync` fires only
+  when the doc actually changed; plaintext/code marked in the file-write path), so it is already
+  change-gated — a separate `updatedAt` / content-hash compare would be redundant. `contentIndexedAt`
+  exists only to drive the 2-min cap.
+- **`paths_content_fts` shape:** external-content FTS5 over a small `path_content(pathId, body)` table
+  (FTS holds only the index; the body lives in `path_content`, cleanly pathId-keyed for upsert/delete;
+  `snippet()` stays available later). An `AFTER DELETE` trigger on `paths` clears the content row.
+- **Migration:** mount `metadata.db` → **v6**.
 
 ## Search API
 
@@ -633,17 +699,17 @@ What not to do:
 |-------|---------------------------------------------------------------------------------------------------------|--------|
 | 1a    | Mail v3 migration (CREATE VIRTUAL TABLE + triggers + populate), `MailDB.searchMail` two-pass JOIN+hydrate, the `/search` route, index-on-write via FTS triggers. **Shipped — see status block.** | M |
 | 1b    | Drive name indexing — mount metadata.db v2 (`paths_fts` + 3 triggers, UPDATE gated on `name` change), `Mount.searchPaths`, `Drive.search` mount fan-out, `/search` route extended with a `file` source, eigendoc-internals exclusion. **Shipped — see status block.** | M |
-| 2     | Body-content indexing — docs / slides / sheets / **stickies** / **chat** (thin text collectors over the `lib/document/` loaders; stickies gets a small new loader; chat extracts the latest ~100 KB from its relational `messages` table) **plus plain text / code file bodies**, written to a sibling `paths_content_fts` table, populated by a dirty-flag + sweep worker hooked on the storage-agnostic `onSync` (not the S3-only upload queue). **[Worked design](#phase-2--body-content-indexing-worked-design).** | M |
+| 2     | Body-content indexing — docs / slides / sheets / **stickies** / **chat** (thin text collectors over the `lib/document/` loaders; stickies gets a small new loader; chat extracts the latest ~100 KB from its relational `messages` table) **plus plain text / code file bodies**, written to a sibling `paths_content_fts` table, populated by a dirty-flag + sweep worker hooked on the storage-agnostic `onSync` (not the S3-only upload queue). **Shipped — see status block.** ([worked design](#phase-2--body-content-indexing-worked-design)). | M |
 | 3     | In-document / in-chat message FTS — per-room `messages_fts` over the **full** chat history (for searching within an open chat). Owned by [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md); listed here because it shares the FTS pattern. | S |
 | 4     | Calendar event indexing — `calendar.db` gains an `events_fts` + same trigger shape                       | S      |
 | 5     | Shared data — make items shared with the user searchable                                                 | S–M    |
 | 6     | Semantic / vector search (future, opt-in)                                                                | L      |
 
-Phases 1a and 1b are **shipped** — the inline FTS5 mail index and the drive name index are
-both live, and the `/search` route returns `{ mail, file }`. The command palette consumes
-both. Each later phase deepens what's searchable with no change to the palette's frontend.
-Phases 2–6 follow the same inline-FTS pattern (Option C) — one virtual table + triggers per
-domain.
+Phases 1a, 1b, and **2** are **shipped** — the inline FTS5 mail index, the drive name index, and
+the drive **content** index are all live, and the `/search` route returns `{ mail, file }`. The
+command palette consumes both. Each later phase deepens what's searchable with no change to the
+palette's frontend. Phases 3–6 follow the same inline-FTS pattern (Option C) — one virtual table +
+triggers per domain.
 
 **Stickies content** is now in Phase 2 (above): it needs only a small dedicated
 `readStickiesContent` loader, so it no longer waits for full stickies export.
@@ -689,8 +755,12 @@ packages/lib/src/types/
   search.ts               # SearchResponse { mail, file } + SearchSource union shared with BE
 ```
 
-Note: `apps/api/src/lib/search/` no longer exists. The previous `SearchIndex` service +
-`search_content` schema were collapsed into per-domain inline FTS.
+Note: `apps/api/src/lib/search/` was reintroduced in Phase 2 for the drive content index — it
+holds only `extract-text.ts` (the per-type text collectors + `extractText` dispatch). The reindex
+worker is not here: it lives beside the upload queue as
+`apps/api/src/lib/mount/content-reindex-queue.ts` (per-mount, mirroring `UploadQueue`). The old
+`SearchIndex` service + `search_content` schema remain gone: search is still per-domain inline FTS,
+and `lib/search/` holds only body-extraction helpers, not a search-index abstraction.
 
 ## Key decisions
 
