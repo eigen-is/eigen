@@ -61,6 +61,13 @@ bun --filter '@apps/api' buildfordocker
 echo "Rebuilding containers..."
 docker compose --env-file .env.production up -d --build
 
+# Edge caddy bind-mounts the Caddyfile; `up -d` won't apply a config-only change, so reload.
+if docker compose --env-file .env.production ps --services --status running 2>/dev/null | grep -qx caddy; then
+    echo "Reloading Caddy config..."
+    docker compose --env-file .env.production exec -T caddy \
+        caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+fi
+
 echo "Pruning unused Docker build cache and images..."
 docker builder prune -f --filter "until=168h"
 docker image prune -f
