@@ -278,10 +278,8 @@
         --app-gutter-x: 0.75rem;
         --app-gutter-y: 0.75rem;
 
-        /* Topbar chrome tokens. Defaults here = the 'theme' variant (neutral
-           background bar that follows the light/dark theme), so the bar reads
-           correctly with no [data-chrome] set. The 'app' override below swaps to
-           a solid app-colour bar with white content (eigen.is parity). */
+        /* Topbar chrome tokens — a neutral background bar that follows the
+           light/dark theme. */
         --topbar-bg: var(--background);
         --topbar-border: var(--border);
         --topbar-fg: var(--foreground);
@@ -296,31 +294,11 @@
         --topbar-pill-hover-bg: var(--muted);
         --topbar-pill-hover-fg: var(--foreground);
 
-        /* Sidebar primary button: brand-colour on the neutral 'theme' bar
-           (default), dark default on the app-colour bar ('app' override below). */
+        /* Sidebar primary button: carries the app's brand colour. */
         --sidebar-newbtn-bg: var(--app-current-color);
         --sidebar-newbtn-fg: #fff;
 
         scroll-behavior: smooth;
-    }
-
-    /* 'app' chrome: solid app-colour bar with white content (eigen.is parity). */
-    :root[data-chrome="app"] {
-        --topbar-bg: var(--app-current-color);
-        --topbar-border: transparent;
-        --topbar-fg: #fff;
-        --topbar-bracket: #fff;
-        --topbar-icon: #fff;
-        --topbar-icon-hover-bg: color-mix(in oklab, var(--primary) 20%, transparent);
-        --topbar-icon-hover-fg: #fff;
-        --topbar-title: rgba(255, 255, 255, 0.7);
-        --topbar-pill-bg: rgba(255, 255, 255, 0.1);
-        --topbar-pill-border: rgba(255, 255, 255, 0.15);
-        --topbar-pill-fg: rgba(255, 255, 255, 0.7);
-        --topbar-pill-hover-bg: rgba(255, 255, 255, 0.15);
-        --topbar-pill-hover-fg: #fff;
-        --sidebar-newbtn-bg: var(--primary);
-        --sidebar-newbtn-fg: var(--primary-foreground);
     }
 
     /* Compact uppercase label shared by sidebar section titles, table column

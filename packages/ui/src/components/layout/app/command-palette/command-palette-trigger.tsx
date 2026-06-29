@@ -5,9 +5,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/component
 import { cn } from '@workspace/ui/lib/utils';
 import { Search } from 'lucide-react';
 
-// Icons + the search pill read from the --topbar-* tokens (defined in globals.css,
-// switched by [data-chrome]), so they adapt to the app-colour or theme bar without
-// branching here — matching NotificationBell and AppSwitcher.
+// Icons + the search pill read from the --topbar-* tokens (defined in globals.css),
+// so they stay in step with the topbar without branching here — matching
+// NotificationBell and AppSwitcher.
 //
 // Topbar renders this unconditionally, but the marketing-only index app (blog/support)
 // doesn't mount the CommandPaletteProvider — mirror PaletteRunner (app-shell.tsx) and

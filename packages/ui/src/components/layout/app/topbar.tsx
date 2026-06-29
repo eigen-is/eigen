@@ -6,7 +6,7 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { cn } from '@workspace/ui/lib/utils.ts';
-import { Grip, LifeBuoy, LogOut, Menu, Palette, PanelTop, Settings, Shield, UserRound } from 'lucide-react';
+import { Grip, LifeBuoy, LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
 import {
@@ -241,21 +241,6 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                                 <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
                                 <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
                                 <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
-                            </DropdownMenuRadioGroup>
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                            <PanelTop />
-                            Topbar
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                            <DropdownMenuRadioGroup
-                                value={settings?.chromeStyle ?? 'theme'}
-                                onValueChange={(v) => updateSettings.mutate({ chromeStyle: v as 'theme' | 'app' })}
-                            >
-                                <DropdownMenuRadioItem value="app">App colour</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="theme">Theme</DropdownMenuRadioItem>
                             </DropdownMenuRadioGroup>
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
