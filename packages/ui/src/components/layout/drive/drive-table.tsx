@@ -95,6 +95,8 @@ export function DriveTable({
         count: sortedItems.length,
         getScrollElement: () => containerRef.current,
         estimateSize: () => ROW_HEIGHT,
+        // Key the measurement cache by id so a re-sort moves cached heights with their rows.
+        getItemKey: (index) => sortedItems[index].id,
         overscan: 12,
         // Offset of the virtualized list within the scroller — measured on the list
         // wrapper, NOT the sticky header (a stuck header's offsetTop equals scrollTop,
@@ -113,15 +115,17 @@ export function DriveTable({
     });
 
     // A deep-linked active row can be windowed out of the DOM on mount — scroll it in once.
+    // Snapshot the id at mount so only a deep-link recenters, not a later in-session select.
+    const initialActiveId = useRef(activeItemId);
     const didInitialScroll = useRef(false);
     useEffect(() => {
-        if (didInitialScroll.current || !activeItemId) return;
-        const idx = sortedItems.findIndex((i) => i.id === activeItemId);
+        if (didInitialScroll.current || !initialActiveId.current) return;
+        const idx = sortedItems.findIndex((i) => i.id === initialActiveId.current);
         if (idx >= 0) {
             virtualizer.scrollToIndex(idx, { align: 'center' });
             didInitialScroll.current = true;
         }
-    }, [activeItemId, sortedItems, virtualizer]);
+    }, [sortedItems, virtualizer]);
 
     const gridCols =
         hideModified && hideOwner

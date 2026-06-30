@@ -28,6 +28,9 @@ import { type CreateCallbacks, getCreateMenuItems } from './create-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { useMountLabel } from './drive-mount-list';
 
+const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
+const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
+
 type DriveListToolbarProps = CreateCallbacks & {
     ownerId: string;
     mountId: string;
@@ -84,8 +87,6 @@ export function DriveListToolbar({
             </DropdownMenu>
         );
 
-    const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
-    const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
     // Re-selecting the active field flips direction; switching field uses that field's default.
     const chooseSort = (key: DriveSortKey) =>
         setSort(key, key === sortKey ? (sortDir === 'asc' ? 'desc' : 'asc') : DEFAULT_DIR[key]);

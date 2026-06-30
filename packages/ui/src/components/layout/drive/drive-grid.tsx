@@ -74,6 +74,19 @@ export function DriveGrid({
         onSelectionChange,
     });
 
+    // A deep-linked active tile can be windowed out of the DOM on mount — scroll it in once.
+    // Snapshot the id at mount so only a deep-link recenters, not a later in-session select.
+    const initialActiveId = useRef(activeItemId);
+    const didInitialScroll = useRef(false);
+    useEffect(() => {
+        if (didInitialScroll.current || !initialActiveId.current) return;
+        const idx = sortedItems.findIndex((i) => i.id === initialActiveId.current);
+        if (idx >= 0) {
+            virtualizer.scrollToIndex(Math.floor(idx / columns), { align: 'center' });
+            didInitialScroll.current = true;
+        }
+    }, [sortedItems, columns, virtualizer]);
+
     return (
         <div
             ref={containerRef}
