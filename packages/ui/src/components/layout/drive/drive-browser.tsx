@@ -1,4 +1,10 @@
-import { useBreadcrumb, useCreateFolder, useFolderContent, useRootFolder } from '@workspace/lib/drive';
+import {
+    defaultDriveSort,
+    useBreadcrumb,
+    useCreateFolder,
+    useFolderContent,
+    useRootFolder,
+} from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -14,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
-import { DriveTable, defaultDriveSort } from './drive-table';
+import { DriveTable } from './drive-table';
 import { getFileIcon } from './file-presentation';
 
 function matchesMimeFilter(mimeType: string, filters: string[]): boolean {

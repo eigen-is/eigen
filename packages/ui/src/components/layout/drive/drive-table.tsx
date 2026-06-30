@@ -1,4 +1,5 @@
 import { formatDateTime } from '@workspace/lib/date';
+import { defaultDriveSort } from '@workspace/lib/drive';
 import { DEFAULT_MOUNT_ID, type DrivePath, stripEigenExtension } from '@workspace/lib/types';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
@@ -14,12 +15,6 @@ import { UserAvatar } from '../user-avatar';
 import { DriveItemMenuItems } from './drive-item-menu';
 import { DriveShareSummary } from './drive-share-summary';
 import { getFilePresentation } from './file-presentation';
-
-export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
-    if (a.type === 'folder' && b.type !== 'folder') return -1;
-    if (a.type !== 'folder' && b.type === 'folder') return 1;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-}
 
 export type DriveTableProps = {
     items: DrivePath[];

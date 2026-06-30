@@ -1,6 +1,7 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import {
+    defaultDriveSort,
     useConvertDocument,
     useCopyPath,
     useDeletePaths,
@@ -22,7 +23,6 @@ import { DriveEmailCollaborators } from './drive-email-collaborators';
 import { DriveList, DriveListToolbar } from './drive-list';
 import { DriveLocationPicker } from './drive-location-picker';
 import { DriveRenameItem } from './drive-rename-item';
-import { defaultDriveSort } from './drive-table';
 import { DriveUploadFiles } from './drive-upload-files';
 import { ExportProgressDialog } from './export-progress-dialog';
 import { useDriveDialogs } from './use-drive-dialogs';
