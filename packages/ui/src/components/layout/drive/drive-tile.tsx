@@ -23,6 +23,7 @@ export function DriveTile({
     isActive,
     isSelected,
     disabled,
+    href,
     onClick,
     onContextMenu,
     onMenuButton,
@@ -74,7 +75,28 @@ export function DriveTile({
                         style: { color: presentation.colorVar },
                     })}
                 </span>
-                <span className="truncate text-xs">{stripEigenExtension(item.name)}</span>
+                {href ? (
+                    <a
+                        href={href}
+                        className="truncate text-xs"
+                        draggable={false}
+                        tabIndex={-1}
+                        onClick={(e) => {
+                            if (e.metaKey || e.ctrlKey) {
+                                e.stopPropagation();
+                                return;
+                            }
+                            e.preventDefault();
+                        }}
+                        onAuxClick={(e) => {
+                            if (e.button === 1) e.stopPropagation();
+                        }}
+                    >
+                        {stripEigenExtension(item.name)}
+                    </a>
+                ) : (
+                    <span className="truncate text-xs">{stripEigenExtension(item.name)}</span>
+                )}
                 <button
                     type="button"
                     aria-label="More actions"

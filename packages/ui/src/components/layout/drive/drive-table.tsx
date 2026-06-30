@@ -8,7 +8,9 @@ import { DriveItemContextMenu } from './drive-item-context-menu';
 import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
 
-export type DriveTableProps = {
+// Shared base for the drive views (table + grid): data, callbacks and selection inputs,
+// minus the table-only column flags. DriveGrid consumes this directly.
+export type DriveViewProps = {
     items: DrivePath[];
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
@@ -30,16 +32,20 @@ export type DriveTableProps = {
     onEmailCollaborators?: (item: DrivePath) => void;
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     allowDelete?: boolean;
-    ancestorBreadcrumb?: DrivePath[];
     unreadPathIds?: Set<string>;
-    hideModified?: boolean;
-    hideOwner?: boolean;
-    hideShareClick?: boolean;
-    hideHeader?: boolean;
     externalSelectedIds?: Set<string>;
     // Fires whenever the internal shift/ctrl-aware selection changes — used by file pickers
     // in multi-select mode to mirror the selection without reimplementing modifier handling.
     onSelectionChange?: (items: DrivePath[]) => void;
+};
+
+// Table view adds the column-layout flags the grid has no concept of.
+export type DriveTableProps = DriveViewProps & {
+    hideModified?: boolean;
+    hideOwner?: boolean;
+    hideShareClick?: boolean;
+    hideHeader?: boolean;
+    ancestorBreadcrumb?: DrivePath[];
 };
 
 export function DriveTable({

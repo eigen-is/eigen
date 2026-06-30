@@ -2,6 +2,7 @@ export * from './drive-access-list';
 export * from './drive-browser';
 export * from './drive-create-eigendoc';
 export * from './drive-file-picker';
+export * from './drive-grid';
 export * from './drive-item-context-menu';
 export * from './drive-item-menu';
 export * from './drive-location-picker';
