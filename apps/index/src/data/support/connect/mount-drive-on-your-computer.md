@@ -6,7 +6,7 @@ category: WebDAV
 tags: [webdav, drive, finder, windows, mount]
 crossSections: [drive]
 related: [drive/get-started, drive/share-a-file]
-updated: 2026-06-08
+updated: 2026-06-30
 ---
 
 Eigen Drive supports WebDAV (RFC 4918), so you can connect any of your drives as a network volume on macOS or Windows. Files appear in Finder or File Explorer like a local folder, so you can open, edit, and save them without going through the browser.
@@ -41,9 +41,15 @@ Finder's built-in WebDAV support works but can be slow on large folders and cach
 Windows connects WebDAV drives through the **WebClient** service.
 
 1. Make sure the **WebClient** service is running. Open Services (`services.msc`), find **WebClient**, and set its startup type to **Automatic** if it is not already running.
-2. Open **This PC**, click **Map network drive** in the toolbar (or from the Computer menu).
-3. Click **Connect to a Web site that you can use to store your documents and pictures**, then follow the wizard.
-4. Enter the WebDAV URL for your drive, then your Eigen email and app password when prompted.
+2. Open **This PC** in File Explorer, then choose **Map network drive** (in Windows 11 it is under the **⋯** menu in the toolbar).
+3. Pick a drive letter, paste the WebDAV URL for your drive into the **Folder** field, and tick **Connect using different credentials**.
+4. Click **Finish**, then enter your Eigen email address and app password when prompted.
+
+<div class="eigen-callout">
+
+Use **Map network drive** and paste the URL straight into the **Folder** field. Do not use the **Add a network location** wizard (the "Connect to a Web site that you can use to store your documents and pictures" link). It checks the parent folders of the address to validate it, and Eigen deliberately does not expose those, so the wizard reports the address as invalid even though the drive itself works fine.
+
+</div>
 
 Windows requires HTTPS for HTTP Basic authentication. Plain HTTP connections are rejected. There is also a 50 MB default upload size limit; large files may fail unless the registry setting `FileSizeLimitInBytes` under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WebClient\Parameters` is increased.
 
@@ -64,7 +70,7 @@ Use your Eigen **email address** as the username, and the **app password** you g
 
 **Drive does not appear after connecting on macOS**: check that the URL ends with a `/`. Finder sometimes drops the trailing slash.
 
-**"The folder you specified does not appear to be valid" on Windows**: confirm the WebClient service is running and that the URL uses `https://`, not `http://`.
+**"The folder you specified does not appear to be valid" on Windows**: this usually means you used the **Add a network location** wizard, which cannot validate Eigen drives. Use **Map network drive** instead, and paste the URL into the **Folder** field. Also confirm the WebClient service is running and that the URL uses `https://`, not `http://`.
 
 **401 Unauthorized**: double-check the app password was copied correctly. Passwords are only shown once; if you missed it, delete it from the Integrations page and generate a new one.
 
