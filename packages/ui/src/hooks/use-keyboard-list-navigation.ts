@@ -15,6 +15,8 @@ type UseKeyboardListNavigationOptions<T> = {
     onDelete?: (item: T) => void;
     shouldNotify?: (item: T, index: number) => boolean;
     selection?: UseListSelectionReturn<T>;
+    columns?: number;
+    scrollToIndex?: (index: number) => void;
 };
 
 export function useKeyboardListNavigation<T>({
@@ -29,6 +31,8 @@ export function useKeyboardListNavigation<T>({
     shouldNotify,
     selection,
     onQuickLook,
+    columns = 1,
+    scrollToIndex,
 }: UseKeyboardListNavigationOptions<T>) {
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const getIdRef = useRef(getId);
@@ -57,6 +61,10 @@ export function useKeyboardListNavigation<T>({
     }, [containerRef]);
 
     const scrollToRow = (index: number) => {
+        if (scrollToIndex) {
+            scrollToIndex(index);
+            return;
+        }
         const container = containerRef.current;
         if (!container) return;
         const item = container.querySelectorAll(itemSelector)[index] as HTMLElement | undefined;
@@ -102,7 +110,7 @@ export function useKeyboardListNavigation<T>({
             case 'ArrowDown':
                 e.preventDefault();
                 setSelectedIndex((prev) => {
-                    const newIndex = Math.min(prev + 1, items.length - 1);
+                    const newIndex = Math.min(prev + columns, items.length - 1);
                     if (newIndex >= 0 && newIndex !== prev) {
                         updateSelection(items[newIndex], e);
                         if (!e.shiftKey) notify(items[newIndex], newIndex);
@@ -115,13 +123,41 @@ export function useKeyboardListNavigation<T>({
             case 'ArrowUp':
                 e.preventDefault();
                 setSelectedIndex((prev) => {
-                    const newIndex = Math.max(prev - 1, 0);
+                    const newIndex = Math.max(prev - columns, 0);
                     if (newIndex >= 0 && newIndex !== prev) {
                         updateSelection(items[newIndex], e);
                         if (!e.shiftKey) notify(items[newIndex], newIndex);
                         scrollToRow(newIndex);
                     }
                     return newIndex;
+                });
+                break;
+
+            case 'ArrowRight':
+                if (columns <= 1) break;
+                e.preventDefault();
+                setSelectedIndex((prev) => {
+                    const next = Math.min(prev + 1, items.length - 1);
+                    if (next >= 0 && next !== prev) {
+                        updateSelection(items[next], e);
+                        if (!e.shiftKey) notify(items[next], next);
+                        scrollToRow(next);
+                    }
+                    return next;
+                });
+                break;
+
+            case 'ArrowLeft':
+                if (columns <= 1) break;
+                e.preventDefault();
+                setSelectedIndex((prev) => {
+                    const next = Math.max(prev - 1, 0);
+                    if (next >= 0 && next !== prev) {
+                        updateSelection(items[next], e);
+                        if (!e.shiftKey) notify(items[next], next);
+                        scrollToRow(next);
+                    }
+                    return next;
                 });
                 break;
 
