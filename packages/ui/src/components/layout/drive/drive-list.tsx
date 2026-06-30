@@ -1,6 +1,6 @@
 import { usePaletteSelection } from '@workspace/lib/command-palette';
-import { useBreadcrumb } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
+import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     ContextMenu,
@@ -17,7 +17,7 @@ import {
 import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { cn } from '@workspace/ui/lib/utils';
-import { Plus, UploadIcon } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Plus, UploadIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
@@ -50,6 +50,7 @@ export function DriveListToolbar({
     const { data: breadcrumbPaths = [] } = useBreadcrumb(ownerId, mountId, showBreadcrumb ? pathId : undefined);
     const mountLabel = useMountLabel(ownerId, mountId);
     const { isMobile } = useLayout();
+    const { sortKey, sortDir, setSort } = useDriveViewPreferences();
 
     const handleBreadcrumbClick = (path: DrivePath) => {
         onRowActivate?.(path);
@@ -82,6 +83,36 @@ export function DriveListToolbar({
             </DropdownMenu>
         );
 
+    const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
+    const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
+    // Re-selecting the active field flips direction; switching field uses that field's default.
+    const chooseSort = (key: DriveSortKey) =>
+        setSort(key, key === sortKey ? (sortDir === 'asc' ? 'desc' : 'asc') : DEFAULT_DIR[key]);
+
+    const sortDropdown = (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                    {SORT_LABELS[sortKey]}
+                    <ChevronDown className="h-4 w-4 ml-1" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                {(Object.keys(SORT_LABELS) as DriveSortKey[]).map((key) => (
+                    <DropdownMenuItem key={key} onClick={() => chooseSort(key)}>
+                        {SORT_LABELS[key]}
+                        {key === sortKey &&
+                            (sortDir === 'asc' ? (
+                                <ArrowUp className="h-4 w-4 ml-auto" />
+                            ) : (
+                                <ArrowDown className="h-4 w-4 ml-auto" />
+                            ))}
+                    </DropdownMenuItem>
+                ))}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+
     return (
         <div className="flex items-center justify-between w-full">
             {showBreadcrumb ? (
@@ -96,7 +127,10 @@ export function DriveListToolbar({
             ) : (
                 <div className="flex-1" />
             )}
-            <div className="flex gap-1">{isMobile && newItemButton}</div>
+            <div className="flex items-center gap-1">
+                {sortDropdown}
+                {isMobile && newItemButton}
+            </div>
         </div>
     );
 }

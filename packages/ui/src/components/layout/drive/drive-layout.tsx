@@ -1,10 +1,11 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import {
-    defaultDriveSort,
+    getDriveComparator,
     useConvertDocument,
     useCopyPath,
     useDeletePaths,
+    useDriveViewPreferences,
     useDuplicatePath,
     useExportDocument,
     useMovePath,
@@ -81,7 +82,7 @@ export function DriveLayout({
     allowMove = true,
     onQuickLook,
     getItemHref,
-    sortFn = defaultDriveSort,
+    sortFn,
     pid = undefined,
     showBreadcrumb = false,
     title,
@@ -95,6 +96,11 @@ export function DriveLayout({
     const duplicatePath = useDuplicatePath();
     const deletePathsMutation = useDeletePaths(ownerId, mountId);
     const convertMutation = useConvertDocument(ownerId, mountId);
+
+    // Sort order comes from the view preference; an explicit sortFn prop overrides it.
+    const { sortKey, sortDir } = useDriveViewPreferences();
+    const comparator = useMemo(() => getDriveComparator(sortKey, sortDir), [sortKey, sortDir]);
+    const activeSortFn = sortFn ?? comparator;
 
     const handleFileUpload = () => {
         if (allowUpload && currentPath) {
@@ -239,7 +245,7 @@ export function DriveLayout({
         [allowShare, dialogs.email.openDialog],
     );
 
-    const sortedContents = useMemo(() => [...folderContents].sort(sortFn), [folderContents, sortFn]);
+    const sortedContents = useMemo(() => [...folderContents].sort(activeSortFn), [folderContents, activeSortFn]);
 
     const wrappedQuickLook = useCallback(
         (path: DrivePath) => {
@@ -313,7 +319,7 @@ export function DriveLayout({
         onCopyTo: handleCopyTo,
         onDuplicate: allowMove ? handleDuplicate : undefined,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
-        sortFn,
+        sortFn: activeSortFn,
         unreadPathIds,
     };
 
