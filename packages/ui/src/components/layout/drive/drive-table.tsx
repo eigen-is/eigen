@@ -1,20 +1,16 @@
 import { formatDateTime } from '@workspace/lib/date';
 import { defaultDriveSort } from '@workspace/lib/drive';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types';
-import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import { Copy, CopyPlus, FolderInput, MoreVertical, Trash2 } from 'lucide-react';
+import { MoreVertical } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
-import { useListDrag } from '../../../hooks/use-list-drag';
-import { useListSelection } from '../../../hooks/use-list-selection';
-import { ContextMenuAnchor, useContextMenu } from '../context-menu';
+import { useMemo, useRef, useState } from 'react';
 import { UnreadDot } from '../unread-dot';
 import { UserAvatar } from '../user-avatar';
-import { DriveItemMenuItems } from './drive-item-menu';
+import { DriveItemContextMenu } from './drive-item-context-menu';
 import { DriveShareSummary } from './drive-share-summary';
 import { getFilePresentation } from './file-presentation';
+import { useDriveItemController } from './use-drive-item-controller';
 
 export type DriveTableProps = {
     items: DrivePath[];
@@ -88,71 +84,23 @@ export function DriveTable({
         return [...items].sort(sortFn);
     }, [items, sortFn]);
 
-    const handleItemSelect = useCallback(
-        (id: string) => {
-            const item = sortedItems.find((i) => i.id === id);
-            if (item) onItemClick?.(item);
-        },
-        [sortedItems, onItemClick],
-    );
-
-    const handleQuickLook = useCallback(
-        (id: string) => {
-            if (!onQuickLook) return;
-            const item = sortedItems.find((i) => i.id === id);
-            if (item) onQuickLook(item);
-        },
-        [sortedItems, onQuickLook],
-    );
-
-    const selection = useListSelection({ items: sortedItems, getId: (item) => item.id });
-
-    useEffect(() => {
-        onSelectionChange?.(selection.selectedItems);
-    }, [selection.selectedItems, onSelectionChange]);
-
-    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation<DrivePath>({
+    const controller = useDriveItemController({
         items: sortedItems,
-        activeId: activeItemId,
-        getId: (item) => item.id,
-        onSelect: handleItemSelect,
-        onQuickLook: onQuickLook ? handleQuickLook : undefined,
+        activeItemId,
         containerRef,
-        shouldNotify: () => !!activeItemId,
-        selection,
+        onItemClick,
+        onQuickLook,
+        onSelectionChange,
     });
-
-    const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'drive-item' });
-
-    const contextMenu = useContextMenu<DrivePath>();
-
-    const handleContextMenu = (e: React.MouseEvent, item: DrivePath) => {
-        if (!selection.isSelected(item.id)) {
-            selection.select(item.id);
-        }
-        contextMenu.handleContextMenu(e, item);
-    };
-
-    const openContextMenuFromButton = (button: HTMLElement, item: DrivePath) => {
-        if (!selection.isSelected(item.id)) {
-            selection.select(item.id);
-        }
-        const rect = button.getBoundingClientRect();
-        contextMenu.openAt(item, rect.right, rect.bottom);
-    };
-
-    const contextItems = contextMenu.item
-        ? selection.selectedCount > 1
-            ? selection.selectedItems
-            : [contextMenu.item]
-        : [];
-    const isSingleSelect = contextItems.length === 1;
-    const contextMenuItemHref = isSingleSelect && contextMenu.item ? getItemHref?.(contextMenu.item) : undefined;
-
-    const isValidFolderDrop = (targetItem: DrivePath) => {
-        if (targetItem.type !== 'folder') return false;
-        return !drag.draggedItems.some((d) => d.id === targetItem.id);
-    };
+    const {
+        selection,
+        selectedIndex,
+        handleKeyDown,
+        drag,
+        handleContextMenu,
+        openContextMenuFromButton,
+        isValidFolderDrop,
+    } = controller;
 
     const gridCols =
         hideModified && hideOwner
@@ -303,80 +251,23 @@ export function DriveTable({
                 );
             })}
 
-            <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
-                {isSingleSelect && contextMenu.item && (
-                    <DriveItemMenuItems
-                        item={contextMenu.item}
-                        href={contextMenuItemHref}
-                        onClose={contextMenu.close}
-                        onItemOpen={onItemOpen}
-                        onQuickLook={onQuickLook}
-                        onDownload={onDownload}
-                        onConvert={onConvert}
-                        onExport={onExport}
-                        onRename={onRename}
-                        onMoveTo={onMoveTo}
-                        onCopyTo={onCopyTo}
-                        onDuplicate={onDuplicate}
-                        onShareClick={onShareClick}
-                        onEmailCollaborators={onEmailCollaborators}
-                        onDelete={onDelete}
-                        allowDelete={allowDelete}
-                    />
-                )}
-                {!isSingleSelect && contextItems.length > 0 && (
-                    <>
-                        {onMoveTo && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onMoveTo(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <FolderInput className="h-4 w-4 mr-2" />
-                                Move {contextItems.length} items to…
-                            </DropdownMenuItem>
-                        )}
-                        {onCopyTo && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onCopyTo(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <Copy className="h-4 w-4 mr-2" />
-                                Copy {contextItems.length} items to…
-                            </DropdownMenuItem>
-                        )}
-                        {onDuplicate && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onDuplicate(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <CopyPlus className="h-4 w-4 mr-2" />
-                                Duplicate {contextItems.length} items
-                            </DropdownMenuItem>
-                        )}
-                    </>
-                )}
-                {!isSingleSelect && allowDelete && contextItems.length > 0 && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onDelete?.(contextItems);
-                            contextMenu.close();
-                        }}
-                        className="flex items-center"
-                    >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Move {contextItems.length} items to trash
-                    </DropdownMenuItem>
-                )}
-            </ContextMenuAnchor>
+            <DriveItemContextMenu
+                controller={controller}
+                getItemHref={getItemHref}
+                onItemOpen={onItemOpen}
+                onQuickLook={onQuickLook}
+                onDownload={onDownload}
+                onConvert={onConvert}
+                onExport={onExport}
+                onRename={onRename}
+                onMoveTo={onMoveTo}
+                onCopyTo={onCopyTo}
+                onDuplicate={onDuplicate}
+                onShareClick={onShareClick}
+                onEmailCollaborators={onEmailCollaborators}
+                onDelete={onDelete}
+                allowDelete={allowDelete}
+            />
         </div>
     );
 }
