@@ -43,6 +43,13 @@ export const spaceRouter = new Elysia({ name: 'space' })
                         ),
                     }),
                 ),
+                driveView: t.Optional(
+                    t.Object({
+                        mode: t.Optional(t.Union([t.Literal('list'), t.Literal('grid')])),
+                        sortKey: t.Optional(t.Union([t.Literal('name'), t.Literal('modified'), t.Literal('size')])),
+                        sortDir: t.Optional(t.Union([t.Literal('asc'), t.Literal('desc')])),
+                    }),
+                ),
             }),
             auth: true,
         },

@@ -1,3 +1,4 @@
+import type { DriveSortDir, DriveSortKey, DriveViewMode } from './drive';
 import type { S3Config } from './mount';
 
 export type MountSettings = {
@@ -22,6 +23,7 @@ export type UserSettings = {
     theme?: 'light' | 'dark' | 'system';
     mounts?: Record<string, MountSettings>;
     email?: EmailSettings;
+    driveView?: { mode?: DriveViewMode; sortKey?: DriveSortKey; sortDir?: DriveSortDir };
 };
 
 export type TeamSettings = {
