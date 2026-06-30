@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-755 primitives across 6 kinds. `packages/sheet` internals are excluded.
+768 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (99)
+## Components (102)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -47,12 +47,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveBrowser` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-browser.tsx |
 | `DriveCreateEigenDoc` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-create-eigendoc.tsx |
 | `DriveFilePicker` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-file-picker.tsx |
+| `DriveGrid` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-grid.tsx |
+| `DriveItemContextMenu` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-item-context-menu.tsx |
 | `DriveItemMenuItems` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-item-menu.tsx |
 | `DriveLocationPicker` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-location-picker.tsx |
 | `DriveMountList` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-mount-list.tsx |
 | `DrivePickerWithUpload` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-picker-with-upload.tsx |
 | `DrivePreview` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-preview.tsx |
 | `DriveTable` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
+| `DriveTile` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-tile.tsx |
 | `EigenApp` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-app.tsx |
 | `EigenCyclingLogo` | `@workspace/ui` | packages/ui/src/components/layout/braket/eigen-cycling-logo.tsx |
 | `EigenDocListView` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-list-view.tsx |
@@ -136,7 +139,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (200)
+## Hooks (202)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -241,6 +244,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCreateFolderItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useDeletePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useDriveAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
+| `useDriveViewPreferences` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-view-preferences.ts |
 | `useDuplicatePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useEffectiveMembers` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useEmailCollaborators` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
@@ -324,6 +328,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useApp` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useCreatedByMeta` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-dialog-meta.ts |
+| `useDriveItemController` | `@workspace/ui` | packages/ui/src/components/layout/drive/use-drive-item-controller.ts |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useMountLabel` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-mount-list.tsx |
 | `useSidebar` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
@@ -341,7 +346,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (205)
+## Types (212)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -419,6 +424,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DrivePathDetails` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveSearchParams` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveSortDir` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveSortKey` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveTypeChat` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveTypeDoc` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveTypeFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -426,6 +433,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveTypeSheets` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveTypeSlides` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveTypeStickies` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveViewMode` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveViewPreferences` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveVisibility` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EditorSaveResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EigenClipboardData` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
@@ -526,7 +535,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContactAutosuggestProps` | `@workspace/ui` | packages/ui/src/components/layout/contacts/types.ts |
 | `DocumentModeButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
 | `DriveAccessListProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-access-list.tsx |
+| `DriveGridProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-grid.tsx |
 | `DriveTableProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
+| `DriveViewProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
 | `EigenDocAppConfig` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `LabelFilterHeaderProps` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-filter-header.tsx |
 | `LabelManagerProps` | `@workspace/ui` | packages/ui/src/components/layout/labels/types.ts |
@@ -539,6 +550,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TooltipButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
 | `TooltipToggleProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-toggle.tsx |
 | `UploadItem` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-provider.tsx |
+| `UseDriveItemControllerOptions` | `@workspace/ui` | packages/ui/src/components/layout/drive/use-drive-item-controller.ts |
 | `UserAvatarProps` | `@workspace/ui` | packages/ui/src/components/layout/user-avatar.tsx |
 | `UserItemProps` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |
 | `DangerZoneProps` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/danger-zone.tsx |
@@ -551,7 +563,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (240)
+## Utilities & constants (241)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -702,6 +714,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `defaultDriveSort` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
+| `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
@@ -778,7 +792,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
 | `createLoginRouteOptions` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-route.tsx |
 | `DEFAULT_COLORS` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
-| `defaultDriveSort` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
 | `DOCS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `eigenDocEditorValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `eigenDocValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
