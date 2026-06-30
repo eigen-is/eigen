@@ -9,6 +9,7 @@ export * from './drive-mount-list';
 export * from './drive-picker-with-upload';
 export * from './drive-preview';
 export * from './drive-table';
+export * from './drive-tile';
 export * from './eigendoc-config';
 export * from './eigendoc-list-view';
 export * from './eigendoc-new-button';
