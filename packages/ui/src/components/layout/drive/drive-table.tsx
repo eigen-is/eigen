@@ -1,15 +1,11 @@
-import { formatDateTime } from '@workspace/lib/date';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { defaultDriveSort } from '@workspace/lib/drive';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
-import { MoreVertical } from 'lucide-react';
 import type React from 'react';
-import { useMemo, useRef, useState } from 'react';
-import { UnreadDot } from '../unread-dot';
-import { UserAvatar } from '../user-avatar';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DriveItemContextMenu } from './drive-item-context-menu';
-import { DriveShareSummary } from './drive-share-summary';
-import { getFilePresentation } from './file-presentation';
+import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
 
 export type DriveTableProps = {
@@ -78,29 +74,48 @@ export function DriveTable({
     onSelectionChange,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const listRef = useRef<HTMLDivElement>(null);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
     const sortedItems = useMemo(() => {
         return [...items].sort(sortFn);
     }, [items, sortFn]);
 
+    // Initial estimate only — every row is measured (measureElement), so the authoritative
+    // height comes from the DOM. A fixed size won't do: the ⋮ column makes wide rows ~41px
+    // while the name-only picker layout is ~33px, and the breakpoint is container-driven.
+    const ROW_HEIGHT = 41;
+    const virtualizer = useVirtualizer({
+        count: sortedItems.length,
+        getScrollElement: () => containerRef.current,
+        estimateSize: () => ROW_HEIGHT,
+        overscan: 12,
+        // Offset of the virtualized list within the scroller — measured on the list
+        // wrapper, NOT the sticky header (a stuck header's offsetTop equals scrollTop,
+        // which would grow scrollMargin in lockstep with scroll and pin the window).
+        scrollMargin: listRef.current?.offsetTop ?? 0,
+    });
+
     const controller = useDriveItemController({
         items: sortedItems,
         activeItemId,
         containerRef,
+        scrollToIndex: virtualizer.scrollToIndex,
         onItemClick,
         onQuickLook,
         onSelectionChange,
     });
-    const {
-        selection,
-        selectedIndex,
-        handleKeyDown,
-        drag,
-        handleContextMenu,
-        openContextMenuFromButton,
-        isValidFolderDrop,
-    } = controller;
+
+    // A deep-linked active row can be windowed out of the DOM on mount — scroll it in once.
+    const didInitialScroll = useRef(false);
+    useEffect(() => {
+        if (didInitialScroll.current || !activeItemId) return;
+        const idx = sortedItems.findIndex((i) => i.id === activeItemId);
+        if (idx >= 0) {
+            virtualizer.scrollToIndex(idx, { align: 'center' });
+            didInitialScroll.current = true;
+        }
+    }, [activeItemId, sortedItems, virtualizer]);
 
     const gridCols =
         hideModified && hideOwner
@@ -115,11 +130,13 @@ export function DriveTable({
         <div
             ref={containerRef}
             tabIndex={0}
-            onKeyDown={handleKeyDown}
+            onKeyDown={controller.handleKeyDown}
+            role="grid"
+            aria-rowcount={sortedItems.length}
             className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none"
         >
             {!hideHeader && (
-                <div className={cn('grid border-b app-gutter-x', gridCols)}>
+                <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', gridCols)}>
                     <div className="eigen-section-label h-10 pr-2 flex items-center">Name</div>
                     {!hideOwner && (
                         <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center">
@@ -138,118 +155,44 @@ export function DriveTable({
                 </div>
             )}
 
-            {sortedItems.map((item, index) => {
-                const itemHref = getItemHref?.(item);
-                const disabled = isItemDisabled?.(item) ?? false;
-                const presentation = getFilePresentation(item.mimeType, item.type);
-
-                return (
-                    <div
-                        key={item.id}
-                        className={cn(
-                            'grid border-b transition-colors eigen-list-item app-gutter-x',
-                            gridCols,
-                            (activeItemId === item.id || selectedIndex === index) && 'eigen-list-item-active',
-                            (selection.isSelected(item.id) || externalSelectedIds?.has(item.id)) &&
-                                'eigen-list-item-selected',
-                            dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
-                            disabled && 'opacity-40 pointer-events-none',
-                        )}
-                        onClick={(e) => {
-                            selection.handleItemClick(item.id, e);
-                            if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                                onItemClick?.(item);
-                            }
-                        }}
-                        onContextMenu={(e) => handleContextMenu(e, item)}
-                        {...drag.getDragProps(item)}
-                        onDragOver={(e) => {
-                            e.preventDefault();
-                            if (drag.isDragging && isValidFolderDrop(item)) {
-                                e.dataTransfer.dropEffect = 'move';
-                            }
-                        }}
-                        onDragEnter={() => {
-                            if (drag.isDragging) setDragOverItemId(item.id);
-                        }}
-                        onDragLeave={() => {}}
-                        onDrop={(e) => {
-                            e.preventDefault();
-                            setDragOverItemId(null);
-                            if (isValidFolderDrop(item) && onMove) {
-                                drag.draggedItems.forEach((d) => {
-                                    onMove(d, item.id);
-                                });
-                            }
-                        }}
-                    >
-                        <div className="pr-2 py-1.5 flex items-center min-w-0">
-                            <div className="relative mr-2 flex-shrink-0">
-                                {getFileIcon?.(item.mimeType, item.type, {
-                                    className: 'h-4 w-4',
-                                    style: { color: presentation.colorVar, fill: presentation.fillColorVar },
-                                })}
-                                {unreadPathIds?.has(item.id) && <UnreadDot />}
-                            </div>
-                            {itemHref ? (
-                                <a
-                                    href={itemHref}
-                                    className="truncate"
-                                    draggable={false}
-                                    tabIndex={-1}
-                                    onClick={(e) => {
-                                        if (e.metaKey || e.ctrlKey) {
-                                            e.stopPropagation();
-                                            return;
-                                        }
-                                        e.preventDefault();
-                                    }}
-                                    onAuxClick={(e) => {
-                                        if (e.button === 1) e.stopPropagation();
-                                    }}
-                                >
-                                    {stripEigenExtension(item.name)}
-                                </a>
-                            ) : (
-                                <span className="truncate">{stripEigenExtension(item.name)}</span>
-                            )}
-                        </div>
-                        {!hideOwner && (
-                            <div className="hidden @[800px]:flex items-center justify-center px-2 py-1.5">
-                                <div className="-my-0.5">
-                                    <UserAvatar userId={item.ownerId} size="sm" tooltip />
-                                </div>
-                            </div>
-                        )}
-                        <div className="hidden @[800px]:flex items-center justify-center px-2 py-1.5 group">
-                            <DriveShareSummary
-                                path={item}
-                                onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
-                                showIconOnHover={!hideShareClick}
+            <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+                {virtualizer.getVirtualItems().map((vi) => {
+                    const item = sortedItems[vi.index];
+                    return (
+                        <div
+                            key={item.id}
+                            data-index={vi.index}
+                            ref={virtualizer.measureElement}
+                            className="absolute inset-x-0 top-0"
+                            style={{ transform: `translateY(${vi.start - virtualizer.options.scrollMargin}px)` }}
+                        >
+                            <DriveRow
+                                item={item}
+                                index={vi.index}
+                                gridCols={gridCols}
+                                controller={controller}
+                                isActive={activeItemId === item.id || controller.selectedIndex === vi.index}
+                                isSelected={
+                                    controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)
+                                }
+                                isDragOver={dragOverItemId === item.id}
+                                disabled={isItemDisabled?.(item) ?? false}
+                                getFileIcon={getFileIcon}
+                                getItemHref={getItemHref}
+                                onItemClick={onItemClick}
+                                onShareClick={onShareClick}
+                                onMove={onMove}
+                                setDragOverItemId={setDragOverItemId}
+                                hideOwner={hideOwner}
+                                hideModified={hideModified}
+                                hideShareClick={hideShareClick}
                                 ancestorBreadcrumb={ancestorBreadcrumb}
+                                unreadPathIds={unreadPathIds}
                             />
                         </div>
-                        {!hideModified && (
-                            <div className="hidden @[600px]:flex items-center justify-end pl-2 pr-4 py-1.5 whitespace-nowrap text-xs text-muted-foreground">
-                                {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
-                            </div>
-                        )}
-                        <div className="hidden @[800px]:flex items-center justify-center py-1.5">
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    openContextMenuFromButton(e.currentTarget, item);
-                                }}
-                                className="h-7 w-7 rounded hover:bg-accent flex items-center justify-center text-muted-foreground"
-                                aria-label="More actions"
-                            >
-                                <MoreVertical className="h-4 w-4" />
-                            </button>
-                        </div>
-                    </div>
-                );
-            })}
+                    );
+                })}
+            </div>
 
             <DriveItemContextMenu
                 controller={controller}
