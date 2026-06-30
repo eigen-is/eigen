@@ -79,13 +79,15 @@ export function DriveGrid({
     const initialActiveId = useRef(activeItemId);
     const didInitialScroll = useRef(false);
     useEffect(() => {
-        if (didInitialScroll.current || !initialActiveId.current) return;
+        // Wait for a measured width so `columns` is real — the 0->1 default would make
+        // scrollToIndex(idx / columns) overshoot on a warm mount (e.g. toggling list->grid with an active item).
+        if (didInitialScroll.current || !initialActiveId.current || !width) return;
         const idx = sortedItems.findIndex((i) => i.id === initialActiveId.current);
         if (idx >= 0) {
             virtualizer.scrollToIndex(Math.floor(idx / columns), { align: 'center' });
             didInitialScroll.current = true;
         }
-    }, [sortedItems, columns, virtualizer]);
+    }, [sortedItems, columns, virtualizer, width]);
 
     return (
         <div
