@@ -1,6 +1,6 @@
 import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
-import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSortDir, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     ContextMenu,
@@ -14,10 +14,11 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
+import { DriveGrid, DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
 import { cn } from '@workspace/ui/lib/utils';
-import { ArrowDown, ArrowUp, ChevronDown, Plus, UploadIcon } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
@@ -50,7 +51,7 @@ export function DriveListToolbar({
     const { data: breadcrumbPaths = [] } = useBreadcrumb(ownerId, mountId, showBreadcrumb ? pathId : undefined);
     const mountLabel = useMountLabel(ownerId, mountId);
     const { isMobile } = useLayout();
-    const { sortKey, sortDir, setSort } = useDriveViewPreferences();
+    const { mode, setMode, sortKey, sortDir, setSort } = useDriveViewPreferences();
 
     const handleBreadcrumbClick = (path: DrivePath) => {
         onRowActivate?.(path);
@@ -129,6 +130,20 @@ export function DriveListToolbar({
             )}
             <div className="flex items-center gap-1">
                 {sortDropdown}
+                <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    value={mode}
+                    onValueChange={(v) => v && setMode(v as DriveViewMode)}
+                >
+                    <ToggleGroupItem value="list" aria-label="List view">
+                        <List className="h-4 w-4" />
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="grid" aria-label="Grid view">
+                        <LayoutGrid className="h-4 w-4" />
+                    </ToggleGroupItem>
+                </ToggleGroup>
                 {isMobile && newItemButton}
             </div>
         </div>
@@ -199,6 +214,7 @@ export function DriveList({
     unreadPathIds,
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
+    const { mode } = useDriveViewPreferences();
     const [isDragging, setIsDragging] = useState(false);
     const [selectedItems, setSelectedItems] = useState<DrivePath[]>([]);
     const dragCounter = useRef(0);
@@ -291,6 +307,32 @@ export function DriveList({
         return <ErrorState message="Error loading files" detail={error.message} />;
     }
 
+    // Shared inputs for both views; the table additionally gets the breadcrumb column.
+    const sharedProps = {
+        items,
+        activeItemId: activeRowId,
+        onItemClick: handleRowClick,
+        onItemOpen: onRowActivate,
+        onShareClick,
+        onEmailCollaborators,
+        getFileIcon,
+        getItemHref,
+        onConvert,
+        onDownload,
+        onExport,
+        onDelete,
+        allowDelete,
+        onRename,
+        onMove,
+        onMoveTo,
+        onCopyTo,
+        onDuplicate,
+        onSelectionChange: setSelectedItems,
+        onQuickLook,
+        sortFn,
+        unreadPathIds,
+    };
+
     const contentDiv = (
         <div
             className="h-full flex flex-col relative border-r"
@@ -313,31 +355,11 @@ export function DriveList({
                 </div>
             )}
 
-            <DriveTable
-                items={items}
-                activeItemId={activeRowId}
-                onItemClick={handleRowClick}
-                onItemOpen={onRowActivate}
-                onShareClick={onShareClick}
-                onEmailCollaborators={onEmailCollaborators}
-                getFileIcon={getFileIcon}
-                getItemHref={getItemHref}
-                onConvert={onConvert}
-                onDownload={onDownload}
-                onExport={onExport}
-                onDelete={onDelete}
-                allowDelete={allowDelete}
-                onRename={onRename}
-                onMove={onMove}
-                onMoveTo={onMoveTo}
-                onCopyTo={onCopyTo}
-                onDuplicate={onDuplicate}
-                onSelectionChange={setSelectedItems}
-                ancestorBreadcrumb={breadcrumbPaths ?? []}
-                onQuickLook={onQuickLook}
-                sortFn={sortFn}
-                unreadPathIds={unreadPathIds}
-            />
+            {mode === 'grid' ? (
+                <DriveGrid {...sharedProps} />
+            ) : (
+                <DriveTable {...sharedProps} ancestorBreadcrumb={breadcrumbPaths ?? []} />
+            )}
 
             {items.length === 0 && <EmptyState />}
         </div>
