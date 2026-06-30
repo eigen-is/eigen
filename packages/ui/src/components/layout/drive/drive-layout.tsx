@@ -297,7 +297,6 @@ export function DriveLayout({
         onShareClick: allowShare ? handleShareClick : undefined,
         onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
         onCreateEigenDoc,
-        currentPath,
         ownerId,
         mountId,
         pathId,

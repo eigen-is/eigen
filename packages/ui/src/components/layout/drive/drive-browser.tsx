@@ -229,14 +229,12 @@ export function DriveBrowser({
             )}
             <DriveTable
                 items={folderContents}
-                currentPath={currentPath}
                 activeItemId={selectedId ?? undefined}
                 onItemClick={handleItemClick}
                 onItemOpen={handleItemOpen}
                 getFileIcon={getFileIcon}
                 isItemDisabled={isItemDisabled}
                 sortFn={defaultDriveSort}
-                showParentRow={breadcrumbPaths.length > 1}
                 hideModified
                 hideOwner
                 hideShareClick

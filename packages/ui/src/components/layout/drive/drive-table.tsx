@@ -1,9 +1,9 @@
 import { formatDateTime } from '@workspace/lib/date';
 import { defaultDriveSort } from '@workspace/lib/drive';
-import { DEFAULT_MOUNT_ID, type DrivePath, stripEigenExtension } from '@workspace/lib/types';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import { ChevronLeft, Copy, CopyPlus, FolderInput, MoreVertical, Trash2 } from 'lucide-react';
+import { Copy, CopyPlus, FolderInput, MoreVertical, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
@@ -18,7 +18,6 @@ import { getFilePresentation } from './file-presentation';
 
 export type DriveTableProps = {
     items: DrivePath[];
-    currentPath?: DrivePath | null;
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
     onItemOpen?: (item: DrivePath) => void;
@@ -40,7 +39,6 @@ export type DriveTableProps = {
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     allowDelete?: boolean;
     ancestorBreadcrumb?: DrivePath[];
-    showParentRow?: boolean;
     unreadPathIds?: Set<string>;
     hideModified?: boolean;
     hideOwner?: boolean;
@@ -54,7 +52,6 @@ export type DriveTableProps = {
 
 export function DriveTable({
     items = [],
-    currentPath,
     activeItemId,
     onItemClick,
     onItemOpen,
@@ -76,7 +73,6 @@ export function DriveTable({
     sortFn = defaultDriveSort,
     allowDelete = false,
     ancestorBreadcrumb,
-    showParentRow,
     unreadPathIds,
     hideModified = false,
     hideOwner = false,
@@ -88,69 +84,41 @@ export function DriveTable({
     const containerRef = useRef<HTMLDivElement>(null);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
-    const hasParentItem = showParentRow ?? Boolean(currentPath?.parentId);
-
     const sortedItems = useMemo(() => {
         return [...items].sort(sortFn);
     }, [items, sortFn]);
 
-    const allItems = useMemo(() => {
-        const result = [...sortedItems];
-        if (hasParentItem && currentPath?.parentId) {
-            result.unshift({
-                id: currentPath.parentId,
-                mountId: currentPath.mountId || DEFAULT_MOUNT_ID,
-                name: '..',
-                type: 'folder',
-                parentId: null,
-                ownerId: currentPath.ownerId || '',
-                mimeType: 'folder',
-                size: 0,
-                hash: null,
-                thumbnail: null,
-                acl: null,
-                visibility: 'private',
-                sharingRestricted: false,
-                details: null,
-                trashedAt: null,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
-        }
-        return result;
-    }, [sortedItems, hasParentItem, currentPath]);
-
     const handleItemSelect = useCallback(
         (id: string) => {
-            const item = allItems.find((i) => i.id === id);
+            const item = sortedItems.find((i) => i.id === id);
             if (item) onItemClick?.(item);
         },
-        [allItems, onItemClick],
+        [sortedItems, onItemClick],
     );
 
     const handleQuickLook = useCallback(
         (id: string) => {
             if (!onQuickLook) return;
-            const item = allItems.find((i) => i.id === id);
+            const item = sortedItems.find((i) => i.id === id);
             if (item) onQuickLook(item);
         },
-        [allItems, onQuickLook],
+        [sortedItems, onQuickLook],
     );
 
-    const selection = useListSelection({ items: allItems, getId: (item) => item.id });
+    const selection = useListSelection({ items: sortedItems, getId: (item) => item.id });
 
     useEffect(() => {
         onSelectionChange?.(selection.selectedItems);
     }, [selection.selectedItems, onSelectionChange]);
 
     const { selectedIndex, handleKeyDown } = useKeyboardListNavigation<DrivePath>({
-        items: allItems,
+        items: sortedItems,
         activeId: activeItemId,
         getId: (item) => item.id,
         onSelect: handleItemSelect,
         onQuickLook: onQuickLook ? handleQuickLook : undefined,
         containerRef,
-        shouldNotify: (_item, index) => (!hasParentItem || index > 0) && !!activeItemId,
+        shouldNotify: () => !!activeItemId,
         selection,
     });
 
@@ -222,37 +190,7 @@ export function DriveTable({
                 </div>
             )}
 
-            {hasParentItem && currentPath && (
-                <div
-                    className={cn(
-                        'grid border-b transition-colors eigen-list-item app-gutter-x',
-                        gridCols,
-                        (activeItemId === currentPath.parentId || selectedIndex === 0) && 'eigen-list-item-active',
-                        currentPath.parentId &&
-                            selection.isSelected(currentPath.parentId) &&
-                            'eigen-list-item-selected',
-                    )}
-                    onClick={(e) => {
-                        const parentId = currentPath.parentId || '';
-                        selection.handleItemClick(parentId, e);
-                        if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                            onItemClick?.(allItems[0]);
-                        }
-                    }}
-                >
-                    <div className="pr-2 py-1.5 flex items-center font-medium">
-                        <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground" />
-                        <span>..</span>
-                    </div>
-                    {!hideOwner && <div className="hidden @[800px]:block px-2 py-1.5" />}
-                    <div className="hidden @[800px]:block px-2 py-1.5" />
-                    {!hideModified && <div className="hidden @[600px]:block pl-2 pr-4 py-1.5 text-right">-</div>}
-                    <div className="hidden @[800px]:block" />
-                </div>
-            )}
-
             {sortedItems.map((item, index) => {
-                const adjustedIndex = hasParentItem ? index + 1 : index;
                 const itemHref = getItemHref?.(item);
                 const disabled = isItemDisabled?.(item) ?? false;
                 const presentation = getFilePresentation(item.mimeType, item.type);
@@ -263,7 +201,7 @@ export function DriveTable({
                         className={cn(
                             'grid border-b transition-colors eigen-list-item app-gutter-x',
                             gridCols,
-                            (activeItemId === item.id || selectedIndex === adjustedIndex) && 'eigen-list-item-active',
+                            (activeItemId === item.id || selectedIndex === index) && 'eigen-list-item-active',
                             (selection.isSelected(item.id) || externalSelectedIds?.has(item.id)) &&
                                 'eigen-list-item-selected',
                             dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',

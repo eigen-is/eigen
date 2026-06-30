@@ -109,7 +109,6 @@ type DriveListProps = CreateCallbacks & {
     onRowActivate?: (path: DrivePath) => void;
     activeRowId?: string;
     onUploadFiles?: (files: File[]) => void;
-    currentPath?: DrivePath | null;
     onDelete?: (paths: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
@@ -144,7 +143,6 @@ export function DriveList({
     onUploadFile,
     onUploadFiles,
     onDelete,
-    currentPath,
     onShareClick,
     onEmailCollaborators,
     onCreateEigenDoc,
@@ -283,7 +281,6 @@ export function DriveList({
 
             <DriveTable
                 items={items}
-                currentPath={currentPath}
                 activeItemId={activeRowId}
                 onItemClick={handleRowClick}
                 onItemOpen={onRowActivate}
@@ -303,13 +300,12 @@ export function DriveList({
                 onDuplicate={onDuplicate}
                 onSelectionChange={setSelectedItems}
                 ancestorBreadcrumb={breadcrumbPaths ?? []}
-                showParentRow={(breadcrumbPaths?.length ?? 0) > 1}
                 onQuickLook={onQuickLook}
                 sortFn={sortFn}
                 unreadPathIds={unreadPathIds}
             />
 
-            {items.length === 0 && !currentPath?.parentId && <EmptyState />}
+            {items.length === 0 && <EmptyState />}
         </div>
     );
 
