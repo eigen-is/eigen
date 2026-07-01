@@ -110,7 +110,8 @@ export function useKeyboardListNavigation<T>({
             case 'ArrowDown':
                 e.preventDefault();
                 setSelectedIndex((prev) => {
-                    const newIndex = Math.min(prev + columns, items.length - 1);
+                    // From no selection, Down enters at the first item — not columns-1 in a grid.
+                    const newIndex = prev < 0 ? 0 : Math.min(prev + columns, items.length - 1);
                     if (newIndex >= 0 && newIndex !== prev) {
                         updateSelection(items[newIndex], e);
                         if (!e.shiftKey) notify(items[newIndex], newIndex);
