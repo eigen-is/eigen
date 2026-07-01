@@ -32,6 +32,7 @@ lose") and the work the grant funds. Highest strategic value.
 |---|---|---|---|---|
 | **S3 Versioning UX** ([proposal](PROPOSAL_S3_VERSIONING_UX.md)) | Detection done (`checkS3Versioning` in `s3-storage.ts`); the one-click fix is 0%. | S–M | No (mutates the external bucket, re-reads it) | **Best value-per-effort.** The SigV4 signing already ships — add two PUTs (`PutBucketVersioning` + lifecycle), a `/settings/s3/harden` route, and an "Enable safe defaults" button. Closes the data-loss incident class. |
 | **Calendar import + subscriptions** ([proposal](PROPOSAL_CALENDAR_IMPORT.md)) | 0%, on a complete `parseIcs` + event-pipeline foundation. | M | Yes, **low** — additive nullable `subscription` column on `calendars` | Best *new* feature: `.ics` import + read-only feed subscriptions. Workspace parity. Open decision: SSRF on server-side feed fetch (see prior MinIO-on-LAN incident). |
+| **SSO / enterprise login** ([proposal](PROPOSAL_SSO.md)) | 0%. Auth foundation ready — `user.create` hook auto-provisions org; app-password protocol-auth already works for passwordless users. | M | Yes — additive `@better-auth/sso` provider tables in `users3.db` (auth-schema migration) | OIDC + SAML via better-auth's `sso` plugin, providers registered at runtime → admin page + optional setup-wizard step. **Demand-gated:** pull forward when a concrete org needs it. Key work: Home/maildir provisioning for SSO users (they bypass the waitlist); SSO users use app passwords for IMAP/CalDAV/WebDAV. |
 
 ## P2 — Finish what's already started
 
