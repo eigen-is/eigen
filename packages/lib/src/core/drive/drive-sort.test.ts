@@ -57,6 +57,13 @@ describe('getDriveComparator', () => {
         expect([newer, older].sort(getDriveComparator('modified', 'asc'))[0].name).toBe('older');
     });
 
+    test('modified honors a custom date accessor (trash sorts by trashedAt)', () => {
+        const a = { ...item({ name: 'a', updatedAt: new Date(9000) }), trashedAt: new Date(1000) };
+        const b = { ...item({ name: 'b', updatedAt: new Date(1000) }), trashedAt: new Date(9000) };
+        const byTrashed = getDriveComparator('modified', 'desc', (p) => p.trashedAt ?? p.updatedAt);
+        expect([a, b].sort(byTrashed)[0].name).toBe('b');
+    });
+
     test('size sorts numerically', () => {
         const small = item({ name: 'small', size: 10 });
         const big = item({ name: 'big', size: 9000 });

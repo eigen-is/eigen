@@ -1,28 +1,25 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { formatDateTime } from '@workspace/lib/date';
 import {
     DEFAULT_MOUNT_ID,
+    getDriveComparator,
+    useDriveViewPreferences,
     useEmptyTrash,
     useListTrash,
     usePermanentlyDelete,
     useRestorePath,
 } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { LoadingState } from '@workspace/ui/components/layout/app/loading-state';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { getFileIcon, getFilePresentation } from '@workspace/ui/components/layout/drive';
+import { DriveList, DriveViewControls } from '@workspace/ui/components/layout/drive/drive-list';
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { cn } from '@workspace/ui/lib/utils';
 import { RotateCcw, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 export const Route = createFileRoute('/_auth/trash')({
     component: TrashRoute,
@@ -32,12 +29,15 @@ function TrashToolbar({ itemCount, onEmptyTrash }: { itemCount: number; onEmptyT
     return (
         <div className="flex items-center justify-between w-full">
             <ToolbarTitle>Trash</ToolbarTitle>
-            {itemCount > 0 && (
-                <Button variant="outline" size="sm" onClick={onEmptyTrash}>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Empty trash
-                </Button>
-            )}
+            <div className="flex items-center gap-1">
+                <DriveViewControls />
+                {itemCount > 0 && (
+                    <Button variant="outline" size="sm" onClick={onEmptyTrash}>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Empty trash
+                    </Button>
+                )}
+            </div>
         </div>
     );
 }
@@ -52,20 +52,44 @@ function TrashRoute() {
     const permanentlyDelete = usePermanentlyDelete(ownerId, mountId);
     const emptyTrash = useEmptyTrash(ownerId, mountId);
 
-    const gridCols = 'grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_15%]';
-
     const [emptyTrashOpen, setEmptyTrashOpen] = useState(false);
-    const [deleteItemOpen, setDeleteItemOpen] = useState(false);
-    const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
-    const [deleteItemName, setDeleteItemName] = useState<string>('');
+    const [deleteItems, setDeleteItems] = useState<DrivePath[]>([]);
 
-    const contextMenu = useContextMenu<DrivePath>();
+    // "Modified" sorts by deletion time here — that's also the date column this page shows.
+    const { sortKey, sortDir } = useDriveViewPreferences();
+    const sortedItems = useMemo(() => {
+        const comparator = getDriveComparator(sortKey, sortDir, (p) => p.trashedAt ?? p.updatedAt);
+        return [...trashedItems].sort(comparator);
+    }, [trashedItems, sortKey, sortDir]);
 
-    const openPermanentDelete = (id: string, name: string) => {
-        setDeleteItemId(id);
-        setDeleteItemName(name);
-        setDeleteItemOpen(true);
-    };
+    const contextMenuItems = useCallback(
+        (items: DrivePath[], close: () => void) => {
+            const suffix = items.length > 1 ? ` ${items.length} items` : '';
+            return (
+                <>
+                    <DropdownMenuItem
+                        onClick={() => {
+                            for (const item of items) restorePath.mutate(item.id);
+                            close();
+                        }}
+                    >
+                        <RotateCcw className="h-4 w-4 mr-2" /> Restore{suffix}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        onClick={() => {
+                            setDeleteItems(items);
+                            close();
+                        }}
+                        className="text-destructive"
+                    >
+                        <Trash2 className="h-4 w-4 mr-2" /> Delete{suffix} permanently
+                    </DropdownMenuItem>
+                </>
+            );
+        },
+        [restorePath],
+    );
 
     if (isLoading) return <LoadingState />;
 
@@ -79,82 +103,17 @@ function TrashRoute() {
                         <TrashToolbar itemCount={trashedItems.length} onEmptyTrash={() => setEmptyTrashOpen(true)} />
                     }
                 >
-                    {trashedItems.length === 0 ? (
-                        <EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />
-                    ) : (
-                        <div className="flex-1 overflow-auto text-sm">
-                            <div className={cn('grid app-gutter-x', gridCols, 'border-b')}>
-                                <div className="eigen-section-label h-10 pr-2 flex items-center">Name</div>
-                                <div className="eigen-section-label h-10 pr-2 hidden sm:flex items-center justify-end">
-                                    Trashed
-                                </div>
-                            </div>
-                            {trashedItems.map((item) => {
-                                const presentation = getFilePresentation(item.mimeType, item.type);
-                                return (
-                                    <div
-                                        key={item.id}
-                                        className={cn(
-                                            'grid app-gutter-x',
-                                            gridCols,
-                                            'border-b transition-colors eigen-list-item group',
-                                        )}
-                                        onContextMenu={(e) => contextMenu.handleContextMenu(e, item)}
-                                    >
-                                        <div className="pr-2 py-2.5 flex items-center min-w-0 relative">
-                                            {getFileIcon(item.mimeType, item.type, {
-                                                className: 'h-4 w-4 mr-2 flex-shrink-0',
-                                                style: {
-                                                    color: presentation.colorVar,
-                                                    fill: presentation.fillColorVar,
-                                                },
-                                            })}
-                                            <span className="truncate">{stripEigenExtension(item.name)}</span>
-                                            <div className="invisible group-hover:visible absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-inherit">
-                                                <TooltipButton
-                                                    icon={RotateCcw}
-                                                    tooltipText="Restore"
-                                                    className="h-7 w-7"
-                                                    onClick={() => restorePath.mutate(item.id)}
-                                                />
-                                                <TooltipButton
-                                                    icon={Trash2}
-                                                    tooltipText="Delete permanently"
-                                                    className="h-7 w-7 text-destructive hover:text-destructive"
-                                                    onClick={() => openPermanentDelete(item.id, item.name)}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="hidden sm:flex items-center justify-end pr-2 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
-                                            {item.trashedAt ? formatDateTime(item.trashedAt) : '-'}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-
-                            <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        if (contextMenu.item) restorePath.mutate(contextMenu.item.id);
-                                        contextMenu.close();
-                                    }}
-                                >
-                                    <RotateCcw className="h-4 w-4 mr-2" /> Restore
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        if (contextMenu.item)
-                                            openPermanentDelete(contextMenu.item.id, contextMenu.item.name);
-                                        contextMenu.close();
-                                    }}
-                                    className="text-destructive"
-                                >
-                                    <Trash2 className="h-4 w-4 mr-2" /> Delete permanently
-                                </DropdownMenuItem>
-                            </ContextMenuAnchor>
-                        </div>
-                    )}
+                    <DriveList
+                        items={sortedItems}
+                        ownerId={ownerId}
+                        mountId={mountId}
+                        hideOwner
+                        hideShared
+                        dateLabel="Trashed"
+                        getItemDate={(item) => item.trashedAt}
+                        contextMenuItems={contextMenuItems}
+                        emptyState={<EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />}
+                    />
                 </Column>
             </ColumnLayout>
 
@@ -171,17 +130,20 @@ function TrashRoute() {
             />
 
             <DeleteDialog
-                open={deleteItemOpen}
-                onOpenChange={setDeleteItemOpen}
+                open={deleteItems.length > 0}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteItems([]);
+                }}
                 title="Delete permanently"
-                description="Are you sure you want to permanently delete"
-                itemName={deleteItemName}
+                description={
+                    deleteItems.length > 1
+                        ? `Are you sure you want to permanently delete ${deleteItems.length} items? This action cannot be undone.`
+                        : 'Are you sure you want to permanently delete'
+                }
+                itemName={deleteItems.length === 1 ? deleteItems[0].name : undefined}
                 onDelete={() => {
-                    if (deleteItemId) {
-                        permanentlyDelete.mutate(deleteItemId);
-                        setDeleteItemOpen(false);
-                        setDeleteItemId(null);
-                    }
+                    for (const item of deleteItems) permanentlyDelete.mutate(item.id);
+                    setDeleteItems([]);
                 }}
                 deleteText="Delete permanently"
             />
