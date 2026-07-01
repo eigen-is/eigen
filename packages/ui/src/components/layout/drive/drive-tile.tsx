@@ -4,12 +4,14 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
 import type React from 'react';
+import { UnreadDot } from '../unread-dot';
 import { getFileIcon, getFilePresentation } from './file-presentation';
 
 type DriveTileProps = {
     item: DrivePath;
     isActive: boolean;
     isSelected: boolean;
+    isUnread?: boolean;
     disabled?: boolean;
     href?: string;
     onClick: (e: React.MouseEvent) => void;
@@ -24,6 +26,7 @@ export function DriveTile({
     item,
     isActive,
     isSelected,
+    isUnread,
     disabled,
     href,
     onClick,
@@ -75,11 +78,12 @@ export function DriveTile({
                 )}
             </div>
             <div className="flex items-center gap-1 px-2 py-1.5 min-w-0">
-                <span className="flex-shrink-0">
+                <span className="relative flex-shrink-0">
                     {getFileIcon(item.mimeType, item.type, {
                         className: 'h-4 w-4',
                         style: { color: presentation.colorVar },
                     })}
+                    {isUnread && <UnreadDot />}
                 </span>
                 {href ? (
                     <a

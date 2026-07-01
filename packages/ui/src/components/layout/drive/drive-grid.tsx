@@ -38,6 +38,7 @@ export function DriveGrid({
     onEmailCollaborators,
     allowDelete = false,
     onSelectionChange,
+    unreadPathIds,
 }: DriveGridProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [width, setWidth] = useState(0);
@@ -123,6 +124,7 @@ export function DriveGrid({
                                         item={item}
                                         isActive={activeItemId === item.id || controller.selectedIndex === index}
                                         isSelected={controller.selection.isSelected(item.id)}
+                                        isUnread={unreadPathIds?.has(item.id) ?? false}
                                         disabled={isItemDisabled?.(item) ?? false}
                                         href={getItemHref?.(item)}
                                         onClick={(e) => {
