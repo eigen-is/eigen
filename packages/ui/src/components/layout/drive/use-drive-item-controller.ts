@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types';
 import type React from 'react';
-import { type RefObject, useCallback, useEffect } from 'react';
+import { type RefObject, useCallback, useEffect, useState } from 'react';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../../hooks/use-list-drag';
 import { useListSelection } from '../../../hooks/use-list-selection';
@@ -17,6 +17,7 @@ export type UseDriveItemControllerOptions = {
     containerRef: RefObject<HTMLElement | null>;
     onItemClick?: (item: DrivePath) => void;
     onQuickLook?: (item: DrivePath) => void;
+    onMove?: (item: DrivePath, targetItemId: string) => void;
     onSelectionChange?: (items: DrivePath[]) => void;
 };
 
@@ -28,6 +29,7 @@ export function useDriveItemController({
     containerRef,
     onItemClick,
     onQuickLook,
+    onMove,
     onSelectionChange,
 }: UseDriveItemControllerOptions) {
     const handleItemSelect = useCallback(
@@ -67,6 +69,7 @@ export function useDriveItemController({
     });
 
     const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'drive-item' });
+    const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
     const contextMenu = useContextMenu<DrivePath>();
 
@@ -90,6 +93,26 @@ export function useDriveItemController({
         return !drag.draggedItems.some((d) => d.id === targetItem.id);
     };
 
+    // Drop handlers for folder rows/tiles — spread onto the item root next to getDragProps.
+    const getDropProps = (item: DrivePath) => ({
+        onDragOver: (e: React.DragEvent) => {
+            e.preventDefault();
+            if (drag.isDragging && isValidFolderDrop(item)) {
+                e.dataTransfer.dropEffect = 'move';
+            }
+        },
+        onDragEnter: () => {
+            if (drag.isDragging) setDragOverItemId(item.id);
+        },
+        onDrop: (e: React.DragEvent) => {
+            e.preventDefault();
+            setDragOverItemId(null);
+            if (isValidFolderDrop(item)) {
+                for (const d of drag.draggedItems) onMove?.(d, item.id);
+            }
+        },
+    });
+
     return {
         selection,
         selectedIndex,
@@ -99,5 +122,7 @@ export function useDriveItemController({
         handleContextMenu,
         openContextMenuFromButton,
         isValidFolderDrop,
+        dragOverItemId,
+        getDropProps,
     };
 }

@@ -3,7 +3,7 @@ import { defaultDriveSort } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { DriveItemContextMenu } from './drive-item-context-menu';
 import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
@@ -81,7 +81,6 @@ export function DriveTable({
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
-    const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
     const sortedItems = useMemo(() => {
         return [...items].sort(sortFn);
@@ -111,6 +110,7 @@ export function DriveTable({
         scrollToIndex: virtualizer.scrollToIndex,
         onItemClick,
         onQuickLook,
+        onMove,
         onSelectionChange,
     });
 
@@ -185,14 +185,11 @@ export function DriveTable({
                                 isSelected={
                                     controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)
                                 }
-                                isDragOver={dragOverItemId === item.id}
                                 disabled={isItemDisabled?.(item) ?? false}
                                 getFileIcon={getFileIcon}
                                 getItemHref={getItemHref}
                                 onItemClick={onItemClick}
                                 onShareClick={onShareClick}
-                                onMove={onMove}
-                                setDragOverItemId={setDragOverItemId}
                                 hideOwner={hideOwner}
                                 hideModified={hideModified}
                                 hideShareClick={hideShareClick}

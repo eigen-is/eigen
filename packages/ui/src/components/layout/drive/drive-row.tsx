@@ -14,7 +14,6 @@ type DriveRowProps = {
     index: number;
     isActive: boolean;
     isSelected: boolean;
-    isDragOver: boolean;
     disabled: boolean;
     gridCols: string;
     controller: ReturnType<typeof useDriveItemController>;
@@ -22,8 +21,6 @@ type DriveRowProps = {
     getItemHref?: (item: DrivePath) => string | undefined;
     onItemClick?: (item: DrivePath) => void;
     onShareClick?: (item: DrivePath) => void;
-    onMove?: (item: DrivePath, targetItemId: string) => void;
-    setDragOverItemId: (id: string | null) => void;
     hideOwner?: boolean;
     hideModified?: boolean;
     hideShareClick?: boolean;
@@ -36,7 +33,6 @@ export function DriveRow({
     index,
     isActive,
     isSelected,
-    isDragOver,
     disabled,
     gridCols,
     controller,
@@ -44,15 +40,21 @@ export function DriveRow({
     getItemHref,
     onItemClick,
     onShareClick,
-    onMove,
-    setDragOverItemId,
     hideOwner = false,
     hideModified = false,
     hideShareClick = false,
     ancestorBreadcrumb,
     unreadPathIds,
 }: DriveRowProps) {
-    const { selection, drag, handleContextMenu, openContextMenuFromButton, isValidFolderDrop } = controller;
+    const {
+        selection,
+        drag,
+        handleContextMenu,
+        openContextMenuFromButton,
+        isValidFolderDrop,
+        getDropProps,
+        dragOverItemId,
+    } = controller;
     const itemHref = getItemHref?.(item);
     const presentation = getFilePresentation(item.mimeType, item.type);
 
@@ -65,7 +67,7 @@ export function DriveRow({
                 gridCols,
                 isActive && 'eigen-list-item-active',
                 isSelected && 'eigen-list-item-selected',
-                isDragOver && isValidFolderDrop(item) && 'bg-accent',
+                dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
                 disabled && 'opacity-40 pointer-events-none',
             )}
             onClick={(e) => {
@@ -76,22 +78,7 @@ export function DriveRow({
             }}
             onContextMenu={(e) => handleContextMenu(e, item)}
             {...drag.getDragProps(item)}
-            onDragOver={(e) => {
-                e.preventDefault();
-                if (drag.isDragging && isValidFolderDrop(item)) {
-                    e.dataTransfer.dropEffect = 'move';
-                }
-            }}
-            onDragEnter={() => {
-                if (drag.isDragging) setDragOverItemId(item.id);
-            }}
-            onDrop={(e) => {
-                e.preventDefault();
-                setDragOverItemId(null);
-                if (isValidFolderDrop(item) && onMove) {
-                    for (const d of drag.draggedItems) onMove(d, item.id);
-                }
-            }}
+            {...getDropProps(item)}
         >
             <div className="pr-2 py-1.5 flex items-center min-w-0">
                 <div className="relative mr-2 flex-shrink-0">

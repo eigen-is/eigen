@@ -28,6 +28,7 @@ export function DriveGrid({
     onDownload,
     onDelete,
     onRename,
+    onMove,
     onMoveTo,
     onCopyTo,
     onDuplicate,
@@ -71,6 +72,7 @@ export function DriveGrid({
         containerRef,
         onItemClick,
         onQuickLook,
+        onMove,
         onSelectionChange,
     });
 
@@ -130,6 +132,10 @@ export function DriveGrid({
                                         onContextMenu={(e) => controller.handleContextMenu(e, item)}
                                         onMenuButton={(btn) => controller.openContextMenuFromButton(btn, item)}
                                         dragProps={controller.drag.getDragProps(item)}
+                                        dropProps={controller.getDropProps(item)}
+                                        isDropTarget={
+                                            controller.dragOverItemId === item.id && controller.isValidFolderDrop(item)
+                                        }
                                     />
                                 );
                             })}

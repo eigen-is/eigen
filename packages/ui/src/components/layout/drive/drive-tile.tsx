@@ -16,6 +16,8 @@ type DriveTileProps = {
     onContextMenu: (e: React.MouseEvent) => void;
     onMenuButton: (button: HTMLElement) => void;
     dragProps?: React.HTMLAttributes<HTMLDivElement>;
+    dropProps?: React.HTMLAttributes<HTMLDivElement>;
+    isDropTarget?: boolean;
 };
 
 export function DriveTile({
@@ -28,6 +30,8 @@ export function DriveTile({
     onContextMenu,
     onMenuButton,
     dragProps,
+    dropProps,
+    isDropTarget,
 }: DriveTileProps) {
     const presentation = getFilePresentation(item.mimeType, item.type);
     const isImage = item.mimeType.startsWith('image/');
@@ -42,11 +46,13 @@ export function DriveTile({
             onClick={onClick}
             onContextMenu={onContextMenu}
             {...dragProps}
+            {...dropProps}
             className={cn(
                 'group relative flex flex-col rounded-lg border overflow-hidden cursor-pointer transition-colors',
                 'eigen-list-item',
                 isActive && 'eigen-list-item-active',
                 isSelected && 'eigen-list-item-selected ring-2 ring-ring',
+                isDropTarget && 'ring-2 ring-primary',
                 disabled && 'opacity-40 pointer-events-none',
             )}
         >
