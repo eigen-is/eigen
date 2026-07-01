@@ -1,9 +1,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { defaultDriveSort } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useRef } from 'react';
+import type { UseListSelectionReturn } from '../../../hooks/use-list-selection';
 import { DriveItemContextMenu } from './drive-item-context-menu';
 import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
@@ -11,11 +11,11 @@ import { useDriveItemController } from './use-drive-item-controller';
 // Shared base for the drive views (table + grid): data, callbacks and selection inputs,
 // minus the table-only column flags. DriveGrid consumes this directly.
 export type DriveViewProps = {
+    // Already sorted by the caller — the views render and navigate them as-is.
     items: DrivePath[];
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
     onItemOpen?: (item: DrivePath) => void;
-    getFileIcon?: (mimeType: string, type: string, props?: Record<string, unknown>) => React.ReactNode;
     isItemDisabled?: (item: DrivePath) => boolean;
     getItemHref?: (item: DrivePath) => string | undefined;
     onShareClick?: (item: DrivePath) => void;
@@ -30,22 +30,40 @@ export type DriveViewProps = {
     onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
-    sortFn?: (a: DrivePath, b: DrivePath) => number;
     allowDelete?: boolean;
     unreadPathIds?: Set<string>;
-    externalSelectedIds?: Set<string>;
+    // Selection lifted by the caller (DriveList) so it survives list/grid toggles.
+    selection?: UseListSelectionReturn<DrivePath>;
     // Fires whenever the internal shift/ctrl-aware selection changes — used by file pickers
     // in multi-select mode to mirror the selection without reimplementing modifier handling.
     onSelectionChange?: (items: DrivePath[]) => void;
+    // Replaces the default context-menu body — used by listings with their own actions (trash).
+    contextMenuItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
 };
 
 // Table view adds the column-layout flags the grid has no concept of.
 export type DriveTableProps = DriveViewProps & {
     hideModified?: boolean;
     hideOwner?: boolean;
+    hideShared?: boolean;
     hideShareClick?: boolean;
     hideHeader?: boolean;
+    dateLabel?: string;
+    getItemDate?: (item: DrivePath) => Date | null;
     ancestorBreadcrumb?: DrivePath[];
+    externalSelectedIds?: Set<string>;
+};
+
+// Static permutations so Tailwind's JIT sees every class; keyed by the visible optional columns.
+const GRID_COLS_800: Record<string, string> = {
+    'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%_40px]',
+    'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_40px]',
+    'owner-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_15%_40px]',
+    'shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_10%_15%_40px]',
+    owner: '@[800px]:grid-cols-[minmax(0,1fr)_8%_40px]',
+    shared: '@[800px]:grid-cols-[minmax(0,1fr)_10%_40px]',
+    modified: '@[800px]:grid-cols-[minmax(0,1fr)_15%_40px]',
+    '': '@[800px]:grid-cols-[minmax(0,1fr)_40px]',
 };
 
 export function DriveTable({
@@ -53,7 +71,6 @@ export function DriveTable({
     activeItemId,
     onItemClick,
     onItemOpen,
-    getFileIcon,
     isItemDisabled,
     getItemHref,
     onShareClick,
@@ -68,73 +85,57 @@ export function DriveTable({
     onExport,
     onQuickLook,
     onEmailCollaborators,
-    sortFn = defaultDriveSort,
     allowDelete = false,
     ancestorBreadcrumb,
     unreadPathIds,
     hideModified = false,
     hideOwner = false,
+    hideShared = false,
     hideShareClick = false,
     hideHeader = false,
+    dateLabel = 'Modified',
+    getItemDate,
+    selection,
     externalSelectedIds,
     onSelectionChange,
+    contextMenuItems,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
 
-    const sortedItems = useMemo(() => {
-        return [...items].sort(sortFn);
-    }, [items, sortFn]);
-
-    // Initial estimate only — every row is measured (measureElement), so the authoritative
-    // height comes from the DOM. A fixed size won't do: the ⋮ column makes wide rows ~41px
-    // while the name-only picker layout is ~33px, and the breakpoint is container-driven.
+    // Estimate only — every row is measured, since row height varies with the container-driven layout.
     const ROW_HEIGHT = 41;
     const virtualizer = useVirtualizer({
-        count: sortedItems.length,
+        count: items.length,
         getScrollElement: () => containerRef.current,
         estimateSize: () => ROW_HEIGHT,
         // Key the measurement cache by id so a re-sort moves cached heights with their rows.
-        getItemKey: (index) => sortedItems[index].id,
+        getItemKey: (index) => items[index].id,
         overscan: 12,
-        // Offset of the virtualized list within the scroller — measured on the list
-        // wrapper, NOT the sticky header (a stuck header's offsetTop equals scrollTop,
-        // which would grow scrollMargin in lockstep with scroll and pin the window).
+        // List offset within the scroller — measured on the list wrapper, not the sticky header.
         scrollMargin: listRef.current?.offsetTop ?? 0,
     });
 
     const controller = useDriveItemController({
-        items: sortedItems,
+        items,
         activeItemId,
         containerRef,
         scrollToIndex: virtualizer.scrollToIndex,
+        selection,
         onItemClick,
         onQuickLook,
         onMove,
         onSelectionChange,
     });
 
-    // A deep-linked active row can be windowed out of the DOM on mount — scroll it in once.
-    // Snapshot the id at mount so only a deep-link recenters, not a later in-session select.
-    const initialActiveId = useRef(activeItemId);
-    const didInitialScroll = useRef(false);
-    useEffect(() => {
-        if (didInitialScroll.current || !initialActiveId.current) return;
-        const idx = sortedItems.findIndex((i) => i.id === initialActiveId.current);
-        if (idx >= 0) {
-            virtualizer.scrollToIndex(idx, { align: 'center' });
-            didInitialScroll.current = true;
-        }
-    }, [sortedItems, virtualizer]);
-
-    const gridCols =
-        hideModified && hideOwner
-            ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_10%_40px]'
-            : hideModified
-              ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%_40px]'
-              : hideOwner
-                ? 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_10%_15%_40px]'
-                : 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%_40px]';
+    const colsKey = [!hideOwner && 'owner', !hideShared && 'shared', !hideModified && 'modified']
+        .filter(Boolean)
+        .join('-');
+    const gridCols = cn(
+        'grid-cols-[minmax(0,1fr)]',
+        !hideModified && '@[600px]:grid-cols-[minmax(0,1fr)_15%]',
+        GRID_COLS_800[colsKey],
+    );
 
     return (
         <div
@@ -142,7 +143,7 @@ export function DriveTable({
             tabIndex={0}
             onKeyDown={controller.handleKeyDown}
             role="grid"
-            aria-rowcount={sortedItems.length}
+            aria-rowcount={items.length}
             className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none"
         >
             {!hideHeader && (
@@ -153,12 +154,14 @@ export function DriveTable({
                             Owner
                         </div>
                     )}
-                    <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center whitespace-nowrap">
-                        Shared with
-                    </div>
+                    {!hideShared && (
+                        <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center whitespace-nowrap">
+                            Shared with
+                        </div>
+                    )}
                     {!hideModified && (
                         <div className="eigen-section-label h-10 pl-2 pr-4 hidden @[600px]:flex items-center justify-end">
-                            Modified
+                            {dateLabel}
                         </div>
                     )}
                     <div className="hidden @[800px]:block" />
@@ -167,7 +170,7 @@ export function DriveTable({
 
             <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                 {virtualizer.getVirtualItems().map((vi) => {
-                    const item = sortedItems[vi.index];
+                    const item = items[vi.index];
                     return (
                         <div
                             key={item.id}
@@ -186,13 +189,14 @@ export function DriveTable({
                                     controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)
                                 }
                                 disabled={isItemDisabled?.(item) ?? false}
-                                getFileIcon={getFileIcon}
                                 getItemHref={getItemHref}
                                 onItemClick={onItemClick}
                                 onShareClick={onShareClick}
                                 hideOwner={hideOwner}
+                                hideShared={hideShared}
                                 hideModified={hideModified}
                                 hideShareClick={hideShareClick}
+                                getItemDate={getItemDate}
                                 ancestorBreadcrumb={ancestorBreadcrumb}
                                 unreadPathIds={unreadPathIds}
                             />
@@ -217,6 +221,7 @@ export function DriveTable({
                 onEmailCollaborators={onEmailCollaborators}
                 onDelete={onDelete}
                 allowDelete={allowDelete}
+                renderItems={contextMenuItems}
             />
         </div>
     );

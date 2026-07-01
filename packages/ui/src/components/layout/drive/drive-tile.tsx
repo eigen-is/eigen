@@ -1,61 +1,62 @@
-import { getDriveThumbnailUrl } from '@workspace/lib/api';
-import { stripEigenExtension } from '@workspace/lib/types';
+import { getDriveItemThumbnail } from '@workspace/lib/api';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
-import type React from 'react';
+import { useState } from 'react';
 import { UnreadDot } from '../unread-dot';
+import { DriveItemNameLink } from './drive-item-name-link';
 import { getFileIcon, getFilePresentation } from './file-presentation';
+import type { useDriveItemController } from './use-drive-item-controller';
 
 type DriveTileProps = {
     item: DrivePath;
     isActive: boolean;
     isSelected: boolean;
-    isUnread?: boolean;
-    disabled?: boolean;
-    href?: string;
-    onClick: (e: React.MouseEvent) => void;
-    onContextMenu: (e: React.MouseEvent) => void;
-    onMenuButton: (button: HTMLElement) => void;
-    dragProps?: React.HTMLAttributes<HTMLDivElement>;
-    dropProps?: React.HTMLAttributes<HTMLDivElement>;
-    isDropTarget?: boolean;
+    disabled: boolean;
+    controller: ReturnType<typeof useDriveItemController>;
+    getItemHref?: (item: DrivePath) => string | undefined;
+    onItemClick?: (item: DrivePath) => void;
+    unreadPathIds?: Set<string>;
 };
 
 export function DriveTile({
     item,
     isActive,
     isSelected,
-    isUnread,
     disabled,
-    href,
-    onClick,
-    onContextMenu,
-    onMenuButton,
-    dragProps,
-    dropProps,
-    isDropTarget,
+    controller,
+    getItemHref,
+    onItemClick,
+    unreadPathIds,
 }: DriveTileProps) {
+    const {
+        selection,
+        drag,
+        handleContextMenu,
+        openContextMenuFromButton,
+        isValidFolderDrop,
+        getDropProps,
+        dragOverItemId,
+    } = controller;
     const presentation = getFilePresentation(item.mimeType, item.type);
-    const isImage = item.mimeType.startsWith('image/');
-    const isVideo = item.mimeType.startsWith('video/');
-    const showThumb = (isImage || isVideo) && !!item.thumbnail;
-    const thumbUrl = item.thumbnail
-        ? `${getDriveThumbnailUrl(item.ownerId, item.mountId, item.thumbnail)}?v=${item.updatedAt.getTime()}`
-        : undefined;
+    const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(item);
+    const [thumbFailed, setThumbFailed] = useState(false);
 
     return (
         <div
-            onClick={onClick}
-            onContextMenu={onContextMenu}
-            {...dragProps}
-            {...dropProps}
+            onClick={(e) => {
+                selection.handleItemClick(item.id, e);
+                if (!e.shiftKey && !e.metaKey && !e.ctrlKey) onItemClick?.(item);
+            }}
+            onContextMenu={(e) => handleContextMenu(e, item)}
+            {...drag.getDragProps(item)}
+            {...getDropProps(item)}
             className={cn(
                 'group relative flex flex-col rounded-lg border overflow-hidden cursor-pointer transition-colors',
                 'eigen-list-item',
                 isActive && 'eigen-list-item-active',
                 isSelected && 'eigen-list-item-selected ring-2 ring-ring',
-                isDropTarget && 'ring-2 ring-primary',
+                dragOverItemId === item.id && isValidFolderDrop(item) && 'ring-2 ring-primary',
                 disabled && 'opacity-40 pointer-events-none',
             )}
         >
@@ -63,11 +64,12 @@ export function DriveTile({
                 className="relative aspect-[4/3] w-full flex items-center justify-center"
                 style={{ backgroundColor: presentation.softColorVar }}
             >
-                {showThumb && thumbUrl ? (
+                {showThumbnail && thumbnailUrl && !thumbFailed ? (
                     <img
-                        src={thumbUrl}
+                        src={thumbnailUrl}
                         alt={item.name}
                         loading="lazy"
+                        onError={() => setThumbFailed(true)}
                         className="absolute inset-0 w-full h-full object-cover"
                     />
                 ) : (
@@ -83,36 +85,15 @@ export function DriveTile({
                         className: 'h-4 w-4',
                         style: { color: presentation.colorVar },
                     })}
-                    {isUnread && <UnreadDot />}
+                    {unreadPathIds?.has(item.id) && <UnreadDot />}
                 </span>
-                {href ? (
-                    <a
-                        href={href}
-                        className="truncate text-xs"
-                        draggable={false}
-                        tabIndex={-1}
-                        onClick={(e) => {
-                            if (e.metaKey || e.ctrlKey) {
-                                e.stopPropagation();
-                                return;
-                            }
-                            e.preventDefault();
-                        }}
-                        onAuxClick={(e) => {
-                            if (e.button === 1) e.stopPropagation();
-                        }}
-                    >
-                        {stripEigenExtension(item.name)}
-                    </a>
-                ) : (
-                    <span className="truncate text-xs">{stripEigenExtension(item.name)}</span>
-                )}
+                <DriveItemNameLink name={item.name} href={getItemHref?.(item)} className="text-xs" />
                 <button
                     type="button"
                     aria-label="More actions"
                     onClick={(e) => {
                         e.stopPropagation();
-                        onMenuButton(e.currentTarget);
+                        openContextMenuFromButton(e.currentTarget, item);
                     }}
                     className="ml-auto flex-shrink-0 h-6 w-6 rounded hover:bg-accent flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100"
                 >

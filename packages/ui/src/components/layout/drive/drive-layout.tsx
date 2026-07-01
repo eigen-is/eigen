@@ -54,7 +54,6 @@ export type DriveLayoutProps = {
     allowMove?: boolean;
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
     getItemHref?: (item: DrivePath) => string | undefined;
-    sortFn?: (a: DrivePath, b: DrivePath) => number;
     pid?: string;
     unreadPathIds?: Set<string>;
     highlightHistory?: boolean;
@@ -82,7 +81,6 @@ export function DriveLayout({
     allowMove = true,
     onQuickLook,
     getItemHref,
-    sortFn,
     pid = undefined,
     showBreadcrumb = false,
     title,
@@ -97,10 +95,9 @@ export function DriveLayout({
     const deletePathsMutation = useDeletePaths(ownerId, mountId);
     const convertMutation = useConvertDocument(ownerId, mountId);
 
-    // Sort order comes from the view preference; an explicit sortFn prop overrides it.
+    // Sort order comes from the shared view preference.
     const { sortKey, sortDir } = useDriveViewPreferences();
-    const comparator = useMemo(() => getDriveComparator(sortKey, sortDir), [sortKey, sortDir]);
-    const activeSortFn = sortFn ?? comparator;
+    const activeSortFn = useMemo(() => getDriveComparator(sortKey, sortDir), [sortKey, sortDir]);
 
     const handleFileUpload = () => {
         if (allowUpload && currentPath) {
@@ -290,7 +287,7 @@ export function DriveLayout({
     }
 
     const listProps = {
-        items: folderContents,
+        items: sortedContents,
         isLoading,
         error,
         onRowSelect,
@@ -306,7 +303,6 @@ export function DriveLayout({
         ownerId,
         mountId,
         pathId,
-        showBreadcrumb,
         onConvert: handleConvertPath,
         onDownload: handleDownloadPath,
         onExport: handleExportPath,
@@ -319,7 +315,6 @@ export function DriveLayout({
         onCopyTo: handleCopyTo,
         onDuplicate: allowMove ? handleDuplicate : undefined,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
-        sortFn: activeSortFn,
         unreadPathIds,
     };
 

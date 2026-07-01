@@ -16,12 +16,11 @@ import {
 } from '@workspace/ui/components/context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { FolderPlus } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
 import { DriveTable } from './drive-table';
-import { getFileIcon } from './file-presentation';
 
 function matchesMimeFilter(mimeType: string, filters: string[]): boolean {
     return filters.some((filter) => {
@@ -116,6 +115,7 @@ export function DriveBrowser({
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
     const folderId = currentFolderId ?? rootFolder?.id ?? '';
     const { data: folderContents = [] } = useFolderContent(activeOwnerId, activeMountId, folderId);
+    const sortedContents = useMemo(() => [...folderContents].sort(defaultDriveSort), [folderContents]);
     const { data: breadcrumbPaths = [] } = useBreadcrumb(activeOwnerId, activeMountId, folderId);
     const createFolder = useCreateFolder(activeOwnerId, activeMountId);
 
@@ -228,13 +228,11 @@ export function DriveBrowser({
                 </div>
             )}
             <DriveTable
-                items={folderContents}
+                items={sortedContents}
                 activeItemId={selectedId ?? undefined}
                 onItemClick={handleItemClick}
                 onItemOpen={handleItemOpen}
-                getFileIcon={getFileIcon}
                 isItemDisabled={isItemDisabled}
-                sortFn={defaultDriveSort}
                 hideModified
                 hideOwner
                 hideShareClick

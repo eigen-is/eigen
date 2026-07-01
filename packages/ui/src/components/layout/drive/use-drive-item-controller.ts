@@ -1,20 +1,21 @@
 import type { DrivePath } from '@workspace/lib/types';
 import type React from 'react';
-import { type RefObject, useCallback, useEffect, useState } from 'react';
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../../hooks/use-list-drag';
-import { useListSelection } from '../../../hooks/use-list-selection';
+import { type UseListSelectionReturn, useListSelection } from '../../../hooks/use-list-selection';
 import { useContextMenu } from '../context-menu';
 
 export type UseDriveItemControllerOptions = {
     // Already sorted by the caller — the controller selects/navigates over them as-is.
     items: DrivePath[];
     activeItemId?: string;
-    // Forwarded to useKeyboardListNavigation so grid/list virtualizers can inject
-    // grid width + a scroll callback. DriveTable passes neither (defaults: columns 1).
+    // Grid width for keyboard navigation; DriveTable keeps the default single column.
     columns?: number;
-    scrollToIndex?: (index: number) => void;
+    scrollToIndex?: (index: number, opts?: { align?: 'center' }) => void;
     containerRef: RefObject<HTMLElement | null>;
+    // Selection lifted by the caller (DriveList) so it survives list/grid toggles.
+    selection?: UseListSelectionReturn<DrivePath>;
     onItemClick?: (item: DrivePath) => void;
     onQuickLook?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
@@ -27,6 +28,7 @@ export function useDriveItemController({
     columns = 1,
     scrollToIndex,
     containerRef,
+    selection: externalSelection,
     onItemClick,
     onQuickLook,
     onMove,
@@ -49,7 +51,8 @@ export function useDriveItemController({
         [items, onQuickLook],
     );
 
-    const selection = useListSelection({ items, getId: (item) => item.id });
+    const internalSelection = useListSelection({ items, getId: (item) => item.id });
+    const selection = externalSelection ?? internalSelection;
 
     useEffect(() => {
         onSelectionChange?.(selection.selectedItems);
@@ -67,6 +70,18 @@ export function useDriveItemController({
         columns,
         scrollToIndex,
     });
+
+    // Scroll a deep-linked active item into view once on mount; later selects don't recenter.
+    const initialActiveId = useRef(activeItemId);
+    const didInitialScroll = useRef(false);
+    useEffect(() => {
+        if (didInitialScroll.current || !initialActiveId.current || !scrollToIndex) return;
+        const idx = items.findIndex((i) => i.id === initialActiveId.current);
+        if (idx >= 0) {
+            scrollToIndex(idx, { align: 'center' });
+            didInitialScroll.current = true;
+        }
+    }, [items, scrollToIndex]);
 
     const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'drive-item' });
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);

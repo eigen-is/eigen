@@ -1,6 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { Copy, CopyPlus, FolderInput, Trash2 } from 'lucide-react';
+import type React from 'react';
 import { ContextMenuAnchor } from '../context-menu';
 import { DriveItemMenuItems } from './drive-item-menu';
 import type { useDriveItemController } from './use-drive-item-controller';
@@ -21,6 +22,8 @@ type DriveItemContextMenuProps = {
     onEmailCollaborators?: (item: DrivePath) => void;
     onDelete?: (items: DrivePath[]) => void;
     allowDelete?: boolean;
+    // Replaces the default menu body — used by listings with their own actions (trash).
+    renderItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
 };
 
 export function DriveItemContextMenu({
@@ -39,6 +42,7 @@ export function DriveItemContextMenu({
     onEmailCollaborators,
     onDelete,
     allowDelete,
+    renderItems,
 }: DriveItemContextMenuProps) {
     const { contextMenu, selection } = controller;
 
@@ -50,8 +54,16 @@ export function DriveItemContextMenu({
     const isSingleSelect = contextItems.length === 1;
     const contextMenuItemHref = isSingleSelect && contextMenu.item ? getItemHref?.(contextMenu.item) : undefined;
 
+    if (renderItems) {
+        return (
+            <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
+                {contextItems.length > 0 && renderItems(contextItems, contextMenu.close)}
+            </ContextMenuAnchor>
+        );
+    }
+
     return (
-        <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
+        <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
             {isSingleSelect && contextMenu.item && (
                 <DriveItemMenuItems
                     item={contextMenu.item}
