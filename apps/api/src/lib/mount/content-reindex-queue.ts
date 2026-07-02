@@ -72,11 +72,16 @@ export class ContentReindexQueue {
                     const body = await this.extract(this.mount, path);
                     if (body) this.mount.upsertPathContent(path.id, body);
                     else this.mount.clearPathContent(path.id);
+                    // Clear the dirty bit only on a completed extract (empty counts) — a throw below must
+                    // leave it set so a transient failure isn't silently dropped from body search.
+                    this.mount.markContentIndexed(path.id);
                 } catch (err) {
                     // The index is regenerable — log and move on so one bad body never stalls the loop.
+                    // Stamp the attempt but keep contentDirty = 1: the cap defers the retry to a later
+                    // drain, so a transient S3 hiccup re-extracts instead of dropping until the next write.
                     console.error(`[content-reindex] extract failed for ${path.id}:`, err);
+                    this.mount.markContentIndexAttempted(path.id);
                 }
-                this.mount.markContentIndexed(path.id);
             }
         }
         if (this.closing) return;

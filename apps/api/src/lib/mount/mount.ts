@@ -1659,6 +1659,12 @@ export class Mount {
         this.db.update(paths).set({ contentDirty: 0, contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
     }
 
+    // A failed extract stamps the attempt time but keeps contentDirty = 1, so the cap window defers the
+    // retry to a later drain instead of dropping the doc from body search (see the reindex catch).
+    markContentIndexAttempted(pathId: string): void {
+        this.db.update(paths).set({ contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
+    }
+
     searchPaths(opts: { q: string; limit: number }): DrivePath[] {
         const match = sanitizeFtsQuery(opts.q);
         if (!match) return [];
