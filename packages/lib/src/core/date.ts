@@ -59,8 +59,21 @@ export function formatInputDate(date: Date | string | number): string {
     return new Date(date).toISOString().slice(0, 10);
 }
 
+// Calendar rows stored before TZID ingestion-normalization can hold a non-IANA zone that makes Intl
+// throw RangeError; this shared FE+BE code can't import the api-side normalizeTimezone, so it
+// degrades to UTC locally using the same Intl-construction oracle.
+function safeTimeZone(timezone?: string | null): string {
+    if (!timezone) return 'UTC';
+    try {
+        new Intl.DateTimeFormat('en', { timeZone: timezone });
+        return timezone;
+    } catch {
+        return 'UTC';
+    }
+}
+
 export function formatEventWhen(start: Date, end: Date, allDay: boolean, timezone?: string | null): string {
-    const tz = timezone || 'UTC';
+    const tz = safeTimeZone(timezone);
     const dateOpts: Intl.DateTimeFormatOptions = {
         weekday: 'long',
         day: 'numeric',

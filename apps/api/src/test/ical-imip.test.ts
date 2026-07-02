@@ -4,7 +4,7 @@ import { parseIcs } from '../lib/caldav/ical-parse';
 import { eventsToIcs, serializeEventForImip } from '../lib/caldav/ical-serialize';
 import { composeCancelEmail, composeInviteEmail, composeRsvpReply, composeUpdateEmail } from '../lib/calendar/imip';
 import { getHome } from '../lib/home/get-home';
-import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
+import { app, assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 const MOCK_EVENT: CalendarEvent = {
     id: 'evt-1',
@@ -55,6 +55,13 @@ describe('iMIP Serialization', () => {
         const ics = serializeEventForImip(MOCK_EVENT, 'REPLY').replace(/\r\n[ \t]/g, '');
         expect(ics).toContain('METHOD:REPLY');
         expect(ics).not.toContain('RSVP=TRUE');
+    });
+
+    test('serializeEventForImip keeps a valid IANA TZID as local wall-clock time', () => {
+        const ics = serializeEventForImip({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, 'REQUEST');
+        // 10:00Z on Apr 15 is 12:00 CEST — the TZID degrade must not touch valid zones.
+        expect(ics).toContain('DTSTART;TZID=Europe/Amsterdam:20260415T120000');
+        expect(ics).toContain('DTEND;TZID=Europe/Amsterdam:20260415T130000');
     });
 
     test('eventsToIcs does NOT include METHOD (CalDAV compat)', () => {
@@ -689,18 +696,15 @@ describe('Calendar timezone crash (audit P1-7b, integration)', () => {
 // receiveInvitation persists the timezone as-is, standing in for such a row; isolated on `charlie`.
 describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calendarId: string;
 
-    beforeAll(async () => {
-        ctx = await getTestContext();
-    });
+    const organizerId = 'external_outlook@external.com';
 
-    test('a pre-existing poisoned TZID row degrades instead of 500ing the range fetch', async () => {
-        const uid = 'poisoned-tzid-uid@external.com';
-        const organizerId = 'external_outlook@external.com';
+    async function receivePoisonedInvite(uid: string): Promise<string> {
         const home = await getHome(ctx.charlie.user.id);
-        home.calendar.receiveInvitation({
+        return home.calendar.receiveInvitation({
             uid,
-            title: 'Pre-existing Poisoned Event',
+            title: `Poisoned ${uid}`,
             description: null,
             location: null,
             startTime: new Date('2026-09-10T09:00:00Z'),
@@ -718,6 +722,17 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
             organizerEventId: uid,
             organizerUserId: organizerId,
         });
+    }
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const res = await authedRequest(ctx.charlie.user.sessionToken, `/calendar/${ctx.charlie.user.id}/calendars`);
+        calendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
+    });
+
+    test('a pre-existing poisoned TZID row degrades instead of 500ing the range fetch', async () => {
+        const uid = 'poisoned-tzid-uid@external.com';
+        await receivePoisonedInvite(uid);
 
         // Pre-fix, expandRecurrence feeds the bad TZID to getIntlFormatter → RangeError → this route 500s.
         const from = Math.floor(new Date('2026-09-09').getTime() / 1000);
@@ -729,6 +744,49 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
         expect(eventsRes.status).toBe(200);
         const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
         expect(events.some((e) => e.uid === uid)).toBe(true);
+    });
+
+    test('a poisoned TZID row does not 500 the CalDAV REPORT of its collection', async () => {
+        const uid = 'poisoned-tzid-caldav@external.com';
+        await receivePoisonedInvite(uid);
+
+        const report = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+</C:calendar-query>`;
+        // Pre-fix, buildVEvent hands the stored TZID to Intl → RangeError → the whole collection 500s.
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${ctx.charlie.user.id}/${calendarId}/`, {
+                method: 'REPORT',
+                headers: {
+                    Authorization: `Basic ${btoa(`${ctx.charlie.user.email}:testpassword123`)}`,
+                    'Content-Type': 'application/xml',
+                },
+                body: report,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain(`${uid}.ics`);
+        // The bad zone serializes like a no-timezone event (absolute UTC), not as a bogus TZID param.
+        expect(xml).not.toContain('W. Europe Standard Time');
+        expect(xml).toContain('DTSTART:20260910T090000Z');
+    });
+
+    test('a poisoned TZID invite is deletable (delete-as-decline does not throw)', async () => {
+        const uid = 'poisoned-tzid-delete@external.com';
+        const eventId = await receivePoisonedInvite(uid);
+
+        // Pre-fix, deleteEvent → composeRsvpReply → formatEventWhen throws BEFORE the row is
+        // removed, so the poisoned invite is undeletable via the UI.
+        const res = await authedRequest(
+            ctx.charlie.user.sessionToken,
+            `/calendar/${ctx.charlie.user.id}/calendars/${calendarId}/events/${eventId}`,
+            { method: 'DELETE' },
+        );
+        expect(res.status).toBe(200);
+        const home = await getHome(ctx.charlie.user.id);
+        expect(home.calendar.getRawEvents(calendarId).some((e) => e.uid === uid)).toBe(false);
     });
 });
 

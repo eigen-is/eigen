@@ -1,4 +1,5 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
+import { normalizeTimezone } from '../calendar/timezone';
 
 // RFC 5545 §3.3.11 — escape TEXT values
 function escapeICalText(s: string): string {
@@ -87,6 +88,10 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string
 
     const prop = (line: string) => lines.push(foldLine(line));
 
+    // Rows stored before ingestion normalized TZIDs can hold a non-IANA zone; serialize those like
+    // no-timezone events (absolute UTC) instead of letting Intl throw and 500 a whole CalDAV collection.
+    const tzid = normalizeTimezone(event.timezone);
+
     prop('BEGIN:VEVENT');
     prop(`UID:${escapeICalText(event.uid)}`);
     prop(`SUMMARY:${escapeICalText(event.title)}`);
@@ -95,9 +100,9 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string
     if (event.allDay) {
         prop(`DTSTART;VALUE=DATE:${formatDateUTC(event.startTime)}`);
         prop(`DTEND;VALUE=DATE:${formatDateUTC(event.endTime)}`);
-    } else if (event.timezone) {
-        prop(`DTSTART;TZID=${event.timezone}:${formatDateTimeInTZ(event.startTime, event.timezone)}`);
-        prop(`DTEND;TZID=${event.timezone}:${formatDateTimeInTZ(event.endTime, event.timezone)}`);
+    } else if (tzid) {
+        prop(`DTSTART;TZID=${tzid}:${formatDateTimeInTZ(event.startTime, tzid)}`);
+        prop(`DTEND;TZID=${tzid}:${formatDateTimeInTZ(event.endTime, tzid)}`);
     } else {
         prop(`DTSTART:${formatDateTimeUTC(event.startTime)}`);
         prop(`DTEND:${formatDateTimeUTC(event.endTime)}`);
@@ -124,8 +129,8 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string
         if (event.allDay) {
             const compact = event.recurrenceDate.replace(/-/g, '');
             prop(`RECURRENCE-ID;VALUE=DATE:${compact}`);
-        } else if (event.timezone) {
-            prop(`RECURRENCE-ID;TZID=${event.timezone}:${formatDateTimeInTZ(event.startTime, event.timezone)}`);
+        } else if (tzid) {
+            prop(`RECURRENCE-ID;TZID=${tzid}:${formatDateTimeInTZ(event.startTime, tzid)}`);
         } else {
             prop(`RECURRENCE-ID:${formatDateTimeUTC(event.startTime)}`);
         }

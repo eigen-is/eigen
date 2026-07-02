@@ -124,16 +124,20 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
     if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
 
+    // The dimension maps are schemaless at the Yjs boundary — coerce so a stray string can never
+    // concatenate itself into the un-sanitized @page CSS that pdf.ts derives from this size.
     let width = 0;
     for (let c = minCol; c <= maxCol; c++) {
         if (config.colhidden?.[c]) continue;
-        width += config.columnlen?.[c] ?? DEFAULT_COL_WIDTH;
+        const w = Number(config.columnlen?.[c] ?? DEFAULT_COL_WIDTH);
+        width += Number.isFinite(w) ? w : DEFAULT_COL_WIDTH;
     }
 
     let height = 0;
     for (let r = minRow; r <= maxRow; r++) {
         if (config.rowhidden?.[r]) continue;
-        height += config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT;
+        const h = Number(config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT);
+        height += Number.isFinite(h) ? h : DEFAULT_ROW_HEIGHT;
     }
 
     return { width, height };
