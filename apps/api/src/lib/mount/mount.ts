@@ -71,6 +71,17 @@ const docContainerDescendantIds = sql`
     SELECT id FROM doc_tree
 `;
 
+// The v7 partial unique index (parentId, LOWER(name)) WHERE trashedAt IS NULL. Its violation on an
+// INSERT is what closes the concurrent-create race; insertPathRow maps it to a 409.
+const UNIQUE_ACTIVE_NAME_INDEX = 'idx_paths_unique_active_name';
+
+// True only for the losing racer's INSERT tripping that index. bun:sqlite names the expression index
+// in the message (`UNIQUE constraint failed: index 'idx_paths_unique_active_name'`); match on it so an
+// unrelated UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
+function isDuplicateActiveNameError(e: unknown): boolean {
+    return e instanceof Error && e.message.includes(`index '${UNIQUE_ACTIVE_NAME_INDEX}'`);
+}
+
 export function buildStorageKey(id: string, name: string): string {
     const dotIdx = name.lastIndexOf('.');
     if (dotIdx > 0) {
@@ -434,6 +445,26 @@ export class Mount {
         return this.isPathBased ? name : buildStorageKey(id, name);
     }
 
+    // Insert a path row, translating the v7 unique-index violation into the SAME 409 assertUniqueName
+    // raises. assertUniqueName's SELECT still handles the friendly common case; this closes the RACE —
+    // two racers both pass the SELECT, the DB serializes their INSERTs, and the second trips the index
+    // here → 409 instead of a silent clobber.
+    // WHY not reorder to avoid the orphaned object: the storage write MUST precede the insert (crash
+    // safety — orphaned bytes beat a row pointing at missing bytes). So on the race the loser already
+    // wrote its storage object before this throws: id-based → a harmless orphaned id-keyed object (never
+    // referenced; a minor leak); path-based → the shared-path write already happened (both racers
+    // targeted the same name → same path). Leaving that is correct; reordering would break the invariant.
+    private async insertPathRow(values: typeof paths.$inferInsert): Promise<void> {
+        try {
+            await this.db.insert(paths).values(values);
+        } catch (e) {
+            if (isDuplicateActiveNameError(e)) {
+                throw new ApiError(409, `A file or folder named "${values.name}" already exists in this directory`);
+            }
+            throw e;
+        }
+    }
+
     private async resolveWriteKey(parentId: string, fileValue: string): Promise<string> {
         return this.isPathBased ? this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
     }
@@ -459,7 +490,7 @@ export class Mount {
             await this.storage.mkdir(await this.resolveWriteKey(parentId, fileValue));
         }
 
-        await this.db.insert(paths).values({
+        await this.insertPathRow({
             id: folderId,
             file: fileValue,
             name,
@@ -506,7 +537,7 @@ export class Mount {
         }
 
         const searchable = isSearchableTextFile(mimeType, name);
-        await this.db.insert(paths).values({
+        await this.insertPathRow({
             id: fileId,
             file: fileValue,
             name,
@@ -547,7 +578,7 @@ export class Mount {
         await this.uploadFromTemp(storageKey, tempId);
 
         const searchable = isSearchableTextFile(mimeType, name);
-        await this.db.insert(paths).values({
+        await this.insertPathRow({
             id: fileId,
             file: fileValue,
             name,
