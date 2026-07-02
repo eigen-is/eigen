@@ -85,7 +85,9 @@ If this is a fresh install, go to **https://eigen.local/admin** to create your a
 
 ### Receiving mail (inbound)
 
-Simulate incoming mail by POSTing to the delivery endpoint:
+`/mail/deliver` is localhost-only — Postfix calls it directly on the Docker network, and Caddy
+404s it at the edge, so it is not reachable from the host. Simulate incoming mail by POSTing to
+it from inside the API container:
 
 ```bash
 # Create a test email
@@ -99,11 +101,11 @@ Content-Type: text/plain
 This is a test message delivered via the API.
 EOF
 
-# Deliver it
-curl -sk -X POST \
+# Deliver it via the API container (the endpoint is not exposed through Caddy)
+docker compose exec -T eigen-api curl -s -X POST \
     -H "Content-Type: application/octet-stream" \
-    --data-binary @/tmp/test.eml \
-    https://eigen.local/eigen/mail/deliver/YOUR_EMAIL@eigen.local
+    --data-binary @- \
+    "http://localhost:8000/mail/deliver/YOUR_EMAIL@eigen.local" < /tmp/test.eml
 ```
 
 Replace `YOUR_EMAIL@eigen.local` with the email you used during setup. The email appears in your Eigen inbox immediately.
@@ -144,11 +146,11 @@ Accept the self-signed certificate warning. You'll see the same mailbox as in th
 
 1. Open Thunderbird → **Calendar** tab
 2. Right-click calendars → **New Calendar** → **On the Network** → **CalDAV**
-3. Find your user ID:
+3. Find your user ID (the verify endpoint is localhost-only — call it inside the API container):
 ```bash
-curl -sk -X POST -H "Content-Type: application/json" \
+docker compose exec eigen-api curl -s -X POST -H "Content-Type: application/json" \
     -d '{"email":"YOUR_EMAIL","password":"YOUR_PASSWORD"}' \
-    https://eigen.local/eigen/internal/auth/verify
+    http://localhost:8000/internal/auth/verify
 ```
 4. Enter:
    - **Location:** `https://eigen.local/dav/calendars/{userId}/`

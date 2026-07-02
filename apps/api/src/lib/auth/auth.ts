@@ -83,9 +83,9 @@ export const auth = betterAuth({
         enabled: true,
     },
     advanced: {
-        // Behind Caddy: X-Real-IP / X-Forwarded-For carry the real client on /eigen/* (Caddy
-        // overwrites them, so they're not spoofable). Pin detection to them — mirrors the global
-        // limiter in app.ts and follows better-auth's anti-spoofing guidance.
+        // Same X-Real-IP → X-Forwarded-For precedence as clientIpKey (lib/core/access); better-auth
+        // extracts the IP itself from these header names, so it declares the precedence here rather
+        // than calling the helper. Caddy overwrites both on proxied routes, so they're not spoofable.
         ipAddress: { ipAddressHeaders: ['x-real-ip', 'x-forwarded-for'] },
     },
     rateLimit: {

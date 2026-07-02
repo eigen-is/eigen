@@ -26,6 +26,13 @@
     @html not path /eigen/* /dav/* /.well-known/* *.js *.css *.png *.jpg *.svg *.woff2 *.ttf *.woff *.eot
     header @html Cache-Control "no-cache"
 
+    # Localhost-only API routes (mail delivery + credential verify) must not be internet-reachable;
+    # their real callers (Postfix/Dovecot) hit the API directly on the bridge, so 404 them here.
+    @internal_only path /eigen/internal/* /eigen/mail/deliver/*
+    handle @internal_only {
+        respond 404
+    }
+
     # API + WebSocket (Caddy auto-detects upgrade requests and forwards them transparently)
     handle_path /eigen/* {
         reverse_proxy eigen-api:8000 {
@@ -36,9 +43,13 @@
         }
     }
 
-    # CalDAV
+    # CalDAV — set X-Real-IP to the real client and drop inbound X-Forwarded-For so a DAV client
+    # can't spoof its rate-limit bucket (matches /eigen/*).
     handle /dav/* {
-        reverse_proxy eigen-api:8000
+        reverse_proxy eigen-api:8000 {
+            header_up X-Real-IP {remote_host}
+            header_up -X-Forwarded-For
+        }
     }
     handle /.well-known/caldav {
         redir /dav/ 301
@@ -60,7 +71,10 @@
     }
     handle @caldav_root {
         rewrite * /dav/
-        reverse_proxy eigen-api:8000
+        reverse_proxy eigen-api:8000 {
+            header_up X-Real-IP {remote_host}
+            header_up -X-Forwarded-For
+        }
     }
 
     # Frontend apps
