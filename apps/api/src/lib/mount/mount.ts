@@ -249,8 +249,9 @@ export class Mount {
             this.reindexQueue.kick();
         }
 
-        // Cleanup stale temp files older than 1 hour (e.g. from interrupted uploads or crashes)
-        this.cleanupStaleFiles(this.tmpDir, 60 * 60 * 1000);
+        // Cleanup stale temp files older than 1 hour (e.g. from interrupted uploads or crashes),
+        // but preserve any that are an open doc's crash-recovery working copy (see cleanupStaleFiles).
+        this.cleanupStaleFiles(this.tmpDir, 60 * 60 * 1000, true);
 
         // Cleanup preview cache files older than 7 days
         this.cleanupStaleFiles(this.previewsDir, 7 * 24 * 60 * 60 * 1000);
@@ -273,10 +274,25 @@ export class Mount {
         return path.join(this.baseDir, 'data');
     }
 
-    private cleanupStaleFiles(dir: string, maxAgeMs: number): void {
+    private cleanupStaleFiles(dir: string, maxAgeMs: number, preserveLivePathIds = false): void {
         try {
             const cutoff = Date.now() - maxAgeMs;
+            // An open document's working copy lives in tmpDir keyed by its data.db pathId (getTempPath).
+            // A delayed restart makes it >maxAge, but crash-recovery only adopts it when the doc is next
+            // opened — so skip any entry whose basename is a live paths.id, or the sweep deletes the last
+            // un-synced edits before recovery can run. Transient stream/upload/download temps use random
+            // UUID ids that are never a paths row, so they're still swept.
+            const liveIds = preserveLivePathIds
+                ? new Set(
+                      this.db
+                          .select({ id: paths.id })
+                          .from(paths)
+                          .all()
+                          .map((r) => r.id),
+                  )
+                : null;
             for (const entry of fs.readdirSync(dir)) {
+                if (liveIds?.has(entry)) continue;
                 const filePath = path.join(dir, entry);
                 try {
                     if (fs.statSync(filePath).mtimeMs < cutoff) fs.unlinkSync(filePath);
@@ -592,9 +608,12 @@ export class Mount {
             return created;
         }
 
-        const srcKey = await this.getStorageKey(srcPathId);
-        const srcFile = this.storage.read(srcKey);
-        if (!(await srcFile.exists())) throw new ApiError(404, 'Source file missing on storage');
+        // Freshest-first source: readFile surfaces an un-acked pending upload's staged bytes (a
+        // just-created / outage-staged data.db) rather than the possibly-stale-or-absent storage
+        // object. The container branch above flushed the doc first, so its pending staging holds the
+        // current bytes; a regular file is never staged, so this is a plain storage read for it.
+        const srcFile = await this.readFile(srcPathId);
+        if (!srcFile) throw new ApiError(404, 'Source file missing on storage');
         const tempId = randomUUID();
         const { size, hash } = await writeTempWithHash(this.getTempPath(tempId), srcFile);
         try {
@@ -647,10 +666,10 @@ export class Mount {
             // the existing one rather than failing on the duplicate name.
             const existing = await this.getChildByName(versions.id, snapshotName);
             if (existing) return existing;
-            // isRemote sources the version from the freshest LOCAL bytes and enqueues its
-            // upload (§3) — never the possibly-stale storage object copyPath would read, and
-            // never blocking close on the backend. Local backends are synchronously current,
-            // so they keep the direct copyPath.
+            // isRemote sources the version from the freshest LOCAL bytes and ENQUEUES its upload
+            // (§3), so a close-time snapshot never blocks on the backend — copyPath would instead
+            // write the new version to storage synchronously. Local backends are synchronously
+            // current, so they keep the direct copyPath.
             const copy = this.isRemote
                 ? await this.snapshotDataDbToVersionStaged(dataDb, versions.id, snapshotName)
                 : await this.copyPath(dataDb.id, versions.id, snapshotName);
@@ -692,20 +711,30 @@ export class Mount {
         return created;
     }
 
+    // The frozen staged copy of a pending (un-acked) upload for storageKey holds bytes newer than
+    // the storage object; returns its on-disk path, or null when there's nothing fresher than
+    // storage: local mounts (no queue), regular files (only managed data.db/comments.db/version
+    // snapshots are ever staged), or an already-acked upload. Synchronous, so a caller can copy the
+    // returned path with no await before a concurrent enqueue could unlink it.
+    private pendingStagedCopy(storageKey: string): string | null {
+        const staged = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
+        return staged && fs.existsSync(staged) ? staged : null;
+    }
+
     // Produce a local copy of data.db's current bytes at destPath, freshest source first.
     private async stageDataDbSnapshot(dataDbPathId: string, destPath: string): Promise<void> {
         const storageKey = await this.getStorageKey(dataDbPathId);
         // The caller (snapshotContainerDataDb) flushed the cached db first, so the pending staged
         // copy already holds the current bytes — reuse it instead of a second VACUUM INTO. Copy it
-        // SYNCHRONOUSLY: with no await between the existsSync and the copy, a concurrent enqueue
-        // can't unlink it mid-read.
-        const pendingStaging = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
-        if (pendingStaging && fs.existsSync(pendingStaging)) {
+        // SYNCHRONOUSLY: with no await between pendingStagedCopy's existsSync and the copy, a
+        // concurrent enqueue can't unlink it mid-read.
+        const pendingStaging = this.pendingStagedCopy(storageKey);
+        if (pendingStaging) {
             fs.copyFileSync(pendingStaging, destPath);
             return;
         }
-        // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which
-        // is current because every upload acked (never the stale read the old copyPath did, §3).
+        // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
+        // current because every upload acked (§3).
         const cached = this.documentDbs.get(dataDbPathId);
         if (cached) {
             (await cached()).stageCopy(destPath);
@@ -1184,6 +1213,16 @@ export class Mount {
 
     async readFile(pathId: string): Promise<StorageFile | null> {
         const storageKey = await this.getStorageKey(pathId);
+        // Freshest-first: an un-acked pending upload's frozen staged copy holds bytes newer than the
+        // storage object (a just-created or outage-staged data.db whose PUT hasn't landed), so serve
+        // it — copy/download must never capture stale/absent storage. A no-op for local mounts (no
+        // queue) and regular files (never staged), and once an upload acks the row is gone and storage
+        // is current. Safe for readFile's real callers: data.db is internal (never served to a user),
+        // and a regular served file is never an open doc, so pending-staging-first can't serve stale
+        // bytes. (The lazy handle races an ack that unlinks the staging file — a bounded transient
+        // read error, never data loss; snapshotting instead uses stageDataDbSnapshot's sync copy.)
+        const staged = this.pendingStagedCopy(storageKey);
+        if (staged) return Bun.file(staged);
         const file = this.storage.read(storageKey);
         if (await file.exists()) {
             return file;

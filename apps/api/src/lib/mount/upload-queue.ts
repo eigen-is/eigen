@@ -54,13 +54,22 @@ export class UploadQueue {
         return path.join(this.stagingDir, `${randomUUID()}.db`);
     }
 
+    // Resolve a stored stagingPath to an absolute path. New rows store a basename (relocation-safe);
+    // legacy rows may hold an absolute path — join basenames against the current stagingDir so a
+    // moved/restored data dir still finds the staged copy, and pass any absolute value through.
+    private resolveStagingPath(stored: string): string {
+        return path.isAbsolute(stored) ? stored : path.join(this.stagingDir, stored);
+    }
+
+    // The full on-disk path of the pending staged copy for storageKey, or null if none. External
+    // callers (Mount recovery/copy) fs-check the returned path, so it must be absolute.
     getPendingStagingPath(storageKey: string): string | null {
         const row = this.db
             .select({ stagingPath: pendingUploads.stagingPath })
             .from(pendingUploads)
             .where(eq(pendingUploads.storageKey, storageKey))
             .get();
-        return row?.stagingPath ?? null;
+        return row ? this.resolveStagingPath(row.stagingPath) : null;
     }
 
     // Queue depth (observability, §9).
@@ -73,14 +82,18 @@ export class UploadQueue {
     // the row is written synchronously before this returns. Newest staging wins (PK upsert); a
     // superseded staged copy is deleted unless it's mid-PUT (the worker deletes that one on completion).
     enqueueStaged(storageKey: string, stagingPath: string): void {
+        // Store only the basename so a data-dir relocation (host migration / restore-from-backup)
+        // still resolves the staged copy against the current stagingDir (schema.ts "moves with the
+        // Home"). An absolute path would miss on the new host and reconcile would drop the row.
+        const stored = path.basename(stagingPath);
         const now = Date.now();
         const prevStaging = this.getPendingStagingPath(storageKey);
         this.db
             .insert(pendingUploads)
-            .values({ storageKey, stagingPath, attempt: 0, enqueuedAt: now, nextAttemptAt: now })
+            .values({ storageKey, stagingPath: stored, attempt: 0, enqueuedAt: now, nextAttemptAt: now })
             .onConflictDoUpdate({
                 target: pendingUploads.storageKey,
-                set: { stagingPath, attempt: 0, enqueuedAt: now, nextAttemptAt: now },
+                set: { stagingPath: stored, attempt: 0, enqueuedAt: now, nextAttemptAt: now },
             })
             .run();
         if (prevStaging && prevStaging !== stagingPath && !this.inFlight.has(storageKey)) {
@@ -106,8 +119,9 @@ export class UploadQueue {
         const rows = this.db.select().from(pendingUploads).all();
         const referenced = new Set<string>();
         for (const row of rows) {
-            if (fs.existsSync(row.stagingPath)) {
-                referenced.add(path.basename(row.stagingPath));
+            const staging = this.resolveStagingPath(row.stagingPath);
+            if (fs.existsSync(staging)) {
+                referenced.add(path.basename(staging));
             } else {
                 // staged copy gone (crash between deleting it and deleting the row on ack) — drop the row
                 this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, row.storageKey)).run();
@@ -190,8 +204,11 @@ export class UploadQueue {
     // cancel/restore/supersede that landed since dequeue aborts it. On success: clear the row iff
     // still ours, delete the staged copy, and — if the row was cancelled mid-PUT — delete the object
     // the PUT just resurrected. On failure: back off and leave both for a later retry. Never throws.
-    private async performUpload(storageKey: string, stagingPath: string, attempt: number): Promise<void> {
+    private async performUpload(storageKey: string, storedStaging: string, attempt: number): Promise<void> {
         if (this.closing) return;
+        // storedStaging is the row's stagingPath column (a basename for new rows, absolute for legacy);
+        // resolve it for filesystem ops but key DB writes off the stored value it was matched on.
+        const stagingPath = this.resolveStagingPath(storedStaging);
         const current = this.getPendingStagingPath(storageKey);
         if (current !== stagingPath) {
             // superseded by a newer enqueue, or cancelled — our staged copy is no longer current
@@ -204,7 +221,9 @@ export class UploadQueue {
             if (!this.closing) {
                 this.db
                     .delete(pendingUploads)
-                    .where(and(eq(pendingUploads.storageKey, storageKey), eq(pendingUploads.stagingPath, stagingPath)))
+                    .where(
+                        and(eq(pendingUploads.storageKey, storageKey), eq(pendingUploads.stagingPath, storedStaging)),
+                    )
                     .run();
             }
             return;

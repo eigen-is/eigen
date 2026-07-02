@@ -32,7 +32,8 @@ export const paths = sqliteTable('paths', {
 // Write-behind upload queue for S3-backed mounts (Phase 1b). One row per storage key
 // with an upload owed; deleted on ack. Local to metadata.db so the queue's own state is
 // synchronously durable, transactional with the path rows it guards, and moves with the
-// Home. `stagingPath` is a frozen VACUUM INTO copy on disk; epochs are plain ms numbers.
+// Home. `stagingPath` is the BASENAME of a frozen VACUUM INTO copy in the mount's stagingDir
+// (resolved at read time so it survives a data-dir relocation); epochs are plain ms numbers.
 export const pendingUploads = sqliteTable('pending_uploads', {
     storageKey: text('storageKey').primaryKey(),
     stagingPath: text('stagingPath').notNull(),

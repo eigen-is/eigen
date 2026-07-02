@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import type { BunFile } from 'bun';
@@ -114,17 +114,24 @@ function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
     return { mount, fault };
 }
 
-// Count rows in the backing-store ("S3") copy of a data.db. Reads through the mount's storage
-// and opens a throwaway non-WAL copy (a readonly WAL open can't create its -shm sidecar).
-async function countBackingRows(mount: Mount, dataDbId: string): Promise<number | null> {
-    const file = await mount.readFile(dataDbId);
-    if (!file) return null;
+// Open a throwaway non-WAL copy of a data.db StorageFile and count its rows (a readonly WAL open
+// can't create its -shm sidecar).
+async function countRowsInFile(file: StorageFile | null): Promise<number | null> {
+    if (!file || !(await file.exists())) return null;
     const verifyPath = join(TEST_DIR, `verify-${Math.random().toString(36).slice(2)}.db`);
     await Bun.write(verifyPath, await file.arrayBuffer());
     const verify = new Database(verifyPath);
     const row = verify.query('SELECT COUNT(*) as c FROM items').get() as { c: number };
     verify.close();
     return row.c;
+}
+
+// Count rows in the object that actually reached the backing store ("S3"/local). Reads storage
+// directly — NOT via mount.readFile, which is freshest-first and would surface un-acked staged
+// bytes; getStorageKey handles both the flat-key (s3) and hierarchical (local) layouts.
+async function countBackingRows(mount: Mount, id: string): Promise<number | null> {
+    const m = mount as unknown as { storage: StorageBackend; getStorageKey(id: string): Promise<string> };
+    return countRowsInFile(m.storage.read(await m.getStorageKey(id)));
 }
 
 async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {
@@ -488,6 +495,116 @@ describe('Phase 1b — write-behind upload pipeline', () => {
 
         fault.writeDelayMs = 0;
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // row preserved for replay on reopen
+    });
+});
+
+describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery', () => {
+    test('copying a doc container with a pending (un-acked) data.db upload copies the fresh staged bytes, not the stale storage object', async () => {
+        const { mount, fault } = createS3Mount('copy-pending');
+        await mount.init();
+        const { containerId, dataDbId } = await provisionDoc(mount);
+        const rootId = (await mount.getRootFolder())!.id;
+
+        // Baseline {1} fully acked → "S3" holds {1}.
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await managed.flush();
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(await countBackingRows(mount, dataDbId)).toBe(1);
+
+        // A new write {2} whose upload is HELD in-flight: the staged {1,2} copy + pending row exist,
+        // but "S3" is still {1}. writeDelayMs keeps that PUT from acking; reset to 0 (after the drain
+        // has entered the sleeping PUT) so the copy's own writes land on a healthy backend.
+        fault.writeDelayMs = 2_000;
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
+        await managed.flush();
+        await Bun.sleep(100);
+        fault.writeDelayMs = 0;
+        expect(mount.pendingUploadCount).toBe(1);
+        expect(await countBackingRows(mount, dataDbId)).toBe(1); // "S3" still stale {1}
+
+        // readFile is freshest-first (the seam behind downloadFile / copyPathAcross): it must surface
+        // the staged {1,2}, not the stale {1} in storage.
+        expect(await countRowsInFile(await mount.readFile(dataDbId))).toBe(2);
+
+        // Copy the whole container: the recursion into data.db must copy the staged {1,2}, not "S3" {1}.
+        const copy = await mount.copyPath(containerId, rootId, 'doc-copy');
+        const copiedDataDb = (await mount.getChildByName(copy.id, 'data.db'))!;
+        expect(await countBackingRows(mount, copiedDataDb.id)).toBe(2);
+
+        // Duplicate-then-delete-original preserves the copied data.
+        await mount.deletePath(containerId);
+        expect(await countBackingRows(mount, copiedDataDb.id)).toBe(2);
+    });
+
+    test('a data-dir relocation keeps pending uploads (stagingPath resolves against the current stagingDir)', async () => {
+        const id = `relocate-${Date.now()}`;
+        // The "S3" backing store is remote — a host migration does NOT move it; only the local data dir moves.
+        const backing = new FaultStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
+        const config: MountConfig = {
+            id,
+            name: id,
+            storageType: 's3',
+            isDefault: false,
+            s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
+        };
+
+        // Original data dir A: stage a pending upload during an outage so it survives to relocation time.
+        const baseA = join(TEST_DIR, `relocate-A-${id}`);
+        const mountA = new Mount(OWNER_ID, baseA, config, createGetLocalDatabase(baseA));
+        (mountA as unknown as { storage: StorageBackend }).storage = backing;
+        createdMounts.push(mountA);
+        backing.failNextWrites = 9999;
+        await mountA.init();
+        const { dataDbId } = await provisionDoc(mountA);
+        const managed = await mountA.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mountA.closeDatabase(dataDbId);
+        await mountA.drainPendingUploads({ flushNow: true });
+        expect(mountA.pendingUploadCount).toBe(1);
+        await mountA.closeAllDatabases(); // idle teardown — leaves the row + staged copy for replay
+
+        // Relocate: move the local data dir A → B (host migration / restore-from-backup). metadata.db
+        // and staging/ move together; the "S3" backing is unchanged.
+        const baseB = join(TEST_DIR, `relocate-B-${id}`);
+        mkdirSync(baseB, { recursive: true });
+        renameSync(join(baseA, 'mounts'), join(baseB, 'mounts'));
+
+        const mountB = new Mount(OWNER_ID, baseB, config, createGetLocalDatabase(baseB));
+        (mountB as unknown as { storage: StorageBackend }).storage = backing;
+        createdMounts.push(mountB);
+        await mountB.init(); // reconcile: the basename resolves against B's stagingDir → row survives
+
+        expect(mountB.pendingUploadCount).toBe(1); // the pending upload was NOT dropped by the move
+        expect(readdirSync(mountB.stagingDir)).toHaveLength(1); // its staged bytes were not swept
+
+        backing.failNextWrites = 0; // outage over — the relocated upload still drains
+        await mountB.drainPendingUploads({ flushNow: true });
+        expect(mountB.pendingUploadCount).toBe(0);
+        expect(await countBackingRows(mountB, dataDbId)).toBe(1);
+    });
+
+    test("a delayed restart preserves an open doc's crash-recovery temp but sweeps stale transient temps", async () => {
+        const { mount } = createS3Mount('tmp-sweep-restart');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount); // dataDbId is a live paths.id
+
+        // A crash-recovery working copy: a temp named after the LIVE data.db pathId. A transient
+        // stream/upload temp: named after a random id that is NOT a paths row. Both aged past 1h.
+        const recoveryTemp = mount.getTempPath(dataDbId);
+        await Bun.write(recoveryTemp, 'live-doc-working-copy');
+        const orphanTemp = mount.getTempPath(randomUUID());
+        await Bun.write(orphanTemp, 'stale-transient-temp');
+        const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        utimesSync(recoveryTemp, old, old);
+        utimesSync(orphanTemp, old, old);
+
+        // A restart sharing the same baseDir re-runs the init-time tmp sweep.
+        const m2 = createS3Mount('tmp-sweep-restart');
+        await m2.mount.init();
+
+        expect(existsSync(recoveryTemp)).toBe(true); // recovery temp survives for reopen to adopt
+        expect(existsSync(orphanTemp)).toBe(false); // transient temp still swept
     });
 });
 
