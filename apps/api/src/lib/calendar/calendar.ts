@@ -26,6 +26,7 @@ import type { User } from '../user';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
+import { clampRangeEnd, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import { buildCalendarEvent } from './sse-events';
@@ -391,6 +392,9 @@ export class Calendar {
             } catch {
                 throw new ApiError(400, 'Invalid RRULE');
             }
+            // Reject sub-daily recurrence at the write boundary (see recurrence-limits): it is never a
+            // real calendar event and lets a single range query block the event loop for everyone.
+            if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
         }
         const timezone = normalizeTimezone(input.timezone);
         const status = input.status ?? 'confirmed';
@@ -506,6 +510,10 @@ export class Calendar {
     }
 
     public getRawEventsInRange(calendarId: string, from: Date, to: Date): CalendarEventRow[] {
+        // Clamp the window span (see recurrence-limits) so an over-wide CalDAV time-range can't make
+        // rrule materialise a giant occurrence set and block the event loop.
+        const clampedTo = clampRangeEnd(from, to);
+
         // 1. Non-recurring events that overlap the range
         const nonRecurring = this.db
             .select()
@@ -515,7 +523,7 @@ export class Calendar {
                     eq(schema.events.calendarId, calendarId),
                     isNull(schema.events.rrule),
                     isNull(schema.events.parentEventId),
-                    lte(schema.events.startTime, to),
+                    lte(schema.events.startTime, clampedTo),
                     gte(schema.events.endTime, from),
                 ),
             )
@@ -540,7 +548,7 @@ export class Calendar {
 
         for (const row of allRecurring) {
             const evt = dbEventToCalendarEventRow(row);
-            const occurrences = expandRecurrence(evt, from, to);
+            const occurrences = expandRecurrence(evt, from, clampedTo);
             if (occurrences.length > 0) {
                 matchingRecurring.push(evt);
                 matchingRecurringIds.add(row.id);
@@ -638,6 +646,9 @@ export class Calendar {
             } catch {
                 throw new ApiError(400, 'Invalid RRULE');
             }
+            // Reject sub-daily recurrence at the write boundary (see recurrence-limits) — same DoS
+            // guard as createEvent, so an update can't poison an existing event either.
+            if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
         }
         const timezone = input.timezone !== undefined ? normalizeTimezone(input.timezone) : (existing.timezone ?? null);
 
@@ -748,6 +759,10 @@ export class Calendar {
     }
 
     public getEventsInRange(from: Date, to: Date, calendarId?: string): CalendarEventOccurrence[] {
+        // Clamp the window span (see recurrence-limits) so an over-wide range like
+        // event-range/0/253402300799 can't make rrule materialise a giant occurrence set.
+        const clampedTo = clampRangeEnd(from, to);
+
         const conditions = [];
         if (calendarId) {
             conditions.push(eq(schema.events.calendarId, calendarId));
@@ -761,7 +776,7 @@ export class Calendar {
                     ...conditions,
                     isNull(schema.events.rrule),
                     isNull(schema.events.parentEventId),
-                    lte(schema.events.startTime, to),
+                    lte(schema.events.startTime, clampedTo),
                     gte(schema.events.endTime, from),
                 ),
             )
@@ -826,7 +841,7 @@ export class Calendar {
                 }
             }
 
-            const occurrences = expandRecurrence(evt, from, to);
+            const occurrences = expandRecurrence(evt, from, clampedTo);
             for (const occ of occurrences) {
                 if (cancelledDates.has(occ.occurrenceDate)) continue;
 
@@ -1487,6 +1502,18 @@ function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEnd: Date
     if (!event.rrule) return [];
 
     const durationMs = event.endTime.getTime() - event.startTime.getTime();
+
+    // Defence in depth: only a legacy stored row can still hold a sub-daily rrule (the write and ICS
+    // boundaries now reject/strip them). Never feed one to rrule.between — it would iterate to the
+    // window and hang. Surface just the base occurrence if it falls in the window (treat as a single
+    // event, matching the ingest-time degrade).
+    if (isSubDailyRrule(event.rrule)) {
+        if (event.startTime >= rangeStart && event.startTime <= rangeEnd) {
+            return [{ ...event, occurrenceDate: occurrenceDateToString(event.startTime) }];
+        }
+        return [];
+    }
+
     const tz = event.timezone;
 
     if (tz) {
@@ -1519,7 +1546,9 @@ function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEnd: Date
             Date.UTC(localTo.year, localTo.month - 1, localTo.day, localTo.hour, localTo.minute, localTo.second),
         );
 
-        const dates = rule.between(wallClockFrom, wallClockTo, true);
+        // Cap the number of occurrences materialised (see recurrence-limits) — bounds the array and the
+        // iteration for an allowed frequency over a very wide window.
+        const dates = rule.between(wallClockFrom, wallClockTo, true, (_d, len) => len < MAX_OCCURRENCES);
         const results: CalendarEventOccurrence[] = [];
 
         for (const date of dates) {
@@ -1550,7 +1579,7 @@ function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEnd: Date
         dtstart: event.startTime,
     });
 
-    const dates = rule.between(rangeStart, rangeEnd, true);
+    const dates = rule.between(rangeStart, rangeEnd, true, (_d, len) => len < MAX_OCCURRENCES);
 
     return dates.map((date) => ({
         ...event,
@@ -1574,7 +1603,9 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
     const tz = parent.timezone;
     const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
 
-    if (parent.rrule) {
+    // Skip a sub-daily rrule (only a legacy stored row can be one) — it would iterate to the day
+    // window and hang; fall through to the time-of-day fallback below.
+    if (parent.rrule && !isSubDailyRrule(parent.rrule)) {
         if (tz) {
             // Timezone-aware: expand in wall-clock space, convert back to UTC
             const local = utcToLocal(parent.startTime, tz);
@@ -1585,7 +1616,7 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
             const dayStart = new Date(occDate);
             const dayEnd = new Date(occDate);
             dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-            const matches = rule.between(dayStart, dayEnd, true);
+            const matches = rule.between(dayStart, dayEnd, true, (_d, len) => len < MAX_OCCURRENCES);
             if (matches.length > 0) {
                 const match = matches[0];
                 const startTime = localToUtc(
@@ -1604,7 +1635,7 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
             const dayStart = new Date(occDate);
             const dayEnd = new Date(occDate);
             dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-            const matches = rule.between(dayStart, dayEnd, true);
+            const matches = rule.between(dayStart, dayEnd, true, (_d, len) => len < MAX_OCCURRENCES);
             if (matches.length > 0) {
                 const startTime = matches[0];
                 return { startTime, endTime: new Date(startTime.getTime() + durationMs) };

@@ -566,4 +566,92 @@ describe('CalDAV', () => {
         expect(xml).toContain('Report Test');
         expect(xml).toContain('getetag');
     });
+
+    test('REPORT calendar-query with a basic-format time-range returns in-window events', async () => {
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-timerange-1@eigen\r\nSUMMARY:TimeRange Hit\r\nDTSTART:20260601T090000Z\r\nDTEND:20260601T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-timerange-1.ics`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+
+        // RFC 5545 BASIC-format bounds that bracket the event (new Date() reads these as Invalid Date).
+        const reportBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <C:filter>
+    <C:comp-filter name="VCALENDAR">
+      <C:comp-filter name="VEVENT">
+        <C:time-range start="20260601T000000Z" end="20260602T000000Z"/>
+      </C:comp-filter>
+    </C:comp-filter>
+  </C:filter>
+</C:calendar-query>`;
+
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: reportBody,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // Pre-fix the Invalid Date bounds emptied the REPORT; the in-window event must appear.
+        expect(xml).toContain('TimeRange Hit');
+    });
+
+    test('REPORT calendar-query time-range excludes out-of-window events', async () => {
+        // A window a year after the caldav-timerange-1 event must NOT return it — proves the parsed
+        // range is actually applied, not ignored.
+        const reportBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <C:filter>
+    <C:comp-filter name="VCALENDAR">
+      <C:comp-filter name="VEVENT">
+        <C:time-range start="20270601T000000Z" end="20270602T000000Z"/>
+      </C:comp-filter>
+    </C:comp-filter>
+  </C:filter>
+</C:calendar-query>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: reportBody,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).not.toContain('TimeRange Hit');
+    });
+
+    test('PUT with a sub-daily RRULE degrades instead of 500-ing (finding 19)', async () => {
+        // DTSTART far in the future so pre-fix range queries in this file never iterate toward it.
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-subdaily-1@eigen\r\nSUMMARY:SubDaily PUT\r\nDTSTART:20990101T090000Z\r\nDTEND:20990101T100000Z\r\nRRULE:FREQ=SECONDLY\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        const putRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-subdaily-1.ics`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+        // Untrusted ICS must not 500 the sync; the explosive rule is stripped and the event stored once.
+        expect([201, 204]).toContain(putRes.status);
+
+        const getRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-subdaily-1.ics`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        const body = await getRes.text();
+        expect(body).toContain('SubDaily PUT');
+        expect(body).not.toContain('SECONDLY');
+    });
 });

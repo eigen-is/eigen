@@ -601,6 +601,35 @@ describe('Calendar timezone validation (audit P1-7b)', () => {
     });
 });
 
+describe('Calendar recurrence DoS guard (audit P2-7)', () => {
+    const withRrule = (rrule: string) =>
+        [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:dos-guard@external.com',
+            'SUMMARY:Recurring',
+            'DTSTART:20260101T090000Z',
+            'DTEND:20260101T100000Z',
+            `RRULE:${rrule}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+    test('parseIcs strips a sub-daily RRULE (unbounded-expansion DoS vector)', () => {
+        // Untrusted ICS with FREQ=SECONDLY/MINUTELY/HOURLY would make rrule.between iterate to the
+        // query window and block the event loop; degrade to a single event, like the TZID guard.
+        expect(parseIcs(withRrule('FREQ=SECONDLY')).events[0].rrule).toBeNull();
+        expect(parseIcs(withRrule('FREQ=MINUTELY;INTERVAL=10')).events[0].rrule).toBeNull();
+        expect(parseIcs(withRrule('FREQ=HOURLY')).events[0].rrule).toBeNull();
+    });
+
+    test('parseIcs preserves a daily-or-coarser RRULE', () => {
+        expect(parseIcs(withRrule('FREQ=DAILY;COUNT=5')).events[0].rrule).toBe('FREQ=DAILY;COUNT=5');
+        expect(parseIcs(withRrule('FREQ=WEEKLY;BYDAY=WE')).events[0].rrule).toBe('FREQ=WEEKLY;BYDAY=WE');
+    });
+});
+
 describe('Calendar timezone crash (audit P1-7b, integration)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let aliceCalendarId: string;

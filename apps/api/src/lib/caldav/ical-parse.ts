@@ -1,5 +1,6 @@
 import { type Attendee, type EventData, IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
+import { isSubDailyRrule } from '../calendar/recurrence-limits';
 import { normalizeTimezone } from '../calendar/timezone';
 
 export type ParsedEvent = {
@@ -75,7 +76,11 @@ export function parseIcs(icsText: string): IcsParseResult {
         const tzid = normalizeTimezone(Array.isArray(tzidRaw) ? tzidRaw[0] : tzidRaw);
 
         const rruleProp = vevent.getFirstPropertyValue('rrule');
-        const rrule = rruleProp ? rruleProp.toString() : null;
+        const rruleRaw = rruleProp ? rruleProp.toString() : null;
+        // Strip a sub-daily recurrence from untrusted ICS the same way a non-IANA TZID is nulled above:
+        // it is a DoS vector (unbounded expansion) that no real client emits, so degrade to a single
+        // event rather than reject the whole invite / CalDAV PUT.
+        const rrule = rruleRaw && isSubDailyRrule(rruleRaw) ? null : rruleRaw;
 
         const rawStatus = (vevent.getFirstPropertyValue('status') || 'CONFIRMED').toString().toLowerCase();
         const status = (
