@@ -169,8 +169,8 @@ export class Mount {
     }
 
     // Hot-swap a live settings change. Only fields that don't define the storage backend (name, quota)
-    // apply here; storageType/s3Config are bound to this.storage + uploadQueue at build time, so
-    // re-pointing storage is a rebuild handled on the next mount load, not under in-flight uploads.
+    // apply here; storageType/s3Config are bound to this.storage + uploadQueue at build time, so a
+    // storage re-point is a rebuild — Drive.updateMount handles it via removeMount + addMount.
     applyConfig(config: MountConfig): void {
         this.config.name = config.name;
         this.config.maxSizeMB = config.maxSizeMB;

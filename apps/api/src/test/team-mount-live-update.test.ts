@@ -37,6 +37,34 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
         }
     });
 
+    test('s3Config update rebuilds the live mount around the new storage config', async () => {
+        const home = await freshTeamHome();
+        try {
+            const mount = await home.addMount({ name: 'Repointed', maxSizeMB: 100 });
+            const rootBefore = await home.drive.getRootFolder(mount.id);
+            expect(rootBefore).not.toBeNull();
+
+            const s3Config = {
+                endpoint: 'https://s3.example.com',
+                bucket: 'team-bucket',
+                prefix: 'eigen/',
+                accessKeyId: 'AK',
+                secretAccessKey: 'SK',
+            };
+            await home.updateMount(mount.id, { s3Config });
+
+            // Same Home instance, no evict — the storage config reached the live Drive.
+            expect(home.drive.getMountConfig(mount.id).s3Config).toEqual(s3Config);
+            // Rebuilt, not dropped: the mount still serves reads from its metadata.db.
+            const rootAfter = await home.drive.getRootFolder(mount.id);
+            expect(rootAfter?.id).toBe(rootBefore!.id);
+            const listed = await home.drive.listMounts();
+            expect(listed.find((m) => m.id === mount.id)?.name).toBe('Repointed');
+        } finally {
+            await home.shutdown();
+        }
+    });
+
     test('disabling a mount drops it from the live Drive', async () => {
         const home = await freshTeamHome();
         try {

@@ -143,8 +143,9 @@ export default class Drive {
     }
 
     // Called by: TeamHome.updateMount (routed via PUT /team/:ownerId/mount/:mountId). Pushes a
-    // persisted mount-settings change onto the live mount so a new quota/name/enabled flag takes
-    // effect on this Home without waiting for an evict + reload. Not route-callable directly.
+    // persisted mount-settings change onto the live mount so a new quota/name/enabled/storage
+    // config takes effect on this Home without waiting for an evict + reload. Not route-callable
+    // directly.
     async updateMount(config: MountConfig, enabled: boolean): Promise<void> {
         const live = this.mounts.get(config.id);
         if (!enabled) {
@@ -152,6 +153,26 @@ export default class Drive {
             return;
         }
         if (!live) {
+            await this.addMount(config);
+            return;
+        }
+        // storageType/s3Config are bound to the Mount's storage backend + upload queue at build
+        // time, so a storage re-point is a real re-mount: removeMount's closeAllDatabases syncs
+        // open docs out against the old backend, and addMount's init() replays any pending
+        // uploads onto the new one via uploadQueue.reconcile(). Enumerate the s3 fields so JSON
+        // key order can't fake a diff.
+        const storageIdentity = ({ storageType, s3Config: s3 }: MountConfig) =>
+            JSON.stringify([
+                storageType,
+                s3?.endpoint,
+                s3?.bucket,
+                s3?.prefix,
+                s3?.region,
+                s3?.accessKeyId,
+                s3?.secretAccessKey,
+            ]);
+        if (storageIdentity(live.config) !== storageIdentity(config)) {
+            await this.removeMount(config.id);
             await this.addMount(config);
             return;
         }

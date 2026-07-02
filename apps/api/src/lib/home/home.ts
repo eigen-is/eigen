@@ -36,7 +36,7 @@ export class Home {
 
     private initialized: boolean = false;
     private initializationStarted: boolean = false;
-    private initWaiters: ((home: Home) => void)[] = [];
+    private initWaiters: { resolve: (home: Home) => void; reject: (reason: unknown) => void }[] = [];
     private timeout: Timer | undefined;
     private _destructing: boolean = false;
     private _destructPromise: Promise<void> | null = null;
@@ -88,8 +88,8 @@ export class Home {
             return this;
         }
         if (this.initializationStarted) {
-            return new Promise<Home>((resolve) => {
-                this.initWaiters.push(resolve);
+            return new Promise<Home>((resolve, reject) => {
+                this.initWaiters.push({ resolve, reject });
             });
         }
         this.initializationStarted = true;
@@ -111,12 +111,17 @@ export class Home {
         const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
         if (failed) {
             await this.shutdown();
+            // Wake concurrent init() callers queued behind this init — they'd otherwise await forever.
+            for (const { reject } of this.initWaiters) {
+                reject(failed.reason);
+            }
+            this.initWaiters = [];
             throw failed.reason;
         }
 
         this.initialized = true;
         console.log(`[Home] Initialized for ${this.user.id}`);
-        for (const resolve of this.initWaiters) {
+        for (const { resolve } of this.initWaiters) {
             resolve(this);
         }
         this.initWaiters = [];
