@@ -1,4 +1,4 @@
-import { isLightColor, lightenColor } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, Paperclip } from 'lucide-react';
 import type { HTMLAttributes } from 'react';
@@ -44,13 +44,21 @@ export function NoteCard({
             ref={ref}
             className={cn(
                 'p-0 w-full shadow-md select-none rounded-none',
-                color ? 'border-0' : 'border',
+                color
+                    ? // Inset shadow, not a border: the color bar must not shift the text
+                      'border-0 bg-(--note-bg) text-(--note-fg) dark:bg-muted dark:text-card-foreground dark:shadow-[inset_3px_0_0_0_var(--note-indicator)]'
+                    : 'border',
                 onClick ? 'cursor-pointer' : '',
                 className,
             )}
             style={{
-                backgroundColor: color ? lightenColor(color, 0.25) : undefined,
-                color: color ? (isLightColor(lightenColor(color, 0.25)) ? '#000' : '#fff') : undefined,
+                ...(color
+                    ? ({
+                          '--note-bg': lightenColor(color, 0.25),
+                          '--note-fg': isLightColor(lightenColor(color, 0.25)) ? '#000' : '#fff',
+                          '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
+                      } as React.CSSProperties)
+                    : undefined),
                 ...style,
             }}
             onClick={onClick}

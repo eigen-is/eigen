@@ -221,9 +221,9 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
         <div className="flex w-full h-[calc(100vh-64px)] items-center justify-center">
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-2xl text-app">
+                    <CardTitle className="text-2xl">
                         <span className="font-medium">eigen</span>
-                        <span className="font-normal">
+                        <span className="font-normal text-app">
                             <Bar />
                             {appName}
                             <Ket />

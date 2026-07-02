@@ -1,5 +1,5 @@
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { isLightColor, lightenColor } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { Link as LinkIcon, Pencil } from 'lucide-react';
@@ -79,11 +79,21 @@ export function NoteCardDialog({
             <DialogContent size="md" className="max-h-[70vh] flex flex-col p-0 gap-0">
                 <div>
                     <DialogHeader
-                        className="flex flex-row items-center gap-2 px-4 pt-4 pb-2 rounded-t-lg"
-                        style={{
-                            backgroundColor: color ? lightenColor(color, 0.5) : undefined,
-                            color: color ? (isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff') : undefined,
-                        }}
+                        className={cn(
+                            'flex flex-row items-center gap-2 px-4 pt-4 pb-2 rounded-t-lg',
+                            color &&
+                                // Inset shadow, not a border: the color bar must not shift the title
+                                'bg-(--note-bg) text-(--note-fg) dark:bg-muted dark:text-card-foreground dark:shadow-[inset_3px_0_0_0_var(--note-indicator)]',
+                        )}
+                        style={
+                            color
+                                ? ({
+                                      '--note-bg': lightenColor(color, 0.5),
+                                      '--note-fg': isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff',
+                                      '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
+                                  } as React.CSSProperties)
+                                : undefined
+                        }
                     >
                         <DialogTitle className="flex-1">{title}</DialogTitle>
                     </DialogHeader>

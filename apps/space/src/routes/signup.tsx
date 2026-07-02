@@ -71,7 +71,7 @@ function SignupPage() {
                 <CardHeader className="text-center">
                     <CardTitle className="text-2xl">
                         <span className="font-medium">eigen</span>
-                        <span className="font-normal">
+                        <span className="font-normal text-app">
                             <Bar />
                             signup
                             <Ket />
