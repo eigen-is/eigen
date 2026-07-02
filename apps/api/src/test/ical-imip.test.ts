@@ -3,6 +3,7 @@ import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@work
 import { parseIcs } from '../lib/caldav/ical-parse';
 import { eventsToIcs, serializeEventForImip } from '../lib/caldav/ical-serialize';
 import { composeCancelEmail, composeInviteEmail, composeRsvpReply, composeUpdateEmail } from '../lib/calendar/imip';
+import { getHome } from '../lib/home/get-home';
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 const MOCK_EVENT: CalendarEvent = {
@@ -684,6 +685,53 @@ describe('Calendar timezone crash (audit P1-7b, integration)', () => {
     });
 });
 
+// A row poisoned BEFORE the ingestion fix (bad TZID stored verbatim) must not 500 reads forever.
+// receiveInvitation persists the timezone as-is, standing in for such a row; isolated on `charlie`.
+describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('a pre-existing poisoned TZID row degrades instead of 500ing the range fetch', async () => {
+        const uid = 'poisoned-tzid-uid@external.com';
+        const organizerId = 'external_outlook@external.com';
+        const home = await getHome(ctx.charlie.user.id);
+        home.calendar.receiveInvitation({
+            uid,
+            title: 'Pre-existing Poisoned Event',
+            description: null,
+            location: null,
+            startTime: new Date('2026-09-10T09:00:00Z'),
+            endTime: new Date('2026-09-10T10:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=WEEKLY;COUNT=3',
+            timezone: 'W. Europe Standard Time',
+            status: 'confirmed',
+            sequence: 0,
+            data: {
+                organizer: { userId: organizerId, email: 'outlook@external.com', name: 'Outlook' },
+                organizerEventId: uid,
+            },
+            createByUserId: organizerId,
+            organizerEventId: uid,
+            organizerUserId: organizerId,
+        });
+
+        // Pre-fix, expandRecurrence feeds the bad TZID to getIntlFormatter → RangeError → this route 500s.
+        const from = Math.floor(new Date('2026-09-09').getTime() / 1000);
+        const to = Math.floor(new Date('2026-10-01').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.charlie.user.sessionToken,
+            `/calendar/${ctx.charlie.user.id}/event-range/${from}/${to}`,
+        );
+        expect(eventsRes.status).toBe(200);
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        expect(events.some((e) => e.uid === uid)).toBe(true);
+    });
+});
+
 // Legitimate REQUEST/REPLY flows (envelope From == organizer/attendee) are already covered by the
 // "iMIP Inbound Processing" and "iMIP METHOD:REPLY inbound" suites above — these guard the forged case.
 // Isolated on `bob` so the P1-7b Windows-TZID events created on alice's calendar above can't
@@ -812,5 +860,154 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         );
         const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
         expect(events.find((e) => e.uid === 'forged-request-uid@external.com')).toBeUndefined();
+    });
+
+    test('forged REQUEST update (envelope From != stored organizer) does not modify the linked invite', async () => {
+        const uid = 'spoof-update-uid@corp.example';
+
+        // A real third party invites Bob — this creates a linked invite on his calendar (organizer = real-org).
+        const inviteIcs = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'SUMMARY:Quarterly Review',
+            'LOCATION:Boardroom',
+            'DTSTART:20260815T090000Z',
+            'DTEND:20260815T100000Z',
+            'SEQUENCE:0',
+            'STATUS:CONFIRMED',
+            'ORGANIZER;CN="Real Org":mailto:real-org@corp.example',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.bob.user.email}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const inviteEmail = [
+            'From: real-org@corp.example',
+            `To: ${ctx.bob.user.email}`,
+            'Subject: Invitation: Quarterly Review',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="inv-boundary"',
+            '',
+            '--inv-boundary',
+            'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+            '',
+            inviteIcs,
+            '--inv-boundary--',
+        ].join('\r\n');
+        const inviteRes = await authedRequest(ctx.bob.user.sessionToken, `/mail/deliver/${ctx.bob.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(inviteEmail).buffer,
+        });
+        expect(inviteRes.status).toBe(200);
+
+        // Mallory (a co-attendee who knows the UID) forges an UPDATE under her own ORGANIZER with a
+        // huge SEQUENCE, trying to rewrite Bob's copy of a meeting organized by someone else.
+        const forgedIcs = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'SUMMARY:HIJACKED',
+            'LOCATION:Evil Lair',
+            'DTSTART:20260815T150000Z',
+            'DTEND:20260815T160000Z',
+            'SEQUENCE:2000000000',
+            'STATUS:CONFIRMED',
+            'ORGANIZER;CN="Mallory":mailto:mallory@evil.com',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.bob.user.email}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const forgedEmail = [
+            'From: mallory@evil.com',
+            `To: ${ctx.bob.user.email}`,
+            'Subject: Updated invitation: Quarterly Review',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="spoof-boundary"',
+            '',
+            '--spoof-boundary',
+            'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+            '',
+            forgedIcs,
+            '--spoof-boundary--',
+        ].join('\r\n');
+        const forgedRes = await authedRequest(ctx.bob.user.sessionToken, `/mail/deliver/${ctx.bob.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(forgedEmail).buffer,
+        });
+        // Delivery still succeeds — the forged mutation is dropped, not the mail.
+        expect(forgedRes.status).toBe(200);
+
+        // Bob's invite is untouched: original title/location/time, SEQUENCE not bumped. Range spans
+        // both the original (09:00) and the attempted (15:00) start so the event is found either way.
+        const from = Math.floor(new Date('2026-08-14').getTime() / 1000);
+        const to = Math.floor(new Date('2026-08-16').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        const target = findOrFail(events, (e) => e.uid === uid);
+        expect(target.title).toBe('Quarterly Review');
+        expect(target.location).toBe('Boardroom');
+        expect(target.sequence).toBe(0);
+        expect(new Date(target.startTime).getTime()).toBe(new Date('2026-08-15T09:00:00Z').getTime());
+    });
+
+    test('genuine REQUEST update from the real organizer still applies', async () => {
+        const uid = 'genuine-update-uid@corp.example';
+        const deliver = (summary: string, start: string, seq: number) => {
+            const ics = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'METHOD:REQUEST',
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                `SUMMARY:${summary}`,
+                `DTSTART:${start}`,
+                'DTEND:20260820T100000Z',
+                `SEQUENCE:${seq}`,
+                'STATUS:CONFIRMED',
+                'ORGANIZER;CN="Real Org":mailto:real-org@corp.example',
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.bob.user.email}`,
+                'END:VEVENT',
+                'END:VCALENDAR',
+            ].join('\r\n');
+            const email = [
+                'From: real-org@corp.example',
+                `To: ${ctx.bob.user.email}`,
+                'Subject: Invitation',
+                'MIME-Version: 1.0',
+                'Content-Type: multipart/mixed; boundary="genuine-boundary"',
+                '',
+                '--genuine-boundary',
+                'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+                '',
+                ics,
+                '--genuine-boundary--',
+            ].join('\r\n');
+            return authedRequest(ctx.bob.user.sessionToken, `/mail/deliver/${ctx.bob.user.email}`, {
+                method: 'POST',
+                body: new TextEncoder().encode(email).buffer,
+            });
+        };
+
+        // Initial invite, then a real reschedule from the same organizer (higher SEQUENCE).
+        expect((await deliver('Team Sync', '20260820T090000Z', 0)).status).toBe(200);
+        expect((await deliver('Team Sync (rescheduled)', '20260820T110000Z', 1)).status).toBe(200);
+
+        const from = Math.floor(new Date('2026-08-19').getTime() / 1000);
+        const to = Math.floor(new Date('2026-08-21').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        const target = findOrFail(events, (e) => e.uid === uid);
+        expect(target.title).toBe('Team Sync (rescheduled)');
+        expect(target.sequence).toBe(1);
     });
 });

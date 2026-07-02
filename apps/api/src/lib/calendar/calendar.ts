@@ -146,8 +146,10 @@ const intlCache = new Map<string, Intl.DateTimeFormat>();
 function getIntlFormatter(tz: string): Intl.DateTimeFormat {
     let fmt = intlCache.get(tz);
     if (!fmt) {
+        // Degrade a pre-existing poisoned TZID to UTC instead of throwing RangeError (heals already-broken rows).
+        const safeZone = normalizeTimezone(tz) ?? 'UTC';
         fmt = new Intl.DateTimeFormat('en-GB', {
-            timeZone: tz,
+            timeZone: safeZone,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',

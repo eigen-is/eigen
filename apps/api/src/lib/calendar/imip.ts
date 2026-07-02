@@ -173,16 +173,14 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
 
     for (const parsed of events) {
         if (method === 'REQUEST') {
-            // REQUEST is an organizer action — only honour it when sent by the ICS organizer.
-            const organizerEmail = parsed.data?.organizer?.email;
-            if (!sentBy(organizerEmail)) continue;
-
             const existing = calendar.getEventsByUid(parsed.uid);
             const linked = existing.find((e) => e.data?.organizer && e.data?.organizerEventId);
 
             const orgEventId = linked?.data?.organizerEventId;
             const orgUserId = linked?.data?.organizer?.userId;
             if (orgEventId && orgUserId) {
+                // Updates bind to the STORED organizer, not the ICS one, so co-attendees can't hijack the invite.
+                if (!sentBy(linked?.data?.organizer?.email)) continue;
                 calendar.receiveInvitationUpdate(orgEventId, orgUserId, {
                     title: parsed.title,
                     description: parsed.description,
@@ -197,6 +195,9 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
                     attendees: parsed.data?.attendees,
                 });
             } else {
+                // New invites are attributed to the sender, so the ICS organizer must equal the envelope From.
+                const organizerEmail = parsed.data?.organizer?.email;
+                if (!sentBy(organizerEmail)) continue;
                 const payload: ReceiveInvitationPayload = {
                     uid: parsed.uid,
                     title: parsed.title,

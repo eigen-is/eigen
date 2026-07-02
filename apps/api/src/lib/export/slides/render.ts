@@ -39,7 +39,8 @@ export function renderSlideObjectHtml(
         `height:${pxToPercent(obj.h, 'y')}%`,
     ];
 
-    if (obj.rotation) styles.push(`transform:rotate(${obj.rotation}deg)`, 'transform-origin:center center');
+    if (obj.rotation)
+        styles.push(`transform:rotate(${escapeHtml(String(obj.rotation))}deg)`, 'transform-origin:center center');
     if (obj.borderWidth && obj.borderColor) {
         // Colors/fonts are schemaless Yjs strings a collaborator can set to anything, so every
         // one is escapeHtml'd (as highlightColor already is) — a value must not break out of style="…".
@@ -62,14 +63,16 @@ export function renderSlideObjectHtml(
             // color-interpolation-method as invalid. Live editor uses
             // getBackgroundStyle in real browsers and emits oklab there.
             const { from, to, angle } = obj.background;
-            styles.push(`background-image:linear-gradient(${angle}deg, ${escapeHtml(from)}, ${escapeHtml(to)})`);
+            styles.push(
+                `background-image:linear-gradient(${escapeHtml(String(angle))}deg, ${escapeHtml(from)}, ${escapeHtml(to)})`,
+            );
         }
         const vAlign = obj.verticalAlign || 'top';
         const alignItems = vAlign === 'center' ? 'center' : vAlign === 'bottom' ? 'flex-end' : 'flex-start';
 
         const textStyles: string[] = [
             `font-size:${sizeUnit(obj.fontSize, 'y')}`,
-            `line-height:${obj.lineHeight || 1.2}`,
+            `line-height:${escapeHtml(String(obj.lineHeight || 1.2))}`,
             `color:${escapeHtml(obj.color || '#000000')}`,
         ];
         if (obj.fontFamily) textStyles.push(`font-family:${escapeHtml(getFontFamily(obj.fontFamily))}`);
@@ -121,7 +124,7 @@ export function renderSlideHtml(
         containerStyles.push(`background-color:${escapeHtml(bg.color)}`);
     } else if (bg?.type === 'gradient') {
         containerStyles.push(
-            `background-image:linear-gradient(${bg.angle}deg, ${escapeHtml(bg.from)}, ${escapeHtml(bg.to)})`,
+            `background-image:linear-gradient(${escapeHtml(String(bg.angle))}deg, ${escapeHtml(bg.from)}, ${escapeHtml(bg.to)})`,
         );
     } else if (bg?.type === 'image' && bg.mediaName) {
         const bgSrc = resolveImgSrc(bg.mediaName);
