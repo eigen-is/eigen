@@ -1,5 +1,6 @@
 import { type Attendee, type EventData, IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
+import { normalizeTimezone } from '../calendar/timezone';
 
 export type ParsedEvent = {
     uid: string;
@@ -71,7 +72,7 @@ export function parseIcs(icsText: string): IcsParseResult {
         }
 
         const tzidRaw = dtstart?.getParameter('tzid') || null;
-        const tzid = Array.isArray(tzidRaw) ? (tzidRaw[0] ?? null) : tzidRaw;
+        const tzid = normalizeTimezone(Array.isArray(tzidRaw) ? tzidRaw[0] : tzidRaw);
 
         const rruleProp = vevent.getFirstPropertyValue('rrule');
         const rrule = rruleProp ? rruleProp.toString() : null;

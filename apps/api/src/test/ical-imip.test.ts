@@ -556,3 +556,261 @@ describe('iMIP RSVP Reply to External Organizer', () => {
         expect(rsvpRes.status).toBe(200);
     });
 });
+
+describe('Calendar timezone validation (audit P1-7b)', () => {
+    test('parseIcs degrades a Windows/non-IANA TZID to null', () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:tz-crash-uid@external.com',
+            'SUMMARY:Outlook Meeting',
+            'DTSTART;TZID=W. Europe Standard Time:20260420T120000',
+            'DTEND;TZID=W. Europe Standard Time:20260420T130000',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        // Stored verbatim, this string later reaches Intl.DateTimeFormat({ timeZone }) → RangeError.
+        expect(parseIcs(ics).events[0].timezone).toBeNull();
+    });
+
+    test('parseIcs preserves a valid IANA TZID', () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:tz-ok-uid@external.com',
+            'SUMMARY:Amsterdam Meeting',
+            'DTSTART;TZID=Europe/Amsterdam:20260420T120000',
+            'DTEND;TZID=Europe/Amsterdam:20260420T130000',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        expect(parseIcs(ics).events[0].timezone).toBe('Europe/Amsterdam');
+    });
+});
+
+describe('Calendar timezone crash (audit P1-7b, integration)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let aliceCalendarId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`);
+        aliceCalendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
+    });
+
+    test('creating a recurring event with an invalid TZID stores null and does not crash range fetch', async () => {
+        const createRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Windows TZID Event',
+                    startTime: new Date('2026-05-01T10:00:00Z'),
+                    endTime: new Date('2026-05-01T11:00:00Z'),
+                    allDay: false,
+                    rrule: 'FREQ=DAILY;COUNT=3',
+                    timezone: 'W. Europe Standard Time',
+                }),
+            },
+        );
+        // Degraded at the create boundary so no stored value can crash a downstream Intl consumer.
+        const created = await assertJson<CalendarEvent>(createRes);
+        expect(created.timezone).toBeNull();
+
+        // Pre-fix, expandRecurrence fed the stored TZID to Intl.DateTimeFormat and this route 500s.
+        const from = Math.floor(new Date('2026-04-30').getTime() / 1000);
+        const to = Math.floor(new Date('2026-05-05').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        expect(events.some((e) => e.title === 'Windows TZID Event')).toBe(true);
+    });
+
+    test('delivering an iMIP invite with an invalid TZID does not crash range fetch', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:tz-imip-crash@external.com',
+            'SUMMARY:Outlook Invite',
+            'DTSTART;TZID=W. Europe Standard Time:20260610T090000',
+            'DTEND;TZID=W. Europe Standard Time:20260610T100000',
+            'RRULE:FREQ=WEEKLY;COUNT=3',
+            'SEQUENCE:0',
+            'STATUS:CONFIRMED',
+            'ORGANIZER;CN="Outlook Org":mailto:outlook-org@external.com',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const email = [
+            'From: outlook-org@external.com',
+            `To: ${ctx.alice.user.email}`,
+            'Subject: Invitation: Outlook Invite',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="tz-boundary"',
+            '',
+            '--tz-boundary',
+            'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+            '',
+            ics,
+            '--tz-boundary--',
+        ].join('\r\n');
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(email).buffer,
+        });
+        expect(res.status).toBe(200);
+
+        const from = Math.floor(new Date('2026-06-09').getTime() / 1000);
+        const to = Math.floor(new Date('2026-06-30').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        expect(findOrFail(events, (e) => e.uid === 'tz-imip-crash@external.com').timezone).toBeNull();
+    });
+});
+
+// Legitimate REQUEST/REPLY flows (envelope From == organizer/attendee) are already covered by the
+// "iMIP Inbound Processing" and "iMIP METHOD:REPLY inbound" suites above — these guard the forged case.
+// Isolated on `bob` so the P1-7b Windows-TZID events created on alice's calendar above can't
+// poison bob's range fetch (a single bad recurring TZID makes every getEventsInRange throw).
+describe('iMIP inbound sender binding (audit P1-7a)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let bobCalendarId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`);
+        bobCalendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
+    });
+
+    test('forged REPLY (envelope From != attendee) does not change the attendee status', async () => {
+        const createRes = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Forged Reply Target',
+                    startTime: new Date(Date.now() + 86400_000 * 10),
+                    endTime: new Date(Date.now() + 86400_000 * 10 + 3600_000),
+                    allDay: false,
+                    data: {
+                        attendees: [
+                            { email: 'victim@external.com', name: 'Victim', status: 'pending', role: 'required' },
+                        ],
+                    },
+                }),
+            },
+        );
+        const event = await assertJson<CalendarEvent>(createRes);
+
+        // Attacker knows the UID (every attendee gets it) and forges a REPLY as the victim.
+        const forgedIcs = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REPLY',
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            'SUMMARY:Forged Reply Target',
+            'DTSTART:20260415T100000Z',
+            'DTEND:20260415T110000Z',
+            'ATTENDEE;PARTSTAT=ACCEPTED;CN="Victim":mailto:victim@external.com',
+            `ORGANIZER;CN="Bob":mailto:${ctx.bob.user.email}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const forgedEmail = [
+            'From: attacker@evil.com',
+            `To: ${ctx.bob.user.email}`,
+            'Subject: RE: Forged Reply Target',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="forge-boundary"',
+            '',
+            '--forge-boundary',
+            'Content-Type: text/calendar; method=REPLY; charset=utf-8',
+            '',
+            forgedIcs,
+            '--forge-boundary--',
+        ].join('\r\n');
+
+        const deliverRes = await authedRequest(ctx.bob.user.sessionToken, `/mail/deliver/${ctx.bob.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(forgedEmail).buffer,
+        });
+        // Delivery still succeeds — we drop the forged action, not the mail.
+        expect(deliverRes.status).toBe(200);
+
+        const from = Math.floor(Date.now() / 1000);
+        const to = Math.floor(Date.now() / 1000) + 86400 * 14;
+        const eventsRes = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        const target = findOrFail(events, (e) => e.title === 'Forged Reply Target');
+        expect(target.data?.attendees?.[0].status).toBe('pending');
+    });
+
+    test('forged REQUEST (envelope From != organizer) is not injected', async () => {
+        const forgedIcs = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:forged-request-uid@external.com',
+            'SUMMARY:Forged Injected Event',
+            'DTSTART:20260701T120000Z',
+            'DTEND:20260701T130000Z',
+            'SEQUENCE:0',
+            'STATUS:CONFIRMED',
+            'ORGANIZER;CN="Real Org":mailto:real-org@external.com',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.bob.user.email}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const forgedEmail = [
+            'From: attacker@evil.com',
+            `To: ${ctx.bob.user.email}`,
+            'Subject: Invitation: Forged Injected Event',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="forge-req-boundary"',
+            '',
+            '--forge-req-boundary',
+            'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+            '',
+            forgedIcs,
+            '--forge-req-boundary--',
+        ].join('\r\n');
+
+        const deliverRes = await authedRequest(ctx.bob.user.sessionToken, `/mail/deliver/${ctx.bob.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(forgedEmail).buffer,
+        });
+        expect(deliverRes.status).toBe(200);
+
+        const from = Math.floor(new Date('2026-06-30').getTime() / 1000);
+        const to = Math.floor(new Date('2026-07-03').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        expect(events.find((e) => e.uid === 'forged-request-uid@external.com')).toBeUndefined();
+    });
+});

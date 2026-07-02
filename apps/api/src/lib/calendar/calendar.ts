@@ -29,6 +29,7 @@ import { propagateCancellation, propagateDecline, propagateInvitation, propagate
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import { buildCalendarEvent } from './sse-events';
+import { normalizeTimezone } from './timezone';
 
 // Internal type extending the shared CalendarEvent with CalDAV-only storage fields
 export type CalendarEventRow = CalendarEvent & { eventCtag: number | null };
@@ -389,7 +390,7 @@ export class Calendar {
                 throw new ApiError(400, 'Invalid RRULE');
             }
         }
-        const timezone = input.timezone ?? null;
+        const timezone = normalizeTimezone(input.timezone);
         const status = input.status ?? 'confirmed';
         const etag = computeEtag({
             title: input.title,
@@ -636,7 +637,7 @@ export class Calendar {
                 throw new ApiError(400, 'Invalid RRULE');
             }
         }
-        const timezone = input.timezone !== undefined ? (input.timezone ?? null) : (existing.timezone ?? null);
+        const timezone = input.timezone !== undefined ? normalizeTimezone(input.timezone) : (existing.timezone ?? null);
 
         const etag = computeEtag({
             title,
