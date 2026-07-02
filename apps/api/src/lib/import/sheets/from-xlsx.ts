@@ -26,6 +26,7 @@ import type {
 } from 'exceljs';
 import he from 'he';
 import JSZip from 'jszip';
+import { ApiError } from '../../core';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -113,19 +114,59 @@ const BORDER_STYLE_MAP: Record<string, number> = {
 
 type ThemePalette = string[];
 
+// The upload route only bounds the COMPRESSED xlsx (getUploadMaxSize, default 35 MB /
+// mount quota), so a decompression bomb — a few KB of highly compressible bytes — expands
+// to many GB in memory and OOM-kills the process, dropping every Home on the box. 200 MB
+// clears any realistic spreadsheet at the compressed ceiling (XML compresses ~10:1, so a
+// maxed-out upload decompresses well under this) while rejecting the honest KB→GB bomb.
+const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;
+// Belt against a tiny file DECLARING an enormous grid (far-apart cells span the full
+// Excel bounding box): even under the byte cap, walking rowCount×columnCount to build the
+// Sheet output would blow up. 10 M matches the largest sane import (Google Sheets' ceiling).
+const MAX_CELLS = 10_000_000;
+
+// JSZip records each entry's declared uncompressed size (from the zip central directory)
+// on a private `_data`; reading it does NOT decompress. Public typings omit it.
+type JSZipEntryInternals = { _data?: { uncompressedSize?: number } };
+
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
+    // One JSZip pass, reused for the size guard AND the hyperlink read below. loadAsync
+    // reads the central directory without decompressing, so the guard can run BEFORE
+    // exceljs's xlsx.load — the OOM a bomb triggers happens inside load() and is not
+    // catchable, so a post-load check would never fire.
+    const zip = await JSZip.loadAsync(buffer);
+    assertDecompressedSizeWithinBounds(zip);
+
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
+    assertCellCountWithinBounds(workbook);
 
     const theme = extractThemePalette(workbook);
-    const locationLinks = await readLocationHyperlinks(buffer);
+    const locationLinks = await readLocationHyperlinks(zip);
 
     const sheets: Sheet[] = [];
     for (const [index, worksheet] of workbook.worksheets.entries()) {
         sheets.push(worksheetToSheet(worksheet, index, theme, locationLinks.get(worksheet.name)));
     }
     return sheets;
+}
+
+function assertDecompressedSizeWithinBounds(zip: JSZip): void {
+    let total = 0;
+    for (const entry of Object.values(zip.files)) {
+        if (entry.dir) continue;
+        total += (entry as unknown as JSZipEntryInternals)._data?.uncompressedSize ?? 0;
+        if (total > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, 'Spreadsheet too large');
+    }
+}
+
+function assertCellCountWithinBounds(workbook: Workbook): void {
+    let cells = 0;
+    for (const worksheet of workbook.worksheets) {
+        cells += worksheet.rowCount * worksheet.columnCount;
+        if (cells > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
+    }
 }
 
 function worksheetToSheet(
@@ -852,9 +893,9 @@ function mapHyperlink(target: string | undefined): { linkType: string; linkAddre
 // attribute at all. Excel itself authors internal links in exactly this form
 // (<hyperlink ref location=…> without a rel), so recover them straight from the
 // worksheet XML. Returns sheet name → (anchor cell ref → location target).
-async function readLocationHyperlinks(buffer: Buffer): Promise<Map<string, Map<string, string>>> {
+// Reuses the zip loaded by xlsxToSheets — no second decompression pass.
+async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Map<string, string>>> {
     const bySheet = new Map<string, Map<string, string>>();
-    const zip = await JSZip.loadAsync(buffer);
     const workbookXml = await zip.file('xl/workbook.xml')?.async('string');
     const relsXml = await zip.file('xl/_rels/workbook.xml.rels')?.async('string');
     if (workbookXml == null || relsXml == null) return bySheet;

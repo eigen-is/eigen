@@ -7,6 +7,7 @@ import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import * as collabSchema from '../lib/collab/schema';
 import { loadYjsState } from '../lib/collab/yjs-loader';
+import { ApiError } from '../lib/core';
 import { getHome } from '../lib/home/get-home';
 import { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { assertJson, authedRequest, driveGet, driveUpload, getTestContext } from './setup';
@@ -1233,5 +1234,45 @@ describe('Sheets xlsx import/convert', () => {
             { method: 'POST', body: replacement },
         );
         expect(res.status).toBe(403);
+    });
+});
+
+describe('xlsxToSheets resource guards', () => {
+    test('rejects an xlsx whose declared decompressed size exceeds the cap', async () => {
+        // Decompression bomb: a few KB of one repeated byte declares 210 MB uncompressed.
+        // The guard must reject it from the zip central directory BEFORE exceljs inflates
+        // every entry into memory (that OOM is not catchable, so a post-load check is useless).
+        const zip = new JSZip();
+        zip.file('xl/worksheets/sheet1.xml', Buffer.alloc(210 * 1024 * 1024, 0x41));
+        const bomb = Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+
+        let error: unknown;
+        try {
+            await xlsxToSheets(bomb);
+        } catch (e) {
+            error = e;
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(413);
+    });
+
+    test('rejects an xlsx declaring an absurd cell count', async () => {
+        // Two far-apart cells span the full Excel grid (1,048,576 × 16,384 ≈ 1.7e10 cells)
+        // from a ~6 KB file. exceljs materializes rows sparsely, but building our Sheet
+        // output would walk the declared bounding box, so reject on cell count.
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Huge');
+        ws.getCell('A1048576').value = 'x';
+        ws.getCell('XFD1').value = 'y';
+        const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+        let error: unknown;
+        try {
+            await xlsxToSheets(buffer);
+        } catch (e) {
+            error = e;
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(413);
     });
 });
