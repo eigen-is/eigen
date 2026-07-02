@@ -33,6 +33,12 @@ verification too.
   --port 3999`). Caveat: the API's CORS allow-list doesn't include extra ports — shim
   `Access-Control-Allow-Origin` onto `localhost:8000` responses via Playwright route
   interception, and stub the streaming `/sse/` endpoint (it hangs `route.fetch`).
+- **The API must run unsandboxed.** An agent-launched server under the macOS command sandbox
+  fails SQLite WAL locking with `SQLITE_IOERR_VNODE` ("disk I/O error") — sometimes only on
+  cold reopens minutes later, after files got stamped with `com.apple.provenance`. Symptoms:
+  boards/docs stuck on the loading spinner, `Failed to init mount` in the API log. Launch the
+  server from an unsandboxed shell, detached (`nohup … & disown`); background-task runners may
+  silently re-apply the sandbox even when asked not to.
 - **Stale-HMR crash** (long-running dev servers): the vite client may re-import
   `main.tsx?t=<ts>`, double-evaluating the entry → double `createRoot` → fatal `removeChild`
   NotFoundError that blanks the app. Workaround:
