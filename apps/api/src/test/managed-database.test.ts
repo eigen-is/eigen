@@ -143,4 +143,32 @@ describe('ManagedDatabase dirty tracking', () => {
 
         await db.close({ skipFinalSnapshot: true });
     });
+
+    test('a write landing DURING the sync callback stays dirty and re-syncs (AUDIT 2b)', async () => {
+        // onSync freezes the bytes it stages up front (Mount's VACUUM INTO); a write that lands
+        // during the callback's later awaits is NOT in that copy. sync() used to set the watermark
+        // to total_changes() AFTER the await, so that racing write was counted as synced but never
+        // staged — silent tail-loss. It must remain dirty and re-sync on the next tick.
+        let syncs = 0;
+        const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {
+            onSync: async () => {
+                syncs++;
+                // Model the concurrent write: it lands after the (notional) staged copy is frozen,
+                // so its bytes never reach storage in THIS sync.
+                if (syncs === 1) db.db.insert(items).values({ v: 'concurrent' }).run();
+            },
+        });
+        await db.open(0);
+        db.db.insert(items).values({ v: 'first' }).run();
+
+        await db.flush();
+        expect(syncs).toBe(1);
+
+        // The concurrent write was never staged, so the db is still dirty and this flush re-syncs
+        // it. Under the pre-fix watermark (captured after the await) this was a silent no-op.
+        await db.flush();
+        expect(syncs).toBe(2);
+
+        await db.close({ skipFinalSnapshot: true });
+    });
 });

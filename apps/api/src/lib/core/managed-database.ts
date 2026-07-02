@@ -167,8 +167,13 @@ export class ManagedDatabase<S extends SchemaType> {
     private async sync(): Promise<void> {
         if (this.isDirty && this.callbacks.onSync) {
             this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
+            // Snapshot the watermark BEFORE the await: onSync stages the current bytes up front, so a
+            // write landing during its later awaits isn't in that copy. Reading total_changes() after
+            // would count that racing write as synced and drop it (silent tail-loss); capturing before
+            // keeps it dirty to re-sync next tick — at worst a redundant re-stage, never a loss.
+            const syncedChanges = this.getTotalChanges();
             await this.callbacks.onSync();
-            this.lastSyncedChanges = this.getTotalChanges();
+            this.lastSyncedChanges = syncedChanges;
             this.forceDirty = false;
             console.log(`[${this.config.name}] Synced`);
         }
