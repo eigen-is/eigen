@@ -34,7 +34,7 @@ export function useFileHistory(ownerId: string, mountId: string, pathId: string)
                 .path({ pathId })
                 .history.get({ query: { limit: 5 } });
             if (response.error) throw new AppError(response);
-            return response.data || [];
+            return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId,
         staleTime: 30_000,

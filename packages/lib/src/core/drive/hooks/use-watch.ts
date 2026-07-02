@@ -62,7 +62,7 @@ export function useUserWatches(ownerIds: string[]) {
             queryFn: async (): Promise<DrivePath[]> => {
                 const response = await driveApi({ ownerId }).watches.get();
                 if (response.error) throw new AppError(response);
-                return response.data || [];
+                return response.data;
             },
             enabled: !!ownerId,
             staleTime: 60_000,

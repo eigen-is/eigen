@@ -40,7 +40,8 @@ export function useCalendars(ownerId: string) {
         queryKey: calendarKeys.calendarList(ownerId),
         queryFn: async () => {
             const response = await calendarApi({ ownerId }).calendars.get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!ownerId,
@@ -98,7 +99,8 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
             const response = await calendarApi({ ownerId })
                 ['event-range']({ from: String(from) })({ to: String(to) })
                 .get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 2 * 60 * 1000,
         enabled: !!ownerId && enabled && from > 0 && to > 0,
@@ -113,7 +115,8 @@ export function useCalendarEvents(ownerId: string, calendarId: string, from: num
                 .calendars({ calId: calendarId })
                 ['event-range']({ from: String(from) })({ to: String(to) })
                 .get();
-            return (response.data || []) as CalendarEventOccurrence[];
+            if (response.error) throw new AppError(response);
+            return response.data as CalendarEventOccurrence[];
         },
         staleTime: 2 * 60 * 1000,
         enabled: !!ownerId && enabled && !!calendarId && from > 0 && to > 0,
@@ -186,7 +189,8 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
                     .calendars({ calId: sc.calendarId })
                     ['event-range']({ from: String(from) })({ to: String(to) })
                     .get();
-                const data = response.data || [];
+                if (response.error) throw new AppError(response);
+                const data = response.data;
                 if (sc.permission === 'free-busy') {
                     return (data as FreeBusyBlock[]).map(
                         (block): CalendarEventOccurrence => ({
@@ -235,7 +239,8 @@ export function useSharedCalendars(ownerId: string) {
         queryKey: calendarKeys.sharedCalendars(ownerId),
         queryFn: async () => {
             const response = await calendarApi({ ownerId }).shared.get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!ownerId,

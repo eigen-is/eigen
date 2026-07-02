@@ -61,9 +61,10 @@ export function useMounts(ownerId: string) {
         queryKey: driveKeys.mounts(ownerId),
         queryFn: async () => {
             const response = await driveApi({ ownerId }).mounts.get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
-        staleTime: Infinity,
+        staleTime: 60_000,
         enabled: !!ownerId,
     });
 }
@@ -74,9 +75,10 @@ export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_I
         queryKey: driveKeys.root(ownerId, mountId),
         queryFn: async () => {
             const response = await driveApi({ ownerId })({ mountId }).root.get();
-            return response.data || null;
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
-        staleTime: Infinity,
+        staleTime: 60_000,
         enabled: !!ownerId && !!mountId,
     });
 }
@@ -91,7 +93,7 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
             if (response.error) {
                 throw new AppError(response);
             }
-            return response.data || [];
+            return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         retry: 1,
@@ -145,7 +147,7 @@ export function mimeContentQueryConfig(ownerId: string, mimeType: string, staleT
             if (!mimeType) return [];
             const response = await driveApi({ ownerId }).mime({ mimeType }).get();
             if (response.error) throw new AppError(response);
-            return response.data || [];
+            return response.data;
         },
         enabled: !!mimeType && !!ownerId,
         retry: 1,
@@ -167,7 +169,7 @@ export function useMountMimeContent(ownerId: string, mountId: string, mimeType: 
             if (response.error) {
                 throw new AppError(response);
             }
-            return response.data || [];
+            return response.data;
         },
         enabled: !!mimeType && !!ownerId && !!mountId,
         retry: 1,
@@ -182,7 +184,8 @@ export function usePathInfo(ownerId: string, mountId: string, pathId: string | u
         queryFn: async () => {
             if (!pathId) return null;
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).get();
-            return response.data || null;
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         staleTime: 1000 * 60 * 5, // 5 minutes
@@ -199,7 +202,8 @@ export function usePathInfos(refs: { ownerId: string; mountId: string; pathId: s
                 const response = await driveApi({ ownerId: r.ownerId })({ mountId: r.mountId })
                     .path({ pathId: r.pathId })
                     .get();
-                return response.data || null;
+                if (response.error) throw new AppError(response);
+                return response.data;
             },
             enabled: !!r.pathId && !!r.ownerId && !!r.mountId,
             staleTime: 1000 * 60 * 5,
@@ -579,7 +583,8 @@ export function useCheckPermissions(ownerId: string, mountId: string, pathId: st
         queryFn: async () => {
             if (!pathId) return { canRead: false, canWrite: false };
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.get();
-            return response.data || { canRead: false, canWrite: false };
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         staleTime: 1000 * 60 * 5, // 5 minutes
@@ -593,7 +598,8 @@ export function useEffectiveMembers(ownerId: string, mountId: string, pathId: st
         queryFn: async () => {
             if (!pathId) return [];
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId })['effective-members'].get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         staleTime: 1000 * 60 * 5, // 5 minutes
@@ -607,7 +613,8 @@ export function useBreadcrumb(ownerId: string, mountId: string, pathId: string |
         queryFn: async () => {
             if (!pathId) return [];
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).breadcrumb.get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         staleTime: 1000 * 60 * 5, // 5 minutes
@@ -661,10 +668,12 @@ export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
         queryFn: async () => {
             if (to === 'by-me') {
                 const response = await driveApi({ ownerId }).shared['by-me'].get();
-                return response.data || [];
+                if (response.error) throw new AppError(response);
+                return response.data;
             } else {
                 const response = await driveApi({ ownerId }).shared['with-me'].get();
-                return response.data || [];
+                if (response.error) throw new AppError(response);
+                return response.data;
             }
         },
         enabled: !!ownerId,

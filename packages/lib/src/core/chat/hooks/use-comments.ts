@@ -16,7 +16,8 @@ export function useComments(ownerId: string, mountId: string, containerId: strin
         queryKey: commentKeys.list(ownerId, mountId, containerId),
         queryFn: async () => {
             const response = await collabApi({ ownerId })({ mountId })({ pathId: containerId }).comments.get();
-            return response.data ?? [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!ownerId && !!mountId && !!containerId,
         staleTime: 120_000,

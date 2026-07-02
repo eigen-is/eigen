@@ -9,7 +9,8 @@ export function useTeamMounts(teamId: string) {
         queryKey: teamKeys.mounts(teamId),
         queryFn: async () => {
             const res = await teamApi({ ownerId: teamOwnerId(teamId) }).mounts.get();
-            return res.data || {};
+            if (res.error) throw new AppError(res);
+            return res.data;
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!teamId,
