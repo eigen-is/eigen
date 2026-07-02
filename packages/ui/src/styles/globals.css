@@ -377,6 +377,19 @@
         @apply border-l-red-600 border-l-2 bg-red-600/5 text-primary;
     }
 
+    /* Grid tiles use a full app-color border on hover/active/selected — the row
+       stripe+wash above only covers a tile's label strip and reads as stray chrome. */
+    .eigen-tile {
+        @apply bg-background;
+        border-color: var(--border);
+    }
+
+    .eigen-tile:hover,
+    .eigen-tile-active,
+    .eigen-tile-selected {
+        border-color: var(--app-current-color);
+    }
+
     .drag-badge {
         position: absolute;
         top: -9999px;
