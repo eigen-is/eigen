@@ -156,41 +156,39 @@ export default class Maildir {
     // -- Message operations --
 
     async messageGet(messageId: string): Promise<Email | null> {
-        try {
-            const cached = this.db.getEmail(messageId);
-            if (!cached) return null;
+        // null means "not found" ONLY: no summary row (real cache-miss) or the .eml isn't
+        // locatable. A parse/read/DB fault propagates → Elysia 500 + log, never a silent 404.
+        const cached = this.db.getEmail(messageId);
+        if (!cached) return null;
 
-            const parsed = await this.readAndParse(messageId, cached.mailbox, cached.filename);
-            if (!parsed) return null;
+        const parsed = await this.readAndParse(messageId, cached.mailbox, cached.filename);
+        if (!parsed) return null;
 
-            for (const a of parsed.attachments) {
-                a.content = Buffer.alloc(0);
-            }
-
-            applyFlagsFromFilename(parsed, cached.filename);
-
-            const result = { ...parsed, ...cached } as Email;
-
-            // Overlay latest values from draft-meta sidecar (written by fast-path saves).
-            // Applied after the spread so sidecar values win over both the stale EML
-            // (parsed) and the DB summary row (cached).
-            if (cached.isDraft) {
-                const meta = await this.store.readDraftMeta<DraftMeta>(messageId);
-                if (meta) {
-                    result.subject = meta.subject;
-                    result.html = meta.html;
-                    result.text = meta.text;
-                    if (meta.to) result.to = meta.to;
-                    if (meta.cc) result.cc = meta.cc;
-                    if (meta.bcc) result.bcc = meta.bcc;
-                    result.driveReferences = meta.driveReferences ?? [];
-                }
-            }
-
-            return result;
-        } catch {
-            return null;
+        for (const a of parsed.attachments) {
+            a.content = Buffer.alloc(0);
         }
+
+        applyFlagsFromFilename(parsed, cached.filename);
+
+        const result = { ...parsed, ...cached } as Email;
+
+        // Overlay latest values from draft-meta sidecar (written by fast-path saves).
+        // Applied after the spread so sidecar values win over both the stale EML
+        // (parsed) and the DB summary row (cached).
+        if (cached.isDraft) {
+            const meta = await this.store.readDraftMeta<DraftMeta>(messageId);
+            if (meta) {
+                result.subject = meta.subject;
+                result.html = meta.html;
+                result.text = meta.text;
+                if (meta.to) result.to = meta.to;
+                if (meta.cc) result.cc = meta.cc;
+                if (meta.bcc) result.bcc = meta.bcc;
+                result.driveReferences = meta.driveReferences ?? [];
+            }
+        }
+
+        return result;
     }
 
     async messageGetFile(messageId: string): Promise<ArrayBuffer> {
@@ -702,26 +700,26 @@ export default class Maildir {
         // New messages (on disk but not in DB)
         for (const [id, fileName] of diskFiles) {
             if (!dbById.has(id)) {
+                // Bulk sweep: parseEml throws on a bad message; log + skip so one unreadable
+                // .eml can't abort the whole mailbox sync. ENOENT is a benign mid-sync race.
                 try {
                     const file = this.store.getMessageFile(mailbox, fileName);
                     const parsed = await parseEml(id, mailbox, file);
-                    if (parsed) {
-                        applyFlagsFromFilename(parsed, fileName);
-                        parsed.filename = fileName;
-                        const isNew = this.db.addEmail(parsed as EmailSummary);
-                        this.emit(SSEventType.MAIL_RECEIVED, { messageId: id, mailbox });
-                        if (isNew && parsed.fromShort) {
-                            const fromEmail = parsed.from?.value?.[0]?.address ?? null;
-                            this.home.notifications?.persist({
-                                type: 'mail',
-                                actorEmail: fromEmail,
-                                title: 'New email',
-                                body: parsed.subject
-                                    ? `From ${parsed.fromShort}: ${parsed.subject}`
-                                    : `New email from ${parsed.fromShort}`,
-                                tag: 'mail:new',
-                            });
-                        }
+                    applyFlagsFromFilename(parsed, fileName);
+                    parsed.filename = fileName;
+                    const isNew = this.db.addEmail(parsed as EmailSummary);
+                    this.emit(SSEventType.MAIL_RECEIVED, { messageId: id, mailbox });
+                    if (isNew && parsed.fromShort) {
+                        const fromEmail = parsed.from?.value?.[0]?.address ?? null;
+                        this.home.notifications?.persist({
+                            type: 'mail',
+                            actorEmail: fromEmail,
+                            title: 'New email',
+                            body: parsed.subject
+                                ? `From ${parsed.fromShort}: ${parsed.subject}`
+                                : `New email from ${parsed.fromShort}`,
+                            tag: 'mail:new',
+                        });
                     }
                 } catch (e: unknown) {
                     if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT'))
@@ -760,22 +758,20 @@ export default class Maildir {
 
     // -- Private helpers --
 
+    // Returns null ONLY when the .eml is genuinely not locatable (no filename, not on disk).
+    // A parse/read fault propagates from parseEml — callers must not treat it as "not found".
     private async readAndParse(messageId: string, mailbox: string, filename?: string): Promise<Email | null> {
-        try {
-            if (!filename) {
-                const record = this.db.getEmail(messageId);
-                filename = record?.filename;
-            }
-            if (!filename) {
-                console.warn(`readAndParse: filename not in DB for ${messageId}, scanning disk`);
-                filename = await this.store.findFileByUniqueId(messageId, mailbox);
-            }
-            if (!filename) return null;
-
-            return parseEml(messageId, mailbox, this.store.getMessageFile(mailbox, filename));
-        } catch {
-            return null;
+        if (!filename) {
+            const record = this.db.getEmail(messageId);
+            filename = record?.filename;
         }
+        if (!filename) {
+            console.warn(`readAndParse: filename not in DB for ${messageId}, scanning disk`);
+            filename = await this.store.findFileByUniqueId(messageId, mailbox);
+        }
+        if (!filename) return null;
+
+        return parseEml(messageId, mailbox, this.store.getMessageFile(mailbox, filename));
     }
 
     private getMailboxInfo(mailboxName: string): MaildirMailbox {
