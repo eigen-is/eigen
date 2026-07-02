@@ -2,6 +2,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import slideTextCSSRaw from '@workspace/ui/styles/slide-text.css' with { type: 'text' };
+import DOMPurify from 'isomorphic-dompurify';
 import { readSlidesContent } from '../../document/slides';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
@@ -39,8 +40,12 @@ export async function generateSlidesExportHtml(
         ? { fillPage: true, pageWidthPx: PAGE_WIDTH_PX, pageHeightPx: PAGE_HEIGHT_PX }
         : undefined;
     const slidesHtml = renderDeckHtml(deck, sizeUnit, resolveImgSrc, slideOptions);
+    // Sanitize the assembled body exactly like the preview surface (eigenslides-preview.ts) —
+    // defence in depth over render.ts's per-value escaping, so the download/print surface is
+    // as guarded as the preview.
+    const sanitized = DOMPurify.sanitize(slidesHtml, { FORCE_BODY: true });
 
-    return wrapInDocument(title, slidesHtml, mode);
+    return wrapInDocument(title, sanitized, mode);
 }
 
 function wrapInDocument(title: string, slidesHtml: string, mode: 'html' | 'pdf'): string {

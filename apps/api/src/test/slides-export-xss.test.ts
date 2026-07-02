@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { TextObject } from '@workspace/lib/slides';
-import { renderSlideObjectHtml, responsiveSizeUnit } from '../lib/export/slides/render';
+import type { SlideItem, TextObject } from '@workspace/lib/slides';
+import { renderSlideHtml, renderSlideObjectHtml, responsiveSizeUnit } from '../lib/export/slides/render';
 
 function makeText(overrides: Partial<TextObject>): TextObject {
     return {
@@ -86,5 +86,93 @@ describe('slides export XSS', () => {
         expect(html).toContain('<ul>');
         expect(html).toContain('<li>item</li>');
         expect(html).toContain('<blockquote>quote</blockquote>');
+    });
+});
+
+// Colors/fonts are schemaless Yjs strings a collaborator can set to anything — they must
+// not be able to break out of style="…" (attribute-breakout XSS) once embedded in the export.
+describe('slides export — style-value escaping', () => {
+    test('escapes text color', () => {
+        const html = renderSlideObjectHtml(
+            makeText({ text: '<p>hi</p>', color: 'red;" onload="alert(1)' }),
+            responsiveSizeUnit,
+            () => null,
+        );
+        expect(html).not.toMatch(/"\s*onload/i);
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes borderColor', () => {
+        const html = renderSlideObjectHtml(
+            makeText({ text: '<p>hi</p>', borderWidth: 2, borderColor: 'red;"><script>alert(1)</script>' }),
+            responsiveSizeUnit,
+            () => null,
+        );
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&lt;script');
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes solid text-background color', () => {
+        const html = renderSlideObjectHtml(
+            makeText({
+                text: '<p>hi</p>',
+                background: { type: 'solid', color: 'red;"><img src=x onerror=alert(1)>' },
+            }),
+            responsiveSizeUnit,
+            () => null,
+        );
+        expect(html).not.toMatch(/<img\s/i);
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes gradient stops', () => {
+        const html = renderSlideObjectHtml(
+            makeText({
+                text: '<p>hi</p>',
+                background: { type: 'gradient', from: 'red;"><script>alert(1)</script>', to: 'blue', angle: 45 },
+            }),
+            responsiveSizeUnit,
+            () => null,
+        );
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes fontFamily', () => {
+        const html = renderSlideObjectHtml(
+            makeText({ text: '<p>hi</p>', fontFamily: 'x"><script>alert(1)</script>' }),
+            responsiveSizeUnit,
+            () => null,
+        );
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes the slide background color', () => {
+        const slide: SlideItem = {
+            id: 's1',
+            objectIds: [],
+            background: { type: 'solid', color: 'red;"><script>alert(1)</script>' },
+        };
+        const html = renderSlideHtml(slide, [], responsiveSizeUnit, () => null);
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&quot;');
+    });
+
+    test('preserves legitimate colors, fonts and gradients', () => {
+        const html = renderSlideObjectHtml(
+            makeText({
+                text: '<p>hi</p>',
+                color: '#ff0000',
+                fontFamily: 'Inter',
+                background: { type: 'gradient', from: '#000000', to: '#ffffff', angle: 90 },
+            }),
+            responsiveSizeUnit,
+            () => null,
+        );
+        expect(html).toContain('color:#ff0000');
+        expect(html).toContain('background-image:linear-gradient(90deg, #000000, #ffffff)');
+        expect(html).toContain('font-family:&#39;Inter&#39;, sans-serif');
     });
 });

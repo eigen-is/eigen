@@ -24,7 +24,10 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
         throw new ApiError(501, 'PDF export requires WeasyPrint. Install with: pip install weasyprint');
     }
 
-    const proc = Bun.spawn(['weasyprint', '-', '-', '--encoding', 'utf-8'], {
+    // SSRF guard: every export resource is embedded as a data: URI (fonts, images), so restrict
+    // WeasyPrint's URL fetcher to the data: scheme. This stops it fetching any http(s)/file url()
+    // an attacker injects into schemaless slide/sheet CSS — server-side SSRF from the API host.
+    const proc = Bun.spawn(['weasyprint', '-', '-', '--encoding', 'utf-8', '--allowed-protocols', 'data'], {
         stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'pipe',

@@ -348,3 +348,64 @@ describe('Sheets HTML export — hyperlinks', () => {
         expect(html).toContain('go to sheet');
     });
 });
+
+// Cell colors come from the sheet snapshot (schemaless — a collaborator can set any string).
+// Like the font-family case above, they must not break out of the style="…" attribute.
+describe('Sheets HTML export — color escaping', () => {
+    test('escapes fc and bg so they cannot break out of the style attribute', () => {
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: 'red;"><script>alert(1)</script>', bg: 'blue">' } }]);
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&lt;script');
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes conditional-format colors', () => {
+        const sheet = makeSheet(
+            [{ r: 0, c: 0, v: { v: 50, ct: { t: 'n', fa: 'General' } } }],
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { textColor: '#ffffff', cellColor: 'red;"><script>alert(1)</script>' },
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: [10],
+                },
+            ],
+        );
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes border colors', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: { v: 'x' } }]),
+            config: {
+                borderInfo: [
+                    {
+                        rangeType: 'cell',
+                        value: { row_index: 0, col_index: 0, b: { style: 1, color: 'red;"><script>x</script>' } },
+                    },
+                ],
+            },
+        };
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes dataBar colors', () => {
+        const sheet = makeSheet(
+            [
+                { r: 0, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
+                { r: 1, c: 0, v: { v: 20, ct: { t: 'n', fa: 'General' } } },
+            ],
+            [{ type: 'dataBar', cellrange: [{ row: [0, 1], column: [0, 0] }], format: ['red;"><script>x</script>'] }],
+        );
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&quot;');
+    });
+});

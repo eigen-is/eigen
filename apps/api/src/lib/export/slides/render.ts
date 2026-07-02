@@ -41,7 +41,9 @@ export function renderSlideObjectHtml(
 
     if (obj.rotation) styles.push(`transform:rotate(${obj.rotation}deg)`, 'transform-origin:center center');
     if (obj.borderWidth && obj.borderColor) {
-        styles.push(`border:${sizeUnit(obj.borderWidth, 'y')} solid ${obj.borderColor}`);
+        // Colors/fonts are schemaless Yjs strings a collaborator can set to anything, so every
+        // one is escapeHtml'd (as highlightColor already is) — a value must not break out of style="…".
+        styles.push(`border:${sizeUnit(obj.borderWidth, 'y')} solid ${escapeHtml(obj.borderColor)}`);
     }
     if (obj.borderRadius) {
         styles.push(
@@ -54,13 +56,13 @@ export function renderSlideObjectHtml(
 
     if (obj.type === 'text') {
         if (obj.background?.type === 'solid') {
-            styles.push(`background-color:${obj.background.color}`);
+            styles.push(`background-color:${escapeHtml(obj.background.color)}`);
         } else if (obj.background?.type === 'gradient') {
             // Why: no `in oklab` — WeasyPrint (PDF export) drops gradients with
             // color-interpolation-method as invalid. Live editor uses
             // getBackgroundStyle in real browsers and emits oklab there.
             const { from, to, angle } = obj.background;
-            styles.push(`background-image:linear-gradient(${angle}deg, ${from}, ${to})`);
+            styles.push(`background-image:linear-gradient(${angle}deg, ${escapeHtml(from)}, ${escapeHtml(to)})`);
         }
         const vAlign = obj.verticalAlign || 'top';
         const alignItems = vAlign === 'center' ? 'center' : vAlign === 'bottom' ? 'flex-end' : 'flex-start';
@@ -68,14 +70,14 @@ export function renderSlideObjectHtml(
         const textStyles: string[] = [
             `font-size:${sizeUnit(obj.fontSize, 'y')}`,
             `line-height:${obj.lineHeight || 1.2}`,
-            `color:${obj.color || '#000000'}`,
+            `color:${escapeHtml(obj.color || '#000000')}`,
         ];
-        if (obj.fontFamily) textStyles.push(`font-family:${getFontFamily(obj.fontFamily)}`);
-        if (obj.fontWeight && obj.fontWeight !== 'normal') textStyles.push(`font-weight:${obj.fontWeight}`);
-        if (obj.fontStyle && obj.fontStyle !== 'normal') textStyles.push(`font-style:${obj.fontStyle}`);
+        if (obj.fontFamily) textStyles.push(`font-family:${escapeHtml(getFontFamily(obj.fontFamily))}`);
+        if (obj.fontWeight && obj.fontWeight !== 'normal') textStyles.push(`font-weight:${escapeHtml(obj.fontWeight)}`);
+        if (obj.fontStyle && obj.fontStyle !== 'normal') textStyles.push(`font-style:${escapeHtml(obj.fontStyle)}`);
         if (obj.textDecoration && obj.textDecoration !== 'none')
-            textStyles.push(`text-decoration:${obj.textDecoration}`);
-        if (obj.textAlign) textStyles.push(`text-align:${obj.textAlign}`);
+            textStyles.push(`text-decoration:${escapeHtml(obj.textDecoration)}`);
+        if (obj.textAlign) textStyles.push(`text-align:${escapeHtml(obj.textAlign)}`);
         if (obj.letterSpacing) textStyles.push(`letter-spacing:${sizeUnit(obj.letterSpacing, 'x')}`);
 
         const safeText = DOMPurify.sanitize(obj.text);
@@ -89,7 +91,7 @@ export function renderSlideObjectHtml(
     if (obj.type === 'image') {
         const src = resolveImgSrc(obj.mediaName);
         if (!src) return `<div style="${styles.join(';')}"></div>`;
-        return `<div style="${styles.join(';')}"><img src="${escapeHtml(src)}" alt="" style="width:100%;height:100%;object-fit:${obj.objectFit || 'contain'}" /></div>`;
+        return `<div style="${styles.join(';')}"><img src="${escapeHtml(src)}" alt="" style="width:100%;height:100%;object-fit:${escapeHtml(obj.objectFit || 'contain')}" /></div>`;
     }
 
     return '';
@@ -116,15 +118,17 @@ export function renderSlideHtml(
 
     const bg = slide.background;
     if (bg?.type === 'solid') {
-        containerStyles.push(`background-color:${bg.color}`);
+        containerStyles.push(`background-color:${escapeHtml(bg.color)}`);
     } else if (bg?.type === 'gradient') {
-        containerStyles.push(`background-image:linear-gradient(${bg.angle}deg, ${bg.from}, ${bg.to})`);
+        containerStyles.push(
+            `background-image:linear-gradient(${bg.angle}deg, ${escapeHtml(bg.from)}, ${escapeHtml(bg.to)})`,
+        );
     } else if (bg?.type === 'image' && bg.mediaName) {
         const bgSrc = resolveImgSrc(bg.mediaName);
         if (bgSrc) {
             containerStyles.push(
                 `background-image:url('${escapeHtml(bgSrc)}')`,
-                `background-size:${bg.fit}`,
+                `background-size:${escapeHtml(bg.fit)}`,
                 'background-position:center',
                 'background-repeat:no-repeat',
             );
