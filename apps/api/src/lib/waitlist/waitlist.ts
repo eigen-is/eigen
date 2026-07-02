@@ -3,6 +3,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { and, desc, eq } from 'drizzle-orm';
+import { createAsyncSingleton } from '../../utils/singleton';
 import { getServerDataPath } from '../config/paths';
 import { getDomain, getOrgName, getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
@@ -15,14 +16,16 @@ import * as schema from './schema';
 
 const INVITE_EXPIRY_DAYS = 7;
 
-let managedDb: ManagedDatabase<typeof schema> | null = null;
+// Memoize the init PROMISE (not the resolved db) so concurrent first-callers await the same
+// open() instead of one reading `.db` before open() resolves ("Database not open").
+const getManagedDb = createAsyncSingleton(async () => {
+    const managed = new ManagedDatabase(WAITLIST_DB_CONFIG, getServerDataPath('waitlist.db'));
+    await managed.open();
+    return managed;
+});
 
 async function db() {
-    if (!managedDb) {
-        managedDb = new ManagedDatabase(WAITLIST_DB_CONFIG, getServerDataPath('waitlist.db'));
-        await managedDb.open();
-    }
-    return managedDb.db;
+    return (await getManagedDb()).db;
 }
 
 export async function submitWaitlist(email: string, notes: string): Promise<boolean> {

@@ -22,6 +22,22 @@ describe('Waitlist', () => {
         });
     });
 
+    // -- DB singleton cold-start race --
+
+    // Runs FIRST, before anything else touches the waitlist DB, so its lazy singleton is still
+    // cold. Two concurrent first-callers used to race: the initializer assigned the
+    // ManagedDatabase synchronously, then awaited open(); a second caller saw the non-null
+    // instance and read `.db` before open() resolved → "Database not open". createAsyncSingleton
+    // memoizes the init PROMISE so both callers await the same open().
+    test('concurrent first waitlist calls do not race the DB singleton (cold start)', async () => {
+        const { submitWaitlist, listWaitlist } = await import('../lib/waitlist/waitlist');
+        await Promise.all([submitWaitlist('race-a@example.com', ''), submitWaitlist('race-b@example.com', '')]);
+
+        const emails = (await listWaitlist()).map((e) => e.email);
+        expect(emails).toContain('race-a@example.com');
+        expect(emails).toContain('race-b@example.com');
+    });
+
     // -- Public submit --
 
     test('submit to waitlist', async () => {

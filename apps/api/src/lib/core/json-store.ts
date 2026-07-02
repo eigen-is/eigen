@@ -38,13 +38,10 @@ export class JsonStore<T extends Record<string, unknown>> {
     }
 
     async load(): Promise<void> {
-        try {
-            const file = this.fs.file(this.filename);
-            if (await file.exists()) {
-                this.data = deepMerge(this.defaults, (await file.json()) as DeepPartial<T>);
-            }
-        } catch {
-            this.data = { ...this.defaults };
+        const file = this.fs.file(this.filename);
+        // Fail-closed: a missing file yields defaults, but a corrupt existing file must reject — a silent reset would let the next set() persist defaults over the real bytes.
+        if (await file.exists()) {
+            this.data = deepMerge(this.defaults, (await file.json()) as DeepPartial<T>);
         }
     }
 

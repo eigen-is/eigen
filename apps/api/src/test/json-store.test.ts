@@ -107,16 +107,40 @@ describe('JsonStore', () => {
         expect(store.get().nested.deep.value).toBe(42);
     });
 
-    test('load falls back to defaults on corrupt JSON', async () => {
+    test('load fails closed on a corrupt existing file instead of resetting to defaults', async () => {
         const dir = join(TEST_DIR, 'corrupt');
         mkdirSync(dir, { recursive: true });
         writeFileSync(join(dir, 'config.json'), '{invalid json!!!');
 
         const fs = new LocalFilesystem(dir);
         const store = new JsonStore<TestConfig>(fs, 'config.json', defaults);
-        await store.load();
 
-        expect(store.get()).toEqual(defaults);
+        // A corrupt/half-written existing file is unrecoverable in place, not a fresh install: it
+        // must reject rather than silently reset to defaults (which the next set() would persist).
+        await expect(store.load()).rejects.toThrow();
+    });
+
+    test('a failed load never lets a later set() overwrite the existing file with defaults', async () => {
+        const dir = join(TEST_DIR, 'corrupt-no-wipe');
+        mkdirSync(dir, { recursive: true });
+        const original = '{invalid json!!!';
+        writeFileSync(join(dir, 'config.json'), original);
+
+        const fs = new LocalFilesystem(dir);
+        const store = new JsonStore<TestConfig>(fs, 'config.json', defaults);
+
+        // Mirror the real caller flow (e.g. UserHome.init): await load(), then mutate. A rejected
+        // load must abort before set(), so the recoverable bytes on disk survive untouched.
+        let loadThrew = false;
+        try {
+            await store.load();
+            await store.set({ name: 'toggled' });
+        } catch {
+            loadThrew = true;
+        }
+
+        expect(loadThrew).toBe(true);
+        expect(readFileSync(join(dir, 'config.json'), 'utf-8')).toBe(original);
     });
 
     test('atomic write: no .tmp file left after save', async () => {
