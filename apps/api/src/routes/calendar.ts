@@ -1,4 +1,9 @@
-import type { CalendarItem, CalendarShare, FreeBusyBlock } from '@workspace/lib/types/calendar';
+import type {
+    CalendarEventOccurrence,
+    CalendarItem,
+    CalendarShare,
+    FreeBusyBlock,
+} from '@workspace/lib/types/calendar';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError } from '../lib/core';
@@ -154,7 +159,9 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .get(
         '/calendar/:ownerId/calendars/:calId/event-range/:from/:to',
-        async ({ params, user }) => {
+        // Union return is intentional: free-busy callers get the redacted FreeBusyBlock shape (privacy
+        // boundary below), everyone else the full events. The explicit annotation stabilises the Eden type.
+        async ({ params, user }): Promise<CalendarEventOccurrence[] | FreeBusyBlock[]> => {
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             const events = await pullEventsInRange(
