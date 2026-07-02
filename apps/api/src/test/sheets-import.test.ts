@@ -1237,6 +1237,31 @@ describe('Sheets xlsx import/convert', () => {
     });
 });
 
+// Forge the uncompressedSize a zip DECLARES for its file entries, so the declared size no
+// longer matches the DEFLATE stream's true output. Walk the central directory (located via
+// the End Of Central Directory record, PK\x05\x06 → CD offset at +16), and rewrite the
+// uncompressedSize field (+24) of every central header (PK\x01\x02) that declares content —
+// JSZip prepends zero-size directory entries (`xl/`, `xl/worksheets/`) for a nested path, so
+// the real file entry is not the first. Walking the CD (fixed 46-byte header + name + extra +
+// comment) lands the patch precisely and skips false signature hits in the compressed data.
+function forgeCentralDirUncompressedSize(zip: Buffer, forgedSize: number): Buffer {
+    const out = Buffer.from(zip);
+    let eocd = out.length - 22;
+    while (eocd >= 0 && out.readUInt32LE(eocd) !== 0x06054b50) eocd--;
+    if (eocd < 0) throw new Error('EOCD not found');
+    let p = out.readUInt32LE(eocd + 16);
+    let patched = 0;
+    while (p < eocd && out.readUInt32LE(p) === 0x02014b50) {
+        if (out.readUInt32LE(p + 24) > 0) {
+            out.writeUInt32LE(forgedSize, p + 24);
+            patched++;
+        }
+        p += 46 + out.readUInt16LE(p + 28) + out.readUInt16LE(p + 30) + out.readUInt16LE(p + 32);
+    }
+    if (patched === 0) throw new Error('no file entry to forge');
+    return out;
+}
+
 describe('xlsxToSheets resource guards', () => {
     test('rejects an xlsx whose declared decompressed size exceeds the cap', async () => {
         // Decompression bomb: a few KB of one repeated byte declares 210 MB uncompressed.
@@ -1249,6 +1274,38 @@ describe('xlsxToSheets resource guards', () => {
         let error: unknown;
         try {
             await xlsxToSheets(bomb);
+        } catch (e) {
+            error = e;
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(413);
+    });
+
+    test('rejects a forged-header bomb whose actual bytes exceed the cap via the streaming pass', async () => {
+        // A sophisticated bomb forges the central-directory uncompressedSize SMALL so it
+        // sails past the declared-size fast reject, while the DEFLATE stream actually inflates
+        // over the cap. exceljs would then inflate it unconditionally inside xlsx.load →
+        // uncatchable OOM. The streaming belt must reject it before load by measuring ACTUAL
+        // decompressed bytes. 210 MB of one repeated byte compresses to a few KB; the forged
+        // declared size (a few hundred bytes) proves the declared guard is bypassed, so the
+        // 413 can only come from the streaming pass. Backpressure discards each chunk, so the
+        // fixture stays small despite the large actual inflation.
+        const zip = new JSZip();
+        zip.file('xl/worksheets/sheet1.xml', Buffer.alloc(210 * 1024 * 1024, 0x41));
+        const honest = Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+        const forged = forgeCentralDirUncompressedSize(honest, 512);
+
+        // Sanity: the forged declared size is well under the cap, so the declared-size guard
+        // passes and only the streaming pass can reject this input.
+        const reloaded = await JSZip.loadAsync(forged);
+        const declared = (
+            reloaded.file('xl/worksheets/sheet1.xml') as unknown as { _data?: { uncompressedSize?: number } }
+        )._data?.uncompressedSize;
+        expect(declared).toBe(512);
+
+        let error: unknown;
+        try {
+            await xlsxToSheets(forged);
         } catch (e) {
             error = e;
         }
