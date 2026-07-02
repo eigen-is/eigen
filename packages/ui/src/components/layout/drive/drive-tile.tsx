@@ -53,9 +53,9 @@ export function DriveTile({
             {...getDropProps(item)}
             className={cn(
                 'group relative flex flex-col rounded-lg border overflow-hidden cursor-pointer transition-colors',
-                'eigen-list-item',
-                isActive && 'eigen-list-item-active',
-                isSelected && 'eigen-list-item-selected ring-2 ring-ring',
+                'eigen-tile',
+                isActive && 'eigen-tile-active',
+                isSelected && 'eigen-tile-selected',
                 dragOverItemId === item.id && isValidFolderDrop(item) && 'ring-2 ring-primary',
                 disabled && 'opacity-40 pointer-events-none',
             )}
