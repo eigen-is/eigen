@@ -202,7 +202,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            return updateEventAt(params.ownerId, params.id, body, user);
+            return updateEventAt(params.ownerId, params.calId, params.id, body, user);
         },
         { body: UpdateEventSchema, auth: true },
     )
@@ -213,7 +213,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            await deleteEventAt(params.ownerId, params.id, user);
+            await deleteEventAt(params.ownerId, params.calId, params.id, user);
             return { success: true };
         },
         { auth: true },

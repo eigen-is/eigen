@@ -57,7 +57,7 @@ export async function handlePut(
 
     if (existingEvent) {
         // Update existing event
-        calendar.updateEvent(existingEvent.id, {
+        calendar.updateEvent(calendarId, existingEvent.id, {
             title: masterParsed.title,
             startTime: masterParsed.startTime,
             endTime: masterParsed.endTime,
@@ -150,7 +150,7 @@ function syncExceptionEvents(
         const existing = exc.recurrenceDate ? existingByRecurrenceDate.get(exc.recurrenceDate) : null;
 
         if (existing) {
-            calendar.updateEvent(existing.id, {
+            calendar.updateEvent(calendarId, existing.id, {
                 title: exc.title,
                 startTime: exc.startTime,
                 endTime: exc.endTime,

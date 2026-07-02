@@ -599,12 +599,13 @@ export class Calendar {
     public deleteByUri(calendarId: string, uri: string): void {
         const event = this.getEventByUri(calendarId, uri);
         if (!event) return;
-        this.deleteEvent(event.id);
+        this.deleteEvent(calendarId, event.id);
     }
 
-    public updateEvent(id: string, input: UpdateEventArgs, user?: User): CalendarEvent {
+    public updateEvent(calendarId: string, id: string, input: UpdateEventArgs, user?: User): CalendarEvent {
         const existing = this.getEventById(id);
-        if (!existing) throw new ApiError(404, 'Event not found');
+        // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
+        if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
         // Linked event guard: attendees can only change local fields (reminders, color)
         if (existing.data?.organizer) {
@@ -700,9 +701,10 @@ export class Calendar {
         return updatedEvent;
     }
 
-    public deleteEvent(id: string, user?: User): void {
+    public deleteEvent(calendarId: string, id: string, user?: User): void {
         const existing = this.getEventById(id);
-        if (!existing) throw new ApiError(404, 'Event not found');
+        // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
+        if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
         if (user && existing.data?.organizer) {
             // Attendee deleting linked copy = decline
@@ -1403,7 +1405,7 @@ export class Calendar {
                 propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined').catch(console.error);
             }
         } else if (input.remove) {
-            this.deleteEvent(eventId, user);
+            this.deleteEvent(event.calendarId, eventId, user);
         } else {
             this.updateAttendeeStatus(eventId, user.email, input.status);
             if (isExternalOrganizer) {

@@ -1064,6 +1064,99 @@ describe('Calendar', () => {
         });
     });
 
+    describe('Cross-calendar write escalation (IDOR)', () => {
+        let sharedCalId: string; // calendar A — Bob has write
+        let privateCalId: string; // calendar B — Bob has no access
+        let privateEventId: string;
+
+        beforeAll(async () => {
+            const aRes = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'IDOR Shared A', color: '#ea4335' }),
+            });
+            sharedCalId = (await assertJson<CalendarItem>(aRes)).id;
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalId}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shares: [{ targetId: ctx.bob.user.email, permission: 'write' }] }),
+                },
+            );
+
+            const bRes = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'IDOR Private B', color: '#4285f4' }),
+            });
+            privateCalId = (await assertJson<CalendarItem>(bRes)).id;
+            const evRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${privateCalId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Alice Private Event',
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
+                        allDay: false,
+                    }),
+                },
+            );
+            privateEventId = (await assertJson<CalendarEvent>(evRes)).id;
+        });
+
+        test('write-share on A cannot update an event living in B', async () => {
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalId}/events/${privateEventId}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Hijacked' }),
+                },
+            );
+            expect(res.status).toBe(404);
+        });
+
+        test('write-share on A cannot delete an event living in B', async () => {
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalId}/events/${privateEventId}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(404);
+        });
+
+        test('the B event is untouched after the escalation attempts', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${privateCalId}/event-range/1741737600/1741824000`,
+            );
+            const events = await assertJson<CalendarEventOccurrence[]>(res);
+            const evt = findOrFail(events, (e) => e.id === privateEventId);
+            expect(evt.title).toBe('Alice Private Event');
+        });
+
+        test('the owner can still edit the event via its own calId', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${privateCalId}/events/${privateEventId}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Alice Private Event Edited' }),
+                },
+            );
+            expect(res.status).toBe(200);
+            const updated = await assertJson<CalendarEvent>(res);
+            expect(updated.title).toBe('Alice Private Event Edited');
+        });
+    });
+
     describe('Cross-user isolation', () => {
         test('Bob calendars are separate from Alice', async () => {
             const aliceRes = await authedRequest(
