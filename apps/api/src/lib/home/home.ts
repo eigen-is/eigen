@@ -39,6 +39,7 @@ export class Home {
     private initWaiters: ((home: Home) => void)[] = [];
     private timeout: Timer | undefined;
     private _destructing: boolean = false;
+    private _destructPromise: Promise<void> | null = null;
 
     get destructing(): boolean {
         return this._destructing;
@@ -246,36 +247,42 @@ export class Home {
         };
     }
 
-    protected async destruct() {
+    protected destruct(): Promise<void> {
+        // Idempotent: the idle timer and an explicit shutdown() (e.g. getHome evicting a home that is
+        // already tearing down) can both fire, so run teardown once — a second concurrent pass would
+        // close, checkpoint and journal-unlink the same DB files twice.
+        if (this._destructPromise) return this._destructPromise;
         this._destructing = true;
-
-        // Subsystems close their own ManagedDatabase. Run those first so the
-        // managedDatabases loop below is a safety net (idempotent close), not a
-        // concurrent second close on the same db.
-        const subsystems: [string, Promise<unknown> | undefined][] = [
-            ['drive', this._drive?.destruct()],
-            ['contacts', this._contacts?.destruct()],
-            ['mail', this._mail?.destruct()],
-            ['calendar', this._calendar?.destruct()],
-            ['notifications', this._notifications?.destruct()],
-        ];
-        for (const [i, result] of (await Promise.allSettled(subsystems.map(([, p]) => p))).entries()) {
-            if (result.status === 'rejected') {
-                console.error(`Failed to destruct ${subsystems[i][0]}:`, result.reason);
+        this._destructPromise = (async () => {
+            // Subsystems close their own ManagedDatabase. Run those first so the
+            // managedDatabases loop below is a safety net (idempotent close), not a
+            // concurrent second close on the same db.
+            const subsystems: [string, Promise<unknown> | undefined][] = [
+                ['drive', this._drive?.destruct()],
+                ['contacts', this._contacts?.destruct()],
+                ['mail', this._mail?.destruct()],
+                ['calendar', this._calendar?.destruct()],
+                ['notifications', this._notifications?.destruct()],
+            ];
+            for (const [i, result] of (await Promise.allSettled(subsystems.map(([, p]) => p))).entries()) {
+                if (result.status === 'rejected') {
+                    console.error(`Failed to destruct ${subsystems[i][0]}:`, result.reason);
+                }
             }
-        }
 
-        const dbs = [...this.managedDatabases.entries()].map(([key, getter]): [string, Promise<unknown>] => [
-            key,
-            (async () => (await getter()).close())(),
-        ]);
-        for (const [i, result] of (await Promise.allSettled(dbs.map(([, p]) => p))).entries()) {
-            if (result.status === 'rejected') {
-                console.error(`Failed to close managed database ${dbs[i][0]}:`, result.reason);
+            const dbs = [...this.managedDatabases.entries()].map(([key, getter]): [string, Promise<unknown>] => [
+                key,
+                (async () => (await getter()).close())(),
+            ]);
+            for (const [i, result] of (await Promise.allSettled(dbs.map(([, p]) => p))).entries()) {
+                if (result.status === 'rejected') {
+                    console.error(`Failed to close managed database ${dbs[i][0]}:`, result.reason);
+                }
             }
-        }
 
-        this.managedDatabases.clear();
+            this.managedDatabases.clear();
+        })();
+        return this._destructPromise;
     }
 
     public broadcast(event: SSEvent) {
