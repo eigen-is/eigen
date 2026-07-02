@@ -804,4 +804,38 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
 
         fault.releaseHungWrites(); // settle the orphaned PUT so nothing lingers
     }, 5_000);
+
+    // Batch-2 review: close() awaits the in-flight drain, whose extract does unbounded storage GETs
+    // via the doc loaders — the same black-hole class the PUT ceiling exists for, and idle-home
+    // eviction has no SIGKILL backstop. The await must be bounded so teardown proceeds past a hung
+    // extract (accepting it as leaked, no worse than the pre-6b leak).
+    test('a hung extract cannot park closeAllDatabases forever (bounded reindex close)', async () => {
+        let extractEntered!: () => void;
+        const entered = new Promise<void>((r) => (extractEntered = r));
+
+        // Models an extract parked on a black-holed storage GET — never resolves.
+        const extract: ContentExtractor = async () => {
+            extractEntered();
+            return new Promise<string>(() => {});
+        };
+
+        const mount = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createDefaultMountConfig(`reindex-close-timeout-${Date.now()}`, 'local'),
+            createGetLocalDatabase(TEST_DIR),
+            extract,
+        );
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        // A searchable file dirties a row; createFile's kick starts the drain, which parks in extract.
+        await mount.createFile(rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
+        await entered;
+
+        (mount as unknown as { reindexQueue: { closeTimeoutMs: number } }).reindexQueue.closeTimeoutMs = 50;
+
+        // Pre-fix: close() awaits the parked drain unboundedly → this never returns (test times out).
+        await mount.closeAllDatabases();
+    }, 5_000);
 });

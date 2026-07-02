@@ -71,15 +71,26 @@ const docContainerDescendantIds = sql`
     SELECT id FROM doc_tree
 `;
 
-// The v7 partial unique index (parentId, LOWER(name)) WHERE trashedAt IS NULL. Its violation on an
-// INSERT is what closes the concurrent-create race; insertPathRow maps it to a 409.
+// The v7 partial unique index (parentId, LOWER(name)) WHERE trashedAt IS NULL. Its violation is what
+// closes the concurrent same-name races (create INSERTs, rename/move/restore UPDATEs); the sites map
+// it to a 409 via rethrowDuplicateActiveName.
 const UNIQUE_ACTIVE_NAME_INDEX = 'idx_paths_unique_active_name';
 
-// True only for the losing racer's INSERT tripping that index. bun:sqlite names the expression index
-// in the message (`UNIQUE constraint failed: index 'idx_paths_unique_active_name'`); match on it so an
+// True only for the losing racer tripping that index. bun:sqlite names the expression index in the
+// message (`UNIQUE constraint failed: index 'idx_paths_unique_active_name'`); match on it so an
 // unrelated UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
 function isDuplicateActiveNameError(e: unknown): boolean {
     return e instanceof Error && e.message.includes(`index '${UNIQUE_ACTIVE_NAME_INDEX}'`);
+}
+
+// Rethrow, translating the index violation into the SAME 409 assertUniqueName raises. Shared by the
+// create INSERTs and the rename/move/restore UPDATEs — single-threaded callers pass assertUniqueName's
+// SELECT first, so only the race tail lands here.
+function rethrowDuplicateActiveName(e: unknown, name: string): never {
+    if (isDuplicateActiveNameError(e)) {
+        throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+    }
+    throw e;
 }
 
 export function buildStorageKey(id: string, name: string): string {
@@ -458,10 +469,7 @@ export class Mount {
         try {
             await this.db.insert(paths).values(values);
         } catch (e) {
-            if (isDuplicateActiveNameError(e)) {
-                throw new ApiError(409, `A file or folder named "${values.name}" already exists in this directory`);
-            }
-            throw e;
+            rethrowDuplicateActiveName(e, values.name);
         }
     }
 
@@ -845,11 +853,15 @@ export class Mount {
             oldParentId = old?.parentId;
         }
 
+        // The name a raced rename/move would collide on: the UPDATEs below trip the v7 unique index
+        // when a same-name sibling lands between assertUniqueName's SELECT and the UPDATE. Empty only
+        // when neither name nor parent changes — then the index can't fire.
+        let targetName = updates.name ?? '';
         if (updates.name !== undefined || updates.parentId !== undefined) {
             const current = await this.getPath(pathId);
             if (current) {
                 const targetParent = updates.parentId ?? current.parentId;
-                const targetName = updates.name ?? current.name;
+                targetName = updates.name ?? current.name;
                 if (targetParent) {
                     await this.assertUniqueName(targetParent, targetName, pathId);
                 }
@@ -862,10 +874,14 @@ export class Mount {
                             if (updates.name !== undefined) {
                                 dbUpdates['file'] = targetName;
                             }
-                            await this.db
-                                .update(paths)
-                                .set({ ...dbUpdates, updatedAt: new Date() })
-                                .where(eq(paths.id, pathId));
+                            try {
+                                await this.db
+                                    .update(paths)
+                                    .set({ ...dbUpdates, updatedAt: new Date() })
+                                    .where(eq(paths.id, pathId));
+                            } catch (e) {
+                                rethrowDuplicateActiveName(e, targetName);
+                            }
                             // Invalidate before the storage rename — a rename failure
                             // here still leaves the DB updated, so the size caches must
                             // already reflect the new parent.
@@ -884,13 +900,17 @@ export class Mount {
             }
         }
 
-        await this.db
-            .update(paths)
-            .set({
-                ...dbUpdates,
-                updatedAt: new Date(),
-            })
-            .where(eq(paths.id, pathId));
+        try {
+            await this.db
+                .update(paths)
+                .set({
+                    ...dbUpdates,
+                    updatedAt: new Date(),
+                })
+                .where(eq(paths.id, pathId));
+        } catch (e) {
+            rethrowDuplicateActiveName(e, targetName);
+        }
 
         if (updates.parentId !== undefined) {
             await this.invalidateSizesFrom(oldParentId ?? null);
@@ -1134,19 +1154,24 @@ export class Mount {
                 await this.storage.rename(currentKey, targetKey);
             }
 
-            // Direct DB update
+            // Direct DB update. The conflict-free restoreName was computed outside this lock, so a
+            // raced same-name create can still trip the unique index here → the same 409 as create.
             const now = new Date();
-            await this.db
-                .update(paths)
-                .set({
-                    parentId: targetParentId,
-                    trashedAt: null,
-                    trashedFrom: null,
-                    name: restoreName,
-                    ...(this.isPathBased ? { file: restoreName } : {}),
-                    updatedAt: now,
-                })
-                .where(eq(paths.id, pathId));
+            try {
+                await this.db
+                    .update(paths)
+                    .set({
+                        parentId: targetParentId,
+                        trashedAt: null,
+                        trashedFrom: null,
+                        name: restoreName,
+                        ...(this.isPathBased ? { file: restoreName } : {}),
+                        updatedAt: now,
+                    })
+                    .where(eq(paths.id, pathId));
+            } catch (e) {
+                rethrowDuplicateActiveName(e, restoreName);
+            }
 
             if (row.type !== 'file') {
                 this.restoreDescendants(pathId, now);
@@ -1605,7 +1630,8 @@ export class Mount {
         // documentDbs means that last-extract DB lands in the map and is closed by the pass below —
         // closing the queue last (after the clear) would let the post-clear open leak (30s timer, fd,
         // temp; dirty syncs into a closed metadata.db). Leftover dirty rows still replay on the next
-        // open (only the current extract is drained, not the backlog).
+        // open (only the current extract is drained, not the backlog). The await is deadline-bounded
+        // so a black-holed extract can't park teardown (see ContentReindexQueue.close).
         await this.reindexQueue?.close();
 
         const entries = [...this.documentDbs.entries()];

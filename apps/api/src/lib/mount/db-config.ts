@@ -201,8 +201,15 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             version: 7,
             up: (db) => {
                 // A1 — DEDUP PRE-STEP. On a LIVE db CREATE UNIQUE INDEX FAILS if a duplicate already
-                // exists, so first make non-trashed (parentId, LOWER(name)) unique by RENAMING every
-                // colliding row except the oldest. RENAME `name` ONLY — never touch `file`:
+                // exists, so first make (parentId, LOWER(name)) unique by RENAMING every colliding row
+                // except the oldest. Scope = trashedFrom IS NULL: LIVE rows (what the index constrains)
+                // PLUS folder-descendant-trashed rows (trashedAt set by trashDescendants, trashedFrom
+                // NULL) — restoreDescendants bulk-restores that whole cohort in one recursive UPDATE
+                // with no conflict handling, so a pre-v7 duplicate surviving inside an already-trashed
+                // folder would trip the index on restore and permanently brick it. Independently-trashed
+                // rows (trashedFrom SET) are excluded: they restore one at a time through restorePath's
+                // conflict rename and may legitimately duplicate a live name (trash-then-recreate).
+                // RENAME `name` ONLY — never touch `file`:
                 //   - id-based (s3/local-key): file = `${id}.${ext}` is keyed by the immutable ROW ID,
                 //     independent of name, so renaming (extension preserved) leaves both distinct storage
                 //     objects valid → lossless. The collision was a metadata-only clash.
@@ -227,21 +234,22 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     .query(`
                         SELECT DISTINCT parentId FROM (
                             SELECT parentId FROM paths
-                            WHERE trashedAt IS NULL AND parentId IS NOT NULL
+                            WHERE trashedFrom IS NULL AND parentId IS NOT NULL
                             GROUP BY parentId, LOWER(name)
                             HAVING COUNT(*) > 1
                         )
                     `)
                     .all() as { parentId: string }[];
 
-                const liveInParent = db.query(
-                    `SELECT id, name FROM paths WHERE parentId = ? AND trashedAt IS NULL ORDER BY createdAt ASC, rowid ASC`,
+                const cohortInParent = db.query(
+                    `SELECT id, name FROM paths WHERE parentId = ? AND trashedFrom IS NULL ORDER BY createdAt ASC, rowid ASC`,
                 );
                 const rename = db.prepare(`UPDATE paths SET name = ? WHERE id = ?`);
 
                 for (const { parentId } of parents) {
-                    const rows = liveInParent.all(parentId) as { id: string; name: string }[];
-                    // Every live lower-name in the parent, so a generated suffix collides with nothing.
+                    const rows = cohortInParent.all(parentId) as { id: string; name: string }[];
+                    // Every lower-name in the parent's dedup cohort, so a generated suffix collides
+                    // with nothing live now or after a folder restore.
                     const taken = new Set(rows.map((r) => lower(r.name)));
                     // Group by lower-name in oldest-first order; the first row of each group keeps its name.
                     const groups = new Map<string, { id: string; name: string }[]>();
