@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import type { JsonStore } from '../lib/core';
 import type { Drive } from '../lib/drive';
-import { Home } from '../lib/home/home';
+import { Home, type HomeSettings } from '../lib/home/home';
 import type Maildir from '../lib/mail/maildir';
 import type { User } from '../lib/user';
 
@@ -33,6 +34,29 @@ class LeakProbeHome extends Home {
             },
             destruct: async () => {},
         } as unknown as Maildir;
+    }
+}
+
+// P2 batch review: settings.load() runs BEFORE the subsystem allSettled block — its throw must take
+// the same failure path (shutdown + waiter rejection) instead of stranding queued init() callers.
+class CorruptSettingsHome extends Home {
+    driveDestructRan = false;
+
+    constructor() {
+        super({ id: 'corrupt-settings-probe' } as User);
+
+        this.settings = {
+            load: async () => {
+                throw new Error('settings corrupt');
+            },
+        } as unknown as JsonStore<HomeSettings>;
+
+        this._drive = {
+            init: async () => {},
+            destruct: async () => {
+                this.driveDestructRan = true;
+            },
+        } as unknown as Drive;
     }
 }
 
@@ -76,5 +100,22 @@ describe('Home.init partial-failure teardown (AUDIT 13)', () => {
         // The failure path rejects waiters before rethrowing, so by now the queued call has settled.
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(queuedError?.message).toBe('mail boom');
+    });
+
+    test('a settings.load() failure rejects queued init() callers and tears the instance down', async () => {
+        const home = new CorruptSettingsHome();
+
+        const first = home.init(); // marks initialization started before its first await
+        // Observe settledness instead of awaiting `queued` — a regression that leaves the waiter
+        // pending forever should fail this test fast, not hang the suite.
+        let queuedError: Error | undefined;
+        home.init().catch((e: Error) => {
+            queuedError = e;
+        });
+
+        await expect(first).rejects.toThrow('settings corrupt');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(queuedError?.message).toBe('settings corrupt');
+        expect(home.driveDestructRan).toBe(true);
     });
 });

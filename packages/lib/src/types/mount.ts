@@ -27,6 +27,22 @@ export type MountConfig = {
     updatedAt?: Date;
 };
 
+// The one list of fields that define a mount's storage destination — Drive.updateMount compares it
+// to pick rebuild vs in-place update, so growing S3Config must grow this too (array form keeps the
+// comparison immune to JSON key order).
+export function mountStorageIdentity(config: Pick<MountConfig, 'storageType' | 's3Config'>): string {
+    const s3 = config.s3Config;
+    return JSON.stringify([
+        config.storageType,
+        s3?.endpoint,
+        s3?.bucket,
+        s3?.prefix,
+        s3?.region,
+        s3?.accessKeyId,
+        s3?.secretAccessKey,
+    ]);
+}
+
 export type MountInfo = {
     id: string;
     name: string;

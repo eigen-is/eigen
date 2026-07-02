@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { teamOwnerId } from '@workspace/lib/types';
 import { getSyntheticTeamUser, TeamHome } from '../lib/home/team-home';
@@ -61,6 +61,38 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
             const listed = await home.drive.listMounts();
             expect(listed.find((m) => m.id === mount.id)?.name).toBe('Repointed');
         } finally {
+            await home.shutdown();
+        }
+    });
+
+    test('updateMount rejects an s3Config that fails the connection check, leaving the live mount untouched', async () => {
+        // Mirror settings.test.ts's checkS3Connection spy: ok for addMount, then a failed check for
+        // the update — deterministic, no network. Pre-fix updateMount never calls the check at all.
+        const s3Storage = await import('../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'checkS3Connection')
+            .mockResolvedValueOnce({ ok: true, message: 'Connection successful', versioning: 'enabled' })
+            .mockResolvedValueOnce({ ok: false, message: 'invalid credentials' });
+
+        const home = await freshTeamHome();
+        try {
+            const s3Config = {
+                endpoint: 'http://127.0.0.1:1',
+                bucket: 'team-bucket',
+                prefix: '',
+                accessKeyId: 'AK',
+                secretAccessKey: 'SK',
+            };
+            const mount = await home.addMount({ name: 'S3 Live', storageType: 's3', s3Config });
+
+            await expect(
+                home.updateMount(mount.id, { s3Config: { ...s3Config, secretAccessKey: 'typo' } }),
+            ).rejects.toThrow('S3 connection failed');
+
+            // Rejected before persist + push: the live mount still runs on the original config.
+            expect(home.drive.getMountConfig(mount.id).s3Config).toEqual(s3Config);
+            expect(home.settings.get().mounts?.[mount.id]?.s3Config).toEqual(s3Config);
+        } finally {
+            spy.mockRestore();
             await home.shutdown();
         }
     });

@@ -94,38 +94,41 @@ export class Home {
         }
         this.initializationStarted = true;
 
-        await time('Home.init.settings', () => this.settings?.load() ?? Promise.resolve());
+        try {
+            await time('Home.init.settings', () => this.settings?.load() ?? Promise.resolve());
 
-        // allSettled (not all): if one subsystem init throws, let its peers finish opening before we
-        // tear down — a rejected Promise.all returns while siblings are still mid-init, so their
-        // ManagedDatabases + upload/reindex timers would leak. On any failure, the idempotent
-        // shutdown() (see destruct) closes what got built and clears the idle timer; then rethrow so
-        // getHome discards this half-built Home instead of caching a leaking one.
-        const results = await Promise.allSettled([
-            time('Home.init.drive', () => this._drive?.init(autoCreateDefaultMount) ?? Promise.resolve()),
-            time('Home.init.contacts', () => this._contacts?.init() ?? Promise.resolve()),
-            time('Home.init.mail', () => this._mail?.init() ?? Promise.resolve()),
-            time('Home.init.calendar', () => this._calendar?.init() ?? Promise.resolve()),
-            time('Home.init.notifications', () => this._notifications?.init() ?? Promise.resolve()),
-        ]);
-        const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
-        if (failed) {
-            await this.shutdown();
-            // Wake concurrent init() callers queued behind this init — they'd otherwise await forever.
-            for (const { reject } of this.initWaiters) {
-                reject(failed.reason);
+            // allSettled (not all): if one subsystem init throws, let its peers finish opening before
+            // we tear down — a rejected Promise.all returns while siblings are still mid-init, so
+            // their ManagedDatabases + upload/reindex timers would leak.
+            const results = await Promise.allSettled([
+                time('Home.init.drive', () => this._drive?.init(autoCreateDefaultMount) ?? Promise.resolve()),
+                time('Home.init.contacts', () => this._contacts?.init() ?? Promise.resolve()),
+                time('Home.init.mail', () => this._mail?.init() ?? Promise.resolve()),
+                time('Home.init.calendar', () => this._calendar?.init() ?? Promise.resolve()),
+                time('Home.init.notifications', () => this._notifications?.init() ?? Promise.resolve()),
+            ]);
+            const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+            if (failed) throw failed.reason;
+
+            this.initialized = true;
+            console.log(`[Home] Initialized for ${this.user.id}`);
+            for (const { resolve } of this.initWaiters) {
+                resolve(this);
             }
             this.initWaiters = [];
-            throw failed.reason;
+            return this;
+        } catch (err) {
+            // One failure path for the whole init body (settings load included): the idempotent
+            // shutdown() (see destruct) closes what got built and clears the idle timer, queued
+            // concurrent init() callers are rejected — they'd otherwise await forever — and the
+            // rethrow makes getHome discard this half-built Home instead of caching a leaking one.
+            await this.shutdown();
+            for (const { reject } of this.initWaiters) {
+                reject(err);
+            }
+            this.initWaiters = [];
+            throw err;
         }
-
-        this.initialized = true;
-        console.log(`[Home] Initialized for ${this.user.id}`);
-        for (const { resolve } of this.initWaiters) {
-            resolve(this);
-        }
-        this.initWaiters = [];
-        return this;
     }
 
     public touch() {
