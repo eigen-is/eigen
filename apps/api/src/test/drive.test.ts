@@ -3561,7 +3561,7 @@ describe('Drive', () => {
             expect(listing.some((p) => p.id === second.id)).toBe(true);
         });
 
-        test('rejects copying a folder into its own descendant with 400', async () => {
+        test('rejects copying a folder into its own descendant with 409', async () => {
             const parent = await drivePost(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
@@ -3590,7 +3590,7 @@ describe('Drive', () => {
                     }),
                 },
             );
-            expect(res.status).toBe(400);
+            expect(res.status).toBe(409);
         });
 
         test('copies a personal file into a team drive through the route (bridge)', async () => {

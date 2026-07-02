@@ -571,11 +571,6 @@ export default class Drive {
         return movedPath;
     }
 
-    // Guards copy/move against subtree cycles.
-    async isSelfOrDescendant(mountId: string, ancestorId: string, candidateId: string): Promise<boolean> {
-        return this.getMount(mountId).isSelfOrDescendant(ancestorId, candidateId);
-    }
-
     async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
@@ -611,6 +606,12 @@ export default class Drive {
         user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
+        // Reject copying a folder into itself or its own descendant. Guarded here (not the route)
+        // so WebDAV COPY — which reaches raw Drive — enters the same gate; otherwise Mount.copyPath
+        // recurses forever, rediscovering the paths it just created. 409 per RFC 4918 §9.8.5.
+        if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
+            throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
+        }
         const copied = await mount.copyPath(srcPathId, destParentId, name, user);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,

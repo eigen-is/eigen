@@ -393,12 +393,6 @@ export default class SharedDrive {
         return this.sharedDrive.movePath(mountId, pathId, targetParentId, this.user);
     }
 
-    public async isSelfOrDescendant(mountId: string, ancestorId: string, candidateId: string): Promise<boolean> {
-        return this.withReadPermission(mountId, ancestorId, () =>
-            this.sharedDrive.isSelfOrDescendant(mountId, ancestorId, candidateId),
-        );
-    }
-
     public async breadCrumb(mountId: string, pathId: string) {
         const bread = await this.sharedDrive.breadCrumb(mountId, pathId);
         const memberships = await this.getUserMemberships();

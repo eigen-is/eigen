@@ -61,6 +61,27 @@ describe('WebDAV MOVE/COPY', () => {
         expect(await dst.text()).toBe('orig');
     });
 
+    test('COPY a folder into its own subtree → 409 (no infinite recursion)', async () => {
+        await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/CopyCycle/`);
+        await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/CopyCycle/Inner/`);
+        const res = await webdavRequest(ctx.alice.user.email, 'COPY', `${baseHref}/CopyCycle`, {
+            headers: { Destination: `http://localhost${baseHref}/CopyCycle/Inner/CopyCycle` },
+        });
+        expect(res.status).toBe(409);
+    });
+
+    test('COPY a folder into an unrelated folder succeeds', async () => {
+        await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/CopyFrom/`);
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/CopyFrom/note.txt`, { body: 'hi' });
+        await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/CopyInto/`);
+        const res = await webdavRequest(ctx.alice.user.email, 'COPY', `${baseHref}/CopyFrom`, {
+            headers: { Destination: `http://localhost${baseHref}/CopyInto/CopyFrom` },
+        });
+        expect([201, 204]).toContain(res.status);
+        const copied = await webdavRequest(ctx.alice.user.email, 'GET', `${baseHref}/CopyInto/CopyFrom/note.txt`);
+        expect(await copied.text()).toBe('hi');
+    });
+
     test('MOVE with no Destination → 400', async () => {
         await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/no-dest.txt`, { body: 'x' });
         const res = await webdavRequest(ctx.alice.user.email, 'MOVE', `${baseHref}/no-dest.txt`);
