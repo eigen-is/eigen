@@ -268,6 +268,11 @@ export default class Drive {
 
     async create(mountId: string, parentId: string, name: string, type: EigenDocType, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
+        const parent = await mount.getActivePath(parentId);
+        if (!isContainerType(parent.type)) {
+            throw new ApiError(404, 'Parent folder not found');
+        }
+
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
@@ -618,9 +623,13 @@ export default class Drive {
         }
 
         await mount.updatePath(pathId, { name: newName });
-        await propagateACLChange(item, item.acl, item.acl, null);
         const renamedItem = await mount.getPath(pathId);
-        if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
+        if (renamedItem) {
+            // Propagate the POST-rename snapshot so each recipient's shared_paths mirror picks up
+            // the new name (mirrors updateACL). actor stays null — a rename must not email shares.
+            await propagateACLChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
+            this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
+        }
         if (user) await this.recordFileEvent(mountId, pathId, user, 'renamed', { oldName, newName });
     }
 

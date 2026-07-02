@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath, EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
+import { MAX_INLINE_EDIT_SIZE } from '../lib/drive/inline-edit';
+import { getHome } from '../lib/home';
 import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 describe('Editor', () => {
@@ -36,7 +38,8 @@ describe('Editor', () => {
             `/editor/${ctx.alice.user.id}/${mountId}/${pathId}/content`,
             { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
         );
-        return { status: res.status, data: await res.json() };
+        // Error responses (413/507) return a plain-text ApiError message, not JSON — tolerate that.
+        return { status: res.status, data: await res.json().catch(() => null) };
     }
 
     describe('GET content', () => {
@@ -187,6 +190,39 @@ describe('Editor', () => {
             const { data: reloaded } = await editorGet(uploaded.id);
             expect(reloaded.frontmatter).toBe('title: Test');
             expect(reloaded.content).toBe('# Updated');
+        });
+
+        test('rejects a save larger than the inline-edit cap with 413', async () => {
+            const uploaded = await uploadTextFile('too-big.txt', 'seed');
+            const { data: initial } = await editorGet(uploaded.id);
+            const { status } = await editorPut(uploaded.id, {
+                content: 'x'.repeat(MAX_INLINE_EDIT_SIZE + 1),
+                expectedUpdatedAt: initial.updatedAt,
+            });
+            expect(status).toBe(413);
+        });
+
+        test('rejects a save that would exceed the mount quota with 507', async () => {
+            const editable = await uploadTextFile('quota-edit.txt', 'seed');
+            const { data: initial } = await editorGet(editable.id);
+
+            // The default mount persists maxSizeMB (500) and team overrides only *raise* it, so shrink
+            // the live mount config directly (mirrors team-mount-live-update.test.ts) to leave room for
+            // the seed but not for the 4 MB save. Snapshot a detached copy — getMountConfig returns the
+            // live object and applyConfig mutates it in place, so restore needs the pre-change values.
+            const home = await getHome(ctx.alice.user.id);
+            const snapshot = { ...home.drive.getMountConfig(mountId) };
+            const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
+            await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB + 1 }, true);
+            try {
+                const { status } = await editorPut(editable.id, {
+                    content: 'y'.repeat(4 * 1024 * 1024),
+                    expectedUpdatedAt: initial.updatedAt,
+                });
+                expect(status).toBe(507);
+            } finally {
+                await home.drive.updateMount(snapshot, true);
+            }
         });
     });
 });

@@ -3627,4 +3627,71 @@ describe('Drive', () => {
             expect(listing.some((p) => p.id === copied.id && p.name === 'route-bridge.txt')).toBe(true);
         });
     });
+
+    describe('Regression: rename propagates to shared-with-me (audit 16)', () => {
+        test("recipient's shared-with-me reflects the new name after a rename, without a further ACL change", async () => {
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'Rename Propagation Orig' },
+            );
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/acl`, {
+                acl: [{ id: BOB_EMAIL, read: true, write: false }],
+            });
+
+            const before = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const beforeShared = findOrFail(await assertJson<DrivePath[]>(before), (item) => item.id === folder.id);
+            expect(beforeShared.name).toBe('Rename Propagation Orig');
+
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/rename`, {
+                newName: 'Rename Propagation New',
+            });
+
+            // No further ACL change — the rename alone must refresh the recipient's mirror.
+            const after = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const afterShared = findOrFail(await assertJson<DrivePath[]>(after), (item) => item.id === folder.id);
+            expect(afterShared.name).toBe('Rename Propagation New');
+        });
+    });
+
+    describe('Regression: create into a trashed parent is rejected (audit 24)', () => {
+        test('creating a doc inside a trashed folder returns 404 and leaks no live doc', async () => {
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'Trashed Parent' },
+            );
+
+            await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}`);
+
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${folder.id}/create/doc`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileName: 'ghost' }),
+                },
+            );
+            expect(res.status).toBe(404);
+
+            // The guard must fire before any row is written: restore the parent and confirm it is empty.
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash/${folder.id}/restore`,
+                { method: 'POST' },
+            );
+            const contents = await driveGetList(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${folder.id}`,
+            );
+            expect(contents.length).toBe(0);
+        });
+    });
 });

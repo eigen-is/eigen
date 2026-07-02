@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { enforceMountQuota } from '../lib/config/enforcement';
 import { getSharedDrive } from '../lib/drive';
 import { getEditableContent, prepareSaveContent } from '../lib/drive/inline-edit';
 import { betterAuth } from './auth';
@@ -31,6 +32,8 @@ export const editorRouter = new Elysia({ name: 'editor' })
                 body.force ?? false,
             );
             if (result.conflict) return { conflict: true as const, currentUpdatedAt: result.currentUpdatedAt };
+            // Quota pre-check at the route boundary, where the Buffer length is known (mirrors WebDAV PUT).
+            await enforceMountQuota(params.ownerId, user.id, params.mountId, result.data.length, path.size);
             const updated = await drive.writeFileContent(params.mountId, params.pathId, result.data, user);
             return { conflict: false as const, updatedAt: updated.updatedAt };
         },
