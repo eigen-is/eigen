@@ -4,6 +4,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { collabKeys } from '../collab/hooks/use-collab';
 import { invalidateSearchOwner } from '../search';
 import {
+    driveKeys,
     invalidateAclSharedOrUnshared,
     invalidateAclUpdated,
     invalidateItemCreated,
@@ -31,8 +32,17 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
 
         case SSEventType.DRIVE_FOLDER_CREATED:
         case SSEventType.DRIVE_FILE_CREATED:
+            invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
+            invalidateSearchOwner(queryClient, path.ownerId);
+            invalidateFileHistory(queryClient, path.ownerId);
+            return true;
+
         case SSEventType.DRIVE_FILE_UPLOADED:
             invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
+            // Overwrite re-uploads to an existing path: refresh the file's own detail too — size,
+            // updatedAt, the thumbnail ?v= cache-bust and the text-preview key all derive from it,
+            // so the parent-folder invalidation alone leaves an open detail/preview stale.
+            queryClient.invalidateQueries({ queryKey: driveKeys.path(path.ownerId, path.mountId, path.id) });
             invalidateSearchOwner(queryClient, path.ownerId);
             invalidateFileHistory(queryClient, path.ownerId);
             return true;
