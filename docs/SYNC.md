@@ -102,6 +102,12 @@ temp-copy backend.
 
 ## Residual limitations
 
+- A move/rename on `local` can strand one in-flight sync: `onSync` re-resolves the storage key on every
+  sync but holds no path lock, so a rename landing between that resolution and the write sends that one
+  sync's bytes to the pre-move path (a `createPath: true` zombie tree) and the watermark marks them
+  synced — a tail write stays stranded until the next dirty sync. Accepted: a path lock wouldn't close
+  it (an ancestor rename locks the folder's id, not the data.db's); id-stable `s3`/`local-key` keys are
+  immune.
 - A home that idle-destructs mid-outage leaves queued bytes on local disk until it's next opened (same
   durability as the temp files; a host-disk loss in that window is the Litestream-class residual RPO).
 - The shutdown drain budget is whole-process; a multi-mount home drains its mounts sequentially.

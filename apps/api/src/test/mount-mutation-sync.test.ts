@@ -50,19 +50,16 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
 };
 
 // S3-like backend over LocalStorage (omits getPath so the mount takes the temp-copy path, not the
-// path-based one). Injectable failures let the delete/resurrection test hold uploads deterministically.
-class FaultStorage implements StorageBackend {
-    failNextWrites = 0;
+// path-based one). Exposed to tests so they can probe the backing store at exact object keys.
+class S3LikeStorage implements StorageBackend {
     constructor(private readonly inner: LocalStorage) {}
     read(key: string): StorageFile {
         return this.inner.read(key);
     }
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+        // Buffer up-front like an S3 PUT streaming its body, so a cancel() unlinking the staging
+        // file mid-flight yields a completed late PUT (the resurrection shape), not a read error.
         const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
-        if (this.failNextWrites > 0) {
-            this.failNextWrites--;
-            throw new Error('injected upload failure (503)');
-        }
         return this.inner.write(key, bytes);
     }
     async delete(key: string): Promise<boolean> {
@@ -90,7 +87,7 @@ async function createMount(id: string, storageType: MountConfig['storageType']):
     return mount;
 }
 
-function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
+function createS3Mount(id: string): { mount: Mount; backing: S3LikeStorage } {
     const config: MountConfig = {
         id,
         name: id,
@@ -99,10 +96,10 @@ function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
         s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
     };
     const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
-    const fault = new FaultStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
-    (mount as unknown as { storage: StorageBackend }).storage = fault;
+    const backing = new S3LikeStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
+    (mount as unknown as { storage: StorageBackend }).storage = backing;
     createdMounts.push(mount);
-    return { mount, fault };
+    return { mount, backing };
 }
 
 // Row count in the on-storage copy of data.db, read through the mount's storage at its CURRENT
@@ -206,15 +203,19 @@ describe('local: open document DB must not sync to a stale path after a mutation
 
 describe('delete/trash must evict the cached document DB (no resurrection, no leaked temp/timer)', () => {
     test('deleting a container with an open dirty data.db tears the DB down and never resurrects it (s3)', async () => {
-        const { mount, fault } = createS3Mount('s3-delete-evict');
+        const { mount, backing } = createS3Mount('s3-delete-evict');
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
         const containerId = await mount.createFolder(rootId, 'doc1', 'doc');
         const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        // Capture the real id-stable key while the row can still resolve it: after deletePath removes
+        // the row, getStorageKey falls back to the bare pathId — a key nothing ever wrote.
+        const storageKey = buildStorageKey(dataDbId, 'data.db');
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.drainPendingUploads({ flushNow: true });
+        expect(await backing.exists(storageKey)).toBe(true); // the object really lives at the probed key
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run(); // open + dirty
         expect(existsSync(mount.getTempPath(dataDbId))).toBe(true);
 
@@ -225,9 +226,8 @@ describe('delete/trash must evict the cached document DB (no resurrection, no le
         expect(existsSync(mount.getTempPath(dataDbId))).toBe(false);
         expect(mount.pendingUploadCount).toBe(0);
 
-        fault.failNextWrites = 0;
         await mount.drainPendingUploads({ flushNow: true });
-        expect(await mount.readFile(dataDbId)).toBeNull(); // never resurrected
+        expect(await backing.exists(storageKey)).toBe(false); // never resurrected
     });
 });
 

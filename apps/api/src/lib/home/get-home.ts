@@ -117,13 +117,16 @@ export async function getUserHome(userId: string): Promise<UserHome> {
 
 export async function evictHome(ownerId: string): Promise<void> {
     const factory = homeFactories.get(ownerId);
-    if (factory) {
-        try {
-            const home = await factory();
-            await home.shutdown();
-        } catch {
-            /* Home may not be initialized */
-        }
+    if (!factory) return;
+    try {
+        const home = await factory();
+        await home.shutdown();
+    } catch {
+        /* Home may not be initialized */
+    }
+    // Evict only if it is still the current entry — a concurrent getHome may already have
+    // installed a replacement we must not clobber.
+    if (homeFactories.get(ownerId) === factory) {
         homeFactories.delete(ownerId);
     }
 }
