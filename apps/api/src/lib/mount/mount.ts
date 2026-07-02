@@ -114,7 +114,6 @@ function isViableRecoveryTemp(tempPath: string, knownSize: number): boolean {
 
 export class Mount {
     readonly id: string;
-    readonly name: string;
     readonly config: MountConfig;
 
     private baseDir: string;
@@ -144,7 +143,6 @@ export class Mount {
     ) {
         this.ownerId = ownerId;
         this.id = config.id;
-        this.name = config.name;
         this.config = config;
         this.baseDir = path.join(baseDir, 'mounts', config.id);
         this.getLocalDatabase = getLocalDatabase;
@@ -163,6 +161,19 @@ export class Mount {
         } else {
             throw new Error(`Storage type ${config.storageType} not yet supported`);
         }
+    }
+
+    // Read live off config so a settings rename (TeamHome.updateMount) shows up without rebuilding.
+    get name(): string {
+        return this.config.name;
+    }
+
+    // Hot-swap a live settings change. Only fields that don't define the storage backend (name, quota)
+    // apply here; storageType/s3Config are bound to this.storage + uploadQueue at build time, so
+    // re-pointing storage is a rebuild handled on the next mount load, not under in-flight uploads.
+    applyConfig(config: MountConfig): void {
+        this.config.name = config.name;
+        this.config.maxSizeMB = config.maxSizeMB;
     }
 
     get thumbsDir(): string {

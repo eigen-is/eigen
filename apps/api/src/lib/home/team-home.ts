@@ -88,6 +88,9 @@ export class TeamHome extends Home {
 
         const updated = { ...existing, ...update };
         await this.settings.set({ mounts: { [mountId]: updated } });
+        // Persisting alone leaves the already-built Drive on a stale config until the Home is evicted;
+        // push the change onto the live mount so quota/name/enabled apply immediately.
+        await this.drive.updateMount(createMountConfig(mountId, updated), updated.enabled);
         return updated;
     }
 }

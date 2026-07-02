@@ -96,13 +96,23 @@ export class Home {
 
         await time('Home.init.settings', () => this.settings?.load() ?? Promise.resolve());
 
-        await Promise.all([
+        // allSettled (not all): if one subsystem init throws, let its peers finish opening before we
+        // tear down — a rejected Promise.all returns while siblings are still mid-init, so their
+        // ManagedDatabases + upload/reindex timers would leak. On any failure, the idempotent
+        // shutdown() (see destruct) closes what got built and clears the idle timer; then rethrow so
+        // getHome discards this half-built Home instead of caching a leaking one.
+        const results = await Promise.allSettled([
             time('Home.init.drive', () => this._drive?.init(autoCreateDefaultMount) ?? Promise.resolve()),
             time('Home.init.contacts', () => this._contacts?.init() ?? Promise.resolve()),
             time('Home.init.mail', () => this._mail?.init() ?? Promise.resolve()),
             time('Home.init.calendar', () => this._calendar?.init() ?? Promise.resolve()),
             time('Home.init.notifications', () => this._notifications?.init() ?? Promise.resolve()),
         ]);
+        const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+        if (failed) {
+            await this.shutdown();
+            throw failed.reason;
+        }
 
         this.initialized = true;
         console.log(`[Home] Initialized for ${this.user.id}`);

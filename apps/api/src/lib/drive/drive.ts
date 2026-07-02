@@ -142,6 +142,22 @@ export default class Drive {
         }
     }
 
+    // Called by: TeamHome.updateMount (routed via PUT /team/:ownerId/mount/:mountId). Pushes a
+    // persisted mount-settings change onto the live mount so a new quota/name/enabled flag takes
+    // effect on this Home without waiting for an evict + reload. Not route-callable directly.
+    async updateMount(config: MountConfig, enabled: boolean): Promise<void> {
+        const live = this.mounts.get(config.id);
+        if (!enabled) {
+            if (live) await this.removeMount(config.id);
+            return;
+        }
+        if (!live) {
+            await this.addMount(config);
+            return;
+        }
+        live.applyConfig(config);
+    }
+
     async removeMount(mountId: string): Promise<void> {
         if (mountId === this.defaultMountId) {
             throw new ApiError(400, 'Cannot remove default mount');
