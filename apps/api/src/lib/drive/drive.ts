@@ -909,6 +909,10 @@ export default class Drive {
                     await this.recordFileEvent(mountId, pathId, actor, 'acl-changed', { added, removed });
                 }
             }
+            // A revoked read must drop the user's live collab socket now, not whenever they
+            // next disconnect. All connections (owner + shared users) live in this owner-home
+            // Drive's `documents` registry, so this is a local close — no home-relay needed.
+            await this.enforceReadAccessRecursively(mountId, pathId);
         }
     }
 
@@ -1433,6 +1437,33 @@ export default class Drive {
             const children = await mount.listFolderAll(pathId);
             for (const child of children) {
                 await this.closeCollabDocumentsRecursively(mountId, child.id);
+            }
+        }
+    }
+
+    // Re-check read on every OPEN collab doc at or below `pathId` (mirrors the
+    // closeCollabDocumentsRecursively walk). Re-checking canRead per connection — not
+    // diffing removed ACL entries — is what makes revoking a *folder* share cascade to
+    // docs nested inside it, since read is inherited from the whole ancestor chain.
+    private async enforceReadAccessRecursively(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path) return;
+
+        if (isCollabType(path.type)) {
+            // Only open docs hold live connections; skip closed ones to keep this cheap.
+            const getter = this.documents.get(this.documentKey(mountId, pathId));
+            if (!getter) return;
+            try {
+                const doc = await getter();
+                await doc.enforceReadAccess();
+            } catch (error) {
+                console.error(`Failed to enforce read access on ${pathId}:`, error);
+            }
+        } else if (isContainerType(path.type)) {
+            const children = await mount.listFolderAll(pathId);
+            for (const child of children) {
+                await this.enforceReadAccessRecursively(mountId, child.id);
             }
         }
     }
