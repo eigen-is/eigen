@@ -138,7 +138,7 @@ export default class Maildir {
         return this.getMailboxInfo(mailbox);
     }
 
-    async mailboxDeliver(message: string): Promise<string> {
+    async mailboxDeliver(message: Buffer): Promise<string> {
         const { uniqueId } = await this.store.deliverAtomic(message, '');
         await this.syncMailbox('');
         return uniqueId;
@@ -254,8 +254,9 @@ export default class Maildir {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
         }
 
-        const text = await this.store.getMessageFile(email.mailbox, email.filename).text();
-        await this.store.deliverAtomic(text, targetMailbox);
+        // Copy the raw bytes, not a `.text()` round-trip — decoding would corrupt non-UTF-8 mail.
+        const bytes = Buffer.from(await this.store.getMessageFile(email.mailbox, email.filename).arrayBuffer());
+        await this.store.deliverAtomic(bytes, targetMailbox);
         await this.syncMailbox(targetMailbox);
     }
 
