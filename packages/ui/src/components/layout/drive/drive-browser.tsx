@@ -1,4 +1,10 @@
-import { useBreadcrumb, useCreateFolder, useFolderContent, useRootFolder } from '@workspace/lib/drive';
+import {
+    defaultDriveSort,
+    useBreadcrumb,
+    useCreateFolder,
+    useFolderContent,
+    useRootFolder,
+} from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -10,12 +16,11 @@ import {
 } from '@workspace/ui/components/context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { FolderPlus } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
-import { DriveTable, defaultDriveSort } from './drive-table';
-import { getFileIcon } from './file-presentation';
+import { DriveTable } from './drive-table';
 
 function matchesMimeFilter(mimeType: string, filters: string[]): boolean {
     return filters.some((filter) => {
@@ -110,6 +115,7 @@ export function DriveBrowser({
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
     const folderId = currentFolderId ?? rootFolder?.id ?? '';
     const { data: folderContents = [] } = useFolderContent(activeOwnerId, activeMountId, folderId);
+    const sortedContents = useMemo(() => [...folderContents].sort(defaultDriveSort), [folderContents]);
     const { data: breadcrumbPaths = [] } = useBreadcrumb(activeOwnerId, activeMountId, folderId);
     const createFolder = useCreateFolder(activeOwnerId, activeMountId);
 
@@ -222,15 +228,11 @@ export function DriveBrowser({
                 </div>
             )}
             <DriveTable
-                items={folderContents}
-                currentPath={currentPath}
+                items={sortedContents}
                 activeItemId={selectedId ?? undefined}
                 onItemClick={handleItemClick}
                 onItemOpen={handleItemOpen}
-                getFileIcon={getFileIcon}
                 isItemDisabled={isItemDisabled}
-                sortFn={defaultDriveSort}
-                showParentRow={breadcrumbPaths.length > 1}
                 hideModified
                 hideOwner
                 hideShareClick

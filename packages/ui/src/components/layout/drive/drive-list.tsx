@@ -1,6 +1,6 @@
 import { usePaletteSelection } from '@workspace/lib/command-palette';
-import { useBreadcrumb } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
+import type { DrivePath, DriveSortDir, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     ContextMenu,
@@ -14,11 +14,14 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
+import { DriveGrid, DriveTable } from '@workspace/ui/components/layout/drive';
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
 import { cn } from '@workspace/ui/lib/utils';
-import { Plus, UploadIcon } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
+import type React from 'react';
 import { useMemo, useRef, useState } from 'react';
+import { useListSelection } from '../../../hooks/use-list-selection';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
 import { useLayout } from '../app/layout-context.tsx';
@@ -26,6 +29,59 @@ import { LoadingState } from '../app/loading-state';
 import { type CreateCallbacks, getCreateMenuItems } from './create-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { useMountLabel } from './drive-mount-list';
+
+const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
+const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
+
+// Sort dropdown + list/grid toggle bound to the shared view preference.
+// Lives in every drive listing toolbar (browser, filter views, trash).
+export function DriveViewControls() {
+    const { mode, setMode, sortKey, sortDir, setSort } = useDriveViewPreferences();
+
+    // Re-selecting the active field flips direction; switching field uses that field's default.
+    const chooseSort = (key: DriveSortKey) =>
+        setSort(key, key === sortKey ? (sortDir === 'asc' ? 'desc' : 'asc') : DEFAULT_DIR[key]);
+
+    return (
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                        {SORT_LABELS[sortKey]}
+                        <ChevronDown className="h-4 w-4 ml-1" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    {(Object.keys(SORT_LABELS) as DriveSortKey[]).map((key) => (
+                        <DropdownMenuItem key={key} onClick={() => chooseSort(key)}>
+                            {SORT_LABELS[key]}
+                            {key === sortKey &&
+                                (sortDir === 'asc' ? (
+                                    <ArrowUp className="h-4 w-4 ml-auto" />
+                                ) : (
+                                    <ArrowDown className="h-4 w-4 ml-auto" />
+                                ))}
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+            </DropdownMenu>
+            <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={mode}
+                onValueChange={(v) => v && setMode(v as DriveViewMode)}
+            >
+                <ToggleGroupItem value="list" aria-label="List view">
+                    <List className="h-4 w-4" />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="grid" aria-label="Grid view">
+                    <LayoutGrid className="h-4 w-4" />
+                </ToggleGroupItem>
+            </ToggleGroup>
+        </>
+    );
+}
 
 type DriveListToolbarProps = CreateCallbacks & {
     ownerId: string;
@@ -96,12 +152,16 @@ export function DriveListToolbar({
             ) : (
                 <div className="flex-1" />
             )}
-            <div className="flex gap-1">{isMobile && newItemButton}</div>
+            <div className="flex items-center gap-1">
+                <DriveViewControls />
+                {isMobile && newItemButton}
+            </div>
         </div>
     );
 }
 
 type DriveListProps = CreateCallbacks & {
+    // Already sorted by the caller — rendered and range-selected in this order.
     items: DrivePath[];
     isLoading?: boolean;
     error?: Error | null;
@@ -109,7 +169,6 @@ type DriveListProps = CreateCallbacks & {
     onRowActivate?: (path: DrivePath) => void;
     activeRowId?: string;
     onUploadFiles?: (files: File[]) => void;
-    currentPath?: DrivePath | null;
     onDelete?: (paths: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
@@ -120,7 +179,6 @@ type DriveListProps = CreateCallbacks & {
     ownerId: string;
     mountId: string;
     pathId?: string;
-    showBreadcrumb?: boolean;
     allowDelete?: boolean;
     allowUpload?: boolean;
     onRename?: (item: DrivePath) => void;
@@ -129,8 +187,13 @@ type DriveListProps = CreateCallbacks & {
     onCopyTo?: (items: DrivePath[]) => void;
     onDuplicate?: (items: DrivePath[]) => void;
     onQuickLook?: (path: DrivePath) => void;
-    sortFn?: (a: DrivePath, b: DrivePath) => number;
     unreadPathIds?: Set<string>;
+    hideOwner?: boolean;
+    hideShared?: boolean;
+    dateLabel?: string;
+    getItemDate?: (item: DrivePath) => Date | null;
+    contextMenuItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
+    emptyState?: React.ReactNode;
 };
 
 export function DriveList({
@@ -144,7 +207,6 @@ export function DriveList({
     onUploadFile,
     onUploadFiles,
     onDelete,
-    currentPath,
     onShareClick,
     onEmailCollaborators,
     onCreateEigenDoc,
@@ -163,21 +225,27 @@ export function DriveList({
     onCopyTo,
     onDuplicate,
     onQuickLook,
-    sortFn,
     unreadPathIds,
+    hideOwner,
+    hideShared,
+    dateLabel,
+    getItemDate,
+    contextMenuItems,
+    emptyState,
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
+    const { mode } = useDriveViewPreferences();
     const [isDragging, setIsDragging] = useState(false);
-    const [selectedItems, setSelectedItems] = useState<DrivePath[]>([]);
     const dragCounter = useRef(0);
 
-    // Publish the table's multi-selection to the command palette. Memoized so the
-    // wrapper's identity stays stable across re-renders that don't actually change the
-    // selection — otherwise the publication effect would refire and the context
-    // update would re-render this component, looping.
+    // Selection lives here (not per view) so it survives list/grid toggles.
+    const selection = useListSelection({ items, getId: (item: DrivePath) => item.id });
+
+    // Publish the multi-selection to the command palette. Memoized so the wrapper's
+    // identity stays stable across re-renders that don't change the selection.
     const paletteSelection = useMemo(
-        () => (selectedItems.length > 0 ? { items: selectedItems } : null),
-        [selectedItems],
+        () => (selection.selectedItems.length > 0 ? { items: selection.selectedItems } : null),
+        [selection.selectedItems],
     );
     usePaletteSelection(paletteSelection);
     // Handle row click with two different behaviors
@@ -259,6 +327,31 @@ export function DriveList({
         return <ErrorState message="Error loading files" detail={error.message} />;
     }
 
+    // Shared inputs for both views; the table additionally gets the column config.
+    const sharedProps = {
+        items,
+        activeItemId: activeRowId,
+        onItemClick: handleRowClick,
+        onItemOpen: onRowActivate,
+        onShareClick,
+        onEmailCollaborators,
+        getItemHref,
+        onConvert,
+        onDownload,
+        onExport,
+        onDelete,
+        allowDelete,
+        onRename,
+        onMove,
+        onMoveTo,
+        onCopyTo,
+        onDuplicate,
+        selection,
+        contextMenuItems,
+        onQuickLook,
+        unreadPathIds,
+    };
+
     const contentDiv = (
         <div
             className="h-full flex flex-col relative border-r"
@@ -281,35 +374,20 @@ export function DriveList({
                 </div>
             )}
 
-            <DriveTable
-                items={items}
-                currentPath={currentPath}
-                activeItemId={activeRowId}
-                onItemClick={handleRowClick}
-                onItemOpen={onRowActivate}
-                onShareClick={onShareClick}
-                onEmailCollaborators={onEmailCollaborators}
-                getFileIcon={getFileIcon}
-                getItemHref={getItemHref}
-                onConvert={onConvert}
-                onDownload={onDownload}
-                onExport={onExport}
-                onDelete={onDelete}
-                allowDelete={allowDelete}
-                onRename={onRename}
-                onMove={onMove}
-                onMoveTo={onMoveTo}
-                onCopyTo={onCopyTo}
-                onDuplicate={onDuplicate}
-                onSelectionChange={setSelectedItems}
-                ancestorBreadcrumb={breadcrumbPaths ?? []}
-                showParentRow={(breadcrumbPaths?.length ?? 0) > 1}
-                onQuickLook={onQuickLook}
-                sortFn={sortFn}
-                unreadPathIds={unreadPathIds}
-            />
+            {mode === 'grid' ? (
+                <DriveGrid {...sharedProps} />
+            ) : (
+                <DriveTable
+                    {...sharedProps}
+                    hideOwner={hideOwner}
+                    hideShared={hideShared}
+                    dateLabel={dateLabel}
+                    getItemDate={getItemDate}
+                    ancestorBreadcrumb={breadcrumbPaths ?? []}
+                />
+            )}
 
-            {items.length === 0 && !currentPath?.parentId && <EmptyState />}
+            {items.length === 0 && (emptyState ?? <EmptyState />)}
         </div>
     );
 

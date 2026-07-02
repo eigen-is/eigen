@@ -1,9 +1,11 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import {
+    getDriveComparator,
     useConvertDocument,
     useCopyPath,
     useDeletePaths,
+    useDriveViewPreferences,
     useDuplicatePath,
     useExportDocument,
     useMovePath,
@@ -22,7 +24,6 @@ import { DriveEmailCollaborators } from './drive-email-collaborators';
 import { DriveList, DriveListToolbar } from './drive-list';
 import { DriveLocationPicker } from './drive-location-picker';
 import { DriveRenameItem } from './drive-rename-item';
-import { defaultDriveSort } from './drive-table';
 import { DriveUploadFiles } from './drive-upload-files';
 import { ExportProgressDialog } from './export-progress-dialog';
 import { useDriveDialogs } from './use-drive-dialogs';
@@ -53,7 +54,6 @@ export type DriveLayoutProps = {
     allowMove?: boolean;
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
     getItemHref?: (item: DrivePath) => string | undefined;
-    sortFn?: (a: DrivePath, b: DrivePath) => number;
     pid?: string;
     unreadPathIds?: Set<string>;
     highlightHistory?: boolean;
@@ -81,7 +81,6 @@ export function DriveLayout({
     allowMove = true,
     onQuickLook,
     getItemHref,
-    sortFn = defaultDriveSort,
     pid = undefined,
     showBreadcrumb = false,
     title,
@@ -95,6 +94,10 @@ export function DriveLayout({
     const duplicatePath = useDuplicatePath();
     const deletePathsMutation = useDeletePaths(ownerId, mountId);
     const convertMutation = useConvertDocument(ownerId, mountId);
+
+    // Sort order comes from the shared view preference.
+    const { sortKey, sortDir } = useDriveViewPreferences();
+    const activeSortFn = useMemo(() => getDriveComparator(sortKey, sortDir), [sortKey, sortDir]);
 
     const handleFileUpload = () => {
         if (allowUpload && currentPath) {
@@ -239,7 +242,7 @@ export function DriveLayout({
         [allowShare, dialogs.email.openDialog],
     );
 
-    const sortedContents = useMemo(() => [...folderContents].sort(sortFn), [folderContents, sortFn]);
+    const sortedContents = useMemo(() => [...folderContents].sort(activeSortFn), [folderContents, activeSortFn]);
 
     const wrappedQuickLook = useCallback(
         (path: DrivePath) => {
@@ -284,7 +287,7 @@ export function DriveLayout({
     }
 
     const listProps = {
-        items: folderContents,
+        items: sortedContents,
         isLoading,
         error,
         onRowSelect,
@@ -297,11 +300,9 @@ export function DriveLayout({
         onShareClick: allowShare ? handleShareClick : undefined,
         onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
         onCreateEigenDoc,
-        currentPath,
         ownerId,
         mountId,
         pathId,
-        showBreadcrumb,
         onConvert: handleConvertPath,
         onDownload: handleDownloadPath,
         onExport: handleExportPath,
@@ -314,7 +315,6 @@ export function DriveLayout({
         onCopyTo: handleCopyTo,
         onDuplicate: allowMove ? handleDuplicate : undefined,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
-        sortFn,
         unreadPathIds,
     };
 

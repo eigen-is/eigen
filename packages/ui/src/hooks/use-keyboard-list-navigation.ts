@@ -15,6 +15,8 @@ type UseKeyboardListNavigationOptions<T> = {
     onDelete?: (item: T) => void;
     shouldNotify?: (item: T, index: number) => boolean;
     selection?: UseListSelectionReturn<T>;
+    columns?: number;
+    scrollToIndex?: (index: number) => void;
 };
 
 export function useKeyboardListNavigation<T>({
@@ -29,6 +31,8 @@ export function useKeyboardListNavigation<T>({
     shouldNotify,
     selection,
     onQuickLook,
+    columns = 1,
+    scrollToIndex,
 }: UseKeyboardListNavigationOptions<T>) {
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const getIdRef = useRef(getId);
@@ -57,6 +61,10 @@ export function useKeyboardListNavigation<T>({
     }, [containerRef]);
 
     const scrollToRow = (index: number) => {
+        if (scrollToIndex) {
+            scrollToIndex(index);
+            return;
+        }
         const container = containerRef.current;
         if (!container) return;
         const item = container.querySelectorAll(itemSelector)[index] as HTMLElement | undefined;
@@ -98,31 +106,35 @@ export function useKeyboardListNavigation<T>({
             return;
         }
 
+        const moveTo = (computeNext: (prev: number) => number) => {
+            e.preventDefault();
+            setSelectedIndex((prev) => {
+                const next = computeNext(prev);
+                if (next >= 0 && next !== prev) {
+                    updateSelection(items[next], e);
+                    if (!e.shiftKey) notify(items[next], next);
+                    scrollToRow(next);
+                }
+                return next;
+            });
+        };
+
         switch (e.key) {
             case 'ArrowDown':
-                e.preventDefault();
-                setSelectedIndex((prev) => {
-                    const newIndex = Math.min(prev + 1, items.length - 1);
-                    if (newIndex >= 0 && newIndex !== prev) {
-                        updateSelection(items[newIndex], e);
-                        if (!e.shiftKey) notify(items[newIndex], newIndex);
-                        scrollToRow(newIndex);
-                    }
-                    return newIndex;
-                });
+                // From no selection, Down enters at the first item — not columns-1 in a grid.
+                moveTo((prev) => (prev < 0 ? 0 : Math.min(prev + columns, items.length - 1)));
                 break;
 
             case 'ArrowUp':
-                e.preventDefault();
-                setSelectedIndex((prev) => {
-                    const newIndex = Math.max(prev - 1, 0);
-                    if (newIndex >= 0 && newIndex !== prev) {
-                        updateSelection(items[newIndex], e);
-                        if (!e.shiftKey) notify(items[newIndex], newIndex);
-                        scrollToRow(newIndex);
-                    }
-                    return newIndex;
-                });
+                moveTo((prev) => Math.max(prev - columns, 0));
+                break;
+
+            case 'ArrowRight':
+                if (columns > 1) moveTo((prev) => Math.min(prev + 1, items.length - 1));
+                break;
+
+            case 'ArrowLeft':
+                if (columns > 1) moveTo((prev) => Math.max(prev - 1, 0));
                 break;
 
             case ' ':

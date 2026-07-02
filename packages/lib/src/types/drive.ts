@@ -328,6 +328,11 @@ export type DrivePath = {
     updatedAt: Date;
 };
 
+export type DriveViewMode = 'list' | 'grid';
+export type DriveSortKey = 'name' | 'modified' | 'size';
+export type DriveSortDir = 'asc' | 'desc';
+export type DriveViewPreferences = { mode: DriveViewMode; sortKey: DriveSortKey; sortDir: DriveSortDir };
+
 // The identity subset of DrivePath needed to resolve a URL or open an item
 // (getDriveItemUrl, openDocument). DrivePath is assignable to it.
 export type DriveItemRef = {

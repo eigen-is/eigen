@@ -512,6 +512,45 @@ describe('User Settings', () => {
         expect(data.email?.signatures).toEqual([sig]);
     });
 
+    test('PUT and GET round-trips driveView', async () => {
+        const driveView = { mode: 'grid', sortKey: 'modified', sortDir: 'desc' } as const;
+        const putRes = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ driveView }),
+        });
+        expect(putRes.status).toBe(200);
+        const getRes = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`);
+        const data = await assertJson<UserSettings>(getRes);
+        expect(data.driveView).toEqual(driveView);
+    });
+
+    test('updating driveView does not clobber theme', async () => {
+        await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: 'dark' }),
+        });
+        await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ driveView: { mode: 'grid', sortKey: 'name', sortDir: 'asc' } }),
+        });
+        const getRes = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`);
+        const data = await assertJson<UserSettings>(getRes);
+        expect(data.theme).toBe('dark');
+        expect(data.driveView?.mode).toBe('grid');
+    });
+
+    test('PUT with invalid driveView.mode returns 422', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ driveView: { mode: 'tiles' } }),
+        });
+        expect(res.status).toBe(422);
+    });
+
     test('PUT with malformed signature returns 422', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
             method: 'PUT',

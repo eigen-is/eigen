@@ -1,3 +1,4 @@
+import type { DriveViewPreferences } from './drive';
 import type { S3Config } from './mount';
 
 export type MountSettings = {
@@ -22,6 +23,7 @@ export type UserSettings = {
     theme?: 'light' | 'dark' | 'system';
     mounts?: Record<string, MountSettings>;
     email?: EmailSettings;
+    driveView?: Partial<DriveViewPreferences>;
 };
 
 export type TeamSettings = {

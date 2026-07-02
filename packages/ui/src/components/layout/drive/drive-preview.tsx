@@ -1,4 +1,4 @@
-import { getDriveThumbnailUrl } from '@workspace/lib/api';
+import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { getTextPreviewMode } from '@workspace/lib/constants';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
 import { useTextPreview } from '@workspace/lib/drive';
@@ -18,15 +18,8 @@ type DrivePreviewProps = {
 // Fixed 16:9 aspect keeps the panel height stable as the user clicks through files.
 export function DrivePreview({ path, onActivate, className }: DrivePreviewProps) {
     const presentation = getFilePresentation(path.mimeType, path.type);
-    const isImage = path.mimeType.startsWith('image/');
-    const isVideo = path.mimeType.startsWith('video/');
     const hasTextPreview = getTextPreviewMode(path.mimeType, path.name) !== null;
-    const showThumbnail = (isImage || isVideo) && !!path.thumbnail;
-
-    const v = path.updatedAt instanceof Date ? path.updatedAt.getTime() : new Date(path.updatedAt).getTime();
-    const thumbnailUrl = path.thumbnail
-        ? `${getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail)}?v=${v}`
-        : undefined;
+    const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(path);
 
     const interactive = !!onActivate;
     const Wrapper = interactive ? 'button' : 'div';

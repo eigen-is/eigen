@@ -1,33 +1,21 @@
-import { formatDateTime } from '@workspace/lib/date';
-import { DEFAULT_MOUNT_ID, type DrivePath, stripEigenExtension } from '@workspace/lib/types';
-import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
-import { ChevronLeft, Copy, CopyPlus, FolderInput, MoreVertical, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
-import { useListDrag } from '../../../hooks/use-list-drag';
-import { useListSelection } from '../../../hooks/use-list-selection';
-import { ContextMenuAnchor, useContextMenu } from '../context-menu';
-import { UnreadDot } from '../unread-dot';
-import { UserAvatar } from '../user-avatar';
-import { DriveItemMenuItems } from './drive-item-menu';
-import { DriveShareSummary } from './drive-share-summary';
-import { getFilePresentation } from './file-presentation';
+import { useRef } from 'react';
+import type { UseListSelectionReturn } from '../../../hooks/use-list-selection';
+import { DriveItemContextMenu } from './drive-item-context-menu';
+import { DriveRow } from './drive-row';
+import { useDriveItemController } from './use-drive-item-controller';
 
-export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
-    if (a.type === 'folder' && b.type !== 'folder') return -1;
-    if (a.type !== 'folder' && b.type === 'folder') return 1;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-}
-
-export type DriveTableProps = {
+// Shared base for the drive views (table + grid): data, callbacks and selection inputs,
+// minus the table-only column flags. DriveGrid consumes this directly.
+export type DriveViewProps = {
+    // Already sorted by the caller — the views render and navigate them as-is.
     items: DrivePath[];
-    currentPath?: DrivePath | null;
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
     onItemOpen?: (item: DrivePath) => void;
-    getFileIcon?: (mimeType: string, type: string, props?: Record<string, unknown>) => React.ReactNode;
     isItemDisabled?: (item: DrivePath) => boolean;
     getItemHref?: (item: DrivePath) => string | undefined;
     onShareClick?: (item: DrivePath) => void;
@@ -42,28 +30,47 @@ export type DriveTableProps = {
     onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
-    sortFn?: (a: DrivePath, b: DrivePath) => number;
     allowDelete?: boolean;
-    ancestorBreadcrumb?: DrivePath[];
-    showParentRow?: boolean;
     unreadPathIds?: Set<string>;
-    hideModified?: boolean;
-    hideOwner?: boolean;
-    hideShareClick?: boolean;
-    hideHeader?: boolean;
-    externalSelectedIds?: Set<string>;
+    // Selection lifted by the caller (DriveList) so it survives list/grid toggles.
+    selection?: UseListSelectionReturn<DrivePath>;
     // Fires whenever the internal shift/ctrl-aware selection changes — used by file pickers
     // in multi-select mode to mirror the selection without reimplementing modifier handling.
     onSelectionChange?: (items: DrivePath[]) => void;
+    // Replaces the default context-menu body — used by listings with their own actions (trash).
+    contextMenuItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
+};
+
+// Table view adds the column-layout flags the grid has no concept of.
+export type DriveTableProps = DriveViewProps & {
+    hideModified?: boolean;
+    hideOwner?: boolean;
+    hideShared?: boolean;
+    hideShareClick?: boolean;
+    hideHeader?: boolean;
+    dateLabel?: string;
+    getItemDate?: (item: DrivePath) => Date | null;
+    ancestorBreadcrumb?: DrivePath[];
+    externalSelectedIds?: Set<string>;
+};
+
+// Static permutations so Tailwind's JIT sees every class; keyed by the visible optional columns.
+const GRID_COLS_800: Record<string, string> = {
+    'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%_40px]',
+    'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_40px]',
+    'owner-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_15%_40px]',
+    'shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_10%_15%_40px]',
+    owner: '@[800px]:grid-cols-[minmax(0,1fr)_8%_40px]',
+    shared: '@[800px]:grid-cols-[minmax(0,1fr)_10%_40px]',
+    modified: '@[800px]:grid-cols-[minmax(0,1fr)_15%_40px]',
+    '': '@[800px]:grid-cols-[minmax(0,1fr)_40px]',
 };
 
 export function DriveTable({
     items = [],
-    currentPath,
     activeItemId,
     onItemClick,
     onItemOpen,
-    getFileIcon,
     isItemDisabled,
     getItemHref,
     onShareClick,
@@ -78,372 +85,144 @@ export function DriveTable({
     onExport,
     onQuickLook,
     onEmailCollaborators,
-    sortFn = defaultDriveSort,
     allowDelete = false,
     ancestorBreadcrumb,
-    showParentRow,
     unreadPathIds,
     hideModified = false,
     hideOwner = false,
+    hideShared = false,
     hideShareClick = false,
     hideHeader = false,
+    dateLabel = 'Modified',
+    getItemDate,
+    selection,
     externalSelectedIds,
     onSelectionChange,
+    contextMenuItems,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
+    const listRef = useRef<HTMLDivElement>(null);
 
-    const hasParentItem = showParentRow ?? Boolean(currentPath?.parentId);
-
-    const sortedItems = useMemo(() => {
-        return [...items].sort(sortFn);
-    }, [items, sortFn]);
-
-    const allItems = useMemo(() => {
-        const result = [...sortedItems];
-        if (hasParentItem && currentPath?.parentId) {
-            result.unshift({
-                id: currentPath.parentId,
-                mountId: currentPath.mountId || DEFAULT_MOUNT_ID,
-                name: '..',
-                type: 'folder',
-                parentId: null,
-                ownerId: currentPath.ownerId || '',
-                mimeType: 'folder',
-                size: 0,
-                hash: null,
-                thumbnail: null,
-                acl: null,
-                visibility: 'private',
-                sharingRestricted: false,
-                details: null,
-                trashedAt: null,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
-        }
-        return result;
-    }, [sortedItems, hasParentItem, currentPath]);
-
-    const handleItemSelect = useCallback(
-        (id: string) => {
-            const item = allItems.find((i) => i.id === id);
-            if (item) onItemClick?.(item);
-        },
-        [allItems, onItemClick],
-    );
-
-    const handleQuickLook = useCallback(
-        (id: string) => {
-            if (!onQuickLook) return;
-            const item = allItems.find((i) => i.id === id);
-            if (item) onQuickLook(item);
-        },
-        [allItems, onQuickLook],
-    );
-
-    const selection = useListSelection({ items: allItems, getId: (item) => item.id });
-
-    useEffect(() => {
-        onSelectionChange?.(selection.selectedItems);
-    }, [selection.selectedItems, onSelectionChange]);
-
-    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation<DrivePath>({
-        items: allItems,
-        activeId: activeItemId,
-        getId: (item) => item.id,
-        onSelect: handleItemSelect,
-        onQuickLook: onQuickLook ? handleQuickLook : undefined,
-        containerRef,
-        shouldNotify: (_item, index) => (!hasParentItem || index > 0) && !!activeItemId,
-        selection,
+    // Estimate only — every row is measured, since row height varies with the container-driven layout.
+    const ROW_HEIGHT = 41;
+    const virtualizer = useVirtualizer({
+        count: items.length,
+        getScrollElement: () => containerRef.current,
+        estimateSize: () => ROW_HEIGHT,
+        // Key the measurement cache by id so a re-sort moves cached heights with their rows.
+        getItemKey: (index) => items[index].id,
+        overscan: 12,
+        // List offset within the scroller — measured on the list wrapper, not the sticky header.
+        scrollMargin: listRef.current?.offsetTop ?? 0,
     });
 
-    const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'drive-item' });
+    const controller = useDriveItemController({
+        items,
+        activeItemId,
+        containerRef,
+        scrollToIndex: virtualizer.scrollToIndex,
+        selection,
+        onItemClick,
+        onQuickLook,
+        onMove,
+        onSelectionChange,
+    });
 
-    const contextMenu = useContextMenu<DrivePath>();
-
-    const handleContextMenu = (e: React.MouseEvent, item: DrivePath) => {
-        if (!selection.isSelected(item.id)) {
-            selection.select(item.id);
-        }
-        contextMenu.handleContextMenu(e, item);
-    };
-
-    const openContextMenuFromButton = (button: HTMLElement, item: DrivePath) => {
-        if (!selection.isSelected(item.id)) {
-            selection.select(item.id);
-        }
-        const rect = button.getBoundingClientRect();
-        contextMenu.openAt(item, rect.right, rect.bottom);
-    };
-
-    const contextItems = contextMenu.item
-        ? selection.selectedCount > 1
-            ? selection.selectedItems
-            : [contextMenu.item]
-        : [];
-    const isSingleSelect = contextItems.length === 1;
-    const contextMenuItemHref = isSingleSelect && contextMenu.item ? getItemHref?.(contextMenu.item) : undefined;
-
-    const isValidFolderDrop = (targetItem: DrivePath) => {
-        if (targetItem.type !== 'folder') return false;
-        return !drag.draggedItems.some((d) => d.id === targetItem.id);
-    };
-
-    const gridCols =
-        hideModified && hideOwner
-            ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_10%_40px]'
-            : hideModified
-              ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%_40px]'
-              : hideOwner
-                ? 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_10%_15%_40px]'
-                : 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%_40px]';
+    const colsKey = [!hideOwner && 'owner', !hideShared && 'shared', !hideModified && 'modified']
+        .filter(Boolean)
+        .join('-');
+    const gridCols = cn(
+        'grid-cols-[minmax(0,1fr)]',
+        !hideModified && '@[600px]:grid-cols-[minmax(0,1fr)_15%]',
+        GRID_COLS_800[colsKey],
+    );
 
     return (
         <div
             ref={containerRef}
             tabIndex={0}
-            onKeyDown={handleKeyDown}
+            onKeyDown={controller.handleKeyDown}
+            role="grid"
+            aria-rowcount={items.length}
             className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none"
         >
             {!hideHeader && (
-                <div className={cn('grid border-b app-gutter-x', gridCols)}>
+                <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', gridCols)}>
                     <div className="eigen-section-label h-10 pr-2 flex items-center">Name</div>
                     {!hideOwner && (
                         <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center">
                             Owner
                         </div>
                     )}
-                    <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center whitespace-nowrap">
-                        Shared with
-                    </div>
+                    {!hideShared && (
+                        <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center whitespace-nowrap">
+                            Shared with
+                        </div>
+                    )}
                     {!hideModified && (
                         <div className="eigen-section-label h-10 pl-2 pr-4 hidden @[600px]:flex items-center justify-end">
-                            Modified
+                            {dateLabel}
                         </div>
                     )}
                     <div className="hidden @[800px]:block" />
                 </div>
             )}
 
-            {hasParentItem && currentPath && (
-                <div
-                    className={cn(
-                        'grid border-b transition-colors eigen-list-item app-gutter-x',
-                        gridCols,
-                        (activeItemId === currentPath.parentId || selectedIndex === 0) && 'eigen-list-item-active',
-                        currentPath.parentId &&
-                            selection.isSelected(currentPath.parentId) &&
-                            'eigen-list-item-selected',
-                    )}
-                    onClick={(e) => {
-                        const parentId = currentPath.parentId || '';
-                        selection.handleItemClick(parentId, e);
-                        if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                            onItemClick?.(allItems[0]);
-                        }
-                    }}
-                >
-                    <div className="pr-2 py-1.5 flex items-center font-medium">
-                        <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground" />
-                        <span>..</span>
-                    </div>
-                    {!hideOwner && <div className="hidden @[800px]:block px-2 py-1.5" />}
-                    <div className="hidden @[800px]:block px-2 py-1.5" />
-                    {!hideModified && <div className="hidden @[600px]:block pl-2 pr-4 py-1.5 text-right">-</div>}
-                    <div className="hidden @[800px]:block" />
-                </div>
-            )}
-
-            {sortedItems.map((item, index) => {
-                const adjustedIndex = hasParentItem ? index + 1 : index;
-                const itemHref = getItemHref?.(item);
-                const disabled = isItemDisabled?.(item) ?? false;
-                const presentation = getFilePresentation(item.mimeType, item.type);
-
-                return (
-                    <div
-                        key={item.id}
-                        className={cn(
-                            'grid border-b transition-colors eigen-list-item app-gutter-x',
-                            gridCols,
-                            (activeItemId === item.id || selectedIndex === adjustedIndex) && 'eigen-list-item-active',
-                            (selection.isSelected(item.id) || externalSelectedIds?.has(item.id)) &&
-                                'eigen-list-item-selected',
-                            dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
-                            disabled && 'opacity-40 pointer-events-none',
-                        )}
-                        onClick={(e) => {
-                            selection.handleItemClick(item.id, e);
-                            if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                                onItemClick?.(item);
-                            }
-                        }}
-                        onContextMenu={(e) => handleContextMenu(e, item)}
-                        {...drag.getDragProps(item)}
-                        onDragOver={(e) => {
-                            e.preventDefault();
-                            if (drag.isDragging && isValidFolderDrop(item)) {
-                                e.dataTransfer.dropEffect = 'move';
-                            }
-                        }}
-                        onDragEnter={() => {
-                            if (drag.isDragging) setDragOverItemId(item.id);
-                        }}
-                        onDragLeave={() => {}}
-                        onDrop={(e) => {
-                            e.preventDefault();
-                            setDragOverItemId(null);
-                            if (isValidFolderDrop(item) && onMove) {
-                                drag.draggedItems.forEach((d) => {
-                                    onMove(d, item.id);
-                                });
-                            }
-                        }}
-                    >
-                        <div className="pr-2 py-1.5 flex items-center min-w-0">
-                            <div className="relative mr-2 flex-shrink-0">
-                                {getFileIcon?.(item.mimeType, item.type, {
-                                    className: 'h-4 w-4',
-                                    style: { color: presentation.colorVar, fill: presentation.fillColorVar },
-                                })}
-                                {unreadPathIds?.has(item.id) && <UnreadDot />}
-                            </div>
-                            {itemHref ? (
-                                <a
-                                    href={itemHref}
-                                    className="truncate"
-                                    draggable={false}
-                                    tabIndex={-1}
-                                    onClick={(e) => {
-                                        if (e.metaKey || e.ctrlKey) {
-                                            e.stopPropagation();
-                                            return;
-                                        }
-                                        e.preventDefault();
-                                    }}
-                                    onAuxClick={(e) => {
-                                        if (e.button === 1) e.stopPropagation();
-                                    }}
-                                >
-                                    {stripEigenExtension(item.name)}
-                                </a>
-                            ) : (
-                                <span className="truncate">{stripEigenExtension(item.name)}</span>
-                            )}
-                        </div>
-                        {!hideOwner && (
-                            <div className="hidden @[800px]:flex items-center justify-center px-2 py-1.5">
-                                <div className="-my-0.5">
-                                    <UserAvatar userId={item.ownerId} size="sm" tooltip />
-                                </div>
-                            </div>
-                        )}
-                        <div className="hidden @[800px]:flex items-center justify-center px-2 py-1.5 group">
-                            <DriveShareSummary
-                                path={item}
-                                onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
-                                showIconOnHover={!hideShareClick}
+            <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+                {virtualizer.getVirtualItems().map((vi) => {
+                    const item = items[vi.index];
+                    return (
+                        <div
+                            key={item.id}
+                            data-index={vi.index}
+                            ref={virtualizer.measureElement}
+                            className="absolute inset-x-0 top-0"
+                            style={{ transform: `translateY(${vi.start - virtualizer.options.scrollMargin}px)` }}
+                        >
+                            <DriveRow
+                                item={item}
+                                index={vi.index}
+                                gridCols={gridCols}
+                                controller={controller}
+                                isActive={activeItemId === item.id || controller.selectedIndex === vi.index}
+                                isSelected={
+                                    controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)
+                                }
+                                disabled={isItemDisabled?.(item) ?? false}
+                                getItemHref={getItemHref}
+                                onItemClick={onItemClick}
+                                onShareClick={onShareClick}
+                                hideOwner={hideOwner}
+                                hideShared={hideShared}
+                                hideModified={hideModified}
+                                hideShareClick={hideShareClick}
+                                getItemDate={getItemDate}
                                 ancestorBreadcrumb={ancestorBreadcrumb}
+                                unreadPathIds={unreadPathIds}
                             />
                         </div>
-                        {!hideModified && (
-                            <div className="hidden @[600px]:flex items-center justify-end pl-2 pr-4 py-1.5 whitespace-nowrap text-xs text-muted-foreground">
-                                {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
-                            </div>
-                        )}
-                        <div className="hidden @[800px]:flex items-center justify-center py-1.5">
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    openContextMenuFromButton(e.currentTarget, item);
-                                }}
-                                className="h-7 w-7 rounded hover:bg-accent flex items-center justify-center text-muted-foreground"
-                                aria-label="More actions"
-                            >
-                                <MoreVertical className="h-4 w-4" />
-                            </button>
-                        </div>
-                    </div>
-                );
-            })}
+                    );
+                })}
+            </div>
 
-            <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
-                {isSingleSelect && contextMenu.item && (
-                    <DriveItemMenuItems
-                        item={contextMenu.item}
-                        href={contextMenuItemHref}
-                        onClose={contextMenu.close}
-                        onItemOpen={onItemOpen}
-                        onQuickLook={onQuickLook}
-                        onDownload={onDownload}
-                        onConvert={onConvert}
-                        onExport={onExport}
-                        onRename={onRename}
-                        onMoveTo={onMoveTo}
-                        onCopyTo={onCopyTo}
-                        onDuplicate={onDuplicate}
-                        onShareClick={onShareClick}
-                        onEmailCollaborators={onEmailCollaborators}
-                        onDelete={onDelete}
-                        allowDelete={allowDelete}
-                    />
-                )}
-                {!isSingleSelect && contextItems.length > 0 && (
-                    <>
-                        {onMoveTo && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onMoveTo(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <FolderInput className="h-4 w-4 mr-2" />
-                                Move {contextItems.length} items to…
-                            </DropdownMenuItem>
-                        )}
-                        {onCopyTo && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onCopyTo(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <Copy className="h-4 w-4 mr-2" />
-                                Copy {contextItems.length} items to…
-                            </DropdownMenuItem>
-                        )}
-                        {onDuplicate && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onDuplicate(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <CopyPlus className="h-4 w-4 mr-2" />
-                                Duplicate {contextItems.length} items
-                            </DropdownMenuItem>
-                        )}
-                    </>
-                )}
-                {!isSingleSelect && allowDelete && contextItems.length > 0 && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onDelete?.(contextItems);
-                            contextMenu.close();
-                        }}
-                        className="flex items-center"
-                    >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Move {contextItems.length} items to trash
-                    </DropdownMenuItem>
-                )}
-            </ContextMenuAnchor>
+            <DriveItemContextMenu
+                controller={controller}
+                getItemHref={getItemHref}
+                onItemOpen={onItemOpen}
+                onQuickLook={onQuickLook}
+                onDownload={onDownload}
+                onConvert={onConvert}
+                onExport={onExport}
+                onRename={onRename}
+                onMoveTo={onMoveTo}
+                onCopyTo={onCopyTo}
+                onDuplicate={onDuplicate}
+                onShareClick={onShareClick}
+                onEmailCollaborators={onEmailCollaborators}
+                onDelete={onDelete}
+                allowDelete={allowDelete}
+                renderItems={contextMenuItems}
+            />
         </div>
     );
 }
