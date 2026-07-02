@@ -308,8 +308,11 @@ export class Mount {
             // An open document's working copy lives in tmpDir keyed by its data.db pathId (getTempPath).
             // A delayed restart makes it >maxAge, but crash-recovery only adopts it when the doc is next
             // opened — so skip any entry whose basename is a live paths.id, or the sweep deletes the last
-            // un-synced edits before recovery can run. Transient stream/upload/download temps use random
-            // UUID ids that are never a paths row, so they're still swept.
+            // un-synced edits before recovery can run. Transient stream/upload temps use random UUID ids
+            // that are never a paths row, so they're still swept. Download temps (downloadToTemp keys by
+            // the real pathId — e.g. version-file grabs) are also preserved while their row lives: a
+            // benign bounded disk leak that clears when the row goes away (a pruned version), with no
+            // adoption hazard — version-file ids are never opened as managed docs.
             const liveIds = preserveLivePathIds
                 ? new Set(
                       this.db
@@ -1279,8 +1282,9 @@ export class Mount {
         // storage object (a just-created or outage-staged data.db whose PUT hasn't landed), so serve
         // it — copy/download must never capture stale/absent storage. A no-op for local mounts (no
         // queue) and regular files (never staged), and once an upload acks the row is gone and storage
-        // is current. Safe for readFile's real callers: data.db is internal (never served to a user),
-        // and a regular served file is never an open doc, so pending-staging-first can't serve stale
+        // is current. Safe for readFile's real callers: data.db is never on a hot serve path (a
+        // container-internal read gets fresher-or-equal bytes, never staler), and a regular served
+        // file is never an open doc, so pending-staging-first can't serve stale
         // bytes. (The lazy handle races an ack that unlinks the staging file — a bounded transient
         // read error, never data loss; snapshotting instead uses stageDataDbSnapshot's sync copy.)
         const staged = this.pendingStagedCopy(storageKey);
@@ -1293,6 +1297,8 @@ export class Mount {
     }
 
     async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
+        // NOT freshest-first (unlike readFile): a ranged GET of a container-internal db with a pending
+        // upload reads storage. Pre-existing and container-internal-db-only; future follow-up.
         const storageKey = await this.getStorageKey(pathId);
         const probe = this.storage.read(storageKey);
         if (!(await probe.exists())) return null;

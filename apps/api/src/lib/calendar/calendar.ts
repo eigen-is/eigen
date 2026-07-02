@@ -26,7 +26,7 @@ import type { User } from '../user';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
-import { clampRangeEnd, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
+import { clampRangeEnd, isOutOfRangeRecurrenceStart, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import { buildCalendarEvent } from './sse-events';
@@ -395,6 +395,11 @@ export class Calendar {
             // Reject sub-daily recurrence at the write boundary (see recurrence-limits): it is never a
             // real calendar event and lets a single range query block the event loop for everyone.
             if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
+            // Same DoS class: a recurring dtstart outside the sane range makes rrule iterate
+            // dtstart→window at any frequency (see recurrence-limits).
+            if (isOutOfRangeRecurrenceStart(input.startTime)) {
+                throw new ApiError(400, 'Recurring event start time is out of range');
+            }
         }
         const timezone = normalizeTimezone(input.timezone);
         const status = input.status ?? 'confirmed';
@@ -649,6 +654,17 @@ export class Calendar {
             // Reject sub-daily recurrence at the write boundary (see recurrence-limits) — same DoS
             // guard as createEvent, so an update can't poison an existing event either.
             if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
+        }
+        // Both directions poison a stored row: adding an rrule to a far-out-of-range event and moving
+        // a recurring event's start out of range (see recurrence-limits). Gated on the inputs actually
+        // changing rrule/startTime so an unrelated edit of a legacy row isn't bricked — the read path
+        // degrades those.
+        if (
+            rruleStr &&
+            (input.rrule !== undefined || input.startTime !== undefined) &&
+            isOutOfRangeRecurrenceStart(startTime)
+        ) {
+            throw new ApiError(400, 'Recurring event start time is out of range');
         }
         const timezone = input.timezone !== undefined ? normalizeTimezone(input.timezone) : (existing.timezone ?? null);
 
@@ -1503,11 +1519,11 @@ function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEnd: Date
 
     const durationMs = event.endTime.getTime() - event.startTime.getTime();
 
-    // Defence in depth: only a legacy stored row can still hold a sub-daily rrule (the write and ICS
-    // boundaries now reject/strip them). Never feed one to rrule.between — it would iterate to the
-    // window and hang. Surface just the base occurrence if it falls in the window (treat as a single
-    // event, matching the ingest-time degrade).
-    if (isSubDailyRrule(event.rrule)) {
+    // Defence in depth: only a legacy stored row can still hold a sub-daily rrule or an out-of-range
+    // dtstart (the write and ICS boundaries now reject/strip them). Never feed one to rrule.between —
+    // it would iterate to the window and hang. Surface just the base occurrence if it falls in the
+    // window (treat as a single event, matching the ingest-time degrade).
+    if (isSubDailyRrule(event.rrule) || isOutOfRangeRecurrenceStart(event.startTime)) {
         if (event.startTime >= rangeStart && event.startTime <= rangeEnd) {
             return [{ ...event, occurrenceDate: occurrenceDateToString(event.startTime) }];
         }
@@ -1603,9 +1619,9 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
     const tz = parent.timezone;
     const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
 
-    // Skip a sub-daily rrule (only a legacy stored row can be one) — it would iterate to the day
-    // window and hang; fall through to the time-of-day fallback below.
-    if (parent.rrule && !isSubDailyRrule(parent.rrule)) {
+    // Skip a sub-daily rrule or out-of-range dtstart (only a legacy stored row can hold one) — it
+    // would iterate to the day window and hang; fall through to the time-of-day fallback below.
+    if (parent.rrule && !isSubDailyRrule(parent.rrule) && !isOutOfRangeRecurrenceStart(parent.startTime)) {
         if (tz) {
             // Timezone-aware: expand in wall-clock space, convert back to UTC
             const local = utcToLocal(parent.startTime, tz);

@@ -32,7 +32,7 @@ describe('Editor', () => {
     async function editorPut(
         pathId: string,
         body: Record<string, unknown>,
-    ): Promise<{ status: number; data: EditorSaveResult }> {
+    ): Promise<{ status: number; data: EditorSaveResult | null }> {
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
             `/editor/${ctx.alice.user.id}/${mountId}/${pathId}/content`,
@@ -119,8 +119,8 @@ describe('Editor', () => {
                 expectedUpdatedAt: updatedAt,
             });
             expect(status).toBe(200);
-            expect(data.conflict).toBe(false);
-            expect(data.updatedAt).toBeDefined();
+            expect(data?.conflict).toBe(false);
+            expect(data?.updatedAt).toBeDefined();
 
             // Verify content was saved
             const { data: reloaded } = await editorGet(uploaded.id);
@@ -137,7 +137,7 @@ describe('Editor', () => {
 
             // First save succeeds and bumps updatedAt
             const { data: saved } = await editorPut(uploaded.id, { content: 'version2', expectedUpdatedAt: updatedAt });
-            expect(saved.conflict).toBe(false);
+            expect(saved?.conflict).toBe(false);
 
             // Verify the first save actually changed updatedAt
             const { data: refreshed } = await editorGet(uploaded.id);
@@ -149,8 +149,8 @@ describe('Editor', () => {
                 content: 'version3',
                 expectedUpdatedAt: updatedAt, // stale!
             });
-            expect(data.conflict).toBe(true);
-            expect(data.currentUpdatedAt).toBeDefined();
+            expect(data?.conflict).toBe(true);
+            expect(data?.currentUpdatedAt).toBeDefined();
         });
 
         test('force save ignores stale updatedAt', async () => {
@@ -169,7 +169,7 @@ describe('Editor', () => {
                 expectedUpdatedAt: updatedAt,
                 force: true,
             });
-            expect(data.conflict).toBe(false);
+            expect(data?.conflict).toBe(false);
 
             const { data: reloaded } = await editorGet(uploaded.id);
             expect(reloaded.content).toBe('forced');

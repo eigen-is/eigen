@@ -20,6 +20,22 @@ export function isSubDailyRrule(rrule: string): boolean {
     return freq !== undefined && SUB_DAILY_FREQUENCIES.has(freq);
 }
 
+// The dtstart→window walk is the other half of the iterate-to-window DoS: rrule.between steps
+// occurrence-by-occurrence from dtstart until it reaches the query window, so a recurring event
+// with a pathological dtstart (epoch 0, year 9999) queried at a distant narrow window still stalls
+// the event loop for seconds even at DAILY — the span clamp bounds the window, not the walk to it.
+// No real recurring series starts outside 1900–2200, so bound dtstart to that range: reject at the
+// API write boundary, strip (degrade to a single event) at the untrusted-ICS boundary, same seams
+// as the sub-daily guard. Worst case inside the range is DAILY 1900→2200 ≈ 110k steps — negligible.
+const MIN_RECURRENCE_START = Date.UTC(1900, 0, 1);
+const MAX_RECURRENCE_START = Date.UTC(2200, 0, 1);
+
+// Negated so an Invalid Date (NaN) also counts as out of range.
+export function isOutOfRangeRecurrenceStart(startTime: Date): boolean {
+    const t = startTime.getTime();
+    return !(t >= MIN_RECURRENCE_START && t <= MAX_RECURRENCE_START);
+}
+
 // Hard ceiling on occurrences materialised per expansion — defence in depth beneath the sub-daily
 // reject and the window clamp. Far larger than any real calendar view so it never clips a legit series.
 export const MAX_OCCURRENCES = 10000;

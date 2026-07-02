@@ -146,7 +146,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // included here — they're fetched via the calId-scoped event-range below.
     .get(
         '/calendar/:ownerId/event-range/:from/:to',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<CalendarEventOccurrence[]> => {
             requireNonGuest(user);
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.getEventsInRange(new Date(params.from * 1000), new Date(params.to * 1000));

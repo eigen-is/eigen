@@ -234,6 +234,39 @@ describe('concurrent same-name create → exactly one 409', () => {
 
     test('raced rename to the same name → 409, path-based (local)', () => renameRaceOnBackend('local'));
     test('raced rename to the same name → 409, id-based (local-key)', () => renameRaceOnBackend('local-key'));
+
+    // Pins the translation's precision: rethrowDuplicateActiveName must map ONLY the
+    // idx_paths_unique_active_name violation to 409. A duplicate paths.id (PRIMARY KEY) through the
+    // same insert seam is a real bug, not a name race — it must re-throw raw, not become a 409.
+    test('a duplicate paths.id violation re-throws raw instead of mapping to 409', async () => {
+        const config = createDefaultMountConfig('pk-precision', 'local-key');
+        const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+        const existingId = await mount.createFile(rootId, 'pk-one.txt', 'text/plain', 1, Buffer.from('1'));
+
+        // A DIFFERENT name (no active-name collision) with the SAME id → pure PK violation.
+        const { insertPathRow } = mount as unknown as {
+            insertPathRow: (values: Record<string, unknown>) => Promise<void>;
+        };
+        const err = await insertPathRow
+            .call(mount, {
+                id: existingId,
+                name: 'pk-two.txt',
+                type: 'file',
+                parentId: rootId,
+                ownerId: 'owner',
+                mimeType: 'text/plain',
+            })
+            .then(() => null)
+            .catch((e: unknown) => e);
+
+        expect(err).not.toBeNull();
+        expect(err).not.toBeInstanceOf(ApiError);
+        expect((err as Error).message).toMatch(/UNIQUE constraint failed: paths\.id/);
+
+        await mount.closeAllDatabases();
+    });
 });
 
 describe('v7 dedup covers the folder restore-from-trash cohort', () => {

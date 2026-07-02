@@ -549,6 +549,9 @@ describe('Collab', () => {
             collab.doc.getMap('revoke-probe').set('k', 'v');
             expect(aliceConn.sent.length).toBeGreaterThan(aliceBefore);
             expect(bobConn.sent.length).toBe(bobBefore);
+
+            // Don't leak the surviving spy into later same-docId tests (bob was already dropped).
+            collab.unsubscribe(aliceUser, aliceConn);
         });
 
         test('revoking only write (read intact) does NOT close the connection', async () => {
@@ -585,6 +588,9 @@ describe('Collab', () => {
 
             expect(bobConn.closedWith).toBeNull();
             expect(collab.connectionCount).toBe(baseline + 1);
+
+            // Don't leak the spy into later same-docId tests.
+            collab.unsubscribe(bobUser, bobConn);
         });
 
         test('downgrading to read-only prevents write updates if WebSocket connected', async () => {

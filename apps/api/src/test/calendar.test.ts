@@ -1701,6 +1701,97 @@ describe('Calendar', () => {
             expect(updateRes.status).toBe(400);
         });
 
+        // A recurring event whose dtstart is far outside the sane range (1900-2200) makes rrule
+        // iterate dtstart→window even at an allowed frequency (~seconds of event-loop stall) —
+        // reject it at the write boundary like the sub-daily frequencies.
+        test('create recurring event with a far-out-of-range dtstart returns 400', async () => {
+            const rangeBody = (startIso: string, endIso: string) => ({
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'DoS out-of-range dtstart',
+                    startTime: new Date(startIso),
+                    endTime: new Date(endIso),
+                    allDay: false,
+                    rrule: 'FREQ=DAILY',
+                }),
+            });
+            const ancient = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                rangeBody('1000-01-01T09:00:00Z', '1000-01-01T10:00:00Z'),
+            );
+            expect(ancient.status).toBe(400);
+            const farFuture = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                rangeBody('9999-01-01T09:00:00Z', '9999-01-01T10:00:00Z'),
+            );
+            expect(farFuture.status).toBe(400);
+        });
+
+        test('update moving a recurring event start out of range returns 400', async () => {
+            const createRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Range update target',
+                        startTime: new Date('2027-03-01T09:00:00Z'),
+                        endTime: new Date('2027-03-01T10:00:00Z'),
+                        allDay: false,
+                        rrule: 'FREQ=DAILY;COUNT=5',
+                    }),
+                },
+            );
+            const event = await assertJson<CalendarEvent>(createRes);
+            const updateRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${event.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        startTime: new Date('1000-01-01T09:00:00Z'),
+                        endTime: new Date('1000-01-01T10:00:00Z'),
+                    }),
+                },
+            );
+            expect(updateRes.status).toBe(400);
+        });
+
+        test('update adding an rrule to a far-out-of-range single event returns 400', async () => {
+            // A single (non-recurring) event may sit anywhere in time — only pairing it with an
+            // rrule creates the iterate-to-window vector.
+            const createRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Ancient single event',
+                        startTime: new Date('1000-01-01T09:00:00Z'),
+                        endTime: new Date('1000-01-01T10:00:00Z'),
+                        allDay: false,
+                    }),
+                },
+            );
+            const event = await assertJson<CalendarEvent>(createRes);
+            const updateRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${event.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rrule: 'FREQ=DAILY' }),
+                },
+            );
+            expect(updateRes.status).toBe(400);
+        });
+
         test('normal weekly recurrence still returns every occurrence (no regression)', async () => {
             const calRes = await authedRequest(
                 ctx.alice.user.sessionToken,

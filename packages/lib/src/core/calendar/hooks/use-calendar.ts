@@ -107,23 +107,6 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
     });
 }
 
-export function useCalendarEvents(ownerId: string, calendarId: string, from: number, to: number, enabled = true) {
-    return useQuery({
-        queryKey: calendarKeys.calendarEvents(ownerId, calendarId, from, to),
-        // Union return mirrors the route: free-busy calendars yield FreeBusyBlock[], others full events.
-        queryFn: async (): Promise<CalendarEventOccurrence[] | FreeBusyBlock[]> => {
-            const response = await calendarApi({ ownerId })
-                .calendars({ calId: calendarId })
-                ['event-range']({ from: String(from) })({ to: String(to) })
-                .get();
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        staleTime: 2 * 60 * 1000,
-        enabled: !!ownerId && enabled && !!calendarId && from > 0 && to > 0,
-    });
-}
-
 export function useCreateEvent(ownerId: string) {
     const queryClient = useQueryClient();
 

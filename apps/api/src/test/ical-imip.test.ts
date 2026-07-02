@@ -602,15 +602,15 @@ describe('Calendar timezone validation (audit P1-7b)', () => {
 });
 
 describe('Calendar recurrence DoS guard (audit P2-7)', () => {
-    const withRrule = (rrule: string) =>
+    const withRrule = (rrule: string, dtstart = '20260101T090000Z', dtend = '20260101T100000Z') =>
         [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
             'BEGIN:VEVENT',
             'UID:dos-guard@external.com',
             'SUMMARY:Recurring',
-            'DTSTART:20260101T090000Z',
-            'DTEND:20260101T100000Z',
+            `DTSTART:${dtstart}`,
+            `DTEND:${dtend}`,
             `RRULE:${rrule}`,
             'END:VEVENT',
             'END:VCALENDAR',
@@ -627,6 +627,15 @@ describe('Calendar recurrence DoS guard (audit P2-7)', () => {
     test('parseIcs preserves a daily-or-coarser RRULE', () => {
         expect(parseIcs(withRrule('FREQ=DAILY;COUNT=5')).events[0].rrule).toBe('FREQ=DAILY;COUNT=5');
         expect(parseIcs(withRrule('FREQ=WEEKLY;BYDAY=WE')).events[0].rrule).toBe('FREQ=WEEKLY;BYDAY=WE');
+    });
+
+    test('parseIcs strips the RRULE from an event whose DTSTART is far out of range', () => {
+        // An allowed frequency with a pathological dtstart still makes rrule.between iterate
+        // dtstart→window (~seconds); degrade to a single event, like the sub-daily strip.
+        const ancient = withRrule('FREQ=DAILY', '10000101T090000Z', '10000101T100000Z');
+        expect(parseIcs(ancient).events[0].rrule).toBeNull();
+        const farFuture = withRrule('FREQ=DAILY', '99990101T090000Z', '99990101T100000Z');
+        expect(parseIcs(farFuture).events[0].rrule).toBeNull();
     });
 });
 

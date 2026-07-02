@@ -5,7 +5,7 @@ import { type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { getUniqueFileName } from '../lib/drive/naming';
-import { ContentReindexQueue } from '../lib/mount/content-reindex-queue';
+import { CONTENT_REINDEX_CAP_SECONDS, ContentReindexQueue } from '../lib/mount/content-reindex-queue';
 import { buildStorageKey, createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import { LocalStorage } from '../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../lib/versioning/retention';
@@ -1563,6 +1563,9 @@ describe('content reindex failure handling', () => {
         // Transient failure: the bit must survive (negative cap bypasses the window → returned iff dirty).
         await queue.drain();
         expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).toContain(txt);
+        // The failed attempt stamped contentIndexedAt, so within the cap window the row is deferred —
+        // still owed (dirty), but not due: no hot-spin on a persistently failing extract.
+        expect(mount.getContentDirtyPaths(CONTENT_REINDEX_CAP_SECONDS, 100).map((p) => p.id)).not.toContain(txt);
         expect(mount.searchPaths({ q: 'flibberretry', limit: 20 }).some((h) => h.id === txt)).toBe(false);
 
         // Production retries once the 2-min cap elapses; age the attempt stamp so the drain sees the row
