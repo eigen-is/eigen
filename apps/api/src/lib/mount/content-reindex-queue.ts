@@ -49,13 +49,18 @@ export class ContentReindexQueue {
         return this.draining;
     }
 
-    // Mount teardown: stop scheduling. Leftover dirty rows replay on the next mount open.
-    close(): void {
+    // Mount teardown: stop scheduling and AWAIT the in-flight drain so the current extract finishes.
+    // That extract opens a doc DB via mount.openDatabase and leaves it for the mount lifecycle to
+    // close; awaiting here lets closeAllDatabases close it before it clears documentDbs — otherwise
+    // the post-clear open leaks. Only the current extract is drained: leftover dirty rows replay on
+    // the next mount open (the bit is the durable queue).
+    async close(): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
             clearTimeout(this.retryTimer);
             this.retryTimer = null;
         }
+        await this.draining;
     }
 
     private async runDrainLoop(): Promise<void> {

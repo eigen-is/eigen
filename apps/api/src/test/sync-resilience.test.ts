@@ -7,6 +7,7 @@ import type { MountConfig, S3Config } from '@workspace/lib/types';
 import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
+import type { ContentExtractor } from '../lib/mount/content-reindex-queue';
 import { buildStorageKey, createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
@@ -63,8 +64,18 @@ class FaultStorage implements StorageBackend {
     failNextWrites = 0;
     writeDelayMs = 0;
     writeCount = 0;
+    // Park every write until the test releases it — models a TCP-black-holed PUT that never resolves,
+    // so only the queue's client-side timeout can end the wait.
+    hangWrites = false;
+    private hungResolvers: Array<() => void> = [];
 
     constructor(private readonly inner: LocalStorage) {}
+
+    // Let any parked writes proceed so a hung PUT promise doesn't linger past the test.
+    releaseHungWrites(): void {
+        this.hangWrites = false;
+        for (const resolve of this.hungResolvers.splice(0)) resolve();
+    }
 
     read(key: string): StorageFile {
         return this.inner.read(key);
@@ -75,6 +86,7 @@ class FaultStorage implements StorageBackend {
         // unlink of the staging file can't abort an already-started upload. This is what makes
         // the resurrection window (cancel during an in-flight PUT) reproducible.
         const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
+        if (this.hangWrites) await new Promise<void>((resolve) => this.hungResolvers.push(resolve));
         if (this.writeDelayMs > 0) await Bun.sleep(this.writeDelayMs);
         if (this.failNextWrites > 0) {
             this.failNextWrites--;
@@ -688,4 +700,108 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await mount.drainPendingUploads({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId)).toBe(500); // not collapsed to empty
     });
+});
+
+describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-timer race, PUT timeout)', () => {
+    // Finding 1: closeAllDatabases must AWAIT the reindex drain before it clears documentDbs. A late
+    // extract opens a doc DB via mount.openDatabase and relies on the mount lifecycle to close it; if
+    // teardown returns before that open, the DB lands in the just-cleared cache and leaks forever.
+    test('closeAllDatabases awaits the reindex drain so a late extract-opened DB is not leaked', async () => {
+        let extractEntered!: () => void;
+        const entered = new Promise<void>((r) => (extractEntered = r));
+        let releaseExtract!: () => void;
+        const gate = new Promise<void>((r) => (releaseExtract = r));
+        let leakDbId = '';
+
+        // Gate BEFORE the open so the open can be forced to land after teardown clears the cache.
+        const extract: ContentExtractor = async (m) => {
+            extractEntered();
+            await gate;
+            await m.openDatabase(docConfigNoSnap, leakDbId);
+            return '';
+        };
+
+        const mount = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createDefaultMountConfig(`reindex-teardown-${Date.now()}`, 'local'),
+            createGetLocalDatabase(TEST_DIR),
+            extract,
+        );
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        // A real data.db for the extractor to (re)open mid-drain (created, then evicted from the cache).
+        const containerId = await mount.createFolder(rootId, 'leak-doc', 'doc');
+        leakDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        await mount.createDatabase(docConfigNoSnap, leakDbId);
+        await mount.closeDatabase(leakDbId);
+
+        // A searchable text file dirties a row → the reindexer drains it → extract runs and parks.
+        await mount.createFile(rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
+        const draining = mount.flushContentReindex(); // handle to the in-flight drain loop
+        await entered; // extract is parked at the gate, before its open
+
+        const documentDbs = (mount as unknown as { documentDbs: Map<string, unknown> }).documentDbs;
+
+        // Tear down while the extract is mid-flight, THEN let it open its DB. Pre-fix: teardown returns
+        // before the open, which lands in the cleared cache and leaks. Post-fix: teardown awaits the
+        // drain, so the opened DB lands in the cache and the close pass closes it.
+        const closing = mount.closeAllDatabases();
+        releaseExtract();
+        await closing;
+        await draining;
+
+        expect(documentDbs.size).toBe(0);
+    });
+
+    // Finding 2: init schedules setTimeout(history.prune, 0) off the ready path; a fast teardown must
+    // cancel it, or it fires against a metadata.db the Home is about to close ("Cannot use a closed
+    // database" noise).
+    test('a fast open→teardown cancels the pending history prune', async () => {
+        const mount = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createDefaultMountConfig(`prune-race-${Date.now()}`, 'local'),
+            createGetLocalDatabase(TEST_DIR),
+        );
+        await mount.init(); // schedules the setTimeout(prune, 0) — still pending (a macrotask)
+
+        let pruneRuns = 0;
+        const history = (mount as unknown as { history: { prune: () => void } }).history;
+        history.prune = () => {
+            pruneRuns++;
+        };
+
+        await mount.closeAllDatabases(); // must clearTimeout the pending prune
+        await new Promise((r) => setTimeout(r, 0)); // let any surviving macrotask fire
+
+        expect(pruneRuns).toBe(0);
+    });
+
+    // Finding 3: a PUT that never resolves must hit the queue's client-side timeout and be treated as
+    // a failure (back off, release the semaphore, advance the loop), not hang the drain forever.
+    test('a hung PUT times out and backs off instead of stalling the queue', async () => {
+        const { mount, fault } = createS3Mount(`put-timeout-${Date.now()}`);
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+
+        // Bound the race deterministically: the injected write never resolves, so only the timeout can
+        // settle it. 50ms keeps the test fast; production uses UPLOAD_PUT_TIMEOUT_MS (120s).
+        (mount as unknown as { uploadQueue: { putTimeoutMs: number } }).uploadQueue.putTimeoutMs = 50;
+        fault.hangWrites = true;
+
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mount.closeDatabase(dataDbId); // enqueues the upload
+
+        // Pre-fix: storage.write never resolves → this drain never returns (the test times out).
+        // Post-fix: the PUT deadline fires, performUpload treats it as a failure and backs off.
+        await mount.drainPendingUploads({ flushNow: true });
+
+        expect(fault.writeCount).toBeGreaterThan(0); // the PUT was attempted…
+        expect(mount.pendingUploadCount).toBeGreaterThan(0); // …and left queued (backed off), not hung/cleared
+
+        fault.releaseHungWrites(); // settle the orphaned PUT so nothing lingers
+    }, 5_000);
 });

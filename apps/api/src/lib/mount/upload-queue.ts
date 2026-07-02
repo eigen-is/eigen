@@ -10,6 +10,12 @@ import { pendingUploads } from './schema';
 
 type Db = BunSQLiteDatabase<typeof schema>;
 
+// Client-side ceiling on a single PUT. A TCP-black-holed request (nbg1's slow→503 class; a hang is
+// adjacent) would otherwise never resolve: the drain loop can't advance past the await, the
+// destination semaphore stays held, and backoff never triggers — four such hangs starve every mount
+// sharing the limiter. Generous so a genuinely slow-but-live PUT still completes.
+const UPLOAD_PUT_TIMEOUT_MS = 120_000;
+
 export type UploadQueueDeps = {
     db: Db; // the mount's metadata.db (owns the pending_uploads table)
     storage: StorageBackend;
@@ -41,6 +47,8 @@ export class UploadQueue {
     private deadline: number | null = null;
     private closing = false;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
+    // Per-PUT client-side deadline (see UPLOAD_PUT_TIMEOUT_MS). A field so tests can shrink it.
+    private putTimeoutMs = UPLOAD_PUT_TIMEOUT_MS;
 
     constructor(deps: UploadQueueDeps) {
         this.db = deps.db;
@@ -231,9 +239,23 @@ export class UploadQueue {
 
         this.inFlight.add(storageKey);
         let putOk = false;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
         try {
             const start = Bun.nanoseconds();
-            await this.storage.write(storageKey, file);
+            // StorageBackend.write takes no abort signal, so bound it with Promise.race; a timeout is
+            // treated exactly like a PUT failure (putOk stays false → backoff below), never as an ack.
+            // Caveat: the orphaned request may still land server-side later — harmless, the PUT is
+            // idempotent (same dead-UUID key, same bytes), so a retry re-PUTs the identical object.
+            const write = this.storage.write(storageKey, file);
+            await Promise.race([
+                write,
+                new Promise<never>((_, reject) => {
+                    timeout = setTimeout(
+                        () => reject(new Error(`PUT exceeded ${this.putTimeoutMs}ms`)),
+                        this.putTimeoutMs,
+                    );
+                }),
+            ]);
             putOk = true;
             const ms = (Bun.nanoseconds() - start) / 1_000_000;
             console.log(`[timing] Mount.upload ${storageKey} ${(file.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
@@ -243,6 +265,7 @@ export class UploadQueue {
                 err instanceof Error ? err.message : err,
             );
         } finally {
+            if (timeout) clearTimeout(timeout);
             this.inFlight.delete(storageKey);
         }
 

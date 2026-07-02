@@ -132,6 +132,10 @@ export class Mount {
     private reindexQueue?: ContentReindexQueue;
     private readonly extractContent?: ContentExtractor;
 
+    // init schedules the history prune off the ready path; held so a fast teardown can cancel it
+    // before the Home closes metadata.db (else prune scans a closed db — see closeAllDatabases).
+    private pruneTimer: ReturnType<typeof setTimeout> | null = null;
+
     public history!: FileHistory;
 
     constructor(
@@ -260,8 +264,10 @@ export class Mount {
         if (retentionDays > 0) {
             this.purgeTrash(retentionDays).catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
         }
-        // Off the init path — the prune's table scans shouldn't delay mount readiness
-        setTimeout(() => {
+        // Off the init path — the prune's table scans shouldn't delay mount readiness. Held so a fast
+        // teardown (idle eviction / a quick open+close) cancels it before metadata.db closes.
+        this.pruneTimer = setTimeout(() => {
+            this.pruneTimer = null;
             try {
                 this.history.prune();
             } catch (e) {
@@ -1555,6 +1561,22 @@ export class Mount {
     }
 
     async closeAllDatabases(): Promise<void> {
+        // Cancel the init-scheduled history prune so a fast teardown doesn't fire it against a
+        // metadata.db the Home is about to close (the mount stops its own timers here — the same seam
+        // as the upload/reindex queues below).
+        if (this.pruneTimer) {
+            clearTimeout(this.pruneTimer);
+            this.pruneTimer = null;
+        }
+
+        // Reindex FIRST, awaiting its in-flight drain: an extract mid-await opens a doc DB via
+        // openDatabase and leaves it for the mount lifecycle to close. Draining before we snapshot
+        // documentDbs means that last-extract DB lands in the map and is closed by the pass below —
+        // closing the queue last (after the clear) would let the post-clear open leak (30s timer, fd,
+        // temp; dirty syncs into a closed metadata.db). Leftover dirty rows still replay on the next
+        // open (only the current extract is drained, not the backlog).
+        await this.reindexQueue?.close();
+
         const entries = [...this.documentDbs.entries()];
         this.documentDbs.clear();
         for (const [pathId, getter] of entries) {
@@ -1579,9 +1601,6 @@ export class Mount {
             }
             this.uploadQueue.close();
         }
-
-        // Leftover dirty rows replay on the next mount open (the bit is the durable queue).
-        this.reindexQueue?.close();
     }
 
     // Force-drain this mount's content reindex queue and await it. The queue otherwise self-drives
