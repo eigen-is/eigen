@@ -18,6 +18,9 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+    /* Drive native UA chrome (scrollbars, form controls) from the theme so the
+       Windows scrollbar is dark in dark mode; macOS overlay bars already match. */
+    color-scheme: light;
     --radius: 0.375rem;
     --background: oklch(1 0 0);
     --foreground: oklch(0.129 0.042 264.695);
@@ -61,6 +64,7 @@
 }
 
 .dark {
+    color-scheme: dark;
     /* Neutral surfaces/text are pure grey (chroma 0) — no blue tint. Only
        functional colours (destructive/success/warning/charts/link/handle) and
        the --sidebar-primary accent keep their hue. */
