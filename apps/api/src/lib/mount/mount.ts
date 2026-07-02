@@ -871,6 +871,11 @@ export class Mount {
         if (!pathEntry) return;
         if (pathEntry.parentId === null) throw new ApiError(400, 'Cannot delete root folder');
 
+        // Tear down any cached DBs under this subtree first, so a still-open dirty DB can't re-stage
+        // its now-dead key on a later tick (resurrection) and its temp/timer don't leak; the
+        // cancel()/storage.delete below then clears whatever the close flushed.
+        await this.closeCachedDbsUnder(pathId);
+
         // Delete DB records before storage cleanup. On crash between the two,
         // we get orphaned files on disk (harmless) instead of DB entries
         // pointing to non-existent files (broken).
@@ -952,6 +957,11 @@ export class Mount {
 
         const root = await this.getRootFolder();
         if (!root) throw new ApiError(500, 'Root folder not found');
+
+        // Flush + close cached DBs BEFORE the storage rename, so their final bytes are written to the
+        // current location and then moved into .trash/ with everything else — and so no post-trash
+        // sync writes a data.db outside .trash/ (a chat's data.db is never closed by the collab path).
+        await this.closeCachedDbsUnder(pathId);
 
         return this.withPathLock(pathId, async () => {
             // Path-based storage: move file/folder to .trash/
@@ -1399,12 +1409,20 @@ export class Mount {
                       // Local path-based: keep the synchronous local copy (Bun.write never 503s,
                       // and async-queuing it would only weaken its on-completion durability).
                       onSync: async () => {
+                          // Resolve the key on EVERY sync, never the once-captured one: on `local` it
+                          // is the hierarchical path, so a move/rename since open would otherwise write
+                          // data.db to the pre-move location (a zombie tree, silently rebuilt via
+                          // createPath:true) and orphan every post-move edit. A vanished row means the
+                          // doc was deleted — skip, so a stale sync can't resurrect a dead key.
+                          // (s3/local-key keys are id-stable, so this re-resolves to the same value.)
+                          if (!(await this.getPath(pathId))) return;
+                          const currentKey = await this.getStorageKey(pathId);
                           if (this.uploadQueue) {
                               const stagingPath = this.uploadQueue.newStagingPath();
                               managed.stageCopy(stagingPath);
-                              this.uploadQueue.enqueueStaged(storageKey, stagingPath);
+                              this.uploadQueue.enqueueStaged(currentKey, stagingPath);
                           } else {
-                              await this.uploadFromTemp(storageKey, pathId);
+                              await this.uploadFromTemp(currentKey, pathId);
                           }
                           await this.syncDocumentDbSize(pathId, localPath);
                           await this.markContainerContentDirty(pathId);
@@ -1465,6 +1483,24 @@ export class Mount {
             this.documentDbs.delete(pathId);
             const db = await getter();
             await db.close(opts);
+        }
+    }
+
+    // Flush + close every cached document DB at or below `rootId` (the container's own data.db, its
+    // comments.db, any nested doc/chat). The documentDbs cache is otherwise decoupled from row
+    // mutations — trash/delete change rows without it noticing — so a still-open dirty DB keeps its
+    // 30s timer alive and syncs data.db to the pre-mutation key: a zombie tree on `local`, a
+    // resurrected object on `s3`. Callers invoke this while the rows still exist (the walk needs
+    // them): trashPath before the storage rename so the final bytes ride into .trash/ with the rest;
+    // deletePath before the row/storage removal so cancel()/deleteDir() then clears what was flushed.
+    // Yjs collab docs are already torn down by Drive.closeCollabDocumentsRecursively; this catches
+    // the rest (chat data.db, comments.db). skipFinalSnapshot: the container is going away, and a
+    // snapshot would re-enter its path lock.
+    private async closeCachedDbsUnder(rootId: string): Promise<void> {
+        for (const id of [rootId, ...this.collectDescendantIds(rootId)]) {
+            if (this.documentDbs.has(id)) {
+                await this.closeDatabase(id, { skipFinalSnapshot: true });
+            }
         }
     }
 
