@@ -9,6 +9,7 @@ import {
     type OrgTeam,
     teamOwnerId,
 } from '@workspace/lib/types';
+import { COMMENT_INDEX_DB_CONFIG } from '../lib/chat/comment-db-config';
 import { getServerConfig } from '../lib/config/server-config';
 import { copyPathAcross } from '../lib/drive/copy-across';
 import { getSharedDrive } from '../lib/drive/get-drive';
@@ -3692,6 +3693,39 @@ describe('Drive', () => {
                 `folder/${folder.id}`,
             );
             expect(contents.length).toBe(0);
+        });
+    });
+
+    describe('Regression: SharedDrive.openDatabase enforces read permission (audit 17)', () => {
+        test('a non-owner without read is rejected opening a container managed DB; a shared reader succeeds', async () => {
+            // A doc container provisions data.db + comments.db synchronously on create.
+            const doc = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/create/doc`,
+                { fileName: 'ACL-Gated DB' },
+            );
+
+            const aliceHome = await getHome(ctx.alice.user.id);
+            const commentsDb = await aliceHome.drive.getChildByName(aliceMountId, doc.id, 'comments.db');
+            expect(commentsDb).not.toBeNull();
+
+            const bob = await getUserById(ctx.bob.user.id);
+            const bobShared = await getSharedDrive(ctx.alice.user.id, bob!);
+
+            // Bob holds no share on the doc. Opening its managed DB by pathId must be refused —
+            // pre-fix the wrapper delegated with no ACL check, an arbitrary-DB-open hole on the seam.
+            await expect(bobShared.openDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id)).rejects.toThrow(
+                'No read permission',
+            );
+
+            // Granting read on the container (comments.db inherits it) lets the same open through.
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}/acl`, {
+                acl: [{ id: BOB_EMAIL, read: true, write: false }],
+            });
+            const managed = await bobShared.openDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id);
+            expect(managed.db).toBeDefined();
         });
     });
 });

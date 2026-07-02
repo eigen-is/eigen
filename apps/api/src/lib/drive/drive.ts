@@ -1198,15 +1198,6 @@ export default class Drive {
         return mount.openDatabase(config, pathId);
     }
 
-    async createDatabase<S extends SchemaType>(
-        mountId: string,
-        config: DatabaseConfig<S>,
-        pathId: string,
-    ): Promise<ManagedDatabase<S>> {
-        const mount = this.getMount(mountId);
-        return mount.createDatabase(config, pathId);
-    }
-
     // Atomic touchFile + createDatabase for managed-db backing files (chat
     // data.db, doc data.db, comments.db, …). On any failure across the list,
     // hard-deletes every metadata row already created — without this, a
@@ -1237,11 +1228,6 @@ export default class Drive {
             }
             throw err;
         }
-    }
-
-    async closeDatabase(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
-        const mount = this.getMount(mountId);
-        await mount.closeDatabase(pathId, opts);
     }
 
     async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {

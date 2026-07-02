@@ -411,24 +411,14 @@ export default class SharedDrive {
         return crumb.reverse();
     }
 
+    // Opening a container's managed DB (comments.db, data.db) reads that path, so gate at read
+    // granularity — the seam's contract is "present on SharedDrive == ACL-checked".
     public async openDatabase<S extends SchemaType>(
         mountId: string,
         config: DatabaseConfig<S>,
         pathId: string,
     ): Promise<ManagedDatabase<S>> {
-        return this.sharedDrive.openDatabase(mountId, config, pathId);
-    }
-
-    public async createDatabase<S extends SchemaType>(
-        mountId: string,
-        config: DatabaseConfig<S>,
-        pathId: string,
-    ): Promise<ManagedDatabase<S>> {
-        return this.sharedDrive.createDatabase(mountId, config, pathId);
-    }
-
-    public async closeDatabase(mountId: string, pathId: string): Promise<void> {
-        return this.sharedDrive.closeDatabase(mountId, pathId);
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.openDatabase(mountId, config, pathId));
     }
 
     public async listVersions(mountId: string, containerId: string): Promise<Snapshot[]> {
