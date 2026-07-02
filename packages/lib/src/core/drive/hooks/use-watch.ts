@@ -1,4 +1,4 @@
-import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { PathWatchStatus } from '@workspace/lib/types/file-history';
@@ -69,8 +69,4 @@ export function useUserWatches(ownerIds: string[]) {
         })),
         combine: (results) => results.flatMap((r) => (r.status === 'error' ? [] : (r.data ?? []))),
     });
-}
-
-export function invalidateWatches(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: driveKeys.watches(ownerId) });
 }

@@ -4,8 +4,6 @@ import type { SearchSource } from '@workspace/lib/types/search';
 import { AppError } from '../../api-error';
 import { searchKeys } from '../keys';
 
-export type { SearchSource };
-
 export type UseSearchOptions = {
     ownerId: string;
     q: string;
