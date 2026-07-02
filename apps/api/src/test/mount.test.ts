@@ -1573,7 +1573,7 @@ describe('content reindex failure handling', () => {
         // Retry succeeds: the body indexes and the bit is finally cleared.
         shouldThrow = false;
         await queue.drain();
-        queue.close();
+        await queue.close();
         expect(mount.searchPaths({ q: 'flibberretry', limit: 20 }).some((h) => h.id === txt)).toBe(true);
         expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).not.toContain(txt);
     });

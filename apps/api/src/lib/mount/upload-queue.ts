@@ -244,8 +244,10 @@ export class UploadQueue {
             const start = Bun.nanoseconds();
             // StorageBackend.write takes no abort signal, so bound it with Promise.race; a timeout is
             // treated exactly like a PUT failure (putOk stays false → backoff below), never as an ack.
-            // Caveat: the orphaned request may still land server-side later — harmless, the PUT is
-            // idempotent (same dead-UUID key, same bytes), so a retry re-PUTs the identical object.
+            // Caveat: the orphaned request may still land server-side later. A retry re-PUTs the same
+            // staged bytes (harmless), but the key is id-stable — an orphan superseded by a newer
+            // enqueue can land AFTER the newer PUT and briefly regress the object until the next sync.
+            // Accepted cost of timing out a write that can't be aborted.
             const write = this.storage.write(storageKey, file);
             await Promise.race([
                 write,
