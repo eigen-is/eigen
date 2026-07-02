@@ -377,14 +377,14 @@ describe('Chat', () => {
                 ctx.alice.user.id,
                 aliceMountId,
                 `${chatId}/messages`,
-                { content: 'Message with attachment', attachments: [uploaded.id] },
+                { content: 'Message with attachment', attachments: [uploaded.name] },
             );
             expect(msg.id).toBeDefined();
             expect(msg.content).toBe('Message with attachment');
-            expect(msg.attachments).toEqual([uploaded.id]);
+            expect(msg.attachments).toEqual([uploaded.name]);
         });
 
-        test('get messages returns attachment pathIds', async () => {
+        test('get messages returns attachment names', async () => {
             const msgs = await chatGet<ChatMessage[]>(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
@@ -398,6 +398,8 @@ describe('Chat', () => {
             expect(withAttachment.attachments).toHaveLength(1);
         });
 
+        // Attachments are stored by file name (matching the client), so the message references
+        // the media file by name — deleting the message must clean that file up.
         test('deleting message also deletes attachment file', async () => {
             const file = new File(['delete-me'], 'delete-me.txt', { type: 'text/plain' });
             const formData = new FormData();
@@ -410,15 +412,14 @@ describe('Chat', () => {
                     body: formData,
                 },
             );
-            const uploadedArr = (await uploadRes.json()) as DrivePath[];
-            const attachmentId = uploadedArr[0].id;
+            const uploaded = ((await uploadRes.json()) as DrivePath[])[0];
 
             const msg = await chatPost<ChatMessage>(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
                 `${chatId}/messages`,
-                { content: 'Will be deleted', attachments: [attachmentId] },
+                { content: 'Will be deleted', attachments: [uploaded.name] },
             );
 
             const deleteRes = await authedRequest(
@@ -437,7 +438,7 @@ describe('Chat', () => {
                 aliceMountId,
                 `folder/${mediaFolderId}`,
             );
-            const deletedFile = mediaContents.find((item: DrivePath) => item.id === attachmentId);
+            const deletedFile = mediaContents.find((item: DrivePath) => item.id === uploaded.id);
             expect(deletedFile).toBeUndefined();
         });
 
@@ -507,8 +508,7 @@ describe('Chat', () => {
                     body: formData,
                 },
             );
-            const uploadedArr = (await uploadRes.json()) as DrivePath[];
-            const fileId = uploadedArr[0].id;
+            const fileName = ((await uploadRes.json()) as DrivePath[])[0].name;
 
             const ref = {
                 type: 'reference' as const,
@@ -525,13 +525,79 @@ describe('Chat', () => {
                 ctx.alice.user.id,
                 aliceMountId,
                 `${chatId}/messages`,
-                { content: 'Message with mixed attachments', attachments: [fileId, ref] },
+                { content: 'Message with mixed attachments', attachments: [fileName, ref] },
             );
             expect(msg.id).toBeDefined();
             expect(msg.content).toBe('Message with mixed attachments');
             expect(msg.attachments).toHaveLength(2);
-            expect(msg.attachments![0]).toBe(fileId);
+            expect(msg.attachments![0]).toBe(fileName);
             expect(msg.attachments![1]).toMatchObject(ref);
+        });
+    });
+
+    // A message attachment is a file name inside the chat's own media/ folder. A crafted string
+    // that happens to be a pathId elsewhere in the owner's mount must NOT be deletable this way —
+    // deleteMessage authorizes against the home owner, so unscoped deletes were an ACL bypass.
+    describe('Attachment Delete Security', () => {
+        let chatId: string;
+
+        beforeAll(async () => {
+            const chat = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/create/chat`,
+                { fileName: 'Attachment Security Chat' },
+            );
+            chatId = chat.id;
+
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${chatId}/acl`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acl: [{ id: ctx.bob.user.email, read: true, write: true }] }),
+                },
+            );
+        });
+
+        test('deleting a message cannot trash a path outside the chat media folder', async () => {
+            // Alice's private file, in her root — never shared with Bob and not in the chat's media/.
+            const file = new File(['owner-only secret'], 'alice-secret.txt', { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('file', file);
+            const uploadRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${aliceRootId}`,
+                { method: 'POST', body: formData },
+            );
+            const outsideId = ((await uploadRes.json()) as DrivePath[])[0].id;
+
+            // Bob has write to the chat, so he can post and delete his own message. The crafted
+            // attachment points at Alice's private pathId, which he cannot write to directly.
+            const msg = await chatPost<ChatMessage>(
+                ctx.bob.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: 'trying to trash a path I cannot write', attachments: [outsideId] },
+            );
+            const deleteRes = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${msg.id}`,
+                { method: 'DELETE' },
+            );
+            expect(((await deleteRes.json()) as { success: boolean }).success).toBe(true);
+
+            // Alice's file must survive — it was never in the chat's media/ folder.
+            const rootContents = await driveGet<DrivePath[]>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+            );
+            expect(rootContents.find((item: DrivePath) => item.id === outsideId)).toBeDefined();
         });
     });
 
