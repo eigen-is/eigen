@@ -385,7 +385,7 @@ export class Mount {
     }
 
     async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
-        validateName(name);
+        name = validateName(name);
         await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();
         // Derive the container mime from the canonical registry; only plain folders
@@ -432,7 +432,7 @@ export class Mount {
         size: number,
         data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined,
     ): Promise<string> {
-        validateName(name);
+        name = validateName(name);
         await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
         const fileValue = this.buildFileValue(fileId, name);
@@ -476,7 +476,7 @@ export class Mount {
         hash: string,
         tempId: string,
     ): Promise<string> {
-        validateName(name);
+        name = validateName(name);
         await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
         const fileValue = this.buildFileValue(fileId, name);
@@ -562,14 +562,15 @@ export class Mount {
     }
 
     async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
+        // Normalize before the spread so the stored name and the path-based storage key both use NFC.
+        if (updates.name !== undefined) {
+            updates.name = validateName(updates.name);
+        }
+
         // DrivePath uses boolean, Drizzle column uses integer
         const dbUpdates: Record<string, unknown> = { ...updates };
         if (updates.sharingRestricted !== undefined) {
             dbUpdates['sharingRestricted'] = updates.sharingRestricted ? 1 : 0;
-        }
-
-        if (updates.name !== undefined) {
-            validateName(updates.name);
         }
 
         let oldParentId: string | null | undefined;

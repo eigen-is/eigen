@@ -349,3 +349,40 @@ describe('v7 dedup covers the folder restore-from-trash cohort', () => {
         await mount.closeAllDatabases();
     });
 });
+
+describe('NFC filename normalization on write', () => {
+    const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-nfc-write-${Date.now()}`);
+
+    beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
+    afterAll(() => {
+        try {
+            rmSync(TEST_DIR, { recursive: true, force: true });
+        } catch {}
+    });
+
+    // macOS clients emit NFD-decomposed names; writes normalize to NFC, so a later NFC create of the
+    // same name collides on the unique index instead of forking a look-alike twin. On a path-based mount
+    // it also keeps the stored name and the on-disk key in agreement — both derive from the same string.
+    async function nfcDedupOnBackend(storageType: 'local' | 'local-key'): Promise<void> {
+        const config = createDefaultMountConfig(`nfc-dedup-${storageType}`, storageType);
+        const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        const nfd = 'cafe\u0301.txt'; // "cafe.txt" decomposed: e + U+0301
+        const nfc = 'caf\u00e9.txt'; // "cafe.txt" composed: U+00E9
+        await mount.createFile(rootId, nfd, 'text/plain', 1, Buffer.from('1'));
+        await expect(mount.createFile(rootId, nfc, 'text/plain', 1, Buffer.from('2'))).rejects.toThrow(
+            /already exists/,
+        );
+
+        const cafes = (await mount.listFolder(rootId)).filter((c) => c.name.normalize('NFC') === nfc);
+        expect(cafes.length).toBe(1);
+        expect(cafes[0].name).toBe(nfc); // stored NFC, not the raw NFD input
+
+        await mount.closeAllDatabases();
+    }
+
+    test('NFD + NFC of a name collide as one, stored NFC — path-based (local)', () => nfcDedupOnBackend('local'));
+    test('NFD + NFC of a name collide as one, stored NFC — id-based (local-key)', () => nfcDedupOnBackend('local-key'));
+});
