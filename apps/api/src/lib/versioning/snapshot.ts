@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
+import { markContainerContentDirty } from '../mount/search-index';
 import { type RetentionPolicy, selectSnapshotsToPrune } from './retention';
 import { formatSnapshotTimestamp } from './timestamp';
 
@@ -130,6 +131,14 @@ export async function replaceContainerDataDb(mount: Mount, containerId: string, 
             await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
             await mount.deletePath(dataDb.id);
         }
-        await mount.createFile(containerId, 'data.db', dataDb?.mimeType ?? 'application/x-sqlite3', file.size, file);
+        const newId = await mount.createFile(
+            containerId,
+            'data.db',
+            dataDb?.mimeType ?? 'application/x-sqlite3',
+            file.size,
+            file,
+        );
+        // createFile fires no onSync — mark the container for re-extraction like a synced data.db would.
+        await markContainerContentDirty(mount, newId);
     });
 }
