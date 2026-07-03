@@ -46,7 +46,6 @@ import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { extractText } from '../search/extract-text';
-import { saveThumbnail } from '../shared/thumbnails';
 import type { StorageFile } from '../storage';
 import { getTeamMembers } from '../team';
 import type { User } from '../user';
@@ -64,12 +63,12 @@ import {
 } from './acl';
 import { diffACLEmails, type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
 import { LockManager } from './lock-manager';
-import { getUniqueFileName } from './naming';
 import { serveFile } from './serve-file';
 import { getSharedDatabase } from './shared';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 import { streamFilesToTemp, writeTempWithHash } from './streaming';
+import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 
 // Drive is the high-level domain API over multiple mounts. Routes reach it through
 // `getSharedDrive(ownerId, user)` (returns `Drive | SharedDrive`) for ACL-checked
@@ -333,35 +332,16 @@ export default class Drive {
 
         for (const result of streamed) {
             try {
-                let safeName = result.fileName.replace(/[/\\]/g, '_');
-                const originalName = safeName;
-
-                const existing = await mount.getChildByName(parentId, safeName);
-                if (existing) {
-                    const siblings = await mount.listFolder(parentId);
-                    const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
-                    safeName = getUniqueFileName(safeName, usedNames);
-                }
-
-                const pathId = await mount.createFileFromTemp(
-                    parentId,
-                    safeName,
-                    result.mimeType,
-                    result.size,
-                    result.hash,
-                    result.tempId,
-                );
-
                 uploaded.push(
-                    await this.finalizeUpload(
-                        mount,
-                        pathId,
-                        originalName,
-                        safeName,
-                        result.mimeType,
-                        result.tempId,
+                    await finalizeUpload(this, mount, {
+                        parentId,
+                        name: result.fileName,
+                        mimeType: result.mimeType,
+                        size: result.size,
+                        hash: result.hash,
+                        tempId: result.tempId,
                         user,
-                    ),
+                    }),
                 );
             } catch (e) {
                 await mount.cleanupTemp(result.tempId);
@@ -408,19 +388,7 @@ export default class Drive {
         const tempId = randomUUID();
         try {
             const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
-
-            let safeName = name.replace(/[/\\]/g, '_');
-            const originalName = safeName;
-
-            const existing = await mount.getChildByName(parentId, safeName);
-            if (existing) {
-                const siblings = await mount.listFolder(parentId);
-                const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
-                safeName = getUniqueFileName(safeName, usedNames);
-            }
-
-            const pathId = await mount.createFileFromTemp(parentId, safeName, mimeType, size, hash, tempId);
-            const created = await this.finalizeUpload(mount, pathId, originalName, safeName, mimeType, tempId, user);
+            const created = await finalizeUpload(this, mount, { parentId, name, mimeType, size, hash, tempId, user });
             if (user) {
                 await mount.history.fanOut({
                     eventType: 'uploaded',
@@ -734,7 +702,8 @@ export default class Drive {
         if (user) await this.recordFileEvent(mountId, pathId, user, 'uploaded', { size: updated.size ?? 0 });
 
         if (thumbnailSource !== null) {
-            this.regenerateThumbnailAsync(
+            regenerateThumbnailAsync(
+                this,
                 mount,
                 pathId,
                 thumbnailSource,
@@ -1421,77 +1390,9 @@ export default class Drive {
         }
     }
 
-    private async finalizeUpload(
-        mount: Mount,
-        pathId: string,
-        originalName: string,
-        safeName: string,
-        mimeType: string,
-        tempId: string,
-        user?: User,
-    ): Promise<DrivePath> {
-        if (originalName) {
-            await mount.updatePath(pathId, { details: { originalName } });
-        }
-
-        const uploadedFile = await mount.getPath(pathId);
-        if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
-        this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-        // History row only — fan-out is the caller's job, so a multi-file upload
-        // notifies watchers once per batch instead of once per file.
-        if (user) {
-            await mount.history.record({
-                pathId,
-                eventType: 'uploaded',
-                actor: user,
-                details: { size: uploadedFile.size ?? 0 },
-            });
-        }
-
-        if (uploadedFile.size === 0) {
-            // 0-byte placeholders (Finder's two-step copy) can't yield a thumbnail.
-            // Skip the worker spawn; the real bytes will arrive via writeFileContent.
-            await mount.cleanupTemp(tempId);
-        } else {
-            this.regenerateThumbnailAsync(mount, pathId, mount.getTempPath(tempId), mimeType, safeName, () =>
-                mount.cleanupTemp(tempId),
-            );
-        }
-
-        return uploadedFile;
-    }
-
-    private regenerateThumbnailAsync(
-        mount: Mount,
-        pathId: string,
-        source: Buffer | string,
-        mimeType: string,
-        fileName: string,
-        onCleanup?: () => Promise<void>,
-    ): void {
-        (async () => {
-            try {
-                const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, source, mimeType, fileName);
-                if (!thumbnail) return;
-                const current = await mount.getPath(pathId);
-                if (!current) return;
-                await mount.updatePath(pathId, {
-                    thumbnail: thumbnail.fileName,
-                    details: {
-                        ...(current.details ?? {}),
-                        width: thumbnail.width,
-                        height: thumbnail.height,
-                        ...(thumbnail.duration !== undefined && { duration: thumbnail.duration }),
-                    },
-                });
-                this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
-            } finally {
-                await onCleanup?.();
-            }
-        })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
-    }
-
-    private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {
+    // Called by: the extracted Drive body modules (upload.ts). Not route-callable — no
+    // SharedDrive wrapper, so the union keeps it off the route surface.
+    emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {
         this.home.broadcast(buildDriveEvent(type, path, oldParentId));
     }
 }
