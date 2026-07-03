@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
+import { sql } from 'drizzle-orm';
 import * as Y from 'yjs';
+import type { Mount } from '../lib/mount/mount';
 import {
     DAY_MS,
     DEFAULT_RETENTION,
@@ -184,6 +186,43 @@ describe('versions HTTP routes', () => {
         // Two versions now: the manual save + the pre-restore auto-snapshot.
         const after = await listVersions(token, ownerId, aliceMountId, chat.id);
         expect(after.length).toBe(2);
+    });
+
+    // replaceContainerDataDb recreates data.db without an onSync, so the chat restore must mark the
+    // container contentDirty itself — otherwise body search serves pre-restore content until the
+    // next write. (The Yjs restore path converges via DbProvider → sync → onSync; chat has no Y.Doc.)
+    test('chat: restore marks the container for content reindex (body search follows the restore)', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+
+        const chat = await drivePost<DrivePath>(token, ownerId, aliceMountId, `folder/${aliceRootId}/create/chat`, {
+            fileName: 'versions-restore-reindex',
+        });
+        await chatPost(token, ownerId, aliceMountId, `${chat.id}/messages`, { content: 'grobblev1 body' });
+        const saved = await saveVersion(token, ownerId, aliceMountId, chat.id);
+
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ownerId);
+        // The save's flush auto-indexed v1; the 2-min cap would defer every later re-extract, so
+        // age the index stamp before each drain. Settle the in-flight drain first so it can't
+        // overwrite the aged stamp mid-test.
+        const mount = (home.drive as unknown as { getMount(id: string): Mount }).getMount(aliceMountId);
+        const ageIndexStamp = () => mount.db.run(sql`UPDATE paths SET contentIndexedAt = 0 WHERE id = ${chat.id}`);
+        await home.drive.flushContentReindex();
+
+        // Index the pre-restore body (v1 + v2).
+        await chatPost(token, ownerId, aliceMountId, `${chat.id}/messages`, { content: 'grobblev2 body' });
+        ageIndexStamp();
+        await home.drive.flushContainerDb(aliceMountId, chat.id);
+        await home.drive.flushContentReindex();
+        expect(home.drive.search({ q: 'grobblev2', limit: 20 }).some((h) => h.id === chat.id)).toBe(true);
+
+        await restoreVersion(token, ownerId, aliceMountId, chat.id, saved.name);
+
+        ageIndexStamp();
+        await home.drive.flushContentReindex();
+        expect(home.drive.search({ q: 'grobblev2', limit: 20 }).some((h) => h.id === chat.id)).toBe(false);
+        expect(home.drive.search({ q: 'grobblev1', limit: 20 }).some((h) => h.id === chat.id)).toBe(true);
     });
 
     test('eigendoc: save + list returns parsed snapshot metadata', async () => {

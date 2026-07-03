@@ -743,7 +743,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         const draining = mount.flushContentReindex(); // handle to the in-flight drain loop
         await entered; // extract is parked at the gate, before its open
 
-        const documentDbs = (mount as unknown as { documentDbs: Map<string, unknown> }).documentDbs;
+        const documentDbs = mount.documentDbs;
 
         // Tear down while the extract is mid-flight, THEN let it open its DB. Pre-fix: teardown returns
         // before the open, which lands in the cleared cache and leaks. Post-fix: teardown awaits the
@@ -789,7 +789,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
 
         // Bound the race deterministically: the injected write never resolves, so only the timeout can
         // settle it. 50ms keeps the test fast; production uses UPLOAD_PUT_TIMEOUT_MS (120s).
-        (mount as unknown as { uploadQueue: { putTimeoutMs: number } }).uploadQueue.putTimeoutMs = 50;
+        (mount.uploadQueue as unknown as { putTimeoutMs: number }).putTimeoutMs = 50;
         fault.hangWrites = true;
 
         const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
@@ -834,7 +834,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         await mount.createFile(rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
         await entered;
 
-        (mount as unknown as { reindexQueue: { closeTimeoutMs: number } }).reindexQueue.closeTimeoutMs = 50;
+        (mount.reindexQueue as unknown as { closeTimeoutMs: number }).closeTimeoutMs = 50;
 
         // Pre-fix: close() awaits the parked drain unboundedly → this never returns (test times out).
         await mount.closeAllDatabases();

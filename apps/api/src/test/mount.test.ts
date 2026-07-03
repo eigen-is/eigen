@@ -5,7 +5,11 @@ import { type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { getUniqueFileName } from '../lib/drive/naming';
-import { CONTENT_REINDEX_CAP_SECONDS, ContentReindexQueue } from '../lib/mount/content-reindex-queue';
+import {
+    CONTENT_REINDEX_CAP_SECONDS,
+    type ContentExtractor,
+    ContentReindexQueue,
+} from '../lib/mount/content-reindex-queue';
 import { buildStorageKey, createDefaultMountConfig } from '../lib/mount/helpers';
 import { Mount } from '../lib/mount/mount';
 import { LocalStorage } from '../lib/storage/local-storage';
@@ -104,6 +108,24 @@ describe('downloadToTemp', () => {
         } finally {
             storage.getPath = originalGetPath;
         }
+    });
+
+    // The temp path doubles as an open doc's live working copy (getTempPath keys both by pathId),
+    // so downloading onto an open document DB would truncate live state. Safe today (only version
+    // files pass through) — this pins the invariant.
+    test('refuses a path whose document DB is open', async () => {
+        const guardSchema = { items: sqliteTable('items', { id: integer('id').primaryKey() }) };
+        const guardConfig: DatabaseConfig<typeof guardSchema> = {
+            name: 'download-guard-test',
+            currentVersion: 1,
+            schema: guardSchema,
+            migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)') }],
+        };
+        const containerId = await mount.createFolder(rootId, 'OpenDoc', 'doc');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        await mount.createDatabase(guardConfig, dataDbId);
+        expect(mount.downloadToTemp(dataDbId)).rejects.toThrow('live working copy');
+        await mount.closeDatabase(dataDbId);
     });
 });
 
@@ -1535,6 +1557,88 @@ describe('content index dirty marks', () => {
         expect(mount.getContentDirtyPaths(0, 100).map((p) => p.id)).toContain(txt);
         mount.markContentIndexed(txt);
         expect(mount.getContentDirtyPaths(120, 100).map((p) => p.id)).not.toContain(txt);
+    });
+
+    // Overwrites mirror createFile's isSearchableTextFile gate — a binary PUT must not queue a re-extract.
+    test('overwriting a plaintext file re-marks it contentDirty; a binary overwrite does not', async () => {
+        const txt = await mount.createFile(rootId, 'rewrite.txt', 'text/plain', 0, undefined);
+        const png = await mount.createFile(rootId, 'rewrite.png', 'image/png', 0, undefined);
+        mount.markContentIndexed(txt);
+        mount.markContentIndexed(png);
+
+        await mount.writeFile(txt, Buffer.from('fresh text'));
+        await mount.writeFile(png, Buffer.from([137, 80, 78, 71]));
+
+        const dirtyIds = mount.getContentDirtyPaths(-1, 100).map((p) => p.id);
+        expect(dirtyIds).toContain(txt);
+        expect(dirtyIds).not.toContain(png);
+    });
+
+    test('overwriting from a temp file (streaming PUT) follows the same searchable gate', async () => {
+        const txt = await mount.createFile(rootId, 'stream.txt', 'text/plain', 0, undefined);
+        const png = await mount.createFile(rootId, 'stream.png', 'image/png', 0, undefined);
+        mount.markContentIndexed(txt);
+        mount.markContentIndexed(png);
+
+        await Bun.write(mount.getTempPath('overwrite-txt'), 'streamed text');
+        await mount.writeFileFromTemp(txt, 'overwrite-txt', 13, 'hash-a');
+        await Bun.write(mount.getTempPath('overwrite-png'), Buffer.from([137, 80, 78, 71]));
+        await mount.writeFileFromTemp(png, 'overwrite-png', 4, 'hash-b');
+
+        const dirtyIds = mount.getContentDirtyPaths(-1, 100).map((p) => p.id);
+        expect(dirtyIds).toContain(txt);
+        expect(dirtyIds).not.toContain(png);
+    });
+});
+
+describe('trash/restore content reindex', () => {
+    // A container trashed while contentDirty=1 is skipped by the drain (trashedAt filter), so restore
+    // must re-kick the reindexer — otherwise its body search stays stale until the next unrelated write.
+    test('restoring a trashed dirty container re-kicks the reindexer', async () => {
+        const docSchema = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };
+        const docConfig: DatabaseConfig<typeof docSchema> = {
+            name: 'restore-reindex-test',
+            currentVersion: 1,
+            schema: docSchema,
+            migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
+        };
+        let body = 'grendelone';
+        let onExtract: (() => void) | undefined;
+        const extract: ContentExtractor = async () => {
+            onExtract?.();
+            return body;
+        };
+        const config = createDefaultMountConfig('test-restore-reindex', 'local-key');
+        const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR), extract);
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        const containerId = await mount.createFolder(rootId, 'RestoreDoc', 'doc');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        const managed = await mount.createDatabase(docConfig, dataDbId);
+
+        // First index: a synced write marks the container dirty; the drain extracts body v1.
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await managed.flush();
+        await mount.flushContentReindex();
+        expect(mount.searchPaths({ q: 'grendelone', limit: 20 }).some((h) => h.id === containerId)).toBe(true);
+
+        // Dirty it again (the trash-time close syncs it, re-marking the container; the 2-min cap
+        // defers that drain), then trash. Age the index stamp so a restore-time drain is due now.
+        body = 'grendeltwo';
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
+        await mount.trashPath(containerId);
+        mount.db.run(sql`UPDATE paths SET contentIndexedAt = 0 WHERE id = ${containerId}`);
+
+        const extracted = new Promise<void>((resolve) => {
+            onExtract = resolve;
+        });
+        await mount.restorePath(containerId);
+        // Pre-fix nothing re-drives the queue, so the extract signal never fires.
+        const kicked = await Promise.race([extracted.then(() => true), Bun.sleep(300).then(() => false)]);
+        await mount.closeAllDatabases(); // settles the in-flight drain + cancels timers before asserting
+        expect(kicked).toBe(true);
+        expect(mount.searchPaths({ q: 'grendeltwo', limit: 20 }).some((h) => h.id === containerId)).toBe(true);
     });
 });
 
