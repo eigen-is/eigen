@@ -20,7 +20,7 @@ export type MailStoreEvents = {
 };
 
 // The swappable mail storage contract held by the Mail domain class (AUDIT_MAIL.md
-// § Backend abstraction). Maildir (+ MailDB) is the only implementation today.
+// § Backend abstraction). MaildirStore (+ MailDB) is the only implementation today.
 export interface MailStore {
     // Resolves true when a fresh (empty) store was created.
     init(events: MailStoreEvents): Promise<boolean>;
