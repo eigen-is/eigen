@@ -232,3 +232,7 @@ class the SharedDrive seam mirrors.
   per-watcher failures.
 - Versioning restore's grab-before-prune ordering and self-locking snapshot design show real races
   were thought through.
+
+---
+
+_Postscript 2026-07-03: decomposition executed on `refactor/drive-split` (merged c5d7526f) — bodies moved to `serve-file.ts`, `upload.ts` (folds the duplicated upload-finalize block), `trash.ts`, `shared-with-me.ts`, `collab-registry.ts`; drive.ts 1549→1118 LOC; sharedDrive.ts + routes/drive.ts zero-diff. Deviations: extracted bodies take `drive` + public annotated `emit` (not pure `(mount,args)`); `acl-ops.ts` skipped per default; `emptyTrash`/`getSharedWith` stayed._
