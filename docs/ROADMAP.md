@@ -1,7 +1,8 @@
 # Roadmap
 
 Prioritised backlog of open work. Each item was checked against the codebase on **2026-06-25**;
-status is what exists today, not what the proposal hoped for. The detailed designs live in the
+done items are pruned on completion (last prune 2026-07-03 — git history keeps them). Status is
+what exists today, not what the proposal hoped for. The detailed designs live in the
 `docs/PROPOSAL_*.md` files referenced per row.
 
 The organising theme is **the road to a trustworthy 1.0**: Eigen runs in production but is honest
@@ -38,10 +39,10 @@ lose") and the work the grant funds. Highest strategic value.
 
 | Item | Status in code | Effort | Frozen-format | Notes |
 |---|---|---|---|---|
-| **Search Phase 2: body content** ([proposal](PROPOSAL_SEARCH.md)) | **Shipped** — drive-wide body search live (`paths_content_fts`, metadata.db v6; covers docs/sheets/slides/stickies/chat/plaintext). This row was stale (2026-07-03 check). | — | — | Remaining: Phase 4 calendar/event search (S). |
+| **Search: calendar events** ([proposal](PROPOSAL_SEARCH.md)) | Mail + drive search (names and body content) shipped; calendar is the last unsearchable domain. | S | Yes, low — additive FTS table, following the inline-FTS pattern mail.db uses | Last phase of the search proposal. |
 | **File History: email digests + in-doc panel** ([proposal](PROPOSAL_FILE_HISTORY.md)) | Phase 1 live (~65%): `FileHistory`, Recent Activity, Watch, Watched view. | M | Yes — email channel needs `notifications.db` v2 migration | Remaining: email/digest channel, in-doc history panel unified with version history, `history:changed` live SSE, and the deferred slide semantic events (S). |
 | **Copy-Paste Phase 0** ([proposal](PROPOSAL_COPY_PASTE.md)) | v1 clipboard live; the async path (`writeEigenClipboardAsync`) omits the custom MIME. | S | No (clipboard is transient) | Tiny fix to make Slides button-copy lossless. Full ECP v2 protocol is P3. |
-| **Help Center rework finish** | Partial — AppShell swap + sections landed; spec's `SupportSidebar` / search-removal didn't fully land. | S | No | The one genuinely-incomplete superpowers plan (`docs/superpowers/plans/2026-05-20-help-center-rework.md`). |
+| **Help Center rework finish** | Partial — AppShell swap + sections landed; spec's `SupportSidebar` / search-removal didn't fully land. | S | No | The one genuinely-incomplete superpowers plan (`docs/superpowers/plans/2026-05-20-help-center-rework.md`). Article-content campaign runs separately per [SUPPORT-CONTENT-PLAN.md](SUPPORT-CONTENT-PLAN.md). |
 
 ## P3 — Defer
 
@@ -55,7 +56,8 @@ Large net-new builds or low value-per-effort today.
 | **Scripting platform** ([proposal](PROPOSAL_SCRIPTING_PLATFORM.md)) | 0% | L | Foundations exist (document layer, ACLs, SSE, CodeMirror), but "Deno isn't a true sandbox" caveat. Post-1.0. |
 | **Vector drawing app** ([proposal](PROPOSAL_VECTOR.md)) | 0% | XL | Pure net-new build, paved by slides. Post-1.0. |
 | **AI integration** ([proposal](PROPOSAL_AI.md)) | 0% | XL | Needs a GPU sidecar the host lacks; its flagship semantic search is superseded by the FTS5 plan. Keep as grant narrative, not a build. |
-| **Stalwart mail backend** ([proposal](PROPOSAL_STALWART_MAIL.md)) | 0% | XL | The proposal's own decision section says **don't build it** until a user asks for JMAP. |
+| **Stalwart mail backend** ([proposal](PROPOSAL_STALWART_MAIL.md)) | 0% | XL | The proposal's own decision section says **don't build it** until a user asks for JMAP. The `MailStore` seam it would plug into exists since 2026-07-03. |
+| **Async `MailStore.search`/`size`** | Interface landed 2026-07-03 with sync signatures | S | Only needed once a second (remote) mail backend exists — widen the types together with that backend. |
 
 ## Cheap wins (broken-window fixes)
 
@@ -66,17 +68,6 @@ Large net-new builds or low value-per-effort today.
 | Calendar: event-details dialog is cramped | ~1 hour | The "Amsterdam time zone" label squeezes the date/time line in the event popup (screenshot 2026-07-03). Small layout polish; check with a screenshot before merging. |
 | File names: accented characters stored inconsistently | ~½ day | The same name typed on a Mac vs Linux can be different bytes ("café" has two encodings). Lookups normalize but writes store the raw bytes, so a file can exist yet not be found. Normalize once in `validateName` (`apps/api/src/lib/mount/helpers.ts`). **Decide first** what to do with names already stored raw. |
 | Upload timing log is ambiguous | ~10 min | Two different code paths both log `[timing] Mount.upload` (direct PUT vs queued S3 upload), so grepping mixes them. Rename one. Careful: this log line is used in ops greps on the server. |
-
-## Done / banked (reference)
-
-- **God-file decompositions** — mount.ts, drive.ts, calendar.ts, Maildir all split 2026-07-03
-  (see the `AUDIT_*.md` postscripts). This also delivered the `MailStore` interface, closing the
-  old "MailBackend interface refactor" cheap win: a future mail backend is now a drop-in. The
-  deliberately-skipped tail (async `MailStore.search`/`size` widening) only matters once a second,
-  remote mail backend exists — do it together with that backend.
-- **Command palette** ([proposal](PROPOSAL_COMMAND_PALETTE.md)) — v1 complete (~90%); only low-priority polish remains.
-- **Help Center** ([proposal](PROPOSAL_HELP_CENTER.md)) — feature + 120 articles live. Content campaign ongoing per [SUPPORT-CONTENT-PLAN.md](SUPPORT-CONTENT-PLAN.md).
-- **Sheets xlsx-fidelity** — program complete (cycles 0–8); status in [SHEETS-XLSX-FIDELITY.md](SHEETS-XLSX-FIDELITY.md).
 
 ## On hold (decision needed)
 
