@@ -17,10 +17,7 @@ import {
     type DrivePathDetails,
     type DriveVisibility,
     type EigenDocType,
-    isChatType,
-    isCollabType,
     isContainerType,
-    stripEigenExtension,
 } from '@workspace/lib/types/drive';
 import {
     type ClientFileEventType,
@@ -34,20 +31,16 @@ import {
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
-import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
 import { openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
-import { contentDisposition, parseByteRange } from '../core/http';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { extractText } from '../search/extract-text';
-import { saveThumbnail } from '../shared/thumbnails';
 import type { StorageFile } from '../storage';
 import { getTeamMembers } from '../team';
 import type { User } from '../user';
@@ -64,12 +57,16 @@ import {
     normalizeACL,
 } from './acl';
 import { diffACLEmails, type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
+import { CollabRegistry } from './collab-registry';
 import { LockManager } from './lock-manager';
-import { getUniqueFileName } from './naming';
+import { serveFile } from './serve-file';
 import { getSharedDatabase } from './shared';
-import * as sharedSchema from './sharedschema';
+import { listSharedWithMe, listSharedWithMeByMimeType, receiveACLChange } from './shared-with-me';
+import type * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 import { streamFilesToTemp, writeTempWithHash } from './streaming';
+import { deletePath, permanentlyDelete, restorePath } from './trash';
+import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 
 // Drive is the high-level domain API over multiple mounts. Routes reach it through
 // `getSharedDrive(ownerId, user)` (returns `Drive | SharedDrive`) for ACL-checked
@@ -88,13 +85,14 @@ export default class Drive {
     private mounts: Map<string, Mount> = new Map();
     private defaultMountId: string = 'default';
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
-    private documents: Map<string, () => Promise<CollabDocument>> = new Map();
+    private readonly documents: CollabRegistry;
     // Per-Drive WebDAV LockManager. Locks evict when this Drive's Home unloads via destruct().
     public readonly lockManager = new LockManager();
 
     constructor(home: Home) {
         this.home = home;
         this.owner = home.user;
+        this.documents = new CollabRegistry(this.owner.id);
     }
 
     async init(autoCreateDefaultMount: boolean = false): Promise<void> {
@@ -169,7 +167,7 @@ export default class Drive {
         live.applyConfig(config);
     }
 
-    async removeMount(mountId: string): Promise<void> {
+    private async removeMount(mountId: string): Promise<void> {
         if (mountId === this.defaultMountId) {
             throw new ApiError(400, 'Cannot remove default mount');
         }
@@ -333,35 +331,16 @@ export default class Drive {
 
         for (const result of streamed) {
             try {
-                let safeName = result.fileName.replace(/[/\\]/g, '_');
-                const originalName = safeName;
-
-                const existing = await mount.getChildByName(parentId, safeName);
-                if (existing) {
-                    const siblings = await mount.listFolder(parentId);
-                    const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
-                    safeName = getUniqueFileName(safeName, usedNames);
-                }
-
-                const pathId = await mount.createFileFromTemp(
-                    parentId,
-                    safeName,
-                    result.mimeType,
-                    result.size,
-                    result.hash,
-                    result.tempId,
-                );
-
                 uploaded.push(
-                    await this.finalizeUpload(
-                        mount,
-                        pathId,
-                        originalName,
-                        safeName,
-                        result.mimeType,
-                        result.tempId,
+                    await finalizeUpload(this, mount, {
+                        parentId,
+                        name: result.fileName,
+                        mimeType: result.mimeType,
+                        size: result.size,
+                        hash: result.hash,
+                        tempId: result.tempId,
                         user,
-                    ),
+                    }),
                 );
             } catch (e) {
                 await mount.cleanupTemp(result.tempId);
@@ -408,19 +387,7 @@ export default class Drive {
         const tempId = randomUUID();
         try {
             const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
-
-            let safeName = name.replace(/[/\\]/g, '_');
-            const originalName = safeName;
-
-            const existing = await mount.getChildByName(parentId, safeName);
-            if (existing) {
-                const siblings = await mount.listFolder(parentId);
-                const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
-                safeName = getUniqueFileName(safeName, usedNames);
-            }
-
-            const pathId = await mount.createFileFromTemp(parentId, safeName, mimeType, size, hash, tempId);
-            const created = await this.finalizeUpload(mount, pathId, originalName, safeName, mimeType, tempId, user);
+            const created = await finalizeUpload(this, mount, { parentId, name, mimeType, size, hash, tempId, user });
             if (user) {
                 await mount.history.fanOut({
                     eventType: 'uploaded',
@@ -441,69 +408,18 @@ export default class Drive {
     async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
-
         if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
-
-        // Capture BEFORE trashPath re-parents the item to the mount root — the
-        // post-trash breadcrumb would lose the old folder's ACL and silently skip
-        // exactly the folder-watchers this event is for.
-        const preTrashChain = user ? await mount.getBreadcrumb(pathId) : [];
-
-        // Close collab docs BEFORE setting trashedAt (they use listFolderAll internally)
-        if (isContainerType(item.type)) {
-            await this.closeCollabDocumentsRecursively(mountId, pathId);
-            await this.propagateACLRemovalRecursively(mountId, pathId);
-        } else {
-            if (isCollabType(item.type)) {
-                try {
-                    await this.closeCollabDocument(mountId, pathId);
-                } catch (e) {
-                    console.error(`Failed to close collab document ${pathId}:`, e);
-                }
-            }
-            if (item.acl) {
-                await propagateACLChange(item, item.acl, null, null);
-            }
-        }
-
-        const trashedItem = await mount.trashPath(pathId);
-        this.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
-        if (user) {
-            await mount.history.record({ pathId, eventType: 'trashed', actor: user });
-            // path: pre-trash snapshot — trashedAt is still null so the fan-out guard passes
-            await mount.history.fanOut({
-                eventType: 'trashed',
-                actor: user,
-                path: item,
-                chainRootIds: [item.parentId],
-                verifyAncestors: preTrashChain,
-            });
-        }
+        await deletePath(this, mount, item, user);
     }
 
     async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
-
-        const restoredItem = await mount.restorePath(pathId);
-
-        // Re-propagate ACL
-        if (restoredItem.acl) {
-            await propagateACLChange(restoredItem, null, restoredItem.acl, null);
-        }
-        // For containers, re-propagate for descendants with ACL
-        if (isContainerType(restoredItem.type)) {
-            await this.propagateACLRestoreRecursively(mountId, restoredItem.id);
-        }
-
-        this.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
-        // recordFileEvent re-fetches the path, so it sees the post-restore row
-        // (trashedAt cleared, original parentId) — the chain it walks is the restored one
-        if (user) await this.recordFileEvent(mountId, pathId, user, 'restored');
+        await restorePath(this, mount, pathId, user);
     }
 
     async listTrash(mountId: string): Promise<DrivePath[]> {
@@ -515,36 +431,7 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
-
-        // Notification-only ('deleted' has no history row — the FK cascade would kill
-        // it instantly). Capture watchers + the trashedFrom id that justifies the
-        // notification BEFORE the delete removes the path_watchers rows.
-        let watcherIds: string[] = [];
-        let trashedFrom: string | null = null;
-        if (user) {
-            trashedFrom = await mount.getTrashedFrom(pathId);
-            watcherIds = mount.history.collectWatcherIds(trashedFrom ? [pathId, trashedFrom] : [pathId], user.id);
-        }
-
-        await mount.permanentlyDeleteFromTrash(pathId);
-
-        if (isContainerType(item.type) || isCollabType(item.type) || isChatType(item.type)) {
-            this.emit(SSEventType.DRIVE_FOLDER_DELETED, item);
-        } else {
-            this.emit(SSEventType.DRIVE_FILE_DELETED, item);
-        }
-
-        if (user && watcherIds.length > 0) {
-            // The item itself joins the chain so direct-file-share watchers still verify
-            // (the trashedFrom folder survives the delete, so its breadcrumb is intact).
-            await mount.history.notifyWatchers(watcherIds, {
-                eventType: 'deleted',
-                actor: user,
-                itemName: item.name,
-                tagPathId: pathId,
-                verifyAncestors: [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item],
-            });
-        }
+        await permanentlyDelete(this, mount, item, user);
     }
 
     async emptyTrash(mountId: string, user?: User): Promise<void> {
@@ -604,7 +491,7 @@ export default class Drive {
         // the old ancestor chain, exactly like an ACL change, so enforce it the same way
         // (P2-8). Runs after updatePath/side-effects so canRead sees the new chain and the
         // move can't be undone; NO-OP when read is kept/widened; local close (owner-scoped).
-        await this.enforceReadAccessRecursively(mountId, pathId);
+        await this.documents.enforceReadAccessBelow(mount, pathId);
         return movedPath;
     }
 
@@ -684,59 +571,7 @@ export default class Drive {
         disposition: 'attachment' | 'inline',
         range: string | null = null,
     ): Promise<Response> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getActivePath(pathId);
-        if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
-        const mimeType = path.mimeType || 'application/octet-stream';
-        const headers: Record<string, string> = {
-            'Content-Type': mimeType,
-            'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
-            'Cache-Control': 'public, max-age=86400',
-            Expires: new Date(Date.now() + 86400000).toUTCString(),
-            // Stored MIME is the upload's own Content-Type, served verbatim — nosniff stops the
-            // browser re-sniffing a disguised payload (e.g. HTML bytes uploaded as image/png).
-            'X-Content-Type-Options': 'nosniff',
-            // Advertise range support so media players seek by fetching byte ranges instead of
-            // re-downloading the whole file (notably from S3, where readRange issues a ranged GET).
-            'Accept-Ranges': 'bytes',
-        };
-        // /embed serves inline from the API's own origin, so a scriptable upload (HTML/SVG) could
-        // run script with the viewer's session. A sandbox CSP neutralises active content while
-        // still rendering the file; scoped to scriptable types so media/PDF previews are untouched.
-        if (disposition === 'inline') {
-            const baseMime = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
-            if (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml') {
-                headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
-            }
-        }
-
-        const parsed = parseByteRange(range, path.size);
-        if (parsed === 'unsatisfiable') {
-            return new Response(null, {
-                status: 416,
-                headers: { ...headers, 'Content-Range': `bytes */${path.size}` },
-            });
-        }
-        if (parsed) {
-            const slice = await mount.readRange(pathId, parsed.start, parsed.end + 1);
-            if (!slice) throw new ApiError(404, 'File not found');
-            // Stream the slice. Passing the BunFile/S3File directly loses the slice bounds
-            // somewhere in the response pipeline, so route through .stream() which respects them.
-            return new Response(slice.stream(), {
-                status: 206,
-                headers: {
-                    ...headers,
-                    'Content-Length': String(parsed.end - parsed.start + 1),
-                    'Content-Range': `bytes ${parsed.start}-${parsed.end}/${path.size}`,
-                },
-            });
-        }
-
-        const file = await mount.readFile(pathId);
-        if (!file) throw new ApiError(404, 'File not found');
-        // S3File doesn't support ResponseInit options — stream it instead
-        const body: BodyInit = 'bucket' in file ? file.stream() : file;
-        return new Response(body, { headers });
+        return serveFile(this.getMount(mountId), pathId, disposition, range);
     }
 
     async writeFileContent(
@@ -786,7 +621,8 @@ export default class Drive {
         if (user) await this.recordFileEvent(mountId, pathId, user, 'uploaded', { size: updated.size ?? 0 });
 
         if (thumbnailSource !== null) {
-            this.regenerateThumbnailAsync(
+            regenerateThumbnailAsync(
+                this,
                 mount,
                 pathId,
                 thumbnailSource,
@@ -817,15 +653,9 @@ export default class Drive {
             allResults.push(...mountResults);
         }
 
-        const sharedResults = await this.sharedDb
-            .select()
-            .from(sharedSchema.sharedPaths)
-            .where(eq(sharedSchema.sharedPaths.mimeType, mimeType))
-            .all();
-
+        const sharedResults = await listSharedWithMeByMimeType(this.sharedDb, mimeType);
         const seen = new Set(allResults.map((r) => r.id));
-        const unique = sharedResults.map((r) => this.sharedRowToDrivePath(r)).filter((r) => !seen.has(r.id));
-        return [...allResults, ...unique];
+        return [...allResults, ...sharedResults.filter((r) => !seen.has(r.id))];
     }
 
     async getMountMimeTypeContents(
@@ -917,7 +747,7 @@ export default class Drive {
             // A revoked read must drop the user's live collab socket now, not whenever they
             // next disconnect. All connections (owner + shared users) live in this owner-home
             // Drive's `documents` registry, so this is a local close — no home-relay needed.
-            await this.enforceReadAccessRecursively(mountId, pathId);
+            await this.documents.enforceReadAccessBelow(mount, pathId);
         }
     }
 
@@ -1047,52 +877,19 @@ export default class Drive {
         return canWriteFromAncestors(ancestors, user, resolved);
     }
 
-    private documentKey(mountId: string, pathId: string): string {
-        return `${this.owner.id}.${mountId}.${pathId}`;
-    }
-
     // Called by: versioning/restore (to decide whether a restore opened the doc
     // itself, and so must close it). Not route-callable.
     hasCollabDocument(mountId: string, pathId: string): boolean {
-        return this.documents.has(this.documentKey(mountId, pathId));
+        return this.documents.has(mountId, pathId);
     }
 
     async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
-        const mount = this.getMount(mountId);
-        const key = this.documentKey(mountId, pathId);
-        if (!this.documents.has(key)) {
-            this.documents.set(
-                key,
-                createAsyncSingleton(async () => {
-                    const path = await mount.getActivePath(pathId);
-                    if (!isCollabType(path.type)) {
-                        throw new ApiError(404, 'Document not found');
-                    }
-                    const document = new CollabDocument(this, path);
-                    return (await document.init()) as CollabDocument;
-                }),
-            );
-        }
-        return (await this.documents.get(key)!()) as CollabDocument;
+        return this.documents.get(this, this.getMount(mountId), pathId);
     }
 
     // Called by: collab/collabDocument cleanup, versioning/restore. Not route-callable.
     async closeCollabDocument(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
-        const mount = this.getMount(mountId);
-        const key = this.documentKey(mountId, pathId);
-        const documentFn = this.documents.get(key);
-        if (!documentFn) return;
-        // Delete BEFORE the async destruct so a concurrent getCollabDocument() builds a fresh
-        // singleton instead of receiving the doc that is closing (a closing doc never sends
-        // sync-step-1, stalling the client). Mirrors Mount.closeDatabase's delete-before-close.
-        this.documents.delete(key);
-        const doc = await documentFn();
-        doc.destruct();
-        // Only tear down the shared data.db if no concurrent reopen re-registered this doc — the
-        // reopened doc now owns the db lifecycle.
-        if (doc.dataDbPathId && !this.documents.has(key)) {
-            await mount.closeDatabase(doc.dataDbPathId, opts);
-        }
+        return this.documents.close(this.getMount(mountId), pathId, opts);
     }
 
     async saveVersion(mountId: string, containerId: string): Promise<Snapshot> {
@@ -1255,8 +1052,7 @@ export default class Drive {
     // IS the user's own state (paths shared with them), so cross-owner access has no
     // meaning. See class doc above.
     async getSharedPathsWithMe(): Promise<DrivePath[]> {
-        const results = await this.sharedDb.select().from(sharedSchema.sharedPaths).all();
-        return results.map((r) => this.sharedRowToDrivePath(r));
+        return listSharedWithMe(this.sharedDb);
     }
 
     async getSharedWith(user: User): Promise<DrivePath[]> {
@@ -1285,62 +1081,7 @@ export default class Drive {
     // Called by: home-relay (cross-home ACL propagation receiver) and share/reconciliation.
     // Not route-callable — inbound side of the sharding seam.
     async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
-        const displayName = stripEigenExtension(path.name);
-        const memberships = await getMemberships(this.owner.id);
-        if (newACL === null || !matchesACL(newACL, this.owner, memberships, 'read')) {
-            this.sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
-            this.emit(SSEventType.DRIVE_ACL_UNSHARED, path);
-            this.home.notifications?.persist({
-                type: 'unshare',
-                actorEmail,
-                title: `"${displayName}" is no longer shared with you`,
-            });
-        } else if (
-            this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()
-        ) {
-            this.sharedDb
-                .update(sharedSchema.sharedPaths)
-                .set({
-                    acl: newACL,
-                    visibility: path.visibility,
-                    sharingRestricted: path.sharingRestricted ? 1 : 0,
-                    name: path.name,
-                    size: path.size,
-                    thumbnail: path.thumbnail,
-                    parentId: path.parentId,
-                    updatedAt: new Date(),
-                })
-                .where(eq(sharedSchema.sharedPaths.id, path.id))
-                .run();
-            this.emit(SSEventType.DRIVE_ACL_UPDATED, path);
-        } else {
-            this.sharedDb
-                .insert(sharedSchema.sharedPaths)
-                .values({
-                    id: path.id,
-                    mountId: path.mountId,
-                    name: path.name,
-                    type: path.type,
-                    parentId: path.parentId,
-                    ownerId: path.ownerId,
-                    mimeType: path.mimeType,
-                    size: path.size,
-                    thumbnail: path.thumbnail,
-                    acl: newACL,
-                    visibility: path.visibility,
-                    sharingRestricted: path.sharingRestricted ? 1 : 0,
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                })
-                .run();
-            this.emit(SSEventType.DRIVE_ACL_SHARED, path);
-            this.home.notifications?.persist({
-                type: 'share',
-                actorEmail,
-                title: `"${displayName}" was shared with you`,
-                tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
-            });
-        }
+        return receiveACLChange(this.sharedDb, this.home, path, newACL, actorEmail);
     }
 
     async destruct(): Promise<void> {
@@ -1348,15 +1089,7 @@ export default class Drive {
         // databases are closed. Yjs may flush pending changes during destruct(), which
         // requires the database to still be open. This mirrors closeCollabDocument() which
         // calls doc.destruct() then mount.closeDatabase().
-        for (const [key, getter] of this.documents) {
-            try {
-                const doc = await getter();
-                doc.destruct();
-            } catch (error) {
-                console.error(`Failed to close document ${key}:`, error);
-            }
-        }
-        this.documents.clear();
+        await this.documents.destructAll();
 
         // Close remaining mount databases (chat rooms, plus any collab databases whose
         // Yjs documents were already destructed above). Triggers onClose → cleanupTemp.
@@ -1371,179 +1104,15 @@ export default class Drive {
         this.lockManager.clear();
     }
 
-    private sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {
-        return {
-            id: r.id,
-            mountId: r.mountId,
-            name: r.name,
-            type: r.type as DrivePath['type'],
-            parentId: r.parentId,
-            ownerId: r.ownerId,
-            mimeType: r.mimeType,
-            size: r.size ?? 0,
-            hash: null,
-            thumbnail: r.thumbnail,
-            acl: r.acl as DriveACL[] | null,
-            visibility: (r.visibility ?? 'private') as DriveVisibility,
-            sharingRestricted: !!r.sharingRestricted,
-            details: r.details ?? null,
-            trashedAt: null,
-            createdAt: r.createdAt ?? new Date(),
-            updatedAt: r.updatedAt ?? new Date(),
-        };
-    }
-
     private getMount(mountId: string): Mount {
         const mount = this.mounts.get(mountId);
         if (!mount) throw new ApiError(404, `Mount not found: ${mountId}`);
         return mount;
     }
 
-    private async propagateACLRemovalRecursively(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) return;
-        if (path.acl) {
-            await propagateACLChange(path, path.acl, null, null);
-        }
-        if (isContainerType(path.type)) {
-            const children = await mount.listFolderAll(pathId);
-            for (const child of children) {
-                await this.propagateACLRemovalRecursively(mountId, child.id);
-            }
-        }
-    }
-
-    private async propagateACLRestoreRecursively(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const children = await mount.listFolderAll(pathId);
-        for (const child of children) {
-            if (child.acl) {
-                await propagateACLChange(child, null, child.acl, null);
-            }
-            if (isContainerType(child.type)) {
-                await this.propagateACLRestoreRecursively(mountId, child.id);
-            }
-        }
-    }
-
-    private async closeCollabDocumentsRecursively(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) return;
-
-        if (isCollabType(path.type)) {
-            try {
-                await this.closeCollabDocument(mountId, pathId);
-            } catch (error) {
-                console.error(`Failed to close collab document ${pathId}:`, error);
-            }
-        } else if (isContainerType(path.type)) {
-            const children = await mount.listFolderAll(pathId);
-            for (const child of children) {
-                await this.closeCollabDocumentsRecursively(mountId, child.id);
-            }
-        }
-    }
-
-    // Re-check read on every OPEN collab doc at or below `pathId` (mirrors the
-    // closeCollabDocumentsRecursively walk). Re-checking canRead per connection — not
-    // diffing removed ACL entries — is what makes revoking a *folder* share cascade to
-    // docs nested inside it, since read is inherited from the whole ancestor chain.
-    private async enforceReadAccessRecursively(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) return;
-
-        if (isCollabType(path.type)) {
-            // Only open docs hold live connections; skip closed ones to keep this cheap.
-            const getter = this.documents.get(this.documentKey(mountId, pathId));
-            if (!getter) return;
-            try {
-                const doc = await getter();
-                await doc.enforceReadAccess();
-            } catch (error) {
-                console.error(`Failed to enforce read access on ${pathId}:`, error);
-            }
-        } else if (isContainerType(path.type)) {
-            const children = await mount.listFolderAll(pathId);
-            for (const child of children) {
-                await this.enforceReadAccessRecursively(mountId, child.id);
-            }
-        }
-    }
-
-    private async finalizeUpload(
-        mount: Mount,
-        pathId: string,
-        originalName: string,
-        safeName: string,
-        mimeType: string,
-        tempId: string,
-        user?: User,
-    ): Promise<DrivePath> {
-        if (originalName) {
-            await mount.updatePath(pathId, { details: { originalName } });
-        }
-
-        const uploadedFile = await mount.getPath(pathId);
-        if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
-        this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-        // History row only — fan-out is the caller's job, so a multi-file upload
-        // notifies watchers once per batch instead of once per file.
-        if (user) {
-            await mount.history.record({
-                pathId,
-                eventType: 'uploaded',
-                actor: user,
-                details: { size: uploadedFile.size ?? 0 },
-            });
-        }
-
-        if (uploadedFile.size === 0) {
-            // 0-byte placeholders (Finder's two-step copy) can't yield a thumbnail.
-            // Skip the worker spawn; the real bytes will arrive via writeFileContent.
-            await mount.cleanupTemp(tempId);
-        } else {
-            this.regenerateThumbnailAsync(mount, pathId, mount.getTempPath(tempId), mimeType, safeName, () =>
-                mount.cleanupTemp(tempId),
-            );
-        }
-
-        return uploadedFile;
-    }
-
-    private regenerateThumbnailAsync(
-        mount: Mount,
-        pathId: string,
-        source: Buffer | string,
-        mimeType: string,
-        fileName: string,
-        onCleanup?: () => Promise<void>,
-    ): void {
-        (async () => {
-            try {
-                const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, source, mimeType, fileName);
-                if (!thumbnail) return;
-                const current = await mount.getPath(pathId);
-                if (!current) return;
-                await mount.updatePath(pathId, {
-                    thumbnail: thumbnail.fileName,
-                    details: {
-                        ...(current.details ?? {}),
-                        width: thumbnail.width,
-                        height: thumbnail.height,
-                        ...(thumbnail.duration !== undefined && { duration: thumbnail.duration }),
-                    },
-                });
-                this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
-            } finally {
-                await onCleanup?.();
-            }
-        })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
-    }
-
-    private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {
+    // Called by: the extracted Drive body modules (upload.ts, trash.ts). Not route-callable —
+    // no SharedDrive wrapper, so the union keeps it off the route surface.
+    emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {
         this.home.broadcast(buildDriveEvent(type, path, oldParentId));
     }
 }
