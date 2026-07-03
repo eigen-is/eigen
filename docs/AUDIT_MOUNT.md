@@ -248,3 +248,7 @@ missing primitive: **the cached `documentDbs` map is decoupled from row mutation
 trash, and delete mutate rows without consulting the cache; the cache only learns at explicit close.
 A single `evictOrRebindCachedDb(pathId)` called from every mutation path — plus resolving keys inside
 the sync callbacks — closes the class. That's the highest-leverage change in this document.
+
+---
+
+_Postscript 2026-07-03: decomposition executed on `refactor/mount-split` (merged dc0154f4) — `helpers.ts`, `search-index.ts`, `copy.ts`, `versioning/snapshot.ts`, `trash.ts`, `document-db.ts` extracted; mount.ts 2007→1200 LOC. E+F+J, tree reads, single `pathLocks` map kept in-class per the doc. Deviation: `uploadQueue` de-privatized instead of queue-wrapper methods. Open P3s logged with new locations in the branch report._
