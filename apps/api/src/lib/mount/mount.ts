@@ -21,8 +21,8 @@ import { getUniqueFileName } from '../drive/naming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
-import { type RetentionPolicy, selectSnapshotsToPrune } from '../versioning/retention';
-import { formatSnapshotTimestamp } from '../versioning/timestamp';
+import type { RetentionPolicy } from '../versioning/retention';
+import * as snapshot from '../versioning/snapshot';
 import { type ContentExtractor, ContentReindexQueue } from './content-reindex-queue';
 import * as copy from './copy';
 import { MOUNT_DB_CONFIG } from './db-config';
@@ -48,15 +48,16 @@ export class Mount {
     readonly config: MountConfig;
 
     private baseDir: string;
-    private storage: StorageBackend;
-    db!: BunSQLiteDatabase<typeof schema>; // internal — used by mount/*.ts
+    storage: StorageBackend; // internal — used by mount/*.ts + versioning/snapshot.ts
+    db!: BunSQLiteDatabase<typeof schema>; // internal — used by mount/*.ts + versioning/snapshot.ts
     private getLocalDatabase: LocalDatabaseGetter;
     private ownerId: string;
-    private documentDbs: Map<string, () => Promise<ManagedDatabase<SchemaType>>> = new Map();
+    // internal — used by mount/*.ts + versioning/snapshot.ts
+    documentDbs: Map<string, () => Promise<ManagedDatabase<SchemaType>>> = new Map();
     private pathLocks: Map<string, Promise<void>> = new Map();
 
     // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
-    private uploadQueue?: UploadQueue;
+    uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
 
     // Per-mount content reindexer — built in init() only when an extractor is injected (the
     // document-loader stack is wired from Drive so it never enters this module's graph).
@@ -524,77 +525,13 @@ export class Mount {
         return copy.copyPath(this, srcPathId, destParentId, name, actor);
     }
 
-    // Snapshots the container's data.db into versions/<iso-ts>.db, then prunes per
-    // the retention policy. Self-locked on the container: the timer, close, manual
-    // save and a restore's pre-restore snapshot all call this directly and serialize
-    // here — no caller has to remember to lock, and nothing holds the lock across
-    // another snapshot, so there is no deadlock to reason about.
+    // Versioning mechanics — implementation in lib/versioning/snapshot.ts (next to restore.ts).
     async snapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
-        return this.withPathLock(containerId, async () => {
-            const dataDb = await this.getChildByName(containerId, 'data.db');
-            if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
-
-            // Flush any cached managedDb so the on-storage data.db reflects pending
-            // writes. No-op if not cached, or cached and not dirty.
-            const cached = this.documentDbs.get(dataDb.id);
-            if (cached) await (await cached()).flush();
-
-            let versions = await this.getChildByName(containerId, 'versions');
-            if (!versions) {
-                const newId = await this.createFolder(containerId, 'versions');
-                const created = await this.getPath(newId);
-                if (!created) throw new ApiError(500, 'Failed to create versions folder');
-                versions = created;
-            }
-
-            const snapshotName = formatSnapshotTimestamp(new Date());
-            // Two snapshots in the same millisecond capture the same instant — reuse
-            // the existing one rather than failing on the duplicate name.
-            const existing = await this.getChildByName(versions.id, snapshotName);
-            if (existing) return existing;
-            // isRemote sources the version from the freshest LOCAL bytes and ENQUEUES its upload
-            // (§3), so a close-time snapshot never blocks on the backend — copyPath would instead
-            // write the new version to storage synchronously. Local backends are synchronously
-            // current, so they keep the direct copyPath.
-            const copy = this.isRemote
-                ? await this.snapshotDataDbToVersionStaged(dataDb, versions.id, snapshotName)
-                : await this.copyPath(dataDb.id, versions.id, snapshotName);
-
-            // Prune. Exclude the just-written copy: retention keeps the newest per
-            // hour bucket, and excluding the fresh one lets a second snapshot taken
-            // within the same hour preserve the first until the hour rolls over.
-            const toPrune = selectSnapshotsToPrune(
-                (await this.listFolder(versions.id))
-                    .filter((e) => e.id !== copy.id)
-                    .map((e) => ({ id: e.id, name: e.name })),
-                policy,
-            );
-            for (const item of toPrune) await this.deletePath(item.id);
-
-            return copy;
-        });
+        return snapshot.snapshotContainerDataDb(this, containerId, policy);
     }
 
-    // isRemote version snapshot: create the version metadata row, source its bytes from the
-    // freshest LOCAL copy of data.db, and enqueue the upload (so a close-time snapshot never
-    // blocks on the backend). Caller holds the container lock.
-    private async snapshotDataDbToVersionStaged(
-        dataDb: DrivePath,
-        versionsId: string,
-        snapshotName: string,
-    ): Promise<DrivePath> {
-        const versionPathId = await this.touchFile(versionsId, snapshotName, dataDb.mimeType);
-        const versionKey = await this.getStorageKey(versionPathId);
-        const queue = this.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
-        const versionStaging = queue.newStagingPath();
-        await this.stageDataDbSnapshot(dataDb.id, versionStaging);
-        const size = fs.statSync(versionStaging).size;
-        await this.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, versionPathId));
-        await this.invalidateAncestorsOf(versionPathId);
-        queue.enqueueStaged(versionKey, versionStaging);
-        const created = await this.getPath(versionPathId);
-        if (!created) throw new ApiError(500, 'Failed to create version snapshot');
-        return created;
+    async replaceContainerDataDb(containerId: string, sourcePath: string): Promise<void> {
+        return snapshot.replaceContainerDataDb(this, containerId, sourcePath);
     }
 
     // The frozen staged copy of a pending (un-acked) upload for storageKey holds bytes newer than
@@ -602,61 +539,18 @@ export class Mount {
     // storage: local mounts (no queue), regular files (only managed data.db/comments.db/version
     // snapshots are ever staged), or an already-acked upload. Synchronous, so a caller can copy the
     // returned path with no await before a concurrent enqueue could unlink it.
-    private pendingStagedCopy(storageKey: string): string | null {
+    // internal — used by mount/*.ts + versioning/snapshot.ts
+    pendingStagedCopy(storageKey: string): string | null {
         const staged = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
         return staged && fs.existsSync(staged) ? staged : null;
-    }
-
-    // Produce a local copy of data.db's current bytes at destPath, freshest source first.
-    private async stageDataDbSnapshot(dataDbPathId: string, destPath: string): Promise<void> {
-        const storageKey = await this.getStorageKey(dataDbPathId);
-        // The caller (snapshotContainerDataDb) flushed the cached db first, so the pending staged
-        // copy already holds the current bytes — reuse it instead of a second VACUUM INTO. Copy it
-        // SYNCHRONOUSLY: with no await between pendingStagedCopy's existsSync and the copy, a
-        // concurrent enqueue can't unlink it mid-read.
-        const pendingStaging = this.pendingStagedCopy(storageKey);
-        if (pendingStaging) {
-            fs.copyFileSync(pendingStaging, destPath);
-            return;
-        }
-        // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
-        // current because every upload acked (§3).
-        const cached = this.documentDbs.get(dataDbPathId);
-        if (cached) {
-            (await cached()).stageCopy(destPath);
-            return;
-        }
-        await Bun.write(destPath, this.storage.read(storageKey));
-    }
-
-    // Replaces the container's data.db with the file at `sourcePath` — a snapshot the
-    // caller grabbed into the OS temp dir (downloadToTemp) before the pre-restore
-    // snapshot could prune it. Self-locked so a concurrent snapshot can't read a
-    // half-written data.db. Closes the live db with skipFinalSnapshot (we're
-    // discarding it, and snapshotting here would re-enter this lock), then deletes and
-    // recreates — a fresh inode, because overwriting the file in place hands SQLite a
-    // stale vnode (SQLITE_IOERR_VNODE) when the db is reopened.
-    async replaceContainerDataDb(containerId: string, sourcePath: string): Promise<void> {
-        return this.withPathLock(containerId, async () => {
-            const file = Bun.file(sourcePath);
-            // data.db is normally present, but a prior restore that crashed between the
-            // delete and recreate below would leave it absent; tolerate that so simply
-            // re-running restore self-heals instead of 404-ing forever. The fallback
-            // mime matches provisionManagedDbs.
-            const dataDb = await this.getChildByName(containerId, 'data.db');
-            if (dataDb) {
-                await this.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
-                await this.deletePath(dataDb.id);
-            }
-            await this.createFile(containerId, 'data.db', dataDb?.mimeType ?? 'application/x-sqlite3', file.size, file);
-        });
     }
 
     async touchFile(parentId: string, name: string, mimeType: string) {
         return this.createFile(parentId, name, mimeType, 0, undefined);
     }
 
-    private async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
+    // internal — used by mount/*.ts + versioning/snapshot.ts
+    async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);
         }
@@ -759,7 +653,8 @@ export class Mount {
         }
     }
 
-    private async getStorageKey(pathId: string): Promise<string> {
+    // internal — used by mount/*.ts + versioning/snapshot.ts
+    async getStorageKey(pathId: string): Promise<string> {
         if (!this.isPathBased) {
             const row = await this.db.select({ file: paths.file }).from(paths).where(eq(paths.id, pathId)).get();
             return row?.file || pathId;
@@ -1232,7 +1127,8 @@ export class Mount {
         } catch {}
     }
 
-    private get isRemote(): boolean {
+    // internal — used by mount/*.ts + versioning/snapshot.ts
+    get isRemote(): boolean {
         return this.config.storageType !== 'local-key' && this.config.storageType !== 'local';
     }
 
@@ -1679,7 +1575,8 @@ export class Mount {
         await this.invalidateAncestorsOf(pathId);
     }
 
-    private async invalidateAncestorsOf(pathId: string): Promise<void> {
+    // internal — used by mount/*.ts + versioning/snapshot.ts
+    async invalidateAncestorsOf(pathId: string): Promise<void> {
         const row = await this.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, pathId)).get();
         if (row) await this.invalidateSizesFrom(row.parentId);
     }
