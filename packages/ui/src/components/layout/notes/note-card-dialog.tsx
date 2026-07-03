@@ -82,8 +82,10 @@ export function NoteCardDialog({
                         className={cn(
                             'flex flex-row items-center gap-2 px-4 pt-4 pb-2 rounded-t-lg',
                             color &&
-                                // Inset shadow, not a border: the color bar must not shift the title
-                                'bg-(--note-bg) text-(--note-fg) dark:bg-muted dark:text-card-foreground dark:shadow-[inset_3px_0_0_0_var(--note-indicator)]',
+                                // Inset shadow, not a border: the color bar must not shift the title.
+                                // Dark mode matches the mail list row / NoteCard: 2px inset stripe +
+                                // a 14% color-mix wash over --background (see --note-soft below).
+                                'bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]',
                         )}
                         style={
                             color
@@ -91,6 +93,8 @@ export function NoteCardDialog({
                                       '--note-bg': lightenColor(color, 0.5),
                                       '--note-fg': isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff',
                                       '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
+                                      '--note-soft':
+                                          'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
                                   } as React.CSSProperties)
                                 : undefined
                         }

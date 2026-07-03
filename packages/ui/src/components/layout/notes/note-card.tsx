@@ -45,8 +45,10 @@ export function NoteCard({
             className={cn(
                 'p-0 w-full shadow-md select-none rounded-none',
                 color
-                    ? // Inset shadow, not a border: the color bar must not shift the text
-                      'border-0 bg-(--note-bg) text-(--note-fg) dark:bg-muted dark:text-card-foreground dark:shadow-[inset_3px_0_0_0_var(--note-indicator)]'
+                    ? // Inset shadow, not a border: the color bar must not shift the text.
+                      // Dark mode mirrors the mail list row: 2px inset stripe in the saturated
+                      // color + a 14% color-mix wash over --background (see --note-soft below).
+                      'border-0 bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]'
                     : 'border',
                 onClick ? 'cursor-pointer' : '',
                 className,
@@ -57,6 +59,7 @@ export function NoteCard({
                           '--note-bg': lightenColor(color, 0.25),
                           '--note-fg': isLightColor(lightenColor(color, 0.25)) ? '#000' : '#fff',
                           '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
+                          '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
                       } as React.CSSProperties)
                     : undefined),
                 ...style,
