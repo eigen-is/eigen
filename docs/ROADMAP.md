@@ -38,7 +38,7 @@ lose") and the work the grant funds. Highest strategic value.
 
 | Item | Status in code | Effort | Frozen-format | Notes |
 |---|---|---|---|---|
-| **Search Phase 2: body content** ([proposal](PROPOSAL_SEARCH.md)) | Phase 1 shipped (mail FTS + drive-name FTS, live on main); body search 0%. | M | Yes, low — additive `paths_content_fts` + dirty-flag sweep | Biggest user-felt gain: search text inside docs/sheets/slides. The scheduler primitive it needs already exists. Phases 3 (chat) / 4 (calendar) are S each afterwards. |
+| **Search Phase 2: body content** ([proposal](PROPOSAL_SEARCH.md)) | **Shipped** — drive-wide body search live (`paths_content_fts`, metadata.db v6; covers docs/sheets/slides/stickies/chat/plaintext). This row was stale (2026-07-03 check). | — | — | Remaining: Phase 4 calendar/event search (S). |
 | **File History: email digests + in-doc panel** ([proposal](PROPOSAL_FILE_HISTORY.md)) | Phase 1 live (~65%): `FileHistory`, Recent Activity, Watch, Watched view. | M | Yes — email channel needs `notifications.db` v2 migration | Remaining: email/digest channel, in-doc history panel unified with version history, `history:changed` live SSE, and the deferred slide semantic events (S). |
 | **Copy-Paste Phase 0** ([proposal](PROPOSAL_COPY_PASTE.md)) | v1 clipboard live; the async path (`writeEigenClipboardAsync`) omits the custom MIME. | S | No (clipboard is transient) | Tiny fix to make Slides button-copy lossless. Full ECP v2 protocol is P3. |
 | **Help Center rework finish** | Partial — AppShell swap + sections landed; spec's `SupportSidebar` / search-removal didn't fully land. | S | No | The one genuinely-incomplete superpowers plan (`docs/superpowers/plans/2026-05-20-help-center-rework.md`). |
@@ -62,10 +62,18 @@ Large net-new builds or low value-per-effort today.
 | Item | Effort | Notes |
 |---|---|---|
 | rspamd sidecar | ~1 day | The real fix for the spam/DMARC pain that the Stalwart proposal exists to solve. |
-| `MailBackend` interface refactor | ~½ day | Half-day of optionality so a future mail backend is a drop-in, without committing to Stalwart. |
+| Calendar: clock-change corner case in repeating events | ~1 hour | When the clocks go back (last Sunday of October), times between 02:00 and 03:00 happen twice. A repeating event at such a time is currently placed on the *second* pass; the iCalendar standard says use the *first*. Fix `localToUtc` in `apps/api/src/lib/calendar/recurrence.ts`, add one test. |
+| Calendar: event-details dialog is cramped | ~1 hour | The "Amsterdam time zone" label squeezes the date/time line in the event popup (screenshot 2026-07-03). Small layout polish; check with a screenshot before merging. |
+| File names: accented characters stored inconsistently | ~½ day | The same name typed on a Mac vs Linux can be different bytes ("café" has two encodings). Lookups normalize but writes store the raw bytes, so a file can exist yet not be found. Normalize once in `validateName` (`apps/api/src/lib/mount/helpers.ts`). **Decide first** what to do with names already stored raw. |
+| Upload timing log is ambiguous | ~10 min | Two different code paths both log `[timing] Mount.upload` (direct PUT vs queued S3 upload), so grepping mixes them. Rename one. Careful: this log line is used in ops greps on the server. |
 
 ## Done / banked (reference)
 
+- **God-file decompositions** — mount.ts, drive.ts, calendar.ts, Maildir all split 2026-07-03
+  (see the `AUDIT_*.md` postscripts). This also delivered the `MailStore` interface, closing the
+  old "MailBackend interface refactor" cheap win: a future mail backend is now a drop-in. The
+  deliberately-skipped tail (async `MailStore.search`/`size` widening) only matters once a second,
+  remote mail backend exists — do it together with that backend.
 - **Command palette** ([proposal](PROPOSAL_COMMAND_PALETTE.md)) — v1 complete (~90%); only low-priority polish remains.
 - **Help Center** ([proposal](PROPOSAL_HELP_CENTER.md)) — feature + 120 articles live. Content campaign ongoing per [SUPPORT-CONTENT-PLAN.md](SUPPORT-CONTENT-PLAN.md).
 - **Sheets xlsx-fidelity** — program complete (cycles 0–8); status in [SHEETS-XLSX-FIDELITY.md](SHEETS-XLSX-FIDELITY.md).
