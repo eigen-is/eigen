@@ -25,10 +25,10 @@ Route: parse: 'none' → getUploadMaxSize() → drive.uploadFiles(mountId, paren
     ↓
 Drive.uploadFiles():
   → streamFilesToTemp(mount, request, maxSize) — writes each file to mount tmp/, hashes incrementally
-  → for each result:
+  → for each result: finalizeUpload() (lib/drive/upload.ts):
     → deduplicate filename against siblings
     → mount.createFileFromTemp() — move temp→storage, insert DB row
-    → finalizeUpload() — store originalName, emit SSE, then background: generate thumbnail + cleanupTemp()
+    → store originalName, emit SSE, then background: generate thumbnail + cleanupTemp()
   → return DrivePath[]
 ```
 
@@ -37,7 +37,8 @@ Drive.uploadFiles():
 | File | Role |
 |------|------|
 | `apps/api/src/lib/drive/streaming.ts` | `streamFilesToTemp()` — multipart parsing + temp file writing |
-| `apps/api/src/lib/drive/drive.ts` | `uploadFiles()` + `finalizeUpload()` |
+| `apps/api/src/lib/drive/drive.ts` | `uploadFiles()` — parent + permission checks, per-batch watcher fan-out |
+| `apps/api/src/lib/drive/upload.ts` | `finalizeUpload()` — dedupe → `createFileFromTemp` → SSE/history + thumbnail kick |
 | `apps/api/src/lib/drive/sharedDrive.ts` | `uploadFiles()` — delegates to underlying `Drive` after ACL write permission check |
 | `apps/api/src/lib/mount/mount.ts` | `createFileFromTemp()` + stale temp cleanup on init |
 | `apps/api/src/lib/config/enforcement.ts` | `getUploadMaxSize()` — returns min(maxUploadSize, remainingQuota) |
