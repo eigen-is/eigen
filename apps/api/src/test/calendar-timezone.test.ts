@@ -237,6 +237,59 @@ describe('Calendar Timezone', () => {
             expect(nextStarts).toContain('2026-10-25T22:30:00.000Z');
         });
 
+        test('weekly recurring event at ambiguous 02:30 Amsterdam picks the first occurrence on the fall-back day', async () => {
+            // Sunday 2025-10-05 02:30 CEST (UTC+2) = 00:30Z. On the fall-back day (2025-10-26) the
+            // local clock shows 02:30 twice; RFC 5545 resolves to the FIRST (pre-transition, CEST) instant.
+            const sundayStart = new Date('2025-10-05T00:30:00Z');
+
+            await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
+                title: 'Ambiguous Fall-Back',
+                startTime: sundayStart,
+                endTime: new Date(sundayStart.getTime() + durationMs),
+                allDay: false,
+                rrule: 'FREQ=WEEKLY;BYDAY=SU',
+                timezone: 'Europe/Amsterdam',
+            });
+
+            const from = Math.floor(new Date('2025-10-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2025-11-10T00:00:00Z').getTime() / 1000);
+            const events = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
+            const starts = events
+                .filter((e: CalendarEventOccurrence) => e.title === 'Ambiguous Fall-Back')
+                .map((e) => new Date(e.startTime).toISOString());
+
+            expect(starts).toContain('2025-10-19T00:30:00.000Z'); // 02:30 CEST
+            expect(starts).toContain('2025-10-26T00:30:00.000Z'); // first 02:30 (still CEST), per RFC 5545
+            expect(starts).not.toContain('2025-10-26T01:30:00.000Z'); // not the repeated 02:30 (CET)
+            expect(starts).toContain('2025-11-02T01:30:00.000Z'); // 02:30 CET
+        });
+
+        test('weekly recurring event at nonexistent 02:30 Amsterdam keeps its spring-forward resolution', async () => {
+            // Sunday 2025-03-16 02:30 CET (UTC+1) = 01:30Z. On 2025-03-30 the clock jumps 02:00→03:00,
+            // so 02:30 never occurs; pins the current resolution (03:30Z) so the fall-back fix can't drift it.
+            const sundayStart = new Date('2025-03-16T01:30:00Z');
+
+            await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
+                title: 'Nonexistent Spring-Forward',
+                startTime: sundayStart,
+                endTime: new Date(sundayStart.getTime() + durationMs),
+                allDay: false,
+                rrule: 'FREQ=WEEKLY;BYDAY=SU',
+                timezone: 'Europe/Amsterdam',
+            });
+
+            const from = Math.floor(new Date('2025-03-10T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2025-04-14T00:00:00Z').getTime() / 1000);
+            const events = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
+            const starts = events
+                .filter((e: CalendarEventOccurrence) => e.title === 'Nonexistent Spring-Forward')
+                .map((e) => new Date(e.startTime).toISOString());
+
+            expect(starts).toContain('2025-03-23T01:30:00.000Z'); // 02:30 CET
+            expect(starts).toContain('2025-03-30T03:30:00.000Z'); // gap time: characterized current output
+            expect(starts).toContain('2025-04-06T00:30:00.000Z'); // 02:30 CEST
+        });
+
         test('without timezone, recurring event drifts across DST', async () => {
             // Same event but no timezone — rrule uses UTC, fixed offset
             const event = await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {

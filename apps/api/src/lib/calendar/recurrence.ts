@@ -63,6 +63,10 @@ function localToUtc(
         const offsetMs2 = verifyMs - guessMs;
         return new Date(guessMs - offsetMs2);
     }
+    // RFC 5545: an ambiguous fall-back time resolves to the first (pre-transition) occurrence
+    const earlier = new Date(adjusted.getTime() - 3600_000);
+    const el = utcToLocal(earlier, tz);
+    if (Date.UTC(el.year, el.month - 1, el.day, el.hour, el.minute, el.second) === guessMs) return earlier;
     return adjusted;
 }
 

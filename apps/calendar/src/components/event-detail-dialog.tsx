@@ -209,14 +209,12 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     <div className="space-y-3">
                         <div className="flex items-start gap-3 text-sm">
                             <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                            <div className="flex flex-grow justify-between items-start">
-                                <span>
-                                    {formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone)}
-                                </span>
+                            <div>
+                                {formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone)}
                                 {event.timezone && (
-                                    <span className="text-xs text-muted-foreground">
+                                    <div className="text-xs text-muted-foreground">
                                         {event.timezone.split('/').pop()?.replace(/_/g, ' ')} time zone
-                                    </span>
+                                    </div>
                                 )}
                             </div>
                         </div>
