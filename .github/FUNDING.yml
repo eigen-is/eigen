@@ -1,6 +1,6 @@
 # GitHub Sponsors / funding button configuration.
 # See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
 github: eigen-is
-# Uncomment when these exist:
-# open_collective: eigen
+open_collective: eigen
+# Uncomment when it exists:
 # custom: ["https://eigen.is/sponsor"]
