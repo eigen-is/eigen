@@ -16,6 +16,7 @@ import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import type { StorageFile } from '../storage';
 import { parseEml } from './mail-parse';
+import type { DraftUpdateOptions, MailSearchOptions, MailStore } from './mail-store';
 import MailDB from './maildb';
 import { MaildirStore } from './maildir-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
@@ -30,12 +31,6 @@ import {
 import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
-
-export type DraftUpdateOptions = {
-    tempAttachmentIds?: string[];
-    keepAttachmentIndexes?: number[];
-    forceFullSave?: boolean;
-};
 
 type DraftMeta = {
     subject: string;
@@ -71,7 +66,7 @@ function extractRefs(email: NewDraft | EmailDraft): AttachmentReference[] | unde
     return 'driveReferences' in email ? email.driveReferences : undefined;
 }
 
-export default class Maildir {
+export default class Maildir implements MailStore {
     private store: MaildirStore;
     private db!: MailDB;
     private syncingMailboxes = new Map<string, Promise<void>>();
@@ -107,7 +102,7 @@ export default class Maildir {
         return (await this.store.dirSize()) || this.db.size();
     }
 
-    search(opts: { q: string; limit: number; mailboxes?: string[]; from?: string; to?: string }): EmailSummary[] {
+    search(opts: MailSearchOptions): EmailSummary[] {
         // Canonicalise mailbox names here so callers can pass any case (e.g. `trash`,
         // `Trash`, `inbox`) and the FTS mailbox filter matches the stored value exactly.
         const mailboxes = opts.mailboxes?.map(canonicalMailbox);

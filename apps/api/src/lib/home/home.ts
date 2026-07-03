@@ -15,7 +15,7 @@ import {
     type SchemaType,
 } from '../core';
 import type { Drive } from '../drive';
-import type Maildir from '../mail/maildir';
+import type { MailStore } from '../mail/mail-store';
 import type { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
 
@@ -30,7 +30,7 @@ export class Home {
 
     protected _drive?: Drive;
     protected _contacts!: Contacts;
-    protected _mail!: Maildir;
+    protected _mail!: MailStore;
     protected _calendar!: Calendar;
     protected _notifications!: NotificationCenter;
 
@@ -64,7 +64,7 @@ export class Home {
         return this._contacts;
     }
 
-    get mail(): Maildir {
+    get mail(): MailStore {
         this.touch();
         return this._mail;
     }
