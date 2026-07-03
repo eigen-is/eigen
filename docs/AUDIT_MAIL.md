@@ -254,3 +254,7 @@ this parser on a hostile inbound message is a DoS, not just a dropped mail.
 3. **`Maildir` is an 837-LOC god-object** mixing storage orchestration, the draft state machine, the
    send pipeline, and the sync engine — the backend-abstraction refactor (§ step 2) is the natural
    remedy.
+
+---
+
+_Postscript 2026-07-03: migration steps 1-2 executed on `refactor/mail-store-split` (merged 33149558) — `Maildir` split into `Mail` domain class (`mail-domain.ts`) + `MailStore` interface + `MaildirStore` impl. Deviations: per-message `MailStoreEvents` (received/flagsChanged/deleted) instead of the sketched `onChange(mailbox)`; draft-sidecar + temp-staging ops added to the contract; `append(..., {skipSync})` preserves welcome-mail timing. Step 3 (async search/size) not taken, per the doc._
