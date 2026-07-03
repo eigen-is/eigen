@@ -22,8 +22,9 @@ reconciles disk state with the DB, enabling seamless coexistence with Dovecot IM
 
 | File | Responsibility |
 |------|----------------|
-| `maildir.ts` | Orchestrator -- public API, ties together store + DB + parsing + SSE |
-| `maildir-store.ts` | Filesystem ops on Maildir structure (deliver, move, list, rename, watch). Returns `BunFile` via `getMessageFile()` for lazy reads |
+| `mail-domain.ts` | `Mail` domain class behind `home.mail` -- draft state machine, send pipeline, iMIP coupling, SSE emission, notifications. Backend-independent; holds a `MailStore` |
+| `mail-store.ts` | `MailStore` interface -- the swappable storage contract, plus the `MailStoreEvents` change stream |
+| `maildir-store.ts` | `MaildirStore implements MailStore` -- Maildir filesystem ops (deliver, move, list, rename, watch), the sync engine, and the `mail.db` index. Returns `BunFile` via `getMessageFile()` for lazy reads |
 | `maildb.ts` | CRUD for email metadata in `mail.db` |
 | `mail-parse.ts` | Parses `.eml` content into `Email` (accepts `BunFile`), sanitizes HTML via DOMPurify |
 | `mailfile.ts` | Generates RFC 5322 `.eml` content from draft input |
@@ -94,7 +95,7 @@ eigen.mail/
 ```
 
 `mailboxDir()` maps names: empty/`INBOX` -> `Maildir/`, others -> `Maildir/.{name}`. Mailbox names are validated
-against path traversal and special characters. `canonicalMailbox()` in `maildir.ts` normalizes case-insensitive
+against path traversal and special characters. `canonicalMailbox()` in `mail-domain.ts` normalizes case-insensitive
 input to canonical form.
 
 Labels (`emailLabels` table) provide per-message tagging as an alternative to folder-based organization.
@@ -113,17 +114,18 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
 
 ## Sync Engine
 
-`syncMailbox()` in `maildir.ts` runs four phases:
+`syncMailbox()` in `maildir-store.ts` runs four phases:
 
 1. **Move `new/` -> `cur/`** -- standalone mode fallback. Appends `:2,` (empty flags). ENOENT-safe if Dovecot already
    moved the file.
 2. **Build disk state** -- lists all files in `cur/`, builds a `Map<messageId, filename>`.
-3. **Reconcile with DB** --
+3. **Reconcile with DB** -- each discovery is reported through `MailStoreEvents`; the `Mail` domain class turns
+   them into SSE events + notifications:
    - **New messages** (on disk, not in DB): read file via `getMessageFile()` (returns `BunFile`), parse EML, apply
-     flags from filename, insert into DB, emit `MAIL_RECEIVED`, persist notification via `home.notifications`.
-   - **Flag changes** (on disk with different filename than DB): update DB flags + filename, emit
-     `MAIL_FLAGS_CHANGED`.
-   - **Deleted messages** (in DB, not on disk): delete from DB, emit `MAIL_DELETED`.
+     flags from filename, insert into DB, report `received` (`MAIL_RECEIVED` + `home.notifications`).
+   - **Flag changes** (on disk with different filename than DB): update DB flags + filename, report `flagsChanged`
+     (`MAIL_FLAGS_CHANGED`).
+   - **Deleted messages** (in DB, not on disk): delete from DB, report `deleted` (`MAIL_DELETED`).
 4. **Deduplication guard** -- `syncingMailboxes` Map prevents redundant concurrent syncs on the same mailbox. If a sync
    is already running, callers await the existing promise.
 
@@ -132,9 +134,10 @@ writes (deliver, copy).
 
 ## File Watching
 
-`MaildirStore.watchMailboxes()` sets up `fs.watch()` on `cur/` and `new/` for each standard mailbox. Changes trigger
-`syncMailbox()` which detects new messages, flag renames, and deletions, then emits SSE events to update the frontend
-without page refresh. `unwatchMailboxes()` closes all watchers on `destruct()`.
+`MaildirStore.watch()` sets up `fs.watch()` on `cur/` and `new/` for each standard mailbox. Changes trigger
+`syncMailbox()` which detects new messages, flag renames, and deletions, then reports them through `MailStoreEvents`
+so the frontend updates without page refresh. `unwatch()` closes all watchers and awaits in-flight syncs on
+`Mail.destruct()`.
 
 ## Dovecot Compatibility
 
@@ -212,8 +215,9 @@ Docker architecture.
 
 | File | Path |
 |------|------|
-| Orchestrator | `apps/api/src/lib/mail/maildir.ts` |
-| Filesystem store | `apps/api/src/lib/mail/maildir-store.ts` |
+| Domain class (`Mail`) | `apps/api/src/lib/mail/mail-domain.ts` |
+| Store contract (`MailStore`) | `apps/api/src/lib/mail/mail-store.ts` |
+| Maildir store | `apps/api/src/lib/mail/maildir-store.ts` |
 | DB operations | `apps/api/src/lib/mail/maildb.ts` |
 | EML parser | `apps/api/src/lib/mail/mail-parse.ts` |
 | EML generator | `apps/api/src/lib/mail/mailfile.ts` |

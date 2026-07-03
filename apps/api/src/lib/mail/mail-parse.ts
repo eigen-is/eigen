@@ -2,6 +2,7 @@ import type { Email } from '@workspace/lib/types/mail';
 import type { BunFile } from 'bun';
 import DOMPurify from 'isomorphic-dompurify';
 import { simpleParser } from './mail-parser';
+import { buildRecipientSummary } from './mailutils';
 
 // Throws on a genuine parse/read fault (unreadable .eml, disk EIO, malformed MIME). Callers
 // decide the policy: single-message reads (messageGet) let it propagate → Elysia 500; bulk
@@ -17,14 +18,7 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
         parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim();
     }
 
-    const toRecipients = parsedMail.to ? (Array.isArray(parsedMail.to) ? parsedMail.to : [parsedMail.to]) : [];
-    const ccRecipients = parsedMail.cc ? (Array.isArray(parsedMail.cc) ? parsedMail.cc : [parsedMail.cc]) : [];
-    const firstTo = toRecipients[0]?.value[0];
-    const allRecipients = [...toRecipients, ...ccRecipients].flatMap((o) => o.value);
-    const recipientsAll = allRecipients
-        .map((a) => `${a.name || ''} ${a.address || ''}`.trim())
-        .filter((s) => s.length > 0)
-        .join('\n');
+    const { toShort, toAddress, recipientsAll } = buildRecipientSummary(parsedMail.to, parsedMail.cc);
 
     return {
         ...parsedMail,
@@ -39,8 +33,8 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
         hasAttachments: parsedMail.attachments?.length > 0,
         fromShort: parsedMail.from?.value[0]?.name || parsedMail.from?.value[0]?.address || 'Unknown',
         fromAddress: parsedMail.from?.value[0]?.address || '',
-        toShort: firstTo?.name || firstTo?.address || '',
-        toAddress: firstTo?.address || '',
+        toShort,
+        toAddress,
         recipientsAll,
         textShort: parsedMail.text || '',
     } as Email;

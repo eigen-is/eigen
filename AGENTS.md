@@ -154,7 +154,7 @@ of changes needs all of it.
 | Concept               | Location                                     | Pattern                                                                                                    |
 |-----------------------|----------------------------------------------|------------------------------------------------------------------------------------------------------------|
 | **Home singleton**    | `apps/api/src/lib/home/home.ts`              | Per-user instance managing DB connections + domain services. Subclasses: `UserHome`, `TeamHome`, `OrgHome` |
-| **Domain classes**    | `apps/api/src/lib/[domain]/[domain].ts`      | Business logic (Drive, Maildir, Contacts, Calendar, ChatRoom)                                              |
+| **Domain classes**    | `apps/api/src/lib/[domain]/[domain].ts`      | Business logic (Drive, Mail, Contacts, Calendar, ChatRoom)                                                 |
 | **Routes**            | `apps/api/src/routes/[domain].ts`            | Thin Elysia routers, `{auth: true}` for protected                                                          |
 | **DB schemas**        | `apps/api/src/lib/[domain]/schema.ts`        | Drizzle ORM schemas                                                                                        |
 | **DB config**         | `apps/api/src/lib/[domain]/db-config.ts`     | `DatabaseConfig` with versioned migrations                                                                 |

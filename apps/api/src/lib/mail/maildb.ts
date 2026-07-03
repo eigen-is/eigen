@@ -5,6 +5,7 @@ import { PATHS, sanitizeFtsQuery } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Home } from '../home';
 import { MAIL_DB_CONFIG } from './db-config';
+import type { MailSearchOptions } from './mail-store';
 import * as schema from './schema';
 
 // Mailboxes excluded from default mail search — users can still search them explicitly.
@@ -148,7 +149,7 @@ export default class MailDB {
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
     }
 
-    searchMail(opts: { q: string; limit: number; mailboxes?: string[]; from?: string; to?: string }): EmailSummary[] {
+    searchMail(opts: MailSearchOptions): EmailSummary[] {
         const match = sanitizeFtsQuery(opts.q);
         if (!match) return [];
 

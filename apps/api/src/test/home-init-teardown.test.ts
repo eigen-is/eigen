@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { JsonStore } from '../lib/core';
 import type { Drive } from '../lib/drive';
 import { Home, type HomeSettings } from '../lib/home/home';
-import type Maildir from '../lib/mail/maildir';
+import type { Mail } from '../lib/mail/mail-domain';
 import type { User } from '../lib/user';
 
 // AUDIT 13: Home.init() opens subsystem DBs + starts upload/reindex timers in parallel. If one
@@ -33,7 +33,7 @@ class LeakProbeHome extends Home {
                 throw new Error('mail boom');
             },
             destruct: async () => {},
-        } as unknown as Maildir;
+        } as unknown as Mail;
     }
 }
 

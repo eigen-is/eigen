@@ -28,7 +28,7 @@ export const searchRouter = new Elysia({ name: 'search' })
             const searchFile = !sources || sources.includes('file');
             const limit = query.limit ?? 20;
 
-            // Pass user-typed names through verbatim; Maildir.search() owns the canonical
+            // Pass user-typed names through verbatim; Mail.search() owns the canonical
             // casing rules (Inbox -> '', case-insensitive match against STANDARD_MAILBOXES).
             const mailboxes = query.mailbox
                 ?.split(',')

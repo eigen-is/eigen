@@ -211,7 +211,7 @@ recents reuses it.
 | `apps/api/src/lib/recents/schema.ts` + `db-config.ts`             | Tables + v1 config                                             |
 | `apps/api/src/lib/home/home.ts` / `user-home.ts`                  | `hasRecents` flag; UserHome wiring                             |
 | `apps/api/src/lib/home/home-relay.ts`                             | `recents:touch` `HomeMessage` variant, guarded by `hasRecents` |
-| `apps/api/src/lib/mail/maildir.ts`                                | Touch recipients after `messageSend` success                   |
+| `apps/api/src/lib/mail/mail-domain.ts`                            | Touch recipients after `messageSend` success                   |
 | `apps/api/src/lib/drive/drive.ts`                                 | `updateACL` added-entries diff → relay touch (rides the File-History actor threading) |
 | `apps/api/src/lib/chat/chat.ts`                                   | Mention commit → relay touch                                   |
 | `apps/api/src/routes/collab.ts`                                   | `info` handler → relay touch after `canRead`                   |
