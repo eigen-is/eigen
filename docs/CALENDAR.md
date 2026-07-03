@@ -280,6 +280,8 @@ External organizers have no Eigen user ID. `organizerUserId` is set to `external
 | File                                             | Purpose                   |
 |--------------------------------------------------|---------------------------|
 | `apps/api/src/lib/calendar/calendar.ts`          | Calendar class            |
+| `apps/api/src/lib/calendar/recurrence.ts`        | Pure recurrence expansion + timezone math (`expandRecurrence`, `computeOccurrenceTimes`, `constrainRRule`) |
+| `apps/api/src/lib/calendar/mappers.ts`           | Pure row→domain mappers + `computeEtag` |
 | `apps/api/src/lib/calendar/get-calendar.ts`      | Access resolution (like Drive's `get-drive.ts`) |
 | `apps/api/src/lib/calendar/schema.ts`            | Drizzle schema            |
 | `apps/api/src/lib/calendar/db-config.ts`         | DB config + migrations    |
