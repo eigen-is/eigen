@@ -17,7 +17,6 @@ import {
     type DrivePathDetails,
     type DriveVisibility,
     type EigenDocType,
-    isCollabType,
     isContainerType,
 } from '@workspace/lib/types/drive';
 import {
@@ -33,7 +32,6 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
 import { openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
@@ -59,6 +57,7 @@ import {
     normalizeACL,
 } from './acl';
 import { diffACLEmails, type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
+import { CollabRegistry } from './collab-registry';
 import { LockManager } from './lock-manager';
 import { serveFile } from './serve-file';
 import { getSharedDatabase } from './shared';
@@ -86,13 +85,14 @@ export default class Drive {
     private mounts: Map<string, Mount> = new Map();
     private defaultMountId: string = 'default';
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
-    private documents: Map<string, () => Promise<CollabDocument>> = new Map();
+    private readonly documents: CollabRegistry;
     // Per-Drive WebDAV LockManager. Locks evict when this Drive's Home unloads via destruct().
     public readonly lockManager = new LockManager();
 
     constructor(home: Home) {
         this.home = home;
         this.owner = home.user;
+        this.documents = new CollabRegistry(this.owner.id);
     }
 
     async init(autoCreateDefaultMount: boolean = false): Promise<void> {
@@ -491,7 +491,7 @@ export default class Drive {
         // the old ancestor chain, exactly like an ACL change, so enforce it the same way
         // (P2-8). Runs after updatePath/side-effects so canRead sees the new chain and the
         // move can't be undone; NO-OP when read is kept/widened; local close (owner-scoped).
-        await this.enforceReadAccessRecursively(mountId, pathId);
+        await this.documents.enforceReadAccessBelow(mount, pathId);
         return movedPath;
     }
 
@@ -747,7 +747,7 @@ export default class Drive {
             // A revoked read must drop the user's live collab socket now, not whenever they
             // next disconnect. All connections (owner + shared users) live in this owner-home
             // Drive's `documents` registry, so this is a local close — no home-relay needed.
-            await this.enforceReadAccessRecursively(mountId, pathId);
+            await this.documents.enforceReadAccessBelow(mount, pathId);
         }
     }
 
@@ -877,52 +877,19 @@ export default class Drive {
         return canWriteFromAncestors(ancestors, user, resolved);
     }
 
-    private documentKey(mountId: string, pathId: string): string {
-        return `${this.owner.id}.${mountId}.${pathId}`;
-    }
-
     // Called by: versioning/restore (to decide whether a restore opened the doc
     // itself, and so must close it). Not route-callable.
     hasCollabDocument(mountId: string, pathId: string): boolean {
-        return this.documents.has(this.documentKey(mountId, pathId));
+        return this.documents.has(mountId, pathId);
     }
 
     async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
-        const mount = this.getMount(mountId);
-        const key = this.documentKey(mountId, pathId);
-        if (!this.documents.has(key)) {
-            this.documents.set(
-                key,
-                createAsyncSingleton(async () => {
-                    const path = await mount.getActivePath(pathId);
-                    if (!isCollabType(path.type)) {
-                        throw new ApiError(404, 'Document not found');
-                    }
-                    const document = new CollabDocument(this, path);
-                    return (await document.init()) as CollabDocument;
-                }),
-            );
-        }
-        return (await this.documents.get(key)!()) as CollabDocument;
+        return this.documents.get(this, this.getMount(mountId), pathId);
     }
 
     // Called by: collab/collabDocument cleanup, versioning/restore. Not route-callable.
     async closeCollabDocument(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
-        const mount = this.getMount(mountId);
-        const key = this.documentKey(mountId, pathId);
-        const documentFn = this.documents.get(key);
-        if (!documentFn) return;
-        // Delete BEFORE the async destruct so a concurrent getCollabDocument() builds a fresh
-        // singleton instead of receiving the doc that is closing (a closing doc never sends
-        // sync-step-1, stalling the client). Mirrors Mount.closeDatabase's delete-before-close.
-        this.documents.delete(key);
-        const doc = await documentFn();
-        doc.destruct();
-        // Only tear down the shared data.db if no concurrent reopen re-registered this doc — the
-        // reopened doc now owns the db lifecycle.
-        if (doc.dataDbPathId && !this.documents.has(key)) {
-            await mount.closeDatabase(doc.dataDbPathId, opts);
-        }
+        return this.documents.close(this.getMount(mountId), pathId, opts);
     }
 
     async saveVersion(mountId: string, containerId: string): Promise<Snapshot> {
@@ -1122,15 +1089,7 @@ export default class Drive {
         // databases are closed. Yjs may flush pending changes during destruct(), which
         // requires the database to still be open. This mirrors closeCollabDocument() which
         // calls doc.destruct() then mount.closeDatabase().
-        for (const [key, getter] of this.documents) {
-            try {
-                const doc = await getter();
-                doc.destruct();
-            } catch (error) {
-                console.error(`Failed to close document ${key}:`, error);
-            }
-        }
-        this.documents.clear();
+        await this.documents.destructAll();
 
         // Close remaining mount databases (chat rooms, plus any collab databases whose
         // Yjs documents were already destructed above). Triggers onClose → cleanupTemp.
@@ -1149,33 +1108,6 @@ export default class Drive {
         const mount = this.mounts.get(mountId);
         if (!mount) throw new ApiError(404, `Mount not found: ${mountId}`);
         return mount;
-    }
-
-    // Re-check read on every OPEN collab doc at or below `pathId` (mirrors the
-    // closeCollabDocumentsRecursively walk). Re-checking canRead per connection — not
-    // diffing removed ACL entries — is what makes revoking a *folder* share cascade to
-    // docs nested inside it, since read is inherited from the whole ancestor chain.
-    private async enforceReadAccessRecursively(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) return;
-
-        if (isCollabType(path.type)) {
-            // Only open docs hold live connections; skip closed ones to keep this cheap.
-            const getter = this.documents.get(this.documentKey(mountId, pathId));
-            if (!getter) return;
-            try {
-                const doc = await getter();
-                await doc.enforceReadAccess();
-            } catch (error) {
-                console.error(`Failed to enforce read access on ${pathId}:`, error);
-            }
-        } else if (isContainerType(path.type)) {
-            const children = await mount.listFolderAll(pathId);
-            for (const child of children) {
-                await this.enforceReadAccessRecursively(mountId, child.id);
-            }
-        }
     }
 
     // Called by: the extracted Drive body modules (upload.ts, trash.ts). Not route-callable —
