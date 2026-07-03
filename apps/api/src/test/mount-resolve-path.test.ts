@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
-import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
+import { createDefaultMountConfig } from '../lib/mount/helpers';
+import { Mount } from '../lib/mount/mount';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-resolve-${Date.now()}`);
 const OWNER_ID = 'test-owner-resolve';

@@ -1,0 +1,120 @@
+import * as fs from 'node:fs';
+import type { MountConfig, MountSettings } from '@workspace/lib/types';
+import { EIGEN_DOCUMENT_TYPES } from '@workspace/lib/types/drive';
+import { sql } from 'drizzle-orm';
+import { getS3Config } from '../config/server-settings';
+import { ApiError } from '../core';
+
+export function validateName(name: string): void {
+    // Reject control bytes (incl. NUL) so a name creatable via the API stays reachable
+    // over WebDAV, where resolvePath rejects the same [\x00-\x1f] range (RFC 4918).
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: mirrors resolvePath's control-char guard
+    const hasControlChar = /[\x00-\x1f]/.test(name);
+    if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || hasControlChar) {
+        throw new ApiError(400, `Invalid file or folder name: "${name}"`);
+    }
+}
+
+// Subquery: ids of every eigendoc container (doc/stickies/slides/sheets/chat) and
+// every path descended from one. Embedded as `parentId NOT IN (…)` to filter out
+// container internals (data.db, media, embedded chats) — file rows the user
+// never sees in the drive UI and shouldn't see in search.
+export const docContainerDescendantIds = sql`
+    WITH RECURSIVE doc_tree AS (
+        SELECT id FROM paths
+        WHERE type IN (${sql.join(
+            EIGEN_DOCUMENT_TYPES.map((t) => sql`${t}`),
+            sql`, `,
+        )}) AND trashedAt IS NULL
+        UNION ALL
+        SELECT child.id FROM paths child INNER JOIN doc_tree dt ON child.parentId = dt.id
+    )
+    SELECT id FROM doc_tree
+`;
+
+// The v7 partial unique index (parentId, LOWER(name)) WHERE trashedAt IS NULL. Its violation is what
+// closes the concurrent same-name races (create INSERTs, rename/move/restore UPDATEs); the sites map
+// it to a 409 via rethrowDuplicateActiveName.
+const UNIQUE_ACTIVE_NAME_INDEX = 'idx_paths_unique_active_name';
+
+// True only for the losing racer tripping that index. bun:sqlite names the expression index in the
+// message (`UNIQUE constraint failed: index 'idx_paths_unique_active_name'`); match on it so an
+// unrelated UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
+function isDuplicateActiveNameError(e: unknown): boolean {
+    return e instanceof Error && e.message.includes(`index '${UNIQUE_ACTIVE_NAME_INDEX}'`);
+}
+
+// Rethrow, translating the index violation into the SAME 409 assertUniqueName raises. Shared by the
+// create INSERTs and the rename/move/restore UPDATEs — single-threaded callers pass assertUniqueName's
+// SELECT first, so only the race tail lands here.
+export function rethrowDuplicateActiveName(e: unknown, name: string): never {
+    if (isDuplicateActiveNameError(e)) {
+        throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+    }
+    throw e;
+}
+
+export function buildStorageKey(id: string, name: string): string {
+    const dotIdx = name.lastIndexOf('.');
+    if (dotIdx > 0) {
+        const ext = name.slice(dotIdx + 1).toLowerCase();
+        if (ext.length > 0 && ext.length <= 12) {
+            return `${id}.${ext}`;
+        }
+    }
+    return id;
+}
+
+// A document working copy must be a real SQLite db. The 16-byte magic header is the cheapest proof;
+// a 0-byte or partial download (an empty/failed S3 GET) fails it. Used to refuse opening such a file
+// as a fresh empty doc and re-uploading it over good stored bytes (the 2026-06-08 data loss).
+function isSqliteFile(filePath: string): boolean {
+    let fd: number | null = null;
+    try {
+        fd = fs.openSync(filePath, 'r');
+        const header = Buffer.alloc(16);
+        const read = fs.readSync(fd, header, 0, 16, 0);
+        // SQLite magic: the 15 ASCII bytes "SQLite format 3" followed by a NUL terminator.
+        return read === 16 && header.toString('latin1', 0, 15) === 'SQLite format 3' && header[15] === 0;
+    } catch {
+        return false;
+    } finally {
+        if (fd !== null) fs.closeSync(fd);
+    }
+}
+
+// A recovered temp is the live working copy after an unclean shutdown: it should be the stored db
+// (plus any unsynced writes), never a fraction of it. Refuse it if it isn't a valid SQLite, or if it
+// has collapsed far below the last-known stored size (a tiny fresh-init db where a multi-MB doc was) —
+// either signals corrupt/empty bytes that must not be adopted and re-uploaded over the good object.
+const RECOVERY_COLLAPSE_FLOOR_BYTES = 64 * 1024;
+const RECOVERY_COLLAPSE_RATIO = 0.5;
+export function isViableRecoveryTemp(tempPath: string, knownSize: number): boolean {
+    if (!isSqliteFile(tempPath)) return false;
+    const tempSize = fs.statSync(tempPath).size;
+    return !(knownSize >= RECOVERY_COLLAPSE_FLOOR_BYTES && tempSize < knownSize * RECOVERY_COLLAPSE_RATIO);
+}
+
+export function createDefaultMountConfig(
+    id: string = 'default',
+    storageType: MountConfig['storageType'] = 'local',
+): MountConfig {
+    return {
+        id,
+        name: 'My Drive',
+        storageType,
+        isDefault: true,
+        s3Config: storageType === 's3' ? getS3Config() : undefined,
+    };
+}
+
+export function createMountConfig(id: string, settings: MountSettings): MountConfig {
+    return {
+        id,
+        name: settings.name ?? (id === 'default' ? 'My Drive' : id),
+        storageType: settings.storageType,
+        isDefault: id === 'default',
+        maxSizeMB: settings.maxSizeMB,
+        s3Config: settings.s3Config ?? (settings.storageType === 's3' ? getS3Config() : undefined),
+    };
+}

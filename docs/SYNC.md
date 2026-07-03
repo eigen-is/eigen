@@ -40,7 +40,7 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
   and `markDirty` then re-uploaded *over the good object* — two live stickies docs were wiped this way (and
   re-wiped on every later redeploy). The open-vs-create intent is threaded `Drive.openDatabase` vs
   `createDatabase` → Mount `mode` → `ManagedDatabase.mustExist`: a `mustExist` open uses `{ create: false }`
-  and **refuses a missing or 0-byte working copy** in `openCold`, and `Mount.buildDocumentDb` adopts a
+  and **refuses a missing or 0-byte working copy** in `openCold`, and `buildDocumentDb` (`lib/mount/document-db.ts`) adopts a
   surviving temp only if it's a valid, non-collapsed SQLite (else it discards it and re-fetches the
   authoritative object). **Invariant: an empty/invalid working copy can never overwrite a non-trivial
   stored object — worst case a transient 503, never a wipe.**
@@ -84,7 +84,7 @@ temp-copy backend.
 |---|---|
 | `lib/mount/upload-queue.ts` | The per-mount `UploadQueue` — enqueue / drain / backoff / cancel / reconcile + staging |
 | `lib/sync/index.ts` | Process-global bits: per-destination semaphore map, backoff, shutdown deadline |
-| `lib/mount/mount.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring |
+| `lib/mount/document-db.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring |
 | `lib/core/managed-database.ts` | `markDirty` (crash recovery), `stageCopy` (`VACUUM INTO`), `mustExist` open guard (refuse a missing/0-byte working copy) |
 | `lib/mount/schema.ts` + `db-config.ts` | The `pending_uploads` table (additive migration v4) |
 

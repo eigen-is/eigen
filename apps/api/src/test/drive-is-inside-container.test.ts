@@ -3,7 +3,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { DRIVE_TYPE_FOLDER, type DrivePath, isContainerType } from '@workspace/lib/types';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
-import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
+import { createDefaultMountConfig } from '../lib/mount/helpers';
+import { Mount } from '../lib/mount/mount';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-iic-${Date.now()}`);
 const OWNER_ID = 'test-owner-iic';

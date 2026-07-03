@@ -4,7 +4,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { MOUNT_DB_CONFIG } from '../lib/mount/db-config';
-import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
+import { createDefaultMountConfig } from '../lib/mount/helpers';
+import { Mount } from '../lib/mount/mount';
 
 const UNIQUE_INDEX = 'idx_paths_unique_active_name';
 const INDEX_DDL = `CREATE UNIQUE INDEX IF NOT EXISTS ${UNIQUE_INDEX} ON paths(parentId, LOWER(name)) WHERE trashedAt IS NULL;`;
