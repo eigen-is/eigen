@@ -105,6 +105,24 @@ describe('downloadToTemp', () => {
             storage.getPath = originalGetPath;
         }
     });
+
+    // The temp path doubles as an open doc's live working copy (getTempPath keys both by pathId),
+    // so downloading onto an open document DB would truncate live state. Safe today (only version
+    // files pass through) — this pins the invariant.
+    test('refuses a path whose document DB is open', async () => {
+        const guardSchema = { items: sqliteTable('items', { id: integer('id').primaryKey() }) };
+        const guardConfig: DatabaseConfig<typeof guardSchema> = {
+            name: 'download-guard-test',
+            currentVersion: 1,
+            schema: guardSchema,
+            migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)') }],
+        };
+        const containerId = await mount.createFolder(rootId, 'OpenDoc', 'doc');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        await mount.createDatabase(guardConfig, dataDbId);
+        expect(mount.downloadToTemp(dataDbId)).rejects.toThrow('live working copy');
+        await mount.closeDatabase(dataDbId);
+    });
 });
 
 describe('snapshotContainerDataDb concurrency', () => {

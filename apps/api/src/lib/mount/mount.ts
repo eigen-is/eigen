@@ -904,6 +904,10 @@ export class Mount {
     // (e.g. reading a SQLite snapshot on any storage backend). Caller owns
     // cleanupTemp(pathId).
     async downloadToTemp(pathId: string): Promise<string> {
+        // Invariant: the temp path doubles as an open doc's live working copy (getTempPath) — never truncate it.
+        if (this.documentDbs.has(pathId)) {
+            throw new Error(`[Mount] downloadToTemp ${pathId}: refusing to overwrite the live working copy`);
+        }
         return this.downloadKeyToTemp(await this.getStorageKey(pathId), pathId);
     }
 
