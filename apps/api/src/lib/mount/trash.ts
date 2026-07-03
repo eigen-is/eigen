@@ -139,6 +139,9 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
 
         await mount.invalidateSizesFrom(targetParentId);
 
+        // Rows trashed while contentDirty=1 were skipped by the drain (trashedAt filter) — re-drive it.
+        mount.reindexQueue?.kick();
+
         const updated = await mount.getPath(pathId);
         return updated!;
     });
