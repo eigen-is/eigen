@@ -64,7 +64,6 @@ Large net-new builds or low value-per-effort today.
 | Item | Effort | Notes |
 |---|---|---|
 | rspamd sidecar | ~1 day | The real fix for the spam/DMARC pain that the Stalwart proposal exists to solve. |
-| File names: accented characters stored inconsistently | ~½ day | **Confirmed real & reachable** (investigated 2026-07-03, memo in `docs/superpowers/reports/2026-07-03-mount-cheap-wins.md`): `getChildByName` NFC-normalizes the query but byte-compares against raw-stored names, so a macOS-origin (NFD) name is listed yet 404s over WebDAV and dedups wrong. Fix-forward + v8 backfill migration recommended. **Awaiting Reinder's migration sign-off** (mutates persisted `name` on eigen.is). |
 
 ## On hold (decision needed)
 
