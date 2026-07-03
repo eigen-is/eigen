@@ -167,7 +167,7 @@ export default class Drive {
         live.applyConfig(config);
     }
 
-    async removeMount(mountId: string): Promise<void> {
+    private async removeMount(mountId: string): Promise<void> {
         if (mountId === this.defaultMountId) {
             throw new ApiError(400, 'Cannot remove default mount');
         }

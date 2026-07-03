@@ -291,8 +291,8 @@ Defined in `apps/api/src/routes/drive.ts`.
 
 ### Propagation
 
-`receiveACLChange()` in `drive.ts` mirrors `sharingRestricted` to `shared_paths` alongside all other `DrivePath`
-fields, so recipients see the current restriction state in their shared-with-me view.
+`receiveACLChange()` in `shared-with-me.ts` mirrors `sharingRestricted` to `shared_paths` alongside all other
+`DrivePath` fields, so recipients see the current restriction state in their shared-with-me view.
 
 ### Frontend
 
@@ -332,7 +332,8 @@ control on team paths, including toggling the flag itself.
 | `packages/lib/src/types/drive.ts`                                    | `DriveACL`, `DriveVisibility`, `sharingRestricted` on `DrivePath`       |
 | `apps/api/src/lib/drive/acl.ts`                                      | `canReadFromAncestors`, `canWriteFromAncestors`, `matchesACL`, `normalizeACL`, `filterRedundantACL`, `findContainerFromAncestors` |
 | `apps/api/src/lib/drive/acl-propagation.ts`                          | `propagateACLChange`, `resolveACLUserIds`, `resolveACLToEmails`, `EffectiveMember` |
-| `apps/api/src/lib/drive/drive.ts`                                    | `canRead`, `canWrite`, `findContainerPath`, `getEffectiveMembers`, `inviteToChat`, `updateACL`, `receiveACLChange` |
+| `apps/api/src/lib/drive/drive.ts`                                    | `canRead`, `canWrite`, `findContainerPath`, `getEffectiveMembers`, `inviteToChat`, `updateACL` |
+| `apps/api/src/lib/drive/shared-with-me.ts`                           | `receiveACLChange` + shared-with-me listings over the `shared_paths` mirror |
 | `apps/api/src/lib/drive/sharedDrive.ts`                              | Permission checks, `isEffectiveOwnerSync()`, `inviteToChat()`/`updateACL()` overrides |
 | `apps/api/src/lib/mount/schema.ts`                                   | `sharingRestricted` column on `paths` table                             |
 | `apps/api/src/lib/drive/sharedschema.ts`                             | `sharingRestricted` column on `shared_paths` table                      |
