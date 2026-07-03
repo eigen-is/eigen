@@ -11,7 +11,7 @@ export function useVersions(ownerId: string, mountId: string, pathId: string) {
         queryFn: async () => {
             const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).versions.get();
             if (response.error) throw new AppError(response);
-            return response.data || [];
+            return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId,
         staleTime: 60_000,

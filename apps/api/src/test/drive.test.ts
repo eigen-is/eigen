@@ -9,6 +9,7 @@ import {
     type OrgTeam,
     teamOwnerId,
 } from '@workspace/lib/types';
+import { COMMENT_INDEX_DB_CONFIG } from '../lib/chat/comment-db-config';
 import { getServerConfig } from '../lib/config/server-config';
 import { copyPathAcross } from '../lib/drive/copy-across';
 import { getSharedDrive } from '../lib/drive/get-drive';
@@ -64,6 +65,11 @@ describe('Drive', () => {
             const root = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, 'root');
             expect(root).toBeDefined();
             expect(root.id).toBe(aliceRootId);
+        });
+
+        test('a malformed ownerId is rejected with 400, not 404', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/drive/not-a-valid-owner-id/mounts');
+            expect(res.status).toBe(400);
         });
     });
 
@@ -3561,7 +3567,7 @@ describe('Drive', () => {
             expect(listing.some((p) => p.id === second.id)).toBe(true);
         });
 
-        test('rejects copying a folder into its own descendant with 400', async () => {
+        test('rejects copying a folder into its own descendant with 409', async () => {
             const parent = await drivePost(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
@@ -3590,7 +3596,7 @@ describe('Drive', () => {
                     }),
                 },
             );
-            expect(res.status).toBe(400);
+            expect(res.status).toBe(409);
         });
 
         test('copies a personal file into a team drive through the route (bridge)', async () => {
@@ -3625,6 +3631,106 @@ describe('Drive', () => {
                 `folder/${teamRootId}`,
             );
             expect(listing.some((p) => p.id === copied.id && p.name === 'route-bridge.txt')).toBe(true);
+        });
+    });
+
+    describe('Regression: rename propagates to shared-with-me (audit 16)', () => {
+        test("recipient's shared-with-me reflects the new name after a rename, without a further ACL change", async () => {
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'Rename Propagation Orig' },
+            );
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/acl`, {
+                acl: [{ id: BOB_EMAIL, read: true, write: false }],
+            });
+
+            const before = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const beforeShared = findOrFail(await assertJson<DrivePath[]>(before), (item) => item.id === folder.id);
+            expect(beforeShared.name).toBe('Rename Propagation Orig');
+
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/rename`, {
+                newName: 'Rename Propagation New',
+            });
+
+            // No further ACL change — the rename alone must refresh the recipient's mirror.
+            const after = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const afterShared = findOrFail(await assertJson<DrivePath[]>(after), (item) => item.id === folder.id);
+            expect(afterShared.name).toBe('Rename Propagation New');
+        });
+    });
+
+    describe('Regression: create into a trashed parent is rejected (audit 24)', () => {
+        test('creating a doc inside a trashed folder returns 404 and leaks no live doc', async () => {
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'Trashed Parent' },
+            );
+
+            await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}`);
+
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${folder.id}/create/doc`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileName: 'ghost' }),
+                },
+            );
+            expect(res.status).toBe(404);
+
+            // The guard must fire before any row is written: restore the parent and confirm it is empty.
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash/${folder.id}/restore`,
+                { method: 'POST' },
+            );
+            const contents = await driveGetList(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${folder.id}`,
+            );
+            expect(contents.length).toBe(0);
+        });
+    });
+
+    describe('Regression: SharedDrive.openDatabase enforces read permission (audit 17)', () => {
+        test('a non-owner without read is rejected opening a container managed DB; a shared reader succeeds', async () => {
+            // A doc container provisions data.db + comments.db synchronously on create.
+            const doc = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/create/doc`,
+                { fileName: 'ACL-Gated DB' },
+            );
+
+            const aliceHome = await getHome(ctx.alice.user.id);
+            const commentsDb = await aliceHome.drive.getChildByName(aliceMountId, doc.id, 'comments.db');
+            expect(commentsDb).not.toBeNull();
+
+            const bob = await getUserById(ctx.bob.user.id);
+            const bobShared = await getSharedDrive(ctx.alice.user.id, bob!);
+
+            // Bob holds no share on the doc. Opening its managed DB by pathId must be refused —
+            // pre-fix the wrapper delegated with no ACL check, an arbitrary-DB-open hole on the seam.
+            await expect(bobShared.openDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id)).rejects.toThrow(
+                'No read permission',
+            );
+
+            // Granting read on the container (comments.db inherits it) lets the same open through.
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}/acl`, {
+                acl: [{ id: BOB_EMAIL, read: true, write: false }],
+            });
+            const managed = await bobShared.openDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id);
+            expect(managed.db).toBeDefined();
         });
     });
 });

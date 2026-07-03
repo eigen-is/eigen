@@ -20,7 +20,8 @@ export function useSpaceSettings() {
         queryKey: spaceKeys.settings(ownerId),
         queryFn: async () => {
             const res = await spaceApi({ ownerId }).settings.get();
-            return res.data || {};
+            if (res.error) throw new AppError(res);
+            return res.data;
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!ownerId && !isGuest,

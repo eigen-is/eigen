@@ -20,7 +20,8 @@ export async function mailboxDeliver(to: string, file: ArrayBuffer) {
         throw new ApiError(404, `Recipient '${to}' not found`);
     }
     const home = await getHome(user.id);
-    const message = new TextDecoder().decode(new Uint8Array(file));
+    // Write raw bytes verbatim — decoding to a string mangles non-UTF-8 mail (Latin-1/Shift-JIS/binary).
+    const message = Buffer.from(file);
     const result = await home.mail.mailboxDeliver(message);
 
     // Process iMIP calendar attachments (blocking so event exists before client queries)

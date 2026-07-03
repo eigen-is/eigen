@@ -7,7 +7,7 @@ import {
     IMIP_METHODS,
     type ImipMethod,
 } from '@workspace/lib/types/calendar';
-import type { Attachment } from '@workspace/lib/types/mail';
+import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
@@ -155,13 +155,19 @@ export function extractCalendarAttachment(mail: {
     return { ics, method };
 }
 
-export function processInboundImip(home: Home, mail: { attachments: Attachment[] }): void {
+export function processInboundImip(home: Home, mail: { attachments: Attachment[]; from?: AddressObject }): void {
     const calAttachment = extractCalendarAttachment(mail);
     if (!calAttachment) return;
 
     const { events, method: parsedMethod } = parseIcs(calAttachment.ics);
     const method = parsedMethod ?? calAttachment.method;
     if (!method || events.length === 0) return;
+
+    // The ICS body carries attacker-controlled identities: a forged REPLY (UIDs ship in every invite)
+    // could set another attendee's status, and a forged REQUEST/CANCEL could inject or drop events under
+    // a spoofed organizer. Bind every mutation to the envelope sender; fail closed if it's unknown.
+    const sender = mail.from?.value?.[0]?.address?.toLowerCase() ?? null;
+    const sentBy = (email: string | undefined): email is string => !!sender && email?.toLowerCase() === sender;
 
     const calendar = home.calendar;
 
@@ -173,6 +179,8 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
             const orgEventId = linked?.data?.organizerEventId;
             const orgUserId = linked?.data?.organizer?.userId;
             if (orgEventId && orgUserId) {
+                // Updates bind to the STORED organizer, not the ICS one, so co-attendees can't hijack the invite.
+                if (!sentBy(linked?.data?.organizer?.email)) continue;
                 calendar.receiveInvitationUpdate(orgEventId, orgUserId, {
                     title: parsed.title,
                     description: parsed.description,
@@ -187,8 +195,9 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
                     attendees: parsed.data?.attendees,
                 });
             } else {
+                // New invites are attributed to the sender, so the ICS organizer must equal the envelope From.
                 const organizerEmail = parsed.data?.organizer?.email;
-                if (!organizerEmail) continue;
+                if (!sentBy(organizerEmail)) continue;
                 const payload: ReceiveInvitationPayload = {
                     uid: parsed.uid,
                     title: parsed.title,
@@ -215,14 +224,17 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
                 calendar.receiveInvitation(payload);
             }
         } else if (method === 'CANCEL') {
+            // CANCEL is an organizer action too — same sender binding as REQUEST.
             const organizerEmail = parsed.data?.organizer?.email;
-            if (!organizerEmail) continue;
+            if (!sentBy(organizerEmail)) continue;
             calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
         } else if (method === 'REPLY') {
             // Find the organizer's own event (not a linked copy) by UID
             const ownerEvent = calendar.getEventsByUid(parsed.uid).find((e) => !e.data?.organizer);
             if (ownerEvent && parsed.data?.attendees) {
                 for (const attendee of parsed.data.attendees) {
+                    // A REPLY may only set the PARTSTAT of the attendee who actually sent it.
+                    if (!sentBy(attendee.email)) continue;
                     calendar.updateAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
                 }
             }

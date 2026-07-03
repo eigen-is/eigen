@@ -1,5 +1,7 @@
 import { type Attendee, type EventData, IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
+import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../calendar/recurrence-limits';
+import { normalizeTimezone } from '../calendar/timezone';
 
 export type ParsedEvent = {
     uid: string;
@@ -71,10 +73,16 @@ export function parseIcs(icsText: string): IcsParseResult {
         }
 
         const tzidRaw = dtstart?.getParameter('tzid') || null;
-        const tzid = Array.isArray(tzidRaw) ? (tzidRaw[0] ?? null) : tzidRaw;
+        const tzid = normalizeTimezone(Array.isArray(tzidRaw) ? tzidRaw[0] : tzidRaw);
 
         const rruleProp = vevent.getFirstPropertyValue('rrule');
-        const rrule = rruleProp ? rruleProp.toString() : null;
+        const rruleRaw = rruleProp ? rruleProp.toString() : null;
+        // Strip a sub-daily recurrence — or any recurrence anchored at an out-of-range dtstart — from
+        // untrusted ICS the same way a non-IANA TZID is nulled above: both make rrule iterate to the
+        // query window (DoS) and no real client emits them, so degrade to a single event rather than
+        // reject the whole invite / CalDAV PUT.
+        const rrule =
+            rruleRaw && (isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime)) ? null : rruleRaw;
 
         const rawStatus = (vevent.getFirstPropertyValue('status') || 'CONFIRMED').toString().toLowerCase();
         const status = (

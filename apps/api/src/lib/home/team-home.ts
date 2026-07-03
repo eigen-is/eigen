@@ -14,7 +14,7 @@ import { Home } from './home';
 
 export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
     const parsed = parseOwnerId(ownerId);
-    if (!parsed || parsed.type !== 'team') {
+    if (parsed.type !== 'team') {
         throw new ApiError(400, 'Invalid teamId format');
     }
     return makeSyntheticUser(ownerId, teamName || ownerId, '');
@@ -86,8 +86,18 @@ export class TeamHome extends Home {
         const existing = this.settings.get().mounts?.[mountId];
         if (!existing) throw new ApiError(404, 'Mount not found');
 
+        // Same gate as addMount — a typo'd s3Config would tear down the working live backend and
+        // pile every write into the upload queue's retry loop against a dead destination.
+        if (existing.storageType === 's3' && update.s3Config) {
+            const s3Result = await checkS3Connection(update.s3Config);
+            if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
+        }
+
         const updated = { ...existing, ...update };
         await this.settings.set({ mounts: { [mountId]: updated } });
+        // Persisting alone leaves the already-built Drive on a stale config until the Home is evicted;
+        // push the change onto the live mount so quota/name/enabled apply immediately.
+        await this.drive.updateMount(createMountConfig(mountId, updated), updated.enabled);
         return updated;
     }
 }

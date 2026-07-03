@@ -24,7 +24,8 @@ export function useLabels() {
         queryKey: labelKeys.lists(ownerId),
         queryFn: async () => {
             const response = await contactsApi({ ownerId }).labels.get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 5 * 60 * 1000, // 5 minutes
         enabled: !!ownerId,

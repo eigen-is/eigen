@@ -143,17 +143,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
 
             const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
 
-            // Reject copying a folder into itself or its own descendant (also prevents
-            // infinite recursion in the same-mount copyPath). Only possible same-mount.
-            if (
-                sameMount &&
-                (await sourceDrive.isSelfOrDescendant(params.mountId, params.pathId, body.targetParentId))
-            ) {
-                throw new ApiError(400, 'Cannot copy a folder into itself or its own descendant');
-            }
-
-            // Dedup the root name against the target folder. Done here (not in
-            // Drive.copyPath) so WebDAV COPY keeps its overwrite/409 semantics.
+            // Dedup the root name against the target folder. Done here (not in Drive.copyPath) so
+            // WebDAV COPY keeps its overwrite/409 semantics. The self-into-subtree cycle guard lives
+            // in Drive.copyPath now — cross-mount copies can never be self-descendant.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
             const desired = (body.name ?? src.name).replace(/[/\\]/g, '_');
             const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);

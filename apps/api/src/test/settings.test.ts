@@ -249,9 +249,21 @@ describe('Team Mount Management', () => {
     test('disabling one mount does not affect the other', async () => {
         const listRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
         const mounts = await assertJson<Record<string, MountResponse>>(listRes);
-        const [id1, id2] = Object.keys(mounts);
+        // Select by name, not Object.keys order — all-digit mount ids reorder the keys
+        // numerically, which used to surface a residual-disabled mount from an earlier test.
+        const sharedId = Object.entries(mounts).find(([, m]) => m.name === 'Shared Files')![0];
+        const archiveId = Object.entries(mounts).find(([, m]) => m.name === 'Archives')![0];
 
-        await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/${id1}`, {
+        // Normalize both to enabled so the assertion doesn't depend on earlier tests' state.
+        for (const id of [sharedId, archiveId]) {
+            await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: true }),
+            });
+        }
+
+        await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/${archiveId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabled: false }),
@@ -259,8 +271,8 @@ describe('Team Mount Management', () => {
 
         const afterRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
         const after = await assertJson<Record<string, MountResponse>>(afterRes);
-        expect(after[id1].enabled).toBe(false);
-        expect(after[id2].enabled).toBe(true);
+        expect(after[archiveId].enabled).toBe(false);
+        expect(after[sharedId].enabled).toBe(true);
     });
 
     test('admin can update specific mount among multiple', async () => {

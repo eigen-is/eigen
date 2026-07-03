@@ -26,8 +26,13 @@ export async function getHome(ownerId: string): Promise<Home> {
             if (!home.destructing) {
                 return home.touch();
             }
-            // The cached home is tearing down — evict it, but only if it is still the current entry
-            // (a concurrent caller may already have installed a replacement we must not clobber).
+            // The cached home is tearing down. Await its teardown to completion (the same shutdown()
+            // path evictHome uses) BEFORE dropping it, so the replacement can't open the same DB files
+            // while close() is still checkpointing + unlinking the -wal/-shm journals. shutdown() is
+            // idempotent with the in-flight destruct(), so this just awaits the outgoing teardown.
+            await home.shutdown();
+            // Evict only if it is still the current entry — a concurrent caller may already have
+            // installed a replacement we must not clobber.
             if (homeFactories.get(ownerId) === existing) {
                 homeFactories.delete(ownerId);
             }
@@ -43,7 +48,7 @@ export async function getHome(ownerId: string): Promise<Home> {
                 }
             };
             const parsed = parseOwnerId(ownerId);
-            if (!parsed) {
+            if (parsed.type === 'invalid') {
                 throw new ApiError(400, 'Invalid ownerId format');
             }
             let home: Home;
@@ -112,13 +117,16 @@ export async function getUserHome(userId: string): Promise<UserHome> {
 
 export async function evictHome(ownerId: string): Promise<void> {
     const factory = homeFactories.get(ownerId);
-    if (factory) {
-        try {
-            const home = await factory();
-            await home.shutdown();
-        } catch {
-            /* Home may not be initialized */
-        }
+    if (!factory) return;
+    try {
+        const home = await factory();
+        await home.shutdown();
+    } catch {
+        /* Home may not be initialized */
+    }
+    // Evict only if it is still the current entry — a concurrent getHome may already have
+    // installed a replacement we must not clobber.
+    if (homeFactories.get(ownerId) === factory) {
         homeFactories.delete(ownerId);
     }
 }

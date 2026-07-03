@@ -8,6 +8,7 @@ import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import { buildDataUriMap } from '../media';
 import type { SizeUnit, SlideImgSrcResolver } from '../render-types';
+import { sanitizeExportHtml } from '../sanitize';
 import { fixedSizeUnit, renderDeckHtml, responsiveSizeUnit } from './render';
 
 // 16:9 landscape page: 254mm x 142.875mm ~ 960 x 540 px at 96dpi
@@ -39,8 +40,12 @@ export async function generateSlidesExportHtml(
         ? { fillPage: true, pageWidthPx: PAGE_WIDTH_PX, pageHeightPx: PAGE_HEIGHT_PX }
         : undefined;
     const slidesHtml = renderDeckHtml(deck, sizeUnit, resolveImgSrc, slideOptions);
+    // Sanitize the assembled body exactly like the preview surface (eigenslides-preview.ts) —
+    // defence in depth over render.ts's per-value escaping, so the download/print surface is
+    // as guarded as the preview.
+    const sanitized = sanitizeExportHtml(slidesHtml);
 
-    return wrapInDocument(title, slidesHtml, mode);
+    return wrapInDocument(title, sanitized, mode);
 }
 
 function wrapInDocument(title: string, slidesHtml: string, mode: 'html' | 'pdf'): string {

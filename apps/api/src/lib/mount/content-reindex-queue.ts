@@ -10,6 +10,12 @@ export const CONTENT_REINDEX_CAP_SECONDS = 120;
 // container + text file dirty) flowing in steady batches instead of one giant query.
 const REINDEX_BATCH = 100;
 
+// Ceiling on awaiting the in-flight drain at close. The current extract does unbounded storage GETs
+// via the doc loaders, so a black-holed backend would otherwise park teardown forever — and
+// idle-home eviction has no SIGKILL backstop (process shutdown does). Mirrors the upload queue's
+// per-PUT ceiling (UPLOAD_PUT_TIMEOUT_MS); generous so a genuinely slow extract still finishes.
+const REINDEX_CLOSE_TIMEOUT_MS = 120_000;
+
 export type ContentExtractor = (mount: Mount, path: DrivePath) => Promise<string>;
 
 // Per-mount, self-scheduled content reindexer — the read-side mirror of UploadQueue. The durable
@@ -27,6 +33,8 @@ export class ContentReindexQueue {
     private draining: Promise<void> | null = null;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
     private closing = false;
+    // Deadline on close()'s drain await (see REINDEX_CLOSE_TIMEOUT_MS). A field so tests can shrink it.
+    private closeTimeoutMs = REINDEX_CLOSE_TIMEOUT_MS;
 
     constructor(deps: { mount: Mount; extract: ContentExtractor; label: string }) {
         this.mount = deps.mount;
@@ -49,12 +57,35 @@ export class ContentReindexQueue {
         return this.draining;
     }
 
-    // Mount teardown: stop scheduling. Leftover dirty rows replay on the next mount open.
-    close(): void {
+    // Mount teardown: stop scheduling and AWAIT the in-flight drain so the current extract finishes.
+    // That extract opens a doc DB via mount.openDatabase and leaves it for the mount lifecycle to
+    // close; awaiting here lets closeAllDatabases close it before it clears documentDbs — otherwise
+    // the post-clear open leaks. Only the current extract is drained: leftover dirty rows replay on
+    // the next mount open (the bit is the durable queue). The await is BOUNDED (see
+    // REINDEX_CLOSE_TIMEOUT_MS): past the deadline teardown proceeds and the hung extract is accepted
+    // as leaked — the pre-await class, now confined to the black-holed-backend tail.
+    async close(): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
             clearTimeout(this.retryTimer);
             this.retryTimer = null;
+        }
+        if (!this.draining) return;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await Promise.race([
+                this.draining,
+                new Promise<void>((resolve) => {
+                    timeout = setTimeout(() => {
+                        console.error(
+                            `[content-reindex] close for ${this.label} exceeded ${this.closeTimeoutMs}ms; proceeding`,
+                        );
+                        resolve();
+                    }, this.closeTimeoutMs);
+                }),
+            ]);
+        } finally {
+            if (timeout) clearTimeout(timeout);
         }
     }
 
@@ -72,11 +103,16 @@ export class ContentReindexQueue {
                     const body = await this.extract(this.mount, path);
                     if (body) this.mount.upsertPathContent(path.id, body);
                     else this.mount.clearPathContent(path.id);
+                    // Clear the dirty bit only on a completed extract (empty counts) — a throw below must
+                    // leave it set so a transient failure isn't silently dropped from body search.
+                    this.mount.markContentIndexed(path.id);
                 } catch (err) {
                     // The index is regenerable — log and move on so one bad body never stalls the loop.
+                    // Stamp the attempt but keep contentDirty = 1: the cap defers the retry to a later
+                    // drain, so a transient S3 hiccup re-extracts instead of dropping until the next write.
                     console.error(`[content-reindex] extract failed for ${path.id}:`, err);
+                    this.mount.markContentIndexAttempted(path.id);
                 }
-                this.mount.markContentIndexed(path.id);
             }
         }
         if (this.closing) return;

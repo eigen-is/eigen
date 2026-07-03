@@ -36,7 +36,8 @@ export function useMessages(ownerId: string, mountId: string, chatId: string | u
             const query: { before?: string; limit?: string } = { limit: String(MESSAGE_PAGE_SIZE) };
             if (pageParam) query.before = pageParam;
             const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.get({ query });
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (lastPage: ChatMessage[]) => {

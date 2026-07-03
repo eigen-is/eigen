@@ -4,7 +4,7 @@ import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 6,
+    currentVersion: 7,
     schema,
     migrations: [
         {
@@ -186,6 +186,100 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 for (const f of files) {
                     if (isSearchableTextFile(f.mimeType, f.name)) mark.run(f.id);
                 }
+            },
+        },
+        {
+            // Close the concurrent same-name-create race (AUDIT_MOUNT finding 27). assertUniqueName's
+            // SELECT and the storage-write-then-INSERT that follows it aren't serialized, so two racers
+            // both pass the check and both insert. On the path-based `local` backend both rows get
+            // file = name → the SAME disk path → the second write clobbers the first and deleting either
+            // deletes both. A partial UNIQUE INDEX makes the losing INSERT throw (translated to 409 in
+            // mount.ts), and it hardens id-based (s3/local-key) metadata against duplicate active names.
+            //
+            // Runs inside the ManagedDatabase migration transaction (BEGIN/COMMIT with ROLLBACK on throw),
+            // so a failure leaves the db at v6 untouched.
+            version: 7,
+            up: (db) => {
+                // A1 — DEDUP PRE-STEP. On a LIVE db CREATE UNIQUE INDEX FAILS if a duplicate already
+                // exists, so first make (parentId, LOWER(name)) unique by RENAMING every colliding row
+                // except the oldest. Scope = trashedFrom IS NULL: LIVE rows (what the index constrains)
+                // PLUS folder-descendant-trashed rows (trashedAt set by trashDescendants, trashedFrom
+                // NULL) — restoreDescendants bulk-restores that whole cohort in one recursive UPDATE
+                // with no conflict handling, so a pre-v7 duplicate surviving inside an already-trashed
+                // folder would trip the index on restore and permanently brick it. Independently-trashed
+                // rows (trashedFrom SET) are excluded: they restore one at a time through restorePath's
+                // conflict rename and may legitimately duplicate a live name (trash-then-recreate).
+                // RENAME `name` ONLY — never touch `file`:
+                //   - id-based (s3/local-key): file = `${id}.${ext}` is keyed by the immutable ROW ID,
+                //     independent of name, so renaming (extension preserved) leaves both distinct storage
+                //     objects valid → lossless. The collision was a metadata-only clash.
+                //   - path-based (local): file = name (old) is left as-is, so the renamed row still
+                //     resolves to the SAME already-shared disk path. That clobber predates this migration
+                //     and can't be undone; renaming introduces NO NEW loss and makes the index satisfiable.
+                // parentId IS NULL is excluded: SQLite treats NULLs as distinct in a unique index, so
+                // roots never collide and must not be renamed.
+
+                // Mirror SQLite's ASCII-only LOWER() — the index and assertUniqueName both fold with it —
+                // so the dedup renames EXACTLY the rows CREATE UNIQUE INDEX would reject, no more (a JS
+                // toLowerCase would over-fold non-ASCII case variants SQLite keeps distinct).
+                const lower = (s: string): string => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+                // Suffix goes BEFORE the extension; a leading dot is a dotfile, not an extension
+                // (matches buildStorageKey's dotIdx > 0 rule).
+                const split = (name: string): { base: string; ext: string } => {
+                    const dot = name.lastIndexOf('.');
+                    return dot > 0 ? { base: name.slice(0, dot), ext: name.slice(dot) } : { base: name, ext: '' };
+                };
+
+                const parents = db
+                    .query(`
+                        SELECT DISTINCT parentId FROM (
+                            SELECT parentId FROM paths
+                            WHERE trashedFrom IS NULL AND parentId IS NOT NULL
+                            GROUP BY parentId, LOWER(name)
+                            HAVING COUNT(*) > 1
+                        )
+                    `)
+                    .all() as { parentId: string }[];
+
+                const cohortInParent = db.query(
+                    `SELECT id, name FROM paths WHERE parentId = ? AND trashedFrom IS NULL ORDER BY createdAt ASC, rowid ASC`,
+                );
+                const rename = db.prepare(`UPDATE paths SET name = ? WHERE id = ?`);
+
+                for (const { parentId } of parents) {
+                    const rows = cohortInParent.all(parentId) as { id: string; name: string }[];
+                    // Every lower-name in the parent's dedup cohort, so a generated suffix collides
+                    // with nothing live now or after a folder restore.
+                    const taken = new Set(rows.map((r) => lower(r.name)));
+                    // Group by lower-name in oldest-first order; the first row of each group keeps its name.
+                    const groups = new Map<string, { id: string; name: string }[]>();
+                    for (const r of rows) {
+                        const key = lower(r.name);
+                        const g = groups.get(key);
+                        if (g) g.push(r);
+                        else groups.set(key, [r]);
+                    }
+                    for (const group of groups.values()) {
+                        for (const dup of group.slice(1)) {
+                            const { base, ext } = split(dup.name);
+                            let n = 2;
+                            let candidate = `${base} (${n})${ext}`;
+                            while (taken.has(lower(candidate))) {
+                                n += 1;
+                                candidate = `${base} (${n})${ext}`;
+                            }
+                            taken.add(lower(candidate));
+                            rename.run(candidate, dup.id);
+                        }
+                    }
+                }
+
+                // A2 — the partial unique index. LOWER(name) + non-trashed scope match getChildByName /
+                // assertUniqueName exactly; trashed rows are excluded so a trashed item doesn't block
+                // re-creating a live one. IF NOT EXISTS keeps a re-run a no-op.
+                db.exec(
+                    `CREATE UNIQUE INDEX IF NOT EXISTS idx_paths_unique_active_name ON paths(parentId, LOWER(name)) WHERE trashedAt IS NULL;`,
+                );
             },
         },
     ],

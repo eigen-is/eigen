@@ -1,12 +1,13 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
+import type { ContentExtractor } from '../lib/mount/content-reindex-queue';
 import { buildStorageKey, createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
@@ -63,8 +64,18 @@ class FaultStorage implements StorageBackend {
     failNextWrites = 0;
     writeDelayMs = 0;
     writeCount = 0;
+    // Park every write until the test releases it — models a TCP-black-holed PUT that never resolves,
+    // so only the queue's client-side timeout can end the wait.
+    hangWrites = false;
+    private hungResolvers: Array<() => void> = [];
 
     constructor(private readonly inner: LocalStorage) {}
+
+    // Let any parked writes proceed so a hung PUT promise doesn't linger past the test.
+    releaseHungWrites(): void {
+        this.hangWrites = false;
+        for (const resolve of this.hungResolvers.splice(0)) resolve();
+    }
 
     read(key: string): StorageFile {
         return this.inner.read(key);
@@ -75,6 +86,7 @@ class FaultStorage implements StorageBackend {
         // unlink of the staging file can't abort an already-started upload. This is what makes
         // the resurrection window (cancel during an in-flight PUT) reproducible.
         const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
+        if (this.hangWrites) await new Promise<void>((resolve) => this.hungResolvers.push(resolve));
         if (this.writeDelayMs > 0) await Bun.sleep(this.writeDelayMs);
         if (this.failNextWrites > 0) {
             this.failNextWrites--;
@@ -114,17 +126,24 @@ function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
     return { mount, fault };
 }
 
-// Count rows in the backing-store ("S3") copy of a data.db. Reads through the mount's storage
-// and opens a throwaway non-WAL copy (a readonly WAL open can't create its -shm sidecar).
-async function countBackingRows(mount: Mount, dataDbId: string): Promise<number | null> {
-    const file = await mount.readFile(dataDbId);
-    if (!file) return null;
+// Open a throwaway non-WAL copy of a data.db StorageFile and count its rows (a readonly WAL open
+// can't create its -shm sidecar).
+async function countRowsInFile(file: StorageFile | null): Promise<number | null> {
+    if (!file || !(await file.exists())) return null;
     const verifyPath = join(TEST_DIR, `verify-${Math.random().toString(36).slice(2)}.db`);
     await Bun.write(verifyPath, await file.arrayBuffer());
     const verify = new Database(verifyPath);
     const row = verify.query('SELECT COUNT(*) as c FROM items').get() as { c: number };
     verify.close();
     return row.c;
+}
+
+// Count rows in the object that actually reached the backing store ("S3"/local). Reads storage
+// directly — NOT via mount.readFile, which is freshest-first and would surface un-acked staged
+// bytes; getStorageKey handles both the flat-key (s3) and hierarchical (local) layouts.
+async function countBackingRows(mount: Mount, id: string): Promise<number | null> {
+    const m = mount as unknown as { storage: StorageBackend; getStorageKey(id: string): Promise<string> };
+    return countRowsInFile(m.storage.read(await m.getStorageKey(id)));
 }
 
 async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {
@@ -491,6 +510,116 @@ describe('Phase 1b — write-behind upload pipeline', () => {
     });
 });
 
+describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery', () => {
+    test('copying a doc container with a pending (un-acked) data.db upload copies the fresh staged bytes, not the stale storage object', async () => {
+        const { mount, fault } = createS3Mount('copy-pending');
+        await mount.init();
+        const { containerId, dataDbId } = await provisionDoc(mount);
+        const rootId = (await mount.getRootFolder())!.id;
+
+        // Baseline {1} fully acked → "S3" holds {1}.
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await managed.flush();
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(await countBackingRows(mount, dataDbId)).toBe(1);
+
+        // A new write {2} whose upload is HELD in-flight: the staged {1,2} copy + pending row exist,
+        // but "S3" is still {1}. writeDelayMs keeps that PUT from acking; reset to 0 (after the drain
+        // has entered the sleeping PUT) so the copy's own writes land on a healthy backend.
+        fault.writeDelayMs = 2_000;
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
+        await managed.flush();
+        await Bun.sleep(100);
+        fault.writeDelayMs = 0;
+        expect(mount.pendingUploadCount).toBe(1);
+        expect(await countBackingRows(mount, dataDbId)).toBe(1); // "S3" still stale {1}
+
+        // readFile is freshest-first (the seam behind downloadFile / copyPathAcross): it must surface
+        // the staged {1,2}, not the stale {1} in storage.
+        expect(await countRowsInFile(await mount.readFile(dataDbId))).toBe(2);
+
+        // Copy the whole container: the recursion into data.db must copy the staged {1,2}, not "S3" {1}.
+        const copy = await mount.copyPath(containerId, rootId, 'doc-copy');
+        const copiedDataDb = (await mount.getChildByName(copy.id, 'data.db'))!;
+        expect(await countBackingRows(mount, copiedDataDb.id)).toBe(2);
+
+        // Duplicate-then-delete-original preserves the copied data.
+        await mount.deletePath(containerId);
+        expect(await countBackingRows(mount, copiedDataDb.id)).toBe(2);
+    });
+
+    test('a data-dir relocation keeps pending uploads (stagingPath resolves against the current stagingDir)', async () => {
+        const id = `relocate-${Date.now()}`;
+        // The "S3" backing store is remote — a host migration does NOT move it; only the local data dir moves.
+        const backing = new FaultStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
+        const config: MountConfig = {
+            id,
+            name: id,
+            storageType: 's3',
+            isDefault: false,
+            s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
+        };
+
+        // Original data dir A: stage a pending upload during an outage so it survives to relocation time.
+        const baseA = join(TEST_DIR, `relocate-A-${id}`);
+        const mountA = new Mount(OWNER_ID, baseA, config, createGetLocalDatabase(baseA));
+        (mountA as unknown as { storage: StorageBackend }).storage = backing;
+        createdMounts.push(mountA);
+        backing.failNextWrites = 9999;
+        await mountA.init();
+        const { dataDbId } = await provisionDoc(mountA);
+        const managed = await mountA.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mountA.closeDatabase(dataDbId);
+        await mountA.drainPendingUploads({ flushNow: true });
+        expect(mountA.pendingUploadCount).toBe(1);
+        await mountA.closeAllDatabases(); // idle teardown — leaves the row + staged copy for replay
+
+        // Relocate: move the local data dir A → B (host migration / restore-from-backup). metadata.db
+        // and staging/ move together; the "S3" backing is unchanged.
+        const baseB = join(TEST_DIR, `relocate-B-${id}`);
+        mkdirSync(baseB, { recursive: true });
+        renameSync(join(baseA, 'mounts'), join(baseB, 'mounts'));
+
+        const mountB = new Mount(OWNER_ID, baseB, config, createGetLocalDatabase(baseB));
+        (mountB as unknown as { storage: StorageBackend }).storage = backing;
+        createdMounts.push(mountB);
+        await mountB.init(); // reconcile: the basename resolves against B's stagingDir → row survives
+
+        expect(mountB.pendingUploadCount).toBe(1); // the pending upload was NOT dropped by the move
+        expect(readdirSync(mountB.stagingDir)).toHaveLength(1); // its staged bytes were not swept
+
+        backing.failNextWrites = 0; // outage over — the relocated upload still drains
+        await mountB.drainPendingUploads({ flushNow: true });
+        expect(mountB.pendingUploadCount).toBe(0);
+        expect(await countBackingRows(mountB, dataDbId)).toBe(1);
+    });
+
+    test("a delayed restart preserves an open doc's crash-recovery temp but sweeps stale transient temps", async () => {
+        const { mount } = createS3Mount('tmp-sweep-restart');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount); // dataDbId is a live paths.id
+
+        // A crash-recovery working copy: a temp named after the LIVE data.db pathId. A transient
+        // stream/upload temp: named after a random id that is NOT a paths row. Both aged past 1h.
+        const recoveryTemp = mount.getTempPath(dataDbId);
+        await Bun.write(recoveryTemp, 'live-doc-working-copy');
+        const orphanTemp = mount.getTempPath(randomUUID());
+        await Bun.write(orphanTemp, 'stale-transient-temp');
+        const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        utimesSync(recoveryTemp, old, old);
+        utimesSync(orphanTemp, old, old);
+
+        // A restart sharing the same baseDir re-runs the init-time tmp sweep.
+        const m2 = createS3Mount('tmp-sweep-restart');
+        await m2.mount.init();
+
+        expect(existsSync(recoveryTemp)).toBe(true); // recovery temp survives for reopen to adopt
+        expect(existsSync(orphanTemp)).toBe(false); // transient temp still swept
+    });
+});
+
 describe('per-destination upload concurrency', () => {
     test('each S3 destination gets its own semaphore; the same destination shares one', () => {
         // Distinct Semaphore instances per destination ⇒ independent permit pools ⇒ a slow/down
@@ -571,4 +700,142 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await mount.drainPendingUploads({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId)).toBe(500); // not collapsed to empty
     });
+});
+
+describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-timer race, PUT timeout)', () => {
+    // Finding 1: closeAllDatabases must AWAIT the reindex drain before it clears documentDbs. A late
+    // extract opens a doc DB via mount.openDatabase and relies on the mount lifecycle to close it; if
+    // teardown returns before that open, the DB lands in the just-cleared cache and leaks forever.
+    test('closeAllDatabases awaits the reindex drain so a late extract-opened DB is not leaked', async () => {
+        let extractEntered!: () => void;
+        const entered = new Promise<void>((r) => (extractEntered = r));
+        let releaseExtract!: () => void;
+        const gate = new Promise<void>((r) => (releaseExtract = r));
+        let leakDbId = '';
+
+        // Gate BEFORE the open so the open can be forced to land after teardown clears the cache.
+        const extract: ContentExtractor = async (m) => {
+            extractEntered();
+            await gate;
+            await m.openDatabase(docConfigNoSnap, leakDbId);
+            return '';
+        };
+
+        const mount = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createDefaultMountConfig(`reindex-teardown-${Date.now()}`, 'local'),
+            createGetLocalDatabase(TEST_DIR),
+            extract,
+        );
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        // A real data.db for the extractor to (re)open mid-drain (created, then evicted from the cache).
+        const containerId = await mount.createFolder(rootId, 'leak-doc', 'doc');
+        leakDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        await mount.createDatabase(docConfigNoSnap, leakDbId);
+        await mount.closeDatabase(leakDbId);
+
+        // A searchable text file dirties a row → the reindexer drains it → extract runs and parks.
+        await mount.createFile(rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
+        const draining = mount.flushContentReindex(); // handle to the in-flight drain loop
+        await entered; // extract is parked at the gate, before its open
+
+        const documentDbs = (mount as unknown as { documentDbs: Map<string, unknown> }).documentDbs;
+
+        // Tear down while the extract is mid-flight, THEN let it open its DB. Pre-fix: teardown returns
+        // before the open, which lands in the cleared cache and leaks. Post-fix: teardown awaits the
+        // drain, so the opened DB lands in the cache and the close pass closes it.
+        const closing = mount.closeAllDatabases();
+        releaseExtract();
+        await closing;
+        await draining;
+
+        expect(documentDbs.size).toBe(0);
+    });
+
+    // Finding 2: init schedules setTimeout(history.prune, 0) off the ready path; a fast teardown must
+    // cancel it, or it fires against a metadata.db the Home is about to close ("Cannot use a closed
+    // database" noise).
+    test('a fast open→teardown cancels the pending history prune', async () => {
+        const mount = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createDefaultMountConfig(`prune-race-${Date.now()}`, 'local'),
+            createGetLocalDatabase(TEST_DIR),
+        );
+        await mount.init(); // schedules the setTimeout(prune, 0) — still pending (a macrotask)
+
+        let pruneRuns = 0;
+        const history = (mount as unknown as { history: { prune: () => void } }).history;
+        history.prune = () => {
+            pruneRuns++;
+        };
+
+        await mount.closeAllDatabases(); // must clearTimeout the pending prune
+        await new Promise((r) => setTimeout(r, 0)); // let any surviving macrotask fire
+
+        expect(pruneRuns).toBe(0);
+    });
+
+    // Finding 3: a PUT that never resolves must hit the queue's client-side timeout and be treated as
+    // a failure (back off, release the semaphore, advance the loop), not hang the drain forever.
+    test('a hung PUT times out and backs off instead of stalling the queue', async () => {
+        const { mount, fault } = createS3Mount(`put-timeout-${Date.now()}`);
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+
+        // Bound the race deterministically: the injected write never resolves, so only the timeout can
+        // settle it. 50ms keeps the test fast; production uses UPLOAD_PUT_TIMEOUT_MS (120s).
+        (mount as unknown as { uploadQueue: { putTimeoutMs: number } }).uploadQueue.putTimeoutMs = 50;
+        fault.hangWrites = true;
+
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mount.closeDatabase(dataDbId); // enqueues the upload
+
+        // Pre-fix: storage.write never resolves → this drain never returns (the test times out).
+        // Post-fix: the PUT deadline fires, performUpload treats it as a failure and backs off.
+        await mount.drainPendingUploads({ flushNow: true });
+
+        expect(fault.writeCount).toBeGreaterThan(0); // the PUT was attempted…
+        expect(mount.pendingUploadCount).toBeGreaterThan(0); // …and left queued (backed off), not hung/cleared
+
+        fault.releaseHungWrites(); // settle the orphaned PUT so nothing lingers
+    }, 5_000);
+
+    // Batch-2 review: close() awaits the in-flight drain, whose extract does unbounded storage GETs
+    // via the doc loaders — the same black-hole class the PUT ceiling exists for, and idle-home
+    // eviction has no SIGKILL backstop. The await must be bounded so teardown proceeds past a hung
+    // extract (accepting it as leaked, no worse than the pre-6b leak).
+    test('a hung extract cannot park closeAllDatabases forever (bounded reindex close)', async () => {
+        let extractEntered!: () => void;
+        const entered = new Promise<void>((r) => (extractEntered = r));
+
+        // Models an extract parked on a black-holed storage GET — never resolves.
+        const extract: ContentExtractor = async () => {
+            extractEntered();
+            return new Promise<string>(() => {});
+        };
+
+        const mount = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createDefaultMountConfig(`reindex-close-timeout-${Date.now()}`, 'local'),
+            createGetLocalDatabase(TEST_DIR),
+            extract,
+        );
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        // A searchable file dirties a row; createFile's kick starts the drain, which parks in extract.
+        await mount.createFile(rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
+        await entered;
+
+        (mount as unknown as { reindexQueue: { closeTimeoutMs: number } }).reindexQueue.closeTimeoutMs = 50;
+
+        // Pre-fix: close() awaits the parked drain unboundedly → this never returns (test times out).
+        await mount.closeAllDatabases();
+    }, 5_000);
 });

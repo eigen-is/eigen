@@ -162,17 +162,23 @@ export async function createEventAt(
 
 export async function updateEventAt(
     ownerUserId: string,
+    calendarId: string,
     eventId: string,
     input: UpdateEventArgs,
     user: User,
 ): Promise<CalendarEvent> {
     const home = await getHome(ownerUserId);
-    return home.calendar.updateEvent(eventId, input, user);
+    return home.calendar.updateEvent(calendarId, eventId, input, user);
 }
 
-export async function deleteEventAt(ownerUserId: string, eventId: string, user: User): Promise<void> {
+export async function deleteEventAt(
+    ownerUserId: string,
+    calendarId: string,
+    eventId: string,
+    user: User,
+): Promise<void> {
     const home = await getHome(ownerUserId);
-    await home.calendar.deleteEvent(eventId, user);
+    await home.calendar.deleteEvent(calendarId, eventId, user);
 }
 
 export async function pullPendingInvitations(ownerUserId: string, attendeeEmail: string): Promise<CalendarEvent[]> {

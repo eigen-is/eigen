@@ -3,7 +3,9 @@ import { toast } from 'sonner';
 export class AppError extends Error {
     status: number;
 
-    constructor(response: { error: { status: number; value: unknown } | null; status: number }) {
+    // error.status is `unknown`, not `number`: the untyped-error GET routes (/p/config, /settings/server,
+    // /settings/s3config) declare no response schema, so Eden can't enumerate their codes. Coerced below.
+    constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
         const value = response.error?.value;
         const message =
             typeof value === 'string'
@@ -18,7 +20,8 @@ export class AppError extends Error {
                     )
                   : String(value ?? 'Unknown error');
         super(message);
-        this.status = response.error?.status ?? response.status;
+        const errorStatus = response.error?.status;
+        this.status = typeof errorStatus === 'number' ? errorStatus : response.status;
     }
 }
 

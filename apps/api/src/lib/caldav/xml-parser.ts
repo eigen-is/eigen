@@ -1,4 +1,23 @@
 import { XMLParser } from 'fast-xml-parser';
+import ICAL from 'ical.js';
+
+// CalDAV <C:time-range> bounds are RFC 5545 BASIC format (YYYYMMDD or YYYYMMDDTHHMMSS[Z]). `new Date()`
+// only reads EXTENDED ISO and returns Invalid Date on basic input, which then flows into
+// rrule.between(Invalid, Invalid) and silently empties (or crashes) the REPORT. Normalise basic →
+// extended UTC and let ical.js — the domain's ICS date parser — parse and validate it. RFC 4791
+// mandates UTC for these bounds, so a missing/present `Z` is treated as UTC either way. Returns
+// undefined for anything malformed so the caller drops the range instead of passing NaN downstream.
+function parseCalDavDate(value: string): Date | undefined {
+    const raw = String(value).trim();
+    const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?Z?$/.exec(raw);
+    const iso = m ? `${m[1]}-${m[2]}-${m[3]}T${m[4] ?? '00'}:${m[5] ?? '00'}:${m[6] ?? '00'}Z` : raw;
+    try {
+        const date = ICAL.Time.fromDateTimeString(iso).toJSDate();
+        return Number.isNaN(date.getTime()) ? undefined : date;
+    } catch {
+        return undefined;
+    }
+}
 
 const parser = new XMLParser({
     ignoreAttributes: false,
@@ -47,10 +66,12 @@ export function parseReport(xml: string): ReportRequest {
 
     let parsedTimeRange: { start: Date; end: Date } | undefined;
     if (timeRange) {
-        const start = timeRange['@_start'];
-        const end = timeRange['@_end'];
+        const start = timeRange['@_start'] ? parseCalDavDate(timeRange['@_start']) : undefined;
+        const end = timeRange['@_end'] ? parseCalDavDate(timeRange['@_end']) : undefined;
+        // Only honour a fully-valid range; a malformed bound drops the range (→ full listing) rather
+        // than feeding Invalid Date into rrule.between.
         if (start && end) {
-            parsedTimeRange = { start: new Date(start), end: new Date(end) };
+            parsedTimeRange = { start, end };
         }
     }
 

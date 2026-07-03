@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
+import { MaildirStore } from '../lib/mail/maildir-store';
 // Static import of '../lib/core/mailer' would trigger server-config module evaluation
 // before './setup' sets EIGEN_DATA_ROOT. Dynamic-import it inside the test instead.
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
@@ -476,5 +477,48 @@ describe.skipIf(isWindows)('Mail', () => {
         } finally {
             spy.mockRestore();
         }
+    });
+
+    // Regression (audit P2-9): messageGet must return null (→404) ONLY for a genuine
+    // cache-miss, and PROPAGATE real faults (unreadable/unparseable .eml, disk EIO) so
+    // Elysia logs + 500s. Previously a triple swallow (messageGet/readAndParse/parseEml
+    // → null) turned any fault on a visible message into a silent 404.
+    describe('messageGet fault propagation', () => {
+        test('unreadable .eml on a visible message returns 500, not a silent 404', async () => {
+            // A draft gives us a summary row + a real .eml on disk (a message the user CAN see).
+            const draftRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/draft`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mail: { subject: 'Fault propagation', text: 'body' } }),
+                },
+            );
+            const draft = await assertJson<EmailSummary>(draftRes);
+
+            // Simulate the .eml being unreadable on disk (disk EIO / missing file) for the read
+            // messageGet performs — a genuine fault, not a cache-miss.
+            const spy = spyOn(MaildirStore.prototype, 'getMessageFile').mockReturnValue(
+                Bun.file('/nonexistent/eigen-p2-9-missing.eml'),
+            );
+            try {
+                const res = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/mail/${ctx.alice.user.id}/message/${draft.id}`,
+                );
+                expect(res.status).toBe(500);
+            } finally {
+                spy.mockRestore();
+            }
+        });
+
+        test('genuine cache-miss (no summary row) still returns 404', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/no-such-message-id`,
+            );
+            expect(res.status).toBe(404);
+        });
     });
 });

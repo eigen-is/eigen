@@ -36,9 +36,10 @@ export class Home {
 
     private initialized: boolean = false;
     private initializationStarted: boolean = false;
-    private initWaiters: ((home: Home) => void)[] = [];
+    private initWaiters: { resolve: (home: Home) => void; reject: (reason: unknown) => void }[] = [];
     private timeout: Timer | undefined;
     private _destructing: boolean = false;
+    private _destructPromise: Promise<void> | null = null;
 
     get destructing(): boolean {
         return this._destructing;
@@ -87,29 +88,47 @@ export class Home {
             return this;
         }
         if (this.initializationStarted) {
-            return new Promise<Home>((resolve) => {
-                this.initWaiters.push(resolve);
+            return new Promise<Home>((resolve, reject) => {
+                this.initWaiters.push({ resolve, reject });
             });
         }
         this.initializationStarted = true;
 
-        await time('Home.init.settings', () => this.settings?.load() ?? Promise.resolve());
+        try {
+            await time('Home.init.settings', () => this.settings?.load() ?? Promise.resolve());
 
-        await Promise.all([
-            time('Home.init.drive', () => this._drive?.init(autoCreateDefaultMount) ?? Promise.resolve()),
-            time('Home.init.contacts', () => this._contacts?.init() ?? Promise.resolve()),
-            time('Home.init.mail', () => this._mail?.init() ?? Promise.resolve()),
-            time('Home.init.calendar', () => this._calendar?.init() ?? Promise.resolve()),
-            time('Home.init.notifications', () => this._notifications?.init() ?? Promise.resolve()),
-        ]);
+            // allSettled (not all): if one subsystem init throws, let its peers finish opening before
+            // we tear down — a rejected Promise.all returns while siblings are still mid-init, so
+            // their ManagedDatabases + upload/reindex timers would leak.
+            const results = await Promise.allSettled([
+                time('Home.init.drive', () => this._drive?.init(autoCreateDefaultMount) ?? Promise.resolve()),
+                time('Home.init.contacts', () => this._contacts?.init() ?? Promise.resolve()),
+                time('Home.init.mail', () => this._mail?.init() ?? Promise.resolve()),
+                time('Home.init.calendar', () => this._calendar?.init() ?? Promise.resolve()),
+                time('Home.init.notifications', () => this._notifications?.init() ?? Promise.resolve()),
+            ]);
+            const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+            if (failed) throw failed.reason;
 
-        this.initialized = true;
-        console.log(`[Home] Initialized for ${this.user.id}`);
-        for (const resolve of this.initWaiters) {
-            resolve(this);
+            this.initialized = true;
+            console.log(`[Home] Initialized for ${this.user.id}`);
+            for (const { resolve } of this.initWaiters) {
+                resolve(this);
+            }
+            this.initWaiters = [];
+            return this;
+        } catch (err) {
+            // One failure path for the whole init body (settings load included): the idempotent
+            // shutdown() (see destruct) closes what got built and clears the idle timer, queued
+            // concurrent init() callers are rejected — they'd otherwise await forever — and the
+            // rethrow makes getHome discard this half-built Home instead of caching a leaking one.
+            await this.shutdown();
+            for (const { reject } of this.initWaiters) {
+                reject(err);
+            }
+            this.initWaiters = [];
+            throw err;
         }
-        this.initWaiters = [];
-        return this;
     }
 
     public touch() {
@@ -246,36 +265,42 @@ export class Home {
         };
     }
 
-    protected async destruct() {
+    protected destruct(): Promise<void> {
+        // Idempotent: the idle timer and an explicit shutdown() (e.g. getHome evicting a home that is
+        // already tearing down) can both fire, so run teardown once — a second concurrent pass would
+        // close, checkpoint and journal-unlink the same DB files twice.
+        if (this._destructPromise) return this._destructPromise;
         this._destructing = true;
-
-        // Subsystems close their own ManagedDatabase. Run those first so the
-        // managedDatabases loop below is a safety net (idempotent close), not a
-        // concurrent second close on the same db.
-        const subsystems: [string, Promise<unknown> | undefined][] = [
-            ['drive', this._drive?.destruct()],
-            ['contacts', this._contacts?.destruct()],
-            ['mail', this._mail?.destruct()],
-            ['calendar', this._calendar?.destruct()],
-            ['notifications', this._notifications?.destruct()],
-        ];
-        for (const [i, result] of (await Promise.allSettled(subsystems.map(([, p]) => p))).entries()) {
-            if (result.status === 'rejected') {
-                console.error(`Failed to destruct ${subsystems[i][0]}:`, result.reason);
+        this._destructPromise = (async () => {
+            // Subsystems close their own ManagedDatabase. Run those first so the
+            // managedDatabases loop below is a safety net (idempotent close), not a
+            // concurrent second close on the same db.
+            const subsystems: [string, Promise<unknown> | undefined][] = [
+                ['drive', this._drive?.destruct()],
+                ['contacts', this._contacts?.destruct()],
+                ['mail', this._mail?.destruct()],
+                ['calendar', this._calendar?.destruct()],
+                ['notifications', this._notifications?.destruct()],
+            ];
+            for (const [i, result] of (await Promise.allSettled(subsystems.map(([, p]) => p))).entries()) {
+                if (result.status === 'rejected') {
+                    console.error(`Failed to destruct ${subsystems[i][0]}:`, result.reason);
+                }
             }
-        }
 
-        const dbs = [...this.managedDatabases.entries()].map(([key, getter]): [string, Promise<unknown>] => [
-            key,
-            (async () => (await getter()).close())(),
-        ]);
-        for (const [i, result] of (await Promise.allSettled(dbs.map(([, p]) => p))).entries()) {
-            if (result.status === 'rejected') {
-                console.error(`Failed to close managed database ${dbs[i][0]}:`, result.reason);
+            const dbs = [...this.managedDatabases.entries()].map(([key, getter]): [string, Promise<unknown>] => [
+                key,
+                (async () => (await getter()).close())(),
+            ]);
+            for (const [i, result] of (await Promise.allSettled(dbs.map(([, p]) => p))).entries()) {
+                if (result.status === 'rejected') {
+                    console.error(`Failed to close managed database ${dbs[i][0]}:`, result.reason);
+                }
             }
-        }
 
-        this.managedDatabases.clear();
+            this.managedDatabases.clear();
+        })();
+        return this._destructPromise;
     }
 
     public broadcast(event: SSEvent) {

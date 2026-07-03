@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { publicApi } from '@workspace/lib/api';
 import { parseOwnerId } from '@workspace/lib/types';
 import { validateEmailAddress } from '@workspace/lib/validation';
+import { AppError } from '../../api-error';
 import { fetchPublicUser } from '../user-batcher';
 
 const publicKeys = {
@@ -19,6 +20,7 @@ export function usePublicConfig() {
         queryKey: publicKeys.config,
         queryFn: async () => {
             const res = await publicApi.config.get();
+            if (res.error) throw new AppError(res);
             return res.data;
         },
         staleTime: Infinity,

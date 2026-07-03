@@ -26,7 +26,8 @@ export function useEmails(mailboxPath: string) {
         queryKey: emailKeys.list(ownerId, mailboxPath),
         queryFn: async (): Promise<EmailSummary[]> => {
             const response = await mailApi({ ownerId }).mailbox({ mailboxPath: mailboxPath.toLowerCase() }).get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 1 * 60 * 1000,
         retry: 1,
@@ -43,7 +44,8 @@ export function useEmail(messageId: string | undefined) {
         queryFn: async () => {
             if (!messageId) return null;
             const response = await mailApi({ ownerId }).message({ id: messageId }).get();
-            return response.data || null;
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!messageId && !!ownerId,
         staleTime: Infinity,
@@ -63,7 +65,8 @@ export function useEmailById() {
                 queryKey: emailKeys.detail(ownerId, messageId),
                 queryFn: async () => {
                     const response = await mailApi({ ownerId }).message({ id: messageId }).get();
-                    return response.data || null;
+                    if (response.error) throw new AppError(response);
+                    return response.data;
                 },
                 staleTime: Infinity,
             });

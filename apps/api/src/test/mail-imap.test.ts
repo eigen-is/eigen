@@ -42,6 +42,26 @@ function makeEml(subject: string, from = 'test@example.com') {
     ].join('\r\n');
 }
 
+// EML with a raw ISO-8859-1 'é' (0xE9) body byte — invalid UTF-8, so a TextDecoder/`.text()`
+// round-trip would replace it with U+FFFD (0xEF 0xBF 0xBD) and inflate the byte count.
+function makeRawNonUtf8Eml(subject: string, to: string, marker: string): Buffer {
+    const headers = [
+        'From: sender@example.com',
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        `Date: ${new Date().toUTCString()}`,
+        `Message-ID: <${marker}@test>`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=iso-8859-1',
+        'Content-Transfer-Encoding: 8bit',
+    ].join('\r\n');
+    return Buffer.concat([
+        Buffer.from(`${headers}\r\n\r\n`, 'ascii'),
+        Buffer.from([0x43, 0x61, 0x66, 0xe9]), // "Caf" + ISO-8859-1 é
+        Buffer.from('\r\n', 'ascii'),
+    ]);
+}
+
 describe('Maildir Utility Functions', () => {
     test('createUniqueMessageId produces Maildir-compatible format', () => {
         const id = createUniqueMessageId();
@@ -543,5 +563,58 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         expect(newFiles.filter((f) => f.includes('Atomic')).length).toBe(0);
         // cur should have the file
         expect(curFiles.some((f) => f.includes(':2,'))).toBe(true);
+    });
+
+    test('inbound non-UTF-8 mail is written to disk byte-for-byte', async () => {
+        const marker = `latin1-${crypto.randomUUID()}`;
+        const rawEml = makeRawNonUtf8Eml('Latin-1 body', ctx.charlie.user.email, marker);
+
+        const res = await ctx.app.handle(
+            new Request(`http://localhost/mail/deliver/${ctx.charlie.user.email}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new Uint8Array(rawEml),
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const dir = curDir(charlieId, '');
+        const deliveredFile = findOrFail(readdirSync(dir), (f) => readFileSync(join(dir, f)).includes(marker));
+        const onDisk = readFileSync(join(dir, deliveredFile));
+
+        // Byte-identical to what arrived — a UTF-8 round-trip would replace 0xE9 with U+FFFD.
+        expect(Buffer.compare(onDisk, rawEml)).toBe(0);
+        expect(onDisk.includes(0xe9)).toBe(true);
+
+        // Size hint reflects the real byte count, not a mangled string length.
+        const size = Number(deliveredFile.match(/,S=(\d+)/)?.[1]);
+        expect(size).toBe(rawEml.byteLength);
+    });
+
+    test('messageCopy preserves non-UTF-8 bytes verbatim', async () => {
+        // Place a raw non-UTF-8 message directly in cur/ (as Dovecot would) so the copy path is tested
+        // independently of delivery.
+        const marker = `copy-latin1-${crypto.randomUUID()}`;
+        const rawEml = makeRawNonUtf8Eml('Copy Latin-1', ctx.charlie.user.email, marker);
+        const uniqueId = createUniqueMessageId();
+        writeFileSync(join(curDir(charlieId, ''), `${uniqueId},S=${rawEml.byteLength}:2,S`), rawEml);
+
+        // Sync so the DB learns of it, then copy to Archive.
+        await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/inbox`);
+        const copyRes = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/message/copy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: uniqueId, targetMailbox: 'Archive' }),
+        });
+        expect(copyRes.status).toBe(200);
+
+        const archiveDir = curDir(charlieId, 'Archive');
+        const copiedFile = findOrFail(readdirSync(archiveDir), (f) =>
+            readFileSync(join(archiveDir, f)).includes(marker),
+        );
+        const copied = readFileSync(join(archiveDir, copiedFile));
+
+        expect(Buffer.compare(copied, rawEml)).toBe(0);
+        expect(copied.includes(0xe9)).toBe(true);
     });
 });

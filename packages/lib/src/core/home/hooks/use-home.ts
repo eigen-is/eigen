@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { homeApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { AppError } from '../../api-error';
 
 // Define query keys for reuse
 export const homeKeys = {
@@ -20,7 +21,8 @@ export function useHomeSize() {
         queryKey: homeKeys.size(ownerId),
         queryFn: async () => {
             const response = await homeApi({ ownerId }).size.get();
-            return response.data || null;
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 1000 * 60 * 5, // 5 minutes
         enabled: !!ownerId,
@@ -50,7 +52,8 @@ export function useMyTeams() {
         queryKey: homeKeys.myTeams(ownerId),
         queryFn: async () => {
             const response = await homeApi({ ownerId })['my-teams'].get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 2 * 60 * 1000,
         enabled: !!ownerId,

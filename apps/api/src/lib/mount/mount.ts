@@ -3,19 +3,19 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isSearchableTextFile } from '@workspace/lib/constants';
 import {
-    DRIVE_MIME_CHAT,
-    DRIVE_MIME_DOC,
     DRIVE_MIME_FOLDER,
-    DRIVE_MIME_SHEETS,
-    DRIVE_MIME_SLIDES,
-    DRIVE_MIME_STICKIES,
     DRIVE_TYPE_FOLDER,
     type DriveContainerType,
     type DrivePath,
     type MountConfig,
     type MountSettings,
 } from '@workspace/lib/types';
-import { type DriveVisibility, EIGEN_DOCUMENT_TYPES, isContainerType } from '@workspace/lib/types/drive';
+import {
+    type DriveVisibility,
+    EIGEN_DOC_TYPE_INFO,
+    EIGEN_DOCUMENT_TYPES,
+    isContainerType,
+} from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -49,7 +49,11 @@ type LocalDatabaseGetter = <S extends SchemaType>(
 ) => Promise<ManagedDatabase<S>>;
 
 function validateName(name: string): void {
-    if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || name.includes('\0')) {
+    // Reject control bytes (incl. NUL) so a name creatable via the API stays reachable
+    // over WebDAV, where resolvePath rejects the same [\x00-\x1f] range (RFC 4918).
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: mirrors resolvePath's control-char guard
+    const hasControlChar = /[\x00-\x1f]/.test(name);
+    if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || hasControlChar) {
         throw new ApiError(400, `Invalid file or folder name: "${name}"`);
     }
 }
@@ -70,6 +74,28 @@ const docContainerDescendantIds = sql`
     )
     SELECT id FROM doc_tree
 `;
+
+// The v7 partial unique index (parentId, LOWER(name)) WHERE trashedAt IS NULL. Its violation is what
+// closes the concurrent same-name races (create INSERTs, rename/move/restore UPDATEs); the sites map
+// it to a 409 via rethrowDuplicateActiveName.
+const UNIQUE_ACTIVE_NAME_INDEX = 'idx_paths_unique_active_name';
+
+// True only for the losing racer tripping that index. bun:sqlite names the expression index in the
+// message (`UNIQUE constraint failed: index 'idx_paths_unique_active_name'`); match on it so an
+// unrelated UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
+function isDuplicateActiveNameError(e: unknown): boolean {
+    return e instanceof Error && e.message.includes(`index '${UNIQUE_ACTIVE_NAME_INDEX}'`);
+}
+
+// Rethrow, translating the index violation into the SAME 409 assertUniqueName raises. Shared by the
+// create INSERTs and the rename/move/restore UPDATEs — single-threaded callers pass assertUniqueName's
+// SELECT first, so only the race tail lands here.
+function rethrowDuplicateActiveName(e: unknown, name: string): never {
+    if (isDuplicateActiveNameError(e)) {
+        throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+    }
+    throw e;
+}
 
 export function buildStorageKey(id: string, name: string): string {
     const dotIdx = name.lastIndexOf('.');
@@ -114,7 +140,6 @@ function isViableRecoveryTemp(tempPath: string, knownSize: number): boolean {
 
 export class Mount {
     readonly id: string;
-    readonly name: string;
     readonly config: MountConfig;
 
     private baseDir: string;
@@ -133,6 +158,10 @@ export class Mount {
     private reindexQueue?: ContentReindexQueue;
     private readonly extractContent?: ContentExtractor;
 
+    // init schedules the history prune off the ready path; held so a fast teardown can cancel it
+    // before the Home closes metadata.db (else prune scans a closed db — see closeAllDatabases).
+    private pruneTimer: ReturnType<typeof setTimeout> | null = null;
+
     public history!: FileHistory;
 
     constructor(
@@ -144,7 +173,6 @@ export class Mount {
     ) {
         this.ownerId = ownerId;
         this.id = config.id;
-        this.name = config.name;
         this.config = config;
         this.baseDir = path.join(baseDir, 'mounts', config.id);
         this.getLocalDatabase = getLocalDatabase;
@@ -163,6 +191,19 @@ export class Mount {
         } else {
             throw new Error(`Storage type ${config.storageType} not yet supported`);
         }
+    }
+
+    // Read live off config so a settings rename (TeamHome.updateMount) shows up without rebuilding.
+    get name(): string {
+        return this.config.name;
+    }
+
+    // Hot-swap a live settings change. Only fields that don't define the storage backend (name, quota)
+    // apply here; storageType/s3Config are bound to this.storage + uploadQueue at build time, so a
+    // storage re-point is a rebuild — Drive.updateMount handles it via removeMount + addMount.
+    applyConfig(config: MountConfig): void {
+        this.config.name = config.name;
+        this.config.maxSizeMB = config.maxSizeMB;
     }
 
     get thumbsDir(): string {
@@ -238,8 +279,9 @@ export class Mount {
             this.reindexQueue.kick();
         }
 
-        // Cleanup stale temp files older than 1 hour (e.g. from interrupted uploads or crashes)
-        this.cleanupStaleFiles(this.tmpDir, 60 * 60 * 1000);
+        // Cleanup stale temp files older than 1 hour (e.g. from interrupted uploads or crashes),
+        // but preserve any that are an open doc's crash-recovery working copy (see cleanupStaleFiles).
+        this.cleanupStaleFiles(this.tmpDir, 60 * 60 * 1000, true);
 
         // Cleanup preview cache files older than 7 days
         this.cleanupStaleFiles(this.previewsDir, 7 * 24 * 60 * 60 * 1000);
@@ -248,8 +290,10 @@ export class Mount {
         if (retentionDays > 0) {
             this.purgeTrash(retentionDays).catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
         }
-        // Off the init path — the prune's table scans shouldn't delay mount readiness
-        setTimeout(() => {
+        // Off the init path — the prune's table scans shouldn't delay mount readiness. Held so a fast
+        // teardown (idle eviction / a quick open+close) cancels it before metadata.db closes.
+        this.pruneTimer = setTimeout(() => {
+            this.pruneTimer = null;
             try {
                 this.history.prune();
             } catch (e) {
@@ -262,10 +306,28 @@ export class Mount {
         return path.join(this.baseDir, 'data');
     }
 
-    private cleanupStaleFiles(dir: string, maxAgeMs: number): void {
+    private cleanupStaleFiles(dir: string, maxAgeMs: number, preserveLivePathIds = false): void {
         try {
             const cutoff = Date.now() - maxAgeMs;
+            // An open document's working copy lives in tmpDir keyed by its data.db pathId (getTempPath).
+            // A delayed restart makes it >maxAge, but crash-recovery only adopts it when the doc is next
+            // opened — so skip any entry whose basename is a live paths.id, or the sweep deletes the last
+            // un-synced edits before recovery can run. Transient stream/upload temps use random UUID ids
+            // that are never a paths row, so they're still swept. Download temps (downloadToTemp keys by
+            // the real pathId — e.g. version-file grabs) are also preserved while their row lives: a
+            // benign bounded disk leak that clears when the row goes away (a pruned version), with no
+            // adoption hazard — version-file ids are never opened as managed docs.
+            const liveIds = preserveLivePathIds
+                ? new Set(
+                      this.db
+                          .select({ id: paths.id })
+                          .from(paths)
+                          .all()
+                          .map((r) => r.id),
+                  )
+                : null;
             for (const entry of fs.readdirSync(dir)) {
+                if (liveIds?.has(entry)) continue;
                 const filePath = path.join(dir, entry);
                 try {
                     if (fs.statSync(filePath).mtimeMs < cutoff) fs.unlinkSync(filePath);
@@ -401,6 +463,23 @@ export class Mount {
         return this.isPathBased ? name : buildStorageKey(id, name);
     }
 
+    // Insert a path row, translating the v7 unique-index violation into the SAME 409 assertUniqueName
+    // raises. assertUniqueName's SELECT still handles the friendly common case; this closes the RACE —
+    // two racers both pass the SELECT, the DB serializes their INSERTs, and the second trips the index
+    // here → 409 instead of a silent clobber.
+    // WHY not reorder to avoid the orphaned object: the storage write MUST precede the insert (crash
+    // safety — orphaned bytes beat a row pointing at missing bytes). So on the race the loser already
+    // wrote its storage object before this throws: id-based → a harmless orphaned id-keyed object (never
+    // referenced; a minor leak); path-based → the shared-path write already happened (both racers
+    // targeted the same name → same path). Leaving that is correct; reordering would break the invariant.
+    private async insertPathRow(values: typeof paths.$inferInsert): Promise<void> {
+        try {
+            await this.db.insert(paths).values(values);
+        } catch (e) {
+            rethrowDuplicateActiveName(e, values.name);
+        }
+    }
+
     private async resolveWriteKey(parentId: string, fileValue: string): Promise<string> {
         return this.isPathBased ? this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
     }
@@ -409,15 +488,9 @@ export class Mount {
         validateName(name);
         await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();
-        const mimeTypeMap: Record<string, string> = {
-            folder: DRIVE_MIME_FOLDER,
-            doc: DRIVE_MIME_DOC,
-            stickies: DRIVE_MIME_STICKIES,
-            slides: DRIVE_MIME_SLIDES,
-            sheets: DRIVE_MIME_SHEETS,
-            chat: DRIVE_MIME_CHAT,
-        };
-        const mimeType = mimeTypeMap[type] ?? DRIVE_MIME_FOLDER;
+        // Derive the container mime from the canonical registry; only plain folders
+        // have no eigendoc entry.
+        const mimeType = type === DRIVE_TYPE_FOLDER ? DRIVE_MIME_FOLDER : EIGEN_DOC_TYPE_INFO[type].mime;
         const fileValue = this.isPathBased ? name : '';
 
         // Create directory before DB insert so a crash leaves an orphaned
@@ -426,7 +499,7 @@ export class Mount {
             await this.storage.mkdir(await this.resolveWriteKey(parentId, fileValue));
         }
 
-        await this.db.insert(paths).values({
+        await this.insertPathRow({
             id: folderId,
             file: fileValue,
             name,
@@ -473,7 +546,7 @@ export class Mount {
         }
 
         const searchable = isSearchableTextFile(mimeType, name);
-        await this.db.insert(paths).values({
+        await this.insertPathRow({
             id: fileId,
             file: fileValue,
             name,
@@ -514,7 +587,7 @@ export class Mount {
         await this.uploadFromTemp(storageKey, tempId);
 
         const searchable = isSearchableTextFile(mimeType, name);
-        await this.db.insert(paths).values({
+        await this.insertPathRow({
             id: fileId,
             file: fileValue,
             name,
@@ -581,9 +654,12 @@ export class Mount {
             return created;
         }
 
-        const srcKey = await this.getStorageKey(srcPathId);
-        const srcFile = this.storage.read(srcKey);
-        if (!(await srcFile.exists())) throw new ApiError(404, 'Source file missing on storage');
+        // Freshest-first source: readFile surfaces an un-acked pending upload's staged bytes (a
+        // just-created / outage-staged data.db) rather than the possibly-stale-or-absent storage
+        // object. The container branch above flushed the doc first, so its pending staging holds the
+        // current bytes; a regular file is never staged, so this is a plain storage read for it.
+        const srcFile = await this.readFile(srcPathId);
+        if (!srcFile) throw new ApiError(404, 'Source file missing on storage');
         const tempId = randomUUID();
         const { size, hash } = await writeTempWithHash(this.getTempPath(tempId), srcFile);
         try {
@@ -636,10 +712,10 @@ export class Mount {
             // the existing one rather than failing on the duplicate name.
             const existing = await this.getChildByName(versions.id, snapshotName);
             if (existing) return existing;
-            // isRemote sources the version from the freshest LOCAL bytes and enqueues its
-            // upload (§3) — never the possibly-stale storage object copyPath would read, and
-            // never blocking close on the backend. Local backends are synchronously current,
-            // so they keep the direct copyPath.
+            // isRemote sources the version from the freshest LOCAL bytes and ENQUEUES its upload
+            // (§3), so a close-time snapshot never blocks on the backend — copyPath would instead
+            // write the new version to storage synchronously. Local backends are synchronously
+            // current, so they keep the direct copyPath.
             const copy = this.isRemote
                 ? await this.snapshotDataDbToVersionStaged(dataDb, versions.id, snapshotName)
                 : await this.copyPath(dataDb.id, versions.id, snapshotName);
@@ -681,20 +757,30 @@ export class Mount {
         return created;
     }
 
+    // The frozen staged copy of a pending (un-acked) upload for storageKey holds bytes newer than
+    // the storage object; returns its on-disk path, or null when there's nothing fresher than
+    // storage: local mounts (no queue), regular files (only managed data.db/comments.db/version
+    // snapshots are ever staged), or an already-acked upload. Synchronous, so a caller can copy the
+    // returned path with no await before a concurrent enqueue could unlink it.
+    private pendingStagedCopy(storageKey: string): string | null {
+        const staged = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
+        return staged && fs.existsSync(staged) ? staged : null;
+    }
+
     // Produce a local copy of data.db's current bytes at destPath, freshest source first.
     private async stageDataDbSnapshot(dataDbPathId: string, destPath: string): Promise<void> {
         const storageKey = await this.getStorageKey(dataDbPathId);
         // The caller (snapshotContainerDataDb) flushed the cached db first, so the pending staged
         // copy already holds the current bytes — reuse it instead of a second VACUUM INTO. Copy it
-        // SYNCHRONOUSLY: with no await between the existsSync and the copy, a concurrent enqueue
-        // can't unlink it mid-read.
-        const pendingStaging = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
-        if (pendingStaging && fs.existsSync(pendingStaging)) {
+        // SYNCHRONOUSLY: with no await between pendingStagedCopy's existsSync and the copy, a
+        // concurrent enqueue can't unlink it mid-read.
+        const pendingStaging = this.pendingStagedCopy(storageKey);
+        if (pendingStaging) {
             fs.copyFileSync(pendingStaging, destPath);
             return;
         }
-        // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which
-        // is current because every upload acked (never the stale read the old copyPath did, §3).
+        // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
+        // current because every upload acked (§3).
         const cached = this.documentDbs.get(dataDbPathId);
         if (cached) {
             (await cached()).stageCopy(destPath);
@@ -768,11 +854,15 @@ export class Mount {
             oldParentId = old?.parentId;
         }
 
+        // The name a raced rename/move would collide on: the UPDATEs below trip the v7 unique index
+        // when a same-name sibling lands between assertUniqueName's SELECT and the UPDATE. Empty only
+        // when neither name nor parent changes — then the index can't fire.
+        let targetName = updates.name ?? '';
         if (updates.name !== undefined || updates.parentId !== undefined) {
             const current = await this.getPath(pathId);
             if (current) {
                 const targetParent = updates.parentId ?? current.parentId;
-                const targetName = updates.name ?? current.name;
+                targetName = updates.name ?? current.name;
                 if (targetParent) {
                     await this.assertUniqueName(targetParent, targetName, pathId);
                 }
@@ -785,10 +875,14 @@ export class Mount {
                             if (updates.name !== undefined) {
                                 dbUpdates['file'] = targetName;
                             }
-                            await this.db
-                                .update(paths)
-                                .set({ ...dbUpdates, updatedAt: new Date() })
-                                .where(eq(paths.id, pathId));
+                            try {
+                                await this.db
+                                    .update(paths)
+                                    .set({ ...dbUpdates, updatedAt: new Date() })
+                                    .where(eq(paths.id, pathId));
+                            } catch (e) {
+                                rethrowDuplicateActiveName(e, targetName);
+                            }
                             // Invalidate before the storage rename — a rename failure
                             // here still leaves the DB updated, so the size caches must
                             // already reflect the new parent.
@@ -807,13 +901,17 @@ export class Mount {
             }
         }
 
-        await this.db
-            .update(paths)
-            .set({
-                ...dbUpdates,
-                updatedAt: new Date(),
-            })
-            .where(eq(paths.id, pathId));
+        try {
+            await this.db
+                .update(paths)
+                .set({
+                    ...dbUpdates,
+                    updatedAt: new Date(),
+                })
+                .where(eq(paths.id, pathId));
+        } catch (e) {
+            rethrowDuplicateActiveName(e, targetName);
+        }
 
         if (updates.parentId !== undefined) {
             await this.invalidateSizesFrom(oldParentId ?? null);
@@ -870,6 +968,11 @@ export class Mount {
         const pathEntry = await this.getPath(pathId);
         if (!pathEntry) return;
         if (pathEntry.parentId === null) throw new ApiError(400, 'Cannot delete root folder');
+
+        // Tear down any cached DBs under this subtree first, so a still-open dirty DB can't re-stage
+        // its now-dead key on a later tick (resurrection) and its temp/timer don't leak; the
+        // cancel()/storage.delete below then clears whatever the close flushed.
+        await this.closeCachedDbsUnder(pathId);
 
         // Delete DB records before storage cleanup. On crash between the two,
         // we get orphaned files on disk (harmless) instead of DB entries
@@ -952,6 +1055,11 @@ export class Mount {
 
         const root = await this.getRootFolder();
         if (!root) throw new ApiError(500, 'Root folder not found');
+
+        // Flush + close cached DBs BEFORE the storage rename, so their final bytes are written to the
+        // current location and then moved into .trash/ with everything else — and so no post-trash
+        // sync writes a data.db outside .trash/ (a chat's data.db is never closed by the collab path).
+        await this.closeCachedDbsUnder(pathId);
 
         return this.withPathLock(pathId, async () => {
             // Path-based storage: move file/folder to .trash/
@@ -1047,19 +1155,24 @@ export class Mount {
                 await this.storage.rename(currentKey, targetKey);
             }
 
-            // Direct DB update
+            // Direct DB update. The conflict-free restoreName was computed outside this lock, so a
+            // raced same-name create can still trip the unique index here → the same 409 as create.
             const now = new Date();
-            await this.db
-                .update(paths)
-                .set({
-                    parentId: targetParentId,
-                    trashedAt: null,
-                    trashedFrom: null,
-                    name: restoreName,
-                    ...(this.isPathBased ? { file: restoreName } : {}),
-                    updatedAt: now,
-                })
-                .where(eq(paths.id, pathId));
+            try {
+                await this.db
+                    .update(paths)
+                    .set({
+                        parentId: targetParentId,
+                        trashedAt: null,
+                        trashedFrom: null,
+                        name: restoreName,
+                        ...(this.isPathBased ? { file: restoreName } : {}),
+                        updatedAt: now,
+                    })
+                    .where(eq(paths.id, pathId));
+            } catch (e) {
+                rethrowDuplicateActiveName(e, restoreName);
+            }
 
             if (row.type !== 'file') {
                 this.restoreDescendants(pathId, now);
@@ -1163,6 +1276,17 @@ export class Mount {
 
     async readFile(pathId: string): Promise<StorageFile | null> {
         const storageKey = await this.getStorageKey(pathId);
+        // Freshest-first: an un-acked pending upload's frozen staged copy holds bytes newer than the
+        // storage object (a just-created or outage-staged data.db whose PUT hasn't landed), so serve
+        // it — copy/download must never capture stale/absent storage. A no-op for local mounts (no
+        // queue) and regular files (never staged), and once an upload acks the row is gone and storage
+        // is current. Safe for readFile's real callers: data.db is never on a hot serve path (a
+        // container-internal read gets fresher-or-equal bytes, never staler), and a regular served
+        // file is never an open doc, so pending-staging-first can't serve stale
+        // bytes. (The lazy handle races an ack that unlinks the staging file — a bounded transient
+        // read error, never data loss; snapshotting instead uses stageDataDbSnapshot's sync copy.)
+        const staged = this.pendingStagedCopy(storageKey);
+        if (staged) return Bun.file(staged);
         const file = this.storage.read(storageKey);
         if (await file.exists()) {
             return file;
@@ -1171,6 +1295,8 @@ export class Mount {
     }
 
     async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
+        // NOT freshest-first (unlike readFile): a ranged GET of a container-internal db with a pending
+        // upload reads storage. Pre-existing and container-internal-db-only; future follow-up.
         const storageKey = await this.getStorageKey(pathId);
         const probe = this.storage.read(storageKey);
         if (!(await probe.exists())) return null;
@@ -1399,12 +1525,20 @@ export class Mount {
                       // Local path-based: keep the synchronous local copy (Bun.write never 503s,
                       // and async-queuing it would only weaken its on-completion durability).
                       onSync: async () => {
+                          // Resolve the key on EVERY sync, never the once-captured one: on `local` it
+                          // is the hierarchical path, so a move/rename since open would otherwise write
+                          // data.db to the pre-move location (a zombie tree, silently rebuilt via
+                          // createPath:true) and orphan every post-move edit. A vanished row means the
+                          // doc was deleted — skip, so a stale sync can't resurrect a dead key.
+                          // (s3/local-key keys are id-stable, so this re-resolves to the same value.)
+                          if (!(await this.getPath(pathId))) return;
+                          const currentKey = await this.getStorageKey(pathId);
                           if (this.uploadQueue) {
                               const stagingPath = this.uploadQueue.newStagingPath();
                               managed.stageCopy(stagingPath);
-                              this.uploadQueue.enqueueStaged(storageKey, stagingPath);
+                              this.uploadQueue.enqueueStaged(currentKey, stagingPath);
                           } else {
-                              await this.uploadFromTemp(storageKey, pathId);
+                              await this.uploadFromTemp(currentKey, pathId);
                           }
                           await this.syncDocumentDbSize(pathId, localPath);
                           await this.markContainerContentDirty(pathId);
@@ -1468,7 +1602,42 @@ export class Mount {
         }
     }
 
+    // Flush + close every cached document DB at or below `rootId` (the container's own data.db, its
+    // comments.db, any nested doc/chat). The documentDbs cache is otherwise decoupled from row
+    // mutations — trash/delete change rows without it noticing — so a still-open dirty DB keeps its
+    // 30s timer alive and syncs data.db to the pre-mutation key: a zombie tree on `local`, a
+    // resurrected object on `s3`. Callers invoke this while the rows still exist (the walk needs
+    // them): trashPath before the storage rename so the final bytes ride into .trash/ with the rest;
+    // deletePath before the row/storage removal so cancel()/deleteDir() then clears what was flushed.
+    // Yjs collab docs are already torn down by Drive.closeCollabDocumentsRecursively; this catches
+    // the rest (chat data.db, comments.db). skipFinalSnapshot: the container is going away, and a
+    // snapshot would re-enter its path lock.
+    private async closeCachedDbsUnder(rootId: string): Promise<void> {
+        for (const id of [rootId, ...this.collectDescendantIds(rootId)]) {
+            if (this.documentDbs.has(id)) {
+                await this.closeDatabase(id, { skipFinalSnapshot: true });
+            }
+        }
+    }
+
     async closeAllDatabases(): Promise<void> {
+        // Cancel the init-scheduled history prune so a fast teardown doesn't fire it against a
+        // metadata.db the Home is about to close (the mount stops its own timers here — the same seam
+        // as the upload/reindex queues below).
+        if (this.pruneTimer) {
+            clearTimeout(this.pruneTimer);
+            this.pruneTimer = null;
+        }
+
+        // Reindex FIRST, awaiting its in-flight drain: an extract mid-await opens a doc DB via
+        // openDatabase and leaves it for the mount lifecycle to close. Draining before we snapshot
+        // documentDbs means that last-extract DB lands in the map and is closed by the pass below —
+        // closing the queue last (after the clear) would let the post-clear open leak (30s timer, fd,
+        // temp; dirty syncs into a closed metadata.db). Leftover dirty rows still replay on the next
+        // open (only the current extract is drained, not the backlog). The await is deadline-bounded
+        // so a black-holed extract can't park teardown (see ContentReindexQueue.close).
+        await this.reindexQueue?.close();
+
         const entries = [...this.documentDbs.entries()];
         this.documentDbs.clear();
         for (const [pathId, getter] of entries) {
@@ -1493,9 +1662,6 @@ export class Mount {
             }
             this.uploadQueue.close();
         }
-
-        // Leftover dirty rows replay on the next mount open (the bit is the durable queue).
-        this.reindexQueue?.close();
     }
 
     // Force-drain this mount's content reindex queue and await it. The queue otherwise self-drives
@@ -1610,6 +1776,12 @@ export class Mount {
 
     markContentIndexed(pathId: string): void {
         this.db.update(paths).set({ contentDirty: 0, contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
+    }
+
+    // A failed extract stamps the attempt time but keeps contentDirty = 1, so the cap window defers the
+    // retry to a later drain instead of dropping the doc from body search (see the reindex catch).
+    markContentIndexAttempted(pathId: string): void {
+        this.db.update(paths).set({ contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
     }
 
     searchPaths(opts: { q: string; limit: number }): DrivePath[] {

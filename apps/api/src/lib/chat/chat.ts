@@ -378,12 +378,14 @@ export class ChatRoom {
             .where(eq(schema.messages.id, messageId));
 
         if (existing.attachments) {
-            for (const attachment of existing.attachments) {
-                if (typeof attachment !== 'string') continue;
-                try {
-                    await this.drive.deletePath(this.path.mountId, attachment);
-                } catch {
-                    // attachment may already be deleted
+            // Attachment strings are file names in this chat's own media/ folder; resolve within it
+            // so a crafted pathId can't trash arbitrary owner-writable paths elsewhere in the mount.
+            const mediaFolder = await this.drive.getChildByName(this.path.mountId, this.path.id, 'media');
+            if (mediaFolder) {
+                for (const attachment of existing.attachments) {
+                    if (typeof attachment !== 'string') continue;
+                    const media = await this.drive.getChildByName(this.path.mountId, mediaFolder.id, attachment);
+                    if (media) await this.drive.deletePath(this.path.mountId, media.id);
                 }
             }
         }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, ConditionalFormatRule, Sheet } from '@workspace/lib/sheets';
-import { renderSheetsHtml } from '../lib/export/sheets/html';
+import { getSheetContentSize, renderSheetsHtml } from '../lib/export/sheets/html';
 
 // Build a Sheet with both `data` (matrix form, required by the CF engine) and `celldata`
 // (sparse form, what the renderer iterates). The sheet Workbook keeps both
@@ -346,5 +346,83 @@ describe('Sheets HTML export — hyperlinks', () => {
         expect(html).not.toContain('javascript:');
         expect(html).toContain('click me');
         expect(html).toContain('go to sheet');
+    });
+});
+
+// Cell colors come from the sheet snapshot (schemaless — a collaborator can set any string).
+// Like the font-family case above, they must not break out of the style="…" attribute.
+describe('Sheets HTML export — color escaping', () => {
+    test('escapes fc and bg so they cannot break out of the style attribute', () => {
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: 'red;"><script>alert(1)</script>', bg: 'blue">' } }]);
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&lt;script');
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes conditional-format colors', () => {
+        const sheet = makeSheet(
+            [{ r: 0, c: 0, v: { v: 50, ct: { t: 'n', fa: 'General' } } }],
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { textColor: '#ffffff', cellColor: 'red;"><script>alert(1)</script>' },
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: [10],
+                },
+            ],
+        );
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes border colors', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: { v: 'x' } }]),
+            config: {
+                borderInfo: [
+                    {
+                        rangeType: 'cell',
+                        value: { row_index: 0, col_index: 0, b: { style: 1, color: 'red;"><script>x</script>' } },
+                    },
+                ],
+            },
+        };
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&quot;');
+    });
+
+    test('escapes dataBar colors', () => {
+        const sheet = makeSheet(
+            [
+                { r: 0, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
+                { r: 1, c: 0, v: { v: 20, ct: { t: 'n', fa: 'General' } } },
+            ],
+            [{ type: 'dataBar', cellrange: [{ row: [0, 1], column: [0, 0] }], format: ['red;"><script>x</script>'] }],
+        );
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('&quot;');
+    });
+});
+
+describe('Sheets export — content size (@page)', () => {
+    test('non-numeric dimensions fall back to the defaults instead of concatenating', () => {
+        const sheet = makeSheet([
+            { r: 0, c: 0, v: { v: 'a', ct: { t: 's', fa: 'General' } } },
+            { r: 1, c: 1, v: { v: 'b', ct: { t: 's', fa: 'General' } } },
+        ]);
+        // The dimension maps are schemaless at the Yjs boundary — a collaborator can store strings.
+        sheet.config = {
+            columnlen: { 0: '50;}@page{' as unknown as number, 1: 100 },
+            rowlen: { 0: 25, 1: 'abc' as unknown as number },
+        };
+        // Pre-coercion this summed to the string "050;}@page{100", headed for the <head> @page CSS.
+        // Bad column → DEFAULT_COL_WIDTH (73), bad row → DEFAULT_ROW_HEIGHT (19).
+        expect(getSheetContentSize(sheet)).toEqual({ width: 73 + 100, height: 25 + 19 });
     });
 });

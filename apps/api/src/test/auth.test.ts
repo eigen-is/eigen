@@ -36,10 +36,24 @@ describe('Auth', () => {
         expect(response.status).not.toBe(200);
     });
 
-    test('authenticated request for unknown drive owner returns 404', async () => {
+    test('authenticated request for a malformed drive owner returns 400', async () => {
+        // 'non-existent-owner' isn't a valid ownerId shape (not a 32-char id / team_/org_ prefix),
+        // so parseOwnerId flags it invalid and the route rejects the bad request (was a 404 before
+        // the audit finding-26 fix, which made a malformed id a 400 instead of a not-found).
         const response = await authedRequest(ctx.alice.user.sessionToken, '/drive/non-existent-owner/mounts');
 
-        expect(response.status).toBe(404);
+        expect(response.status).toBe(400);
+    });
+
+    test('authenticated request for a well-formed but unowned drive owner is not a 400', async () => {
+        // A valid-shaped id Alice doesn't own passes parseOwnerId (so no 400) and is rejected by the
+        // access/existence check instead — confirms finding-26's 400 only catches malformed ids.
+        const response = await authedRequest(
+            ctx.alice.user.sessionToken,
+            '/drive/00000000000000000000000000000000/mounts',
+        );
+
+        expect([403, 404]).toContain(response.status);
     });
 
     test('Alice can access authenticated routes', async () => {

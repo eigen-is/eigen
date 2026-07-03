@@ -393,12 +393,6 @@ export default class SharedDrive {
         return this.sharedDrive.movePath(mountId, pathId, targetParentId, this.user);
     }
 
-    public async isSelfOrDescendant(mountId: string, ancestorId: string, candidateId: string): Promise<boolean> {
-        return this.withReadPermission(mountId, ancestorId, () =>
-            this.sharedDrive.isSelfOrDescendant(mountId, ancestorId, candidateId),
-        );
-    }
-
     public async breadCrumb(mountId: string, pathId: string) {
         const bread = await this.sharedDrive.breadCrumb(mountId, pathId);
         const memberships = await this.getUserMemberships();
@@ -417,24 +411,14 @@ export default class SharedDrive {
         return crumb.reverse();
     }
 
+    // Opening a container's managed DB (comments.db, data.db) reads that path, so gate at read
+    // granularity — the seam's contract is "present on SharedDrive == ACL-checked".
     public async openDatabase<S extends SchemaType>(
         mountId: string,
         config: DatabaseConfig<S>,
         pathId: string,
     ): Promise<ManagedDatabase<S>> {
-        return this.sharedDrive.openDatabase(mountId, config, pathId);
-    }
-
-    public async createDatabase<S extends SchemaType>(
-        mountId: string,
-        config: DatabaseConfig<S>,
-        pathId: string,
-    ): Promise<ManagedDatabase<S>> {
-        return this.sharedDrive.createDatabase(mountId, config, pathId);
-    }
-
-    public async closeDatabase(mountId: string, pathId: string): Promise<void> {
-        return this.sharedDrive.closeDatabase(mountId, pathId);
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.openDatabase(mountId, config, pathId));
     }
 
     public async listVersions(mountId: string, containerId: string): Promise<Snapshot[]> {

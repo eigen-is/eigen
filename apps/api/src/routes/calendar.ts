@@ -1,4 +1,9 @@
-import type { CalendarItem, CalendarShare, FreeBusyBlock } from '@workspace/lib/types/calendar';
+import type {
+    CalendarEventOccurrence,
+    CalendarItem,
+    CalendarShare,
+    FreeBusyBlock,
+} from '@workspace/lib/types/calendar';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError } from '../lib/core';
@@ -141,7 +146,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // included here — they're fetched via the calId-scoped event-range below.
     .get(
         '/calendar/:ownerId/event-range/:from/:to',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<CalendarEventOccurrence[]> => {
             requireNonGuest(user);
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.getEventsInRange(new Date(params.from * 1000), new Date(params.to * 1000));
@@ -154,7 +159,9 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .get(
         '/calendar/:ownerId/calendars/:calId/event-range/:from/:to',
-        async ({ params, user }) => {
+        // Union return is intentional: free-busy callers get the redacted FreeBusyBlock shape (privacy
+        // boundary below), everyone else the full events. The explicit annotation stabilises the Eden type.
+        async ({ params, user }): Promise<CalendarEventOccurrence[] | FreeBusyBlock[]> => {
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             const events = await pullEventsInRange(
@@ -202,7 +209,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            return updateEventAt(params.ownerId, params.id, body, user);
+            return updateEventAt(params.ownerId, params.calId, params.id, body, user);
         },
         { body: UpdateEventSchema, auth: true },
     )
@@ -213,7 +220,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            await deleteEventAt(params.ownerId, params.id, user);
+            await deleteEventAt(params.ownerId, params.calId, params.id, user);
             return { success: true };
         },
         { auth: true },

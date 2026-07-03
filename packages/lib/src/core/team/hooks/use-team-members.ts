@@ -1,6 +1,7 @@
 import { type QueryClient, useQuery } from '@tanstack/react-query';
 import { teamApi } from '@workspace/lib/api';
 import { teamOwnerId } from '@workspace/lib/types';
+import { AppError } from '../../api-error';
 import { teamKeys } from './use-team-settings';
 
 export function useTeamMembers(teamId: string | undefined) {
@@ -8,7 +9,8 @@ export function useTeamMembers(teamId: string | undefined) {
         queryKey: teamKeys.members(teamId ?? ''),
         queryFn: async () => {
             const res = await teamApi({ ownerId: teamOwnerId(teamId!) }).members.get();
-            return res.data ?? [];
+            if (res.error) throw new AppError(res);
+            return res.data;
         },
         enabled: !!teamId,
         staleTime: 2 * 60 * 1000,

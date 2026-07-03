@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { getUniqueFileName } from '../lib/drive/naming';
+import { CONTENT_REINDEX_CAP_SECONDS, ContentReindexQueue } from '../lib/mount/content-reindex-queue';
 import { buildStorageKey, createDefaultMountConfig, Mount } from '../lib/mount/mount';
 import { LocalStorage } from '../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../lib/versioning/retention';
@@ -435,6 +437,10 @@ describe('Name validation', () => {
 
     test('rejects name with null byte', async () => {
         expect(mount.createFolder(rootId, 'a\0b')).rejects.toThrow('Invalid file or folder name');
+    });
+
+    test('rejects name with control character', async () => {
+        expect(mount.createFolder(rootId, 'a\x01b')).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects .. as file name', async () => {
@@ -1528,5 +1534,54 @@ describe('content index dirty marks', () => {
         expect(mount.getContentDirtyPaths(0, 100).map((p) => p.id)).toContain(txt);
         mount.markContentIndexed(txt);
         expect(mount.getContentDirtyPaths(120, 100).map((p) => p.id)).not.toContain(txt);
+    });
+});
+
+describe('content reindex failure handling', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-reindex-retry', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        rootId = (await mount.getRootFolder())!.id;
+    });
+
+    // A transient extract failure (S3 503/hiccup) must NOT clear the dirty bit — otherwise the doc is
+    // dropped from body search until its next write. The failed attempt only stamps contentIndexedAt so
+    // the 2-min cap defers the retry; a later successful drain then indexes it and clears the bit.
+    test('a failed extract keeps the path dirty; a later success indexes it and clears the bit', async () => {
+        const txt = await mount.createFile(rootId, 'reindex-retry.txt', 'text/plain', 0, undefined);
+
+        let shouldThrow = true;
+        const queue = new ContentReindexQueue({
+            mount,
+            label: 'retry-test',
+            extract: async () => {
+                if (shouldThrow) throw new Error('transient extract failure');
+                return 'flibberretry body text';
+            },
+        });
+
+        // Transient failure: the bit must survive (negative cap bypasses the window → returned iff dirty).
+        await queue.drain();
+        expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).toContain(txt);
+        // The failed attempt stamped contentIndexedAt, so within the cap window the row is deferred —
+        // still owed (dirty), but not due: no hot-spin on a persistently failing extract.
+        expect(mount.getContentDirtyPaths(CONTENT_REINDEX_CAP_SECONDS, 100).map((p) => p.id)).not.toContain(txt);
+        expect(mount.searchPaths({ q: 'flibberretry', limit: 20 }).some((h) => h.id === txt)).toBe(false);
+
+        // Production retries once the 2-min cap elapses; age the attempt stamp so the drain sees the row
+        // as due without a real wall-clock wait.
+        const { db } = mount as unknown as { db: { run: (query: SQL) => unknown } };
+        db.run(sql`UPDATE paths SET contentIndexedAt = 0 WHERE id = ${txt}`);
+
+        // Retry succeeds: the body indexes and the bit is finally cleared.
+        shouldThrow = false;
+        await queue.drain();
+        await queue.close();
+        expect(mount.searchPaths({ q: 'flibberretry', limit: 20 }).some((h) => h.id === txt)).toBe(true);
+        expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).not.toContain(txt);
     });
 });

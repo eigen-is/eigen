@@ -26,7 +26,8 @@ export function useContacts() {
         queryKey: contactKeys.lists(ownerId),
         queryFn: async () => {
             const response = await contactsApi({ ownerId }).contacts.get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 5 * 60 * 1000, // 5 minutes
         enabled: !!ownerId && !isGuest,
@@ -109,7 +110,8 @@ export function useMeContact() {
         queryKey: contactKeys.me(ownerId),
         queryFn: async () => {
             const response = await contactsApi({ ownerId }).me.get();
-            return response.data ?? null;
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!ownerId,
         staleTime: 5 * 60 * 1000, // 5 minutes

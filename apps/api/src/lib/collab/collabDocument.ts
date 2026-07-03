@@ -317,6 +317,23 @@ export default class CollabDocument {
         }
     }
 
+    // Read is checked only when a connection opens (routes/collab.ts), whereas write is
+    // re-checked per message. Enforcing read here on an ACL change restores the symmetry:
+    // a user whose read was revoked is dropped from the live doc immediately, instead of
+    // receiving broadcasts until they happen to disconnect. Called by Drive.updateACL.
+    public async enforceReadAccess() {
+        if (this.closed) {
+            return;
+        }
+        // Snapshot: unsubscribe() mutates `connections` while we iterate.
+        for (const [conn, user] of [...this.connections]) {
+            if (!(await this.drive.canRead(this.path.mountId, this.path.id, user))) {
+                conn.close(1008, 'Access revoked');
+                this.unsubscribe(user, conn);
+            }
+        }
+    }
+
     public handleMessage(conn: ServerWebSocket<undefined>, update: Uint8Array, canWrite: boolean) {
         if (this.closed) {
             return;

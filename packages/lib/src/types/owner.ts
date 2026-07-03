@@ -1,6 +1,6 @@
 import { validateEmailAddress } from '../validation';
 
-export type OwnerType = 'user' | 'team' | 'org' | 'external';
+export type OwnerType = 'user' | 'team' | 'org' | 'external' | 'invalid';
 
 export type ParsedOwnerId = { type: OwnerType; id: string };
 
@@ -32,7 +32,10 @@ export function parseOwnerId(ownerId: string): ParsedOwnerId {
     // and may contain alphanumeric characters beyond hex. Do not restrict to [a-f].
     const uuidRegex = /^[0-9a-fA-Z]{32}$/i;
     if (!uuidRegex.test(id)) {
-        return { type: 'user', id: '' };
+        // Garbage owner id: flag it as `invalid` so route guards can 400 instead of
+        // 404. `id: ''` is preserved because callers also detect invalidity via that
+        // sentinel (validation/acl.ts, use-public.ts).
+        return { type: 'invalid', id: '' };
     }
 
     return { id, type };

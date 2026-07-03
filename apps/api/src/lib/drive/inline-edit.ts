@@ -59,6 +59,8 @@ export function prepareSaveContent(
         return { conflict: true, currentUpdatedAt: path.updatedAt };
     }
 
-    const fullContent = reattachFrontmatter(content, frontmatter);
-    return { conflict: false, data: Buffer.from(fullContent, 'utf-8') };
+    const data = Buffer.from(reattachFrontmatter(content, frontmatter), 'utf-8');
+    // Same cap as the read side (getEditableContent) — a save past it would open a 413 next time.
+    if (data.length > MAX_INLINE_EDIT_SIZE) throw new ApiError(413, 'File too large for inline editing');
+    return { conflict: false, data };
 }

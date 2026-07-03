@@ -13,12 +13,12 @@ import {
     FormulaEngine,
     functionCopy,
 } from '@workspace/sheet/engine';
-import DOMPurify from 'isomorphic-dompurify';
 import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import type { RenderMode } from '../render-types';
+import { sanitizeExportHtml } from '../sanitize';
 import { resolveFontFamily } from './fonts';
 
 const DEFAULT_COL_WIDTH = 73;
@@ -73,7 +73,7 @@ export async function generateSheetsExportHtml(mount: Mount, drivePath: DrivePat
     const bodyHtml = renderSheetsHtml(sheets);
     // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
     // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.
-    const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true, ADD_ATTR: ['target'] });
+    const sanitized = sanitizeExportHtml(bodyHtml, { ADD_ATTR: ['target'] });
     return wrapInDocument(title, sanitized);
 }
 
@@ -124,16 +124,20 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
     if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
 
+    // The dimension maps are schemaless at the Yjs boundary — coerce so a stray string can never
+    // concatenate itself into the un-sanitized @page CSS that pdf.ts derives from this size.
     let width = 0;
     for (let c = minCol; c <= maxCol; c++) {
         if (config.colhidden?.[c]) continue;
-        width += config.columnlen?.[c] ?? DEFAULT_COL_WIDTH;
+        const w = Number(config.columnlen?.[c] ?? DEFAULT_COL_WIDTH);
+        width += Number.isFinite(w) ? w : DEFAULT_COL_WIDTH;
     }
 
     let height = 0;
     for (let r = minRow; r <= maxRow; r++) {
         if (config.rowhidden?.[r]) continue;
-        height += config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT;
+        const h = Number(config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT);
+        height += Number.isFinite(h) ? h : DEFAULT_ROW_HEIGHT;
     }
 
     return { width, height };
@@ -266,6 +270,9 @@ function getCellDisplay(v: Cell | null): string {
 // inherited here for visual parity. Diverging would mean the export differs from what
 // users see on screen.
 function renderDataBar(bar: DataBar, display: string): string {
+    // Bar colors come from the schemaless rule format — escape like every other cell color.
+    const from = escapeHtml(bar.format[0]);
+    const to = bar.format.length > 1 ? escapeHtml(bar.format[1]) : '';
     let left: number;
     let width: number;
     let fill: string;
@@ -276,12 +283,12 @@ function renderDataBar(bar: DataBar, display: string): string {
     } else if (bar.plusLen === 1) {
         left = 0;
         width = bar.valueLen * 100;
-        fill = bar.format.length > 1 ? `linear-gradient(to right, ${bar.format[0]}, ${bar.format[1]})` : bar.format[0];
+        fill = bar.format.length > 1 ? `linear-gradient(to right, ${from}, ${to})` : from;
     } else {
         // Mixed range, positive value: bar starts at the zero line (minusLen) and extends right.
         left = bar.minusLen * 100;
         width = bar.plusLen * bar.valueLen * 100;
-        fill = bar.format.length > 1 ? `linear-gradient(to right, ${bar.format[0]}, ${bar.format[1]})` : bar.format[0];
+        fill = bar.format.length > 1 ? `linear-gradient(to right, ${from}, ${to})` : from;
     }
 
     const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
@@ -308,16 +315,18 @@ function buildCellStyle(
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
         if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);
-        // CF colors override the static `fc`/`bg` fields, matching the canvas painter.
+        // CF colors override the static `fc`/`bg` fields, matching the canvas painter. Every
+        // color is escaped (like font-family above) — schemaless cell strings must not break
+        // out of the style="…" attribute.
         if (cfStyle?.textColor) {
-            parts.push(`color:${cfStyle.textColor}`);
+            parts.push(`color:${escapeHtml(cfStyle.textColor)}`);
         } else if (v.fc) {
-            parts.push(`color:${v.fc}`);
+            parts.push(`color:${escapeHtml(v.fc)}`);
         }
         if (cfStyle?.cellColor) {
-            parts.push(`background:${cfStyle.cellColor}`);
+            parts.push(`background:${escapeHtml(cfStyle.cellColor)}`);
         } else if (v.bg) {
-            parts.push(`background:${v.bg}`);
+            parts.push(`background:${escapeHtml(v.bg)}`);
         }
         // Rotated cells skip ht/vt — the rotated span is absolutely-positioned in the
         // cell (see wrapForRotation) so neither alignment property has anything to act
@@ -339,8 +348,8 @@ function buildCellStyle(
     } else if (cfStyle) {
         // CF can land on a cell with no `v` (engine still emits an entry for empty cells in some
         // rules); render its color overrides without dragging in the v-block defaults.
-        if (cfStyle.textColor) parts.push(`color:${cfStyle.textColor}`);
-        if (cfStyle.cellColor) parts.push(`background:${cfStyle.cellColor}`);
+        if (cfStyle.textColor) parts.push(`color:${escapeHtml(cfStyle.textColor)}`);
+        if (cfStyle.cellColor) parts.push(`background:${escapeHtml(cfStyle.cellColor)}`);
     }
 
     if (borders) {
@@ -429,7 +438,7 @@ function buildBorderMap(borderInfo?: BorderInfo[]): Map<string, { l?: string; r?
 
 function borderSideToCSS(side: { style: number; color: string }): string {
     const css = BORDER_STYLE_CSS[side.style] ?? '1px solid';
-    return `${css} ${side.color}`;
+    return `${css} ${escapeHtml(side.color)}`;
 }
 
 function hasVisibleContent(v: Cell | null): boolean {

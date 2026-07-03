@@ -14,7 +14,8 @@ export function useNotifications(ownerId: string, enabled: boolean = true) {
         queryKey: notificationKeys.list(ownerId),
         queryFn: async () => {
             const response = await notificationApi({ ownerId }).get({ query: { limit: 50 } });
-            return response.data ?? [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!ownerId && enabled,
         staleTime: 60_000,
@@ -26,7 +27,8 @@ export function useUnreadNotificationCount(ownerId: string) {
         queryKey: notificationKeys.unreadCount(ownerId),
         queryFn: async () => {
             const response = await notificationApi({ ownerId })['unread-count'].get();
-            return response.data?.count ?? 0;
+            if (response.error) throw new AppError(response);
+            return response.data.count;
         },
         enabled: !!ownerId,
         staleTime: 60_000,

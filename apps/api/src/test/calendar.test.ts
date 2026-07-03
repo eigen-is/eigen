@@ -1064,6 +1064,99 @@ describe('Calendar', () => {
         });
     });
 
+    describe('Cross-calendar write escalation (IDOR)', () => {
+        let sharedCalId: string; // calendar A — Bob has write
+        let privateCalId: string; // calendar B — Bob has no access
+        let privateEventId: string;
+
+        beforeAll(async () => {
+            const aRes = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'IDOR Shared A', color: '#ea4335' }),
+            });
+            sharedCalId = (await assertJson<CalendarItem>(aRes)).id;
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalId}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shares: [{ targetId: ctx.bob.user.email, permission: 'write' }] }),
+                },
+            );
+
+            const bRes = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'IDOR Private B', color: '#4285f4' }),
+            });
+            privateCalId = (await assertJson<CalendarItem>(bRes)).id;
+            const evRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${privateCalId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Alice Private Event',
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
+                        allDay: false,
+                    }),
+                },
+            );
+            privateEventId = (await assertJson<CalendarEvent>(evRes)).id;
+        });
+
+        test('write-share on A cannot update an event living in B', async () => {
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalId}/events/${privateEventId}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Hijacked' }),
+                },
+            );
+            expect(res.status).toBe(404);
+        });
+
+        test('write-share on A cannot delete an event living in B', async () => {
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalId}/events/${privateEventId}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(404);
+        });
+
+        test('the B event is untouched after the escalation attempts', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${privateCalId}/event-range/1741737600/1741824000`,
+            );
+            const events = await assertJson<CalendarEventOccurrence[]>(res);
+            const evt = findOrFail(events, (e) => e.id === privateEventId);
+            expect(evt.title).toBe('Alice Private Event');
+        });
+
+        test('the owner can still edit the event via its own calId', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${privateCalId}/events/${privateEventId}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Alice Private Event Edited' }),
+                },
+            );
+            expect(res.status).toBe(200);
+            const updated = await assertJson<CalendarEvent>(res);
+            expect(updated.title).toBe('Alice Private Event Edited');
+        });
+    });
+
     describe('Cross-user isolation', () => {
         test('Bob calendars are separate from Alice', async () => {
             const aliceRes = await authedRequest(
@@ -1537,6 +1630,249 @@ describe('Calendar', () => {
             );
             const event = await assertJson<CalendarEvent>(res);
             expect(event.rrule).toBe('FREQ=DAILY;COUNT=5');
+        });
+    });
+
+    describe('Regression: recurrence DoS bounds (finding 19)', () => {
+        const subDailyBody = (rrule: string) => ({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: `DoS ${rrule}`,
+                startTime: new Date(1741773600 * 1000),
+                endTime: new Date(1741777200 * 1000),
+                allDay: false,
+                rrule,
+            }),
+        });
+
+        test('create event with FREQ=SECONDLY returns 400', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                subDailyBody('FREQ=SECONDLY'),
+            );
+            expect(res.status).toBe(400);
+        });
+
+        test('create event with FREQ=MINUTELY returns 400', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                subDailyBody('FREQ=MINUTELY;INTERVAL=5'),
+            );
+            expect(res.status).toBe(400);
+        });
+
+        test('create event with FREQ=HOURLY returns 400', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                subDailyBody('FREQ=HOURLY'),
+            );
+            expect(res.status).toBe(400);
+        });
+
+        test('update event to FREQ=SECONDLY returns 400', async () => {
+            const createRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'DoS update target',
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
+                        allDay: false,
+                    }),
+                },
+            );
+            const event = await assertJson<CalendarEvent>(createRes);
+            const updateRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${event.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rrule: 'FREQ=SECONDLY' }),
+                },
+            );
+            expect(updateRes.status).toBe(400);
+        });
+
+        // A recurring event whose dtstart is far outside the sane range (1900-2200) makes rrule
+        // iterate dtstart→window even at an allowed frequency (~seconds of event-loop stall) —
+        // reject it at the write boundary like the sub-daily frequencies.
+        test('create recurring event with a far-out-of-range dtstart returns 400', async () => {
+            const rangeBody = (startIso: string, endIso: string) => ({
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'DoS out-of-range dtstart',
+                    startTime: new Date(startIso),
+                    endTime: new Date(endIso),
+                    allDay: false,
+                    rrule: 'FREQ=DAILY',
+                }),
+            });
+            const ancient = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                rangeBody('1000-01-01T09:00:00Z', '1000-01-01T10:00:00Z'),
+            );
+            expect(ancient.status).toBe(400);
+            const farFuture = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                rangeBody('9999-01-01T09:00:00Z', '9999-01-01T10:00:00Z'),
+            );
+            expect(farFuture.status).toBe(400);
+        });
+
+        test('update moving a recurring event start out of range returns 400', async () => {
+            const createRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Range update target',
+                        startTime: new Date('2027-03-01T09:00:00Z'),
+                        endTime: new Date('2027-03-01T10:00:00Z'),
+                        allDay: false,
+                        rrule: 'FREQ=DAILY;COUNT=5',
+                    }),
+                },
+            );
+            const event = await assertJson<CalendarEvent>(createRes);
+            const updateRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${event.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        startTime: new Date('1000-01-01T09:00:00Z'),
+                        endTime: new Date('1000-01-01T10:00:00Z'),
+                    }),
+                },
+            );
+            expect(updateRes.status).toBe(400);
+        });
+
+        test('update adding an rrule to a far-out-of-range single event returns 400', async () => {
+            // A single (non-recurring) event may sit anywhere in time — only pairing it with an
+            // rrule creates the iterate-to-window vector.
+            const createRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Ancient single event',
+                        startTime: new Date('1000-01-01T09:00:00Z'),
+                        endTime: new Date('1000-01-01T10:00:00Z'),
+                        allDay: false,
+                    }),
+                },
+            );
+            const event = await assertJson<CalendarEvent>(createRes);
+            const updateRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${event.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rrule: 'FREQ=DAILY' }),
+                },
+            );
+            expect(updateRes.status).toBe(400);
+        });
+
+        test('normal weekly recurrence still returns every occurrence (no regression)', async () => {
+            const calRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'DoS Weekly Cal', color: '#00aa88' }),
+                },
+            );
+            const cal = await assertJson<CalendarItem>(calRes);
+
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${cal.id}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'DoS Weekly',
+                        startTime: new Date('2027-01-04T09:00:00Z'), // Monday
+                        endTime: new Date('2027-01-04T10:00:00Z'),
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY;BYDAY=MO;COUNT=52',
+                    }),
+                },
+            );
+
+            const from = Math.floor(new Date('2027-01-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2027-12-31T23:59:59Z').getTime() / 1000);
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${cal.id}/event-range/${from}/${to}`,
+            );
+            const events = await assertJson<CalendarEventOccurrence[]>(res);
+            const weekly = events.filter((e) => e.title === 'DoS Weekly');
+            // All 52 occurrences must survive the count cap + window clamp untouched.
+            expect(weekly.length).toBe(52);
+        });
+
+        test('an over-wide window is clamped so expansion stays bounded', async () => {
+            const calRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'DoS Clamp Cal', color: '#aa0088' }),
+                },
+            );
+            const cal = await assertJson<CalendarItem>(calRes);
+
+            // Unbounded DAILY rule (no COUNT/UNTIL) — the allowed-frequency vector.
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${cal.id}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'DoS Daily',
+                        startTime: new Date('2030-01-01T09:00:00Z'),
+                        endTime: new Date('2030-01-01T10:00:00Z'),
+                        allDay: false,
+                        rrule: 'FREQ=DAILY',
+                    }),
+                },
+            );
+
+            const from = Math.floor(new Date('2030-01-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2038-01-01T00:00:00Z').getTime() / 1000); // 8-year span
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${cal.id}/event-range/${from}/${to}`,
+            );
+            const events = await assertJson<CalendarEventOccurrence[]>(res);
+            const daily = events.filter((e) => e.title === 'DoS Daily');
+            // Window clamped to ~5 years: bounded count and nothing near the requested 8-year edge.
+            expect(daily.length).toBeGreaterThan(1500);
+            expect(daily.length).toBeLessThan(2100);
+            expect(daily.every((e) => e.occurrenceDate < '2036-01-01')).toBe(true);
         });
     });
 });

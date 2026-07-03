@@ -3,9 +3,10 @@ import { externalOwnerId, isExternalOwnerId, orgOwnerId, parseOwnerId, teamOwner
 
 const ALNUM_32 = 'abcdef0123456789ABCDEFghijklmnop';
 
-// `parseOwnerId` is silent on invalid input — returns `{type:'user', id:''}` rather than
+// `parseOwnerId` is silent on invalid input — returns `{type:'invalid', id:''}` rather than
 // throwing. Many frontend hooks call it with empty/loading values and rely on that
-// fallthrough; consumers detect "invalid" by checking `parsed.id === ''`.
+// fallthrough; consumers detect "invalid" via the `type: 'invalid'` discriminant or the
+// preserved `parsed.id === ''` sentinel.
 describe('parseOwnerId', () => {
     test('plain 32-char alphanumeric → user', () => {
         expect(parseOwnerId(ALNUM_32)).toEqual({ type: 'user', id: ALNUM_32 });
@@ -30,13 +31,13 @@ describe('parseOwnerId', () => {
         });
     });
 
-    test('invalid input returns id:"" silently (no throw)', () => {
-        expect(parseOwnerId('')).toEqual({ type: 'user', id: '' });
-        expect(parseOwnerId('abc')).toEqual({ type: 'user', id: '' });
-        expect(parseOwnerId(`${ALNUM_32}x`)).toEqual({ type: 'user', id: '' });
-        expect(parseOwnerId('abcdef0123_56789abcdef0123456789')).toEqual({ type: 'user', id: '' });
-        expect(parseOwnerId('abcdef0123-56789abcdef0123456789')).toEqual({ type: 'user', id: '' });
-        expect(parseOwnerId('team_abcdef0123_56789abcdef0123')).toEqual({ type: 'user', id: '' });
+    test('invalid input returns type:"invalid", id:"" silently (no throw)', () => {
+        expect(parseOwnerId('')).toEqual({ type: 'invalid', id: '' });
+        expect(parseOwnerId('abc')).toEqual({ type: 'invalid', id: '' });
+        expect(parseOwnerId(`${ALNUM_32}x`)).toEqual({ type: 'invalid', id: '' });
+        expect(parseOwnerId('abcdef0123_56789abcdef0123456789')).toEqual({ type: 'invalid', id: '' });
+        expect(parseOwnerId('abcdef0123-56789abcdef0123456789')).toEqual({ type: 'invalid', id: '' });
+        expect(parseOwnerId('team_abcdef0123_56789abcdef0123')).toEqual({ type: 'invalid', id: '' });
     });
 
     test('helpers round-trip with parseOwnerId', () => {

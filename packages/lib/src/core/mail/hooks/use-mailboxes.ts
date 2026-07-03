@@ -1,6 +1,7 @@
 import { type QueryClient, useQuery } from '@tanstack/react-query';
 import { mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { AppError } from '../../api-error';
 
 export const mailboxKeys = {
     all: ['mailboxes'] as const,
@@ -17,7 +18,8 @@ export function useMailboxes() {
         queryKey: mailboxKeys.lists(ownerId),
         queryFn: async () => {
             const response = await mailApi({ ownerId }).mailboxes.get();
-            return response.data || [];
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         staleTime: 1 * 60 * 1000, // 1 minute
         retry: 1,

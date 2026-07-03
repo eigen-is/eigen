@@ -14,7 +14,8 @@ export function useServerS3Config() {
         queryKey: s3ConfigKeys.all,
         queryFn: async () => {
             const res = await settingsApi.s3config.get();
-            return res.data || null;
+            if (res.error) throw new AppError(res);
+            return res.data;
         },
         staleTime: 5 * 60 * 1000,
     });

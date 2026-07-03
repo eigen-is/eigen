@@ -6,6 +6,7 @@ import {
     type MountConfig,
     type MountInfo,
     type MountSettings,
+    mountStorageIdentity,
     parseOwnerId,
 } from '@workspace/lib/types';
 import {
@@ -142,6 +143,32 @@ export default class Drive {
         }
     }
 
+    // Called by: TeamHome.updateMount (routed via PUT /team/:ownerId/mount/:mountId). Pushes a
+    // persisted mount-settings change onto the live mount so a new quota/name/enabled/storage
+    // config takes effect on this Home without waiting for an evict + reload. Not route-callable
+    // directly.
+    async updateMount(config: MountConfig, enabled: boolean): Promise<void> {
+        const live = this.mounts.get(config.id);
+        if (!enabled) {
+            if (live) await this.removeMount(config.id);
+            return;
+        }
+        if (!live) {
+            await this.addMount(config);
+            return;
+        }
+        // storageType/s3Config are bound to the Mount's storage backend + upload queue at build
+        // time, so a storage re-point is a real re-mount: removeMount's closeAllDatabases syncs
+        // open docs out against the old backend, and addMount's init() replays any pending
+        // uploads onto the new one via uploadQueue.reconcile().
+        if (mountStorageIdentity(live.config) !== mountStorageIdentity(config)) {
+            await this.removeMount(config.id);
+            await this.addMount(config);
+            return;
+        }
+        live.applyConfig(config);
+    }
+
     async removeMount(mountId: string): Promise<void> {
         if (mountId === this.defaultMountId) {
             throw new ApiError(400, 'Cannot remove default mount');
@@ -231,6 +258,11 @@ export default class Drive {
 
     async create(mountId: string, parentId: string, name: string, type: EigenDocType, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
+        const parent = await mount.getActivePath(parentId);
+        if (!isContainerType(parent.type)) {
+            throw new ApiError(404, 'Parent folder not found');
+        }
+
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
@@ -568,12 +600,12 @@ export default class Drive {
                 verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(pathId))],
             });
         }
+        // Re-parenting OUT of a shared subtree revokes read for users who had it only via
+        // the old ancestor chain, exactly like an ACL change, so enforce it the same way
+        // (P2-8). Runs after updatePath/side-effects so canRead sees the new chain and the
+        // move can't be undone; NO-OP when read is kept/widened; local close (owner-scoped).
+        await this.enforceReadAccessRecursively(mountId, pathId);
         return movedPath;
-    }
-
-    // Guards copy/move against subtree cycles.
-    async isSelfOrDescendant(mountId: string, ancestorId: string, candidateId: string): Promise<boolean> {
-        return this.getMount(mountId).isSelfOrDescendant(ancestorId, candidateId);
     }
 
     async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
@@ -586,9 +618,13 @@ export default class Drive {
         }
 
         await mount.updatePath(pathId, { name: newName });
-        await propagateACLChange(item, item.acl, item.acl, null);
         const renamedItem = await mount.getPath(pathId);
-        if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
+        if (renamedItem) {
+            // Propagate the POST-rename snapshot so each recipient's shared_paths mirror picks up
+            // the new name (mirrors updateACL). actor stays null — a rename must not email shares.
+            await propagateACLChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
+            this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
+        }
         if (user) await this.recordFileEvent(mountId, pathId, user, 'renamed', { oldName, newName });
     }
 
@@ -611,6 +647,12 @@ export default class Drive {
         user?: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
+        // Reject copying a folder into itself or its own descendant. Guarded here (not the route)
+        // so WebDAV COPY — which reaches raw Drive — enters the same gate; otherwise Mount.copyPath
+        // recurses forever, rediscovering the paths it just created. 409 per RFC 4918 §9.8.5.
+        if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
+            throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
+        }
         const copied = await mount.copyPath(srcPathId, destParentId, name, user);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
@@ -872,6 +914,10 @@ export default class Drive {
                     await this.recordFileEvent(mountId, pathId, actor, 'acl-changed', { added, removed });
                 }
             }
+            // A revoked read must drop the user's live collab socket now, not whenever they
+            // next disconnect. All connections (owner + shared users) live in this owner-home
+            // Drive's `documents` registry, so this is a local close — no home-relay needed.
+            await this.enforceReadAccessRecursively(mountId, pathId);
         }
     }
 
@@ -1151,15 +1197,6 @@ export default class Drive {
         return mount.openDatabase(config, pathId);
     }
 
-    async createDatabase<S extends SchemaType>(
-        mountId: string,
-        config: DatabaseConfig<S>,
-        pathId: string,
-    ): Promise<ManagedDatabase<S>> {
-        const mount = this.getMount(mountId);
-        return mount.createDatabase(config, pathId);
-    }
-
     // Atomic touchFile + createDatabase for managed-db backing files (chat
     // data.db, doc data.db, comments.db, …). On any failure across the list,
     // hard-deletes every metadata row already created — without this, a
@@ -1190,11 +1227,6 @@ export default class Drive {
             }
             throw err;
         }
-    }
-
-    async closeDatabase(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
-        const mount = this.getMount(mountId);
-        await mount.closeDatabase(pathId, opts);
     }
 
     async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
@@ -1410,6 +1442,33 @@ export default class Drive {
             const children = await mount.listFolderAll(pathId);
             for (const child of children) {
                 await this.closeCollabDocumentsRecursively(mountId, child.id);
+            }
+        }
+    }
+
+    // Re-check read on every OPEN collab doc at or below `pathId` (mirrors the
+    // closeCollabDocumentsRecursively walk). Re-checking canRead per connection — not
+    // diffing removed ACL entries — is what makes revoking a *folder* share cascade to
+    // docs nested inside it, since read is inherited from the whole ancestor chain.
+    private async enforceReadAccessRecursively(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path) return;
+
+        if (isCollabType(path.type)) {
+            // Only open docs hold live connections; skip closed ones to keep this cheap.
+            const getter = this.documents.get(this.documentKey(mountId, pathId));
+            if (!getter) return;
+            try {
+                const doc = await getter();
+                await doc.enforceReadAccess();
+            } catch (error) {
+                console.error(`Failed to enforce read access on ${pathId}:`, error);
+            }
+        } else if (isContainerType(path.type)) {
+            const children = await mount.listFolderAll(pathId);
+            for (const child of children) {
+                await this.enforceReadAccessRecursively(mountId, child.id);
             }
         }
     }

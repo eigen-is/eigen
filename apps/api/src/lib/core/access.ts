@@ -30,10 +30,28 @@ export function isIpTrusted(ip: string): boolean {
     return networks.some((entry) => matchesCidr(ip, entry.trim()));
 }
 
-export function requireLocalhost(
-    request: Request,
-    server: { requestIP(req: Request): { address: string } | null } | null,
-): void {
+type RequestServer = { requestIP(req: Request): { address: string } | null } | null;
+
+// One source of truth for the real client IP behind Caddy, which overwrites X-Real-IP /
+// X-Forwarded-For with the true client on proxied routes (not spoofable). The socket peer is
+// only the proxy — fall back to it for direct bridge callers (Postfix/Dovecot) and to 'unknown'
+// with no server (tests). Every rate-limit / abuse key routes through here; don't re-derive inline.
+export function clientIpKey(request: Request, server: RequestServer): string {
+    return (
+        request.headers.get('x-real-ip') ??
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+        server?.requestIP(request)?.address ??
+        'unknown'
+    );
+}
+
+export function requireLocalhost(request: Request, server: RequestServer): void {
+    // Belt-and-suspenders with the Caddyfile edge 404: a genuine bridge caller (Postfix/Dovecot)
+    // connects directly and sets no proxy headers, but every Caddy-proxied request carries
+    // X-Real-IP / X-Forwarded-For — reject those even though Caddy's socket peer is trusted.
+    if (request.headers.has('x-real-ip') || request.headers.has('x-forwarded-for')) {
+        throw new ApiError(403, 'Access denied: localhost only');
+    }
     const ip = server?.requestIP(request)?.address;
     if (!ip) return; // No server (e.g., tests using app.handle()) — allow
     if (!isIpTrusted(ip)) {

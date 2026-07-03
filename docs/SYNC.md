@@ -28,7 +28,9 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
 - **Local bytes are never discarded until S3 acks** — the staged copy + the pending row persist until the
   upload succeeds.
 - **Replay on boot / reopen** — `pending_uploads` is durable in `metadata.db`, so a restart or home-reopen
-  resumes un-acked uploads (`UploadQueue.reconcile`, before the stale-temp sweep).
+  resumes un-acked uploads (`UploadQueue.reconcile`, before the stale-temp sweep). `stagingPath` stores a
+  **basename**, resolved against the mount's `staging/` dir at read time (legacy absolute rows pass
+  through), so a host migration / restore-from-backup / bind-mount change doesn't drop pending rows.
 - **Crash recovery (Phase 1a)** — a temp that survived an unclean shutdown is force-dirtied on reopen
   (`ManagedDatabase.markDirty`) so its unsynced bytes re-reach storage instead of being dropped by the
   close-time cleanup. Closes the original data-loss bug; needs no queue. (It also *introduced* one — see
@@ -42,8 +44,9 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
   surviving temp only if it's a valid, non-collapsed SQLite (else it discards it and re-fetches the
   authoritative object). **Invariant: an empty/invalid working copy can never overwrite a non-trivial
   stored object — worst case a transient 503, never a wipe.**
-- **Newest-from-staging on reopen** — during an outage a reopened doc reads the staged copy (newest bytes),
-  not a stale/absent S3 object.
+- **Freshest-first reads** — `Mount.readFile` serves a pending staged copy before the storage object, so
+  reopen, copy/duplicate, and copy-across all read the newest bytes during an outage, never a stale/absent
+  S3 object.
 - **No resurrection** — permanent delete + chat restore cancel the pending upload; if a PUT finishes after
   a cancel, the queue deletes the resurrected object (the key is a dead UUID, never reused).
 - **Consistent version snapshots** — version copies source the freshest *local* bytes (never a stale S3
@@ -54,8 +57,12 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
 One `Semaphore` **per S3 destination** (`endpoint+bucket`), not one per process
 (`lib/sync/index.ts` → `getUploadSemaphore`). A slow/down provider only backs up its own uploads and
 never blocks uploads to other destinations — important once team mounts + user-owned endpoints point at
-different buckets. Failed uploads back off (full-jitter, capped) and the queue **self-schedules** its own
-retry — there is no global registry or sweep. The only process-global state is the destination→semaphore
+different buckets. Each PUT is raced against a **~120 s client-side ceiling** (`S3Storage` can't abort);
+a timeout counts as a failure, so backoff takes over instead of a black-holed request parking the drain
+and its semaphore. Caveat: the orphaned request may still land later — a retry re-PUT of the same staged
+bytes is harmless, but an orphan superseded by a newer upload can briefly regress the object until the
+next sync (accepted). Failed uploads back off (full-jitter, capped) and the queue **self-schedules** its
+own retry — there is no global registry or sweep. The only process-global state is the destination→semaphore
 map (infra strings, no per-user data), the backoff function, and the shutdown deadline.
 
 ## Teardown
@@ -102,6 +109,12 @@ temp-copy backend.
 
 ## Residual limitations
 
+- A move/rename on `local` can strand one in-flight sync: `onSync` re-resolves the storage key on every
+  sync but holds no path lock, so a rename landing between that resolution and the write sends that one
+  sync's bytes to the pre-move path (a `createPath: true` zombie tree) and the watermark marks them
+  synced — a tail write stays stranded until the next dirty sync. Accepted: a path lock wouldn't close
+  it (an ancestor rename locks the folder's id, not the data.db's); id-stable `s3`/`local-key` keys are
+  immune.
 - A home that idle-destructs mid-outage leaves queued bytes on local disk until it's next opened (same
   durability as the temp files; a host-disk loss in that window is the Litestream-class residual RPO).
 - The shutdown drain budget is whole-process; a multi-mount home drains its mounts sequentially.
