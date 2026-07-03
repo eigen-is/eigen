@@ -64,8 +64,6 @@ Large net-new builds or low value-per-effort today.
 | Item | Effort | Notes |
 |---|---|---|
 | rspamd sidecar | ~1 day | The real fix for the spam/DMARC pain that the Stalwart proposal exists to solve. |
-| Calendar: clock-change corner case in repeating events | ~1 hour | When the clocks go back (last Sunday of October), times between 02:00 and 03:00 happen twice. A repeating event at such a time is currently placed on the *second* pass; the iCalendar standard says use the *first*. Fix `localToUtc` in `apps/api/src/lib/calendar/recurrence.ts`, add one test. |
-| Calendar: event-details dialog is cramped | ~1 hour | The "Amsterdam time zone" label squeezes the date/time line in the event popup (screenshot 2026-07-03). Small layout polish; check with a screenshot before merging. |
 | File names: accented characters stored inconsistently | ~½ day | The same name typed on a Mac vs Linux can be different bytes ("café" has two encodings). Lookups normalize but writes store the raw bytes, so a file can exist yet not be found. Normalize once in `validateName` (`apps/api/src/lib/mount/helpers.ts`). **Decide first** what to do with names already stored raw. |
 | Upload timing log is ambiguous | ~10 min | Two different code paths both log `[timing] Mount.upload` (direct PUT vs queued S3 upload), so grepping mixes them. Rename one. Careful: this log line is used in ops greps on the server. |
 
