@@ -19,7 +19,6 @@ import {
     type EigenDocType,
     isCollabType,
     isContainerType,
-    stripEigenExtension,
 } from '@workspace/lib/types/drive';
 import {
     type ClientFileEventType,
@@ -33,7 +32,6 @@ import {
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
-import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
@@ -64,7 +62,8 @@ import { diffACLEmails, type EffectiveMember, propagateACLChange, resolveACLToEm
 import { LockManager } from './lock-manager';
 import { serveFile } from './serve-file';
 import { getSharedDatabase } from './shared';
-import * as sharedSchema from './sharedschema';
+import { listSharedWithMe, listSharedWithMeByMimeType, receiveACLChange } from './shared-with-me';
+import type * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 import { streamFilesToTemp, writeTempWithHash } from './streaming';
 import { deletePath, permanentlyDelete, restorePath } from './trash';
@@ -654,15 +653,9 @@ export default class Drive {
             allResults.push(...mountResults);
         }
 
-        const sharedResults = await this.sharedDb
-            .select()
-            .from(sharedSchema.sharedPaths)
-            .where(eq(sharedSchema.sharedPaths.mimeType, mimeType))
-            .all();
-
+        const sharedResults = await listSharedWithMeByMimeType(this.sharedDb, mimeType);
         const seen = new Set(allResults.map((r) => r.id));
-        const unique = sharedResults.map((r) => this.sharedRowToDrivePath(r)).filter((r) => !seen.has(r.id));
-        return [...allResults, ...unique];
+        return [...allResults, ...sharedResults.filter((r) => !seen.has(r.id))];
     }
 
     async getMountMimeTypeContents(
@@ -1092,8 +1085,7 @@ export default class Drive {
     // IS the user's own state (paths shared with them), so cross-owner access has no
     // meaning. See class doc above.
     async getSharedPathsWithMe(): Promise<DrivePath[]> {
-        const results = await this.sharedDb.select().from(sharedSchema.sharedPaths).all();
-        return results.map((r) => this.sharedRowToDrivePath(r));
+        return listSharedWithMe(this.sharedDb);
     }
 
     async getSharedWith(user: User): Promise<DrivePath[]> {
@@ -1122,62 +1114,7 @@ export default class Drive {
     // Called by: home-relay (cross-home ACL propagation receiver) and share/reconciliation.
     // Not route-callable — inbound side of the sharding seam.
     async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
-        const displayName = stripEigenExtension(path.name);
-        const memberships = await getMemberships(this.owner.id);
-        if (newACL === null || !matchesACL(newACL, this.owner, memberships, 'read')) {
-            this.sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
-            this.emit(SSEventType.DRIVE_ACL_UNSHARED, path);
-            this.home.notifications?.persist({
-                type: 'unshare',
-                actorEmail,
-                title: `"${displayName}" is no longer shared with you`,
-            });
-        } else if (
-            this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()
-        ) {
-            this.sharedDb
-                .update(sharedSchema.sharedPaths)
-                .set({
-                    acl: newACL,
-                    visibility: path.visibility,
-                    sharingRestricted: path.sharingRestricted ? 1 : 0,
-                    name: path.name,
-                    size: path.size,
-                    thumbnail: path.thumbnail,
-                    parentId: path.parentId,
-                    updatedAt: new Date(),
-                })
-                .where(eq(sharedSchema.sharedPaths.id, path.id))
-                .run();
-            this.emit(SSEventType.DRIVE_ACL_UPDATED, path);
-        } else {
-            this.sharedDb
-                .insert(sharedSchema.sharedPaths)
-                .values({
-                    id: path.id,
-                    mountId: path.mountId,
-                    name: path.name,
-                    type: path.type,
-                    parentId: path.parentId,
-                    ownerId: path.ownerId,
-                    mimeType: path.mimeType,
-                    size: path.size,
-                    thumbnail: path.thumbnail,
-                    acl: newACL,
-                    visibility: path.visibility,
-                    sharingRestricted: path.sharingRestricted ? 1 : 0,
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                })
-                .run();
-            this.emit(SSEventType.DRIVE_ACL_SHARED, path);
-            this.home.notifications?.persist({
-                type: 'share',
-                actorEmail,
-                title: `"${displayName}" was shared with you`,
-                tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
-            });
-        }
+        return receiveACLChange(this.sharedDb, this.home, path, newACL, actorEmail);
     }
 
     async destruct(): Promise<void> {
@@ -1206,28 +1143,6 @@ export default class Drive {
         }
 
         this.lockManager.clear();
-    }
-
-    private sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {
-        return {
-            id: r.id,
-            mountId: r.mountId,
-            name: r.name,
-            type: r.type as DrivePath['type'],
-            parentId: r.parentId,
-            ownerId: r.ownerId,
-            mimeType: r.mimeType,
-            size: r.size ?? 0,
-            hash: null,
-            thumbnail: r.thumbnail,
-            acl: r.acl as DriveACL[] | null,
-            visibility: (r.visibility ?? 'private') as DriveVisibility,
-            sharingRestricted: !!r.sharingRestricted,
-            details: r.details ?? null,
-            trashedAt: null,
-            createdAt: r.createdAt ?? new Date(),
-            updatedAt: r.updatedAt ?? new Date(),
-        };
     }
 
     private getMount(mountId: string): Mount {
