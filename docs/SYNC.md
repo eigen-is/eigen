@@ -52,6 +52,32 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
 - **Consistent version snapshots** — version copies source the freshest *local* bytes (never a stale S3
   read) and are themselves queued, so a close-time snapshot never blocks on the backend.
 
+## Numbered invariants
+
+Code comments cite these by number ("invariant 2", "invariant 7"). The numbering comes from the
+original design spec (`docs/PROPOSAL_SYNC_RESILIENCE.md`, removed once implemented — see git history)
+and is fixed; restated here in as-built terms so the references resolve:
+
+1. **The upload payload is a frozen `VACUUM INTO` staged copy**, captured at enqueue — never the live
+   temp DB.
+2. **Staged copies live in the dedicated per-mount `staging/` dir, which the `cleanupStaleFiles`
+   startup sweep never touches**; a staged copy survives until its PUT acks, then it's deleted.
+3. **The sync watermark advances only on ack** — local bytes are never treated as synced (or
+   discarded) while an upload is pending. (As built, the pending row itself is the durable marker;
+   the proposal's persisted content hash was dropped.)
+4. **At most one pending upload per storage key; the newest enqueued staging wins** (PK upsert on
+   `pending_uploads`).
+5. **Every enqueue is durably recorded in `metadata.db` before the producer returns**, and startup
+   reconciliation (`UploadQueue.reconcile`) runs **before** the tmp sweep — replay can't lose to it.
+6. **Uploads are idempotent** (stable UUID keys, whole-file overwrite); replay is harmless.
+7. **Permanent delete and the chat-restore replace cancel the pending upload + staged copy** — a
+   queued or in-flight PUT must never resurrect deleted bytes.
+
+Section references ("§3", "§9") point at the same spec's detailed-design sections: §1 crash-recovery
+fix (Phase 1a) · §2 upload pipeline (Phase 1b) · §3 staging + consistent version snapshots ·
+§4 change detection · §5 create path · §6 delete/trash/restore · §7 startup reconciliation ·
+§8 shutdown/drain · §9 observability.
+
 ## Concurrency
 
 One `Semaphore` **per S3 destination** (`endpoint+bucket`), not one per process
