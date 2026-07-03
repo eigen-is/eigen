@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { CalendarEvent, CalendarItem, EventData, SharedCalendar } from '@workspace/lib/types/calendar';
-import type { CalendarEventRow } from './calendar';
 import type * as schema from './schema';
+import type { CalendarEventRow } from './types';
 
 export function computeEtag(event: {
     title: string;

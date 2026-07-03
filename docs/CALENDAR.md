@@ -284,6 +284,7 @@ External organizers have no Eigen user ID. `organizerUserId` is set to `external
 | `apps/api/src/lib/calendar/mappers.ts`           | Pure row→domain mappers + `computeEtag` |
 | `apps/api/src/lib/calendar/get-calendar.ts`      | Access resolution (like Drive's `get-drive.ts`) |
 | `apps/api/src/lib/calendar/schema.ts`            | Drizzle schema            |
+| `apps/api/src/lib/calendar/types.ts`             | BE-internal types (`CalendarEventRow`, relay payloads, event args) |
 | `apps/api/src/lib/calendar/db-config.ts`         | DB config + migrations    |
 | `apps/api/src/lib/calendar/share-propagation.ts`  | Push shares to recipients |
 | `apps/api/src/lib/calendar/invite-propagation.ts` | Push invites to attendees (internal + iMIP outbound) |

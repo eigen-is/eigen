@@ -1,5 +1,6 @@
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
-import type { Calendar, CalendarEventRow } from '../calendar/calendar';
+import type { Calendar } from '../calendar/calendar';
+import type { CalendarEventRow } from '../calendar/types';
 import type { ParsedEvent } from './ical-parse';
 import { parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';

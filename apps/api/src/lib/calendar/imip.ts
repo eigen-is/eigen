@@ -14,7 +14,7 @@ import { serializeEventForImip } from '../caldav/ical-serialize';
 import { renderEigenEmail } from '../core/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
-import type { ReceiveInvitationPayload } from './calendar';
+import type { ReceiveInvitationPayload } from './types';
 
 type Organizer = NonNullable<EventData['organizer']>;
 

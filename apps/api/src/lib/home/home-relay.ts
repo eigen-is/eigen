@@ -24,7 +24,7 @@ import type {
     InvitationUpdatePayload,
     ReceiveInvitationPayload,
     UpdateEventArgs,
-} from '../calendar/calendar';
+} from '../calendar/types';
 import { getAvatarsDir } from '../config/paths';
 import type { PersistInput } from '../notification-center/notification-center';
 import type { User } from '../user';
