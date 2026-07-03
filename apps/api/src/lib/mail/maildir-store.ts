@@ -222,7 +222,7 @@ export class MaildirStore implements MailStore {
 
     // -- Sync --
 
-    async syncMailbox(mailbox: string): Promise<void> {
+    private async syncMailbox(mailbox: string): Promise<void> {
         // Don't start a sync once teardown has begun — the watcher can fire one fire-and-forget
         // (watch()) and doSyncMailbox's later phases would query a closed db (see destruct).
         if (this.home.destructing) return;
@@ -303,11 +303,11 @@ export class MaildirStore implements MailStore {
 
     // -- Draft meta sidecar (lightweight body-only saves) --
 
-    getDraftMetaPath(draftId: string): string {
+    private getDraftMetaPath(draftId: string): string {
         return this.storage.pathJoin('draft-meta', `${this.sanitizeTempId(draftId)}.json`);
     }
 
-    async ensureDraftMetaDir(): Promise<void> {
+    private async ensureDraftMetaDir(): Promise<void> {
         if (!(await this.storage.dirExists('draft-meta'))) {
             await this.storage.mkdir('draft-meta');
         }
@@ -368,11 +368,11 @@ export class MaildirStore implements MailStore {
         return { tempId, ...meta };
     }
 
-    openDraftTempWriter(tempId: string) {
+    private openDraftTempWriter(tempId: string) {
         return this.storage.file(this.getDraftTempPath(tempId)).writer({ highWaterMark: 256 * 1024 });
     }
 
-    async writeDraftTempMeta(
+    private async writeDraftTempMeta(
         tempId: string,
         meta: { filename: string; size: number; contentType: string },
     ): Promise<void> {
@@ -397,12 +397,12 @@ export class MaildirStore implements MailStore {
         };
     }
 
-    getDraftTempDir(): string {
+    private getDraftTempDir(): string {
         // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
         return 'draft-attachments';
     }
 
-    async ensureDraftTempDir(): Promise<void> {
+    private async ensureDraftTempDir(): Promise<void> {
         const dir = this.getDraftTempDir();
         if (!(await this.storage.dirExists(dir))) {
             await this.storage.mkdir(dir);
@@ -413,11 +413,11 @@ export class MaildirStore implements MailStore {
         return tempId.replace(/[^a-zA-Z0-9-_]/g, '_');
     }
 
-    getDraftTempPath(tempId: string): string {
+    private getDraftTempPath(tempId: string): string {
         return this.storage.pathJoin(this.getDraftTempDir(), this.sanitizeTempId(tempId));
     }
 
-    getDraftTempMetaPath(tempId: string): string {
+    private getDraftTempMetaPath(tempId: string): string {
         return `${this.getDraftTempPath(tempId)}.json`;
     }
 
@@ -453,11 +453,11 @@ export class MaildirStore implements MailStore {
 
     // -- Maildir filesystem primitives --
 
-    async exists(): Promise<boolean> {
+    private async exists(): Promise<boolean> {
         return this.storage.dirExists(this.basePath);
     }
 
-    async createStandardMailboxes(): Promise<void> {
+    private async createStandardMailboxes(): Promise<void> {
         for (const mailbox of STANDARD_MAILBOXES) {
             if (!(await this.storage.dirExists(this.mailboxDir(mailbox)))) {
                 await this.createMailboxDir(mailbox);
@@ -468,11 +468,11 @@ export class MaildirStore implements MailStore {
         await this.storage.write(this.storage.pathJoin(this.basePath, 'subscriptions'), subscriptions);
     }
 
-    async mailboxDirExists(mailbox: string): Promise<boolean> {
+    private async mailboxDirExists(mailbox: string): Promise<boolean> {
         return this.storage.dirExists(this.mailboxDir(mailbox));
     }
 
-    async createMailboxDir(mailbox: string): Promise<void> {
+    private async createMailboxDir(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
         await this.storage.mkdir(mailboxPath);
         await this.storage.mkdir(this.storage.pathJoin(mailboxPath, this.CUR));
@@ -483,7 +483,10 @@ export class MaildirStore implements MailStore {
         }
     }
 
-    async deliverAtomic(message: string | Buffer, mailbox: string): Promise<{ uniqueId: string; size: number }> {
+    private async deliverAtomic(
+        message: string | Buffer,
+        mailbox: string,
+    ): Promise<{ uniqueId: string; size: number }> {
         const uniqueId = createUniqueMessageId();
         const size = typeof message === 'string' ? Buffer.byteLength(message, 'utf-8') : message.byteLength;
         const filename = `${uniqueId},S=${size}`;
@@ -498,7 +501,7 @@ export class MaildirStore implements MailStore {
         return { uniqueId, size };
     }
 
-    async deliverToCur(
+    private async deliverToCur(
         mailbox: string,
         message: string,
         flags: Record<string, boolean>,
@@ -522,7 +525,7 @@ export class MaildirStore implements MailStore {
         return { uniqueId, size, filename };
     }
 
-    async moveNewToCur(mailbox: string): Promise<void> {
+    private async moveNewToCur(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
         const newPath = this.storage.pathJoin(mailboxPath, this.NEW);
         if (!(await this.storage.dirExists(newPath))) return;
@@ -540,7 +543,7 @@ export class MaildirStore implements MailStore {
         }
     }
 
-    async listCurFiles(mailbox: string): Promise<string[]> {
+    private async listCurFiles(mailbox: string): Promise<string[]> {
         const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR);
         if (!(await this.storage.dirExists(curPath))) return [];
         return this.storage.readdir(curPath);
@@ -551,13 +554,13 @@ export class MaildirStore implements MailStore {
         return this.storage.file(filePath);
     }
 
-    async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
+    private async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
         const srcPath = this.storage.pathJoin(this.mailboxDir(fromMailbox), this.CUR, fromFilename);
         const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), this.CUR, fromFilename);
         await this.storage.rename(srcPath, dstPath);
     }
 
-    async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
+    private async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
         const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR);
         await this.storage.rename(
             this.storage.pathJoin(curPath, oldFilename),
@@ -565,19 +568,19 @@ export class MaildirStore implements MailStore {
         );
     }
 
-    async deleteMessage(mailbox: string, filename: string): Promise<void> {
+    private async deleteMessage(mailbox: string, filename: string): Promise<void> {
         const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR, filename);
         if (await this.storage.fileExists(filePath)) {
             await this.storage.unlink(filePath);
         }
     }
 
-    async findFileByUniqueId(uniqueId: string, mailbox: string): Promise<string | undefined> {
+    private async findFileByUniqueId(uniqueId: string, mailbox: string): Promise<string | undefined> {
         const files = await this.listCurFiles(mailbox);
         return files.find((f) => f.startsWith(uniqueId));
     }
 
-    async dirSize(): Promise<number> {
+    private async dirSize(): Promise<number> {
         return (await this.storage.dirSize(PATHS.MAIL.ROOT)) || 0;
     }
 
