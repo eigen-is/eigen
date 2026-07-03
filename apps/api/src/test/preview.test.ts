@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
-import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
+import { createDefaultMountConfig } from '../lib/mount/helpers';
+import { Mount } from '../lib/mount/mount';
 import { isExiftoolCandidate } from '../lib/preview/exiftool-preview';
 import { getTextPreview } from '../lib/preview/preview-cache';
 import { isVideoCandidate } from '../lib/preview/video-preview';
