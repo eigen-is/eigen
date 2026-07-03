@@ -2,6 +2,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
+import { closeCachedDbsUnder } from './document-db';
 import { buildStorageKey, rethrowDuplicateActiveName } from './helpers';
 import type { Mount } from './mount';
 import { paths } from './schema';
@@ -21,7 +22,7 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
     // Flush + close cached DBs BEFORE the storage rename, so their final bytes are written to the
     // current location and then moved into .trash/ with everything else — and so no post-trash
     // sync writes a data.db outside .trash/ (a chat's data.db is never closed by the collab path).
-    await mount.closeCachedDbsUnder(pathId);
+    await closeCachedDbsUnder(mount, pathId);
 
     return mount.withPathLock(pathId, async () => {
         // Path-based storage: move file/folder to .trash/
