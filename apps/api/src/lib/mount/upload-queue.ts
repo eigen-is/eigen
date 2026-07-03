@@ -260,7 +260,7 @@ export class UploadQueue {
             ]);
             putOk = true;
             const ms = (Bun.nanoseconds() - start) / 1_000_000;
-            console.log(`[timing] Mount.upload ${storageKey} ${(file.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
+            console.log(`[timing] Mount.upload.queued ${storageKey} ${(file.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
         } catch (err) {
             console.error(
                 `[sync] upload failed for ${storageKey} (attempt ${attempt + 1}):`,
