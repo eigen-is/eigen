@@ -11,13 +11,12 @@ import {
 } from '@workspace/lib/types';
 import { type DriveVisibility, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, type SyncCallbacks } from '../core';
 import { FileHistory } from '../drive/history';
-import { getUniqueFileName } from '../drive/naming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
@@ -36,6 +35,7 @@ import {
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
+import * as trash from './trash';
 import { UploadQueue } from './upload-queue';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
@@ -351,7 +351,8 @@ export class Mount {
         return current;
     }
 
-    private async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
+    // internal — used by mount/*.ts
+    async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
         const existing = await this.db
             .select({ id: paths.id })
             .from(paths)
@@ -662,7 +663,8 @@ export class Mount {
         return this.resolveStoragePath(pathId);
     }
 
-    private async resolveStoragePath(pathId: string): Promise<string> {
+    // internal — used by mount/*.ts
+    async resolveStoragePath(pathId: string): Promise<string> {
         const rows = await this.db
             .select({
                 id: paths.id,
@@ -783,144 +785,34 @@ export class Mount {
         }
     }
 
+    // ---- Trash facade — implementation in mount/trash.ts ----
+
     async trashPath(pathId: string): Promise<DrivePath> {
-        const item = await this.getPath(pathId);
-        if (!item) throw new ApiError(404, 'Path not found');
-        if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-
-        const root = await this.getRootFolder();
-        if (!root) throw new ApiError(500, 'Root folder not found');
-
-        // Flush + close cached DBs BEFORE the storage rename, so their final bytes are written to the
-        // current location and then moved into .trash/ with everything else — and so no post-trash
-        // sync writes a data.db outside .trash/ (a chat's data.db is never closed by the collab path).
-        await this.closeCachedDbsUnder(pathId);
-
-        return this.withPathLock(pathId, async () => {
-            // Path-based storage: move file/folder to .trash/
-            let trashKey: string | undefined;
-            if (this.isPathBased && this.storage.rename) {
-                const oldKey = await this.resolveStoragePath(pathId);
-                trashKey = `.trash/${buildStorageKey(pathId, item.name)}`;
-                await this.storage.rename(oldKey, trashKey);
-            }
-
-            // Direct DB update — do NOT use updatePath()
-            const now = new Date();
-            await this.db
-                .update(paths)
-                .set({
-                    trashedAt: now,
-                    trashedFrom: item.parentId,
-                    parentId: root.id,
-                    ...(trashKey !== undefined ? { file: trashKey } : {}),
-                    updatedAt: now,
-                })
-                .where(eq(paths.id, pathId));
-
-            if (item.type !== 'file') {
-                this.trashDescendants(pathId, now);
-            }
-
-            await this.invalidateSizesFrom(item.parentId);
-
-            const updated = await this.getPath(pathId);
-            return updated!;
-        });
+        return trash.trashPath(this, pathId);
     }
 
     async listTrash(): Promise<DrivePath[]> {
-        const results = await this.db
-            .select()
-            .from(paths)
-            .where(isNotNull(paths.trashedFrom))
-            .orderBy(desc(paths.trashedAt))
-            .all();
-
-        return results.map((r) => this.toDrivePath(r));
+        return trash.listTrash(this);
     }
 
-    // trashedFrom is trash bookkeeping, not part of DrivePath — permanentlyDelete
-    // needs the original parent to notify the old folder's watchers.
     async getTrashedFrom(pathId: string): Promise<string | null> {
-        const row = await this.db
-            .select({ trashedFrom: paths.trashedFrom })
-            .from(paths)
-            .where(eq(paths.id, pathId))
-            .get();
-        return row?.trashedFrom ?? null;
+        return trash.getTrashedFrom(this, pathId);
     }
 
     async restorePath(pathId: string): Promise<DrivePath> {
-        const row = await this.db.select().from(paths).where(eq(paths.id, pathId)).get();
-        if (!row) throw new ApiError(404, 'Path not found');
-        if (!row.trashedFrom) throw new ApiError(400, 'Item is not in trash');
-
-        const root = await this.getRootFolder();
-        if (!root) throw new ApiError(500, 'Root folder not found');
-
-        // Determine target parent
-        let targetParentId = root.id;
-        const originalParent = await this.getPath(row.trashedFrom);
-        if (originalParent && !originalParent.trashedAt) {
-            targetParentId = originalParent.id;
-        }
-
-        // Check name conflict and auto-rename if needed
-        let restoreName = row.name;
-        try {
-            await this.assertUniqueName(targetParentId, restoreName, pathId);
-        } catch {
-            // Name conflict: generate unique name
-            const siblings = await this.db
-                .select({ name: paths.name })
-                .from(paths)
-                .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
-                .all();
-            const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
-            restoreName = getUniqueFileName(row.name, usedNames);
-        }
-
-        return this.withPathLock(pathId, async () => {
-            // Path-based storage: move back from .trash/
-            if (this.isPathBased && this.storage.rename) {
-                const currentKey = await this.resolveStoragePath(pathId);
-                const parentPath = await this.resolveStoragePath(targetParentId);
-                const targetKey = parentPath ? `${parentPath}/${restoreName}` : restoreName;
-                await this.storage.rename(currentKey, targetKey);
-            }
-
-            // Direct DB update. The conflict-free restoreName was computed outside this lock, so a
-            // raced same-name create can still trip the unique index here → the same 409 as create.
-            const now = new Date();
-            try {
-                await this.db
-                    .update(paths)
-                    .set({
-                        parentId: targetParentId,
-                        trashedAt: null,
-                        trashedFrom: null,
-                        name: restoreName,
-                        ...(this.isPathBased ? { file: restoreName } : {}),
-                        updatedAt: now,
-                    })
-                    .where(eq(paths.id, pathId));
-            } catch (e) {
-                rethrowDuplicateActiveName(e, restoreName);
-            }
-
-            if (row.type !== 'file') {
-                this.restoreDescendants(pathId, now);
-            }
-
-            await this.invalidateSizesFrom(targetParentId);
-
-            const updated = await this.getPath(pathId);
-            return updated!;
-        });
+        return trash.restorePath(this, pathId);
     }
 
-    private collectDescendantIds(parentId: string): string[] {
+    async permanentlyDeleteFromTrash(pathId: string): Promise<void> {
+        return trash.permanentlyDeleteFromTrash(this, pathId);
+    }
+
+    async purgeTrash(maxAgeDays?: number): Promise<void> {
+        return trash.purgeTrash(this, maxAgeDays);
+    }
+
+    // internal — used by mount/*.ts
+    collectDescendantIds(parentId: string): string[] {
         const ids: string[] = [];
         const collect = (pid: string) => {
             const children = this.db.select({ id: paths.id }).from(paths).where(eq(paths.parentId, pid)).all();
@@ -931,82 +823,6 @@ export class Mount {
         };
         collect(parentId);
         return ids;
-    }
-
-    // Recursively set trashedAt on all non-trashed descendants
-    private trashDescendants(parentId: string, now: Date): void {
-        const epoch = Math.floor(now.getTime() / 1000);
-        this.db.run(sql`
-            WITH RECURSIVE descendants AS (
-                SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
-                UNION ALL
-                SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
-            )
-            UPDATE ${paths}
-            SET ${sql.raw('trashedAt')} = ${epoch}, ${sql.raw('updatedAt')} = ${epoch}
-            WHERE id IN (SELECT id FROM descendants) AND ${paths.trashedAt} IS NULL
-        `);
-    }
-
-    // Recursively clear trashedAt on descendants, skipping independently trashed items
-    private restoreDescendants(parentId: string, now: Date): void {
-        const epoch = Math.floor(now.getTime() / 1000);
-        this.db.run(sql`
-            WITH RECURSIVE descendants AS (
-                SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
-                UNION ALL
-                SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
-            )
-            UPDATE ${paths}
-            SET ${sql.raw('trashedAt')} = NULL, ${sql.raw('updatedAt')} = ${epoch}
-            WHERE id IN (SELECT id FROM descendants)
-            AND ${paths.trashedAt} IS NOT NULL
-            AND ${paths.trashedFrom} IS NULL
-        `);
-    }
-
-    async permanentlyDeleteFromTrash(pathId: string): Promise<void> {
-        const row = await this.db.select().from(paths).where(eq(paths.id, pathId)).get();
-        if (!row) return;
-        if (!row.trashedAt) throw new ApiError(400, 'Item is not in trash');
-
-        if (row.type !== 'file') {
-            const descendantIds = this.collectDescendantIds(pathId);
-            const allIds = [pathId, ...descendantIds];
-            const orphans = await this.db
-                .select({ id: paths.id })
-                .from(paths)
-                .where(
-                    sql`${paths.trashedFrom} IN (${sql.join(
-                        allIds.map((id) => sql`${id}`),
-                        sql`, `,
-                    )})`,
-                )
-                .all();
-            for (const orphan of orphans) {
-                await this.deletePath(orphan.id);
-            }
-        }
-
-        await this.deletePath(pathId);
-    }
-
-    async purgeTrash(maxAgeDays?: number): Promise<void> {
-        let items: DrivePath[];
-        if (maxAgeDays !== undefined) {
-            const cutoffEpoch = Math.floor((Date.now() - maxAgeDays * 24 * 60 * 60 * 1000) / 1000);
-            const results = await this.db
-                .select()
-                .from(paths)
-                .where(sql`${paths.trashedFrom} IS NOT NULL AND ${paths.trashedAt} < ${cutoffEpoch}`)
-                .all();
-            items = results.map((r) => this.toDrivePath(r));
-        } else {
-            items = await this.listTrash();
-        }
-        for (const item of items) {
-            await this.permanentlyDeleteFromTrash(item.id);
-        }
     }
 
     async readFile(pathId: string): Promise<StorageFile | null> {
@@ -1132,7 +948,8 @@ export class Mount {
         return this.config.storageType !== 'local-key' && this.config.storageType !== 'local';
     }
 
-    private get isPathBased(): boolean {
+    // internal — used by mount/*.ts
+    get isPathBased(): boolean {
         return this.config.storageType === 'local';
     }
 
@@ -1348,7 +1165,8 @@ export class Mount {
     // Yjs collab docs are already torn down by Drive.closeCollabDocumentsRecursively; this catches
     // the rest (chat data.db, comments.db). skipFinalSnapshot: the container is going away, and a
     // snapshot would re-enter its path lock.
-    private async closeCachedDbsUnder(rootId: string): Promise<void> {
+    // internal — used by mount/*.ts
+    async closeCachedDbsUnder(rootId: string): Promise<void> {
         for (const id of [rootId, ...this.collectDescendantIds(rootId)]) {
             if (this.documentDbs.has(id)) {
                 await this.closeDatabase(id, { skipFinalSnapshot: true });
@@ -1582,7 +1400,8 @@ export class Mount {
     }
 
     // NULL the cached size on `parentId` and every ancestor up to the mount root.
-    private async invalidateSizesFrom(parentId: string | null): Promise<void> {
+    // internal — used by mount/*.ts
+    async invalidateSizesFrom(parentId: string | null): Promise<void> {
         if (!parentId) return;
         await this.db.run(sql`
             WITH RECURSIVE ancestors(id) AS (
