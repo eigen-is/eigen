@@ -23,8 +23,10 @@ export type MailSearchOptions = {
     to?: string;
 };
 
-// The mail backend contract behind home.mail. Extracted from Maildir's public surface
-// (AUDIT_MAIL.md § Backend abstraction); Maildir is the only implementation today.
+export type MailFlag = 'seen' | 'replied' | 'flagged' | 'draft' | 'trashed' | 'forwarded';
+
+// The swappable mail storage contract held by the Mail domain class (AUDIT_MAIL.md
+// § Backend abstraction). Maildir (+ MailDB) is the only implementation today.
 export interface MailStore {
     init(): Promise<void>;
     destruct(): Promise<void>;
@@ -34,19 +36,22 @@ export interface MailStore {
     mailboxesList(): Promise<MaildirMailbox[]>;
     mailboxCreate(mailbox: string): Promise<void>;
     mailboxExists(mailbox: string): Promise<MaildirMailbox | false>;
-    mailboxDeliver(message: Buffer): Promise<string>;
-    mailboxGet(mailbox: string): Promise<EmailSummary[]>;
+    listMessages(mailbox: string): Promise<EmailSummary[]>;
 
-    messageGet(messageId: string): Promise<Email | null>;
-    messageGetFile(messageId: string): Promise<ArrayBuffer>;
-    messageGetAttachment(messageId: string, index: number): Promise<Attachment>;
-    messageGetAttachments(messageId: string): Promise<Attachment[]>;
-    messageDelete(messageId: string): Promise<void>;
-    messageMove(messageId: string, targetMailbox: string): Promise<void>;
-    messageCopy(messageId: string, targetMailbox: string): Promise<void>;
-    messageSetRead(messageId: string, read: boolean): Promise<void>;
-    messageSetFlagged(messageId: string, flagged: boolean): Promise<void>;
+    getSummary(messageId: string): EmailSummary | undefined;
+    getMessage(messageId: string): Promise<Email | null>;
+    getRawMessage(messageId: string): Promise<ArrayBuffer>;
+    getAttachments(messageId: string): Promise<Attachment[]>;
+    append(mailbox: string, message: Buffer): Promise<string>;
+    delete(messageId: string): Promise<void>;
+    move(messageId: string, targetMailbox: string): Promise<void>;
+    setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void>;
 
+    readDraftMeta<T = Record<string, unknown>>(draftId: string): Promise<T | null>;
+    deleteDraftMeta(draftId: string): Promise<void>;
+    cleanupStaleDraftTemps(maxAgeMs?: number): Promise<void>;
+
+    // Temporary residents until the draft machine and send pipeline move into Mail (steps 2c-2d).
     messageHandleDraft(email: NewDraft | EmailDraft, options?: DraftUpdateOptions): Promise<EmailDraft>;
     uploadDraftAttachment(request: Request, maxSize: number): Promise<DraftAttachmentUpload>;
     stageDriveAttachment(

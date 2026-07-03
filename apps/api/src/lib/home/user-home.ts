@@ -5,6 +5,7 @@ import { getServerSettings, mapStorageType } from '../config/server-settings';
 import { Contacts } from '../contacts/contacts.ts';
 import { JsonStore, LocalFilesystem } from '../core';
 import { Drive } from '../drive';
+import { Mail } from '../mail/mail-domain.ts';
 import Maildir from '../mail/maildir.ts';
 import { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
@@ -21,7 +22,7 @@ export class UserHome extends Home {
 
         this.settings = new JsonStore<UserSettings>(this.fs, 'settings.json', {});
         this._contacts = new Contacts(this);
-        this._mail = new Maildir(this);
+        this._mail = new Mail(this, new Maildir(this));
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
         this._notifications = new NotificationCenter(this);

@@ -2,6 +2,7 @@ import { MaxFileSizeExceededError, parseMultipartRequest } from '@mjackson/multi
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type {
     AddressObject,
+    Attachment,
     DraftAttachmentUpload,
     Email,
     EmailDraft,
@@ -15,8 +16,9 @@ import { renderAttachmentPills } from '../core/mail-template';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import type { StorageFile } from '../storage';
+import type { DraftMeta } from './mail-domain';
 import { parseEml } from './mail-parse';
-import type { DraftUpdateOptions, MailSearchOptions, MailStore } from './mail-store';
+import type { DraftUpdateOptions, MailFlag, MailSearchOptions, MailStore } from './mail-store';
 import MailDB from './maildb';
 import { MaildirStore } from './maildir-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
@@ -32,27 +34,7 @@ import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
 
-type DraftMeta = {
-    subject: string;
-    to?: AddressObject;
-    cc?: AddressObject;
-    bcc?: AddressObject;
-    text: string;
-    // "Clean" body as typed by the user — without the reference-card HTML that the EML
-    // on disk has baked in. Overlaid on messageGet so the compose view shows what the
-    // user typed, not the rendered card block at the bottom.
-    html: string;
-    attachments: Array<{ filename: string; contentType: string; size: number }>;
-    driveReferences?: AttachmentReference[];
-    lastFullSaveAt?: number;
-};
-
 const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
-
-function canonicalMailbox(name: string): string {
-    if (name === '' || name.toLowerCase() === 'inbox') return '';
-    return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === name.toLowerCase()) ?? name;
-}
 
 function appendReferenceLinks(html: string, refs: AttachmentReference[]): string {
     const refHtml = renderAttachmentPills(refs);
@@ -103,10 +85,7 @@ export default class Maildir implements MailStore {
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
-        // Canonicalise mailbox names here so callers can pass any case (e.g. `trash`,
-        // `Trash`, `inbox`) and the FTS mailbox filter matches the stored value exactly.
-        const mailboxes = opts.mailboxes?.map(canonicalMailbox);
-        return this.db.searchMail({ ...opts, mailboxes });
+        return this.db.searchMail(opts);
     }
 
     // -- Mailbox operations --
@@ -133,14 +112,7 @@ export default class Maildir implements MailStore {
         return this.getMailboxInfo(mailbox);
     }
 
-    async mailboxDeliver(message: Buffer): Promise<string> {
-        const { uniqueId } = await this.store.deliverAtomic(message, '');
-        await this.syncMailbox('');
-        return uniqueId;
-    }
-
-    async mailboxGet(mailbox: string): Promise<EmailSummary[]> {
-        mailbox = canonicalMailbox(mailbox);
+    async listMessages(mailbox: string): Promise<EmailSummary[]> {
         if (!(await this.store.mailboxDirExists(mailbox))) {
             throw new ApiError(404, `Mailbox '${mailbox}' not found`);
         }
@@ -150,80 +122,51 @@ export default class Maildir implements MailStore {
 
     // -- Message operations --
 
-    async messageGet(messageId: string): Promise<Email | null> {
-        // null means "not found" ONLY: no summary row (real cache-miss) or the .eml isn't
-        // locatable. A parse/read/DB fault propagates → Elysia 500 + log, never a silent 404.
+    getSummary(messageId: string): EmailSummary | undefined {
+        return this.db.getEmail(messageId);
+    }
+
+    // null means "not found" ONLY: no summary row (real cache-miss) or the .eml isn't
+    // locatable. A parse/read/DB fault propagates — never masked as a missing message.
+    async getMessage(messageId: string): Promise<Email | null> {
         const cached = this.db.getEmail(messageId);
         if (!cached) return null;
 
         const parsed = await this.readAndParse(messageId, cached.mailbox, cached.filename);
         if (!parsed) return null;
 
-        for (const a of parsed.attachments) {
-            a.content = Buffer.alloc(0);
-        }
-
         applyFlagsFromFilename(parsed, cached.filename);
-
-        const result = { ...parsed, ...cached } as Email;
-
-        // Overlay latest values from draft-meta sidecar (written by fast-path saves).
-        // Applied after the spread so sidecar values win over both the stale EML
-        // (parsed) and the DB summary row (cached).
-        if (cached.isDraft) {
-            const meta = await this.store.readDraftMeta<DraftMeta>(messageId);
-            if (meta) {
-                result.subject = meta.subject;
-                result.html = meta.html;
-                result.text = meta.text;
-                if (meta.to) result.to = meta.to;
-                if (meta.cc) result.cc = meta.cc;
-                if (meta.bcc) result.bcc = meta.bcc;
-                result.driveReferences = meta.driveReferences ?? [];
-            }
-        }
-
-        return result;
+        return { ...parsed, ...cached } as Email;
     }
 
-    async messageGetFile(messageId: string): Promise<ArrayBuffer> {
+    async getRawMessage(messageId: string): Promise<ArrayBuffer> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Email '${messageId}' not found`);
         return this.store.getMessageFile(email.mailbox, email.filename).arrayBuffer();
     }
 
-    async messageGetAttachment(messageId: string, index: number) {
-        const email = this.db.getEmail(messageId);
-        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
-
-        const parsed = await this.readAndParse(messageId, email.mailbox, email.filename);
-        if (!parsed?.attachments || index >= parsed.attachments.length) {
-            throw new ApiError(404, `Attachment ${index} not found for message '${messageId}'`);
-        }
-
-        return parsed.attachments[index];
-    }
-
-    async messageGetAttachments(messageId: string) {
+    async getAttachments(messageId: string): Promise<Attachment[]> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
         const parsed = await this.readAndParse(messageId, email.mailbox, email.filename);
         return parsed?.attachments ?? [];
     }
 
-    async messageDelete(messageId: string): Promise<void> {
+    async append(mailbox: string, message: Buffer): Promise<string> {
+        const { uniqueId } = await this.store.deliverAtomic(message, mailbox);
+        await this.syncMailbox(mailbox);
+        return uniqueId;
+    }
+
+    async delete(messageId: string): Promise<void> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
         await this.store.deleteMessage(email.mailbox, email.filename);
-        await this.store.deleteDraftMeta(messageId);
         this.db.deleteEmail(messageId);
-
-        this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox: email.mailbox });
     }
 
-    async messageMove(messageId: string, targetMailbox: string): Promise<void> {
-        targetMailbox = canonicalMailbox(targetMailbox);
+    async move(messageId: string, targetMailbox: string): Promise<void> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
@@ -231,43 +174,11 @@ export default class Maildir implements MailStore {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
         }
 
-        const sourceMailbox = email.mailbox;
-        await this.store.moveMessage(sourceMailbox, email.filename, targetMailbox);
+        await this.store.moveMessage(email.mailbox, email.filename, targetMailbox);
         this.db.moveEmail(messageId, targetMailbox);
-
-        this.emit(SSEventType.MAIL_MOVED, { messageId, mailbox: sourceMailbox, toMailbox: targetMailbox });
     }
 
-    async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
-        targetMailbox = canonicalMailbox(targetMailbox);
-        const email = this.db.getEmail(messageId);
-        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
-
-        if (!(await this.store.mailboxDirExists(targetMailbox))) {
-            throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
-        }
-
-        // Copy the raw bytes, not a `.text()` round-trip — decoding would corrupt non-UTF-8 mail.
-        const bytes = Buffer.from(await this.store.getMessageFile(email.mailbox, email.filename).arrayBuffer());
-        await this.store.deliverAtomic(bytes, targetMailbox);
-        await this.syncMailbox(targetMailbox);
-    }
-
-    async messageSetRead(messageId: string, read: boolean): Promise<void> {
-        await this.renameFlag(messageId, { seen: read }, SSEventType.MAIL_READ_CHANGED);
-        this.db.setRead(messageId, read);
-    }
-
-    async messageSetFlagged(messageId: string, flagged: boolean): Promise<void> {
-        await this.renameFlag(messageId, { flagged }, SSEventType.MAIL_FLAGS_CHANGED);
-        this.db.setFlagged(messageId, flagged);
-    }
-
-    private async renameFlag(
-        messageId: string,
-        changes: Parameters<typeof rebuildFlagsSuffix>[1],
-        eventType: Parameters<typeof buildMailEvent>[0],
-    ): Promise<void> {
+    async setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
@@ -280,7 +191,21 @@ export default class Maildir implements MailStore {
             this.db.setFilename(messageId, newFilename);
         }
 
-        this.emit(eventType, { messageId, mailbox: email.mailbox });
+        if (changes.seen !== undefined) this.db.setRead(messageId, changes.seen);
+        if (changes.flagged !== undefined) this.db.setFlagged(messageId, changes.flagged);
+        if (changes.draft !== undefined) this.db.setDraft(messageId, changes.draft);
+    }
+
+    readDraftMeta<T = Record<string, unknown>>(draftId: string): Promise<T | null> {
+        return this.store.readDraftMeta<T>(draftId);
+    }
+
+    deleteDraftMeta(draftId: string): Promise<void> {
+        return this.store.deleteDraftMeta(draftId);
+    }
+
+    cleanupStaleDraftTemps(maxAgeMs?: number): Promise<void> {
+        return this.store.cleanupStaleDraftTemps(maxAgeMs);
     }
 
     // -- Draft & Send --
@@ -650,9 +575,10 @@ export default class Maildir implements MailStore {
         }
 
         await this.store.deleteDraftMeta(mail.id);
-        await this.messageMove(mail.id, 'Sent');
-        await this.renameFlag(mail.id, { draft: false }, SSEventType.MAIL_FLAGS_CHANGED);
-        this.db.setDraft(mail.id, false);
+        await this.move(mail.id, 'Sent');
+        this.emit(SSEventType.MAIL_MOVED, { messageId: mail.id, mailbox: 'Drafts', toMailbox: 'Sent' });
+        await this.setFlags(mail.id, { draft: false });
+        this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: mail.id, mailbox: 'Sent' });
         this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: 'Sent' });
 
         return mail;

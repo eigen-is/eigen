@@ -1,5 +1,6 @@
 import { hostname } from 'node:os';
 import type { EmailSummary } from '@workspace/lib/types/mail';
+import type { MailFlag } from './mail-store';
 
 let deliveryCounter = 0;
 
@@ -12,8 +13,14 @@ const STANDARD_MAILBOX_FLAGS: Record<string, string[]> = {
     Archive: ['\\HasNoChildren', '\\Archive'],
 };
 
-const FLAG_MAP = { seen: 'S', replied: 'R', flagged: 'F', draft: 'D', trashed: 'T', forwarded: 'P' } as const;
-type FlagKey = keyof typeof FLAG_MAP;
+const FLAG_MAP: Record<MailFlag, string> = {
+    seen: 'S',
+    replied: 'R',
+    flagged: 'F',
+    draft: 'D',
+    trashed: 'T',
+    forwarded: 'P',
+};
 
 export function createUniqueMessageId(): string {
     const time = Math.floor(Date.now() / 1000);
@@ -59,14 +66,14 @@ export function parseFlagsFromFilename(fileName: string) {
     };
 }
 
-export function rebuildFlagsSuffix(currentFilename: string, changes: Partial<Record<FlagKey, boolean>>): string {
+export function rebuildFlagsSuffix(currentFilename: string, changes: Partial<Record<MailFlag, boolean>>): string {
     const match = currentFilename.match(/:2,([A-Za-z]*)/);
     const existing = match?.[1] || '';
     const keywords = existing.replace(/[A-Z]/g, '');
     const current = parseFlagsFromFilename(currentFilename);
     const merged = { ...current, ...changes };
     const standardFlags = Object.entries(FLAG_MAP)
-        .filter(([key]) => merged[key as FlagKey])
+        .filter(([key]) => merged[key as MailFlag])
         .map(([, char]) => char)
         .sort()
         .join('');
