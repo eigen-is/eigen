@@ -15,6 +15,7 @@ import type { Home } from '../home';
 import type { StorageFile } from '../storage';
 import type { DraftUpdateOptions, MailSearchOptions, MailStore } from './mail-store';
 import { buildMailEvent } from './sse-events';
+import { welcomeMail } from './welcome';
 
 export type DraftMeta = {
     subject: string;
@@ -47,7 +48,30 @@ export class Mail {
     }
 
     async init(): Promise<void> {
-        return this.store.init();
+        const isNew = await this.store.init({
+            received: (email, isNewMessage) => {
+                this.emit(SSEventType.MAIL_RECEIVED, { messageId: email.id, mailbox: email.mailbox });
+                if (isNewMessage && email.fromShort) {
+                    this.home.notifications?.persist({
+                        type: 'mail',
+                        actorEmail: email.from?.value?.[0]?.address ?? null,
+                        title: 'New email',
+                        body: email.subject
+                            ? `From ${email.fromShort}: ${email.subject}`
+                            : `New email from ${email.fromShort}`,
+                        tag: 'mail:new',
+                    });
+                }
+            },
+            flagsChanged: (messageId, mailbox) => this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox }),
+            deleted: (messageId, mailbox) => this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox }),
+        });
+        if (isNew) {
+            const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
+            if (welcome) await this.store.append('', welcome, { skipSync: true });
+        }
+        this.store.watch();
+        this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
     }
 
     async size(): Promise<number> {
@@ -203,6 +227,7 @@ export class Mail {
     }
 
     async destruct(): Promise<void> {
+        await this.store.unwatch();
         return this.store.destruct();
     }
 }

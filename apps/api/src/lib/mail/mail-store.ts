@@ -25,10 +25,21 @@ export type MailSearchOptions = {
 
 export type MailFlag = 'seen' | 'replied' | 'flagged' | 'draft' | 'trashed' | 'forwarded';
 
+// Change stream surfaced by the store's own discovery (sync + fs.watch today; JMAP push or
+// IMAP IDLE for a remote backend). The Mail domain turns these into SSE + notifications.
+export type MailStoreEvents = {
+    received: (email: Email, isNew: boolean) => void;
+    flagsChanged: (messageId: string, mailbox: string) => void;
+    deleted: (messageId: string, mailbox: string) => void;
+};
+
 // The swappable mail storage contract held by the Mail domain class (AUDIT_MAIL.md
 // § Backend abstraction). Maildir (+ MailDB) is the only implementation today.
 export interface MailStore {
-    init(): Promise<void>;
+    // Resolves true when a fresh (empty) store was created.
+    init(events: MailStoreEvents): Promise<boolean>;
+    watch(): void;
+    unwatch(): Promise<void>;
     destruct(): Promise<void>;
     size(): Promise<number>;
     search(opts: MailSearchOptions): EmailSummary[];
@@ -42,7 +53,8 @@ export interface MailStore {
     getMessage(messageId: string): Promise<Email | null>;
     getRawMessage(messageId: string): Promise<ArrayBuffer>;
     getAttachments(messageId: string): Promise<Attachment[]>;
-    append(mailbox: string, message: Buffer): Promise<string>;
+    // skipSync: leave discovery to the next sync — welcome-mail seeding surfaces on first open.
+    append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string>;
     delete(messageId: string): Promise<void>;
     move(messageId: string, targetMailbox: string): Promise<void>;
     setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void>;

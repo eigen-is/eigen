@@ -18,7 +18,7 @@ import type { Home } from '../home';
 import type { StorageFile } from '../storage';
 import type { DraftMeta } from './mail-domain';
 import { parseEml } from './mail-parse';
-import type { DraftUpdateOptions, MailFlag, MailSearchOptions, MailStore } from './mail-store';
+import type { DraftUpdateOptions, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
 import MailDB from './maildb';
 import { MaildirStore } from './maildir-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
@@ -32,7 +32,6 @@ import {
 } from './mailutils';
 import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
-import { welcomeMail } from './welcome';
 
 const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -51,6 +50,7 @@ function extractRefs(email: NewDraft | EmailDraft): AttachmentReference[] | unde
 export default class Maildir implements MailStore {
     private store: MaildirStore;
     private db!: MailDB;
+    private events!: MailStoreEvents;
     private syncingMailboxes = new Map<string, Promise<void>>();
 
     constructor(private home: Home) {
@@ -61,23 +61,28 @@ export default class Maildir implements MailStore {
         this.home.broadcast(buildMailEvent(type, mail));
     }
 
-    async init() {
+    async init(events: MailStoreEvents): Promise<boolean> {
+        this.events = events;
         const isNew = !(await this.store.exists());
         if (isNew) {
             await this.store.createStandardMailboxes();
         }
         this.db = new MailDB(this.home);
         await this.db.init();
-        if (isNew) {
-            const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
-            if (welcome) await this.store.deliverAtomic(welcome, '');
-        }
+        return isNew;
+    }
+
+    watch(): void {
         this.store.watchMailboxes((mailbox) =>
             this.syncMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err)),
         );
-        this.store
-            .cleanupStaleDraftTemps()
-            .catch((err) => console.error('maildir: stale draft temp cleanup failed', err));
+    }
+
+    async unwatch(): Promise<void> {
+        this.store.unwatchMailboxes();
+        // Let any in-flight mailbox sync (kicked fire-and-forget by the watcher) finish before
+        // the domain flushes drafts and the db closes — later sync phases would hit a closed db.
+        await Promise.allSettled([...this.syncingMailboxes.values()]);
     }
 
     async size(): Promise<number> {
@@ -152,9 +157,9 @@ export default class Maildir implements MailStore {
         return parsed?.attachments ?? [];
     }
 
-    async append(mailbox: string, message: Buffer): Promise<string> {
+    async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string> {
         const { uniqueId } = await this.store.deliverAtomic(message, mailbox);
-        await this.syncMailbox(mailbox);
+        if (!opts?.skipSync) await this.syncMailbox(mailbox);
         return uniqueId;
     }
 
@@ -629,19 +634,7 @@ export default class Maildir implements MailStore {
                     applyFlagsFromFilename(parsed, fileName);
                     parsed.filename = fileName;
                     const isNew = this.db.addEmail(parsed as EmailSummary);
-                    this.emit(SSEventType.MAIL_RECEIVED, { messageId: id, mailbox });
-                    if (isNew && parsed.fromShort) {
-                        const fromEmail = parsed.from?.value?.[0]?.address ?? null;
-                        this.home.notifications?.persist({
-                            type: 'mail',
-                            actorEmail: fromEmail,
-                            title: 'New email',
-                            body: parsed.subject
-                                ? `From ${parsed.fromShort}: ${parsed.subject}`
-                                : `New email from ${parsed.fromShort}`,
-                            tag: 'mail:new',
-                        });
-                    }
+                    this.events.received(parsed, isNew);
                 } catch (e: unknown) {
                     if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT'))
                         console.warn(`syncMailbox: failed to parse ${fileName}:`, e instanceof Error ? e.message : e);
@@ -664,7 +657,7 @@ export default class Maildir implements MailStore {
                     },
                     diskFilename,
                 );
-                this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: id, mailbox });
+                this.events.flagsChanged(id, mailbox);
             }
         }
 
@@ -672,7 +665,7 @@ export default class Maildir implements MailStore {
         for (const [id] of dbById) {
             if (!diskFiles.has(id)) {
                 this.db.deleteEmail(id);
-                this.emit(SSEventType.MAIL_DELETED, { messageId: id, mailbox });
+                this.events.deleted(id, mailbox);
             }
         }
     }
@@ -712,10 +705,6 @@ export default class Maildir implements MailStore {
     }
 
     async destruct(): Promise<void> {
-        this.store.unwatchMailboxes();
-        // Let any in-flight mailbox sync (kicked fire-and-forget by the watcher) finish before
-        // closing the db — otherwise its later phases hit a closed database (RangeError).
-        await Promise.allSettled([...this.syncingMailboxes.values()]);
         await this.flushDraftSidecars();
         if (this.db) {
             await this.db.destruct();
