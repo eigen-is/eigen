@@ -24,7 +24,8 @@ export async function finalizeUpload(
         user?: User;
     },
 ): Promise<DrivePath> {
-    let safeName = args.name.replace(/[/\\]/g, '_');
+    // NFC so dedup + getUniqueFileName compare against NFC siblings in the same form the store will use.
+    let safeName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
     const originalName = safeName;
 
     const existing = await mount.getChildByName(args.parentId, safeName);

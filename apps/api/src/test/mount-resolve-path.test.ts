@@ -83,6 +83,18 @@ describe('Mount.resolvePath', () => {
         expect(viaNfd!.name).toBe(nfcName);
     });
 
+    test('resolves an NFD-stored name by its NFC query form', async () => {
+        // The actual bug (reverse of the test above): a name written DECOMPOSED (NFD, as macOS
+        // emits) is normalized to NFC on write, so an NFC lookup finds it. A different word from
+        // café — both café forms normalize alike and would collide with the folder created above.
+        const nfdName = 're\u0301sume\u0301'; // "resume" decomposed: e + U+0301
+        const nfcName = 'r\u00e9sum\u00e9'; // "resume" composed: U+00E9
+        await mount.createFolder(rootId, nfdName);
+        const viaNfc = await mount.resolvePath(`/${nfcName}`);
+        expect(viaNfc).not.toBeNull();
+        expect(viaNfc!.name).toBe(nfcName); // stored NFC, not the raw NFD input
+    });
+
     test('rejects path traversal', async () => {
         await expect(mount.resolvePath('/../etc/passwd')).rejects.toThrow();
         await expect(mount.resolvePath('/./foo')).rejects.toThrow();

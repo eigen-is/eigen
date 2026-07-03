@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
 import { ApiError } from '../core';
 
-export function validateName(name: string): void {
+export function validateName(name: string): string {
     // Reject control bytes (incl. NUL) so a name creatable via the API stays reachable
     // over WebDAV, where resolvePath rejects the same [\x00-\x1f] range (RFC 4918).
     // biome-ignore lint/suspicious/noControlCharactersInRegex: mirrors resolvePath's control-char guard
@@ -13,6 +13,8 @@ export function validateName(name: string): void {
     if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || hasControlChar) {
         throw new ApiError(400, `Invalid file or folder name: "${name}"`);
     }
+    // Store NFC so a decomposed (NFD) name still matches the NFC-normalized getChildByName/resolvePath lookups.
+    return name.normalize('NFC');
 }
 
 // Subquery: ids of every eigendoc container (doc/stickies/slides/sheets/chat) and
