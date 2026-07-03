@@ -11,18 +11,11 @@ import {
 } from '@workspace/lib/types';
 import { type DriveVisibility, EIGEN_DOC_TYPE_INFO, isContainerType } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { getServerSettings } from '../config/server-settings';
-import {
-    ApiError,
-    type DatabaseConfig,
-    ManagedDatabase,
-    type SchemaType,
-    type SyncCallbacks,
-    sanitizeFtsQuery,
-} from '../core';
+import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, type SyncCallbacks } from '../core';
 import { FileHistory } from '../drive/history';
 import { getUniqueFileName } from '../drive/naming';
 import { writeTempWithHash } from '../drive/streaming';
@@ -42,6 +35,7 @@ import {
 } from './helpers';
 import type * as schema from './schema';
 import { paths } from './schema';
+import * as searchIndex from './search-index';
 import { UploadQueue } from './upload-queue';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
@@ -55,7 +49,7 @@ export class Mount {
 
     private baseDir: string;
     private storage: StorageBackend;
-    private db!: BunSQLiteDatabase<typeof schema>;
+    db!: BunSQLiteDatabase<typeof schema>; // internal — used by mount/*.ts
     private getLocalDatabase: LocalDatabaseGetter;
     private ownerId: string;
     private documentDbs: Map<string, () => Promise<ManagedDatabase<SchemaType>>> = new Map();
@@ -66,7 +60,7 @@ export class Mount {
 
     // Per-mount content reindexer — built in init() only when an extractor is injected (the
     // document-loader stack is wired from Drive so it never enters this module's graph).
-    private reindexQueue?: ContentReindexQueue;
+    reindexQueue?: ContentReindexQueue; // internal — used by mount/*.ts
     private readonly extractContent?: ContentExtractor;
 
     // init schedules the history prune off the ready path; held so a fast teardown can cancel it
@@ -1452,7 +1446,7 @@ export class Mount {
                               await this.uploadFromTemp(currentKey, pathId);
                           }
                           await this.syncDocumentDbSize(pathId, localPath);
-                          await this.markContainerContentDirty(pathId);
+                          await searchIndex.markContainerContentDirty(this, pathId);
                       },
                       // onClose runs after wal_checkpoint(TRUNCATE), so the final stat captures
                       // any pages PASSIVE left in WAL. cleanupTemp is safe under async: the
@@ -1466,7 +1460,7 @@ export class Mount {
                 : {
                       onSync: async () => {
                           await this.syncDocumentDbSize(pathId, localPath);
-                          await this.markContainerContentDirty(pathId);
+                          await searchIndex.markContainerContentDirty(this, pathId);
                       },
                       onClose: async () => {
                           await this.syncDocumentDbSize(pathId, localPath);
@@ -1644,110 +1638,34 @@ export class Mount {
         return results.map((r) => this.toDrivePath(r));
     }
 
+    // ---- Content index + search facade — implementation in mount/search-index.ts ----
+
     upsertPathContent(pathId: string, body: string): void {
-        this.db.run(sql`
-            INSERT INTO path_content (pathId, body) VALUES (${pathId}, ${body})
-            ON CONFLICT(pathId) DO UPDATE SET body = excluded.body
-        `);
+        searchIndex.upsertPathContent(this, pathId, body);
     }
 
     clearPathContent(pathId: string): void {
-        this.db.run(sql`DELETE FROM path_content WHERE pathId = ${pathId}`);
+        searchIndex.clearPathContent(this, pathId);
     }
 
-    // Indexable rows whose body is stale: dirty AND (never indexed OR indexed longer ago than
-    // the cap). The dirty bit is only ever set on a real body write, so this is the work-list;
-    // `limit` keeps one drain turn (and its id-hydrate) bounded.
     getContentDirtyPaths(reindexCapSeconds: number, limit: number): DrivePath[] {
-        const dirty = this.db.all(sql`
-            SELECT id FROM paths
-            WHERE contentDirty = 1
-              AND trashedAt IS NULL
-              AND (contentIndexedAt IS NULL OR contentIndexedAt < (unixepoch() - ${reindexCapSeconds}))
-            LIMIT ${limit}
-        `) as { id: string }[];
-        if (dirty.length === 0) return [];
-        const ids = dirty.map((r) => r.id);
-        const rows = this.db.select().from(paths).where(inArray(paths.id, ids)).all();
-        return rows.map((r) => this.toDrivePath(r));
+        return searchIndex.getContentDirtyPaths(this, reindexCapSeconds, limit);
     }
 
-    // Epoch ms when the earliest not-yet-due dirty row becomes eligible, or null if none are
-    // dirty. A never-indexed row reads as due-now (0) so a row that slipped in mid-drain is never
-    // stranded. Drives the reindexer's self-timer in place of a poll.
     earliestPendingReindexAt(reindexCapSeconds: number): number | null {
-        const row = this.db.all(sql`
-            SELECT MIN(CASE WHEN contentIndexedAt IS NULL THEN 0 ELSE contentIndexedAt + ${reindexCapSeconds} END) AS dueSec
-            FROM paths
-            WHERE contentDirty = 1 AND trashedAt IS NULL
-        `) as { dueSec: number | null }[];
-        const dueSec = row[0]?.dueSec;
-        return dueSec == null ? null : dueSec * 1000;
+        return searchIndex.earliestPendingReindexAt(this, reindexCapSeconds);
     }
 
     markContentIndexed(pathId: string): void {
-        this.db.update(paths).set({ contentDirty: 0, contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
+        searchIndex.markContentIndexed(this, pathId);
     }
 
-    // A failed extract stamps the attempt time but keeps contentDirty = 1, so the cap window defers the
-    // retry to a later drain instead of dropping the doc from body search (see the reindex catch).
     markContentIndexAttempted(pathId: string): void {
-        this.db.update(paths).set({ contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
+        searchIndex.markContentIndexAttempted(this, pathId);
     }
 
     searchPaths(opts: { q: string; limit: number }): DrivePath[] {
-        const match = sanitizeFtsQuery(opts.q);
-        if (!match) return [];
-
-        // Pass 1a: name hits, FTS-ranked. docContainerDescendantIds keeps eigendoc internals
-        // (data.db, embedded media, embedded chats) out — same exclusion as the body pass.
-        const nameRanked = this.db.all(sql`
-            SELECT p.id AS id
-            FROM paths_fts
-            JOIN paths p ON p.rowid = paths_fts.rowid
-            WHERE paths_fts MATCH ${match}
-              AND p.trashedAt IS NULL
-              AND p.parentId IS NOT NULL
-              AND p.parentId NOT IN (${docContainerDescendantIds})
-            ORDER BY bm25(paths_fts), p.updatedAt DESC, p.id DESC
-            LIMIT ${opts.limit}
-        `) as { id: string }[];
-
-        // Pass 1b: body hits via the sibling content index.
-        const bodyRanked = this.db.all(sql`
-            SELECT p.id AS id
-            FROM paths_content_fts
-            JOIN path_content pc ON pc.rowid = paths_content_fts.rowid
-            JOIN paths p ON p.id = pc.pathId
-            WHERE paths_content_fts MATCH ${match}
-              AND p.trashedAt IS NULL
-              AND p.parentId IS NOT NULL
-              AND p.parentId NOT IN (${docContainerDescendantIds})
-            ORDER BY bm25(paths_content_fts), p.updatedAt DESC, p.id DESC
-            LIMIT ${opts.limit}
-        `) as { id: string }[];
-
-        // Merge: name hits first, then body-only hits. The name boost is structural — a
-        // file whose name matches always outranks one matched only on body. Dedup by id.
-        const seen = new Set<string>();
-        const orderedIds: string[] = [];
-        for (const r of [...nameRanked, ...bodyRanked]) {
-            if (!seen.has(r.id)) {
-                seen.add(r.id);
-                orderedIds.push(r.id);
-            }
-        }
-        const ids = orderedIds.slice(0, opts.limit);
-        if (ids.length === 0) return [];
-
-        // Pass 2: hydrate through Drizzle so timestamp columns come back as Date. Order
-        // preserved via the id-keyed map.
-        const rows = this.db.select().from(paths).where(inArray(paths.id, ids)).all();
-        const byId = new Map(rows.map((r) => [r.id, r]));
-        return ids
-            .map((id) => byId.get(id))
-            .filter((r): r is NonNullable<typeof r> => r !== undefined)
-            .map((r) => this.toDrivePath(r));
+        return searchIndex.searchPaths(this, opts);
     }
 
     async getPathsWithACL(): Promise<DrivePath[]> {
@@ -1786,7 +1704,8 @@ export class Mount {
         return ordered.map((r) => this.toDrivePath(r));
     }
 
-    private toDrivePath(row: typeof paths.$inferSelect): DrivePath {
+    // internal — used by mount/*.ts
+    toDrivePath(row: typeof paths.$inferSelect): DrivePath {
         let size = row.size;
         if (row.type !== 'file' && size === null) {
             size = this.computeAndCacheFolderSize(row.id);
@@ -1828,17 +1747,6 @@ export class Mount {
     private async invalidateAncestorsOf(pathId: string): Promise<void> {
         const row = await this.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, pathId)).get();
         if (row) await this.invalidateSizesFrom(row.parentId);
-    }
-
-    // A container's data.db just synced. Mark the CONTAINER (the data.db's parent) for
-    // content re-extraction. Gated on the synced file being the primary `data.db` so
-    // sibling DBs (e.g. comments.db) don't mark the parent. Touches ONLY contentDirty —
-    // never name/updatedAt — so paths_fts is not churned.
-    private async markContainerContentDirty(dataDbPathId: string): Promise<void> {
-        const dataDb = await this.getPath(dataDbPathId);
-        if (dataDb?.name !== 'data.db' || !dataDb.parentId) return;
-        await this.db.update(paths).set({ contentDirty: 1 }).where(eq(paths.id, dataDb.parentId));
-        this.reindexQueue?.kick();
     }
 
     // NULL the cached size on `parentId` and every ancestor up to the mount root.
