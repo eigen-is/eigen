@@ -66,6 +66,11 @@ describe('Drive', () => {
             expect(root).toBeDefined();
             expect(root.id).toBe(aliceRootId);
         });
+
+        test('a malformed ownerId is rejected with 400, not 404', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/drive/not-a-valid-owner-id/mounts');
+            expect(res.status).toBe(400);
+        });
     });
 
     describe('Folder Operations', () => {

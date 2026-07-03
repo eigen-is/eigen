@@ -3,19 +3,19 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isSearchableTextFile } from '@workspace/lib/constants';
 import {
-    DRIVE_MIME_CHAT,
-    DRIVE_MIME_DOC,
     DRIVE_MIME_FOLDER,
-    DRIVE_MIME_SHEETS,
-    DRIVE_MIME_SLIDES,
-    DRIVE_MIME_STICKIES,
     DRIVE_TYPE_FOLDER,
     type DriveContainerType,
     type DrivePath,
     type MountConfig,
     type MountSettings,
 } from '@workspace/lib/types';
-import { type DriveVisibility, EIGEN_DOCUMENT_TYPES, isContainerType } from '@workspace/lib/types/drive';
+import {
+    type DriveVisibility,
+    EIGEN_DOC_TYPE_INFO,
+    EIGEN_DOCUMENT_TYPES,
+    isContainerType,
+} from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -49,7 +49,11 @@ type LocalDatabaseGetter = <S extends SchemaType>(
 ) => Promise<ManagedDatabase<S>>;
 
 function validateName(name: string): void {
-    if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || name.includes('\0')) {
+    // Reject control bytes (incl. NUL) so a name creatable via the API stays reachable
+    // over WebDAV, where resolvePath rejects the same [\x00-\x1f] range (RFC 4918).
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: mirrors resolvePath's control-char guard
+    const hasControlChar = /[\x00-\x1f]/.test(name);
+    if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || hasControlChar) {
         throw new ApiError(400, `Invalid file or folder name: "${name}"`);
     }
 }
@@ -484,15 +488,9 @@ export class Mount {
         validateName(name);
         await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();
-        const mimeTypeMap: Record<string, string> = {
-            folder: DRIVE_MIME_FOLDER,
-            doc: DRIVE_MIME_DOC,
-            stickies: DRIVE_MIME_STICKIES,
-            slides: DRIVE_MIME_SLIDES,
-            sheets: DRIVE_MIME_SHEETS,
-            chat: DRIVE_MIME_CHAT,
-        };
-        const mimeType = mimeTypeMap[type] ?? DRIVE_MIME_FOLDER;
+        // Derive the container mime from the canonical registry; only plain folders
+        // have no eigendoc entry.
+        const mimeType = type === DRIVE_TYPE_FOLDER ? DRIVE_MIME_FOLDER : EIGEN_DOC_TYPE_INFO[type].mime;
         const fileValue = this.isPathBased ? name : '';
 
         // Create directory before DB insert so a crash leaves an orphaned

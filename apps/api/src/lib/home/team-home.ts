@@ -14,7 +14,7 @@ import { Home } from './home';
 
 export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
     const parsed = parseOwnerId(ownerId);
-    if (!parsed || parsed.type !== 'team') {
+    if (parsed.type !== 'team') {
         throw new ApiError(400, 'Invalid teamId format');
     }
     return makeSyntheticUser(ownerId, teamName || ownerId, '');

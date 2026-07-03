@@ -48,7 +48,7 @@ export async function getHome(ownerId: string): Promise<Home> {
                 }
             };
             const parsed = parseOwnerId(ownerId);
-            if (!parsed) {
+            if (parsed.type === 'invalid') {
                 throw new ApiError(400, 'Invalid ownerId format');
             }
             let home: Home;

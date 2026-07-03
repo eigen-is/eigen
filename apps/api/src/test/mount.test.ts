@@ -439,6 +439,10 @@ describe('Name validation', () => {
         expect(mount.createFolder(rootId, 'a\0b')).rejects.toThrow('Invalid file or folder name');
     });
 
+    test('rejects name with control character', async () => {
+        expect(mount.createFolder(rootId, 'a\x01b')).rejects.toThrow('Invalid file or folder name');
+    });
+
     test('rejects .. as file name', async () => {
         expect(mount.createFile(rootId, '..', 'text/plain', 0, undefined)).rejects.toThrow(
             'Invalid file or folder name',

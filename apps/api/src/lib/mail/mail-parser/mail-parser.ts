@@ -597,7 +597,7 @@ class MailParser extends Transform {
                 case 'reply-to':
                 case 'delivered-to':
                 case 'return-path':
-                case 'disposition-notification.ts-to':
+                case 'disposition-notification-to':
                     value = addressparser(value as string) as ParsedAddress[];
                     this.decodeAddresses(value as ParsedAddress[]);
                     value = {
@@ -641,7 +641,7 @@ class MailParser extends Transform {
             'content-description',
             'precedence',
             'errors-to',
-            'disposition-notification.ts-to',
+            'disposition-notification-to',
         ];
 
         const result: Headers = headers as unknown as Headers;

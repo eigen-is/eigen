@@ -6,7 +6,7 @@ import { Home } from './home';
 
 export function getSyntheticOrgUser(ownerId: string): User {
     const parsed = parseOwnerId(ownerId);
-    if (!parsed || parsed.type !== 'org') {
+    if (parsed.type !== 'org') {
         throw new ApiError(400, 'Invalid orgId format');
     }
     return makeSyntheticUser(ownerId, ownerId, '');
