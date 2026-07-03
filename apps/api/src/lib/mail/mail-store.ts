@@ -1,19 +1,5 @@
-import type {
-    Attachment,
-    DraftAttachmentUpload,
-    Email,
-    EmailDraft,
-    EmailSummary,
-    MaildirMailbox,
-    NewDraft,
-} from '@workspace/lib/types/mail';
-import type { StorageFile } from '../storage';
-
-export type DraftUpdateOptions = {
-    tempAttachmentIds?: string[];
-    keepAttachmentIndexes?: number[];
-    forceFullSave?: boolean;
-};
+import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
+import type { FileSink } from 'bun';
 
 export type MailSearchOptions = {
     q: string;
@@ -55,22 +41,29 @@ export interface MailStore {
     getAttachments(messageId: string): Promise<Attachment[]>;
     // skipSync: leave discovery to the next sync — welcome-mail seeding surfaces on first open.
     append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string>;
+    // Writes raw draft bytes under existingId (or a fresh id), indexes them, returns the parsed result.
+    saveDraft(raw: string, existingId?: string): Promise<Email>;
     delete(messageId: string): Promise<void>;
     move(messageId: string, targetMailbox: string): Promise<void>;
     setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void>;
+    updateDraftContent(
+        id: string,
+        subject: string,
+        text: string,
+        recipients?: { toShort: string; toAddress: string; recipientsAll: string },
+    ): void;
 
+    writeDraftMeta(draftId: string, meta: Record<string, unknown>): Promise<void>;
     readDraftMeta<T = Record<string, unknown>>(draftId: string): Promise<T | null>;
     deleteDraftMeta(draftId: string): Promise<void>;
-    cleanupStaleDraftTemps(maxAgeMs?: number): Promise<void>;
+    listDraftMetaIds(): Promise<string[]>;
 
-    // Temporary residents until the draft machine and send pipeline move into Mail (steps 2c-2d).
-    messageHandleDraft(email: NewDraft | EmailDraft, options?: DraftUpdateOptions): Promise<EmailDraft>;
-    uploadDraftAttachment(request: Request, maxSize: number): Promise<DraftAttachmentUpload>;
-    stageDriveAttachment(
-        source: StorageFile,
+    persistDraftTemp(
+        write: (writer: FileSink) => Promise<number>,
         filename: string,
         contentType: string,
-        maxSize: number,
     ): Promise<DraftAttachmentUpload>;
-    messageSend(mail: NewDraft | EmailDraft): Promise<EmailDraft>;
+    readDraftTempFile(tempId: string): Promise<{ content: Buffer; filename: string; contentType: string } | null>;
+    cleanupDraftTemp(tempId: string): Promise<void>;
+    cleanupStaleDraftTemps(maxAgeMs?: number): Promise<void>;
 }

@@ -1,51 +1,18 @@
-import { MaxFileSizeExceededError, parseMultipartRequest } from '@mjackson/multipart-parser';
-import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import type {
-    AddressObject,
-    Attachment,
-    DraftAttachmentUpload,
-    Email,
-    EmailDraft,
-    EmailSummary,
-    MaildirMailbox,
-    NewDraft,
-} from '@workspace/lib/types/mail';
-import { SSEventType } from '@workspace/lib/types/sse';
+import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
+import type { FileSink } from 'bun';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
-import { renderAttachmentPills } from '../core/mail-template';
-import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
-import type { StorageFile } from '../storage';
-import type { DraftMeta } from './mail-domain';
 import { parseEml } from './mail-parse';
-import type { DraftUpdateOptions, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
+import type { MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
 import MailDB from './maildb';
 import { MaildirStore } from './maildir-store';
-import { createEmlContent, type EmlAttachment } from './mailfile';
 import {
     applyFlagsFromFilename,
-    createUniqueMessageId,
     getMailIDfromFileName,
     getStandardMailboxFlags,
     parseFlagsFromFilename,
     rebuildFlagsSuffix,
 } from './mailutils';
-import { draftToOutboundMail } from './sender';
-import { buildMailEvent } from './sse-events';
-
-const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
-
-function appendReferenceLinks(html: string, refs: AttachmentReference[]): string {
-    const refHtml = renderAttachmentPills(refs);
-    if (!refHtml) return html;
-    if (!html) return refHtml;
-    const replaced = html.replace(/<\/body>/i, `${refHtml}</body>`);
-    return replaced !== html ? replaced : html + refHtml;
-}
-
-function extractRefs(email: NewDraft | EmailDraft): AttachmentReference[] | undefined {
-    return 'driveReferences' in email ? email.driveReferences : undefined;
-}
 
 export default class Maildir implements MailStore {
     private store: MaildirStore;
@@ -55,10 +22,6 @@ export default class Maildir implements MailStore {
 
     constructor(private home: Home) {
         this.store = new MaildirStore(home.homeDir);
-    }
-
-    private emit(type: Parameters<typeof buildMailEvent>[0], mail: Parameters<typeof buildMailEvent>[1]): void {
-        this.home.broadcast(buildMailEvent(type, mail));
     }
 
     async init(events: MailStoreEvents): Promise<boolean> {
@@ -163,6 +126,27 @@ export default class Maildir implements MailStore {
         return uniqueId;
     }
 
+    async saveDraft(raw: string, existingId?: string): Promise<Email> {
+        const { uniqueId, filename } = await this.store.deliverToCur(
+            'Drafts',
+            raw,
+            { draft: true, seen: true },
+            existingId,
+        );
+
+        const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
+        if (!parsed) {
+            await this.store.deleteMessage('Drafts', filename).catch(() => {});
+            throw new ApiError(500, 'Failed to parse saved draft');
+        }
+
+        applyFlagsFromFilename(parsed, filename);
+        parsed.filename = filename;
+        parsed.mailbox = 'Drafts';
+        this.db.addEmail(parsed as EmailSummary);
+        return parsed;
+    }
+
     async delete(messageId: string): Promise<void> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
@@ -201,6 +185,21 @@ export default class Maildir implements MailStore {
         if (changes.draft !== undefined) this.db.setDraft(messageId, changes.draft);
     }
 
+    updateDraftContent(
+        id: string,
+        subject: string,
+        text: string,
+        recipients?: { toShort: string; toAddress: string; recipientsAll: string },
+    ): void {
+        this.db.updateDraftContent(id, subject, text, recipients);
+    }
+
+    // -- Draft sidecar + temp staging --
+
+    writeDraftMeta(draftId: string, meta: Record<string, unknown>): Promise<void> {
+        return this.store.writeDraftMeta(draftId, meta);
+    }
+
     readDraftMeta<T = Record<string, unknown>>(draftId: string): Promise<T | null> {
         return this.store.readDraftMeta<T>(draftId);
     }
@@ -209,260 +208,12 @@ export default class Maildir implements MailStore {
         return this.store.deleteDraftMeta(draftId);
     }
 
-    cleanupStaleDraftTemps(maxAgeMs?: number): Promise<void> {
-        return this.store.cleanupStaleDraftTemps(maxAgeMs);
+    listDraftMetaIds(): Promise<string[]> {
+        return this.store.listDraftMetaIds();
     }
 
-    // -- Draft & Send --
-
-    async messageHandleDraft(email: NewDraft | EmailDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
-        const existingId = email.id?.trim() || undefined;
-        const hasNewTemps = !!options.tempAttachmentIds?.length;
-
-        // Fast path: when a draft with attachments already exists on disk and no attachment
-        // changes are requested, skip the expensive EML re-compose. Only write a lightweight
-        // JSON sidecar with the updated headers/body and update the DB list entry.
-        // Note: fast-path saves leave the EML stale on disk; IMAP clients reading Drafts
-        // will see old content until a full save occurs.
-        if (existingId && !hasNewTemps && !options.forceFullSave) {
-            const dbRecord = this.db.getEmail(existingId);
-            if (dbRecord) {
-                const meta = await this.store.readDraftMeta<DraftMeta>(existingId);
-                if (meta && meta.attachments.length > 0) {
-                    const keepAll =
-                        !options.keepAttachmentIndexes ||
-                        (options.keepAttachmentIndexes.length === meta.attachments.length &&
-                            options.keepAttachmentIndexes.every((v, i) => v === i));
-
-                    const stale = meta.lastFullSaveAt && Date.now() - meta.lastFullSaveAt > FULL_SAVE_INTERVAL_MS;
-                    if (keepAll && !stale) {
-                        return this.draftFastSave(email, existingId, meta, dbRecord);
-                    }
-                }
-            }
-        }
-
-        return this.draftFullSave(email, existingId, options);
-    }
-
-    private async draftFastSave(
-        email: NewDraft | EmailDraft,
-        existingId: string,
-        prevMeta: DraftMeta,
-        dbRecord: EmailSummary,
-    ): Promise<EmailDraft> {
-        const driveReferences = extractRefs(email) ?? prevMeta.driveReferences;
-        const meta: DraftMeta = {
-            subject: email.subject || '',
-            to: email.to,
-            cc: email.cc,
-            bcc: email.bcc,
-            text: email.text || '',
-            html: email.html || '',
-            attachments: prevMeta.attachments,
-            driveReferences,
-            lastFullSaveAt: prevMeta.lastFullSaveAt,
-        };
-        await this.store.writeDraftMeta(existingId, meta);
-
-        const textShort = (email.text || '').slice(0, 200);
-        const toAddrObjs = email.to ? (Array.isArray(email.to) ? email.to : [email.to]) : [];
-        const ccAddrObjs = email.cc ? (Array.isArray(email.cc) ? email.cc : [email.cc]) : [];
-        const firstTo = toAddrObjs[0]?.value[0];
-        const allRecipients = [...toAddrObjs, ...ccAddrObjs].flatMap((o) => o.value);
-        const recipients = {
-            toShort: firstTo?.name || firstTo?.address || '',
-            toAddress: firstTo?.address || '',
-            recipientsAll: allRecipients
-                .map((a) => `${a.name || ''} ${a.address || ''}`.trim())
-                .filter((s) => s.length > 0)
-                .join('\n'),
-        };
-        this.db.updateDraftContent(existingId, meta.subject, email.text || '', recipients);
-
-        this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: 'Drafts' });
-
-        const user = this.home.user;
-        const attachments = meta.attachments.map((a) => ({
-            type: 'attachment' as const,
-            content: Buffer.alloc(0),
-            contentType: a.contentType,
-            contentDisposition: 'attachment',
-            filename: a.filename,
-            headers: new Map() as Email['headers'],
-            headerLines: [] as unknown as Email['headerLines'],
-            checksum: '',
-            size: a.size,
-            related: false,
-        }));
-
-        return {
-            ...dbRecord,
-            subject: meta.subject,
-            textShort,
-            hasAttachments: attachments.length > 0,
-            attachments,
-            headers: new Map() as Email['headers'],
-            headerLines: [] as unknown as Email['headerLines'],
-            html: meta.html,
-            text: meta.text,
-            to: email.to,
-            cc: email.cc,
-            bcc: email.bcc,
-            from: {
-                value: [{ address: user.email, name: user.name }],
-                html: user.email,
-                text: user.email,
-            },
-            messageId: 'messageId' in email ? email.messageId : undefined,
-            inReplyTo: 'inReplyTo' in email ? email.inReplyTo : undefined,
-            references: 'references' in email ? email.references : undefined,
-            driveReferences: driveReferences ?? [],
-        } as EmailDraft;
-    }
-
-    private async draftFullSave(
-        email: NewDraft | EmailDraft,
-        existingId: string | undefined,
-        options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] },
-    ): Promise<EmailDraft> {
-        const user = this.home.user;
-
-        // Caller-supplied refs win; otherwise carry forward whatever was last persisted.
-        let driveReferences = extractRefs(email);
-
-        // When a draft-meta sidecar exists, prefer its header/body values (they may be newer
-        // than the stale EML on disk from a previous fast-path save).
-        if (existingId) {
-            const meta = await this.store.readDraftMeta<DraftMeta>(existingId);
-            if (meta) {
-                email = {
-                    ...email,
-                    subject: email.subject ?? meta.subject,
-                    text: email.text ?? meta.text,
-                    html: email.html || meta.html, // || not ?? — mailparser uses `false` for "no HTML"
-                    to: email.to ?? meta.to,
-                    cc: email.cc ?? meta.cc,
-                    bcc: email.bcc ?? meta.bcc,
-                };
-                driveReferences = driveReferences ?? meta.driveReferences;
-            }
-        }
-
-        const existingAttachments: EmlAttachment[] = [];
-        if (existingId) {
-            const old = this.db.getEmail(existingId);
-            if (old) {
-                const parsed = await this.readAndParse(existingId, old.mailbox, old.filename);
-                const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
-                const attachments = parsed?.attachments ?? [];
-                for (let i = 0; i < attachments.length; i++) {
-                    const a = attachments[i];
-                    if (!a.filename || a.contentType.startsWith('text/calendar')) continue;
-                    if (keepSet && !keepSet.has(i)) continue;
-                    if (!(a.content instanceof Uint8Array)) {
-                        console.warn(
-                            `draft ${existingId}: skipping attachment ${a.filename} (unexpected content type ${typeof a.content})`,
-                        );
-                        continue;
-                    }
-                    existingAttachments.push({
-                        filename: a.filename,
-                        content: Buffer.isBuffer(a.content) ? a.content : Buffer.from(a.content),
-                        contentType: a.contentType,
-                    });
-                }
-                await this.store.deleteMessage(old.mailbox, old.filename);
-                this.db.deleteEmail(existingId);
-            }
-        }
-
-        const newAttachments: EmlAttachment[] = [];
-        for (const tempId of options.tempAttachmentIds ?? []) {
-            const { content, filename, contentType } = await this.getDraftTempFile(tempId);
-            newAttachments.push({ filename, content, contentType });
-        }
-
-        const allAttachments = [...existingAttachments, ...newAttachments];
-
-        const from: AddressObject = {
-            value: [{ address: user.email, name: user.name }],
-            html: user.email,
-            text: user.email,
-        };
-
-        const newId = existingId ?? createUniqueMessageId();
-        const cleanHtml = email.html || '';
-        // Bake ref links into the EML body so both the Sent copy and the outbound SMTP
-        // message carry them. DraftMeta stores the *clean* html so the compose view shows
-        // what the user typed, not the rendered card block.
-        const bakedHtml = driveReferences?.length ? appendReferenceLinks(cleanHtml, driveReferences) : cleanHtml;
-        const emlContent = await createEmlContent({
-            id: newId,
-            subject: email.subject || '',
-            from,
-            to: email.to,
-            cc: email.cc,
-            bcc: email.bcc,
-            text: email.text || '',
-            html: bakedHtml,
-            date: new Date(),
-            attachments: allAttachments.length ? allAttachments : undefined,
-        });
-
-        const { uniqueId, filename } = await this.store.deliverToCur(
-            'Drafts',
-            emlContent,
-            { draft: true, seen: true },
-            existingId,
-        );
-
-        for (const tempId of options.tempAttachmentIds ?? []) {
-            await this.cleanupDraftTempFile(tempId);
-        }
-
-        const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
-        if (!parsed) {
-            await this.store.deleteMessage('Drafts', filename).catch(() => {});
-            throw new ApiError(500, 'Failed to parse saved draft');
-        }
-
-        applyFlagsFromFilename(parsed, filename);
-        parsed.filename = filename;
-        parsed.mailbox = 'Drafts';
-        this.db.addEmail(parsed as EmailSummary);
-
-        // Write draft-meta so subsequent body-only saves can use the fast path.
-        const visibleAttachments = (parsed.attachments ?? []).filter(
-            (a) => a.filename && !a.contentType.startsWith('text/calendar'),
-        );
-        await this.store.writeDraftMeta(uniqueId, {
-            subject: email.subject || '',
-            to: email.to,
-            cc: email.cc,
-            bcc: email.bcc,
-            text: email.text || '',
-            html: cleanHtml,
-            attachments: visibleAttachments.map((a) => ({
-                filename: a.filename!,
-                contentType: a.contentType,
-                size: a.size,
-            })),
-            driveReferences,
-            lastFullSaveAt: Date.now(),
-        } satisfies DraftMeta);
-
-        this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: uniqueId, mailbox: 'Drafts' });
-
-        // Overlay the clean html so the client's compose view doesn't re-render the
-        // baked card block that's in the parsed EML.
-        parsed.html = cleanHtml;
-        (parsed as EmailDraft).driveReferences = driveReferences ?? [];
-        return parsed as EmailDraft;
-    }
-
-    private async persistDraftTemp(
-        write: (writer: ReturnType<MaildirStore['openDraftTempWriter']>) => Promise<number>,
+    async persistDraftTemp(
+        write: (writer: FileSink) => Promise<number>,
         filename: string,
         contentType: string,
     ): Promise<DraftAttachmentUpload> {
@@ -488,112 +239,23 @@ export default class Maildir implements MailStore {
         return { tempId, ...meta };
     }
 
-    async uploadDraftAttachment(request: Request, maxSize: number): Promise<DraftAttachmentUpload> {
-        try {
-            for await (const part of parseMultipartRequest(request, { maxFileSize: maxSize })) {
-                if (!part.isFile || !part.filename) continue;
-                return await this.persistDraftTemp(
-                    async (writer) => {
-                        let size = 0;
-                        for (const chunk of part.content) {
-                            writer.write(chunk);
-                            size += chunk.length;
-                        }
-                        return size;
-                    },
-                    part.filename,
-                    part.mediaType || 'application/octet-stream',
-                );
-            }
-        } catch (e) {
-            if (e instanceof MaxFileSizeExceededError) {
-                const limitMB = Math.floor(maxSize / (1024 * 1024));
-                throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
-            }
-            throw e;
-        }
-
-        throw new ApiError(400, 'No file in request');
+    readDraftTempFile(tempId: string): Promise<{ content: Buffer; filename: string; contentType: string } | null> {
+        return this.store.readDraftTempFile(tempId);
     }
 
-    async stageDriveAttachment(
-        source: StorageFile,
-        filename: string,
-        contentType: string,
-        maxSize: number,
-    ): Promise<DraftAttachmentUpload> {
-        // Source size is known from the drive DB; the route validates it against maxSize before
-        // calling us. We still guard during streaming in case the source grows mid-read.
-        return this.persistDraftTemp(
-            async (writer) => {
-                let size = 0;
-                const reader = source.stream().getReader();
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    size += value.byteLength;
-                    if (size > maxSize) {
-                        const limitMB = Math.floor(maxSize / (1024 * 1024));
-                        throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
-                    }
-                    writer.write(value);
-                }
-                return size;
-            },
-            filename,
-            contentType,
-        );
+    cleanupDraftTemp(tempId: string): Promise<void> {
+        return this.store.cleanupDraftTemp(tempId);
     }
 
-    async getDraftTempFile(tempId: string): Promise<{
-        content: Buffer;
-        filename: string;
-        contentType: string;
-    }> {
-        const result = await this.store.readDraftTempFile(tempId);
-        if (!result) throw new ApiError(404, `Temp attachment '${tempId}' not found`);
-        return result;
-    }
-
-    async cleanupDraftTempFile(tempId: string): Promise<void> {
-        await this.store.cleanupDraftTemp(tempId);
-    }
-
-    async messageSend(mailToSend: NewDraft | EmailDraft): Promise<EmailDraft> {
-        // Full EML rebuild so attachment content is available for SMTP. draftFullSave bakes
-        // ref cards into the Sent-folder EML and returns `mail` with the *clean* html
-        // (for the frontend). Re-bake here so the outbound SMTP body matches the Sent copy.
-        const mail = await this.draftFullSave(mailToSend, (mailToSend as EmailDraft).id?.trim(), {});
-        const message = draftToOutboundMail(mail, this.home.user.email);
-        if (mail.driveReferences?.length) {
-            message.html = appendReferenceLinks(message.html || '', mail.driveReferences);
-        }
-
-        if (!message.subject.trim() && !message.text.trim() && !message.html) {
-            throw new ApiError(400, 'Cannot send email with empty subject and body');
-        }
-
-        const sent = await sendMail(message);
-
-        if (!sent) {
-            throw new ApiError(500, 'Failed to send email');
-        }
-
-        await this.store.deleteDraftMeta(mail.id);
-        await this.move(mail.id, 'Sent');
-        this.emit(SSEventType.MAIL_MOVED, { messageId: mail.id, mailbox: 'Drafts', toMailbox: 'Sent' });
-        await this.setFlags(mail.id, { draft: false });
-        this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: mail.id, mailbox: 'Sent' });
-        this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: 'Sent' });
-
-        return mail;
+    cleanupStaleDraftTemps(maxAgeMs?: number): Promise<void> {
+        return this.store.cleanupStaleDraftTemps(maxAgeMs);
     }
 
     // -- Sync --
 
     async syncMailbox(mailbox: string): Promise<void> {
         // Don't start a sync once teardown has begun — the watcher can fire one fire-and-forget
-        // (init :98) and doSyncMailbox's later phases would query a closed db (see destruct).
+        // (watch()) and doSyncMailbox's later phases would query a closed db (see destruct).
         if (this.home.destructing) return;
         const running = this.syncingMailboxes.get(mailbox);
         if (running) return running;
@@ -705,40 +367,8 @@ export default class Maildir implements MailStore {
     }
 
     async destruct(): Promise<void> {
-        await this.flushDraftSidecars();
         if (this.db) {
             await this.db.destruct();
-        }
-    }
-
-    private async flushDraftSidecars(): Promise<void> {
-        const ids = await this.store.listDraftMetaIds();
-        for (const id of ids) {
-            try {
-                const dbRecord = this.db.getEmail(id);
-                if (!dbRecord?.isDraft) {
-                    await this.store.deleteDraftMeta(id);
-                    continue;
-                }
-                const meta = await this.store.readDraftMeta<DraftMeta>(id);
-                if (!meta) continue;
-                await this.draftFullSave(
-                    {
-                        id,
-                        subject: meta.subject,
-                        text: meta.text,
-                        html: meta.html,
-                        to: meta.to,
-                        cc: meta.cc,
-                        bcc: meta.bcc,
-                        driveReferences: meta.driveReferences,
-                    },
-                    id,
-                    {},
-                );
-            } catch (err) {
-                console.error(`[mail] Failed to flush draft sidecar ${id}:`, err);
-            }
         }
     }
 }

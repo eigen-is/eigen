@@ -1,5 +1,5 @@
 import { hostname } from 'node:os';
-import type { EmailSummary } from '@workspace/lib/types/mail';
+import type { AddressObject, EmailSummary } from '@workspace/lib/types/mail';
 import type { MailFlag } from './mail-store';
 
 let deliveryCounter = 0;
@@ -86,4 +86,22 @@ export function applyFlagsFromFilename(email: EmailSummary, filename: string): v
     email.isFlagged = flags.flagged;
     email.isDraft = flags.draft;
     email.isReplied = flags.replied;
+}
+
+export function buildRecipientSummary(
+    to: AddressObject | AddressObject[] | undefined,
+    cc: AddressObject | AddressObject[] | undefined,
+): { toShort: string; toAddress: string; recipientsAll: string } {
+    const toList = to ? (Array.isArray(to) ? to : [to]) : [];
+    const ccList = cc ? (Array.isArray(cc) ? cc : [cc]) : [];
+    const firstTo = toList[0]?.value[0];
+    const allRecipients = [...toList, ...ccList].flatMap((o) => o.value);
+    return {
+        toShort: firstTo?.name || firstTo?.address || '',
+        toAddress: firstTo?.address || '',
+        recipientsAll: allRecipients
+            .map((a) => `${a.name || ''} ${a.address || ''}`.trim())
+            .filter((s) => s.length > 0)
+            .join('\n'),
+    };
 }
