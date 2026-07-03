@@ -191,3 +191,7 @@ Extract only the pure modules.
   interop-risky regardless of the TZID crash above.
 - `/mail/deliver/:email` is the untrusted-iMIP vector; sender restrictions there are finding 1 in
   [AUDIT.md](AUDIT.md).
+
+---
+
+_Postscript 2026-07-03: decomposition executed on `refactor/calendar-split` (merged ed3b3ba6) — `recurrence.ts` + `mappers.ts` extracted, calendar.ts 1685→1367 LOC. Deviation: the wall-clock dedup landed as a `wallClockDate(date, tz)` primitive (4 sites) instead of the proposed `wallClockRule` (2 sites). Events+RSVP kept in-class and `SharedCalendars` skipped, per the doc._
