@@ -41,7 +41,6 @@ import { ChatRoom } from '../chat';
 import { openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
-import { contentDisposition, parseByteRange } from '../core/http';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
@@ -66,6 +65,7 @@ import {
 import { diffACLEmails, type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
 import { LockManager } from './lock-manager';
 import { getUniqueFileName } from './naming';
+import { serveFile } from './serve-file';
 import { getSharedDatabase } from './shared';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
@@ -684,59 +684,7 @@ export default class Drive {
         disposition: 'attachment' | 'inline',
         range: string | null = null,
     ): Promise<Response> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getActivePath(pathId);
-        if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
-        const mimeType = path.mimeType || 'application/octet-stream';
-        const headers: Record<string, string> = {
-            'Content-Type': mimeType,
-            'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
-            'Cache-Control': 'public, max-age=86400',
-            Expires: new Date(Date.now() + 86400000).toUTCString(),
-            // Stored MIME is the upload's own Content-Type, served verbatim — nosniff stops the
-            // browser re-sniffing a disguised payload (e.g. HTML bytes uploaded as image/png).
-            'X-Content-Type-Options': 'nosniff',
-            // Advertise range support so media players seek by fetching byte ranges instead of
-            // re-downloading the whole file (notably from S3, where readRange issues a ranged GET).
-            'Accept-Ranges': 'bytes',
-        };
-        // /embed serves inline from the API's own origin, so a scriptable upload (HTML/SVG) could
-        // run script with the viewer's session. A sandbox CSP neutralises active content while
-        // still rendering the file; scoped to scriptable types so media/PDF previews are untouched.
-        if (disposition === 'inline') {
-            const baseMime = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
-            if (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml') {
-                headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
-            }
-        }
-
-        const parsed = parseByteRange(range, path.size);
-        if (parsed === 'unsatisfiable') {
-            return new Response(null, {
-                status: 416,
-                headers: { ...headers, 'Content-Range': `bytes */${path.size}` },
-            });
-        }
-        if (parsed) {
-            const slice = await mount.readRange(pathId, parsed.start, parsed.end + 1);
-            if (!slice) throw new ApiError(404, 'File not found');
-            // Stream the slice. Passing the BunFile/S3File directly loses the slice bounds
-            // somewhere in the response pipeline, so route through .stream() which respects them.
-            return new Response(slice.stream(), {
-                status: 206,
-                headers: {
-                    ...headers,
-                    'Content-Length': String(parsed.end - parsed.start + 1),
-                    'Content-Range': `bytes ${parsed.start}-${parsed.end}/${path.size}`,
-                },
-            });
-        }
-
-        const file = await mount.readFile(pathId);
-        if (!file) throw new ApiError(404, 'File not found');
-        // S3File doesn't support ResponseInit options — stream it instead
-        const body: BodyInit = 'bucket' in file ? file.stream() : file;
-        return new Response(body, { headers });
+        return serveFile(this.getMount(mountId), pathId, disposition, range);
     }
 
     async writeFileContent(
