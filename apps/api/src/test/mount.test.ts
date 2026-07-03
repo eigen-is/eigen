@@ -1536,6 +1536,37 @@ describe('content index dirty marks', () => {
         mount.markContentIndexed(txt);
         expect(mount.getContentDirtyPaths(120, 100).map((p) => p.id)).not.toContain(txt);
     });
+
+    // Overwrites mirror createFile's isSearchableTextFile gate — a binary PUT must not queue a re-extract.
+    test('overwriting a plaintext file re-marks it contentDirty; a binary overwrite does not', async () => {
+        const txt = await mount.createFile(rootId, 'rewrite.txt', 'text/plain', 0, undefined);
+        const png = await mount.createFile(rootId, 'rewrite.png', 'image/png', 0, undefined);
+        mount.markContentIndexed(txt);
+        mount.markContentIndexed(png);
+
+        await mount.writeFile(txt, Buffer.from('fresh text'));
+        await mount.writeFile(png, Buffer.from([137, 80, 78, 71]));
+
+        const dirtyIds = mount.getContentDirtyPaths(-1, 100).map((p) => p.id);
+        expect(dirtyIds).toContain(txt);
+        expect(dirtyIds).not.toContain(png);
+    });
+
+    test('overwriting from a temp file (streaming PUT) follows the same searchable gate', async () => {
+        const txt = await mount.createFile(rootId, 'stream.txt', 'text/plain', 0, undefined);
+        const png = await mount.createFile(rootId, 'stream.png', 'image/png', 0, undefined);
+        mount.markContentIndexed(txt);
+        mount.markContentIndexed(png);
+
+        await Bun.write(mount.getTempPath('overwrite-txt'), 'streamed text');
+        await mount.writeFileFromTemp(txt, 'overwrite-txt', 13, 'hash-a');
+        await Bun.write(mount.getTempPath('overwrite-png'), Buffer.from([137, 80, 78, 71]));
+        await mount.writeFileFromTemp(png, 'overwrite-png', 4, 'hash-b');
+
+        const dirtyIds = mount.getContentDirtyPaths(-1, 100).map((p) => p.id);
+        expect(dirtyIds).toContain(txt);
+        expect(dirtyIds).not.toContain(png);
+    });
 });
 
 describe('content reindex failure handling', () => {

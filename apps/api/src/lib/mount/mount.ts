@@ -848,6 +848,16 @@ export class Mount {
         return probe.slice(start, end);
     }
 
+    // Overwrites aren't handed mimeType/name like createFile — resolve the searchable gate from the row.
+    private async isSearchableRow(pathId: string): Promise<boolean> {
+        const row = await this.db
+            .select({ name: paths.name, mimeType: paths.mimeType })
+            .from(paths)
+            .where(eq(paths.id, pathId))
+            .get();
+        return !!row && isSearchableTextFile(row.mimeType, row.name);
+    }
+
     async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const storageKey = await this.getStorageKey(pathId);
         const written = await this.storage.write(storageKey, data);
@@ -862,12 +872,13 @@ export class Mount {
         }
 
         const hash = await this.computeHash(data);
+        const searchable = await this.isSearchableRow(pathId);
         await this.db
             .update(paths)
-            .set({ size, hash, updatedAt: new Date(), contentDirty: 1 })
+            .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
             .where(eq(paths.id, pathId));
         await this.invalidateAncestorsOf(pathId);
-        this.reindexQueue?.kick();
+        if (searchable) this.reindexQueue?.kick();
         return written;
     }
 
@@ -876,12 +887,13 @@ export class Mount {
     async writeFileFromTemp(pathId: string, tempId: string, size: number, hash: string): Promise<void> {
         const storageKey = await this.getStorageKey(pathId);
         await this.uploadFromTemp(storageKey, tempId);
+        const searchable = await this.isSearchableRow(pathId);
         await this.db
             .update(paths)
-            .set({ size, hash, updatedAt: new Date(), contentDirty: 1 })
+            .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
             .where(eq(paths.id, pathId));
         await this.invalidateAncestorsOf(pathId);
-        this.reindexQueue?.kick();
+        if (searchable) this.reindexQueue?.kick();
     }
 
     getTempPath(pathId: string): string {
