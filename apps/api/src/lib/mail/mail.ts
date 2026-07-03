@@ -1,13 +1,11 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DraftAttachmentUpload, Email } from '@workspace/lib/types/mail';
-import { processInboundImip } from '../calendar/imip';
 import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive';
 import { getHome } from '../home';
 import type { User } from '../user';
 import { getUserByEmail } from '../user/';
-import { simpleParser } from './mail-parser';
 
 export async function getMailClient(user: User) {
     const home = await getHome(user.id);
@@ -21,21 +19,7 @@ export async function mailboxDeliver(to: string, file: ArrayBuffer) {
     }
     const home = await getHome(user.id);
     // Write raw bytes verbatim — decoding to a string mangles non-UTF-8 mail (Latin-1/Shift-JIS/binary).
-    const message = Buffer.from(file);
-    const result = await home.mail.mailboxDeliver(message);
-
-    // Process iMIP calendar attachments (blocking so event exists before client queries)
-    try {
-        const parsed = await simpleParser(message);
-        const hasCalendar = parsed.attachments.some((a) => a.contentType.startsWith('text/calendar'));
-        if (hasCalendar) {
-            processInboundImip(home, parsed);
-        }
-    } catch (error) {
-        console.error('iMIP processing failed:', error);
-    }
-
-    return result;
+    return home.mail.mailboxDeliver(Buffer.from(file));
 }
 
 export async function messageGet(user: User, messageId: string): Promise<Email> {

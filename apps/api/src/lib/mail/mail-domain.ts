@@ -11,11 +11,13 @@ import type {
     NewDraft,
 } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { processInboundImip } from '../calendar/imip';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { renderAttachmentPills } from '../core/mail-template';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import type { StorageFile } from '../storage';
+import { simpleParser } from './mail-parser';
 import type { MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
@@ -126,7 +128,20 @@ export class Mail {
     }
 
     async mailboxDeliver(message: Buffer): Promise<string> {
-        return this.store.append('', message);
+        const uniqueId = await this.store.append('', message);
+
+        // Process iMIP calendar attachments (blocking so event exists before client queries)
+        try {
+            const parsed = await simpleParser(message);
+            const hasCalendar = parsed.attachments.some((a) => a.contentType.startsWith('text/calendar'));
+            if (hasCalendar) {
+                processInboundImip(this.home, parsed);
+            }
+        } catch (error) {
+            console.error('iMIP processing failed:', error);
+        }
+
+        return uniqueId;
     }
 
     async mailboxGet(mailbox: string): Promise<EmailSummary[]> {
