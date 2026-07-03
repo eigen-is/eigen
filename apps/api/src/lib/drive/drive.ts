@@ -17,7 +17,6 @@ import {
     type DrivePathDetails,
     type DriveVisibility,
     type EigenDocType,
-    isChatType,
     isCollabType,
     isContainerType,
     stripEigenExtension,
@@ -68,6 +67,7 @@ import { getSharedDatabase } from './shared';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 import { streamFilesToTemp, writeTempWithHash } from './streaming';
+import { deletePath, permanentlyDelete, restorePath } from './trash';
 import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 
 // Drive is the high-level domain API over multiple mounts. Routes reach it through
@@ -409,69 +409,18 @@ export default class Drive {
     async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
-
         if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
-
-        // Capture BEFORE trashPath re-parents the item to the mount root — the
-        // post-trash breadcrumb would lose the old folder's ACL and silently skip
-        // exactly the folder-watchers this event is for.
-        const preTrashChain = user ? await mount.getBreadcrumb(pathId) : [];
-
-        // Close collab docs BEFORE setting trashedAt (they use listFolderAll internally)
-        if (isContainerType(item.type)) {
-            await this.closeCollabDocumentsRecursively(mountId, pathId);
-            await this.propagateACLRemovalRecursively(mountId, pathId);
-        } else {
-            if (isCollabType(item.type)) {
-                try {
-                    await this.closeCollabDocument(mountId, pathId);
-                } catch (e) {
-                    console.error(`Failed to close collab document ${pathId}:`, e);
-                }
-            }
-            if (item.acl) {
-                await propagateACLChange(item, item.acl, null, null);
-            }
-        }
-
-        const trashedItem = await mount.trashPath(pathId);
-        this.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
-        if (user) {
-            await mount.history.record({ pathId, eventType: 'trashed', actor: user });
-            // path: pre-trash snapshot — trashedAt is still null so the fan-out guard passes
-            await mount.history.fanOut({
-                eventType: 'trashed',
-                actor: user,
-                path: item,
-                chainRootIds: [item.parentId],
-                verifyAncestors: preTrashChain,
-            });
-        }
+        await deletePath(this, mount, item, user);
     }
 
     async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
-
-        const restoredItem = await mount.restorePath(pathId);
-
-        // Re-propagate ACL
-        if (restoredItem.acl) {
-            await propagateACLChange(restoredItem, null, restoredItem.acl, null);
-        }
-        // For containers, re-propagate for descendants with ACL
-        if (isContainerType(restoredItem.type)) {
-            await this.propagateACLRestoreRecursively(mountId, restoredItem.id);
-        }
-
-        this.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
-        // recordFileEvent re-fetches the path, so it sees the post-restore row
-        // (trashedAt cleared, original parentId) — the chain it walks is the restored one
-        if (user) await this.recordFileEvent(mountId, pathId, user, 'restored');
+        await restorePath(this, mount, pathId, user);
     }
 
     async listTrash(mountId: string): Promise<DrivePath[]> {
@@ -483,36 +432,7 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
-
-        // Notification-only ('deleted' has no history row — the FK cascade would kill
-        // it instantly). Capture watchers + the trashedFrom id that justifies the
-        // notification BEFORE the delete removes the path_watchers rows.
-        let watcherIds: string[] = [];
-        let trashedFrom: string | null = null;
-        if (user) {
-            trashedFrom = await mount.getTrashedFrom(pathId);
-            watcherIds = mount.history.collectWatcherIds(trashedFrom ? [pathId, trashedFrom] : [pathId], user.id);
-        }
-
-        await mount.permanentlyDeleteFromTrash(pathId);
-
-        if (isContainerType(item.type) || isCollabType(item.type) || isChatType(item.type)) {
-            this.emit(SSEventType.DRIVE_FOLDER_DELETED, item);
-        } else {
-            this.emit(SSEventType.DRIVE_FILE_DELETED, item);
-        }
-
-        if (user && watcherIds.length > 0) {
-            // The item itself joins the chain so direct-file-share watchers still verify
-            // (the trashedFrom folder survives the delete, so its breadcrumb is intact).
-            await mount.history.notifyWatchers(watcherIds, {
-                eventType: 'deleted',
-                actor: user,
-                itemName: item.name,
-                tagPathId: pathId,
-                verifyAncestors: [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item],
-            });
-        }
+        await permanentlyDelete(this, mount, item, user);
     }
 
     async emptyTrash(mountId: string, user?: User): Promise<void> {
@@ -1316,53 +1236,6 @@ export default class Drive {
         return mount;
     }
 
-    private async propagateACLRemovalRecursively(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) return;
-        if (path.acl) {
-            await propagateACLChange(path, path.acl, null, null);
-        }
-        if (isContainerType(path.type)) {
-            const children = await mount.listFolderAll(pathId);
-            for (const child of children) {
-                await this.propagateACLRemovalRecursively(mountId, child.id);
-            }
-        }
-    }
-
-    private async propagateACLRestoreRecursively(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const children = await mount.listFolderAll(pathId);
-        for (const child of children) {
-            if (child.acl) {
-                await propagateACLChange(child, null, child.acl, null);
-            }
-            if (isContainerType(child.type)) {
-                await this.propagateACLRestoreRecursively(mountId, child.id);
-            }
-        }
-    }
-
-    private async closeCollabDocumentsRecursively(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) return;
-
-        if (isCollabType(path.type)) {
-            try {
-                await this.closeCollabDocument(mountId, pathId);
-            } catch (error) {
-                console.error(`Failed to close collab document ${pathId}:`, error);
-            }
-        } else if (isContainerType(path.type)) {
-            const children = await mount.listFolderAll(pathId);
-            for (const child of children) {
-                await this.closeCollabDocumentsRecursively(mountId, child.id);
-            }
-        }
-    }
-
     // Re-check read on every OPEN collab doc at or below `pathId` (mirrors the
     // closeCollabDocumentsRecursively walk). Re-checking canRead per connection — not
     // diffing removed ACL entries — is what makes revoking a *folder* share cascade to
@@ -1390,8 +1263,8 @@ export default class Drive {
         }
     }
 
-    // Called by: the extracted Drive body modules (upload.ts). Not route-callable — no
-    // SharedDrive wrapper, so the union keeps it off the route surface.
+    // Called by: the extracted Drive body modules (upload.ts, trash.ts). Not route-callable —
+    // no SharedDrive wrapper, so the union keeps it off the route surface.
     emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {
         this.home.broadcast(buildDriveEvent(type, path, oldParentId));
     }
