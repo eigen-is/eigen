@@ -645,4 +645,110 @@ describe('Collab', () => {
             expect(ws.readyState).toBeGreaterThan(0);
         });
     });
+
+    describe('Move revokes read (P3-C)', () => {
+        // A doc that Bob can read ONLY via a shared folder loses read when it is moved OUT
+        // of that folder — read is inherited from the ancestor chain, so re-parenting away
+        // from the shared ancestor revokes it, exactly like an ACL change (P2-8). The live
+        // collab socket must close on the move. Control: moving WITHIN the shared subtree
+        // keeps read, so the socket must stay open.
+        test('moving a doc OUT of a shared folder closes the revoked user, keeps the owner', async () => {
+            const aliceHome = await getHome(ctx.alice.user.id);
+            const bobHome = await getHome(ctx.bob.user.id);
+            const aliceUser = aliceHome.user;
+            const bobUser = bobHome.user;
+
+            // Shared folder → Bob has read on everything nested inside it.
+            const sharedFolder = await aliceHome.drive.createFolder(
+                aliceMountId,
+                aliceRootId,
+                'P3C Shared Folder',
+                aliceUser,
+            );
+            await aliceHome.drive.updateACL(
+                aliceMountId,
+                sharedFolder.id,
+                [{ id: 'bob@test.eigen.is', read: true, write: true }],
+                undefined,
+                undefined,
+                aliceUser,
+            );
+            const movingDoc = await aliceHome.drive.create(
+                aliceMountId,
+                sharedFolder.id,
+                'P3C Moving Doc',
+                'doc',
+                aliceUser,
+            );
+
+            // Bob reads the doc purely via the folder ancestor (no direct ACL on the doc).
+            expect(await aliceHome.drive.canRead(aliceMountId, movingDoc.id, bobUser)).toBe(true);
+
+            const collab = await aliceHome.drive.getCollabDocument(aliceMountId, movingDoc.id);
+            const baseline = collab.connectionCount;
+            const aliceConn = makeSpyConn();
+            const bobConn = makeSpyConn();
+            collab.subscribe(aliceUser, aliceConn);
+            collab.subscribe(bobUser, bobConn);
+            expect(collab.connectionCount).toBe(baseline + 2);
+
+            // Move the doc OUT of the shared folder to the (unshared) root.
+            await aliceHome.drive.movePath(aliceMountId, movingDoc.id, aliceRootId, aliceUser);
+
+            // Read is now gone at the new location, and Bob's socket is closed for it.
+            expect(await aliceHome.drive.canRead(aliceMountId, movingDoc.id, bobUser)).toBe(false);
+            expect(bobConn.closedWith?.code).toBe(1008);
+            expect(aliceConn.closedWith).toBeNull();
+            expect(collab.connectionCount).toBe(baseline + 1);
+
+            // Bob no longer receives broadcasts; Alice still does.
+            const aliceBefore = aliceConn.sent.length;
+            const bobBefore = bobConn.sent.length;
+            collab.doc.getMap('move-probe').set('k', 'v');
+            expect(aliceConn.sent.length).toBeGreaterThan(aliceBefore);
+            expect(bobConn.sent.length).toBe(bobBefore);
+
+            collab.unsubscribe(aliceUser, aliceConn);
+        });
+
+        test('moving a doc WITHIN the shared subtree keeps read, does NOT close', async () => {
+            const aliceHome = await getHome(ctx.alice.user.id);
+            const bobHome = await getHome(ctx.bob.user.id);
+            const aliceUser = aliceHome.user;
+            const bobUser = bobHome.user;
+
+            const sharedFolder = await aliceHome.drive.createFolder(
+                aliceMountId,
+                aliceRootId,
+                'P3C Shared Folder 2',
+                aliceUser,
+            );
+            await aliceHome.drive.updateACL(
+                aliceMountId,
+                sharedFolder.id,
+                [{ id: 'bob@test.eigen.is', read: true, write: true }],
+                undefined,
+                undefined,
+                aliceUser,
+            );
+            // A subfolder still INSIDE the shared folder — read survives a move into it.
+            const subFolder = await aliceHome.drive.createFolder(aliceMountId, sharedFolder.id, 'P3C Sub', aliceUser);
+            const doc = await aliceHome.drive.create(aliceMountId, sharedFolder.id, 'P3C Within Doc', 'doc', aliceUser);
+
+            const collab = await aliceHome.drive.getCollabDocument(aliceMountId, doc.id);
+            const baseline = collab.connectionCount;
+            const bobConn = makeSpyConn();
+            collab.subscribe(bobUser, bobConn);
+            expect(collab.connectionCount).toBe(baseline + 1);
+
+            // Move within the shared subtree — Bob still reads via the shared folder ancestor.
+            await aliceHome.drive.movePath(aliceMountId, doc.id, subFolder.id, aliceUser);
+
+            expect(await aliceHome.drive.canRead(aliceMountId, doc.id, bobUser)).toBe(true);
+            expect(bobConn.closedWith).toBeNull();
+            expect(collab.connectionCount).toBe(baseline + 1);
+
+            collab.unsubscribe(bobUser, bobConn);
+        });
+    });
 });

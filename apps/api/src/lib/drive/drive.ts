@@ -600,6 +600,11 @@ export default class Drive {
                 verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(pathId))],
             });
         }
+        // Re-parenting OUT of a shared subtree revokes read for users who had it only via
+        // the old ancestor chain, exactly like an ACL change, so enforce it the same way
+        // (P2-8). Runs after updatePath/side-effects so canRead sees the new chain and the
+        // move can't be undone; NO-OP when read is kept/widened; local close (owner-scoped).
+        await this.enforceReadAccessRecursively(mountId, pathId);
         return movedPath;
     }
 
