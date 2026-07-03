@@ -4,13 +4,13 @@ import { escapeHtml } from '@workspace/lib/html';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
-import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
 import { readEigendocContent } from '../../document/doc';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import { buildDataUriMap } from '../media';
+import { sanitizeExportHtml } from '../sanitize';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
 
 const lowlight = createLowlight(common);
@@ -51,7 +51,7 @@ export async function generateExportHtml(mount: Mount, drivePath: DrivePath): Pr
         },
     });
 
-    const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true, ADD_DATA_URI_TAGS: ['img'] });
+    const sanitized = sanitizeExportHtml(bodyHtml, { ADD_DATA_URI_TAGS: ['img'] });
     return wrapInDocument(drivePath.name, sanitized);
 }
 

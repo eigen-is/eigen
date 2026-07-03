@@ -1,19 +1,53 @@
 import { describe, expect, test } from 'bun:test';
+import { sanitizeExportHtml } from '../lib/export/sanitize';
 import { htmlToPdf, isWeasyPrintAvailable } from '../lib/export/weasyprint';
 
-// SSRF regression: a collaborator can inject `url(http://…)` into a schemaless slide/sheet
-// color, which lands in CSS the server-side PDF renderer would otherwise fetch (SSRF from
-// the API host). All legitimate export resources are embedded as `data:` URIs, so the
-// renderer must never reach the network. Skipped where WeasyPrint isn't installed.
-const wp = await isWeasyPrintAvailable();
-const suite = wp ? describe : describe.skip;
+// SSRF regression: a collaborator can inject `url(http://…)` or `<img src=http://…>` into a
+// schemaless slide/sheet color or text. It lands in CSS the server-side PDF renderer would
+// otherwise fetch (SSRF from the API host). All legit export resources are embedded as `data:`
+// URIs, so sanitizeExportHtml — run by every export path before htmlToPdf — strips every non-data
+// ref. That layer is tested unconditionally (WeasyPrint's CLI can't restrict protocols, so the
+// strip must not depend on the renderer being present); the end-to-end run is skipped where absent.
 
 // 1x1 PNG — the only legitimate resource shape exports embed (fonts/images are data: URIs).
 const DATA_PNG =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
-suite('PDF export SSRF', () => {
-    test('an injected remote url() does not trigger a network fetch', async () => {
+describe('export sanitize — SSRF surface', () => {
+    test('an injected remote url() in a style is neutralized', () => {
+        const out = sanitizeExportHtml(
+            '<div style="background-image:url(http://169.254.169.254/latest/meta-data/)">x</div>',
+        );
+        expect(out).not.toMatch(/url\(\s*['"]?https?:/i);
+    });
+
+    test('a split-declaration url() injection is neutralized', () => {
+        const out = sanitizeExportHtml('<div style="color:red;background-image:url(http://evil.test/ssrf)">x</div>');
+        expect(out).not.toMatch(/url\(\s*['"]?https?:/i);
+    });
+
+    test('an injected remote <img src> is dropped', () => {
+        const out = sanitizeExportHtml('<img src="http://evil.test/pixel.png">');
+        expect(out).not.toMatch(/src\s*=\s*["']?https?:/i);
+    });
+
+    test('legit data: url() and data: image are kept', () => {
+        const out = sanitizeExportHtml(`<div style="background-image:url(${DATA_PNG})">x</div><img src="${DATA_PNG}">`);
+        expect(out).toContain('data:image/png;base64');
+        expect(out).not.toMatch(/url\(\s*['"]?https?:/i);
+    });
+
+    test('legit http(s) hyperlinks are preserved (link targets are not fetched during render)', () => {
+        const out = sanitizeExportHtml('<a href="https://example.com/report">r</a>', { ADD_ATTR: ['target'] });
+        expect(out).toContain('href="https://example.com/report"');
+    });
+});
+
+const wp = await isWeasyPrintAvailable();
+const suite = wp ? describe : describe.skip;
+
+suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
+    test('a sanitized body with an injected remote url() triggers no network fetch', async () => {
         let connections = 0;
         const server = Bun.listen({
             hostname: '127.0.0.1',
@@ -28,10 +62,11 @@ suite('PDF export SSRF', () => {
             },
         });
         try {
-            const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
-<div style="width:200px;height:100px;background-image:url(http://127.0.0.1:${server.port}/pwn.png)">x</div>
-</body></html>`;
-            await htmlToPdf(html);
+            // Mirror an export path: sanitize the assembled body, then render — as every caller does.
+            const body = sanitizeExportHtml(
+                `<div style="width:200px;height:100px;background-image:url(http://127.0.0.1:${server.port}/pwn.png)">x</div>`,
+            );
+            await htmlToPdf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`);
             await Bun.sleep(250); // let any async fetch land before asserting
             expect(connections).toBe(0);
         } finally {

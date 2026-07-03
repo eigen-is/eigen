@@ -2,13 +2,13 @@ import { escapeHtml } from '@workspace/lib/html';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import slideTextCSSRaw from '@workspace/ui/styles/slide-text.css' with { type: 'text' };
-import DOMPurify from 'isomorphic-dompurify';
 import { readSlidesContent } from '../../document/slides';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import { buildDataUriMap } from '../media';
 import type { SizeUnit, SlideImgSrcResolver } from '../render-types';
+import { sanitizeExportHtml } from '../sanitize';
 import { fixedSizeUnit, renderDeckHtml, responsiveSizeUnit } from './render';
 
 // 16:9 landscape page: 254mm x 142.875mm ~ 960 x 540 px at 96dpi
@@ -43,7 +43,7 @@ export async function generateSlidesExportHtml(
     // Sanitize the assembled body exactly like the preview surface (eigenslides-preview.ts) —
     // defence in depth over render.ts's per-value escaping, so the download/print surface is
     // as guarded as the preview.
-    const sanitized = DOMPurify.sanitize(slidesHtml, { FORCE_BODY: true });
+    const sanitized = sanitizeExportHtml(slidesHtml);
 
     return wrapInDocument(title, sanitized, mode);
 }

@@ -1,8 +1,8 @@
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
-import DOMPurify from 'isomorphic-dompurify';
 import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
+import { sanitizeExportHtml } from '../sanitize';
 import { htmlToPdf } from '../weasyprint';
 import { getSheetContentSize, renderSheetsHtml, wrapInDocument } from './html';
 
@@ -22,7 +22,7 @@ export async function exportSheetsToPdf(mount: Mount, drivePath: DrivePath): Pro
     }
 
     const bodyHtml = renderSheetsHtml(sheets);
-    const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true });
+    const sanitized = sanitizeExportHtml(bodyHtml);
     const pageSize = {
         width: maxW + 2 * PAGE_MARGIN + PAGE_SLACK,
         height: maxH + 2 * PAGE_MARGIN + PAGE_SLACK,

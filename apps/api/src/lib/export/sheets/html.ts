@@ -13,12 +13,12 @@ import {
     FormulaEngine,
     functionCopy,
 } from '@workspace/sheet/engine';
-import DOMPurify from 'isomorphic-dompurify';
 import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import type { RenderMode } from '../render-types';
+import { sanitizeExportHtml } from '../sanitize';
 import { resolveFontFamily } from './fonts';
 
 const DEFAULT_COL_WIDTH = 73;
@@ -73,7 +73,7 @@ export async function generateSheetsExportHtml(mount: Mount, drivePath: DrivePat
     const bodyHtml = renderSheetsHtml(sheets);
     // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
     // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.
-    const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true, ADD_ATTR: ['target'] });
+    const sanitized = sanitizeExportHtml(bodyHtml, { ADD_ATTR: ['target'] });
     return wrapInDocument(title, sanitized);
 }
 

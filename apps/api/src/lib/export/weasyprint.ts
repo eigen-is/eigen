@@ -24,10 +24,9 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
         throw new ApiError(501, 'PDF export requires WeasyPrint. Install with: pip install weasyprint');
     }
 
-    // SSRF guard: every export resource is embedded as a data: URI (fonts, images), so restrict
-    // WeasyPrint's URL fetcher to the data: scheme. This stops it fetching any http(s)/file url()
-    // an attacker injects into schemaless slide/sheet CSS — server-side SSRF from the API host.
-    const proc = Bun.spawn(['weasyprint', '-', '-', '--encoding', 'utf-8', '--allowed-protocols', 'data'], {
+    // SSRF is closed upstream in sanitizeExportHtml (export/sanitize.ts), which strips every non-data:
+    // url()/img src before the HTML reaches here — WeasyPrint's CLI can't restrict fetch protocols.
+    const proc = Bun.spawn(['weasyprint', '-', '-', '--encoding', 'utf-8'], {
         stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'pipe',
@@ -39,8 +38,14 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
     }, timeout);
 
     try {
-        proc.stdin.write(html);
-        proc.stdin.end();
+        // A WeasyPrint that exits early (bad input) closes its stdin; writing to the dead pipe throws
+        // EPIPE. Guard it so an early exit becomes the exitCode-500 below, never a process crash.
+        try {
+            proc.stdin.write(html);
+            await proc.stdin.end();
+        } catch {
+            // Early stdin close is surfaced by the exitCode/stderr check below.
+        }
 
         const [exitCode, stdoutResponse, stderrResponse] = await Promise.all([
             proc.exited,
