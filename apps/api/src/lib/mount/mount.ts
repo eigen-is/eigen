@@ -9,7 +9,7 @@ import {
     type DrivePath,
     type MountConfig,
 } from '@workspace/lib/types';
-import { type DriveVisibility, EIGEN_DOC_TYPE_INFO, isContainerType } from '@workspace/lib/types/drive';
+import { type DriveVisibility, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -18,13 +18,13 @@ import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, type SyncCallbacks } from '../core';
 import { FileHistory } from '../drive/history';
 import { getUniqueFileName } from '../drive/naming';
-import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
 import { type RetentionPolicy, selectSnapshotsToPrune } from '../versioning/retention';
 import { formatSnapshotTimestamp } from '../versioning/timestamp';
 import { type ContentExtractor, ContentReindexQueue } from './content-reindex-queue';
+import * as copy from './copy';
 import { MOUNT_DB_CONFIG } from './db-config';
 import {
     buildStorageKey,
@@ -514,79 +514,14 @@ export class Mount {
         return fileId;
     }
 
+    // Recursive same-mount copy — implementation in mount/copy.ts.
     async copyPath(
         srcPathId: string,
         destParentId: string,
         name: string,
         actor?: { id: string; email: string },
     ): Promise<DrivePath> {
-        const src = await this.getPath(srcPathId);
-        if (!src || src.trashedAt) throw new ApiError(404, 'Source not found');
-
-        if (isContainerType(src.type)) {
-            const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
-            if (isEigenDoc) await this.flushContainerDb(srcPathId);
-            const containerType: DriveContainerType | undefined = isEigenDoc ? src.type : undefined;
-            const newId = await this.createFolder(destParentId, name, containerType);
-            if (actor) {
-                await this.history.record({
-                    pathId: newId,
-                    eventType: 'copied',
-                    actor,
-                    details: {
-                        sourceOwnerId: this.history.ownerId,
-                        sourceMountId: this.history.mountId,
-                        sourcePathId: srcPathId,
-                    },
-                });
-            }
-            const children = await this.listFolder(srcPathId);
-            for (const child of children) {
-                // Inside an eigen-doc container, versions/ is snapshot history — a
-                // fresh copy starts clean rather than inheriting old snapshots.
-                if (isEigenDoc && child.type === DRIVE_TYPE_FOLDER && child.name === 'versions') continue;
-                await this.copyPath(child.id, newId, child.name, actor);
-            }
-            // The copied container's data.db is byte-copied as raw bytes — no onSync fires
-            // for the new container, so mark it dirty here and kick the reindexer to extract its
-            // body. Plain folders have no body and stay unmarked.
-            if (isEigenDoc) {
-                await this.db.update(paths).set({ contentDirty: 1 }).where(eq(paths.id, newId)).run();
-                this.reindexQueue?.kick();
-            }
-            const created = await this.getPath(newId);
-            if (!created) throw new ApiError(500, 'Failed to copy folder');
-            return created;
-        }
-
-        // Freshest-first source: readFile surfaces an un-acked pending upload's staged bytes (a
-        // just-created / outage-staged data.db) rather than the possibly-stale-or-absent storage
-        // object. The container branch above flushed the doc first, so its pending staging holds the
-        // current bytes; a regular file is never staged, so this is a plain storage read for it.
-        const srcFile = await this.readFile(srcPathId);
-        if (!srcFile) throw new ApiError(404, 'Source file missing on storage');
-        const tempId = randomUUID();
-        const { size, hash } = await writeTempWithHash(this.getTempPath(tempId), srcFile);
-        try {
-            const newId = await this.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
-            if (actor) {
-                await this.history.record({
-                    pathId: newId,
-                    eventType: 'copied',
-                    actor,
-                    details: {
-                        sourceOwnerId: this.history.ownerId,
-                        sourceMountId: this.history.mountId,
-                        sourcePathId: srcPathId,
-                    },
-                });
-            }
-            const created = await this.getPath(newId);
-            if (!created) throw new ApiError(500, 'Failed to copy file');
-            return created;
-        } finally {
-            await this.cleanupTemp(tempId);
-        }
+        return copy.copyPath(this, srcPathId, destParentId, name, actor);
     }
 
     // Snapshots the container's data.db into versions/<iso-ts>.db, then prunes per
