@@ -75,7 +75,8 @@ export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): C
             return e.startTime.getTime() < dayEndUtcMs && e.endTime.getTime() > dayUtcMs;
         }
         const dayStartMs = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-        const dayEndMs = dayStartMs + 86400_000;
+        // Next local midnight, not +24h — DST transition days are 23/25 hours long.
+        const dayEndMs = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
         return e.startTime.getTime() < dayEndMs && e.endTime.getTime() > dayStartMs;
     });
 }

@@ -193,6 +193,50 @@ describe('Calendar Timezone', () => {
             expect(postHour).toBe(21);
         });
 
+        test('weekly recurring event at 23:30 Amsterdam is not dropped on the DST fall-back Sunday', async () => {
+            // Sunday 2025-09-14 23:30 CEST (UTC+2) = 21:30Z. The last Sunday of October (2025-10-26)
+            // is the EU fall-back day (25-hour local day): 23:30 CET = 22:30Z.
+            const sundayStart = new Date('2025-09-14T21:30:00Z');
+
+            await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
+                title: 'Late Sunday Fall-Back',
+                startTime: sundayStart,
+                endTime: new Date(sundayStart.getTime() + durationMs),
+                allDay: false,
+                rrule: 'FREQ=WEEKLY;BYDAY=SU',
+                timezone: 'Europe/Amsterdam',
+            });
+
+            // Month-view-like query covering all of October 2025
+            const from = Math.floor(new Date('2025-09-29T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2025-11-03T00:00:00Z').getTime() / 1000);
+            const events = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
+            const occurrences = events.filter((e: CalendarEventOccurrence) => e.title === 'Late Sunday Fall-Back');
+
+            const starts = occurrences.map((e) => new Date(e.startTime).toISOString());
+            expect(starts).toContain('2025-10-19T21:30:00.000Z'); // 23:30 CEST
+            expect(starts).toContain('2025-10-26T22:30:00.000Z'); // 23:30 CET, fall-back day
+            expect(starts).toContain('2025-11-02T22:30:00.000Z'); // 23:30 CET
+            const fallBack = findOrFail(occurrences, (e) => e.occurrenceDate === '2025-10-26');
+            expect(new Date(fallBack.startTime).toISOString()).toBe('2025-10-26T22:30:00.000Z');
+
+            // Week-view-like query of just the fall-back week
+            const weekFrom = Math.floor(new Date('2025-10-20T00:00:00Z').getTime() / 1000);
+            const weekTo = Math.floor(new Date('2025-10-27T00:00:00Z').getTime() / 1000);
+            const weekEvents = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, weekFrom, weekTo);
+            const weekOccs = weekEvents.filter((e: CalendarEventOccurrence) => e.title === 'Late Sunday Fall-Back');
+            expect(weekOccs.map((e) => e.occurrenceDate)).toEqual(['2025-10-26']);
+
+            // The series recurs forever, so next year's fall-back Sunday (2026-10-25) must expand too
+            const nextFrom = Math.floor(new Date('2026-10-19T00:00:00Z').getTime() / 1000);
+            const nextTo = Math.floor(new Date('2026-11-04T00:00:00Z').getTime() / 1000);
+            const nextEvents = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, nextFrom, nextTo);
+            const nextStarts = nextEvents
+                .filter((e: CalendarEventOccurrence) => e.title === 'Late Sunday Fall-Back')
+                .map((e) => new Date(e.startTime).toISOString());
+            expect(nextStarts).toContain('2026-10-25T22:30:00.000Z');
+        });
+
         test('without timezone, recurring event drifts across DST', async () => {
             // Same event but no timezone — rrule uses UTC, fixed offset
             const event = await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
