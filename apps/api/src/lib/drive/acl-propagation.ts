@@ -1,5 +1,6 @@
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import { Semaphore } from '../../utils/semaphore';
 import { getServerSettings } from '../config/server-settings';
 import { composeShareEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
@@ -95,21 +96,62 @@ async function emailNewlyAddedAclEntries(
     }
 }
 
-export async function propagateACLChange(
+// Recipient delivery is asynchronous: shared_paths mirrors, notifications, and recipient SSE are
+// derived state (enforcement is always owner-side via SharedDrive/canReadFromAncestors), so the
+// request never waits for per-recipient home opens — a 25-person ACL previously cost 1–2s of
+// sequential cold home opens. The semaphore bounds concurrent opens (each open Home costs
+// ~25–30 fds); the per-path promise chain keeps rapid successive changes to the same path
+// ordered per recipient — an out-of-order add→revoke would resurrect a stale mirror row. In-flight
+// deliveries are lost on a crash (same window the old swallowed-error loop had); the durable
+// outbox that closes it is roadmapped (ROADMAP.md § Durable home-relay outbox).
+const FAN_OUT_CONCURRENCY = 8;
+const fanOutSemaphore = new Semaphore(FAN_OUT_CONCURRENCY);
+const pendingFanOuts = new Map<string, Promise<void>>();
+
+function queueACLFanOut(ids: Set<string>, path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): void {
+    if (ids.size === 0) return;
+    const prev = pendingFanOuts.get(path.id) ?? Promise.resolve();
+    const next = prev.then(() =>
+        Promise.all(
+            [...ids].map((id) =>
+                fanOutSemaphore.run(async () => {
+                    try {
+                        await sendToHome(id, { type: 'drive:acl-change', path, acl: newACL, actorEmail });
+                    } catch (error) {
+                        console.error(`Failed to propagate ACL change to ${id}:`, error);
+                    }
+                }),
+            ),
+        ).then(() => undefined),
+    );
+    pendingFanOuts.set(path.id, next);
+    next.finally(() => {
+        if (pendingFanOuts.get(path.id) === next) {
+            pendingFanOuts.delete(path.id);
+        }
+    });
+}
+
+// Awaits every queued delivery (including ones queued while draining). Used by tests for
+// read-your-fanout determinism and by graceful shutdown — must run BEFORE shutdownAllHomes,
+// since delivery reopens recipient homes.
+export async function drainACLFanOuts(): Promise<void> {
+    while (pendingFanOuts.size > 0) {
+        await Promise.allSettled([...pendingFanOuts.values()]);
+    }
+}
+
+export async function propagateSharedPathChange(
     path: DrivePath,
     oldACL: DriveACL[] | null,
     newACL: DriveACL[] | null,
     actor: { name: string; email: string } | null,
 ): Promise<void> {
+    // Target resolution stays on the awaited path: the registry writes inside are the durable
+    // record for not-yet-registered targets and must survive the request.
     const ids = await resolveACLUserIds(path.ownerId, [...(oldACL || []), ...(newACL || [])]);
 
-    for (const id of ids) {
-        try {
-            await sendToHome(id, { type: 'drive:acl-change', path, acl: newACL, actorEmail: actor?.email });
-        } catch (error) {
-            console.error('Failed to propagate ACL change:', error);
-        }
-    }
+    queueACLFanOut(ids, path, newACL, actor?.email);
 
     if (actor && newACL) {
         const addedUserEmails = diffACLEmails(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');

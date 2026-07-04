@@ -456,7 +456,7 @@ describe('Comment Index', () => {
 
             // Share with Bob so whisper target exists
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${chat.id}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
 
             // Post a whisper — should NOT increment the seeded row's messageCount or set lastAuthor.
@@ -621,7 +621,7 @@ describe('Comment Index', () => {
 
         test('reader can list comments', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${permDocId}/acl`, {
-                acl: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
+                add: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
             });
 
             const res = await collabGet(
@@ -648,7 +648,7 @@ describe('Comment Index', () => {
 
         test('writer can resolve comments', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${permDocId}/acl`, {
-                acl: [{ id: 'charlie@test.eigen.is', read: true, write: true }],
+                add: [{ id: 'charlie@test.eigen.is', read: true, write: true }],
             });
 
             const res = await collabPatch(
@@ -692,7 +692,7 @@ describe('Comment Index', () => {
 
             // Share with Bob and Charlie
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${mentionDocId}/acl`, {
-                acl: [
+                add: [
                     { id: BOB_EMAIL, read: true, write: true },
                     { id: 'charlie@test.eigen.is', read: true, write: true },
                 ],
@@ -757,7 +757,7 @@ describe('Comment Index', () => {
             caseDocId = doc.id;
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${caseDocId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
 
             const contents = await driveGet<DrivePath[]>(

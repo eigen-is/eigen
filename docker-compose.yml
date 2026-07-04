@@ -58,6 +58,14 @@ services:
     # index.ts). Give it more than Docker's 10s default so a healthy drain completes; anything
     # still in flight past this is SIGKILLed and replays from pending_uploads on next boot.
     stop_grace_period: 30s
+    # Each open Home costs ~25-30 fds (~6 WAL SQLite DBs × 3 files each + ~10 maildir fs.watch
+    # handles). Distro/Docker defaults (often 1024 soft) cap concurrent open homes at ~35, and
+    # cross-home fan-outs (e.g. sharing to a large team) then fail with SQLITE_IOERR and
+    # silently skip recipients. Pin the limit high — fds are cheap kernel objects.
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     networks: [eigen]
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]

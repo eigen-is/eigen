@@ -259,7 +259,7 @@ describe('Team ACL on personal drive', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/acl`, {
-            acl: [{ id: `team_${teamId}`, read: true, write: false }],
+            add: [{ id: `team_${teamId}`, read: true, write: false }],
             visibility: 'private',
         });
 
@@ -286,7 +286,7 @@ describe('Team ACL on personal drive', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/acl`, {
-            acl: [{ id: `team_${teamId}`, read: true, write: false }],
+            add: [{ id: `team_${teamId}`, read: true, write: false }],
             visibility: 'private',
         });
 
@@ -313,7 +313,7 @@ describe('Team ACL on personal drive', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/acl`, {
-            acl: [{ id: `team_${teamId}`, read: true, write: true }],
+            add: [{ id: `team_${teamId}`, read: true, write: true }],
             visibility: 'private',
         });
 
@@ -340,7 +340,7 @@ describe('Team ACL on personal drive', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/acl`, {
-            acl: [
+            add: [
                 { id: `team_${teamId}`, read: true, write: false },
                 { id: 'charlie@test.eigen.is', read: true, write: true },
             ],
@@ -398,7 +398,7 @@ describe('Redundant ACL filtering', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${parent.id}/acl`, {
-            acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
+            add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
             visibility: 'private',
         });
 
@@ -412,7 +412,7 @@ describe('Redundant ACL filtering', () => {
 
         // Set ACL on child granting bob read (redundant — inherited from parent)
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${child.id}/acl`, {
-            acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
+            add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
             visibility: 'private',
         });
 
@@ -435,7 +435,7 @@ describe('Redundant ACL filtering', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${parent.id}/acl`, {
-            acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
+            add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
             visibility: 'private',
         });
 
@@ -448,7 +448,7 @@ describe('Redundant ACL filtering', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${child.id}/acl`, {
-            acl: [{ id: 'bob@test.eigen.is', read: true, write: true }],
+            add: [{ id: 'bob@test.eigen.is', read: true, write: true }],
             visibility: 'private',
         });
 
@@ -498,7 +498,7 @@ describe('Redundant ACL filtering', () => {
 
         // Set ACL for the SAME team on a path inside team drive (redundant)
         await drivePut(ctx.alice.user.sessionToken, tOwner, teamMountId, `path/${folder.id}/acl`, {
-            acl: [{ id: `team_${team.id}`, read: true, write: true }],
+            add: [{ id: `team_${team.id}`, read: true, write: true }],
             visibility: 'private',
         });
 
@@ -529,7 +529,7 @@ describe('Redundant ACL filtering', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${parent.id}/acl`, {
-            acl: [{ id: `team_${team.id}`, read: true, write: true }],
+            add: [{ id: `team_${team.id}`, read: true, write: true }],
             visibility: 'private',
         });
 
@@ -542,7 +542,7 @@ describe('Redundant ACL filtering', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${child.id}/acl`, {
-            acl: [{ id: `team_${team.id}`, read: true, write: false }],
+            add: [{ id: `team_${team.id}`, read: true, write: false }],
             visibility: 'private',
         });
 
@@ -573,7 +573,7 @@ describe('Redundant ACL filtering', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${child.id}/acl`, {
-            acl: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
+            add: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
             visibility: 'private',
         });
 
@@ -671,7 +671,7 @@ describe('Team Drive Security Edge Cases', () => {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    acl: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
+                    add: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
                 }),
             },
         );
@@ -692,7 +692,7 @@ describe('Team Drive Security Edge Cases', () => {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    acl: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
+                    add: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
                 }),
             },
         );
@@ -707,7 +707,7 @@ describe('Team Drive Security Edge Cases', () => {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    acl: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
+                    add: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
                 }),
             },
         );
@@ -847,7 +847,7 @@ describe('Cross-Team Access Edge Cases', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, team2Owner, team2MountId, `path/${folder.id}/acl`, {
-            acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
+            add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
             visibility: 'private',
         });
 
@@ -875,7 +875,7 @@ describe('Cross-Team Access Edge Cases', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/acl`, {
-            acl: [{ id: `team_${team2Id}`, read: true, write: true }],
+            add: [{ id: `team_${team2Id}`, read: true, write: true }],
             visibility: 'private',
         });
 
@@ -925,12 +925,12 @@ describe('Cross-Team Access Edge Cases', () => {
 
         // Team1 ACL on parent, Team2 ACL on child
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${parent.id}/acl`, {
-            acl: [{ id: `team_${team1Id}`, read: true, write: false }],
+            add: [{ id: `team_${team1Id}`, read: true, write: false }],
             visibility: 'private',
         });
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${child.id}/acl`, {
-            acl: [{ id: `team_${team2Id}`, read: true, write: true }],
+            add: [{ id: `team_${team2Id}`, read: true, write: true }],
             visibility: 'private',
         });
 
@@ -1038,7 +1038,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
 
         // Set both team and individual ACL
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/acl`, {
-            acl: [
+            add: [
                 { id: `team_${teamId}`, read: true, write: false },
                 { id: 'charlie@test.eigen.is', read: true, write: true },
             ],
@@ -1092,12 +1092,12 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
 
         // Team ACL on parent (write), individual restriction on child (read-only for Charlie)
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${parent.id}/acl`, {
-            acl: [{ id: `team_${teamId}`, read: true, write: true }],
+            add: [{ id: `team_${teamId}`, read: true, write: true }],
             visibility: 'private',
         });
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${child.id}/acl`, {
-            acl: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
+            add: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
             visibility: 'private',
         });
 
@@ -1130,7 +1130,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
         );
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folder.id}/acl`, {
-            acl: [
+            add: [
                 { id: `team_${teamId}`, read: true, write: true },
                 { id: 'bob@test.eigen.is', read: true, write: false },
             ],
@@ -1209,12 +1209,12 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
         test('team additive model: team ACL at parent + individual ACL at child', async () => {
             // Team ACL at A (write), individual ACL for Charlie at B (read)
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderA}/acl`, {
-                acl: [{ id: `team_${teamId}`, read: true, write: true }],
+                add: [{ id: `team_${teamId}`, read: true, write: true }],
                 visibility: 'private',
             });
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderB}/acl`, {
-                acl: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
+                add: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
                 visibility: 'private',
             });
 
@@ -1255,12 +1255,12 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
 
             // Team1 ACL at A (read), Team2 ACL at B (write)
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderA}/acl`, {
-                acl: [{ id: `team_${teamId}`, read: true, write: false }],
+                add: [{ id: `team_${teamId}`, read: true, write: false }],
                 visibility: 'private',
             });
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderB}/acl`, {
-                acl: [{ id: `team_${team2Id}`, read: true, write: true }],
+                add: [{ id: `team_${team2Id}`, read: true, write: true }],
                 visibility: 'private',
             });
 
@@ -1300,7 +1300,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
         test('team additive model: team member removed loses team ACL access', async () => {
             // Team ACL at A (write)
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderA}/acl`, {
-                acl: [{ id: `team_${teamId}`, read: true, write: true }],
+                add: [{ id: `team_${teamId}`, read: true, write: true }],
                 visibility: 'private',
             });
 

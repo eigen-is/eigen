@@ -105,8 +105,8 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 
 | Source                 | Where persisted                          | Type                        | Tag format                                          |
 |------------------------|------------------------------------------|-----------------------------|-----------------------------------------------------|
-| Drive share            | `Drive.receiveACLChange()` (new share)   | `share`                     | `share:{ownerId}:{mountId}:{pathId}`                |
-| Drive unshare          | `Drive.receiveACLChange()` (removed)     | `unshare`                   | (no tag)                                            |
+| Drive share            | `Drive.receiveSharedPathChange()` (new share)   | `share`                     | `share:{ownerId}:{mountId}:{pathId}`                |
+| Drive unshare          | `Drive.receiveSharedPathChange()` (removed)     | `unshare`                   | (no tag)                                            |
 | Calendar share         | `Calendar.receiveShare()`                | `calendar-share`            | `calendar-share:{calId}:{ownerUserId}`              |
 | Calendar unshare       | `Calendar.removeShare()`                 | `calendar-unshare`          | (no tag)                                            |
 | Calendar invite        | `invite-propagation.ts`                  | `calendar-invite`           | `calendar-invite:{eventId}`                         |

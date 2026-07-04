@@ -99,7 +99,7 @@ describe('Collab', () => {
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acl: [] }),
+                    body: JSON.stringify({ remove: ['bob@test.eigen.is'] }),
                 },
             );
 
@@ -121,7 +121,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
+                        add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
                     }),
                 },
             );
@@ -261,7 +261,7 @@ describe('Collab', () => {
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acl: [] }),
+                    body: JSON.stringify({ remove: ['bob@test.eigen.is'] }),
                 },
             );
 
@@ -287,7 +287,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
+                        add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
                     }),
                 },
             );
@@ -432,7 +432,8 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
+                        add: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
+                        remove: ['bob@test.eigen.is'],
                     }),
                 },
             );
@@ -474,7 +475,8 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'bob@test.eigen.is', read: true, write: true }],
+                        add: [{ id: 'bob@test.eigen.is', read: true, write: true }],
+                        remove: ['charlie@test.eigen.is'],
                     }),
                 },
             );
@@ -502,7 +504,7 @@ describe('Collab', () => {
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acl: [] }),
+                    body: JSON.stringify({ remove: ['bob@test.eigen.is'] }),
                 },
             );
 
@@ -601,7 +603,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'bob@test.eigen.is', read: true, write: true }],
+                        add: [{ id: 'bob@test.eigen.is', read: true, write: true }],
                     }),
                 },
             );
@@ -630,7 +632,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
+                        add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
                     }),
                 },
             );

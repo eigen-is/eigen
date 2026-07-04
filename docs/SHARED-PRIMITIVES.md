@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-765 primitives across 6 kinds. `packages/sheet` internals are excluded.
+766 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -342,7 +342,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (211)
+## Types (212)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -411,6 +411,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DraftAttachmentUpload` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DraftInput` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DriveACL` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveACLDelta` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveChatType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

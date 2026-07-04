@@ -51,7 +51,7 @@ describe('Sharing Restricted', () => {
             folderId = folder.id;
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
         });
 
@@ -67,10 +67,7 @@ describe('Sharing Restricted', () => {
 
         test('editor can modify ACL when unrestricted', async () => {
             const res = await putACL(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, {
-                acl: [
-                    { id: BOB_EMAIL, read: true, write: true },
-                    { id: CHARLIE_EMAIL, read: true, write: false },
-                ],
+                add: [{ id: CHARLIE_EMAIL, read: true, write: false }],
             });
             expect(res.status).toBe(200);
 
@@ -85,7 +82,7 @@ describe('Sharing Restricted', () => {
 
         test('cleanup: remove charlie, restore bob-only ACL', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                remove: [CHARLIE_EMAIL],
             });
         });
     });
@@ -105,7 +102,7 @@ describe('Sharing Restricted', () => {
 
             // Share with Bob (write) and enable restriction in the same call
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
                 sharingRestricted: true,
             });
         });
@@ -122,10 +119,7 @@ describe('Sharing Restricted', () => {
 
         test('editor is blocked from modifying ACL', async () => {
             const res = await putACL(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, {
-                acl: [
-                    { id: BOB_EMAIL, read: true, write: true },
-                    { id: CHARLIE_EMAIL, read: true, write: false },
-                ],
+                add: [{ id: CHARLIE_EMAIL, read: true, write: false }],
             });
             expect(res.status).toBe(403);
 
@@ -142,7 +136,6 @@ describe('Sharing Restricted', () => {
 
         test('editor is blocked from changing visibility', async () => {
             const res = await putACL(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
                 visibility: 'public-read',
             });
             expect(res.status).toBe(403);
@@ -158,7 +151,6 @@ describe('Sharing Restricted', () => {
 
         test('editor cannot toggle sharingRestricted flag', async () => {
             const res = await putACL(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
                 sharingRestricted: false,
             });
             expect(res.status).toBe(403);
@@ -185,10 +177,7 @@ describe('Sharing Restricted', () => {
 
         test('owner can still modify ACL', async () => {
             const res = await putACL(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, {
-                acl: [
-                    { id: BOB_EMAIL, read: true, write: true },
-                    { id: CHARLIE_EMAIL, read: true, write: false },
-                ],
+                add: [{ id: CHARLIE_EMAIL, read: true, write: false }],
             });
             expect(res.status).toBe(200);
 
@@ -203,10 +192,6 @@ describe('Sharing Restricted', () => {
 
         test('owner can change visibility while restricted', async () => {
             const res = await putACL(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, {
-                acl: [
-                    { id: BOB_EMAIL, read: true, write: true },
-                    { id: CHARLIE_EMAIL, read: true, write: false },
-                ],
                 visibility: 'public-read',
             });
             expect(res.status).toBe(200);
@@ -222,10 +207,6 @@ describe('Sharing Restricted', () => {
 
         test('owner can unrestrict', async () => {
             const res = await putACL(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, {
-                acl: [
-                    { id: BOB_EMAIL, read: true, write: true },
-                    { id: CHARLIE_EMAIL, read: true, write: false },
-                ],
                 sharingRestricted: false,
             });
             expect(res.status).toBe(200);
@@ -241,7 +222,7 @@ describe('Sharing Restricted', () => {
 
         test('editor can modify ACL after owner unrestricts', async () => {
             const res = await putACL(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                remove: [CHARLIE_EMAIL],
             });
             expect(res.status).toBe(200);
         });
@@ -261,13 +242,13 @@ describe('Sharing Restricted', () => {
             folderId = folder.id;
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: false }],
+                add: [{ id: BOB_EMAIL, read: true, write: false }],
             });
         });
 
         test('viewer cannot modify ACL (no write, no restriction needed)', async () => {
             const res = await putACL(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
             expect(res.status).toBe(403);
         });
@@ -289,7 +270,7 @@ describe('Sharing Restricted', () => {
 
             // Share parent with Bob (write)
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${parentId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
 
             // Create restricted child
@@ -303,7 +284,6 @@ describe('Sharing Restricted', () => {
             childId = child.id;
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${childId}/acl`, {
-                acl: [],
                 sharingRestricted: true,
             });
         });
@@ -315,7 +295,7 @@ describe('Sharing Restricted', () => {
 
         test('Bob is blocked from modifying ACL on restricted child despite inherited write', async () => {
             const res = await putACL(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, childId, {
-                acl: [{ id: CHARLIE_EMAIL, read: true, write: false }],
+                add: [{ id: CHARLIE_EMAIL, read: true, write: false }],
             });
             expect(res.status).toBe(403);
         });
@@ -346,7 +326,7 @@ describe('Sharing Restricted', () => {
             folderId = folder.id;
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
                 sharingRestricted: true,
             });
         });
@@ -360,7 +340,6 @@ describe('Sharing Restricted', () => {
 
         test('sharingRestricted updates propagate', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
                 sharingRestricted: false,
             });
 
@@ -431,28 +410,27 @@ describe('Sharing Restricted', () => {
             folderId = folder.id;
 
             await drivePut(ctx.alice.user.sessionToken, teamOwner, teamMountId, `path/${folderId}/acl`, {
-                acl: [{ id: CHARLIE_EMAIL, read: true, write: true }],
+                add: [{ id: CHARLIE_EMAIL, read: true, write: true }],
                 sharingRestricted: true,
             });
         });
 
         test('team member (alice) can modify ACL on restricted team path', async () => {
             const res = await putACL(ctx.alice.user.sessionToken, teamOwner, teamMountId, folderId, {
-                acl: [{ id: CHARLIE_EMAIL, read: true, write: true }],
+                add: [{ id: CHARLIE_EMAIL, read: true, write: true }],
             });
             expect(res.status).toBe(200);
         });
 
         test('team member (bob) can modify ACL on restricted team path', async () => {
             const res = await putACL(ctx.bob.user.sessionToken, teamOwner, teamMountId, folderId, {
-                acl: [{ id: CHARLIE_EMAIL, read: true, write: true }],
+                add: [{ id: CHARLIE_EMAIL, read: true, write: true }],
             });
             expect(res.status).toBe(200);
         });
 
         test('team member can toggle sharingRestricted on team path', async () => {
             const res = await putACL(ctx.bob.user.sessionToken, teamOwner, teamMountId, folderId, {
-                acl: [{ id: CHARLIE_EMAIL, read: true, write: true }],
                 sharingRestricted: false,
             });
             expect(res.status).toBe(200);
@@ -462,24 +440,19 @@ describe('Sharing Restricted', () => {
 
             // Re-restrict for next test
             await putACL(ctx.alice.user.sessionToken, teamOwner, teamMountId, folderId, {
-                acl: [{ id: CHARLIE_EMAIL, read: true, write: true }],
                 sharingRestricted: true,
             });
         });
 
         test('non-team-member editor (charlie) is blocked on restricted team path', async () => {
             const res = await putACL(ctx.charlie.user.sessionToken, teamOwner, teamMountId, folderId, {
-                acl: [
-                    { id: CHARLIE_EMAIL, read: true, write: true },
-                    { id: 'external@example.com', read: true, write: false },
-                ],
+                add: [{ id: 'external@example.com', read: true, write: false }],
             });
             expect(res.status).toBe(403);
         });
 
         test('non-team-member cannot toggle sharingRestricted on team path', async () => {
             const res = await putACL(ctx.charlie.user.sessionToken, teamOwner, teamMountId, folderId, {
-                acl: [{ id: CHARLIE_EMAIL, read: true, write: true }],
                 sharingRestricted: false,
             });
             expect(res.status).toBe(403);

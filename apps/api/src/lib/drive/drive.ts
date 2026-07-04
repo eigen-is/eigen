@@ -12,6 +12,7 @@ import {
 import {
     DRIVE_EXTENSIONS,
     type DriveACL,
+    type DriveACLDelta,
     type DriveContainerType,
     type DrivePath,
     type DrivePathDetails,
@@ -54,14 +55,15 @@ import {
     filterRedundantACL,
     findContainerFromAncestors,
     matchesACL,
+    mergeACLDelta,
     normalizeACL,
 } from './acl';
-import { diffACLEmails, type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
+import { diffACLEmails, type EffectiveMember, propagateSharedPathChange, resolveACLToEmails } from './acl-propagation';
 import { CollabRegistry } from './collab-registry';
 import { LockManager } from './lock-manager';
 import { serveFile } from './serve-file';
 import { getSharedDatabase } from './shared';
-import { listSharedWithMe, listSharedWithMeByMimeType, receiveACLChange } from './shared-with-me';
+import { listSharedWithMe, listSharedWithMeByMimeType, receiveSharedPathChange } from './shared-with-me';
 import type * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 import { streamFilesToTemp, writeTempWithHash } from './streaming';
@@ -509,7 +511,7 @@ export default class Drive {
         if (renamedItem) {
             // Propagate the POST-rename snapshot so each recipient's shared_paths mirror picks up
             // the new name (mirrors updateACL). actor stays null — a rename must not email shares.
-            await propagateACLChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
+            await propagateSharedPathChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
             this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
         }
         if (user) await this.recordFileEvent(mountId, pathId, user, 'renamed', { oldName, newName });
@@ -693,6 +695,45 @@ export default class Drive {
         return await mount.getBreadcrumb(pathId);
     }
 
+    // One tail per path: updateACLDelta's read-merge-write must not interleave with a concurrent
+    // delta for the same path, or the second merge would be computed against the first's pre-image
+    // and silently drop its entries — the exact race the delta contract exists to prevent.
+    private aclDeltaChains = new Map<string, Promise<void>>();
+
+    // The route-facing ACL mutation: merges what changed onto the CURRENT ACL server-side,
+    // then delegates to updateACL for validation, persistence, and propagation.
+    async updateACLDelta(
+        mountId: string,
+        pathId: string,
+        delta: DriveACLDelta,
+        visibility?: DriveVisibility,
+        sharingRestricted?: boolean,
+        actor?: User | null,
+    ): Promise<void> {
+        const key = `${mountId}:${pathId}`;
+        const prev = this.aclDeltaChains.get(key) ?? Promise.resolve();
+        // The stored tail swallows rejections (a 403 must not poison the chain for the next
+        // caller); the returned promise keeps them so the route surfaces the real error.
+        const run = prev.then(async () => {
+            const mount = this.getMount(mountId);
+            const item = await mount.getPath(pathId);
+            if (!item) {
+                throw new ApiError(404, 'Path not found');
+            }
+            await this.updateACL(mountId, pathId, mergeACLDelta(item.acl, delta), visibility, sharingRestricted, actor);
+        });
+        const tail = run.catch(() => {});
+        this.aclDeltaChains.set(key, tail);
+        tail.then(() => {
+            if (this.aclDeltaChains.get(key) === tail) {
+                this.aclDeltaChains.delete(key);
+            }
+        });
+        return run;
+    }
+
+    // Called by: updateACLDelta (after its server-side merge) and inviteToChat. Not route-callable —
+    // the ACL route accepts only deltas, so full-array replaces can't originate from clients.
     async updateACL(
         mountId: string,
         pathId: string,
@@ -736,7 +777,7 @@ export default class Drive {
         await mount.updatePath(pathId, updates);
         const updatedItem = await mount.getPath(pathId);
         if (updatedItem) {
-            await propagateACLChange(updatedItem, oldACL, normalizedACL, actor ?? null);
+            await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
             if (actor) {
                 const { added, removed } = diffACLEmails(oldACL, normalizedACL);
@@ -1080,8 +1121,8 @@ export default class Drive {
 
     // Called by: home-relay (cross-home ACL propagation receiver) and share/reconciliation.
     // Not route-callable — inbound side of the sharding seam.
-    async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
-        return receiveACLChange(this.sharedDb, this.home, path, newACL, actorEmail);
+    async receiveSharedPathChange(path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
+        return receiveSharedPathChange(this.sharedDb, this.home, path, newACL, actorEmail);
     }
 
     async destruct(): Promise<void> {

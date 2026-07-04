@@ -5,7 +5,7 @@ import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@wor
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { ContactSuggestion } from '@workspace/lib/types/contact';
-import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { parseContactInput } from '@workspace/lib/validation';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
@@ -28,7 +28,7 @@ import { UserItem } from '../user-item';
 
 export type DriveAccessListEditProps = {
     path: DrivePath;
-    onSave: (updatedAcl: DriveACL[], visibility: DriveVisibility, sharingRestricted?: boolean) => void;
+    onSave: (delta: DriveACLDelta, visibility: DriveVisibility, sharingRestricted?: boolean) => void;
     onCancel?: () => void;
     onEmailClick?: () => void;
     className?: string;
@@ -193,20 +193,27 @@ export function DriveAccessListEdit({
     }, []);
 
     const handleSave = useCallback(() => {
-        const updatedAcl: DriveACL[] = [];
+        // Send only what changed — the server merges onto the current ACL, so a stale
+        // dialog can't revert entries another sharer added while it was open.
+        const base = new Map(baseDirectList.filter((item) => !item.owner).map((item) => [item.id.toLowerCase(), item]));
+        const add: DriveACL[] = [];
+        const remove: string[] = [];
 
         for (const item of directList) {
-            if (!item.owner && (item.read || item.write)) {
-                updatedAcl.push({
-                    id: item.id,
-                    read: item.read,
-                    write: item.write,
-                });
+            if (item.owner) continue;
+            const prev = base.get(item.id.toLowerCase());
+            if (item.read || item.write) {
+                if (!prev || prev.read !== item.read || prev.write !== item.write) {
+                    add.push({ id: item.id, read: item.read, write: item.write });
+                }
+            } else if (prev) {
+                // Marked "remove" in the UI (read and write both cleared)
+                remove.push(item.id);
             }
         }
 
-        onSave(updatedAcl, visibility, isEffectiveOwner ? sharingRestricted : undefined);
-    }, [directList, visibility, sharingRestricted, isEffectiveOwner, onSave]);
+        onSave({ add, remove }, visibility, isEffectiveOwner ? sharingRestricted : undefined);
+    }, [baseDirectList, directList, visibility, sharingRestricted, isEffectiveOwner, onSave]);
 
     return (
         <div className={cn('flex flex-col min-h-0', className)}>

@@ -244,7 +244,7 @@ describe('Chat', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [
+                        add: [
                             { id: BOB_EMAIL, read: true, write: true },
                             { id: CHARLIE_EMAIL, read: true, write: true },
                         ],
@@ -557,7 +557,7 @@ describe('Chat', () => {
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acl: [{ id: ctx.bob.user.email, read: true, write: true }] }),
+                    body: JSON.stringify({ add: [{ id: ctx.bob.user.email, read: true, write: true }] }),
                 },
             );
         });
@@ -621,7 +621,7 @@ describe('Chat', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'bob@test.eigen.is', read: true, write: true }],
+                        add: [{ id: 'bob@test.eigen.is', read: true, write: true }],
                     }),
                 },
             );
@@ -816,7 +816,7 @@ describe('Chat', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
+                        add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
                     }),
                 },
             );
@@ -952,7 +952,7 @@ describe('Chat', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'bob@test.eigen.is', read: true, write: true }],
+                        add: [{ id: 'bob@test.eigen.is', read: true, write: true }],
                     }),
                 },
             );
@@ -1054,7 +1054,7 @@ describe('Chat', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'bob@test.eigen.is', read: true, write: true }],
+                        add: [{ id: 'bob@test.eigen.is', read: true, write: true }],
                     }),
                 },
             );
@@ -1222,7 +1222,7 @@ describe('Chat', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [
+                        add: [
                             { id: ctx.bob.user.email, read: true, write: true },
                             { id: ctx.charlie.user.email, read: true, write: true },
                         ],
@@ -1365,7 +1365,7 @@ describe('Chat', () => {
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acl: [{ id: ctx.bob.user.email, read: true, write: true }] }),
+                    body: JSON.stringify({ add: [{ id: ctx.bob.user.email, read: true, write: true }] }),
                 },
             );
 

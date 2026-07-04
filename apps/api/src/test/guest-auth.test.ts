@@ -124,7 +124,7 @@ describe('Guest Auth', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: guestEmail, read: true, write: false }],
+                        add: [{ id: guestEmail, read: true, write: false }],
                     }),
                 },
             );
@@ -278,7 +278,7 @@ describe('Guest Auth', () => {
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acl: [{ id: guestEmail, read: true, write: false }] }),
+                    body: JSON.stringify({ add: [{ id: guestEmail, read: true, write: false }] }),
                 },
             );
         });
@@ -386,7 +386,7 @@ describe('Guest Auth', () => {
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acl: [{ id: email, read: true, write: false }] }),
+                    body: JSON.stringify({ add: [{ id: email, read: true, write: false }] }),
                 },
             );
 

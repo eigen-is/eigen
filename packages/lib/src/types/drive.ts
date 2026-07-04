@@ -4,6 +4,13 @@ export type DriveACL = {
     write: boolean;
 };
 
+// Wire shape of the ACL route: callers send what changed, the server merges onto the
+// current ACL. Full-array replace is not accepted — it loses concurrent sharers' entries.
+export type DriveACLDelta = {
+    add?: DriveACL[];
+    remove?: string[];
+};
+
 export const DRIVE_TYPE_DOC = 'doc' as const;
 export const DRIVE_TYPE_STICKIES = 'stickies' as const;
 export const DRIVE_TYPE_SLIDES = 'slides' as const;

@@ -143,9 +143,9 @@ use `listFolderAll()` to walk descendants.
 The `acl` column is preserved when an item is trashed (not cleared). This enables restore to re-share with
 original collaborators:
 
-- **On trash**: `propagateACLChange(path, path.acl, null)` — revokes shared access, removes `sharedPaths`
+- **On trash**: `propagateSharedPathChange(path, path.acl, null)` — revokes shared access, removes `sharedPaths`
   entries. The `acl` column stays intact on the owner's row.
-- **On restore**: `propagateACLChange(path, null, path.acl)` — re-creates `sharedPaths` entries using the
+- **On restore**: `propagateSharedPathChange(path, null, path.acl)` — re-creates `sharedPaths` entries using the
   preserved ACL.
 - **On permanent delete**: ACL propagation is skipped — already revoked during trash.
 

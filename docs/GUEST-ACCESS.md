@@ -32,12 +32,12 @@ data/guest/{guestId}/
 ```
 
 No default mount — guests have no personal drive. The Drive instance is only used for
-`getSharedPathsWithMe()` and receiving ACL propagation via `receiveACLChange()`.
+`getSharedPathsWithMe()` and receiving ACL propagation via `receiveSharedPathChange()`.
 
 ### Why Disk-Based
 
 Disk-based over in-memory because: (1) `Drive.home` and `Drive.emit()` are `private` — a subclass can't
-override without changing access modifiers, (2) `receiveACLChange()` is ~50 lines that would need parallel
+override without changing access modifiers, (2) `receiveSharedPathChange()` is ~50 lines that would need parallel
 reimplementation, (3) `shared.db` persists across idle timeouts and server restarts, (4) notifications
 persist across sessions.
 
@@ -141,8 +141,8 @@ identically.
 
 1. **Before guest account exists**: share → `resolveACLUserIds` → user not found → registry entry created
 2. **Guest verifies OTP**: account created → `reconcileSharesForNewUser()` reads (does not delete) from
-   registry → idempotently writes to `shared.db` via `Drive.receiveACLChange`
-3. **After guest account exists**: share → `resolveACLUserIds` → user found → `receiveACLChange()` called
+   registry → idempotently writes to `shared.db` via `Drive.receiveSharedPathChange`
+3. **After guest account exists**: share → `resolveACLUserIds` → user found → `receiveSharedPathChange()` called
    directly → writes to `shared.db`
 4. **Guest deleted**: `deleteUserCompletely` removes the home directory, sessions, and FROM-this-user
    registry entries. TO-this-email entries are preserved. Re-OTP later rebuilds the home and re-reads the

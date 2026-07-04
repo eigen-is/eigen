@@ -366,7 +366,7 @@ describe('Drive history recording', () => {
             folderName: 'ShareMe',
         });
         await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${folder.id}/acl`, {
-            acl: [{ id: ctx.bob.user.email, read: true, write: false }],
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
         });
         const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${folder.id}/history`);
         const events = (await res.json()) as FileEvent[];
@@ -472,7 +472,7 @@ describe('Drive history recording', () => {
             folderName: 'SharedForHistory',
         });
         await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${folder.id}/acl`, {
-            acl: [{ id: ctx.bob.user.email, read: true, write: false }],
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
         });
         const res = await authedRequest(
             ctx.bob.user.sessionToken,

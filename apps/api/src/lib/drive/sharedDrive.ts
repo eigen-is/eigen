@@ -1,5 +1,5 @@
 import type {
-    DriveACL,
+    DriveACLDelta,
     DriveContainerType,
     DrivePath,
     DrivePathDetails,
@@ -304,13 +304,13 @@ export default class SharedDrive {
         return this.sharedDrive.inviteToChat(mountId, chatId, email, this.user);
     }
 
-    public async updateACL(
+    public async updateACLDelta(
         mountId: string,
         pathId: string,
-        acl: DriveACL[],
+        delta: DriveACLDelta,
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
-        // Param exists to match Drive.updateACL's union signature; SharedDrive
+        // Param exists to match Drive.updateACLDelta's union signature; SharedDrive
         // derives the actor from this.user, so the route's value is intentionally ignored.
         _actor?: User | null,
     ) {
@@ -328,10 +328,10 @@ export default class SharedDrive {
             throw new ApiError(403, 'Sharing is restricted by the owner');
         }
 
-        return this.sharedDrive.updateACL(
+        return this.sharedDrive.updateACLDelta(
             mountId,
             pathId,
-            acl,
+            delta,
             visibility,
             effectiveOwner ? sharingRestricted : undefined,
             this.user,

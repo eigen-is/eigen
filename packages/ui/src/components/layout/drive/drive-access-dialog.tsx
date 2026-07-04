@@ -1,6 +1,11 @@
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useCheckPermissions, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
-import { type DriveACL, type DrivePath, type DriveVisibility, stripEigenExtension } from '@workspace/lib/types/drive';
+import {
+    type DriveACLDelta,
+    type DrivePath,
+    type DriveVisibility,
+    stripEigenExtension,
+} from '@workspace/lib/types/drive';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { DriveAccessList } from '@workspace/ui/components/layout/drive/drive-access-list';
 import { DriveAccessListEdit } from '@workspace/ui/components/layout/drive/drive-access-list-edit';
@@ -40,9 +45,9 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
         onOpenChange(false);
     };
 
-    const handleSave = async (updatedAcl: DriveACL[], visibility: DriveVisibility, sharingRestricted?: boolean) => {
+    const handleSave = async (delta: DriveACLDelta, visibility: DriveVisibility, sharingRestricted?: boolean) => {
         setIsSubmitting(true);
-        await updateACL.mutateAsync({ path, acl: updatedAcl, visibility, sharingRestricted });
+        await updateACL.mutateAsync({ path, add: delta.add, remove: delta.remove, visibility, sharingRestricted });
         onOpenChange(false);
         setIsSubmitting(false);
     };

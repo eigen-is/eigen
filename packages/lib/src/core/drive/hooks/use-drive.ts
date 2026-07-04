@@ -510,17 +510,20 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
     return useMutation({
         mutationFn: async ({
             path,
-            acl,
+            add,
+            remove,
             visibility,
             sharingRestricted,
         }: {
             path: DrivePath;
-            acl: DriveACL[];
+            add?: DriveACL[];
+            remove?: string[];
             visibility?: DriveVisibility;
             sharingRestricted?: boolean;
         }) => {
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId: path.id }).acl.put({
-                acl,
+                add,
+                remove,
                 visibility,
                 sharingRestricted,
             });

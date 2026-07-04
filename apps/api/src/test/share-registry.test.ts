@@ -66,7 +66,7 @@ describe('Share Registry', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: ctx.bob.user.email, read: true, write: false }],
+                        add: [{ id: ctx.bob.user.email, read: true, write: false }],
                     }),
                 },
             );
@@ -156,7 +156,7 @@ describe('Share Registry', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: 'newuser@test.eigen.is', read: true, write: true }],
+                        add: [{ id: 'newuser@test.eigen.is', read: true, write: true }],
                     }),
                 },
             );
@@ -253,7 +253,7 @@ describe('Share Registry', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{ id: `team_${teamId}`, read: true, write: true }],
+                        add: [{ id: `team_${teamId}`, read: true, write: true }],
                     }),
                 },
             );

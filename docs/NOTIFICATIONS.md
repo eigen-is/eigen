@@ -46,8 +46,8 @@ See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) for the full architecture.
 
 | Event                  | Notification title                    | Source                     |
 |------------------------|---------------------------------------|----------------------------|
-| Drive share            | `"file" was shared with you`          | `Drive.receiveACLChange()` |
-| Drive unshare          | `"file" is no longer shared with you` | `Drive.receiveACLChange()` |
+| Drive share            | `"file" was shared with you`          | `Drive.receiveSharedPathChange()` |
+| Drive unshare          | `"file" is no longer shared with you` | `Drive.receiveSharedPathChange()` |
 | Calendar share         | `"calendar" was shared with you`      | `Calendar.receiveShare()`  |
 | Calendar unshare       | `"calendar" is no longer shared`      | `Calendar.removeShare()`   |
 | Calendar invite        | `New invitation: "event"`             | `invite-propagation.ts`    |

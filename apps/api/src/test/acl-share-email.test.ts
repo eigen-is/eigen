@@ -28,9 +28,12 @@ async function createDoc(name: string): Promise<{ id: string }> {
     });
 }
 
-async function setAcl(pathId: string, acl: Array<{ id: string; read: boolean; write: boolean }>): Promise<void> {
+async function setAcl(
+    pathId: string,
+    delta: { add?: Array<{ id: string; read: boolean; write: boolean }>; remove?: string[] },
+): Promise<void> {
     await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${pathId}/acl`, {
-        acl,
+        ...delta,
         visibility: 'private',
     });
 }
@@ -52,7 +55,7 @@ describe('ACL share email', () => {
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         const doc = await createDoc('share-default-off');
-        await setAcl(doc.id, [{ id: ctx.bob.user.email, read: true, write: false }]);
+        await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
         await new Promise((r) => setTimeout(r, 10));
 
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));
@@ -67,7 +70,7 @@ describe('ACL share email', () => {
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         const doc = await createDoc('share-toggle-on');
-        await setAcl(doc.id, [{ id: ctx.bob.user.email, read: true, write: false }]);
+        await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
         await new Promise((r) => setTimeout(r, 10));
 
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));
@@ -79,14 +82,14 @@ describe('ACL share email', () => {
     test('does not email on permission upgrade (read → write)', async () => {
         await setEmailToggle('userOnAclAdd', true);
         const doc = await createDoc('share-upgrade');
-        await setAcl(doc.id, [{ id: ctx.bob.user.email, read: true, write: false }]);
+        await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
         await new Promise((r) => setTimeout(r, 10));
 
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
-        await setAcl(doc.id, [{ id: ctx.bob.user.email, read: true, write: true }]);
+        await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: true }] });
         await new Promise((r) => setTimeout(r, 10));
 
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));
@@ -97,14 +100,14 @@ describe('ACL share email', () => {
     test('does not email on unshare', async () => {
         await setEmailToggle('userOnAclAdd', true);
         const doc = await createDoc('share-unshare');
-        await setAcl(doc.id, [{ id: ctx.bob.user.email, read: true, write: true }]);
+        await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: true }] });
         await new Promise((r) => setTimeout(r, 10));
 
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
-        await setAcl(doc.id, []);
+        await setAcl(doc.id, { remove: [ctx.bob.user.email] });
         await new Promise((r) => setTimeout(r, 10));
 
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));

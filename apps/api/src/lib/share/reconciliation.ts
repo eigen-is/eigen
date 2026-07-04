@@ -31,7 +31,7 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
 
             const sharedPaths = await pullSharedPaths(fromUserId, user);
             for (const path of sharedPaths) {
-                await targetHome.drive.receiveACLChange(path, path.acl);
+                await targetHome.drive.receiveSharedPathChange(path, path.acl);
             }
 
             if (targetHome.hasCalendar) {

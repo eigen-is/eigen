@@ -1,5 +1,5 @@
 import { parseOwnerId } from '@workspace/lib/types';
-import { type DriveACL, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import { type DriveACL, type DriveACLDelta, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
 import type { User } from '../user';
 import type { Memberships } from '../user/';
 
@@ -62,6 +62,24 @@ export function matchesACL(
         }
     }
     return false;
+}
+
+// Merges an add/remove delta onto the current ACL: removals first (case-insensitive id match),
+// then upserts — re-adding an existing id replaces its entry, which is how permission changes
+// travel. The server-side merge is what makes concurrent sharers safe: a full-array replace
+// built from a stale client cache silently reverts other people's entries.
+export function mergeACLDelta(current: DriveACL[] | null, delta: DriveACLDelta): DriveACL[] {
+    const removed = new Set((delta.remove ?? []).map((id) => id.toLowerCase()));
+    const merged = (current ?? []).filter((entry) => !removed.has(entry.id.toLowerCase()));
+    for (const entry of delta.add ?? []) {
+        const existing = merged.findIndex((e) => e.id.toLowerCase() === entry.id.toLowerCase());
+        if (existing >= 0) {
+            merged[existing] = entry;
+        } else {
+            merged.push(entry);
+        }
+    }
+    return merged;
 }
 
 export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {

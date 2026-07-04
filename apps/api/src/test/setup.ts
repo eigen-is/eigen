@@ -37,6 +37,7 @@ if (!setupResponse.ok) {
 
 const { auth } = await import('../lib/auth/auth');
 const { treaty } = await import('@elysiajs/eden');
+const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
 const { getHome } = await import('../lib/home');
 
 type App = typeof app;
@@ -160,7 +161,12 @@ export async function getTestContext(): Promise<TestContext> {
     return context;
 }
 
-export function authedRequest(sessionToken: string, path: string, options?: RequestInit): Promise<Response> {
+export async function authedRequest(sessionToken: string, path: string, options?: RequestInit): Promise<Response> {
+    // ACL fan-out to recipient homes is async (fire-and-forget after the mutation returns).
+    // Draining here gives every test read-your-fanout consistency: a cross-user assertion
+    // that follows a share/revoke/rename/trash sees the delivered mirror state, matching
+    // what a real client experiences after its SSE-triggered refetch. No-op when idle.
+    await drainACLFanOuts();
     return app.handle(
         new Request(`http://localhost${path}`, {
             ...options,

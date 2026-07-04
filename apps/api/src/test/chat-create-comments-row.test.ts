@@ -141,7 +141,7 @@ describe('Comment lifecycle via chat-create', () => {
     test('bob creates a chat in alice-shared doc → createdBy is bob', async () => {
         // Give bob write access to the doc container so he can create a chat inside it
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docId}/acl`, {
-            acl: [{ id: ctx.bob.user.email, read: true, write: true }],
+            add: [{ id: ctx.bob.user.email, read: true, write: true }],
         });
 
         await drivePost<DrivePath>(

@@ -1,4 +1,5 @@
 import { app } from './app';
+import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
@@ -27,6 +28,8 @@ async function gracefulShutdown(signal: string) {
     // Each mount flushes its upload queue (bounded by this deadline) during destruct, after
     // its final close-time enqueues but before metadata.db closes.
     setShutdownDrainDeadline(Date.now() + SHUTDOWN_DRAIN_BUDGET_MS);
+    // In-flight ACL fan-outs reopen recipient homes to deliver, so drain them before closing homes.
+    await drainACLFanOuts();
     await shutdownAllHomes();
     console.log('All homes shut down, exiting.');
     process.exit(0);

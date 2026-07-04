@@ -67,7 +67,7 @@ describe('File watch + fan-out', () => {
 
     async function shareWith(pathId: string, email: string): Promise<void> {
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${pathId}/acl`, {
-            acl: [{ id: email, read: true, write: false }],
+            add: [{ id: email, read: true, write: false }],
         });
     }
 
@@ -159,7 +159,7 @@ describe('File watch + fan-out', () => {
         const file = await driveUpload(aliceToken, aliceOwnerId, mountId, folder.id, new File(['x'], 'rev.txt'));
 
         // Revoke bob's access, then mutate inside the still-watched folder
-        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${folder.id}/acl`, { acl: [] });
+        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${folder.id}/acl`, { remove: [ctx.bob.user.email] });
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/rename`, { newName: 'rev2.txt' });
 
         const notifications = await notificationsFor(ctx.bob.user.id);
@@ -253,7 +253,7 @@ describe('File watch + fan-out', () => {
         // An event on a trashed item is dropped entirely (recordFileEvent returns on
         // path.trashedAt) — neither recorded nor fanned out.
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/acl`, {
-            acl: [{ id: ctx.charlie.user.email, read: true, write: false }],
+            add: [{ id: ctx.charlie.user.email, read: true, write: false }],
         });
 
         const notifications = await notificationsFor(ctx.bob.user.id);
@@ -354,7 +354,7 @@ describe('File watch + fan-out', () => {
         await shareWith(folder.id, ctx.bob.user.email);
         await watch(bobToken, folder.id);
 
-        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${folder.id}/acl`, { acl: [] });
+        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${folder.id}/acl`, { remove: [ctx.bob.user.email] });
 
         const watches = await assertJson<DrivePath[]>(await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`));
         expect(watches.some((w) => w.id === folder.id)).toBe(false);
@@ -408,7 +408,7 @@ describe('File events: collab edits, client posts, comments', () => {
 
     async function shareWith(pathId: string, email: string, write = false): Promise<void> {
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${pathId}/acl`, {
-            acl: [{ id: email, read: true, write }],
+            add: [{ id: email, read: true, write }],
         });
     }
 

@@ -14,7 +14,7 @@ import { buildDriveEvent } from './sse-events';
 
 type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
 
-export async function receiveACLChange(
+export async function receiveSharedPathChange(
     sharedDb: SharedDb,
     home: Home,
     path: DrivePath,

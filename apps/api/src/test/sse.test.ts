@@ -105,7 +105,7 @@ describe('SSE', () => {
                 .drive({ ownerId: ctx.alice.user.id })({ mountId: 'default' })
                 .path({ pathId: folder!.id })
                 .acl.put({
-                    acl: [{ id: ctx.bob.user.email, read: true, write: false }],
+                    add: [{ id: ctx.bob.user.email, read: true, write: false }],
                 });
 
             await new Promise((r) => setTimeout(r, 50));
@@ -130,19 +130,19 @@ describe('SSE', () => {
                 .drive({ ownerId: ctx.alice.user.id })({ mountId: 'default' })
                 .path({ pathId: folder!.id })
                 .acl.put({
-                    acl: [{ id: ctx.bob.user.email, read: true, write: false }],
+                    add: [{ id: ctx.bob.user.email, read: true, write: false }],
                 });
 
             // Now subscribe to Bob's SSE events
             const bobSSE = collectSSE(ctx.bob.user.id);
             await new Promise((r) => setTimeout(r, 50));
 
-            // Modify ACL — add Charlie (Bob already has share, so receiveACLChange updates existing)
+            // Modify ACL — add Charlie (Bob already has share, so receiveSharedPathChange updates existing)
             await ctx.alice.api
                 .drive({ ownerId: ctx.alice.user.id })({ mountId: 'default' })
                 .path({ pathId: folder!.id })
                 .acl.put({
-                    acl: [
+                    add: [
                         { id: ctx.bob.user.email, read: true, write: true },
                         { id: ctx.charlie.user.email, read: true, write: false },
                     ],

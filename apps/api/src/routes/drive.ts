@@ -383,13 +383,15 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
+            // Delta contract: the server merges add/remove onto the current ACL, so concurrent
+            // sharers can't revert each other's entries.
             // getSharedDrive returns raw Drive for own-owner — pass actor explicitly so
-            // propagateACLChange can fire user/guest share emails. SharedDrive ignores
+            // propagateSharedPathChange can fire user/guest share emails. SharedDrive ignores
             // this param and uses this.user instead.
-            await drive.updateACL(
+            await drive.updateACLDelta(
                 params.mountId,
                 params.pathId,
-                body.acl,
+                { add: body.add, remove: body.remove },
                 body.visibility,
                 body.sharingRestricted,
                 user,
@@ -398,13 +400,16 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         {
             body: t.Object({
-                acl: t.Array(
-                    t.Object({
-                        id: t.String(),
-                        read: t.Boolean(),
-                        write: t.Boolean(),
-                    }),
+                add: t.Optional(
+                    t.Array(
+                        t.Object({
+                            id: t.String(),
+                            read: t.Boolean(),
+                            write: t.Boolean(),
+                        }),
+                    ),
                 ),
+                remove: t.Optional(t.Array(t.String())),
                 visibility: t.Optional(
                     t.Union([t.Literal('private'), t.Literal('public-read'), t.Literal('public-write')]),
                 ),

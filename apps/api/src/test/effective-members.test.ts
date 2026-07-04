@@ -62,7 +62,7 @@ describe('Effective Members', () => {
             folderId = folder.id;
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folderId}/acl`, {
-                acl: [
+                add: [
                     { id: BOB_EMAIL, read: true, write: true },
                     { id: CHARLIE_EMAIL, read: true, write: false },
                 ],
@@ -108,7 +108,7 @@ describe('Effective Members', () => {
             parentId = parent.id;
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${parentId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
 
             const child = await drivePost<DrivePath>(
@@ -133,7 +133,7 @@ describe('Effective Members', () => {
         test('child direct ACL merges with inherited (most permissive wins)', async () => {
             // Give Charlie read-only on child
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${childId}/acl`, {
-                acl: [{ id: CHARLIE_EMAIL, read: true, write: false }],
+                add: [{ id: CHARLIE_EMAIL, read: true, write: false }],
             });
 
             const res = await getEffectiveMembers(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, childId);
@@ -160,7 +160,7 @@ describe('Effective Members', () => {
 
             // Share doc with Bob
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
 
             // Create chat inside the doc
@@ -211,7 +211,7 @@ describe('Effective Members', () => {
 
             // Bob as viewer on parent
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${parent.id}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: false }],
+                add: [{ id: BOB_EMAIL, read: true, write: false }],
             });
 
             const child = await drivePost<DrivePath>(
@@ -225,7 +225,7 @@ describe('Effective Members', () => {
 
             // Bob as editor on child — should merge to editor (most permissive)
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folderId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
         });
 

@@ -51,7 +51,7 @@ describe('ACL Bubbling', () => {
 
             // Share chat with Bob so he can write
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${chatId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
         });
 
@@ -123,7 +123,7 @@ describe('ACL Bubbling', () => {
 
             // Share doc with Bob (write) — Bob inherits write on the embedded chat
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${docId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
         });
 
@@ -269,7 +269,7 @@ describe('ACL Bubbling', () => {
         test('viewer on chat gets 403', async () => {
             // Give Bob read-only on the chat
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${chatId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: false }],
+                add: [{ id: BOB_EMAIL, read: true, write: false }],
             });
 
             const res = await invite(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, chatId, CHARLIE_EMAIL);
@@ -277,7 +277,7 @@ describe('ACL Bubbling', () => {
 
             // Cleanup
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${chatId}/acl`, {
-                acl: [],
+                remove: [BOB_EMAIL],
             });
         });
 
@@ -338,7 +338,7 @@ describe('ACL Bubbling', () => {
 
             // Give Bob write on the chat only, NOT on the doc
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${chatId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
             });
         });
 
@@ -373,7 +373,7 @@ describe('ACL Bubbling', () => {
 
             // Share doc with Bob (write) + restrict sharing
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${docId}/acl`, {
-                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+                add: [{ id: BOB_EMAIL, read: true, write: true }],
                 sharingRestricted: true,
             });
         });
@@ -407,7 +407,7 @@ describe('ACL Bubbling', () => {
 
         test('editor can invite after owner removes restriction', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${docId}/acl`, {
-                acl: [
+                add: [
                     { id: BOB_EMAIL, read: true, write: true },
                     { id: CHARLIE_EMAIL, read: true, write: true },
                 ],

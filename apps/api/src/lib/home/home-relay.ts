@@ -64,7 +64,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
 
     switch (message.type) {
         case 'drive:acl-change':
-            await home.drive.receiveACLChange(message.path, message.acl, message.actorEmail);
+            await home.drive.receiveSharedPathChange(message.path, message.acl, message.actorEmail);
             break;
         case 'calendar:share':
             if (!home.hasCalendar) break;

@@ -2,7 +2,7 @@ import { type DrivePath, isChatType, isCollabType, isContainerType } from '@work
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
 import type { User } from '../user';
-import { propagateACLChange } from './acl-propagation';
+import { propagateSharedPathChange } from './acl-propagation';
 import type Drive from './drive';
 
 // Trash lifecycle bodies. Drive's deletePath/restorePath/permanentlyDelete keep their
@@ -27,7 +27,7 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
             }
         }
         if (item.acl) {
-            await propagateACLChange(item, item.acl, null, null);
+            await propagateSharedPathChange(item, item.acl, null, null);
         }
     }
 
@@ -51,7 +51,7 @@ export async function restorePath(drive: Drive, mount: Mount, pathId: string, us
 
     // Re-propagate ACL
     if (restoredItem.acl) {
-        await propagateACLChange(restoredItem, null, restoredItem.acl, null);
+        await propagateSharedPathChange(restoredItem, null, restoredItem.acl, null);
     }
     // For containers, re-propagate for descendants with ACL
     if (isContainerType(restoredItem.type)) {
@@ -100,7 +100,7 @@ async function propagateACLRemovalRecursively(mount: Mount, pathId: string): Pro
     const path = await mount.getPath(pathId);
     if (!path) return;
     if (path.acl) {
-        await propagateACLChange(path, path.acl, null, null);
+        await propagateSharedPathChange(path, path.acl, null, null);
     }
     if (isContainerType(path.type)) {
         const children = await mount.listFolderAll(pathId);
@@ -114,7 +114,7 @@ async function propagateACLRestoreRecursively(mount: Mount, pathId: string): Pro
     const children = await mount.listFolderAll(pathId);
     for (const child of children) {
         if (child.acl) {
-            await propagateACLChange(child, null, child.acl, null);
+            await propagateSharedPathChange(child, null, child.acl, null);
         }
         if (isContainerType(child.type)) {
             await propagateACLRestoreRecursively(mount, child.id);
