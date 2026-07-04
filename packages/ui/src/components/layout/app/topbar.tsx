@@ -299,18 +299,25 @@ export function Topbar({ rootRoute }: TopbarProps) {
                             <span className="sr-only">Open menu</span>
                         </Button>
                     )}
-                    {!isMobile && <AppSwitcher isGuest={isGuest} />}
+                    {!isMobile &&
+                        (auth.isAuthenticated ? (
+                            <AppSwitcher isGuest={isGuest} />
+                        ) : (
+                            <div className="mr-1 flex h-8 w-8 items-center justify-center text-[var(--topbar-icon)]">
+                                <EigenLogo className="h-5 w-5" />
+                            </div>
+                        ))}
                     <AppLogo appName={appName.toLowerCase()} />
                 </div>
 
                 <div className="flex justify-center min-w-0">
-                    {!isMobile && <CommandPaletteTrigger documentTitle={documentTitle} />}
+                    {!isMobile && auth.isAuthenticated && <CommandPaletteTrigger documentTitle={documentTitle} />}
                 </div>
 
                 <div className="flex items-center justify-end gap-1 px-4">
-                    {isMobile && <CommandPaletteTrigger />}
+                    {isMobile && auth.isAuthenticated && <CommandPaletteTrigger />}
                     <NotificationBell />
-                    {isMobile && <AppSwitcher isGuest={isGuest} />}
+                    {isMobile && auth.isAuthenticated && <AppSwitcher isGuest={isGuest} />}
                     {isGuest ? <GuestUserDropdown rootRoute={rootRoute} /> : <UserDropdown rootRoute={rootRoute} />}
                 </div>
             </div>

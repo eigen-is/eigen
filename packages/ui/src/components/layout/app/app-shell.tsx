@@ -98,7 +98,9 @@ type CreateDialogKind = EigenDocType | 'folder' | null;
 function PaletteRunner() {
     const palette = useOptionalCommandPalette();
     const preview = useOptionalPreview();
-    if (!palette || !preview) return null;
+    const auth = useAuth();
+    // Palette is signed-in-only: skip Inner for anonymous visitors so Mod+K never binds.
+    if (!palette || !preview || !auth.isAuthenticated) return null;
     return <PaletteRunnerInner />;
 }
 
