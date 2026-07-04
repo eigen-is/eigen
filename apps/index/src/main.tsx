@@ -1,5 +1,6 @@
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
+import { RouterProvider } from '@tanstack/react-router';
 import { RouterClient } from '@tanstack/react-router/ssr/client';
 import { Toaster } from '@workspace/ui/components/sonner';
 import { mountReactApp } from '@workspace/ui/lib/mountReactApp';
@@ -7,6 +8,11 @@ import { useEffect, useState } from 'react';
 import { createAppRouter } from './router';
 
 const router = createAppRouter();
+
+// Prerendered pages inject the SSR handshake <script> (window.$_TSR) before this
+// module; the vite dev server serves the raw SPA shell without it, where
+// RouterClient's hydrate() throws — fall back to a plain client render there.
+const hasSsrBootstrap = '$_TSR' in window;
 
 function App() {
     // The Toaster is client-only — rendering it on the first (hydration) render
@@ -24,7 +30,7 @@ function App() {
     return (
         <>
             {hydrated && <Toaster />}
-            <RouterClient router={router} />
+            {hasSsrBootstrap ? <RouterClient router={router} /> : <RouterProvider router={router} />}
         </>
     );
 }
