@@ -25,7 +25,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
         case SSEventType.DRIVE_ACL_SHARED:
         case SSEventType.DRIVE_ACL_UNSHARED:
             if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
-            invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
+            invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             queryClient.invalidateQueries({ queryKey: collabKeys.document(path.ownerId, path.mountId, path.id) });
             invalidateFileHistory(queryClient, path.ownerId);
             return true;
@@ -67,7 +67,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
 
         case SSEventType.DRIVE_ACL_UPDATED:
             if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
-            invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
+            invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             invalidateFileHistory(queryClient, path.ownerId);
             return true;
 

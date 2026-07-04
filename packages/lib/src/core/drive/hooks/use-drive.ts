@@ -537,6 +537,7 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
                 variables.path.mountId,
                 variables.path.id,
                 variables.path.parentId,
+                variables.path.mimeType,
             );
             // Invalidate the current user's shared-with-me (ownerId is the document owner, not the current user)
             if (currentUserId && currentUserId !== ownerId) {
@@ -857,6 +858,7 @@ export function invalidateAclUpdated(
     mountId: string,
     pathId: string,
     parentId: string | null | undefined,
+    mimeType: string | null | undefined,
 ): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'by-me') });
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
@@ -864,6 +866,12 @@ export function invalidateAclUpdated(
     queryClient.invalidateQueries({ queryKey: driveKeys.permissions(ownerId, mountId, pathId) });
     if (parentId) {
         queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
+    }
+    // The eigendoc app listings (stickies/docs/slides/sheets) render from the mime-type
+    // queries and pass their row objects into the share dialog — without this, the dialog
+    // reopens on a stale ACL after a change made from those views.
+    if (mimeType) {
+        queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
     }
 }
 

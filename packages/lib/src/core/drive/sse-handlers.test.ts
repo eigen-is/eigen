@@ -33,6 +33,20 @@ function driveEvent(type: SSEventDrive['type']): SSEventDrive {
     };
 }
 
+describe('handleDriveSSEvent — DRIVE_ACL_UPDATED', () => {
+    test('invalidates the mime-type listings so eigendoc app views (stickies/docs/…) refresh their rows', () => {
+        const { queryClient, invalidated } = trackingClient();
+
+        const handled = handleDriveSSEvent(driveEvent(SSEventType.DRIVE_ACL_UPDATED), queryClient);
+
+        expect(handled).toBe(true);
+        expect(hasKey(invalidated, driveKeys.path(OWNER, MOUNT, PATH))).toBe(true);
+        // The share dialog in mime-filtered views reads its ACL from the listing row —
+        // the mime prefix must be invalidated or the dialog reopens stale.
+        expect(hasKey(invalidated, driveKeys.mimeTypes(OWNER))).toBe(true);
+    });
+});
+
 describe('handleDriveSSEvent — DRIVE_FILE_UPLOADED (overwrite)', () => {
     test("invalidates the uploaded file's own path detail, not just the parent folder", () => {
         const { queryClient, invalidated } = trackingClient();
