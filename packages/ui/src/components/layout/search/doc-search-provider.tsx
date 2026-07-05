@@ -1,4 +1,5 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
+import { usePaletteDocSearch } from '@workspace/lib/command-palette';
 import type { DocSearchController, DocSearchMatch, DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { FindReplaceBar } from '@workspace/ui/components/layout/search/find-replace-bar';
 import { cn } from '@workspace/ui/lib/utils';
@@ -218,6 +219,12 @@ export function DocSearchProvider({ controller, children, barClassName, onOpenCh
     );
 
     const barContext = useMemo(() => ({ open: () => openBar(true) }), [openBar]);
+
+    // Publish the per-app controller so the palette `doc:` scope can list in-document matches and
+    // reveal one in place. usePaletteDocSearch stabilises it by shape, so the publish effect doesn't
+    // loop even though the app rebuilds the controller each render. The palette hit's run() calls
+    // controller.reveal(matchId) — reveal in place, no bar (review decision).
+    usePaletteDocSearch(controller);
 
     return (
         <DocSearchBarContext.Provider value={barContext}>
