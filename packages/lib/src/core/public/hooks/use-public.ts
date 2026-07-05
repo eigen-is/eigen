@@ -38,18 +38,22 @@ export function usePublicUser(emailOrId: string | undefined) {
 }
 
 export function usePublicUsers(emailsOrIds: string[]): Record<string, PublicUser> {
-    const results = useQueries({
+    return useQueries({
         queries: emailsOrIds.map((id) => ({
             queryKey: publicUserKeys.detail(id),
             queryFn: () => fetchPublicUser(id),
+            enabled: !!id,
             staleTime: Infinity,
         })),
+        // Why: combine memoizes with structural sharing, so the map stays referentially
+        // stable across renders and consumer useMemos hold.
+        combine: (results) => {
+            const map: Record<string, PublicUser> = {};
+            emailsOrIds.forEach((id, i) => {
+                const user = results[i]?.data;
+                if (user) map[id] = user;
+            });
+            return map;
+        },
     });
-
-    const map: Record<string, PublicUser> = {};
-    for (let i = 0; i < emailsOrIds.length; i++) {
-        const user = results[i]?.data;
-        if (user) map[emailsOrIds[i]] = user;
-    }
-    return map;
 }
