@@ -51,8 +51,6 @@ export type Context = {
     editingInsertedImgs?: Image;
     activeImg?: string;
     presences?: Presence[];
-    showSearch?: boolean;
-    showReplace?: boolean;
     // Transient find highlight state (UI-only, never persisted/synced — like
     // formulaRangeHighlight; filterPatch drops non-sheets[*] patches).
     searchHighlights?: SearchHighlight[];

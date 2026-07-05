@@ -1289,9 +1289,6 @@ const handlerMap: Record<string, ToolbarItemClickHandler> = {
     underline: handleUnderline,
     'clear-format': handleClearFormat,
     'format-painter': handleFormatPainter,
-    search: (ctx: Context) => {
-        ctx.showSearch = true;
-    },
     link: handleLink,
 };
 

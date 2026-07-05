@@ -181,6 +181,15 @@
     /* display: none; */
 }
 
+/* In-document search highlight: positioning only. The amber wash + active ring come from the
+   shared .eigen-search-match / -active classes (single source, packages/ui globals.css). */
+.fortune-search-highlight {
+    position: absolute;
+    pointer-events: none;
+    z-index: 13;
+    box-sizing: border-box;
+}
+
 .fortune-cell-selected-extend {
     position: absolute;
     pointer-events: none;

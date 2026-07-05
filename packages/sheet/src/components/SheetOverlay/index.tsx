@@ -27,6 +27,7 @@ import {
     locale,
     onCellsMoveStart,
     selectAll,
+    seletedHighlistByindex,
     showLinkCard,
     tryInsertRowCol,
 } from '../../state';
@@ -34,7 +35,6 @@ import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropDownList } from '../DataVerification/DropdownList';
 import { ImgBoxs } from '../ImgBoxs';
 import { LinkEditCard } from '../LinkEditCard';
-import { SearchReplace } from '../SearchReplace';
 import { ColumnHeader } from './ColumnHeader';
 import { InputBox } from './InputBox';
 import { RowHeader } from './RowHeader';
@@ -365,12 +365,6 @@ export const SheetOverlay: React.FC = () => {
         }
     }, [context.sheetFocused]);
 
-    useEffect(() => {
-        if (context.showSearch || context.showReplace) {
-            showDialog(<SearchReplace />);
-        }
-    }, [context.showSearch, context.showReplace, showDialog]);
-
     return (
         <main
             className="fortune-sheet-overlay"
@@ -458,6 +452,24 @@ export const SheetOverlay: React.FC = () => {
                             </div>
                         );
                     })}
+                    {context.searchHighlights
+                        ?.filter((h) => h.sheetId === context.currentSheetId)
+                        .slice(0, 200)
+                        .map((h) => {
+                            const rect = seletedHighlistByindex(context, h.r, h.r, h.c, h.c);
+                            if (!rect) return null;
+                            const active =
+                                context.searchActive?.sheetId === h.sheetId &&
+                                context.searchActive.r === h.r &&
+                                context.searchActive.c === h.c;
+                            return (
+                                <div
+                                    key={`${h.r}_${h.c}`}
+                                    className={`fortune-search-highlight eigen-search-match${active ? ' eigen-search-match-active' : ''}`}
+                                    style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+                                />
+                            );
+                        })}
                     <div className="luckysheet-row-count-show luckysheet-count-show" id="luckysheet-row-count-show" />
                     <div
                         className="luckysheet-column-count-show luckysheet-count-show"
