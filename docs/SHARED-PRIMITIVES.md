@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-766 primitives across 6 kinds. `packages/sheet` internals are excluded.
+768 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (100)
+## Components (101)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -94,6 +94,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UploadContainer` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-container.tsx |
 | `UserAvatar` | `@workspace/ui` | packages/ui/src/components/layout/user-avatar.tsx |
 | `UserItem` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |
+| `UserNameCard` | `@workspace/ui` | packages/ui/src/components/layout/user-name-card.tsx |
 | `AttachmentChip` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/attachment-chip.tsx |
 | `AttachmentDraftChips` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/attachment-draft-chips.tsx |
 | `LightEditor` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/editor/light-editor.tsx |
@@ -342,7 +343,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (212)
+## Types (213)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -549,6 +550,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UploadItem` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-provider.tsx |
 | `UserAvatarProps` | `@workspace/ui` | packages/ui/src/components/layout/user-avatar.tsx |
 | `UserItemProps` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |
+| `UserNameCardProps` | `@workspace/ui` | packages/ui/src/components/layout/user-name-card.tsx |
 | `DangerZoneProps` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/danger-zone.tsx |
 | `DeleteDialogProps` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/delete-dialog.tsx |
 | `OwnerInfoPopoverProps` | `@workspace/ui/components/layout/owner-info-popover` | packages/ui/src/components/layout/owner-info-popover.tsx |

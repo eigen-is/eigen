@@ -21,3 +21,4 @@ export * from './components/layout/unread-dot';
 export * from './components/layout/upload-provider';
 export * from './components/layout/user-avatar';
 export * from './components/layout/user-item';
+export * from './components/layout/user-name-card';
