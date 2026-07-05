@@ -21,6 +21,7 @@ type SlidePanelProps = {
     onDeleteSlide?: (slideId: string) => void;
     onDuplicateSlide?: (slideId: string) => void;
     mobile?: boolean;
+    highlightedSlideIds?: ReadonlySet<string>;
 };
 
 export function SlidePanel({
@@ -33,6 +34,7 @@ export function SlidePanel({
     onDeleteSlide,
     onDuplicateSlide,
     mobile,
+    highlightedSlideIds,
 }: SlidePanelProps) {
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
     const { resolveMediaUrl } = useMediaResolver();
@@ -49,6 +51,7 @@ export function SlidePanel({
                 objects={objects}
                 index={index}
                 isActive={slideId === activeSlideId}
+                matched={highlightedSlideIds?.has(slideId)}
                 onClick={() => onSelectSlide(slideId)}
             />
         );

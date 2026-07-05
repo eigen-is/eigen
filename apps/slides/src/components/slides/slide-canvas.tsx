@@ -43,6 +43,9 @@ type SlideCanvasProps = {
     onCommentChangeColor?: (cardId: string, color: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
     onDuplicateObjects?: (placements: { id: string; x: number; y: number }[]) => void;
+    onStopEditing?: () => void;
+    searchActiveObjectId?: string | null;
+    searchMatchedObjectIds?: ReadonlySet<string>;
 };
 
 export function SlideCanvas({
@@ -72,6 +75,9 @@ export function SlideCanvas({
     onCommentChangeColor,
     onCommentDelete,
     onDuplicateObjects,
+    onStopEditing,
+    searchActiveObjectId,
+    searchMatchedObjectIds,
 }: SlideCanvasProps) {
     const { resolveMediaUrl } = useMediaResolver();
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -243,7 +249,10 @@ export function SlideCanvas({
                             editing={editingObjectId === obj.id}
                             editable={canWrite}
                             isMultiSelected={selectedObjectIds.length > 1 && selectedObjectIds.includes(obj.id)}
+                            searchActive={searchActiveObjectId === obj.id}
+                            searchMatched={searchMatchedObjectIds?.has(obj.id)}
                             onSelect={onSelectObject}
+                            onStopEditing={onStopEditing}
                             onStartEditing={onStartEditing}
                             onUpdate={onUpdateObject}
                             onDragStart={handleDragStart}

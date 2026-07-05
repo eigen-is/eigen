@@ -10,6 +10,7 @@ type SlideThumbnailProps = {
     objects: SlideObject[];
     index: number;
     isActive: boolean;
+    matched?: boolean;
     onClick: () => void;
 };
 
@@ -18,6 +19,7 @@ export const SlideThumbnail = memo(function SlideThumbnail({
     objects,
     index,
     isActive,
+    matched,
     onClick,
 }: SlideThumbnailProps) {
     const { resolveMediaUrl } = useMediaResolver();
@@ -35,6 +37,7 @@ export const SlideThumbnail = memo(function SlideThumbnail({
                 className={cn(
                     'flex-1 min-w-0 rounded border overflow-hidden',
                     isActive ? 'border-selection-handle shadow-sm' : 'border-border',
+                    matched && !isActive && 'eigen-search-ring',
                 )}
                 style={{ aspectRatio: SLIDE_ASPECT_RATIO }}
             >

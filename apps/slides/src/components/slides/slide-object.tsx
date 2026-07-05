@@ -117,7 +117,10 @@ type SlideObjectViewProps = {
     editing: boolean;
     editable: boolean;
     isMultiSelected: boolean;
+    searchActive?: boolean;
+    searchMatched?: boolean;
     onSelect: (objId: string, additive?: boolean) => void;
+    onStopEditing?: () => void;
     onStartEditing: (objId: string) => void;
     onUpdate: (objId: string, updates: Partial<SlideObject>) => void;
     onDragStart: (
@@ -142,7 +145,10 @@ export const SlideObjectView = memo(function SlideObjectView({
     editing,
     editable,
     isMultiSelected,
+    searchActive,
+    searchMatched,
     onSelect,
+    onStopEditing,
     onStartEditing,
     onUpdate,
     onDragStart,
@@ -185,6 +191,8 @@ export const SlideObjectView = memo(function SlideObjectView({
                 'absolute',
                 !selected && obj.type === 'text' && 'border border-dashed border-border',
                 editable && !editing ? 'cursor-move' : 'cursor-default',
+                searchMatched && !searchActive && 'eigen-search-ring',
+                searchActive && 'eigen-search-ring-active eigen-search-flash',
             )}
             style={getObjectPositionStyle(obj)}
             onMouseDown={handleMouseDown}
@@ -209,6 +217,18 @@ export const SlideObjectView = memo(function SlideObjectView({
                     className="w-full h-full flex overflow-hidden"
                     style={getVerticalAlignStyle(verticalAlign)}
                     onMouseDown={(e) => e.stopPropagation()}
+                    // Text edit claims Escape before it reaches the document-level find bar / deselect
+                    // hotkeys (amendment 12: present → text-edit → bar → deselect).
+                    onKeyDown={
+                        onStopEditing
+                            ? (e) => {
+                                  if (e.key === 'Escape') {
+                                      e.stopPropagation();
+                                      onStopEditing();
+                                  }
+                              }
+                            : undefined
+                    }
                 >
                     <div className="slide-text w-full max-h-full overflow-hidden" style={textStyle}>
                         <LightEditor
