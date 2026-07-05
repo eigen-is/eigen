@@ -497,12 +497,12 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
    palette-reveal flash (no persistent decoration to clear when the bar is closed). */
 
 .tiptap .ProseMirror-search-match {
-    background-color: color-mix(in oklab, var(--warning) 22%, var(--background));
+    background-color: color-mix(in oklab, var(--warning) 22%, transparent);
     border-radius: calc(var(--radius) - 3px);
 }
 
 .tiptap .ProseMirror-active-search-match {
-    background-color: color-mix(in oklab, var(--warning) 45%, var(--background));
+    background-color: color-mix(in oklab, var(--warning) 45%, transparent);
     box-shadow: 0 0 0 1px color-mix(in oklab, var(--warning) 65%, transparent);
     border-radius: calc(var(--radius) - 3px);
 }
