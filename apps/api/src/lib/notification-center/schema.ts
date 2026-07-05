@@ -1,3 +1,4 @@
+import type { NotificationDetails } from '@workspace/lib/types/notification';
 import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
@@ -10,4 +11,5 @@ export const notifications = sqliteTable('notifications', {
     tag: text('tag').unique(),
     read: integer('read', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+    details: text('details', { mode: 'json' }).$type<NotificationDetails | null>(),
 });

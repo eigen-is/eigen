@@ -18,6 +18,7 @@ import type {
     CalendarShare,
 } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type {
     CreateEventArgs,
@@ -26,7 +27,6 @@ import type {
     UpdateEventArgs,
 } from '../calendar/types';
 import { getAvatarsDir } from '../config/paths';
-import type { PersistInput } from '../notification-center/notification-center';
 import type { User } from '../user';
 import { updateUser } from '../user/';
 import { atHome, getHome, getTeamHome } from './get-home';
@@ -53,7 +53,7 @@ export type HomeMessage =
           recurrenceDate?: string;
       }
     | { type: 'broadcast'; event: SSEvent }
-    | { type: 'notification'; notification: PersistInput };
+    | { type: 'notification'; notification: NotificationPersistInput };
 
 export async function sendToHome(targetUserId: string, message: HomeMessage): Promise<void> {
     if (message.type === 'broadcast' && !atHome(targetUserId)) {

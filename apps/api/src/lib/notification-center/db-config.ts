@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const NOTIFICATION_CENTER_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'notification-center',
-    currentVersion: 1,
+    currentVersion: 2,
     schema,
     migrations: [
         {
@@ -24,6 +24,10 @@ export const NOTIFICATION_CENTER_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_notifications_read_createdAt ON notifications(read, createdAt);
                 CREATE INDEX IF NOT EXISTS idx_notifications_createdAt ON notifications(createdAt);
             `),
+        },
+        {
+            version: 2,
+            up: (db) => db.exec(`ALTER TABLE notifications ADD COLUMN details TEXT;`),
         },
     ],
 };
