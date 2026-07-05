@@ -117,7 +117,7 @@ export async function resolveNotificationLink(
         case 'calendar-invite-cancelled': {
             const parsed = parseCalendarInviteTag(tag);
             if (parsed?.startTime) {
-                const { from, to } = getMonthRange(new Date(parsed.startTime * 1000));
+                const { from, to } = getMonthRange(new Date(parsed.startTime));
                 return getCalendarAppUrl(`view/month/${from}/${to}?eventId=${encodeURIComponent(parsed.eventId)}`);
             }
             return getCalendarAppUrl();
