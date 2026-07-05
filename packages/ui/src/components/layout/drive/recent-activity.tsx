@@ -1,9 +1,10 @@
-import { formatTimeAgo } from '@workspace/lib/date';
+import { getDriveAppUrl, getDriveItemUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import { useFileHistory } from '@workspace/lib/drive';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
-import { type FileEvent, fileEventSummary, fileEventVerb } from '@workspace/lib/types/file-history';
+import type { DriveItemRef, DrivePath } from '@workspace/lib/types/drive';
+import { describeFileEvent, type FileEvent } from '@workspace/lib/types/file-history';
 import { useEffect, useRef } from 'react';
-import { UserAvatar } from '../user-avatar';
+import { ActivityRow } from '../activity-row';
 import { UserNameCard } from '../user-name-card';
 
 type RecentActivityProps = {
@@ -13,6 +14,7 @@ type RecentActivityProps = {
 
 export function RecentActivity({ path, highlight }: RecentActivityProps) {
     const { data: events = [] } = useFileHistory(path.ownerId, path.mountId, path.id);
+    const { user } = useAuth();
     const sectionRef = useRef<HTMLDivElement>(null);
 
     // events.length is a dep so the scroll fires once the async history resolves
@@ -30,98 +32,86 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
     return (
         <div ref={sectionRef}>
             <h3 className="eigen-section-label mt-6 mb-2">Recent activity</h3>
-            <ul className="space-y-2">
+            {/* -mx-3 cancels the panel gutter so each row's px-3 hover fill bleeds full-width while its content stays gutter-aligned. */}
+            <div className="-mx-3">
                 {events.map((event) => {
-                    // Name the acted-on item except for the selected file's own events,
-                    // where the panel title already shows it. A folder's own events keep
-                    // the name so "created MyFolder" isn't a bare verb.
-                    const showName = isFolder || event.pathId !== path.id;
+                    // 'own' = the file's own events (panel title already names it); else name the item.
+                    const ctx = !isFolder && event.pathId === path.id ? 'own' : 'container';
+                    const lines = describeFileEvent(event, ctx);
+                    const url = resolveEventUrl(event, path, ctx);
 
                     return (
-                        <li key={event.id} className="flex items-start gap-2 text-sm">
-                            <UserAvatar email={event.actorEmail} size="sm" className="mt-0.5 shrink-0" />
-                            <div className="min-w-0 flex-1">
-                                {/* One line, clipped with an ellipsis — same as the panel's other rows. */}
-                                <div className="truncate">
-                                    <UserNameCard
-                                        userId={event.actorUserId}
-                                        email={event.actorEmail}
-                                        className="font-medium"
-                                    />{' '}
-                                    <ActivityPhrase
-                                        event={event}
-                                        showName={showName}
-                                        name={stripEigenExtension(event.pathName)}
-                                    />
-                                </div>
-                                <div className="text-xs text-muted-foreground">{formatTimeAgo(event.createdAt)}</div>
-                            </div>
-                        </li>
+                        <ActivityRow
+                            key={event.id}
+                            actorEmail={event.actorEmail}
+                            actorUserId={event.actorUserId}
+                            action={
+                                <>
+                                    {event.actorUserId === user?.id ? (
+                                        'You'
+                                    ) : (
+                                        <UserNameCard
+                                            userId={event.actorUserId}
+                                            email={event.actorEmail}
+                                            className="font-medium"
+                                        />
+                                    )}{' '}
+                                    {lines.action}
+                                </>
+                            }
+                            primary={lines.primary}
+                            secondary={lines.secondary}
+                            createdAt={event.createdAt}
+                            onOpen={
+                                url
+                                    ? () => {
+                                          window.location.href = url;
+                                      }
+                                    : undefined
+                            }
+                        />
                     );
                 })}
-            </ul>
+            </div>
         </div>
     );
 }
 
-// Bold only the names: the user (rendered by the caller), card/column/file/folder
-// titles. Verbs and connectors stay plain weight.
-function Name({ children }: { children: string }) {
-    return <span className="font-medium">{children}</span>;
-}
+// Row click target per Inventory B: deep-links for sticky/comment, share dialog for acl-changed, item open otherwise.
+function resolveEventUrl(event: FileEvent, path: DrivePath, ctx: 'own' | 'container'): string | undefined {
+    if (event.eventType === 'trashed' || event.eventType === 'deleted') return undefined;
 
-function ActivityPhrase({ event, showName, name }: { event: FileEvent; showName: boolean; name: string }) {
-    switch (event.eventType) {
-        case 'sticky-added':
-        case 'sticky-moved': {
-            const details = event.details;
-            return (
-                <>
-                    {event.eventType === 'sticky-added' ? 'added' : 'moved'} <Name>{details?.card || 'a card'}</Name>
-                    {details?.toColumn ? (
-                        <>
-                            {' to '}
-                            <Name>{details.toColumn}</Name>
-                        </>
-                    ) : null}
-                </>
-            );
-        }
-        case 'sticky-removed':
-            return (
-                <>
-                    removed <Name>{event.details?.card || 'a card'}</Name>
-                </>
-            );
-        case 'commented': {
-            // Shared across all eigendoc types — the comment text is the payload.
-            const preview = event.details?.preview;
-            const quote = preview ? `: ${preview}` : '';
-            return showName ? (
-                <>
-                    commented on <Name>{name}</Name>
-                    {quote}
-                </>
-            ) : (
-                <>commented{quote}</>
-            );
-        }
-        case 'acl-changed':
-            return showName ? (
-                <>
-                    updated sharing for <Name>{name}</Name>
-                </>
-            ) : (
-                <>updated sharing</>
-            );
-        default:
-            // With a name, the object-expecting verb ("restored a version of <Name>");
-            // without, the standalone summary so nothing dangles ("restored a version").
-            if (!showName) return fileEventSummary(event.eventType);
-            return (
-                <>
-                    {fileEventVerb(event.eventType)} <Name>{name}</Name>
-                </>
-            );
+    // Folder behind the fs share-dialog / ?pid= select: own → the item's parent, container → the folder we're viewing.
+    const parentIdOrSelf = ctx === 'own' ? (path.parentId ?? path.id) : path.id;
+
+    if (event.eventType === 'acl-changed') {
+        return getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${parentIdOrSelf}?sharePathId=${event.pathId}`);
     }
+
+    const containerRef: DriveItemRef =
+        ctx === 'own'
+            ? path
+            : {
+                  id: event.pathId,
+                  ownerId: path.ownerId,
+                  mountId: path.mountId,
+                  name: event.pathName,
+                  type: event.pathType,
+                  mimeType: '',
+              };
+    const itemUrl = getDriveItemUrl(containerRef);
+    const details = event.details;
+
+    if (event.eventType === 'sticky-added' || event.eventType === 'sticky-moved') {
+        const cardId = details && 'cardId' in details ? details.cardId : undefined;
+        return itemUrl && cardId ? `${itemUrl}?card=${encodeURIComponent(cardId)}` : itemUrl;
+    }
+    if (event.eventType === 'sticky-removed') return itemUrl; // card is gone — board only
+    if (event.eventType === 'commented') {
+        const chatName = details && 'chatName' in details ? details.chatName : undefined;
+        return itemUrl && chatName ? `${itemUrl}?chat=${encodeURIComponent(chatName)}` : itemUrl;
+    }
+
+    // created/edited/moved/copied/uploaded/renamed/restored/version-restored.
+    return itemUrl ?? getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${parentIdOrSelf}?pid=${event.pathId}`);
 }
