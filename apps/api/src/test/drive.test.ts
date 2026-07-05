@@ -131,6 +131,19 @@ describe('Drive', () => {
             expect(deleted).toBeUndefined();
         });
 
+        test('create folder with slash in name returns 400', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${aliceRootId}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderName: 'a/b' }),
+                },
+            );
+            expect(res.status).toBe(400);
+        });
+
         test('createFolder can create a typed container', async () => {
             const home = await getHome(ctx.alice.user.id);
             const created = await home.drive.createFolder(
@@ -216,8 +229,8 @@ describe('Drive', () => {
             );
             expect(res.status).toBe(200);
             expect(res.headers.get('content-disposition')).toContain('attachment');
-            expect(res.headers.get('cache-control')).toContain('public');
-            expect(res.headers.get('expires')).toBeDefined();
+            expect(res.headers.get('cache-control')).toContain('no-cache');
+            expect(res.headers.get('etag')).toBeDefined();
         });
 
         test('Bob cannot download without permission', async () => {
@@ -2125,8 +2138,8 @@ describe('Drive', () => {
         test('embed has cache headers', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl());
             expect(res.status).toBe(200);
-            expect(res.headers.get('cache-control')).toContain('public');
-            expect(res.headers.get('expires')).toBeDefined();
+            expect(res.headers.get('cache-control')).toContain('no-cache');
+            expect(res.headers.get('etag')).toBeDefined();
         });
 
         test('full response advertises Accept-Ranges', async () => {
@@ -2188,7 +2201,7 @@ describe('Drive', () => {
             }
             expect(res!.status).toBe(200);
             expect(res!.headers.get('content-type')).toBe('image/webp');
-            expect(res!.headers.get('cache-control')).toContain('public');
+            expect(res!.headers.get('cache-control')).toContain('private');
         });
 
         test('thumbnail returns 404 for non-existent file', async () => {

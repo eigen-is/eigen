@@ -3,7 +3,7 @@ import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
-import { buildStorageKey, rethrowDuplicateActiveName } from './helpers';
+import { buildStorageKey, rethrowDuplicateActiveName, validateName } from './helpers';
 import type { Mount } from './mount';
 import { paths } from './schema';
 
@@ -90,9 +90,11 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
         targetParentId = originalParent.id;
     }
 
-    // Check name conflict and auto-rename if needed
+    // Check name conflict and auto-rename if needed. validateName also catches legacy rows
+    // whose name became reserved (`.trash`) after they were trashed — renamed like a conflict.
     let restoreName = row.name;
     try {
+        validateName(restoreName);
         await mount.assertUniqueName(targetParentId, restoreName, pathId);
     } catch {
         // Name conflict: generate unique name

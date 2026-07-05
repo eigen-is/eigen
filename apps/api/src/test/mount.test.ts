@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { type SQL, sql } from 'drizzle-orm';
+import { eq, type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { getUniqueFileName } from '../lib/drive/naming';
@@ -12,6 +12,7 @@ import {
 } from '../lib/mount/content-reindex-queue';
 import { buildStorageKey, createDefaultMountConfig } from '../lib/mount/helpers';
 import { Mount } from '../lib/mount/mount';
+import { paths } from '../lib/mount/schema';
 import { LocalStorage } from '../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../lib/versioning/timestamp';
@@ -257,6 +258,15 @@ describe('Mount (local-key storage)', () => {
         expect(mount.createFolder(rootId, 'casesensitive')).rejects.toThrow();
     });
 
+    // Id-keyed backends keep SQLite's ASCII-only fold: non-ASCII case pairs are distinct
+    // files (unique storage keys, no disk aliasing). Only path-based mounts fold stricter.
+    test('non-ASCII case pair is allowed on id-keyed storage', async () => {
+        const folderId = await mount.createFolder(rootId, 'UnicodePair');
+        await mount.createFile(folderId, 'É.txt', 'text/plain', 1, Buffer.from('a'));
+        const secondId = await mount.createFile(folderId, 'é.txt', 'text/plain', 1, Buffer.from('b'));
+        expect((await mount.getPath(secondId))!.name).toBe('é.txt');
+    });
+
     test('rename path', async () => {
         const folderId = await mount.createFolder(rootId, 'OldName');
         await mount.updatePath(folderId, { name: 'NewName' });
@@ -424,6 +434,24 @@ describe('Mount (local path-based storage)', () => {
         expect(fileB).not.toBeNull();
         expect(fileA!.id).not.toBe(fileB!.id);
     });
+
+    // SQLite's LOWER() is ASCII-only, but names ARE disk paths here and case-insensitive
+    // filesystems (APFS, Windows) fold non-ASCII case pairs to one file — a silent clobber.
+    test('non-ASCII case pair in same folder throws 409', async () => {
+        const folderId = await mount.createFolder(rootId, 'UnicodeCase');
+        await mount.createFile(folderId, 'Ärger.txt', 'text/plain', 1, Buffer.from('a'));
+        expect(mount.createFile(folderId, 'ärger.txt', 'text/plain', 1, Buffer.from('b'))).rejects.toThrow(
+            'already exists',
+        );
+    });
+
+    test('getChildByName finds a non-ASCII cross-case sibling', async () => {
+        const folderId = await mount.createFolder(rootId, 'UnicodeLookup');
+        const fileId = await mount.createFile(folderId, 'Übung.txt', 'text/plain', 1, Buffer.from('u'));
+        const found = await mount.getChildByName(folderId, 'übung.txt');
+        expect(found).not.toBeNull();
+        expect(found!.id).toBe(fileId);
+    });
 });
 
 describe('Name validation', () => {
@@ -477,6 +505,58 @@ describe('Name validation', () => {
         expect(mount.updatePath(id, { name: '..' })).rejects.toThrow('Invalid file or folder name');
     });
 
+    test('rejects .trash as folder name', async () => {
+        expect(mount.createFolder(rootId, '.trash')).rejects.toThrow('reserved name');
+    });
+
+    test('rejects .trash case-insensitively', async () => {
+        expect(mount.createFolder(rootId, '.TRASH')).rejects.toThrow('reserved name');
+        expect(mount.createFolder(rootId, '.Trash')).rejects.toThrow('reserved name');
+    });
+
+    test('rejects .trash as file name', async () => {
+        expect(mount.createFile(rootId, '.trash', 'text/plain', 0, undefined)).rejects.toThrow('reserved name');
+    });
+
+    test('rejects .trash on rename', async () => {
+        const id = await mount.createFolder(rootId, 'NotTrash');
+        expect(mount.updatePath(id, { name: '.trash' })).rejects.toThrow('reserved name');
+    });
+
+    // A legacy pre-guard row named .trash could otherwise be MOVED to the mount root,
+    // where storage.rename would land it on the real trash dir (the audit's move vector).
+    test('rejects moving a legacy .trash row to another parent', async () => {
+        const subId = await mount.createFolder(rootId, 'LegacyHome');
+        const folderId = await mount.createFolder(subId, 'PreGuard');
+        // Simulate a pre-guard row faithfully: name + file column + physical dir all `.trash`.
+        await mount.db.update(paths).set({ name: '.trash', file: '.trash' }).where(eq(paths.id, folderId));
+        renameSync(join(mount.dataDir, 'LegacyHome', 'PreGuard'), join(mount.dataDir, 'LegacyHome', '.trash'));
+
+        expect(mount.updatePath(folderId, { parentId: rootId })).rejects.toThrow('reserved name');
+        // The real trash dir must still be the mount's own, not the user folder.
+        expect(existsSync(join(mount.dataDir, 'LegacyHome', '.trash'))).toBe(true);
+    });
+
+    test('rejects name longer than 255 bytes', async () => {
+        // Must be the 400 guard, not a raw fs ENAMETOOLONG 500.
+        expect(mount.createFolder(rootId, 'a'.repeat(300))).rejects.toThrow(
+            'File or folder name too long (max 255 bytes)',
+        );
+    });
+
+    test('length cap counts bytes, not characters', async () => {
+        // 130 chars but 260 UTF-8 bytes — over the ENAMETOOLONG byte limit.
+        expect(mount.createFolder(rootId, 'ä'.repeat(130))).rejects.toThrow(
+            'File or folder name too long (max 255 bytes)',
+        );
+    });
+
+    test('allows a 255-byte name', async () => {
+        const id = await mount.createFolder(rootId, 'b'.repeat(255));
+        const folder = await mount.getPath(id);
+        expect(folder!.name).toBe('b'.repeat(255));
+    });
+
     test('allows dotfiles', async () => {
         const id = await mount.createFile(rootId, '.gitignore', 'text/plain', 0, undefined);
         const file = await mount.getPath(id);
@@ -491,35 +571,40 @@ describe('Name validation', () => {
 });
 
 describe('getUniqueFileName', () => {
-    test('returns original if not in set', () => {
+    test('suffixes (2) when no numbered sibling exists', () => {
         const used = new Set(['other.txt']);
-        expect(getUniqueFileName('photo.jpg', used)).toBe('photo#1.jpg');
+        expect(getUniqueFileName('photo.jpg', used)).toBe('photo (2).jpg');
     });
 
     test('increments number for simple collision', () => {
-        const used = new Set(['photo.jpg', 'photo#1.jpg']);
-        expect(getUniqueFileName('photo.jpg', used)).toBe('photo#2.jpg');
+        const used = new Set(['photo.jpg', 'photo (2).jpg']);
+        expect(getUniqueFileName('photo.jpg', used)).toBe('photo (3).jpg');
     });
 
     test('increments existing numbered file', () => {
-        const used = new Set(['photo#3.jpg', 'photo#4.jpg']);
-        expect(getUniqueFileName('photo#3.jpg', used)).toBe('photo#5.jpg');
+        const used = new Set(['photo (3).jpg', 'photo (4).jpg']);
+        expect(getUniqueFileName('photo (3).jpg', used)).toBe('photo (5).jpg');
     });
 
     test('handles file without extension', () => {
-        const used = new Set(['readme', 'readme#1']);
-        expect(getUniqueFileName('readme', used)).toBe('readme#2');
+        const used = new Set(['readme', 'readme (2)']);
+        expect(getUniqueFileName('readme', used)).toBe('readme (3)');
     });
 
     test('case-insensitive collision detection', () => {
-        const used = new Set(['photo#1.jpg']);
-        expect(getUniqueFileName('Photo.JPG', used)).toBe('Photo#2.JPG');
+        const used = new Set(['photo (2).jpg']);
+        expect(getUniqueFileName('Photo.JPG', used)).toBe('Photo (3).JPG');
     });
 
     test('handles many collisions', () => {
         const used = new Set<string>();
-        for (let i = 1; i <= 50; i++) used.add(`file#${i}.txt`);
-        expect(getUniqueFileName('file.txt', used)).toBe('file#51.txt');
+        for (let i = 2; i <= 51; i++) used.add(`file (${i}).txt`);
+        expect(getUniqueFileName('file.txt', used)).toBe('file (52).txt');
+    });
+
+    test('dotfile has no extension — suffix goes at the end', () => {
+        const used = new Set(['.trash']);
+        expect(getUniqueFileName('.trash', used)).toBe('.trash (2)');
     });
 });
 
@@ -867,6 +952,23 @@ describe('trashPath (local path-based storage)', () => {
         expect(result.trashedAt).not.toBeNull();
         expect(result.parentId).toBe(rootId);
     });
+
+    // The P1 trash-wipe alias: a user folder named .trash would resolve to the REAL trash dir
+    // (data/.trash), so deleting it deleted every trashed file's bytes. Reserved in validateName.
+    test('no user path can alias the real trash dir — trashed bytes survive', async () => {
+        const data = Buffer.from('must-survive');
+        const fileId = await mount.createFile(rootId, 'survive.txt', 'text/plain', data.length, data);
+        await mount.trashPath(fileId);
+        const trashKey = buildStorageKey(fileId, 'survive.txt');
+        expect(existsSync(join(mount.dataDir, '.trash', trashKey))).toBe(true);
+
+        expect(mount.createFolder(rootId, '.trash')).rejects.toThrow('reserved name');
+        expect(mount.createFolder(rootId, '.Trash')).rejects.toThrow('reserved name');
+
+        expect(existsSync(join(mount.dataDir, '.trash', trashKey))).toBe(true);
+        const restored = await mount.restorePath(fileId);
+        expect(await (await mount.readFile(restored.id))!.text()).toBe('must-survive');
+    });
 });
 
 describe('restorePath (local-key storage)', () => {
@@ -1070,6 +1172,22 @@ describe('restorePath (local path-based storage)', () => {
         expect(restored.parentId).toBe(rootId);
         // File should exist at root on disk
         expect(existsSync(join(mount.dataDir, restored.name))).toBe(true);
+    });
+
+    // Rows named .trash created before the reserved-name guard can exist on live installs;
+    // restoring one must conflict-rename, never land on the real trash dir.
+    test('restore of a legacy trashed row named .trash lands with a renamed name', async () => {
+        const folderId = await mount.createFolder(rootId, 'LegacyTrashName');
+        await mount.createFile(folderId, 'inside.txt', 'text/plain', 6, Buffer.from('legacy'));
+        await mount.trashPath(folderId);
+        // Simulate a pre-guard row: rename directly in the db, bypassing validateName.
+        await mount.db.update(paths).set({ name: '.trash' }).where(eq(paths.id, folderId));
+
+        const restored = await mount.restorePath(folderId);
+        expect(restored.name.toLowerCase()).not.toBe('.trash');
+        expect(existsSync(join(mount.dataDir, restored.name, 'inside.txt'))).toBe(true);
+        // The real trash dir is still a directory at data/.trash
+        expect(existsSync(join(mount.dataDir, '.trash'))).toBe(true);
     });
 });
 
