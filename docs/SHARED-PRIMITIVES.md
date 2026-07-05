@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-768 primitives across 6 kinds. `packages/sheet` internals are excluded.
+769 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -138,7 +138,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (200)
+## Hooks (201)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -305,6 +305,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUnreadNotificationCount` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `usePublicConfig` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
+| `usePublicUsers` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `useResolvedUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-resolved-user.ts |
 | `useSearch` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-search.ts |
 | `useCheckS3Connection` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
@@ -325,7 +326,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSaveVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useApp` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
-| `useCreatedByMeta` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-dialog-meta.ts |
+| `useCreatedByMeta` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-dialog-meta.tsx |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useMountLabel` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-mount-list.tsx |
 | `useSidebar` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
