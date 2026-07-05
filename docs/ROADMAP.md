@@ -67,7 +67,7 @@ Large net-new builds or low value-per-effort today.
 
 | Item | Effort | Notes |
 |---|---|---|
-| rspamd sidecar | ~1 day | The real fix for the spam/DMARC pain that the Stalwart proposal exists to solve. |
+| rspamd sidecar + spam learn-loop ([proposal](PROPOSAL_RSPAMD.md)) | 1–2 d | The real fix for the spam/DMARC pain that the Stalwart proposal exists to solve. rspamd+Redis as a Postfix milter (edge scoring, SPF/DKIM/DMARC); `mailboxDeliver` routes flagged mail to Junk; the existing "Report Spam" button trains Bayes via `/learnspam`·`/learnham` in `messageMove`. Fail-open, no frozen-format impact. |
 | Palette doc actions (Phase 1 of [in-document search](PROPOSAL_IN_DOCUMENT_SEARCH.md)) | S | Inside an open doc, the palette shows Open/Mail/Copy link but NOT Rename/Share/Trash/Download — the viewers publish the doc as a `selection` but never call `usePaletteSelectionActions`. Wiring the handlers in (probably in the shared `useEigenDocEditorRoute`) fixes a real inconsistency today and ships independently of the search half. |
 
 ## On hold (decision needed)
