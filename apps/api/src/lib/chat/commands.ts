@@ -723,8 +723,7 @@ export function formatEmoteForViewer(
     viewerId: string,
     viewerEmail?: string,
 ): string {
-    // Emit the full email so the client's email→name rendering resolves it to a
-    // hoverable display name (retroactive for all history).
+    // Emit the full email; the client renders it as a resolved, hoverable display name.
     const authorName = authorEmail;
 
     if (content.startsWith('$')) {
