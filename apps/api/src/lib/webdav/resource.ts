@@ -1,7 +1,7 @@
 import { isContainerType } from '@workspace/lib/types/drive';
 import { enforceMountQuota } from '../config/enforcement';
 import { ApiError } from '../core/errors';
-import { computeEtag, parseByteRange } from '../core/http';
+import { computeEtag, etagMatches, parseByteRange } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
@@ -11,6 +11,8 @@ function mimeTypeFromName(name: string): string {
     return Bun.file(name).type || 'application/octet-stream';
 }
 
+// If-Match only — RFC 7232 requires STRONG comparison here (no W/ strip); If-None-Match
+// uses the shared weak matcher etagMatches.
 function ifMatchesEtag(header: string, etag: string): boolean {
     if (header === '*') return true;
     return header
@@ -41,7 +43,7 @@ export async function handleGet(args: {
     if (ifMatch && !ifMatchesEtag(ifMatch, etag)) {
         return new Response(null, { status: 412 });
     }
-    if (ifNoneMatch && ifMatchesEtag(ifNoneMatch, etag)) {
+    if (ifNoneMatch && etagMatches(ifNoneMatch, etag)) {
         return new Response(null, { status: 304, headers: { ETag: etag } });
     }
 

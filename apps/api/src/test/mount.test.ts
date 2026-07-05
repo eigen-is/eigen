@@ -13,7 +13,6 @@ import {
 import { buildStorageKey, createDefaultMountConfig } from '../lib/mount/helpers';
 import { Mount } from '../lib/mount/mount';
 import { paths } from '../lib/mount/schema';
-import type { StorageBackend } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../lib/versioning/timestamp';
@@ -1619,7 +1618,7 @@ describe('Managed-db open vs create', () => {
         const managed = await failMount.createDatabase(minimalConfig, dataDbId);
         managed.db.insert(minimalSchema.items).values({ id: 1 }).run();
 
-        const storage = (failMount as unknown as { storage: StorageBackend }).storage;
+        const storage = failMount.storage;
         const realWrite = storage.write.bind(storage);
         storage.write = async () => {
             throw new Error('injected write failure');

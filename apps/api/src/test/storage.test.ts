@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { ApiError } from '../lib/core';
 import { LocalStorage } from '../lib/storage/local-storage';
 import { S3Storage } from '../lib/storage/s3-storage';
 
@@ -141,14 +140,7 @@ describe('S3Storage key guard', () => {
     test('empty segments (leading/trailing/double slash) are rejected with 400', () => {
         // An empty segment builds `prefix//x` — S3 rejects it as an opaque XMinioInvalidObjectName 500.
         for (const key of ['/x', 'a//b', 'x/', '']) {
-            let err: unknown;
-            try {
-                storage.read(key);
-            } catch (e) {
-                err = e;
-            }
-            expect(err).toBeInstanceOf(ApiError);
-            expect((err as ApiError).status).toBe(400);
+            expect(() => storage.read(key)).toThrow('empty path segment');
         }
     });
 

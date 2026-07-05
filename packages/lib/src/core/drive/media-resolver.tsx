@@ -83,7 +83,7 @@ export function MediaResolverProvider({
                     // Defer settle to a macrotask so the caller's mediaName rewrite
                     // renders before the blob URL gets revoked.
                     const probe = new Image();
-                    probe.src = `${getDrivePreviewUrl(ownerId, mountId, result.id)}?v=${result.updatedAt.getTime()}`;
+                    probe.src = getDrivePreviewUrl(ownerId, mountId, result.id, result.updatedAt);
                     await probe.decode().catch(() => {});
                     setTimeout(settle, 0);
                     return result;
@@ -104,7 +104,7 @@ export function MediaResolverProvider({
                 return pendingRef.current.get(name) ?? null;
             }
             const file = media.findByName(name);
-            return file ? `${getDrivePreviewUrl(ownerId, mountId, file.id)}?v=${file.updatedAt.getTime()}` : null;
+            return file ? getDrivePreviewUrl(ownerId, mountId, file.id, file.updatedAt) : null;
         },
         [media, ownerId, mountId],
     );

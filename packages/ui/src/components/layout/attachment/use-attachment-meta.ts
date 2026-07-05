@@ -1,4 +1,4 @@
-import { getDriveThumbnailUrl } from '@workspace/lib/api';
+import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 
@@ -16,7 +16,7 @@ export function useAttachmentMeta(attachments?: ChatAttachment[]): {
         const path = resolveMediaPath(attachment);
         if (path?.thumbnail && path.mimeType?.startsWith('image/')) {
             return {
-                coverThumbnailUrl: `${getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail)}?v=${path.updatedAt.getTime()}`,
+                coverThumbnailUrl: getDriveItemThumbnail(path).thumbnailUrl,
                 attachmentCount: attachments.length,
             };
         }

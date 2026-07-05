@@ -1,18 +1,18 @@
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
 import { computeEtag, contentDisposition, etagMatches, parseByteRange } from '../core/http';
 import type { Mount } from '../mount';
 
 // Header/range/CSP mechanics for serving a file body. Pure Mount function —
-// the drive routes resolve the mount (via SharedDrive ACL) and delegate here.
+// the drive routes resolve mount + path (via SharedDrive ACL) and delegate here.
 export async function serveFile(
     mount: Mount,
-    pathId: string,
+    path: DrivePath,
     disposition: 'attachment' | 'inline',
     range: string | null,
     ifNoneMatch: string | null = null,
 ): Promise<Response> {
-    const path = await mount.getActivePath(pathId);
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
     const mimeType = path.mimeType || 'application/octet-stream';
     const etag = computeEtag(path);
@@ -41,10 +41,7 @@ export async function serveFile(
 
     // RFC 7232 §6: a matching conditional GET returns 304 regardless of Range.
     if (ifNoneMatch && etagMatches(ifNoneMatch, etag)) {
-        return new Response(null, {
-            status: 304,
-            headers: { ETag: etag, 'Cache-Control': 'private, no-cache' },
-        });
+        return new Response(null, { status: 304, headers });
     }
 
     const parsed = parseByteRange(range, path.size);
@@ -55,7 +52,7 @@ export async function serveFile(
         });
     }
     if (parsed) {
-        const slice = await mount.readRange(pathId, parsed.start, parsed.end + 1);
+        const slice = await mount.readRange(path.id, parsed.start, parsed.end + 1);
         if (!slice) throw new ApiError(404, 'File not found');
         // Stream the slice. Passing the BunFile/S3File directly loses the slice bounds
         // somewhere in the response pipeline, so route through .stream() which respects them.
@@ -69,7 +66,7 @@ export async function serveFile(
         });
     }
 
-    const file = await mount.readFile(pathId);
+    const file = await mount.readFile(path.id);
     if (!file) throw new ApiError(404, 'File not found');
     // S3File doesn't support ResponseInit options — stream it instead
     const body: BodyInit = 'bucket' in file ? file.stream() : file;

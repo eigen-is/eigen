@@ -128,10 +128,10 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/download',
         async ({ params, request, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const { mount } = await drive.resolveFile(params.mountId, params.pathId);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return serveFile(
                 mount,
-                params.pathId,
+                path,
                 'attachment',
                 request.headers.get('range'),
                 request.headers.get('if-none-match'),
@@ -262,14 +262,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/embed/:fileName',
         async ({ params, request, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const { mount } = await drive.resolveFile(params.mountId, params.pathId);
-            return serveFile(
-                mount,
-                params.pathId,
-                'inline',
-                request.headers.get('range'),
-                request.headers.get('if-none-match'),
-            );
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            return serveFile(mount, path, 'inline', request.headers.get('range'), request.headers.get('if-none-match'));
         },
         { auth: true },
     )

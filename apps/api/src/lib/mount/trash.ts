@@ -3,7 +3,7 @@ import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
-import { buildStorageKey, rethrowDuplicateActiveName, validateName } from './helpers';
+import { buildStorageKey, isReservedName, rethrowDuplicateActiveName } from './helpers';
 import type { Mount } from './mount';
 import { paths } from './schema';
 
@@ -90,14 +90,18 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
         targetParentId = originalParent.id;
     }
 
-    // Check name conflict and auto-rename if needed. validateName also catches legacy rows
-    // whose name became reserved (`.trash`) after they were trashed — renamed like a conflict.
+    // Check name conflict and auto-rename if needed. A legacy row named `.trash` (pre-guard)
+    // is treated like a conflict — restoring it verbatim would alias the real trash dir.
     let restoreName = row.name;
-    try {
-        validateName(restoreName);
-        await mount.assertUniqueName(targetParentId, restoreName, pathId);
-    } catch {
-        // Name conflict: generate unique name
+    let conflict = isReservedName(restoreName);
+    if (!conflict) {
+        try {
+            await mount.assertUniqueName(targetParentId, restoreName, pathId);
+        } catch {
+            conflict = true;
+        }
+    }
+    if (conflict) {
         const siblings = await mount.db
             .select({ name: paths.name })
             .from(paths)

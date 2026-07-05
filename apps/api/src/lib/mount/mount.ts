@@ -330,7 +330,7 @@ export class Mount {
         if (result) return this.toDrivePath(result);
 
         const folded = await this.findCaseFoldedChild(parentId, name);
-        return folded ? this.toDrivePath(folded) : null;
+        return folded ? this.getPath(folded.id) : null;
     }
 
     // SQLite's LOWER() folds ASCII only. On path-based mounts names are disk paths, and
@@ -341,12 +341,12 @@ export class Mount {
     // Accepted residual: an ASCII query never scans, so a stored-side-only alias (U+212A 'K'.txt
     // vs ASCII k.txt) still clobbers; pairs JS can't fold either way (ſ/s) likewise. Both are
     // single-codepoint oddities far rarer than the é/É class this closes.
-    private async findCaseFoldedChild(parentId: string, name: string): Promise<typeof paths.$inferSelect | null> {
+    private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
         // biome-ignore lint/suspicious/noControlCharactersInRegex: \x00-\x7F is the ASCII range, not a control-char match
         if (!this.isPathBased || !/[^\x00-\x7F]/.test(name)) return null;
         const folded = name.toLowerCase();
         const siblings = await this.db
-            .select()
+            .select({ id: paths.id, name: paths.name })
             .from(paths)
             .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
             .all();
@@ -375,19 +375,20 @@ export class Mount {
 
     // internal — used by mount/*.ts
     async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
-        const existing = await this.db
-            .select({ id: paths.id })
-            .from(paths)
-            .where(
-                and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`, isNull(paths.trashedAt)),
-            )
-            .get();
+        const existing =
+            (await this.db
+                .select({ id: paths.id })
+                .from(paths)
+                .where(
+                    and(
+                        eq(paths.parentId, parentId),
+                        sql`LOWER(${paths.name}) = LOWER(${name})`,
+                        isNull(paths.trashedAt),
+                    ),
+                )
+                .get()) ?? (await this.findCaseFoldedChild(parentId, name));
 
         if (existing && existing.id !== excludeId) {
-            throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
-        }
-        const folded = await this.findCaseFoldedChild(parentId, name);
-        if (folded && folded.id !== excludeId) {
             throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
         }
     }
@@ -627,8 +628,9 @@ export class Mount {
                 targetName = updates.name ?? current.name;
                 // A legacy pre-guard row named `.trash` must not be re-parented — at the mount
                 // root its storage rename would land on the real trash dir (rename it first).
-                if (updates.parentId !== undefined && isReservedName(current.name)) {
-                    throw new ApiError(400, `"${current.name}" is a reserved name`);
+                // targetName, not current.name: a move that simultaneously renames away is safe.
+                if (updates.parentId !== undefined && isReservedName(targetName)) {
+                    throw new ApiError(400, `"${targetName}" is a reserved name`);
                 }
                 if (targetParent) {
                     await this.assertUniqueName(targetParent, targetName, pathId);
