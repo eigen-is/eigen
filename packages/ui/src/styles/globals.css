@@ -397,6 +397,22 @@
         border-color: var(--app-current-color);
     }
 
+    /* In-document search highlight — the single source of truth all four editors
+       (docs/sheets/slides/stickies) paint through; docs maps prosemirror-search's
+       own class names onto these in its CSS. A warm amber wash derived from the
+       --warning token so it reads as a highlight in light AND dark without a harsh
+       literal yellow. `-active` is the current match: stronger wash + a ring. */
+    .eigen-search-match {
+        background-color: color-mix(in oklab, var(--warning) 22%, var(--background));
+        border-radius: calc(var(--radius) - 3px);
+    }
+
+    .eigen-search-match-active {
+        background-color: color-mix(in oklab, var(--warning) 45%, var(--background));
+        box-shadow: 0 0 0 1px color-mix(in oklab, var(--warning) 65%, transparent);
+        border-radius: calc(var(--radius) - 3px);
+    }
+
     .drag-badge {
         position: absolute;
         top: -9999px;
