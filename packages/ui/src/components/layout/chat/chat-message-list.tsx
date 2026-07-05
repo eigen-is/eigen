@@ -2,14 +2,13 @@ import { getDriveDownloadUrl } from '@workspace/lib/api';
 import { useContacts } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
 import { useCopyFiles, useFolderLookup } from '@workspace/lib/drive';
-import { usePublicUser } from '@workspace/lib/public';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
 import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { UserNameCard } from '@workspace/ui/components/layout/user-name-card';
 import { Check, Download, Pencil, Trash2, X } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../components/hover-card';
 import { cn } from '../../../lib/utils';
 import { LoadingState } from '../app/loading-state';
 import { AttachmentChip } from '../attachment/attachment-chip';
@@ -45,17 +44,12 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
 }
 
 function InlineEmail({ email }: { email: string }) {
-    const { data } = usePublicUser(email);
-    const name = data?.name || email.split('@')[0];
     return (
-        <HoverCard>
-            <HoverCardTrigger asChild>
-                <span className="text-primary cursor-default font-medium underline hover:no-underline">{name}</span>
-            </HoverCardTrigger>
-            <HoverCardContent className="w-auto p-3">
-                <UserItem email={email} mailLink />
-            </HoverCardContent>
-        </HoverCard>
+        <UserNameCard
+            email={email}
+            mailLink
+            className="text-primary cursor-default font-medium underline hover:no-underline"
+        />
     );
 }
 
@@ -446,8 +440,6 @@ export function ChatMessageList({
                     );
                 }
 
-                const displayName = message.authorEmail.split('@')[0] || message.authorEmail;
-
                 if (isEmote) {
                     return (
                         <div
@@ -476,7 +468,10 @@ export function ChatMessageList({
                             <div className="flex-1 min-w-0 pb-1">
                                 {!grouped && (
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-sm font-medium text-foreground">{displayName}</span>
+                                        <UserNameCard
+                                            email={message.authorEmail}
+                                            className="text-sm font-medium text-foreground"
+                                        />
                                         <span className="text-xs text-muted-foreground">
                                             {formatDateTime(message.createdAt)}
                                         </span>
@@ -516,7 +511,10 @@ export function ChatMessageList({
                             <div className="flex-1 min-w-0 pb-1">
                                 {!grouped && (
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-sm font-medium text-foreground">{displayName}</span>
+                                        <UserNameCard
+                                            email={message.authorEmail}
+                                            className="text-sm font-medium text-foreground"
+                                        />
                                         <span className="text-xs text-muted-foreground">
                                             {formatDateTime(message.createdAt)}
                                         </span>
@@ -556,7 +554,10 @@ export function ChatMessageList({
                         <div className="flex-1 min-w-0 pb-1">
                             {!grouped && (
                                 <div className="flex items-baseline gap-2">
-                                    <span className="text-sm font-medium text-foreground">{displayName}</span>
+                                    <UserNameCard
+                                        email={message.authorEmail}
+                                        className="text-sm font-medium text-foreground"
+                                    />
                                     <span className="text-xs text-muted-foreground">
                                         {formatDateTime(message.createdAt)}
                                     </span>
