@@ -39,6 +39,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -47,9 +48,11 @@ import * as Y from 'yjs';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
+import { SearchHighlight } from './extensions/search-highlight';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
+import { useDocSearchController } from './use-doc-search-controller';
 
 function findCommentMarkPositions(doc: Node, cardId: string): { pos: number; end: number }[] {
     const positions: { pos: number; end: number }[] = [];
@@ -271,6 +274,7 @@ const TiptapEditor = ({
                 ...getDocExtensions({ lowlight, exclude: ['figure', 'comment'] }),
                 Figure,
                 TableWidthClamp,
+                SearchHighlight,
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
                     onCommentContextMenu: (cardId, event) => {
@@ -639,6 +643,8 @@ const TiptapEditor = ({
         return () => clearTimeout(timer);
     }, [editor]);
 
+    const docSearchController = useDocSearchController(editor);
+
     const isWide = !useMediaQuery('(max-width: 1200px)');
 
     if (!editor) return null;
@@ -655,96 +661,98 @@ const TiptapEditor = ({
 
     return (
         <>
-            <Column
-                id={'doc-editor'}
-                width={'w-full'}
-                toolbarBorder="always"
-                toolbar={
-                    <EditorToolbar
-                        editor={editor}
-                        path={path}
-                        canWrite={access.canWrite}
-                        canUndo={canUndo}
-                        canRedo={canRedo}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
-                        commentPanelOpen={commentPanelOpen}
-                        unresolvedCommentCount={unresolvedCount}
-                        onImageUpload={mediaFolderId ? handleImageUpload : undefined}
-                        onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
-                    />
-                }
-            >
-                <div className="h-full relative overflow-hidden">
-                    <div
-                        ref={scrollContainerRef}
-                        className={cn(
-                            'h-full w-full overflow-y-scroll bg-muted p-4',
-                            needsScale && 'overflow-x-hidden',
+            <DocSearchProvider controller={docSearchController} barClassName={cn('top-14', showSidebar && 'right-68')}>
+                <Column
+                    id={'doc-editor'}
+                    width={'w-full'}
+                    toolbarBorder="always"
+                    toolbar={
+                        <EditorToolbar
+                            editor={editor}
+                            path={path}
+                            canWrite={access.canWrite}
+                            canUndo={canUndo}
+                            canRedo={canRedo}
+                            onAccessDialogOpen={onAccessDialogOpen}
+                            onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                            commentPanelOpen={commentPanelOpen}
+                            unresolvedCommentCount={unresolvedCount}
+                            onImageUpload={mediaFolderId ? handleImageUpload : undefined}
+                            onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
+                        />
+                    }
+                >
+                    <div className="h-full relative overflow-hidden">
+                        <div
+                            ref={scrollContainerRef}
+                            className={cn(
+                                'h-full w-full overflow-y-scroll bg-muted p-4',
+                                needsScale && 'overflow-x-hidden',
+                            )}
+                            onClick={(e) => {
+                                if (e.target === scrollContainerRef.current) {
+                                    editor.commands.blur();
+                                }
+                            }}
+                        >
+                            <div
+                                data-document="true"
+                                className={cn(
+                                    'grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
+                                    !needsScale && 'min-h-full m-auto',
+                                )}
+                                ref={documentRef}
+                                style={
+                                    needsScale
+                                        ? {
+                                              transform: `scale(${canvasScale})`,
+                                              transformOrigin: 'top left',
+                                              marginBottom: -(1 - canvasScale) * docHeight,
+                                          }
+                                        : undefined
+                                }
+                            >
+                                <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
+                            </div>
+                        </div>
+                        {isWide && (
+                            <div
+                                className={cn(
+                                    'absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out',
+                                    showSidebar ? 'translate-x-0' : 'translate-x-full',
+                                )}
+                            >
+                                {activePanel === 'comments' ? (
+                                    <CommentPanel
+                                        cards={cards}
+                                        entries={allComments}
+                                        activeCardIds={activeComments.ids}
+                                        anchorTexts={activeComments.anchorTexts}
+                                        currentUserEmail={auth.user!.email}
+                                        onClose={() => setCommentPanelOpen(false)}
+                                        onCommentClick={(cardId) => {
+                                            handleScrollToComment(cardId);
+                                            setOpenCardId(cardId);
+                                        }}
+                                        onCommentContextMenu={(e, card, entry) => {
+                                            commentContextMenu.handleContextMenu(e, { card, entry });
+                                        }}
+                                    />
+                                ) : lastPanelRef.current === 'figure' ? (
+                                    <FigurePropertiesPanel
+                                        key={editor.state.selection.from}
+                                        editor={editor}
+                                        onReplaceImage={handleReplaceImage}
+                                        onReplaceImageFromDrive={handleReplaceImageFromDrive}
+                                    />
+                                ) : (
+                                    <TablePropertiesPanel editor={editor} />
+                                )}
+                            </div>
                         )}
-                        onClick={(e) => {
-                            if (e.target === scrollContainerRef.current) {
-                                editor.commands.blur();
-                            }
-                        }}
-                    >
-                        <div
-                            data-document="true"
-                            className={cn(
-                                'grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
-                                !needsScale && 'min-h-full m-auto',
-                            )}
-                            ref={documentRef}
-                            style={
-                                needsScale
-                                    ? {
-                                          transform: `scale(${canvasScale})`,
-                                          transformOrigin: 'top left',
-                                          marginBottom: -(1 - canvasScale) * docHeight,
-                                      }
-                                    : undefined
-                            }
-                        >
-                            <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
-                        </div>
                     </div>
-                    {isWide && (
-                        <div
-                            className={cn(
-                                'absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out',
-                                showSidebar ? 'translate-x-0' : 'translate-x-full',
-                            )}
-                        >
-                            {activePanel === 'comments' ? (
-                                <CommentPanel
-                                    cards={cards}
-                                    entries={allComments}
-                                    activeCardIds={activeComments.ids}
-                                    anchorTexts={activeComments.anchorTexts}
-                                    currentUserEmail={auth.user!.email}
-                                    onClose={() => setCommentPanelOpen(false)}
-                                    onCommentClick={(cardId) => {
-                                        handleScrollToComment(cardId);
-                                        setOpenCardId(cardId);
-                                    }}
-                                    onCommentContextMenu={(e, card, entry) => {
-                                        commentContextMenu.handleContextMenu(e, { card, entry });
-                                    }}
-                                />
-                            ) : lastPanelRef.current === 'figure' ? (
-                                <FigurePropertiesPanel
-                                    key={editor.state.selection.from}
-                                    editor={editor}
-                                    onReplaceImage={handleReplaceImage}
-                                    onReplaceImageFromDrive={handleReplaceImageFromDrive}
-                                />
-                            ) : (
-                                <TablePropertiesPanel editor={editor} />
-                            )}
-                        </div>
-                    )}
-                </div>
-            </Column>
+                </Column>
+            </DocSearchProvider>
 
             <CardFormDialog
                 open={addOpen}
