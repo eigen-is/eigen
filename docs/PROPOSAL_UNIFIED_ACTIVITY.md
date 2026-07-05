@@ -1,5 +1,12 @@
 # Proposal: Unified Activity Rows
 
+> **Status (2026-07-05): IMPLEMENTED** — shared `ActivityRow` + `NotificationBadge`, the
+> `describeFileEvent` / `describeNotification` phrasing layer, the `notifications` v2 `details`
+> column, and the new deep links (`?card=` on eigendoc editors, mail `?mailId=`, `commented`
+> `?chat=`) shipped as described below; both surfaces (topbar bell + Drive *Recent activity*
+> panel) render through `ActivityRow`. See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) for
+> the shipped title/body/details contract and the bell badge.
+
 > **TLDR**: The Drive *Recent activity* panel and the topbar notification bell show the same kind of
 > information with two different layouts, two phrasing implementations, and inconsistent (or missing)
 > links. This proposal unifies them on one row anatomy — a small muted **action** line (`Mark added a card

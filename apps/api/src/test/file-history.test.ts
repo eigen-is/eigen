@@ -3,13 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    describeFileEvent,
-    type FileEvent,
-    fileEventSummary,
-    fileEventVerb,
-    toFileEventType,
-} from '@workspace/lib/types/file-history';
+import { describeFileEvent, type FileEvent, toFileEventType } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
@@ -60,9 +54,10 @@ afterAll(() => {
 });
 
 describe('file event phrasing', () => {
-    test('known event types resolve to their phrase', () => {
-        expect(fileEventSummary('edited')).toBe('edited');
-        expect(fileEventVerb('renamed')).toBe('renamed');
+    test('known event types resolve to their phrase via describeFileEvent', () => {
+        const file = { pathName: 'x.txt', pathType: 'file' } as const;
+        expect(describeFileEvent({ ...file, eventType: 'edited', details: null }, 'own').action).toBe('edited');
+        expect(describeFileEvent({ ...file, eventType: 'renamed', details: null }, 'own').action).toBe('renamed');
     });
 
     test('known event types pass through toFileEventType unchanged', () => {

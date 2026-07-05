@@ -65,28 +65,27 @@ export type PathWatchStatus = {
     viaAncestor?: { pathId: string; name: string };
 };
 
-// Third-person past-tense phrasing for notification titles + activity rows.
-// `verb` expects a trailing object ("created <name>"); `summary` stands alone
-// ("created") for places with no room for the item name (a selected file's own
-// events where the panel title already shows the name). (Lives here, not in a UI
-// module, because the server composes notification titles with verb — same
-// precedent as stripEigenExtension in types/drive.ts.)
-const FILE_EVENT_PHRASES: Record<FileEventType, { verb: string; summary: string }> = {
-    created: { verb: 'created', summary: 'created' },
-    uploaded: { verb: 'uploaded', summary: 'uploaded' },
-    edited: { verb: 'edited', summary: 'edited' },
-    renamed: { verb: 'renamed', summary: 'renamed' },
-    moved: { verb: 'moved', summary: 'moved' },
-    copied: { verb: 'copied', summary: 'copied' },
-    'acl-changed': { verb: 'updated sharing for', summary: 'updated sharing' },
-    trashed: { verb: 'trashed', summary: 'trashed' },
-    restored: { verb: 'restored', summary: 'restored' },
-    deleted: { verb: 'deleted', summary: 'deleted' },
-    'version-restored': { verb: 'restored a version of', summary: 'restored a version' },
-    commented: { verb: 'commented on', summary: 'commented' },
-    'sticky-added': { verb: 'added a card to', summary: 'added a card' },
-    'sticky-moved': { verb: 'moved a card in', summary: 'moved a card' },
-    'sticky-removed': { verb: 'removed a card from', summary: 'removed a card' },
+// Bare third-person past-tense verb per event type. describeFileEvent renders the plain
+// drive verbs (created/edited/…) straight from this table and phrases the richer types in
+// its switch, so those entries exist mainly to complete the registry toFileEventType
+// validates against. (Lives here, not a UI module, because the server composes notification
+// titles from it — same precedent as stripEigenExtension in types/drive.ts.)
+const FILE_EVENT_PHRASES: Record<FileEventType, string> = {
+    created: 'created',
+    uploaded: 'uploaded',
+    edited: 'edited',
+    renamed: 'renamed',
+    moved: 'moved',
+    copied: 'copied',
+    'acl-changed': 'updated sharing',
+    trashed: 'trashed',
+    restored: 'restored',
+    deleted: 'deleted',
+    'version-restored': 'restored a version',
+    commented: 'commented',
+    'sticky-added': 'added a card',
+    'sticky-moved': 'moved a card',
+    'sticky-removed': 'removed a card',
 };
 
 // Persisted rows can hold an eventType outside today's union — older builds, or the
@@ -96,14 +95,6 @@ const FILE_EVENT_PHRASES: Record<FileEventType, { verb: string; summary: string 
 // FileEvent stays honest and the phrasing helpers stay total over the union.
 export function toFileEventType(raw: string): FileEventType {
     return Object.hasOwn(FILE_EVENT_PHRASES, raw) ? (raw as FileEventType) : 'edited';
-}
-
-export function fileEventVerb(eventType: FileEventType): string {
-    return FILE_EVENT_PHRASES[eventType].verb;
-}
-
-export function fileEventSummary(eventType: FileEventType): string {
-    return FILE_EVENT_PHRASES[eventType].summary;
 }
 
 export type ActivityLines = { action: string; primary?: string; secondary?: string };
@@ -182,6 +173,6 @@ export function describeFileEvent(
         }
         default:
             // created/edited/moved/copied/trashed/restored/deleted: bare verb; name is the primary line.
-            return { action: fileEventSummary(event.eventType), primary: container ? name : undefined };
+            return { action: FILE_EVENT_PHRASES[event.eventType], primary: container ? name : undefined };
     }
 }
