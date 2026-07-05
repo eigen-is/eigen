@@ -18,9 +18,9 @@ export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClie
                 options.action = {
                     label: 'View',
                     onClick: () => {
-                        resolveNotificationLink({ type: notificationType, tag })
+                        resolveNotificationLink({ type: notificationType, tag, details: null })
                             .then((url) => {
-                                if (url) window.location.href = url;
+                                if (url) window.open(url, '_blank', 'noopener');
                             })
                             .catch(() => {});
                     },

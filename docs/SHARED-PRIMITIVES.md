@@ -5,18 +5,19 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-777 primitives across 6 kinds. `packages/sheet` internals are excluded.
+779 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (102)
+## Components (103)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
 | `AccessDenied` | `@workspace/ui` | packages/ui/src/components/layout/app/access-denied.tsx |
+| `ActivityRow` | `@workspace/ui` | packages/ui/src/components/layout/activity-row.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
 | `AppSidebar` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
@@ -344,7 +345,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (218)
+## Types (219)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -530,6 +531,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
+| `ActivityRowProps` | `@workspace/ui` | packages/ui/src/components/layout/activity-row.tsx |
 | `ChatMessageInputHandle` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-message-input.tsx |
 | `ColorPickerButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker-button.tsx |
 | `ColorPickerProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
