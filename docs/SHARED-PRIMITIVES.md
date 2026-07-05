@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-772 primitives across 6 kinds. `packages/sheet` internals are excluded.
+773 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -563,7 +563,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (245)
+## Utilities & constants (246)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -713,6 +713,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `formatMonth` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatTimeAgo` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
+| `applyPreserveCase` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/preserve-case.ts |
 | `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
