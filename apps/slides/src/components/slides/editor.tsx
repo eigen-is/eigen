@@ -220,20 +220,34 @@ function SlideEditorInner({
         },
         { enabled: canWrite && hasSelection && !isEditing },
     );
-    // Layered Escape (amendment 12): present → text-edit → bar → deselect. Text edit normally claims
-    // Escape via the object's own onKeyDown (stops propagation before the document); the isEditing
-    // branch here is the fallback for when focus has left the text object. A bar-open, non-editing
-    // Escape lets the find bar close itself without also deselecting.
-    useHotkey(
-        'Escape',
-        () => {
-            if (isPresenting) setIsPresenting(false);
-            else if (isEditing) setEditingObjectId(null);
-            else if (searchOpen) return;
-            else setSelectedObjectIds([]);
-        },
-        { enabled: true },
-    );
+    // Layered Escape (amendment 12): present → text-edit → bar → deselect. This is a capture-phase
+    // document listener (NOT useHotkey): the find bar's own Escape runs in the bubble phase and closes
+    // the bar before any bubble handler here could tell it had been open, and useHotkey's callback sync
+    // goes stale once a second document Escape (the bar's) is registered. Capturing lets us read the
+    // live state first: when the bar is open we do nothing and let Escape bubble to the bar (close
+    // without deselecting); present/text-edit claim Escape and stop it; otherwise deselect (no
+    // stopPropagation, so dialogs and other layers still receive Escape). State is read from a ref so
+    // this listener never goes stale.
+    const escStateRef = useRef({ isPresenting, isEditing, searchOpen });
+    escStateRef.current = { isPresenting, isEditing, searchOpen };
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            const { isPresenting: presenting, isEditing: editing, searchOpen: barOpen } = escStateRef.current;
+            if (presenting) {
+                e.stopPropagation();
+                setIsPresenting(false);
+            } else if (editing) {
+                e.stopPropagation();
+                setEditingObjectId(null);
+            } else if (!barOpen) {
+                // bar open ⇒ let Escape bubble to the find bar so it closes without deselecting
+                setSelectedObjectIds([]);
+            }
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+    }, []);
     const moveSelected = useCallback(
         (dx: number, dy: number) => {
             if (!yjsDoc) return;
@@ -747,7 +761,6 @@ function SlideEditorInner({
                                                 objects={activeObjects}
                                                 searchActiveObjectId={searchActiveObjectId}
                                                 searchMatchedObjectIds={matchedObjectIds}
-                                                onStopEditing={() => setEditingObjectId(null)}
                                                 selectedObjectIds={selectedObjectIds}
                                                 editingObjectId={editingObjectId}
                                                 onSelectObject={handleSelectObject}
