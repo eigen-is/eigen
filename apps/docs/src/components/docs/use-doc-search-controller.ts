@@ -1,5 +1,7 @@
+import type { EditorState } from '@tiptap/pm/state';
 import { TextSelection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
+import { applyPreserveCase } from '@workspace/lib/doc-search';
 import type { DocSearchController, DocSearchMatch } from '@workspace/lib/types/doc-search';
 import { getSearchState, SearchQuery, setSearchState } from 'prosemirror-search';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +14,22 @@ const FLASH_MS = 800;
 // each edit resets the timer, so the controller identity settles only once typing pauses.
 const REPUBLISH_DEBOUNCE_MS = 300;
 
-export function useDocSearchController(editor: Editor | null): DocSearchController {
+// All live match ranges for a query, in document order. Zero-width matches (degenerate regexes like
+// `a*`) aren't painted by the library — skip them so n of m matches what's on screen.
+function findRanges(state: EditorState, sq: SearchQuery): { from: number; to: number }[] {
+    const size = state.doc.content.size;
+    const out: { from: number; to: number }[] = [];
+    for (let pos = 0; ; ) {
+        const result = sq.findNext(state, pos, size);
+        if (!result) break;
+        if (result.to > result.from) out.push({ from: result.from, to: result.to });
+        pos = result.to > result.from ? result.to : result.from + 1;
+        if (pos >= size) break;
+    }
+    return out;
+}
+
+export function useDocSearchController(editor: Editor | null, canWrite: boolean): DocSearchController {
     // The query built by the LAST search(). Safe to cache (contract rule 3): highlightAll always
     // follows the immediately-preceding search() on this controller, and reveal never reads it
     // (ids are self-describing), so interleaved palette calls can't corrupt a bar session.
@@ -37,6 +54,13 @@ export function useDocSearchController(editor: Editor | null): DocSearchControll
 
     return useMemo<DocSearchController>(() => {
         void docVersion; // new identity per (debounced) doc change — keeps n of m live
+
+        const toMatches = (state: EditorState, sq: SearchQuery): DocSearchMatch[] =>
+            findRanges(state, sq).map((r) => ({
+                id: `${r.from}:${r.to}`,
+                label: state.doc.textBetween(r.from, r.to, ' '),
+            }));
+
         return {
             search(query, opts) {
                 if (!editor || query === '') {
@@ -49,24 +73,7 @@ export function useDocSearchController(editor: Editor | null): DocSearchControll
                     return [];
                 }
                 queryRef.current = sq;
-                const { state } = editor.view;
-                const size = state.doc.content.size;
-                const matches: DocSearchMatch[] = [];
-                for (let pos = 0; ; ) {
-                    const result = sq.findNext(state, pos, size);
-                    if (!result) break;
-                    // Zero-width matches (degenerate regexes like `a*`) aren't painted by the
-                    // library — skip them so n of m matches what's on screen.
-                    if (result.to > result.from) {
-                        matches.push({
-                            id: `${result.from}:${result.to}`,
-                            label: state.doc.textBetween(result.from, result.to, ' '),
-                        });
-                    }
-                    pos = result.to > result.from ? result.to : result.from + 1;
-                    if (pos >= size) break;
-                }
-                return matches;
+                return toMatches(editor.view.state, sq);
             },
 
             highlightAll(matches) {
@@ -108,6 +115,53 @@ export function useDocSearchController(editor: Editor | null): DocSearchControll
                     }, FLASH_MS);
                 }
             },
+
+            canReplace: canWrite,
+
+            // Rewrite the one range the id encodes, then re-search the post-edit doc (editor state
+            // updates synchronously after dispatch). Stale-verify first: an id whose range is no
+            // longer a live match no-ops and returns the current fresh list (collab shifts positions).
+            // opts unused: the matchId self-describes the exact range and staleness is checked
+            // against the cached query, so the search options don't affect a single-range replace.
+            replace(matchId, replacement, _opts, preserveCase) {
+                const sq = queryRef.current;
+                const fresh = () => (editor && sq ? toMatches(editor.view.state, sq) : []);
+                if (!editor || !canWrite || !sq?.valid) return fresh();
+                const { view } = editor;
+                const [from, to] = matchId.split(':').map(Number);
+                if (!Number.isInteger(from) || !Number.isInteger(to)) return fresh();
+                if (!findRanges(view.state, sq).some((r) => r.from === from && r.to === to)) return fresh();
+                const matched = view.state.doc.textBetween(from, to);
+                // Literal insert (no $1/$& expansion); preserve-case per the matched run.
+                view.dispatch(
+                    view.state.tr.insertText(
+                        preserveCase ? applyPreserveCase(matched, replacement) : replacement,
+                        from,
+                        to,
+                    ),
+                );
+                return fresh();
+            },
+
+            // Every match in ONE transaction (one Yjs undo). Iterate high-to-low so an edit never
+            // shifts a not-yet-processed lower range. Literal insert + per-run preserve-case.
+            replaceAll(query, replacement, opts, preserveCase) {
+                if (!editor || query === '') return { replaced: 0, matches: [] };
+                const sq = buildDocSearchQuery(query, opts);
+                queryRef.current = sq.valid ? sq : null;
+                const { view } = editor;
+                if (!canWrite || !sq.valid) return { replaced: 0, matches: sq.valid ? toMatches(view.state, sq) : [] };
+                const ranges = findRanges(view.state, sq);
+                if (ranges.length === 0) return { replaced: 0, matches: [] };
+                const tr = view.state.tr;
+                for (let i = ranges.length - 1; i >= 0; i -= 1) {
+                    const { from, to } = ranges[i];
+                    const matched = view.state.doc.textBetween(from, to);
+                    tr.insertText(preserveCase ? applyPreserveCase(matched, replacement) : replacement, from, to);
+                }
+                view.dispatch(tr);
+                return { replaced: ranges.length, matches: toMatches(view.state, sq) };
+            },
         };
-    }, [editor, docVersion]);
+    }, [editor, canWrite, docVersion]);
 }

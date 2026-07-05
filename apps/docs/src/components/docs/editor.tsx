@@ -648,7 +648,7 @@ const TiptapEditor = ({
         return () => clearTimeout(timer);
     }, [editor]);
 
-    const docSearchController = useDocSearchController(editor);
+    const docSearchController = useDocSearchController(editor, access.canWrite);
 
     const isWide = !useMediaQuery('(max-width: 1200px)');
 
