@@ -33,6 +33,10 @@ export type DocSearchProviderProps = {
     // a surface passes offsets to clear its own chrome (docs insets it below the toolbar + clear of
     // the side panel). Merged over the default via cn, so later utilities win.
     barClassName?: string;
+    // Notifies a surface whose Escape is layered (slides: present → edit → bar → deselect) when the
+    // bar opens/closes, so its own document-level Escape can defer to the bar-close instead of running
+    // its default action. The bar owns closing itself; this is read-only awareness.
+    onOpenChange?: (open: boolean) => void;
 };
 
 // Owns the find session (open state, query, options, matches, active index), the keybinds, and the
@@ -42,7 +46,7 @@ export type DocSearchProviderProps = {
 // Accepted quirk: the active match is tracked by INDEX, so under remote collab edits it may drift to
 // a different occurrence when the controller republishes; reveal is best-effort. Surface controllers
 // debounce remote-origin republish coarsely (not per remote keystroke) to keep count/paint settled.
-export function DocSearchProvider({ controller, children, barClassName }: DocSearchProviderProps) {
+export function DocSearchProvider({ controller, children, barClassName, onOpenChange }: DocSearchProviderProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [options, setOptions] = useState<DocSearchOptions>(DEFAULT_OPTIONS);
@@ -84,6 +88,10 @@ export function DocSearchProvider({ controller, children, barClassName }: DocSea
     );
 
     useEffect(() => () => clearTimeout(debounceRef.current), []);
+
+    useEffect(() => {
+        onOpenChange?.(open);
+    }, [open, onOpenChange]);
 
     // Focus once the bar has mounted (inputRef is null on the render that flips `open`).
     useEffect(() => {
