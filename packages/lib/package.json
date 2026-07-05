@@ -54,6 +54,7 @@
     "./constants/*": "./src/constants/*",
     "./validation": "./src/validation/index.ts",
     "./docs/eigendoc": "./src/docs/eigendoc/index.ts",
+    "./doc-search": "./src/doc-search/index.ts",
     "./sheets": "./src/sheets/index.ts",
     "./sheets/*": "./src/sheets/*",
     "./slides": "./src/slides/index.ts",

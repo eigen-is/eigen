@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-766 primitives across 6 kinds. `packages/sheet` internals are excluded.
+770 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -342,7 +342,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (212)
+## Types (215)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -519,6 +519,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActiveComments` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `DocSearchController` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
+| `DocSearchMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
+| `DocSearchOptions` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
@@ -559,7 +562,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (243)
+## Utilities & constants (244)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -708,6 +711,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `formatMonth` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatTimeAgo` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
+| `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
