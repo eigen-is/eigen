@@ -217,6 +217,12 @@ export type SearchResult = {
     value: string;
 };
 
+export type SearchHighlight = {
+    sheetId: string;
+    r: number;
+    c: number;
+};
+
 export type LinkCardProps = {
     sheetId: string;
     r: number;
