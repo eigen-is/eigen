@@ -1,10 +1,13 @@
-import { buildSearchRegex } from '@workspace/lib/doc-search';
+import { applyPreserveCase, buildSearchRegex } from '@workspace/lib/doc-search';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { sortBy } from 'es-toolkit/compat';
 import { valueShowEs } from '../../engine/format';
 import { type Context, getFlowdata, updateContextWithSheetData } from '../context';
 import type { SearchHighlight, SearchResult } from '../types';
 import { chatatABC, getSheetIndex } from '../utils';
+import { setCellValue as setCellValueInternal } from './cell';
+import { delFunctionGroup, execFunctionGroup, groupValuesRefresh } from './formula-exec';
+import { checkCellIsLocked } from './protection';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
@@ -93,4 +96,73 @@ export function revealSearchMatch(ctx: Context, cell: SearchHighlight) {
     ctx.selections = normalizeSelection(ctx, [{ row: [cell.r, cell.r], column: [cell.c, cell.c] }]);
     ctx.searchActive = cell;
     centerCellInView(ctx, cell.r, cell.c);
+}
+
+// Rewrite every occurrence of the query inside one cell via the recalc path. Returns true iff the
+// cell was rewritten. A formula cell (its COMPUTED value matched — the Excel/Google convention is not
+// to rewrite inside formula results), a per-cell-locked cell, or a value that no longer matches (a
+// stale id under collab) all no-op and return false, so they're excluded from the replaced count.
+function replaceInCell(
+    ctx: Context,
+    cell: SearchHighlight,
+    regex: RegExp,
+    replacement: string,
+    preserveCase: boolean,
+): boolean {
+    const flowdata = getFlowdata(ctx, cell.sheetId);
+    if (!flowdata) return false;
+    const cellData = flowdata[cell.r]?.[cell.c];
+    if (cellData == null || cellData.f != null) return false;
+    if (checkCellIsLocked(ctx, cell.r, cell.c, cell.sheetId)) return false;
+
+    const oldText = cellText(cell.r, cell.c, flowdata);
+    regex.lastIndex = 0;
+    // Function-form replacement suppresses $1/$& expansion — literal, one semantic across surfaces.
+    const newText = oldText.replace(regex, (m) => (preserveCase ? applyPreserveCase(m, replacement) : replacement));
+    if (newText === oldText) return false;
+
+    // Recalc path (mirrors updateCell's plain-value branch), cross-tab safe via sheetId + flowdata:
+    // clear the cell's formula group, run the group so dependents recompute, then write the value.
+    delFunctionGroup(ctx, cell.r, cell.c, cell.sheetId);
+    execFunctionGroup(ctx, cell.r, cell.c, newText, cell.sheetId, flowdata);
+    setCellValueInternal(ctx, cell.r, cell.c, flowdata, newText);
+    return true;
+}
+
+// Rewrite the one targeted cell (every occurrence within it — the cell is the atomic unit), then
+// materialise any recomputed dependents. Returns whether it changed anything.
+export function replaceSearchMatch(
+    ctx: Context,
+    cell: SearchHighlight,
+    query: string,
+    replacement: string,
+    opts: DocSearchOptions,
+    preserveCase: boolean,
+): boolean {
+    const regex = buildSearchRegex(query, opts);
+    if (regex == null) return false;
+    const changed = replaceInCell(ctx, cell, regex, replacement, preserveCase);
+    if (changed) groupValuesRefresh(ctx);
+    return changed;
+}
+
+// Replace across every matching cell in one pass (one setContext recipe = one undo when driven from
+// the Workbook API), skipping formula/locked cells. Returns the count of cells actually rewritten.
+export function replaceAllMatches(
+    ctx: Context,
+    query: string,
+    replacement: string,
+    opts: DocSearchOptions,
+    preserveCase: boolean,
+): number {
+    const regex = buildSearchRegex(query, opts);
+    if (regex == null) return 0;
+    let replaced = 0;
+    for (const m of collectMatches(ctx, query, opts)) {
+        if (replaceInCell(ctx, { sheetId: m.sheetId, r: m.r, c: m.c }, regex, replacement, preserveCase)) {
+            replaced += 1;
+        }
+    }
+    if (replaced > 0) groupValuesRefresh(ctx);
+    return replaced;
 }

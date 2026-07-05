@@ -85,7 +85,7 @@ function SheetEditorInner({
     const [flowdata, setFlowdata] = useState<(import('@workspace/sheet').Cell | null)[][] | undefined>();
     // flowdata is the republish identity key — set from every Workbook onChange, so the controller
     // re-publishes per document change and the provider re-runs the open search (contract rule 4).
-    const searchController = useSheetSearchController(workbookRef, flowdata);
+    const searchController = useSheetSearchController(workbookRef, flowdata, canWrite);
     const activeComments = useActiveComments(flowdata);
     const lifecycle = useCommentLifecycle({
         ownerId,

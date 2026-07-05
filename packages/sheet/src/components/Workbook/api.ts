@@ -1,6 +1,6 @@
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { cloneDeep } from 'es-toolkit/compat';
-import { applyPatches } from 'immer';
+import { applyPatches, produce } from 'immer';
 import type { SetContextOptions } from '../../context';
 import { RowColError } from '../../engine';
 import type { Cell, CellMatrix } from '../../engine/types';
@@ -22,7 +22,9 @@ import {
     type Presence,
     type Range,
     removeImageByMediaName,
+    replaceAllMatches,
     replaceImageMediaName,
+    replaceSearchMatch,
     revealSearchMatch,
     type SearchHighlight,
     type SearchResult,
@@ -286,6 +288,39 @@ export function generateAPIs(
 
         revealSearchMatch: (cell: SearchHighlight) =>
             setContext((draftCtx) => revealSearchMatch(draftCtx, cell), { noHistory: true }),
+
+        // Replace rewrites every occurrence in the one targeted cell; replaceAll sweeps every match —
+        // each in ONE setContext recipe (one undo, one op batch). React state updates a render later,
+        // so the fresh post-edit match list is computed on a synchronously produced next-state (the
+        // same pure recipe) and returned; the provider adopts it instead of re-searching stale state.
+        replace: (
+            cell: SearchHighlight,
+            query: string,
+            replacement: string,
+            opts: DocSearchOptions,
+            preserveCase: boolean,
+        ): SearchResult[] => {
+            const recipe = (ctx_: Context) => {
+                replaceSearchMatch(ctx_, cell, query, replacement, opts, preserveCase);
+            };
+            setContext(recipe);
+            return collectMatches(produce(context, recipe), query, opts);
+        },
+
+        replaceAll: (
+            query: string,
+            replacement: string,
+            opts: DocSearchOptions,
+            preserveCase: boolean,
+        ): { replaced: number; matches: SearchResult[] } => {
+            let replaced = 0;
+            const recipe = (ctx_: Context) => {
+                replaced = replaceAllMatches(ctx_, query, replacement, opts, preserveCase);
+            };
+            setContext(recipe);
+            const next = produce(context, recipe);
+            return { replaced, matches: collectMatches(next, query, opts) };
+        },
 
         calculateFormula: (id?: string, range?: SingleRange) => {
             setContext((draftCtx) => {
