@@ -5,12 +5,17 @@
 > mounted by `AppShell.PaletteRunner`.
 >
 > **Shipped:** `Mod+K` dialog with the typed result model
-> (`action` / `smart` / `contact` / `mail` / `file`), five providers
-> (`actions`, `contacts`, `smart`, `mail-search`, `file-search`), the catalog (nav derived from
+> (`action` / `smart` / `contact` / `mail` / `file` / `doc-hit`), six providers
+> (`actions`, `contacts`, `smart`, `mail-search`, `file-search`, `doc-search`), the catalog (nav derived from
 > the shared `apps` registry; creates derived from `EIGEN_DOC_TYPE_INFO`; selection-aware drive
-> actions), the engine (`buildSections` with Top Hit / Suggestions / Selection / Files / Mail /
-> Contacts / Actions), scope prefixes (`mail:` / `file:` / `>` / `@`) and the scope chip via
-> Tab (cycle: none → file → mail → actions → contacts → none). Smart parser for `email@…`
+> actions), the engine (`buildSections` with Top Hit / Suggestions / Selection / In Document / Files / Mail /
+> Contacts / Actions), scope prefixes (`mail:` / `file:` / `doc:` / `>` / `@`) and the scope chip via
+> Tab (cycle: none → doc → file → mail → actions → contacts → none; the `doc` stop is gated on a
+> document being open). The `doc:` scope lists in-document matches from the open eigendoc's
+> `DocSearchController` (published to the palette by `DocSearchProvider` via `usePaletteDocSearch`);
+> Enter reveals a hit in place. Doc hits are a section only — excluded from Top-Hit candidates so a
+> matched fragment can't hijack Enter from a file the user typed. A drive/mail palette hit carries
+> `?q=` into the opened doc/email so its find bar / body highlight lands on the matches. Smart parser for `email@…`
 > (deterministic Top Hit) and `http(s)://…` (deterministic with `noopener,noreferrer`). Smart
 > contact-derived `Send mail to <email>` row. Selection publication from DriveList + the four
 > eigendoc viewers. Selection-aware actions published from `DriveLayout` via
@@ -196,6 +201,7 @@ When the query starts with a prefix, the result set scopes:
 | `@`       | Contacts / people                      |
 | `mail:`   | Mail only                              |
 | `file:`   | Files only                             |
+| `doc:`    | In-document matches (open eigendoc only) |
 | `event:`  | Calendar only                          |
 | `chat:`   | Chat messages only                     |
 | `?`       | Help — list every command + shortcut   |
@@ -203,7 +209,9 @@ When the query starts with a prefix, the result set scopes:
 No prefix = full blend. The active scope shows as a chip in the footer. Cycling through scopes
 needs a key the browser doesn't reserve — **not `Ctrl+Tab`**, which browsers intercept for tab
 switching and never deliver to page scripts. Use a plain affordance (e.g. `Tab` to advance the
-chip, or click it) instead.
+chip, or click it) instead. `Tab` skips the `doc:` stop when no document is open (no controller
+published); the typed `doc:` prefix is always available, and with no document open it shows the
+empty-state hint "Open a document to search inside it".
 
 ### Sub-action sheet
 
