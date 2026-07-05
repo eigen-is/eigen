@@ -1,6 +1,6 @@
 import { buildSearchRegex } from '@workspace/lib/doc-search';
 import type { DocSearchController } from '@workspace/lib/types/doc-search';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { searchDeck } from '../search-deck';
 import type { DeckData } from '../types';
 
@@ -14,6 +14,7 @@ export function useSlidesDocSearch({ deck, setActiveSlideId }: SlidesDocSearchAr
     highlightedSlideIds: ReadonlySet<string>;
     matchedObjectIds: ReadonlySet<string>;
     searchActiveObjectId: string | null;
+    clearHighlights: () => void;
 } {
     const [highlightedSlideIds, setHighlightedSlideIds] = useState<ReadonlySet<string>>(new Set());
     const [matchedObjectIds, setMatchedObjectIds] = useState<ReadonlySet<string>>(new Set());
@@ -50,5 +51,13 @@ export function useSlidesDocSearch({ deck, setActiveSlideId }: SlidesDocSearchAr
         };
     }, [deck, setActiveSlideId]);
 
-    return { controller, highlightedSlideIds, matchedObjectIds, searchActiveObjectId };
+    // Present mode unmounts the DocSearchProvider without routing through close(), so the editor calls
+    // this to drop stranded rings on enter (the provider only clears them on Esc/✕).
+    const clearHighlights = useCallback(() => {
+        setHighlightedSlideIds(new Set());
+        setMatchedObjectIds(new Set());
+        setSearchActiveObjectId(null);
+    }, []);
+
+    return { controller, highlightedSlideIds, matchedObjectIds, searchActiveObjectId, clearHighlights };
 }

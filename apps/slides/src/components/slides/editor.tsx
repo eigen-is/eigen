@@ -170,7 +170,14 @@ function SlideEditorInner({
         highlightedSlideIds,
         matchedObjectIds,
         searchActiveObjectId,
+        clearHighlights,
     } = useSlidesDocSearch({ deck, setActiveSlideId });
+
+    // Entering present unmounts the DocSearchProvider subtree without closing the bar, so its rings
+    // would survive an exit-with-bar-closed. Drop them on enter.
+    useEffect(() => {
+        if (isPresenting) clearHighlights();
+    }, [isPresenting, clearHighlights]);
 
     const auth = useAuth();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
