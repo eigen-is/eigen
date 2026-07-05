@@ -34,4 +34,22 @@ export type DocSearchController = {
     // move focus while a bar session is open — that would break Enter/⌘G stepping (docs uses
     // setTextSelection; never chain .focus()). Reveal centres the match so the bar can't cover it.
     reveal(matchId: string): void;
+
+    // v1.5 — replace (docs + sheets). Optional: slides/stickies leave these unset and stay
+    // search-only, so no existing v1 caller changes shape. canReplace = canWrite for the surface;
+    // unset/false → the bar hides the replace row and ⌥⌘F opens plain search.
+    canReplace?: boolean;
+    // Both methods perform the edit AND return the FRESH post-edit match list, which the provider
+    // ADOPTS — it never re-runs search() after an edit (sheets' React context is one render behind
+    // then). Docs re-searches synchronously after view.dispatch; sheets collects on a synchronously
+    // produced next-state inside the same commit. preserveCase is a separate arg (a replace-only
+    // concern search()/buildSearchRegex never read); the impl reapplies it via applyPreserveCase.
+    // Replacement strings are LITERAL on every surface — no $1/$& capture-group expansion.
+    replace?(matchId: string, replacement: string, opts: DocSearchOptions, preserveCase: boolean): DocSearchMatch[];
+    replaceAll?(
+        query: string,
+        replacement: string,
+        opts: DocSearchOptions,
+        preserveCase: boolean,
+    ): { replaced: number; matches: DocSearchMatch[] };
 };
