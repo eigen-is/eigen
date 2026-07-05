@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { ApiError } from '../lib/core';
 import { LocalStorage } from '../lib/storage/local-storage';
+import { S3Storage } from '../lib/storage/s3-storage';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data/test-storage-${Date.now()}`);
 
@@ -114,5 +116,44 @@ describe('LocalStorage', () => {
     test('size returns null for missing file', async () => {
         const size = await storage.size('no-such-file');
         expect(size).toBeNull();
+    });
+});
+
+// getKey validates synchronously before any network call, so these run without a live S3.
+// The network-touching surface (read/write/stat round-trips) needs the MinIO-gated suite.
+describe('S3Storage key guard', () => {
+    let storage: S3Storage;
+
+    beforeAll(() => {
+        storage = new S3Storage({
+            endpoint: 'http://localhost:9',
+            bucket: 'test-bucket',
+            prefix: 'prefix',
+            accessKeyId: 'key',
+            secretAccessKey: 'secret',
+        });
+    });
+
+    test('path traversal with .. is rejected', () => {
+        expect(() => storage.read('a/../b')).toThrow('path traversal');
+    });
+
+    test('empty segments (leading/trailing/double slash) are rejected with 400', () => {
+        // An empty segment builds `prefix//x` — S3 rejects it as an opaque XMinioInvalidObjectName 500.
+        for (const key of ['/x', 'a//b', 'x/', '']) {
+            let err: unknown;
+            try {
+                storage.read(key);
+            } catch (e) {
+                err = e;
+            }
+            expect(err).toBeInstanceOf(ApiError);
+            expect((err as ApiError).status).toBe(400);
+        }
+    });
+
+    test('valid nested keys are allowed', () => {
+        expect(() => storage.read('a/b')).not.toThrow();
+        expect(() => storage.read('folder-uuid/file-uuid')).not.toThrow();
     });
 });

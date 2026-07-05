@@ -227,23 +227,29 @@ export class ManagedDatabase<S extends SchemaType> {
             this.syncTimer = null;
         }
 
-        await this.sync();
-        // Fold the WAL into the main file before snapshotting: local backends copy
-        // this on-disk file (TRUNCATE makes it complete), remote backends copy the
-        // object sync() uploaded. A snapshot failure is caught so it can't block close.
-        this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
-        if (!opts.skipFinalSnapshot) {
-            await this.snapshotIfDue(true).catch((err) =>
-                console.error(`[${this.config.name}] close snapshot failed:`, err),
-            );
+        // The teardown runs even when onSync throws (the error still propagates to the caller) —
+        // aborting before it leaked the raw db handle + working copy. Checkpoint and snapshot stay
+        // correct after a failed sync: they copy the locally-committed on-disk bytes.
+        try {
+            await this.sync();
+        } finally {
+            // Fold the WAL into the main file before snapshotting: local backends copy
+            // this on-disk file (TRUNCATE makes it complete), remote backends copy the
+            // object sync() uploaded. A snapshot failure is caught so it can't block close.
+            this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
+            if (!opts.skipFinalSnapshot) {
+                await this.snapshotIfDue(true).catch((err) =>
+                    console.error(`[${this.config.name}] close snapshot failed:`, err),
+                );
+            }
+            this.rawDb?.close();
+            this.rawDb = null;
+            this.drizzleDb = null;
+
+            this.deleteJournalFiles();
+
+            await this.callbacks.onClose?.();
         }
-        this.rawDb?.close();
-        this.rawDb = null;
-        this.drizzleDb = null;
-
-        this.deleteJournalFiles();
-
-        await this.callbacks.onClose?.();
     }
 
     private deleteJournalFiles(): void {
