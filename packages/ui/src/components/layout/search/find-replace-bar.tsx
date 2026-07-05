@@ -1,10 +1,27 @@
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupButton,
+    InputGroupInput,
+    InputGroupText,
+} from '@workspace/ui/components/input-group';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Toggle } from '@workspace/ui/components/toggle';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
-import { ArrowDown, ArrowUp, CaseSensitive, type LucideIcon, Regex, WholeWord, X } from 'lucide-react';
+import {
+    ALargeSmall,
+    ArrowDown,
+    ArrowUp,
+    CaseSensitive,
+    ChevronDown,
+    ChevronRight,
+    type LucideIcon,
+    Regex,
+    WholeWord,
+    X,
+} from 'lucide-react';
 import type React from 'react';
 
 export type FindReplaceBarProps = {
@@ -18,10 +35,21 @@ export type FindReplaceBarProps = {
     onNext: () => void;
     onPrev: () => void;
     onClose: () => void;
+    // v1.5 replace row — rendered only when `mode === 'replace'` AND the surface `canReplace`.
+    mode: 'search' | 'replace';
+    replacement: string;
+    preserveCase: boolean;
+    canReplace: boolean;
+    replacedCount: number | null; // transient "Replaced N" after Replace All; the provider clears it
+    onReplacementChange: (r: string) => void;
+    onTogglePreserveCase: () => void;
+    onToggleMode: () => void;
+    onReplace: () => void;
+    onReplaceAll: () => void;
 };
 
-// Compact icon toggle for a search option. onMouseDown-preventDefault keeps the input focused so
-// toggling a filter never interrupts typing (the repo's preventFocusLoss idiom).
+// Compact icon toggle for a search/replace option. onMouseDown-preventDefault keeps the input focused
+// so toggling a filter never interrupts typing (the repo's preventFocusLoss idiom).
 function OptionToggle({
     pressed,
     label,
@@ -52,8 +80,6 @@ function OptionToggle({
     );
 }
 
-// v1 renders the search row only. The flex-col wrapper is kept so the v1.5 replace plan slots a
-// replace row in as a second child without reshaping this one.
 export function FindReplaceBar({
     query,
     options,
@@ -65,10 +91,21 @@ export function FindReplaceBar({
     onNext,
     onPrev,
     onClose,
+    mode,
+    replacement,
+    preserveCase,
+    canReplace,
+    replacedCount,
+    onReplacementChange,
+    onTogglePreserveCase,
+    onToggleMode,
+    onReplace,
+    onReplaceAll,
 }: FindReplaceBarProps) {
     const noResults = query !== '' && matchCount === 0;
     // Empty query → no count at all (never "0 of 0"); non-empty + 0 matches → muted "No results".
     const count = query === '' ? null : noResults ? 'No results' : `${activeIndex + 1} of ${matchCount}`;
+    const showReplace = mode === 'replace' && canReplace;
 
     return (
         <div
@@ -78,7 +115,15 @@ export function FindReplaceBar({
             )}
         >
             <div className="flex items-center gap-1">
-                <InputGroup className="h-8 flex-1">
+                {canReplace && (
+                    <TooltipButton
+                        icon={showReplace ? ChevronDown : ChevronRight}
+                        tooltipText={showReplace ? 'Hide replace' : 'Show replace'}
+                        preventFocusLoss
+                        onClick={onToggleMode}
+                    />
+                )}
+                <InputGroup className="h-8 min-w-0 flex-1">
                     <InputGroupInput
                         ref={inputRef}
                         placeholder="Find"
@@ -141,6 +186,59 @@ export function FindReplaceBar({
                 />
                 <TooltipButton icon={X} tooltipText="Close" onClick={onClose} />
             </div>
+            {showReplace && (
+                <div className="flex items-center gap-1">
+                    {/* aligns the replace input under the find input (past the mode chevron) */}
+                    <div className="size-8 shrink-0" aria-hidden />
+                    <InputGroup className="h-8 min-w-0 flex-1">
+                        <InputGroupInput
+                            placeholder="Replace"
+                            value={replacement}
+                            onChange={(e) => onReplacementChange(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    onReplace();
+                                } else if (e.key === 'Escape') {
+                                    e.preventDefault();
+                                    onClose();
+                                }
+                            }}
+                        />
+                        <InputGroupAddon align="inline-end" className="gap-0.5">
+                            <OptionToggle
+                                pressed={preserveCase}
+                                label="Preserve case"
+                                icon={ALargeSmall}
+                                onToggle={onTogglePreserveCase}
+                            />
+                        </InputGroupAddon>
+                    </InputGroup>
+                    <InputGroupButton
+                        size="sm"
+                        aria-label="Replace"
+                        disabled={matchCount === 0}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={onReplace}
+                    >
+                        Replace
+                    </InputGroupButton>
+                    <InputGroupButton
+                        size="sm"
+                        aria-label="Replace all"
+                        disabled={matchCount === 0}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={onReplaceAll}
+                    >
+                        All
+                    </InputGroupButton>
+                    {replacedCount != null && (
+                        <InputGroupText className="px-1 text-xs whitespace-nowrap">
+                            Replaced {replacedCount}
+                        </InputGroupText>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

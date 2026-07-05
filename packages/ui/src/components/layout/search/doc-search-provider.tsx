@@ -62,9 +62,19 @@ export function DocSearchProvider({
     const [options, setOptions] = useState<DocSearchOptions>(DEFAULT_OPTIONS);
     const [matches, setMatches] = useState<DocSearchMatch[]>([]);
     const [activeIndex, setActiveIndex] = useState(-1);
+    // v1.5 replace session state. mode is 'search' until ⌥⌘F / the chevron opens replace;
+    // replacedCount is the transient "Replaced N" the bar shows after Replace All.
+    const [mode, setMode] = useState<'search' | 'replace'>('search');
+    const [replacement, setReplacement] = useState('');
+    const [preserveCase, setPreserveCase] = useState(false);
+    const [replacedCount, setReplacedCount] = useState<number | null>(null);
+    const canReplace = controller.canReplace ?? false;
+    // ⌥⌘F everywhere; Mod+H only off macOS (plain ⌘H is macOS Hide, never reaches the page).
+    const isMac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
 
     const inputRef = useRef<HTMLInputElement>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+    const replacedTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     const controllerRef = useRef(controller);
     controllerRef.current = controller;
     const sessionRef = useRef({ open, query, options });
@@ -97,7 +107,13 @@ export function DocSearchProvider({
         [runSearch],
     );
 
-    useEffect(() => () => clearTimeout(debounceRef.current), []);
+    useEffect(
+        () => () => {
+            clearTimeout(debounceRef.current);
+            clearTimeout(replacedTimeoutRef.current);
+        },
+        [],
+    );
 
     useEffect(() => {
         onOpenChange?.(open);
@@ -139,10 +155,13 @@ export function DocSearchProvider({
 
     const close = useCallback(() => {
         clearTimeout(debounceRef.current);
+        clearTimeout(replacedTimeoutRef.current);
         controllerRef.current.highlightAll([]);
         setOpen(false);
         setMatches([]);
         setActiveIndex(-1);
+        setMode('search');
+        setReplacedCount(null);
     }, []);
 
     const openBar = useCallback(
@@ -188,10 +207,65 @@ export function DocSearchProvider({
         [open, step, query, options, runSearch],
     );
 
+    // Adopt the fresh post-edit match list the controller RETURNS — never re-run controller.search
+    // after an edit (sheets' React context is one render behind then). nextIndex null → nothing active.
+    const adoptMatches = useCallback((fresh: DocSearchMatch[], nextIndex: number | null) => {
+        setMatches(fresh);
+        setActiveIndex(nextIndex ?? -1);
+        controllerRef.current.highlightAll(fresh);
+        if (nextIndex != null && fresh[nextIndex]) controllerRef.current.reveal(fresh[nextIndex].id);
+    }, []);
+
+    const flashReplaced = useCallback((n: number) => {
+        setReplacedCount(n);
+        clearTimeout(replacedTimeoutRef.current);
+        replacedTimeoutRef.current = setTimeout(() => setReplacedCount(null), 2000);
+    }, []);
+
+    const onReplace = useCallback(() => {
+        const c = controllerRef.current;
+        if (!c.replace || activeIndex < 0 || !matches[activeIndex]) return;
+        const fresh = c.replace(matches[activeIndex].id, replacement, options, preserveCase);
+        // Advance rule: keep the index only when a match was consumed (count dropped) — the next
+        // match shifted into it. If the count held (cat→cats still matches), step forward, or Replace
+        // loops on the same match forever.
+        const consumed = fresh.length < matches.length;
+        const next =
+            fresh.length === 0
+                ? null
+                : consumed
+                  ? Math.min(activeIndex, fresh.length - 1)
+                  : (activeIndex + 1) % fresh.length;
+        setReplacedCount(null);
+        clearTimeout(replacedTimeoutRef.current);
+        adoptMatches(fresh, next);
+    }, [activeIndex, matches, replacement, options, preserveCase, adoptMatches]);
+
+    const onReplaceAll = useCallback(() => {
+        const c = controllerRef.current;
+        if (!c.replaceAll) return;
+        const { replaced, matches: fresh } = c.replaceAll(query, replacement, options, preserveCase);
+        adoptMatches(fresh, null); // skipped formula/locked cells may remain matched; nothing active
+        flashReplaced(replaced);
+    }, [query, replacement, options, preserveCase, adoptMatches, flashReplaced]);
+
+    // ⌥⌘F (and Win/Linux Mod+H): open the bar in replace mode when the surface supports it, else
+    // plain search (read-only docs/sheets, slides, stickies).
+    const openReplace = useCallback(
+        (e: KeyboardEvent) => {
+            e.preventDefault();
+            setMode(controllerRef.current.canReplace ? 'replace' : 'search');
+            openBar(true);
+        },
+        [openBar],
+    );
+
     useHotkey('Mod+F', (e) => {
         e.preventDefault();
         openBar(true);
     });
+    useHotkey('Mod+Alt+F', openReplace); // ⌥⌘F on macOS, Ctrl+Alt+F elsewhere (order-free at runtime)
+    useHotkey('Mod+H', openReplace, { enabled: !isMac });
     useHotkey(
         'Mod+G',
         (e) => {
@@ -223,10 +297,15 @@ export function DocSearchProvider({
     const onQueryChange = useCallback(
         (q: string) => {
             setQuery(q);
+            setReplacedCount(null); // a new search invalidates the "Replaced N" feedback
+            clearTimeout(replacedTimeoutRef.current);
             scheduleSearch(q, options);
         },
         [options, scheduleSearch],
     );
+
+    const toggleMode = useCallback(() => setMode((m) => (m === 'search' ? 'replace' : 'search')), []);
+    const togglePreserveCase = useCallback(() => setPreserveCase((p) => !p), []);
 
     // Side effects stay OUT of state-updater functions (scheduleSearch here, reveal in step).
     const onToggleOption = useCallback(
@@ -265,6 +344,16 @@ export function DocSearchProvider({
                             onNext={() => step(1)}
                             onPrev={() => step(-1)}
                             onClose={close}
+                            mode={mode}
+                            replacement={replacement}
+                            preserveCase={preserveCase}
+                            canReplace={canReplace}
+                            replacedCount={replacedCount}
+                            onReplacementChange={setReplacement}
+                            onTogglePreserveCase={togglePreserveCase}
+                            onToggleMode={toggleMode}
+                            onReplace={onReplace}
+                            onReplaceAll={onReplaceAll}
                         />
                     </div>
                 )}
