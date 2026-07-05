@@ -13,7 +13,7 @@ import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { AddColumnDialog } from './add-column-dialog';
 import { Column } from './column';
@@ -50,6 +50,8 @@ type StickiesBoardProps = {
     onAccessDialogOpen: () => void;
     initialChatName?: string;
     onClearInitialChat?: () => void;
+    initialCardId?: string;
+    onClearInitialCard?: () => void;
 };
 
 export function StickiesBoard({
@@ -61,6 +63,8 @@ export function StickiesBoard({
     onAccessDialogOpen,
     initialChatName,
     onClearInitialChat,
+    initialCardId,
+    onClearInitialCard,
 }: StickiesBoardProps) {
     const {
         board,
@@ -97,6 +101,26 @@ export function StickiesBoard({
     });
     const { allComments, cards, createCard, setOpenCardId } = lifecycle;
 
+    // ?card=<id> mirrors ?chat=: open the card once it has synced in; if the board is synced and
+    // the id isn't a live card, ask the route to strip the param (same UX as an unknown ?chat=).
+    const appliedCardIdRef = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        if (!initialCardId) {
+            appliedCardIdRef.current = undefined;
+            return;
+        }
+        if (appliedCardIdRef.current === initialCardId) return;
+        if (cards[initialCardId]) {
+            setOpenCardId(initialCardId);
+            appliedCardIdRef.current = initialCardId;
+            return;
+        }
+        if (isSynced) {
+            appliedCardIdRef.current = initialCardId;
+            onClearInitialCard?.();
+        }
+    }, [cards, initialCardId, isSynced, setOpenCardId, onClearInitialCard]);
+
     const recordHistory = useRecordHistory(ownerId, path.mountId, path.id);
     const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({
         board,
@@ -132,7 +156,9 @@ export function StickiesBoard({
         ) => {
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
+            let newCardId = '';
             await createCard({ ...patch, attachments }, (card) => {
+                newCardId = card.id;
                 const col = yjsDoc.getMap('columns').get(targetColumnId) as Y.Map<unknown> | undefined;
                 if (!col) return;
                 let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
@@ -144,7 +170,11 @@ export function StickiesBoard({
             });
             recordHistory.mutate({
                 eventType: 'sticky-added',
-                details: { card: patch.title ?? '', toColumn: board.columns[targetColumnId]?.title ?? '' },
+                details: {
+                    card: patch.title ?? '',
+                    toColumn: board.columns[targetColumnId]?.title ?? '',
+                    cardId: newCardId,
+                },
             });
             setScrollToTopOf((prev) => ({ columnId: targetColumnId, n: (prev?.n ?? 0) + 1 }));
             setAddTargetColumn(null);
@@ -342,7 +372,7 @@ export function StickiesBoard({
                                         deleteCardFromBoard(deleteCardId);
                                         recordHistory.mutate({
                                             eventType: 'sticky-removed',
-                                            details: { card: removed?.title ?? '' },
+                                            details: { card: removed?.title ?? '', cardId: deleteCardId },
                                         });
                                     }
                                     setDeleteCardId(null);

@@ -97,9 +97,9 @@ export function isClickableNotification(type: string): boolean {
 }
 
 export async function resolveNotificationLink(
-    notification: Pick<Notification, 'type' | 'tag'>,
+    notification: Pick<Notification, 'type' | 'tag' | 'details'>,
 ): Promise<string | null> {
-    const { type, tag } = notification;
+    const { type, tag, details } = notification;
     if (!tag) return null;
 
     switch (type) {
@@ -127,8 +127,10 @@ export async function resolveNotificationLink(
         case 'calendar-unshare':
             return getCalendarAppUrl();
 
-        case 'mail':
-            return getMailAppUrl('box/inbox');
+        case 'mail': {
+            const mailId = details && 'mailId' in details ? details.mailId : undefined;
+            return getMailAppUrl(mailId ? `box/inbox?mailId=${mailId}` : 'box/inbox');
+        }
 
         case 'access-request':
             return resolveAccessRequestLink(tag);
@@ -145,7 +147,13 @@ export async function resolveNotificationLink(
             // land on the fs view with history open so the user sees what changed.
             if (isCollabType(path.type) || isChatType(path.type)) {
                 const itemUrl = getDriveItemUrl(path);
-                if (itemUrl) return itemUrl;
+                if (itemUrl) {
+                    if (details && 'cardId' in details && details.cardId)
+                        return `${itemUrl}?card=${encodeURIComponent(details.cardId)}`;
+                    if (details && 'chatName' in details && details.chatName)
+                        return `${itemUrl}?chat=${encodeURIComponent(details.chatName)}`;
+                    return itemUrl;
+                }
             }
             return getDriveAppUrl(
                 `fs/${parsed.ownerId}/${parsed.mountId}/${path.parentId ?? path.id}?pid=${path.id}&showHistory=1`,

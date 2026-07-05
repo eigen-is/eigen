@@ -109,6 +109,7 @@ export const useDragAndDrop = ({ board, cards, yjsDoc, onRecordEvent }: UseDragA
                 details: {
                     card: cards[activeId]?.title ?? '',
                     toColumn: board.columns[movedColumns.newColumn]?.title ?? '',
+                    cardId: activeId,
                 },
             });
         }
