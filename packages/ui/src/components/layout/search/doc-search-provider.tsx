@@ -1,6 +1,7 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import type { DocSearchController, DocSearchMatch, DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { FindReplaceBar } from '@workspace/ui/components/layout/search/find-replace-bar';
+import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -28,6 +29,10 @@ export function useOptionalDocSearchBar(): DocSearchBarContextValue | null {
 export type DocSearchProviderProps = {
     controller: DocSearchController;
     children: React.ReactNode;
+    // Per-surface bar placement (amendment 10): the default floats top-right of the wrapped subtree;
+    // a surface passes offsets to clear its own chrome (docs insets it below the toolbar + clear of
+    // the side panel). Merged over the default via cn, so later utilities win.
+    barClassName?: string;
 };
 
 // Owns the find session (open state, query, options, matches, active index), the keybinds, and the
@@ -37,7 +42,7 @@ export type DocSearchProviderProps = {
 // Accepted quirk: the active match is tracked by INDEX, so under remote collab edits it may drift to
 // a different occurrence when the controller republishes; reveal is best-effort. Surface controllers
 // debounce remote-origin republish coarsely (not per remote keystroke) to keep count/paint settled.
-export function DocSearchProvider({ controller, children }: DocSearchProviderProps) {
+export function DocSearchProvider({ controller, children, barClassName }: DocSearchProviderProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [options, setOptions] = useState<DocSearchOptions>(DEFAULT_OPTIONS);
@@ -213,7 +218,7 @@ export function DocSearchProvider({ controller, children }: DocSearchProviderPro
                     not share a stacking context with the bar */}
                 <div className="isolate flex-1 min-h-0">{children}</div>
                 {open && (
-                    <div className="absolute top-2 right-4 z-10 max-sm:inset-x-2">
+                    <div className={cn('absolute top-2 right-4 z-10 max-sm:inset-x-2', barClassName)}>
                         <FindReplaceBar
                             query={query}
                             options={options}
