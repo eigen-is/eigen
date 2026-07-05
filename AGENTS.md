@@ -53,6 +53,8 @@ bun run check          # lint + typecheck + test
 
 ### Critical Rules
 
+- **No AI co-author trailers in commits** — never add `Co-authored-by: Claude/Copilot/...` lines to commit
+  messages, even if your tooling defaults to it
 - **Read [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) before writing code** — defines typing rules, code style,
   common LLM mistakes with BAD/GOOD examples, and the **self-review checklist**. Must be followed before declaring
   any task complete
