@@ -10,6 +10,7 @@ export type ParsedQuery = {
 const SCOPE_PREFIXES: { prefix: string; scope: PaletteScope }[] = [
     { prefix: 'mail:', scope: 'mail' },
     { prefix: 'file:', scope: 'file' },
+    { prefix: 'doc:', scope: 'doc' },
     { prefix: '>', scope: 'actions' },
     { prefix: '@', scope: 'contacts' },
     { prefix: '?', scope: 'help' },

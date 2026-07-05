@@ -23,7 +23,7 @@ export function useMailSearchResults(
 
     // Skip the network call when scope excludes mail. The effective scope already
     // merges the typed prefix (`mail:`, `>`, `@`) with the chip scope set via Tab.
-    const scopeBlocks = scope === 'actions' || scope === 'contacts';
+    const scopeBlocks = scope === 'actions' || scope === 'contacts' || scope === 'doc';
 
     const { data, isFetching } = useSearch({
         ownerId: ctx.ownerId,

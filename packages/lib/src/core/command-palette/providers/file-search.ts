@@ -22,7 +22,7 @@ export function useFileSearchResults(
     const parsed = parseQuery(debouncedInput);
 
     // Skip the network call when the effective scope excludes files.
-    const scopeBlocks = scope === 'mail' || scope === 'actions' || scope === 'contacts';
+    const scopeBlocks = scope === 'mail' || scope === 'actions' || scope === 'contacts' || scope === 'doc';
 
     const { data, isFetching } = useSearch({
         ownerId: ctx.ownerId,

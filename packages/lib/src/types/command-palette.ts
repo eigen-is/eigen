@@ -5,7 +5,7 @@ import type { DrivePath, EigenDocType } from './drive';
 import type { EmailSummary } from './mail';
 import type { HelpSearchDoc } from './search';
 
-export type PaletteScope = 'mail' | 'file' | 'actions' | 'contacts' | 'help';
+export type PaletteScope = 'mail' | 'file' | 'doc' | 'actions' | 'contacts' | 'help';
 
 export type ResultGroup =
     | 'top-hit'

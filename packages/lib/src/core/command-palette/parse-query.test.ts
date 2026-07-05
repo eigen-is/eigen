@@ -16,6 +16,11 @@ describe('parseQuery', () => {
         expect(parseQuery('mail:q3')).toEqual({ scope: 'mail', q: 'q3' });
     });
 
+    test('doc: prefix sets the doc scope and strips the prefix', () => {
+        expect(parseQuery('doc: q3 budget')).toEqual({ scope: 'doc', q: 'q3 budget' });
+        expect(parseQuery('doc:q3')).toEqual({ scope: 'doc', q: 'q3' });
+    });
+
     test('> prefix sets the actions scope', () => {
         expect(parseQuery('> new doc')).toEqual({ scope: 'actions', q: 'new doc' });
         expect(parseQuery('>new doc')).toEqual({ scope: 'actions', q: 'new doc' });
