@@ -104,12 +104,12 @@ function resolveEventUrl(event: FileEvent, path: DrivePath, ctx: 'own' | 'contai
 
     if (event.eventType === 'sticky-added' || event.eventType === 'sticky-moved') {
         const cardId = details && 'cardId' in details ? details.cardId : undefined;
-        return itemUrl && cardId ? `${itemUrl}?card=${encodeURIComponent(cardId)}` : itemUrl;
+        return getDriveItemUrl(containerRef, { card: cardId });
     }
     if (event.eventType === 'sticky-removed') return itemUrl; // card is gone — board only
     if (event.eventType === 'commented') {
         const chatName = details && 'chatName' in details ? details.chatName : undefined;
-        return itemUrl && chatName ? `${itemUrl}?chat=${encodeURIComponent(chatName)}` : itemUrl;
+        return getDriveItemUrl(containerRef, { chat: chatName });
     }
 
     // created/edited/moved/copied/uploaded/renamed/restored/version-restored.

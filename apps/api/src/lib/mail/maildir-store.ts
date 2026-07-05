@@ -4,7 +4,7 @@ import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { ApiError, LocalFilesystem, PATHS, STANDARD_MAILBOXES } from '../core';
 import type { Home } from '../home';
-import { parseEml } from './mail-parse';
+import { parseEml, parseEmlBytes } from './mail-parse';
 import type { MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
 import MailDB from './maildb';
 import {
@@ -162,21 +162,16 @@ export class MaildirStore implements MailStore {
     }
 
     async saveDraft(raw: string, existingId?: string): Promise<Email> {
+        // Parse the in-memory bytes up front so the heavyweight MIME parse stays off the lock —
+        // the bytes we write are exactly what parseEml would read back from the delivered file.
+        const messageId = existingId ?? createUniqueMessageId();
+        const bytes = Buffer.from(raw, 'utf-8');
+        const parsed = await parseEmlBytes(messageId, 'Drafts', bytes, bytes.length);
+
         // Hold the lock across the fs write + db.addEmail pair so a concurrent watcher sync can't
         // ingest the draft file first and fire a spurious received(isNew) event.
         return this.storeLock.run(async () => {
-            const { uniqueId, filename } = await this.deliverToCur(
-                'Drafts',
-                raw,
-                { draft: true, seen: true },
-                existingId,
-            );
-
-            const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
-            if (!parsed) {
-                await this.deleteMessage('Drafts', filename).catch(() => {});
-                throw new ApiError(500, 'Failed to parse saved draft');
-            }
+            const { filename } = await this.deliverToCur('Drafts', raw, { draft: true, seen: true }, messageId);
 
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;

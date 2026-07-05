@@ -11,7 +11,9 @@ import { getUserByEmail } from '../user/';
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
-    for (const acl of acls) {
+    // Dedupe by id up front — only acl.id drives resolution, and the restore path feeds [...acl, ...acl].
+    const uniqueAcls = [...new Map(acls.map((acl) => [acl.id, acl])).values()];
+    for (const acl of uniqueAcls) {
         const parsed = parseOwnerId(acl.id);
         if (parsed.type === 'user') {
             const user = await getUserByEmail(acl.id);

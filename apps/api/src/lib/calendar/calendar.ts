@@ -21,7 +21,7 @@ import { ApiError, PATHS } from '../core';
 import type { ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
-import type { User } from '../user';
+import { actorDisplayName, type User } from '../user';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
@@ -755,7 +755,7 @@ export class Calendar {
         this.home.notifications?.persist({
             type: 'calendar-share',
             actorEmail,
-            title: `${actorName ?? actorEmail?.split('@')[0]} shared a calendar`,
+            title: `${actorDisplayName(actorName, actorEmail)} shared a calendar`,
             body: calendarName,
             tag: `calendar-share:${calendarId}:${ownerUserId}`,
         });
@@ -779,7 +779,7 @@ export class Calendar {
             this.home.notifications?.persist({
                 type: 'calendar-unshare',
                 actorEmail,
-                title: `${actorName ?? actorEmail?.split('@')[0]} removed your access`,
+                title: `${actorDisplayName(actorName, actorEmail)} removed your access`,
                 body: existing.calendarName,
             });
         }
@@ -950,7 +950,7 @@ export class Calendar {
         this.home.notifications?.persist({
             type: 'calendar-invite',
             actorEmail: organizer?.email,
-            title: `${organizer?.name ?? organizer?.email?.split('@')[0]} invited you`,
+            title: `${actorDisplayName(organizer?.name, organizer?.email)} invited you`,
             body: payload.title,
             tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime.getTime()}`,
             details: { startTime: payload.startTime.getTime() },
@@ -1016,7 +1016,7 @@ export class Calendar {
         this.home.notifications?.persist({
             type: 'calendar-invite-updated',
             actorEmail: organizer?.email,
-            title: `${organizer?.name ?? organizer?.email?.split('@')[0]} updated an invitation`,
+            title: `${actorDisplayName(organizer?.name, organizer?.email)} updated an invitation`,
             body: payload.title,
             tag: `calendar-invite:${orgEventId}:${payload.startTime.getTime()}`,
             details: { startTime: payload.startTime.getTime() },
@@ -1034,7 +1034,7 @@ export class Calendar {
         this.home.notifications?.persist({
             type: 'calendar-invite-cancelled',
             actorEmail: organizer?.email,
-            title: `${organizer?.name ?? organizer?.email?.split('@')[0]} cancelled an invitation`,
+            title: `${actorDisplayName(organizer?.name, organizer?.email)} cancelled an invitation`,
             body: linked.title,
             tag: `calendar-invite:${orgEventId}:${linked.startTime.getTime()}`,
         });

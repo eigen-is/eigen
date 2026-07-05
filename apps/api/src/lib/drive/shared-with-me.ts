@@ -10,7 +10,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { Home } from '../home';
-import { getMemberships } from '../user/';
+import { actorDisplayName, getMemberships } from '../user/';
 import { matchesACL } from './acl';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
@@ -30,7 +30,7 @@ export async function receiveSharedPathChange(
     actorName?: string,
 ): Promise<void> {
     const displayName = stripEigenExtension(path.name);
-    const actorDisplay = actorName ?? actorEmail?.split('@')[0];
+    const actorDisplay = actorDisplayName(actorName, actorEmail);
     const memberships = await getMemberships(home.user.id);
     if (newACL === null || !matchesACL(newACL, home.user, memberships, 'read')) {
         sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();

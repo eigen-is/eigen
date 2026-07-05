@@ -13,7 +13,7 @@ import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { AddColumnDialog } from './add-column-dialog';
 import { Column } from './column';
@@ -98,28 +98,10 @@ export function StickiesBoard({
         mapName: 'tasks',
         ready: isSynced,
         onChatNotFound: onClearInitialChat,
+        initialCardId,
+        onCardNotFound: onClearInitialCard,
     });
     const { allComments, cards, createCard, setOpenCardId } = lifecycle;
-
-    // ?card=<id> mirrors ?chat=: open the card once it has synced in; if the board is synced and
-    // the id isn't a live card, ask the route to strip the param (same UX as an unknown ?chat=).
-    const appliedCardIdRef = useRef<string | undefined>(undefined);
-    useEffect(() => {
-        if (!initialCardId) {
-            appliedCardIdRef.current = undefined;
-            return;
-        }
-        if (appliedCardIdRef.current === initialCardId) return;
-        if (cards[initialCardId]) {
-            setOpenCardId(initialCardId);
-            appliedCardIdRef.current = initialCardId;
-            return;
-        }
-        if (isSynced) {
-            appliedCardIdRef.current = initialCardId;
-            onClearInitialCard?.();
-        }
-    }, [cards, initialCardId, isSynced, setOpenCardId, onClearInitialCard]);
 
     const recordHistory = useRecordHistory(ownerId, path.mountId, path.id);
     const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({

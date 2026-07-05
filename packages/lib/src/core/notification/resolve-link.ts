@@ -53,11 +53,8 @@ async function resolveDriveLink(tag: string, hasChatName = false): Promise<strin
     if (response.error || !response.data) return getDriveAppUrl();
 
     const path = response.data;
-    const itemUrl = getDriveItemUrl(path);
-    if (itemUrl) {
-        if (parsed.chatName) return `${itemUrl}?chat=${encodeURIComponent(parsed.chatName)}`;
-        return itemUrl;
-    }
+    const itemUrl = getDriveItemUrl(path, { chat: parsed.chatName });
+    if (itemUrl) return itemUrl;
 
     // Regular files (images, PDFs, etc.) open in shared-with-me with the file pre-selected
     return getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`);
@@ -146,14 +143,10 @@ export async function resolveNotificationLink(
             // Only collab/chat types navigate directly into their app; plain files and folders
             // land on the fs view with history open so the user sees what changed.
             if (isCollabType(path.type) || isChatType(path.type)) {
-                const itemUrl = getDriveItemUrl(path);
-                if (itemUrl) {
-                    if (details && 'cardId' in details && details.cardId)
-                        return `${itemUrl}?card=${encodeURIComponent(details.cardId)}`;
-                    if (details && 'chatName' in details && details.chatName)
-                        return `${itemUrl}?chat=${encodeURIComponent(details.chatName)}`;
-                    return itemUrl;
-                }
+                const cardId = details && 'cardId' in details ? details.cardId : undefined;
+                const chatName = details && 'chatName' in details ? details.chatName : undefined;
+                const itemUrl = getDriveItemUrl(path, { card: cardId, chat: chatName });
+                if (itemUrl) return itemUrl;
             }
             return getDriveAppUrl(
                 `fs/${parsed.ownerId}/${parsed.mountId}/${path.parentId ?? path.id}?pid=${path.id}&showHistory=1`,

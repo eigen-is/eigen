@@ -193,16 +193,19 @@ export function openDocument(path: DrivePath, newTab: boolean = false) {
     return true;
 }
 
-export function getDriveItemUrl(path: DriveItemRef): string | undefined {
-    const docUrl = getDocumentUrl(path);
-    if (docUrl) return docUrl;
-    if (isFolderType(path.type)) {
-        return getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${path.id}`);
+export function getDriveItemUrl(path: DriveItemRef, opts?: { card?: string; chat?: string }): string | undefined {
+    let url = getDocumentUrl(path);
+    if (!url) {
+        if (isFolderType(path.type)) {
+            url = getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${path.id}`);
+        } else if (isInlineEditable(path.mimeType, path.name)) {
+            url = getInlineEditUrl(path.ownerId, path.mountId, path.id);
+        }
     }
-    if (isInlineEditable(path.mimeType, path.name)) {
-        return getInlineEditUrl(path.ownerId, path.mountId, path.id);
-    }
-    return undefined;
+    if (!url) return undefined;
+    if (opts?.card) return `${url}?card=${encodeURIComponent(opts.card)}`;
+    if (opts?.chat) return `${url}?chat=${encodeURIComponent(opts.chat)}`;
+    return url;
 }
 
 export function getDriveShareUrl(path: DrivePath): string {

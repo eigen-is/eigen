@@ -9,7 +9,13 @@ import { buildRecipientSummary } from './mailutils';
 // sweeps (syncMailbox) wrap it in a logged try/catch so one bad message can't abort the batch.
 // It must never mask a fault as a missing message.
 export async function parseEml(messageId: string, mailbox: string, file: BunFile): Promise<Email> {
-    const parsedMail = await simpleParser(Buffer.from(await file.arrayBuffer()), {});
+    return parseEmlBytes(messageId, mailbox, Buffer.from(await file.arrayBuffer()), file.size);
+}
+
+// Same parse over in-memory bytes — lets the draft hot path skip the disk read-back (the bytes it
+// writes are exactly what parseEml would read back). `size` is the byte length of those bytes.
+export async function parseEmlBytes(messageId: string, mailbox: string, bytes: Buffer, size: number): Promise<Email> {
+    const parsedMail = await simpleParser(bytes, {});
 
     if (parsedMail.html) {
         // ADD_ATTR keeps `target` on anchors so eigen-doc attachment pills (and any other
@@ -25,7 +31,7 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
         id: messageId,
         filename: '',
         mailbox,
-        size: file.size,
+        size,
         isRead: false,
         isFlagged: false,
         isDraft: false,
