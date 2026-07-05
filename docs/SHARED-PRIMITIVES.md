@@ -11,7 +11,7 @@ Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's que
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (101)
+## Components (102)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -42,6 +42,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContactAddRow` | `@workspace/ui` | packages/ui/src/components/layout/contacts/contact-add-row.tsx |
 | `ContactAutosuggest` | `@workspace/ui` | packages/ui/src/components/layout/contacts/contact-autosuggest.tsx |
 | `CountBadge` | `@workspace/ui` | packages/ui/src/components/layout/count-badge.tsx |
+| `CreatedByMeta` | `@workspace/ui` | packages/ui/src/components/layout/comments/created-by-meta.tsx |
 | `DocumentModeButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
 | `DriveAccessList` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-access-list.tsx |
 | `DriveBrowser` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-browser.tsx |
@@ -138,7 +139,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (201)
+## Hooks (200)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -326,7 +327,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSaveVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useApp` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
-| `useCreatedByMeta` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-dialog-meta.tsx |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useMountLabel` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-mount-list.tsx |
 | `useSidebar` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
