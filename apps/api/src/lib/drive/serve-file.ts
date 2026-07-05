@@ -1,24 +1,27 @@
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import { ApiError } from '../core';
-import { contentDisposition, parseByteRange } from '../core/http';
+import { computeEtag, contentDisposition, etagMatches, parseByteRange } from '../core/http';
 import type { Mount } from '../mount';
 
 // Header/range/CSP mechanics for serving a file body. Pure Mount function —
-// Drive.serveFile resolves the mount and delegates here.
+// the drive routes resolve the mount (via SharedDrive ACL) and delegate here.
 export async function serveFile(
     mount: Mount,
     pathId: string,
     disposition: 'attachment' | 'inline',
     range: string | null,
+    ifNoneMatch: string | null = null,
 ): Promise<Response> {
     const path = await mount.getActivePath(pathId);
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
     const mimeType = path.mimeType || 'application/octet-stream';
+    const etag = computeEtag(path);
     const headers: Record<string, string> = {
         'Content-Type': mimeType,
         'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
-        'Cache-Control': 'public, max-age=86400',
-        Expires: new Date(Date.now() + 86400000).toUTCString(),
+        // no-cache = revalidate on every use; the ETag makes that a cheap 304 round-trip.
+        'Cache-Control': 'private, no-cache',
+        ETag: etag,
         // Stored MIME is the upload's own Content-Type, served verbatim — nosniff stops the
         // browser re-sniffing a disguised payload (e.g. HTML bytes uploaded as image/png).
         'X-Content-Type-Options': 'nosniff',
@@ -34,6 +37,14 @@ export async function serveFile(
         if (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml') {
             headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
         }
+    }
+
+    // RFC 7232 §6: a matching conditional GET returns 304 regardless of Range.
+    if (ifNoneMatch && etagMatches(ifNoneMatch, etag)) {
+        return new Response(null, {
+            status: 304,
+            headers: { ETag: etag, 'Cache-Control': 'private, no-cache' },
+        });
     }
 
     const parsed = parseByteRange(range, path.size);

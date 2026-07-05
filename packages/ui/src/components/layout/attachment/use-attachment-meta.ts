@@ -16,7 +16,7 @@ export function useAttachmentMeta(attachments?: ChatAttachment[]): {
         const path = resolveMediaPath(attachment);
         if (path?.thumbnail && path.mimeType?.startsWith('image/')) {
             return {
-                coverThumbnailUrl: getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail),
+                coverThumbnailUrl: `${getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail)}?v=${path.updatedAt.getTime()}`,
                 attachmentCount: attachments.length,
             };
         }

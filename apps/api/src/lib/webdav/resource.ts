@@ -1,12 +1,11 @@
 import { isContainerType } from '@workspace/lib/types/drive';
 import { enforceMountQuota } from '../config/enforcement';
 import { ApiError } from '../core/errors';
-import { parseByteRange } from '../core/http';
+import { computeEtag, parseByteRange } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
-import { computeEtag } from './xml';
 
 function mimeTypeFromName(name: string): string {
     return Bun.file(name).type || 'application/octet-stream';

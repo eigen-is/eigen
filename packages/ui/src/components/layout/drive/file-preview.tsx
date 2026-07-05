@@ -87,7 +87,10 @@ export function FilePreview({
         for (let i = 0; i < downloadableSiblings.length; i++) {
             const s = downloadableSiblings[i];
             downloadTimers.current.push(
-                setTimeout(() => triggerDownload(getDriveDownloadUrl(s.ownerId, s.mountId, s.id)), i * 300),
+                setTimeout(
+                    () => triggerDownload(getDriveDownloadUrl(s.ownerId, s.mountId, s.id, s.updatedAt)),
+                    i * 300,
+                ),
             );
         }
     };

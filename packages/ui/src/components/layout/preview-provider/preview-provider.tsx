@@ -74,12 +74,13 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
         const mode = getPreviewMode(preview.path);
 
         const { path } = preview;
-        const v = path.updatedAt instanceof Date ? path.updatedAt.getTime() : new Date(path.updatedAt).getTime();
+        const updated = path.updatedAt instanceof Date ? path.updatedAt : new Date(path.updatedAt);
+        const v = updated.getTime();
         const previewUrl = `${getDrivePreviewUrl(path.ownerId, path.mountId, path.id)}?v=${v}`;
         const embedUrl = `${getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name)}?v=${v}`;
         const downloadUrl = isFolderType(path.type)
             ? undefined
-            : getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
+            : getDriveDownloadUrl(path.ownerId, path.mountId, path.id, updated);
         const thumbnailUrl = path.thumbnail
             ? `${getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail)}?v=${v}`
             : undefined;

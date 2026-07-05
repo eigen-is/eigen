@@ -134,8 +134,8 @@ export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: 
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}`;
 export const getMailDraftAttachmentUploadUrl = (ownerId: string) =>
     `${API_HOST}/mail/${ownerId}/message/draft/attachment`;
-export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string) =>
-    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download`;
+export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string, updatedAt?: Date) =>
+    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
 export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: string, format: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/export/${format}`;
 export const getDriveImportUrl = (ownerId: string, mountId: string, pathId: string) =>

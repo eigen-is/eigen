@@ -40,7 +40,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     };
 
     const handleDownload = () => {
-        const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
+        const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt);
         const a = document.createElement('a');
         a.href = url;
         a.download = path.name;

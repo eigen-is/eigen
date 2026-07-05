@@ -28,10 +28,10 @@ export function AttachmentChip({
     const { openPreview } = usePreview();
 
     const name = fileInfo?.details?.originalName || fileInfo?.name || fileName;
-    const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id) : '#';
+    const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id, fileInfo.updatedAt) : '#';
     const thumbnailUrl =
         fileInfo?.thumbnail && fileInfo.mimeType?.startsWith('image/')
-            ? getDriveThumbnailUrl(ownerId, mountId, fileInfo.thumbnail)
+            ? `${getDriveThumbnailUrl(ownerId, mountId, fileInfo.thumbnail)}?v=${fileInfo.updatedAt.getTime()}`
             : undefined;
 
     return (

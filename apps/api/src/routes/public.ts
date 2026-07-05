@@ -15,12 +15,12 @@ export const publicRouter = new Elysia({ name: 'public' })
         const avatar = await getAvatarByEmailOrId(params.emailOrId);
 
         if (avatar) {
-            setCacheHeaders(set, 86400);
+            setCacheHeaders(set, 86400, 'public');
             set.headers['Content-Type'] = 'image/webp';
             return avatar;
         }
 
-        setCacheHeaders(set, 3600);
+        setCacheHeaders(set, 3600, 'public');
         set.headers['Content-Type'] = 'image/svg+xml';
         return await generateFallbackSvg(params.emailOrId);
     })

@@ -196,7 +196,7 @@ export function DriveLayout({
 
     const handleDownloadPath = useCallback((path: DrivePath) => {
         if (path?.type === 'file' && path.id) {
-            const downloadUrl = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
+            const downloadUrl = getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt);
             const a = document.createElement('a');
             a.href = downloadUrl;
             a.download = path.name || 'download';

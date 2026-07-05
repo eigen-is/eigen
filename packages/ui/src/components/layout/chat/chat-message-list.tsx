@@ -249,7 +249,7 @@ export function ChatMessageList({
                     downloadTimers.current.push(
                         setTimeout(() => {
                             const a = document.createElement('a');
-                            a.href = getDriveDownloadUrl(ownerId, mountId, fileInfo.id);
+                            a.href = getDriveDownloadUrl(ownerId, mountId, fileInfo.id, fileInfo.updatedAt);
                             a.download = '';
                             document.body.appendChild(a);
                             a.click();
