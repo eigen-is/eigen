@@ -105,6 +105,7 @@ export function EmailDetailToolbar({
 type EmailDetailProps = {
     email: Email | null;
     toggleMailRead: (mail: Email, isRead: boolean) => void;
+    highlightTerm?: string;
 };
 
 export function MailLink({
@@ -235,7 +236,7 @@ function MailHeader({ email, formattedDate }: { email: Email; formattedDate: str
     );
 }
 
-export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
+export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetailProps) {
     const hasMarkedAsRead = useRef<string | null>(null);
 
     useEffect(() => {
@@ -284,6 +285,7 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
                                 contentType="html"
                                 scheme={email.html ? 'light' : 'theme'}
                                 className="w-full"
+                                highlightTerm={highlightTerm}
                             />
                         ) : (
                             <div style={{ whiteSpace: 'pre-wrap' }}>{emailContent}</div>
