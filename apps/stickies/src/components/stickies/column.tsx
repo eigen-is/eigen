@@ -20,6 +20,8 @@ type ColumnProps = {
     onCardContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
     isMobile: boolean;
     scrollToTopSignal?: number;
+    highlighted?: boolean;
+    highlightedCardIds?: ReadonlySet<string>;
 };
 
 export const Column = memo(function Column({
@@ -33,6 +35,8 @@ export const Column = memo(function Column({
     onCardContextMenu,
     isMobile,
     scrollToTopSignal,
+    highlighted,
+    highlightedCardIds,
 }: ColumnProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: column.id,
@@ -55,6 +59,7 @@ export const Column = memo(function Column({
     return (
         <div
             ref={setNodeRef}
+            data-search-anchor={`column:${column.id}`}
             className={cn(columnMargin, columnWidth, 'flex flex-col h-full', isDragging && 'opacity-10')}
             style={{
                 transform: CSS.Transform.toString(transform),
@@ -67,6 +72,7 @@ export const Column = memo(function Column({
                 className={cn(
                     'h-10 pl-3 font-medium text-sm bg-muted flex-shrink-0 flex items-center justify-between',
                     canWrite && 'cursor-grab touch-none',
+                    highlighted && 'eigen-search-ring',
                 )}
                 {...(canWrite ? { ...attributes, ...listeners } : {})}
             >
@@ -110,6 +116,7 @@ export const Column = memo(function Column({
                                         replyCount={entry?.messageCount}
                                         resolved={entry?.status === 'resolved'}
                                         canWrite={canWrite}
+                                        highlighted={highlightedCardIds?.has(card.id)}
                                         onOpen={onCardOpen}
                                         onContextMenu={onCardContextMenu}
                                     />
