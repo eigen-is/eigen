@@ -68,7 +68,6 @@ Large net-new builds or low value-per-effort today.
 | Item | Effort | Notes |
 |---|---|---|
 | rspamd sidecar | ~1 day | The real fix for the spam/DMARC pain that the Stalwart proposal exists to solve. |
-| Comment/card author name consistency | S | Card/comment UI shows the username (e.g. "hioberman") in some places and the display name (e.g. "Hanne") in others — one person reads as two. Render display-name consistently, fall back to username. See the 2026-07-03 detail section (§4). |
 | Palette doc actions (Phase 1 of [in-document search](PROPOSAL_IN_DOCUMENT_SEARCH.md)) | S | Inside an open doc, the palette shows Open/Mail/Copy link but NOT Rename/Share/Trash/Download — the viewers publish the doc as a `selection` but never call `usePaletteSelectionActions`. Wiring the handlers in (probably in the shared `useEigenDocEditorRoute`) fixes a real inconsistency today and ships independently of the search half. |
 
 ## On hold (decision needed)
@@ -134,9 +133,3 @@ resolves (`packages/lib/src/core/comments/hooks/use-create-comment-card.ts:58` a
 `data.db`, so the orphan scan cannot see it) that no card references. Cosmetic litter, no breakage. To
 clean: cross-reference each board's Yjs `tasks`/`comments` card `chatName`s against the chat folders in
 the board's `chat/` subfolder; trash the unreferenced ones via the app delete path.
-
-### 4 — Comment/card author name consistency (cheap win). Effort S, no frozen-format.
-The card/comment UI shows the username (e.g. "hioberman") in some places and the display name (e.g.
-"Hanne") in others, so one person reads as two. Render the display name consistently (fall back to
-username when absent). Unify where the stickies card author and the comment-thread reply author are
-rendered.

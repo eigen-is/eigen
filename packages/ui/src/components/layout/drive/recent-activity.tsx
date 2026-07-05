@@ -4,6 +4,7 @@ import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive'
 import { type FileEvent, fileEventSummary, fileEventVerb } from '@workspace/lib/types/file-history';
 import { useEffect, useRef } from 'react';
 import { UserAvatar } from '../user-avatar';
+import { UserNameCard } from '../user-name-card';
 
 type RecentActivityProps = {
     path: DrivePath;
@@ -42,7 +43,11 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
                             <div className="min-w-0 flex-1">
                                 {/* One line, clipped with an ellipsis — same as the panel's other rows. */}
                                 <div className="truncate">
-                                    <Name>{event.actorEmail.split('@')[0]}</Name>{' '}
+                                    <UserNameCard
+                                        userId={event.actorUserId}
+                                        email={event.actorEmail}
+                                        className="font-medium"
+                                    />{' '}
                                     <ActivityPhrase
                                         event={event}
                                         showName={showName}

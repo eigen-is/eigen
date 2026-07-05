@@ -27,7 +27,7 @@ type NoteCardDialogProps = {
     onOpenChange: (open: boolean) => void;
     title: string;
     description?: string;
-    meta?: string;
+    meta?: ReactNode;
     color?: string | null;
     canWrite?: boolean;
     onEdit?: () => void;
