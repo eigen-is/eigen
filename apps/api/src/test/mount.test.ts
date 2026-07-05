@@ -13,6 +13,7 @@ import {
 import { buildStorageKey, createDefaultMountConfig } from '../lib/mount/helpers';
 import { Mount } from '../lib/mount/mount';
 import { paths } from '../lib/mount/schema';
+import type { StorageBackend } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../lib/versioning/timestamp';
@@ -512,6 +513,12 @@ describe('Name validation', () => {
     test('rejects .trash case-insensitively', async () => {
         expect(mount.createFolder(rootId, '.TRASH')).rejects.toThrow('reserved name');
         expect(mount.createFolder(rootId, '.Trash')).rejects.toThrow('reserved name');
+    });
+
+    test('rejects .trash compatibility-character aliases', async () => {
+        // U+017F LATIN SMALL LETTER LONG S: '.traſh' IS the '.trash' dir under APFS case folding,
+        // but survives NFC + toLowerCase. NFKC maps ſ→s.
+        expect(mount.createFolder(rootId, '.traſh')).rejects.toThrow('reserved name');
     });
 
     test('rejects .trash as file name', async () => {
@@ -1596,6 +1603,34 @@ describe('Managed-db open vs create', () => {
         await mount.createDatabase(minimalConfig, dataDbId);
         expect(mount.createDatabase(minimalConfig, dataDbId)).rejects.toThrow('already in cache');
         await mount.closeDatabase(dataDbId);
+    });
+
+    // A close whose final sync FAILED must not cleanupTemp: the temp is the only copy holding
+    // the unsynced tail, and a surviving temp is the Phase 1a unclean-shutdown marker the next
+    // open adopts + re-syncs. Deleting it would silently serve stale storage bytes on reopen.
+    test('close() with a failing final sync rejects but leaves the crash-recovery temp', async () => {
+        const config = createDefaultMountConfig('test-failed-close', 'local');
+        const failMount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await failMount.init();
+        const failRootId = (await failMount.getRootFolder())!.id;
+        const containerId = await failMount.createFolder(failRootId, 'FailedCloseDoc', 'doc');
+        const dataDbId = await failMount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+
+        const managed = await failMount.createDatabase(minimalConfig, dataDbId);
+        managed.db.insert(minimalSchema.items).values({ id: 1 }).run();
+
+        const storage = (failMount as unknown as { storage: StorageBackend }).storage;
+        const realWrite = storage.write.bind(storage);
+        storage.write = async () => {
+            throw new Error('injected write failure');
+        };
+        try {
+            await expect(failMount.closeDatabase(dataDbId)).rejects.toThrow('injected write failure');
+        } finally {
+            storage.write = realWrite;
+        }
+
+        expect(existsSync(failMount.getTempPath(dataDbId))).toBe(true);
     });
 });
 

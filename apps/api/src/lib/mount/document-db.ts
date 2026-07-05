@@ -157,9 +157,12 @@ async function buildDocumentDb<S extends SchemaType>(
                   // onClose runs after wal_checkpoint(TRUNCATE), so the final stat captures
                   // any pages PASSIVE left in WAL. cleanupTemp is safe under async: the
                   // staged copy (not the live temp) is the upload payload.
-                  onClose: async () => {
+                  onClose: async (syncFailed) => {
                       await syncDocumentDbSize(mount, pathId, localPath);
-                      await mount.cleanupTemp(pathId);
+                      // A failed final sync means the temp is the only copy holding the tail —
+                      // leave it as the Phase 1a unclean-shutdown marker (adopted + re-synced
+                      // on the next open), never delete it.
+                      if (!syncFailed) await mount.cleanupTemp(pathId);
                   },
                   onSnapshot,
               }

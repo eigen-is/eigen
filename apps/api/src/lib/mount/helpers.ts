@@ -7,8 +7,10 @@ import { ApiError } from '../core';
 
 // Reserved: any case variant of `.trash` aliases the real trash dir (Mount.trashDir) on path-based mounts.
 // Also checked on move (updatePath) so a legacy pre-guard row can't be re-parented onto the alias.
+// NFKC before folding: APFS equates compatibility characters ('.traſh' with U+017F IS '.trash'),
+// which plain toLowerCase misses.
 export function isReservedName(name: string): boolean {
-    return name.toLowerCase() === '.trash';
+    return name.normalize('NFKC').toLowerCase() === '.trash';
 }
 
 export function validateName(name: string): string {

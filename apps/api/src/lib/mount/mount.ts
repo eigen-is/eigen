@@ -338,6 +338,9 @@ export class Mount {
     // so those must compare equal too. JS toLowerCase() is the stricter fold; only consulted for
     // non-ASCII names on path-based mounts, keeping ASCII lookups and id-keyed backends at
     // today's exact semantics. The v7 unique index stays the ASCII race net.
+    // Accepted residual: an ASCII query never scans, so a stored-side-only alias (U+212A 'K'.txt
+    // vs ASCII k.txt) still clobbers; pairs JS can't fold either way (ſ/s) likewise. Both are
+    // single-codepoint oddities far rarer than the é/É class this closes.
     private async findCaseFoldedChild(parentId: string, name: string): Promise<typeof paths.$inferSelect | null> {
         // biome-ignore lint/suspicious/noControlCharactersInRegex: \x00-\x7F is the ASCII range, not a control-char match
         if (!this.isPathBased || !/[^\x00-\x7F]/.test(name)) return null;
