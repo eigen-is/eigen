@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ContactSuggestion } from './contact';
+import type { DocSearchController } from './doc-search';
 import type { DrivePath, EigenDocType } from './drive';
 import type { EmailSummary } from './mail';
 import type { HelpSearchDoc } from './search';
@@ -11,6 +12,7 @@ export type ResultGroup =
     | 'suggested'
     | 'smart'
     | 'selection'
+    | 'doc-content'
     | 'mail'
     | 'file'
     | 'contacts'
@@ -43,6 +45,9 @@ export type CommandContext = {
     ownerId: string;
     selection: PaletteSelection;
     selectionActions: PaletteSelectionActions;
+    // The open eigendoc's search controller (published by DocSearchProvider). null in the drive
+    // list and non-eigendoc apps. Drives the palette `doc:` scope; Enter reveals a hit in place.
+    docSearch: DocSearchController | null;
     navigate: (to: string) => void;
     openDriveCreate: (kind: EigenDocType | 'folder') => void;
     openMailComposeWith: (opts: { to?: string; attachments?: DrivePath[] }) => void;
