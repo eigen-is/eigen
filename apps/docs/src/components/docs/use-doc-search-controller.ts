@@ -100,8 +100,9 @@ export function useDocSearchController(editor: Editor | null): DocSearchControll
                 if (flash) {
                     setTimeout(() => {
                         if (view.isDestroyed) return;
-                        const current = searchFlashKey.getState(view.state);
-                        if (current && current.from === from && current.to === to) {
+                        // Clear whatever flash exists — a concurrent edit remaps the stored coords
+                        // away from {from,to}, so a coord-equality guard would strand the decoration.
+                        if (searchFlashKey.getState(view.state)) {
                             view.dispatch(view.state.tr.setMeta(searchFlashKey, null));
                         }
                     }, FLASH_MS);
