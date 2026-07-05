@@ -2,7 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { type FileEvent, fileEventSummary, fileEventVerb, toFileEventType } from '@workspace/lib/types/file-history';
+import {
+    describeFileEvent,
+    type FileEvent,
+    fileEventSummary,
+    fileEventVerb,
+    toFileEventType,
+} from '@workspace/lib/types/file-history';
 import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { createDefaultMountConfig } from '../lib/mount/helpers';
@@ -61,6 +67,49 @@ describe('file event phrasing', () => {
         expect(toFileEventType('sheet-rows-inserted')).toBe('edited');
         expect(toFileEventType('slide-removed')).toBe('edited');
         expect(toFileEventType('totally-made-up')).toBe('edited');
+    });
+});
+
+describe('describeFileEvent', () => {
+    const base = { pathName: 'Roadmap.eigenstickies', pathType: 'stickies' } as const;
+    test('sticky-moved, container ctx', () => {
+        expect(
+            describeFileEvent(
+                { ...base, eventType: 'sticky-moved', details: { card: 'Fix flaky test', toColumn: 'Done' } },
+                'container',
+            ),
+        ).toEqual({ action: 'moved a card in "Roadmap"', primary: 'Fix flaky test → Done' });
+    });
+    test('sticky-added, own ctx keeps column in action', () => {
+        expect(
+            describeFileEvent(
+                { ...base, eventType: 'sticky-added', details: { card: 'Welcome', toColumn: 'To Do' } },
+                'own',
+            ),
+        ).toEqual({ action: 'added a card to To Do', primary: 'Welcome' });
+    });
+    test('renamed shows old → new as primary in both ctx', () => {
+        const e = { ...base, eventType: 'renamed', details: { oldName: 'a.txt', newName: 'b.txt' } } as const;
+        expect(describeFileEvent(e, 'own').primary).toBe('a.txt → b.txt');
+        expect(describeFileEvent(e, 'container').primary).toBe('a.txt → b.txt');
+    });
+    test('created: action-only in own ctx, name as primary in container ctx', () => {
+        const e = { pathName: 'notes.txt', pathType: 'file', eventType: 'created', details: null } as const;
+        expect(describeFileEvent(e, 'own')).toEqual({ action: 'created' });
+        expect(describeFileEvent(e, 'container')).toEqual({ action: 'created', primary: 'notes.txt' });
+    });
+    test('commented quotes the preview and names the doc in container ctx', () => {
+        const e = { ...base, eventType: 'commented', details: { preview: 'looks good' } } as const;
+        expect(describeFileEvent(e, 'container')).toEqual({
+            action: 'commented on "Roadmap"',
+            primary: '“looks good”',
+        });
+    });
+    test('acl-changed secondary joins the diff', () => {
+        // as const only on eventType — a whole-object as const would make added/removed
+        // readonly, which is not assignable to FileEventDetailsMap['acl-changed'].string[].
+        const e = { ...base, eventType: 'acl-changed' as const, details: { added: ['a@x.nl'], removed: ['b@x.nl'] } };
+        expect(describeFileEvent(e, 'own').secondary).toBe('Added a@x.nl · removed b@x.nl');
     });
 });
 

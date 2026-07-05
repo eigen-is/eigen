@@ -1,4 +1,5 @@
-import type { DrivePathType } from './drive';
+import { formatFileSize } from '../core/format';
+import { type DrivePathType, stripEigenExtension } from './drive';
 
 export type FileEventDetailsMap = {
     uploaded: { size: number };
@@ -7,10 +8,11 @@ export type FileEventDetailsMap = {
     copied: { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
     'acl-changed': { added: string[]; removed: string[] };
     'version-restored': { versionName: string };
-    commented: { preview: string };
-    'sticky-added': { card: string; toColumn: string };
-    'sticky-moved': { card: string; toColumn: string };
-    'sticky-removed': { card: string };
+    // cardId/chatName are additive deep-link fields — old rows lack them and fall back to the container link.
+    commented: { preview: string; chatName?: string };
+    'sticky-added': { card: string; toColumn: string; cardId?: string };
+    'sticky-moved': { card: string; toColumn: string; cardId?: string };
+    'sticky-removed': { card: string; cardId?: string };
 };
 
 export type FileEventType = 'created' | 'edited' | 'trashed' | 'restored' | 'deleted' | keyof FileEventDetailsMap;
@@ -102,4 +104,84 @@ export function fileEventVerb(eventType: FileEventType): string {
 
 export function fileEventSummary(eventType: FileEventType): string {
     return FILE_EVENT_PHRASES[eventType].summary;
+}
+
+export type ActivityLines = { action: string; primary?: string; secondary?: string };
+
+// One phrasing layer for the activity panel and file-event notifications; callers prepend
+// the actor ("You" / <UserNameCard/> / `${actor.name}`). ctx 'own' omits the item name (the
+// panel title shows it); 'container' names it. Details are read via `in`-narrowing since
+// Pick<FileEvent> flattens the discriminated union. Spec Inventory B is normative.
+export function describeFileEvent(
+    event: Pick<FileEvent, 'eventType' | 'details' | 'pathName' | 'pathType'>,
+    ctx: 'own' | 'container',
+): ActivityLines {
+    const name = stripEigenExtension(event.pathName);
+    const container = ctx === 'container';
+    const details = event.details;
+
+    switch (event.eventType) {
+        case 'renamed': {
+            const d = details && 'oldName' in details ? details : null;
+            return { action: 'renamed', primary: d ? `${d.oldName} → ${d.newName}` : undefined };
+        }
+        case 'uploaded': {
+            const d = details && 'size' in details ? details : null;
+            return {
+                action: 'uploaded',
+                primary: container ? name : undefined,
+                secondary: d ? formatFileSize(d.size) : undefined,
+            };
+        }
+        case 'acl-changed': {
+            const d = details && 'added' in details ? details : null;
+            let secondary: string | undefined;
+            if (d) {
+                if (d.added.length && d.removed.length)
+                    secondary = `Added ${d.added.join(', ')} · removed ${d.removed.join(', ')}`;
+                else if (d.added.length) secondary = `Added ${d.added.join(', ')}`;
+                else if (d.removed.length) secondary = `Removed ${d.removed.join(', ')}`;
+            }
+            return { action: 'updated sharing', primary: container ? name : undefined, secondary };
+        }
+        case 'version-restored': {
+            const d = details && 'versionName' in details ? details : null;
+            return {
+                action: container ? `restored a version of "${name}"` : 'restored a version',
+                primary: d?.versionName,
+            };
+        }
+        case 'commented': {
+            const d = details && 'preview' in details ? details : null;
+            return {
+                action: container ? `commented on "${name}"` : 'commented',
+                primary: d ? `“${d.preview}”` : undefined,
+            };
+        }
+        case 'sticky-added': {
+            const d = details && 'toColumn' in details ? details : null;
+            return {
+                action: container ? `added a card to "${name}"` : d ? `added a card to ${d.toColumn}` : 'added a card',
+                primary: d?.card,
+                secondary: container && d ? `in ${d.toColumn}` : undefined,
+            };
+        }
+        case 'sticky-moved': {
+            const d = details && 'toColumn' in details ? details : null;
+            return {
+                action: container ? `moved a card in "${name}"` : 'moved a card',
+                primary: d ? `${d.card} → ${d.toColumn}` : undefined,
+            };
+        }
+        case 'sticky-removed': {
+            const d = details && 'card' in details ? details : null;
+            return {
+                action: container ? `removed a card from "${name}"` : 'removed a card',
+                primary: d?.card,
+            };
+        }
+        default:
+            // created/edited/moved/copied/trashed/restored/deleted: bare verb; name is the primary line.
+            return { action: fileEventSummary(event.eventType), primary: container ? name : undefined };
+    }
 }

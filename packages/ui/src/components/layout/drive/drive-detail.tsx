@@ -1,11 +1,11 @@
 import { formatDateTime } from '@workspace/lib/date';
+import { formatFileSize } from '@workspace/lib/format';
 import { type DrivePath, isDocumentType, isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
 import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
 import { DriveAccessList } from '@workspace/ui/components/layout/drive';
 import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch-toggle-button';
-import { formatFileSize } from '@workspace/ui/lib/formatFileSize';
 import { Download, MoreVertical, UserRoundPlus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useLayout } from '../app/layout-context.tsx';

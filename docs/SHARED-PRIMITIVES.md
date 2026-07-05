@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-769 primitives across 6 kinds. `packages/sheet` internals are excluded.
+777 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -344,7 +344,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (213)
+## Types (218)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -389,6 +389,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SlideItem` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `SlideObject` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `TextObject` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
+| `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `Address` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `AddressObject` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `AdminUser` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
@@ -472,6 +473,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MountSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `NewDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Notification` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `NotificationDetails` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `NotificationDetailsMap` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `NotificationPersistInput` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `NotificationType` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `OrgMember` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OrgTeam` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OwnerType` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
@@ -562,7 +567,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (243)
+## Utilities & constants (246)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -719,10 +724,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `createDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
 | `sendDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `updateDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
+| `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `resolveNotificationLink` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
@@ -737,6 +744,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `DRIVE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_DOC` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
