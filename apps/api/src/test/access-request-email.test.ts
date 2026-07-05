@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { authedRequest, driveGet, drivePost, getTestContext } from './setup';
+import type { Notification } from '@workspace/lib/types/notification';
+import { assertJson, authedRequest, driveGet, drivePost, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -56,6 +57,14 @@ describe('Access-request email', () => {
         expect(calls[0][0].subject).toContain(ctx.bob.user.name);
         expect(calls[0][0].html).toContain('Please');
         spy.mockRestore();
+
+        const notifs = await assertJson<Notification[]>(
+            await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`),
+        );
+        const req = notifs.find((n) => n.type === 'access-request' && n.actorEmail === ctx.bob.user.email);
+        expect(req?.title).toBe(`${ctx.bob.user.name} requested access`);
+        expect(req?.body).toBe('access-request-on');
+        expect(req?.details).toEqual({ message: 'Please', pathType: 'doc' });
     });
 
     test('does not email when toggle off', async () => {

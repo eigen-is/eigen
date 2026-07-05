@@ -25,13 +25,15 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
                         result.name,
                         result.color,
                         result.permission,
+                        owner.email,
+                        owner.name,
                     );
                 }
             }
 
             const sharedPaths = await pullSharedPaths(fromUserId, user);
             for (const path of sharedPaths) {
-                await targetHome.drive.receiveSharedPathChange(path, path.acl);
+                await targetHome.drive.receiveSharedPathChange(path, path.acl, owner.email, owner.name);
             }
 
             if (targetHome.hasCalendar) {
@@ -78,6 +80,9 @@ export async function reconcileSharesForNewTeamMember(userId: string, teamId: st
 
     for (const fromUserId of fromUserIds) {
         try {
+            const owner = await getUserById(fromUserId);
+            if (!owner) continue;
+
             const calShares = await pullCalendarShares(fromUserId, user.email, memberships.teamIds);
             for (const result of calShares) {
                 await sendToHome(userId, {
@@ -87,12 +92,20 @@ export async function reconcileSharesForNewTeamMember(userId: string, teamId: st
                     name: result.name,
                     color: result.color,
                     permission: result.permission,
+                    actorEmail: owner.email,
+                    actorName: owner.name,
                 });
             }
 
             const sharedPaths = await pullSharedPaths(fromUserId, user);
             for (const path of sharedPaths) {
-                await sendToHome(userId, { type: 'drive:acl-change', path, acl: path.acl });
+                await sendToHome(userId, {
+                    type: 'drive:acl-change',
+                    path,
+                    acl: path.acl,
+                    actorEmail: owner.email,
+                    actorName: owner.name,
+                });
             }
         } catch (error) {
             console.error(`Failed to reconcile team shares from ${fromUserId} for user ${userId}:`, error);

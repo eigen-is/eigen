@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { authedRequest, driveGet, drivePost, drivePut, getTestContext } from './setup';
+import type { Notification } from '@workspace/lib/types/notification';
+import { assertJson, authedRequest, driveGet, drivePost, drivePut, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -113,5 +114,27 @@ describe('ACL share email', () => {
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));
         expect(calls.length).toBe(0);
         spy.mockRestore();
+    });
+
+    test('persists share + unshare notifications with the actor display name', async () => {
+        const doc = await createDoc('share-notify');
+        await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
+
+        // The GET drains the async ACL fan-out before listing (authedRequest drains on entry).
+        const shareList = await assertJson<Notification[]>(
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+        );
+        const shared = shareList.find((n) => n.tag === `share:${ctx.alice.user.id}:${aliceMountId}:${doc.id}`);
+        expect(shared?.title).toBe(`${ctx.alice.user.name} shared a doc`);
+        expect(shared?.body).toBe('share-notify');
+        expect(shared?.details).toEqual({ pathType: 'doc' });
+
+        await setAcl(doc.id, { remove: [ctx.bob.user.email] });
+        const unshareList = await assertJson<Notification[]>(
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+        );
+        const unshared = unshareList.find((n) => n.type === 'unshare' && n.body === 'share-notify');
+        expect(unshared?.title).toBe(`${ctx.alice.user.name} removed your access`);
+        expect(unshared?.details).toEqual({ pathType: 'doc' });
     });
 });

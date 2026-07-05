@@ -1,4 +1,11 @@
-import { type DriveACL, type DrivePath, type DriveVisibility, stripEigenExtension } from '@workspace/lib/types/drive';
+import {
+    type DriveACL,
+    type DrivePath,
+    type DriveVisibility,
+    getEigenDocInfoByType,
+    isFolderType,
+    stripEigenExtension,
+} from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -20,8 +27,10 @@ export async function receiveSharedPathChange(
     path: DrivePath,
     newACL: DriveACL[] | null,
     actorEmail?: string,
+    actorName?: string,
 ): Promise<void> {
     const displayName = stripEigenExtension(path.name);
+    const actorDisplay = actorName ?? actorEmail?.split('@')[0];
     const memberships = await getMemberships(home.user.id);
     if (newACL === null || !matchesACL(newACL, home.user, memberships, 'read')) {
         sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
@@ -29,7 +38,9 @@ export async function receiveSharedPathChange(
         home.notifications?.persist({
             type: 'unshare',
             actorEmail,
-            title: `"${displayName}" is no longer shared with you`,
+            title: `${actorDisplay} removed your access`,
+            body: displayName,
+            details: { pathType: path.type },
         });
     } else if (sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
         sharedDb
@@ -68,11 +79,15 @@ export async function receiveSharedPathChange(
             })
             .run();
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_SHARED, path));
+        const noun =
+            getEigenDocInfoByType(path.type)?.label.toLowerCase() ?? (isFolderType(path.type) ? 'folder' : 'file');
         home.notifications?.persist({
             type: 'share',
             actorEmail,
-            title: `"${displayName}" was shared with you`,
+            title: `${actorDisplay} shared a ${noun}`,
+            body: displayName,
             tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
+            details: { pathType: path.type },
         });
     }
 }

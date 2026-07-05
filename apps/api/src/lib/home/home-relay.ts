@@ -32,7 +32,7 @@ import { updateUser } from '../user/';
 import { atHome, getHome, getTeamHome } from './get-home';
 
 export type HomeMessage =
-    | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string }
+    | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
     | {
           type: 'calendar:share';
           ownerId: string;
@@ -41,6 +41,7 @@ export type HomeMessage =
           color: string;
           permission: CalendarShare['permission'] | null;
           actorEmail?: string;
+          actorName?: string;
       }
     | { type: 'calendar:invitation'; payload: ReceiveInvitationPayload }
     | { type: 'calendar:invitation-update'; orgEventId: string; orgUserId: string; payload: InvitationUpdatePayload }
@@ -64,7 +65,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
 
     switch (message.type) {
         case 'drive:acl-change':
-            await home.drive.receiveSharedPathChange(message.path, message.acl, message.actorEmail);
+            await home.drive.receiveSharedPathChange(message.path, message.acl, message.actorEmail, message.actorName);
             break;
         case 'calendar:share':
             if (!home.hasCalendar) break;
@@ -76,9 +77,10 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
                     message.color,
                     message.permission,
                     message.actorEmail,
+                    message.actorName,
                 );
             } else {
-                home.calendar.removeShare(message.ownerId, message.calendarId, message.actorEmail);
+                home.calendar.removeShare(message.ownerId, message.calendarId, message.actorEmail, message.actorName);
             }
             break;
         case 'calendar:invitation':

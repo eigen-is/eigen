@@ -1125,8 +1125,13 @@ export default class Drive {
 
     // Called by: home-relay (cross-home ACL propagation receiver) and share/reconciliation.
     // Not route-callable — inbound side of the sharding seam.
-    async receiveSharedPathChange(path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
-        return receiveSharedPathChange(this.sharedDb, this.home, path, newACL, actorEmail);
+    async receiveSharedPathChange(
+        path: DrivePath,
+        newACL: DriveACL[] | null,
+        actorEmail?: string,
+        actorName?: string,
+    ): Promise<void> {
+        return receiveSharedPathChange(this.sharedDb, this.home, path, newACL, actorEmail, actorName);
     }
 
     async destruct(): Promise<void> {
