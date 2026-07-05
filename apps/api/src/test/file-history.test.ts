@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     describeFileEvent,
     type FileEvent,
@@ -9,14 +10,25 @@ import {
     fileEventVerb,
     toFileEventType,
 } from '@workspace/lib/types/file-history';
+import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
+import { getHome } from '../lib/home';
 import { createDefaultMountConfig } from '../lib/mount/helpers';
 import { Mount } from '../lib/mount/mount';
 import { fileEvents } from '../lib/mount/schema';
 import { getUserById } from '../lib/user';
 import type { TestContext } from './setup';
-import { authedRequest, driveDelete, driveGet, drivePost, drivePut, driveUpload, getTestContext } from './setup';
+import {
+    assertJson,
+    authedRequest,
+    driveDelete,
+    driveGet,
+    drivePost,
+    drivePut,
+    driveUpload,
+    getTestContext,
+} from './setup';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-file-history-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -447,7 +459,6 @@ describe('Drive history recording', () => {
     });
 
     test('copy records copied on root and descendants', async () => {
-        const { getHome } = await import('../lib/home');
         const home = await getHome(aliceOwnerId);
 
         const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
@@ -531,7 +542,6 @@ describe('Drive history recording', () => {
     });
 
     test('version-restored after save+restore', async () => {
-        const { getHome } = await import('../lib/home');
         const home = await getHome(aliceOwnerId);
 
         const alice = await getUserById(ctx.alice.user.id);
@@ -548,5 +558,91 @@ describe('Drive history recording', () => {
         const versionRestored = events.find((e) => e.eventType === 'version-restored');
         expect(versionRestored).toBeDefined();
         expect((versionRestored!.details as { versionName: string }).versionName).toBe(version.name);
+    });
+});
+
+// The file-event notification now carries the whole event: title = action line, body = primary
+// content, details = { secondary, cardId, chatName, pathType } — composed through describeFileEvent,
+// the same phrasing the activity panel renders with.
+describe('file-event notifications carry the event details', () => {
+    let ctx: TestContext;
+    let aliceToken: string;
+    let bobToken: string;
+    let aliceOwnerId: string;
+    let mountId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        aliceToken = ctx.alice.user.sessionToken;
+        bobToken = ctx.bob.user.sessionToken;
+        aliceOwnerId = ctx.alice.user.id;
+
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(aliceToken, `/drive/${aliceOwnerId}/mounts`),
+        );
+        mountId = mounts[0].id;
+        const root = await assertJson<{ id: string }>(
+            await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/root`),
+        );
+        rootId = root.id;
+    });
+
+    async function notificationsFor(userId: string): Promise<Notification[]> {
+        const home = await getHome(userId);
+        return home.notifications.list();
+    }
+
+    function fileEventTag(pathId: string): string {
+        return `file-event:${aliceOwnerId}:${mountId}:${pathId}`;
+    }
+
+    function postSticky(pathId: string, body: Record<string, unknown>): Promise<Response> {
+        return authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/path/${pathId}/history`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    }
+
+    test('a sticky-added event reaches the watcher with body + card details, and coalesces to the latest', async () => {
+        const board = await drivePost<DrivePath>(
+            aliceToken,
+            aliceOwnerId,
+            mountId,
+            `folder/${rootId}/create/stickies`,
+            {
+                fileName: 'DetailBoard',
+            },
+        );
+        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${board.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+        await authedRequest(bobToken, `/drive/${aliceOwnerId}/${mountId}/path/${board.id}/watch`, { method: 'POST' });
+
+        const added = await postSticky(board.id, {
+            eventType: 'sticky-added',
+            details: { card: 'Hello', toColumn: 'To Do', cardId: 'c1' },
+        });
+        expect(added.status).toBe(200);
+
+        const row = (await notificationsFor(ctx.bob.user.id)).find((n) => n.tag === fileEventTag(board.id));
+        expect(row).toBeDefined();
+        expect(row!.title).toBe('Alice Test added a card to "DetailBoard"');
+        expect(row!.body).toBe('Hello');
+        expect(row!.details).toEqual({ cardId: 'c1', secondary: 'in To Do', pathType: 'stickies' });
+
+        // A second, different event on the same board upserts the ONE tagged row to the latest change
+        const moved = await postSticky(board.id, {
+            eventType: 'sticky-moved',
+            details: { card: 'Hello', toColumn: 'Done', cardId: 'c1' },
+        });
+        expect(moved.status).toBe(200);
+
+        const rows = (await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === fileEventTag(board.id));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].title).toBe('Alice Test moved a card in "DetailBoard"');
+        expect(rows[0].body).toBe('Hello → Done');
+        expect(rows[0].details).toEqual({ cardId: 'c1', pathType: 'stickies' });
     });
 });

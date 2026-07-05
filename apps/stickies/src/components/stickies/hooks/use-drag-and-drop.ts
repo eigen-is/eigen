@@ -16,7 +16,11 @@ type UseDragAndDropProps = {
     board: BoardData;
     cards: Record<string, CommentCard>;
     yjsDoc: Y.Doc | null;
-    onRecordEvent?: (event: { eventType: 'sticky-moved'; details: FileEventDetailsMap['sticky-moved'] }) => void;
+    // cardId required: the write contract (POST /history typebox), not the optional read shape.
+    onRecordEvent?: (event: {
+        eventType: 'sticky-moved';
+        details: FileEventDetailsMap['sticky-moved'] & { cardId: string };
+    }) => void;
 };
 
 export const useDragAndDrop = ({ board, cards, yjsDoc, onRecordEvent }: UseDragAndDropProps) => {

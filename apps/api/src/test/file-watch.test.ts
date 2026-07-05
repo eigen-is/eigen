@@ -117,7 +117,8 @@ describe('File watch + fan-out', () => {
         expect(tags).toContain(fileEventTag(aliceOwnerId, mountId, file.id));
 
         const renamed = notifications.find((n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id));
-        expect(renamed?.title).toBe('Alice Test renamed deeper.txt');
+        expect(renamed?.title).toBe('Alice Test renamed');
+        expect(renamed?.body).toBe('deep.txt → deeper.txt');
         expect(renamed?.actorEmail).toBe(ctx.alice.user.email);
     });
 
@@ -179,7 +180,8 @@ describe('File watch + fan-out', () => {
 
         const notifications = await notificationsFor(ctx.bob.user.id);
         const trashed = notifications.find((n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id));
-        expect(trashed?.title).toBe('Alice Test trashed doomed.txt');
+        expect(trashed?.title).toBe('Alice Test trashed');
+        expect(trashed?.body).toBe('doomed.txt');
     });
 
     test('restore notifies via the post-restore chain', async () => {
@@ -197,7 +199,8 @@ describe('File watch + fan-out', () => {
         // Same tag as the trash notification — the upsert leaves the latest verb
         const notifications = await notificationsFor(ctx.bob.user.id);
         const restored = notifications.find((n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id));
-        expect(restored?.title).toBe('Alice Test restored phoenix.txt');
+        expect(restored?.title).toBe('Alice Test restored');
+        expect(restored?.body).toBe('phoenix.txt');
     });
 
     test('move notifies watchers of both the old and new parent', async () => {
@@ -214,8 +217,10 @@ describe('File watch + fan-out', () => {
         const tag = fileEventTag(aliceOwnerId, mountId, file.id);
         const bobMoved = (await notificationsFor(ctx.bob.user.id)).find((n) => n.tag === tag);
         const charlieMoved = (await notificationsFor(ctx.charlie.user.id)).find((n) => n.tag === tag);
-        expect(bobMoved?.title).toBe('Alice Test moved mover.txt');
-        expect(charlieMoved?.title).toBe('Alice Test moved mover.txt');
+        expect(bobMoved?.title).toBe('Alice Test moved');
+        expect(bobMoved?.body).toBe('mover.txt');
+        expect(charlieMoved?.title).toBe('Alice Test moved');
+        expect(charlieMoved?.body).toBe('mover.txt');
     });
 
     test('permanent delete notifies watchers and removes the watch rows', async () => {
@@ -234,7 +239,8 @@ describe('File watch + fan-out', () => {
         const deleted = (await notificationsFor(ctx.bob.user.id)).find(
             (n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id),
         );
-        expect(deleted?.title).toBe('Alice Test deleted gone.txt');
+        expect(deleted?.title).toBe('Alice Test deleted');
+        expect(deleted?.body).toBe('gone.txt');
 
         // path_watchers cascade: bob's watch on the file is gone, the folder watch survives
         const watches = await assertJson<DrivePath[]>(await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`));
@@ -259,7 +265,8 @@ describe('File watch + fan-out', () => {
         const notifications = await notificationsFor(ctx.bob.user.id);
         const latest = notifications.find((n) => n.tag === fileEventTag(aliceOwnerId, mountId, file.id));
         // Still the trash notification — the acl-changed event never fired
-        expect(latest?.title).toBe('Alice Test trashed silent.txt');
+        expect(latest?.title).toBe('Alice Test trashed');
+        expect(latest?.body).toBe('silent.txt');
     });
 
     test('coalesce: repeat events within the window upsert one row and suppress the broadcast', async () => {
@@ -285,7 +292,8 @@ describe('File watch + fan-out', () => {
 
         const rows = (await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === tag);
         expect(rows).toHaveLength(1);
-        expect(rows[0].title).toBe('Alice Test renamed co2.txt');
+        expect(rows[0].title).toBe('Alice Test renamed');
+        expect(rows[0].body).toBe('co1.txt → co2.txt');
     });
 
     test('burst: multiple uploads into a watched folder collapse to one row tagged on the parent', async () => {
@@ -525,7 +533,7 @@ describe('File events: collab edits, client posts, comments', () => {
     describe('client-posted history events', () => {
         const stickyMoved = {
             eventType: 'sticky-moved',
-            details: { card: 'Buy milk', toColumn: 'Done' },
+            details: { card: 'Buy milk', toColumn: 'Done', cardId: 'card-1' },
         };
 
         test('a writer can post a sticky-moved event with details', async () => {
@@ -563,7 +571,7 @@ describe('File events: collab edits, client posts, comments', () => {
 
         test('a writer can post a sticky-added event with the card title', async () => {
             const board = await createDoc('ClientStickyAdd', 'stickies');
-            const details = { card: 'Write tests', toColumn: 'Todo' };
+            const details = { card: 'Write tests', toColumn: 'Todo', cardId: 'card-2' };
             const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-added', details });
             expect(res.status).toBe(200);
             const added = (await history(board.id)).find((e) => e.eventType === 'sticky-added');
@@ -572,7 +580,7 @@ describe('File events: collab edits, client posts, comments', () => {
 
         test('sticky-removed is accepted and recorded with the card title', async () => {
             const board = await createDoc('ClientVocab', 'stickies');
-            const details = { card: 'Old card' };
+            const details = { card: 'Old card', cardId: 'card-3' };
             const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-removed', details });
             expect(res.status).toBe(200);
             const recorded = await history(board.id);
@@ -638,14 +646,17 @@ describe('File events: collab edits, client posts, comments', () => {
             const commented = (await history(doc.id)).filter((e) => e.eventType === 'commented');
             expect(commented).toHaveLength(1);
             expect(commented[0].pathId).toBe(doc.id);
-            expect(commented[0].details).toEqual({ preview: 'first comment' });
+            // toMatchObject, not toEqual: chat.ts additively records `chatName` in commented
+            // details (its deep-link field) — assert the preview here, leave chatName to chat's tests.
+            expect(commented[0].details).toMatchObject({ preview: 'first comment' });
             expect(commented[0].actorEmail).toBe(ctx.alice.user.email);
 
             // bob (watcher, never commented) gets exactly ONE file-event row, no comment-reply
             const notifications = await notificationsFor(ctx.bob.user.id);
             const fileEvents = notifications.filter((n) => n.tag === fileEventTag(aliceOwnerId, mountId, doc.id));
             expect(fileEvents).toHaveLength(1);
-            expect(fileEvents[0].title).toBe('Alice Test commented on CommentWatch');
+            expect(fileEvents[0].title).toBe('Alice Test commented on "CommentWatch"');
+            expect(fileEvents[0].body).toBe('“first comment”');
             expect(notifications.some((n) => n.type === 'comment-reply' && (n.tag ?? '').includes(doc.id))).toBe(false);
         });
 

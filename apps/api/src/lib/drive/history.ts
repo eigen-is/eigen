@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { type DrivePath, type DrivePathType, isDocumentType, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type DrivePath, type DrivePathType, isDocumentType } from '@workspace/lib/types/drive';
 import {
+    describeFileEvent,
     type FileEvent,
     type FileEventInput,
     type FileEventType,
-    fileEventVerb,
     type PathWatchStatus,
     toFileEventType,
 } from '@workspace/lib/types/file-history';
@@ -199,11 +199,27 @@ export class FileHistory {
             eventType: FileEventType;
             actor: User;
             itemName: string;
+            pathType: DrivePathType;
+            details?: FileEvent['details'];
             tagPathId: string; // the path the tag points at (parent for burst events)
             verifyAncestors: DrivePath[];
             excludeEmails?: Set<string>;
         },
     ): Promise<void> {
+        // Compose the row once through the shared phrasing layer (the same the activity panel
+        // renders with): title = actor + action, body = primary content, details = link/secondary.
+        const lines = describeFileEvent(
+            {
+                eventType: opts.eventType,
+                details: opts.details ?? null,
+                pathName: opts.itemName,
+                pathType: opts.pathType,
+            },
+            'container',
+        );
+        const d = opts.details;
+        const cardId = d && 'cardId' in d ? d.cardId : undefined;
+        const chatName = d && 'chatName' in d ? d.chatName : undefined;
         // Per-watcher lookups run concurrently — a shared folder with many watchers
         // would otherwise add serial auth-db round-trips to every mutation request.
         // Each watcher is isolated and best-effort: delivery happens after the mutation
@@ -223,9 +239,11 @@ export class FileHistory {
                         notification: {
                             type: 'file-event',
                             actorEmail: opts.actor.email,
-                            title: `${opts.actor.name} ${fileEventVerb(opts.eventType)} ${stripEigenExtension(opts.itemName)}`,
+                            title: `${opts.actor.name} ${lines.action}`,
+                            body: lines.primary,
                             tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
                             coalesce: true,
+                            details: { secondary: lines.secondary, cardId, chatName, pathType: opts.pathType },
                         },
                     });
                 } catch {
@@ -242,6 +260,7 @@ export class FileHistory {
         chainRootIds: (string | null)[]; // parent chains to walk (e.g. [parentId]; moved: both)
         burst?: boolean; // created/uploaded/copied: tag on the parent folder
         excludeEmails?: Set<string>;
+        details?: FileEvent['details']; // event details → notification body/secondary/links
         // Thunks resolve only when there are watchers — zero watchers (the common
         // case) costs zero breadcrumb walks. Mutations that rewrite the parent
         // chain (trash/move) pass pre-captured arrays instead.
@@ -258,6 +277,8 @@ export class FileHistory {
             eventType: opts.eventType,
             actor: opts.actor,
             itemName: opts.path.name,
+            pathType: opts.path.type,
+            details: opts.details,
             tagPathId: opts.burst ? (chainRoots[0] ?? opts.path.id) : opts.path.id,
             verifyAncestors:
                 typeof opts.verifyAncestors === 'function' ? await opts.verifyAncestors() : opts.verifyAncestors,

@@ -90,6 +90,7 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
             eventType: 'deleted',
             actor: user,
             itemName: item.name,
+            pathType: item.type,
             tagPathId: item.id,
             verifyAncestors: [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item],
         });
