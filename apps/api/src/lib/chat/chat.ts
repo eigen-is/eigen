@@ -309,7 +309,7 @@ export class ChatRoom {
             if (msg.type === 'whisper') {
                 const isAuthor = msg.authorId === userId;
                 const isRecipient = msg.whisperTo === userId || msg.whisperTo === userEmail;
-                const targetName = msg.whisperTo?.split('@')[0] || msg.whisperTo || 'someone';
+                const targetName = msg.whisperTo || 'someone';
                 if (isAuthor) {
                     return { ...msg, content: `whispers to ${targetName}: ${msg.content}` };
                 }

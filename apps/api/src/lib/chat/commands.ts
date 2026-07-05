@@ -723,7 +723,9 @@ export function formatEmoteForViewer(
     viewerId: string,
     viewerEmail?: string,
 ): string {
-    const authorName = authorEmail.split('@')[0] || authorEmail;
+    // Emit the full email so the client's email→name rendering resolves it to a
+    // hoverable display name (retroactive for all history).
+    const authorName = authorEmail;
 
     if (content.startsWith('$')) {
         const raw = content.slice(1);
@@ -735,7 +737,7 @@ export function formatEmoteForViewer(
         if (!emote) return `${authorName} does something mysterious.`;
 
         if (targetEmail) {
-            const targetName = targetEmail.split('@')[0] || targetEmail;
+            const targetName = targetEmail;
             const isAuthor = authorId === viewerId;
             const isTarget = viewerEmail?.toLowerCase() === targetEmail.toLowerCase();
 
