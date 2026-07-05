@@ -129,7 +129,7 @@ export async function resolveNotificationLink(
 
         case 'mail': {
             const mailId = details && 'mailId' in details ? details.mailId : undefined;
-            return getMailAppUrl(mailId ? `box/inbox?mailId=${mailId}` : 'box/inbox');
+            return getMailAppUrl(mailId ? `box/inbox?mailId=${encodeURIComponent(mailId)}` : 'box/inbox');
         }
 
         case 'access-request':

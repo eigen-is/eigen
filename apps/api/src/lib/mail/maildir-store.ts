@@ -162,19 +162,28 @@ export class MaildirStore implements MailStore {
     }
 
     async saveDraft(raw: string, existingId?: string): Promise<Email> {
-        const { uniqueId, filename } = await this.deliverToCur('Drafts', raw, { draft: true, seen: true }, existingId);
+        // Hold the lock across the fs write + db.addEmail pair so a concurrent watcher sync can't
+        // ingest the draft file first and fire a spurious received(isNew) event.
+        return this.storeLock.run(async () => {
+            const { uniqueId, filename } = await this.deliverToCur(
+                'Drafts',
+                raw,
+                { draft: true, seen: true },
+                existingId,
+            );
 
-        const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
-        if (!parsed) {
-            await this.deleteMessage('Drafts', filename).catch(() => {});
-            throw new ApiError(500, 'Failed to parse saved draft');
-        }
+            const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
+            if (!parsed) {
+                await this.deleteMessage('Drafts', filename).catch(() => {});
+                throw new ApiError(500, 'Failed to parse saved draft');
+            }
 
-        applyFlagsFromFilename(parsed, filename);
-        parsed.filename = filename;
-        parsed.mailbox = 'Drafts';
-        this.db.addEmail(parsed as EmailSummary);
-        return parsed;
+            applyFlagsFromFilename(parsed, filename);
+            parsed.filename = filename;
+            parsed.mailbox = 'Drafts';
+            this.db.addEmail(parsed as EmailSummary);
+            return parsed;
+        });
     }
 
     async delete(messageId: string): Promise<void> {

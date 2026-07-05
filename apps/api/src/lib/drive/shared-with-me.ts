@@ -38,7 +38,7 @@ export async function receiveSharedPathChange(
         home.notifications?.persist({
             type: 'unshare',
             actorEmail,
-            title: `${actorDisplay} removed your access`,
+            title: actorDisplay ? `${actorDisplay} removed your access` : 'Access removed',
             body: displayName,
             details: { pathType: path.type },
         });
@@ -79,12 +79,12 @@ export async function receiveSharedPathChange(
             })
             .run();
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_SHARED, path));
-        const noun =
-            getEigenDocInfoByType(path.type)?.label.toLowerCase() ?? (isFolderType(path.type) ? 'folder' : 'file');
+        const info = getEigenDocInfoByType(path.type);
+        const noun = info?.noun ?? info?.label.toLowerCase() ?? (isFolderType(path.type) ? 'folder' : 'file');
         home.notifications?.persist({
             type: 'share',
             actorEmail,
-            title: `${actorDisplay} shared a ${noun}`,
+            title: actorDisplay ? `${actorDisplay} shared a ${noun}` : 'Shared with you',
             body: displayName,
             tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
             details: { pathType: path.type },

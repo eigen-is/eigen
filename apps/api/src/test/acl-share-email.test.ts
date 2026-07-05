@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type { Notification } from '@workspace/lib/types/notification';
-import { assertJson, authedRequest, driveGet, drivePost, drivePut, getTestContext } from './setup';
+import { assertJson, authedRequest, driveDelete, driveGet, drivePost, drivePut, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -136,5 +136,29 @@ describe('ACL share email', () => {
         const unshared = unshareList.find((n) => n.type === 'unshare' && n.body === 'share-notify');
         expect(unshared?.title).toBe(`${ctx.alice.user.name} removed your access`);
         expect(unshared?.details).toEqual({ pathType: 'doc' });
+    });
+
+    test('trash + restore of a shared item name the actor, never "undefined"', async () => {
+        const doc = await createDoc('trash-notify');
+        await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
+
+        // Trashing routes through the null-actor propagateSharedPathChange path that used to
+        // render "undefined removed your access" for the sharee.
+        await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}`);
+        const afterTrash = await assertJson<Notification[]>(
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+        );
+        const unshared = afterTrash.find((n) => n.type === 'unshare' && n.body === 'trash-notify');
+        expect(unshared?.title).toBe(`${ctx.alice.user.name} removed your access`);
+        expect(afterTrash.every((n) => !n.title.includes('undefined'))).toBe(true);
+
+        // Restoring re-inserts the mirror row → share branch, again naming the actor.
+        await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `trash/${doc.id}/restore`, {});
+        const afterRestore = await assertJson<Notification[]>(
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+        );
+        const reshared = afterRestore.find((n) => n.tag === `share:${ctx.alice.user.id}:${aliceMountId}:${doc.id}`);
+        expect(reshared?.title).toBe(`${ctx.alice.user.name} shared a doc`);
+        expect(afterRestore.every((n) => !n.title.includes('undefined'))).toBe(true);
     });
 });

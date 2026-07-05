@@ -17,7 +17,7 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     // Close collab docs BEFORE setting trashedAt (they use listFolderAll internally)
     if (isContainerType(item.type)) {
         await closeCollabDocumentsRecursively(drive, mount, item.id);
-        await propagateACLRemovalRecursively(mount, item.id);
+        await propagateACLRemovalRecursively(mount, item.id, user);
     } else {
         if (isCollabType(item.type)) {
             try {
@@ -27,7 +27,7 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
             }
         }
         if (item.acl) {
-            await propagateSharedPathChange(item, item.acl, null, null);
+            await propagateSharedPathChange(item, item.acl, null, user ?? null);
         }
     }
 
@@ -49,13 +49,13 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
 export async function restorePath(drive: Drive, mount: Mount, pathId: string, user?: User): Promise<void> {
     const restoredItem = await mount.restorePath(pathId);
 
-    // Re-propagate ACL
+    // Re-propagate ACL. old=new ACL → empty added-diff: restore re-shares (naming the actor) without re-emailing.
     if (restoredItem.acl) {
-        await propagateSharedPathChange(restoredItem, null, restoredItem.acl, null);
+        await propagateSharedPathChange(restoredItem, restoredItem.acl, restoredItem.acl, user ?? null);
     }
     // For containers, re-propagate for descendants with ACL
     if (isContainerType(restoredItem.type)) {
-        await propagateACLRestoreRecursively(mount, restoredItem.id);
+        await propagateACLRestoreRecursively(mount, restoredItem.id, user);
     }
 
     drive.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
@@ -97,28 +97,29 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
     }
 }
 
-async function propagateACLRemovalRecursively(mount: Mount, pathId: string): Promise<void> {
+async function propagateACLRemovalRecursively(mount: Mount, pathId: string, user?: User): Promise<void> {
     const path = await mount.getPath(pathId);
     if (!path) return;
     if (path.acl) {
-        await propagateSharedPathChange(path, path.acl, null, null);
+        await propagateSharedPathChange(path, path.acl, null, user ?? null);
     }
     if (isContainerType(path.type)) {
         const children = await mount.listFolderAll(pathId);
         for (const child of children) {
-            await propagateACLRemovalRecursively(mount, child.id);
+            await propagateACLRemovalRecursively(mount, child.id, user);
         }
     }
 }
 
-async function propagateACLRestoreRecursively(mount: Mount, pathId: string): Promise<void> {
+async function propagateACLRestoreRecursively(mount: Mount, pathId: string, user?: User): Promise<void> {
     const children = await mount.listFolderAll(pathId);
     for (const child of children) {
         if (child.acl) {
-            await propagateSharedPathChange(child, null, child.acl, null);
+            // old=new ACL → empty added-diff so restore re-shares without re-emailing (see restorePath).
+            await propagateSharedPathChange(child, child.acl, child.acl, user ?? null);
         }
         if (isContainerType(child.type)) {
-            await propagateACLRestoreRecursively(mount, child.id);
+            await propagateACLRestoreRecursively(mount, child.id, user);
         }
     }
 }
