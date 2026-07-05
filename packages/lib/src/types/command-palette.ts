@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ContactSuggestion } from './contact';
-import type { DocSearchController } from './doc-search';
+import type { DocSearchController, DocSearchMatch } from './doc-search';
 import type { DrivePath, EigenDocType } from './drive';
 import type { EmailSummary } from './mail';
 import type { HelpSearchDoc } from './search';
@@ -133,6 +133,17 @@ export type PaletteResult =
           group: ResultGroup;
           rank: number;
           payload: HelpSearchDoc;
+          run: (ctx: CommandContext) => void;
+      }
+    | {
+          kind: 'doc-hit';
+          id: string;
+          title: string;
+          subtitle?: string;
+          icon: LucideIcon;
+          group: ResultGroup;
+          rank: number;
+          payload: DocSearchMatch;
           run: (ctx: CommandContext) => void;
       };
 

@@ -56,6 +56,19 @@ function helpResult(id: string, title: string, rank: number): PaletteResult {
     };
 }
 
+function docHit(id: string, title: string, rank: number): PaletteResult {
+    return {
+        kind: 'doc-hit',
+        id,
+        title,
+        icon: Search,
+        group: 'doc-content',
+        rank,
+        payload: { id, label: title },
+        run: () => {},
+    };
+}
+
 function smart(id: string, title: string, opts: { deterministic?: boolean } = {}): PaletteResult {
     return {
         kind: 'smart',
@@ -243,6 +256,69 @@ describe('buildSections', () => {
             scope: undefined,
         });
         expect(sections.topHit?.id).toBe('f.q4');
+    });
+
+    test('doc-content group renders the in-document hits', () => {
+        const sections = buildSections({
+            action: [],
+            contact: [],
+            smart: [],
+            mail: [],
+            file: [],
+            help: [],
+            doc: [docHit('d1', 'Q3 launch', 0)],
+            input: 'q3',
+            scope: undefined,
+        });
+        expect(sections.groups.find((g) => g.id === 'doc-content')?.items.map((i) => i.id)).toEqual(['d1']);
+    });
+
+    test('doc-content renders above Files and Mail', () => {
+        const sections = buildSections({
+            action: [],
+            contact: [],
+            smart: [],
+            mail: [mailResult('m1', 'M1', 0)],
+            file: [fileResult('f1', 'F1', 0)],
+            help: [],
+            doc: [docHit('d1', 'D1', 0)],
+            input: 'zzz',
+            scope: undefined,
+        });
+        expect(sections.groups.map((g) => g.id)).toEqual(['doc-content', 'file', 'mail']);
+    });
+
+    test('doc hits never become the Top Hit (excluded from candidates)', () => {
+        // A doc-hit's title starts at the matched text, so title-prefix promotion would
+        // otherwise fire for virtually any query the open doc contains.
+        const sections = buildSections({
+            action: [],
+            contact: [],
+            smart: [],
+            mail: [],
+            file: [],
+            help: [],
+            doc: [docHit('d1', 'q3 launch', 10)],
+            input: 'q3',
+            scope: undefined,
+        });
+        expect(sections.topHit).toBeUndefined();
+        expect(sections.groups.find((g) => g.id === 'doc-content')?.items.map((i) => i.id)).toEqual(['d1']);
+    });
+
+    test('scope=doc keeps only the doc-content group', () => {
+        const sections = buildSections({
+            action: [action('a1', 'A1', 0)],
+            contact: [],
+            smart: [],
+            mail: [mailResult('m1', 'M1', 0)],
+            file: [fileResult('f1', 'F1', 0)],
+            help: [],
+            doc: [docHit('d1', 'D1', 0)],
+            input: 'zzz',
+            scope: 'doc',
+        });
+        expect(sections.groups.map((g) => g.id)).toEqual(['doc-content']);
     });
 
     test('empty input renders only the suggested section (curated actions)', () => {

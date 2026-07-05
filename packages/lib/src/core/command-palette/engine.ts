@@ -8,6 +8,8 @@ type BuildInput = {
     mail: PaletteResult[];
     file: PaletteResult[];
     help: PaletteResult[];
+    // In-document hits from the open eigendoc — absent in the drive list / non-eigendoc apps.
+    doc?: PaletteResult[];
     input: string;
     scope?: PaletteScope;
     suggestedCommandIds?: string[];
@@ -73,6 +75,7 @@ export function buildSections(input: BuildInput): Sections {
     let fileList = input.scope && input.scope !== 'file' ? [] : input.file;
     let contactList = input.scope && input.scope !== 'contacts' ? [] : input.contact;
     let helpList = input.scope && input.scope !== 'help' ? [] : input.help;
+    let docList = input.scope && input.scope !== 'doc' ? [] : (input.doc ?? []);
     const smartList = input.scope ? [] : input.smart;
 
     // Engine owns final ordering: sort by descending rank, then cap.
@@ -81,6 +84,7 @@ export function buildSections(input: BuildInput): Sections {
     fileList = [...fileList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     contactList = [...contactList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     helpList = [...helpList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
+    docList = [...docList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     const scopedSelection = [...selectionList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
 
     // Top Hit: a deterministic smart parse claims it outright; otherwise the strongest
@@ -90,6 +94,8 @@ export function buildSections(input: BuildInput): Sections {
     if (deterministicSmart) {
         topHit = { ...deterministicSmart, group: 'top-hit' };
     } else {
+        // No ...docList here — doc hits are section-only (their titles ARE the matched text,
+        // so they'd hijack title-prefix Top-Hit promotion from files/actions).
         const candidates: PaletteResult[] = [
             ...scopedSelection,
             ...fileList,
@@ -119,6 +125,7 @@ export function buildSections(input: BuildInput): Sections {
     const groups: Sections['groups'] = [];
     if (suggestionsList.length > 0) groups.push({ id: 'smart', heading: 'Suggestions', items: suggestionsList });
     if (scopedSelection.length > 0) groups.push({ id: 'selection', heading: 'Selection', items: scopedSelection });
+    if (docList.length > 0) groups.push({ id: 'doc-content', heading: 'In Document', items: docList });
     if (fileList.length > 0) groups.push({ id: 'file', heading: 'Files', items: fileList });
     if (mailList.length > 0) groups.push({ id: 'mail', heading: 'Mail', items: mailList });
     if (contactList.length > 0) groups.push({ id: 'contacts', heading: 'Contacts', items: contactList });
