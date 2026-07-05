@@ -416,6 +416,39 @@
         border-radius: calc(var(--radius) - 3px);
     }
 
+    /* Ring variants of the search highlight — same --warning token, for overlay surfaces
+       (slides objects/thumbnails, stickies cards/columns) where a background wash would
+       obscure content. `outline` (not box-shadow) so it never fights a card's own shadow.
+       `.eigen-search-flash` is the one-shot reveal pulse; keyframe box-shadow briefly stacks
+       over the outline, then settles back to the steady ring. */
+    .eigen-search-ring {
+        outline: 2px solid color-mix(in oklab, var(--warning) 55%, transparent);
+        outline-offset: 1px;
+        border-radius: calc(var(--radius) - 3px);
+    }
+
+    .eigen-search-ring-active {
+        outline: 2px solid color-mix(in oklab, var(--warning) 90%, transparent);
+        outline-offset: 1px;
+        border-radius: calc(var(--radius) - 3px);
+    }
+
+    .eigen-search-flash {
+        animation: eigen-search-ring-flash 1.1s ease-out;
+    }
+
+    @keyframes eigen-search-ring-flash {
+        0% {
+            box-shadow: 0 0 0 0 color-mix(in oklab, var(--warning) 80%, transparent);
+        }
+        30% {
+            box-shadow: 0 0 0 8px color-mix(in oklab, var(--warning) 45%, transparent);
+        }
+        100% {
+            box-shadow: 0 0 0 0 transparent;
+        }
+    }
+
     .drag-badge {
         position: absolute;
         top: -9999px;
