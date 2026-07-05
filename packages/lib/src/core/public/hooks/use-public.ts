@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { publicApi } from '@workspace/lib/api';
 import { parseOwnerId } from '@workspace/lib/types';
 import { validateEmailAddress } from '@workspace/lib/validation';
+import type { PublicUser } from '../../../types/public';
 import { AppError } from '../../api-error';
 import { fetchPublicUser } from '../user-batcher';
 
@@ -34,4 +35,21 @@ export function usePublicUser(emailOrId: string | undefined) {
         enabled: !!emailOrId && !!(validateEmailAddress(emailOrId) || parseOwnerId(emailOrId).id),
         staleTime: Infinity,
     });
+}
+
+export function usePublicUsers(emailsOrIds: string[]): Record<string, PublicUser> {
+    const results = useQueries({
+        queries: emailsOrIds.map((id) => ({
+            queryKey: publicUserKeys.detail(id),
+            queryFn: () => fetchPublicUser(id),
+            staleTime: Infinity,
+        })),
+    });
+
+    const map: Record<string, PublicUser> = {};
+    for (let i = 0; i < emailsOrIds.length; i++) {
+        const user = results[i]?.data;
+        if (user) map[emailsOrIds[i]] = user;
+    }
+    return map;
 }

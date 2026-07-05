@@ -14,6 +14,7 @@ import {
     usePathInfo,
     useUploadFile,
 } from '../../drive';
+import { usePublicUsers } from '../../public';
 import { COMMANDS_HELP, getLocalCommand, isUnknownCommand } from '../commands';
 import { useDeleteMessage, useEditMessage, useInviteToChat, useMessages, usePostMessage } from './use-chat';
 import { useAutoMarkChatRead } from './use-chat-unread';
@@ -56,13 +57,15 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     useAutoMarkChatRead(user?.id ?? '', chatId);
 
     const { data: effectiveMembers } = useEffectiveMembers(ownerId, mountId, chatId);
+    const memberEmails = useMemo(() => (effectiveMembers ?? []).map((m) => m.email), [effectiveMembers]);
+    const publicMembers = usePublicUsers(memberEmails);
     const roomMembers: RoomMember[] = useMemo(() => {
         if (!effectiveMembers) return [];
         return effectiveMembers.map((m) => ({
             email: m.email,
-            displayName: m.email.split('@')[0],
+            displayName: publicMembers[m.email]?.name || m.email.split('@')[0],
         }));
-    }, [effectiveMembers]);
+    }, [effectiveMembers, publicMembers]);
 
     const addLocalMessage = useCallback((content: string) => {
         const msg: ChatMessage = {
