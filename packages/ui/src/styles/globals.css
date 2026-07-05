@@ -419,17 +419,19 @@
     /* Ring variants of the search highlight — same --warning token, for overlay surfaces
        (slides objects/thumbnails, stickies cards/columns) where a background wash would
        obscure content. `outline` (not box-shadow) so it never fights a card's own shadow.
-       `.eigen-search-flash` is the one-shot reveal pulse; keyframe box-shadow briefly stacks
-       over the outline, then settles back to the steady ring. */
+       The 2px `outline-offset` gap shows the surface behind the element (--background on
+       stickies), giving a neutral separator so the amber ring still reads on a same-hue
+       card (default-yellow stickies). `.eigen-search-flash` is the one-shot reveal pulse;
+       keyframe box-shadow briefly stacks over the outline, then settles back to the steady ring. */
     .eigen-search-ring {
         outline: 2px solid color-mix(in oklab, var(--warning) 55%, transparent);
-        outline-offset: 1px;
+        outline-offset: 2px;
         border-radius: calc(var(--radius) - 3px);
     }
 
     .eigen-search-ring-active {
         outline: 2px solid color-mix(in oklab, var(--warning) 90%, transparent);
-        outline-offset: 1px;
+        outline-offset: 2px;
         border-radius: calc(var(--radius) - 3px);
     }
 
