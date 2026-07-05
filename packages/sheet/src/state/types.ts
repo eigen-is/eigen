@@ -333,13 +333,6 @@ export type GlobalCache = {
         cursorMoveStartPosition: { x: number; y: number } | undefined;
         resizingSide: string | undefined;
     };
-    searchDialog?: {
-        mouseEnter?: boolean;
-        moveProps?: {
-            initialPosition: Rect | undefined;
-            cursorMoveStartPosition: { x: number; y: number } | undefined;
-        };
-    };
     linkCard?: {
         mouseEnter?: boolean;
         rangeSelectionModal?: {
