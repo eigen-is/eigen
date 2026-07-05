@@ -23,9 +23,9 @@ lose") and the work the grant funds. Highest strategic value.
 
 | Item | Status in code | Effort | Frozen-format | Notes |
 |---|---|---|---|---|
-| **CRDT format migration** | Primitive **already exists** — `restoreYjsDoc` (`packages/lib/src/core/collab/yjs-utils.ts`) does single-transaction live-state replacement, with snapshot-before-restore in `apps/api/src/lib/versioning/`. The system on top is net-new. | L+ | **Yes** — touches the document container format; design migration + snapshot rollback up front | Flagship. Net-new: version stamps per container, a per-type migration registry, lazy-migrate-on-open + dormant-doc sweep, and a sync handshake so stale clients can't write old-format data. **No `PROPOSAL_*.md` yet — write one.** |
-| **Data integrity + verified backups** | Not started | M | No (new tests/checks) | Semantic restore tests (CRDT bytes aren't comparable), integrity checks at every write path, scheduled corruption detection with alerts. |
-| **E2E multi-user collab test suite** | Not started | M | No | Playwright, multiple concurrent clients, CI. Must be reliable from the start — flaky suites get abandoned. |
+| **CRDT format migration** ([proposal](PROPOSAL_CRDT_MIGRATION.md)) | Primitive **already exists** — `restoreYjsDoc` (`packages/lib/src/core/collab/yjs-utils.ts`) does single-transaction live-state replacement, with snapshot-before-restore in `apps/api/src/lib/versioning/`. The system on top is net-new. Proposal written + reviewed 2026-07-05. | L+ | **Yes** — touches the document container format; design migration + snapshot rollback up front | Flagship. Net-new: version stamps per container (`doc_format` row in the container's `data.db`), a per-type migration registry, lazy-migrate-on-open + dormant-doc sweep, and a `?fmt=` sync handshake so stale clients can't write old-format data. |
+| **Data integrity + verified backups** ([proposal](PROPOSAL_DATA_INTEGRITY.md)) | Not started. Proposal written + reviewed 2026-07-05. | M | Yes, low — additive `paths.integrityCheckedAt` column (sweep cursor) | Cost-tiered checks at every write seam, scheduled corruption sweep (incl. the permanent orphaned-container scan), semantic backup verification (`verifySnapshotDb`), and a made-safe `scripts/backup.sh` (today it tars live WAL DBs — torn captures). |
+| **E2E multi-user collab test suite** ([proposal](PROPOSAL_E2E_COLLAB_TESTING.md)) | Not started. Proposal written + reviewed 2026-07-05. | M | No | Playwright, multiple concurrent clients, CI. Must be reliable from the start — flaky suites get abandoned. Phase 1: four docs/Tiptap tests on one shared convergence primitive; retries=0. |
 
 ## P1 — High value-per-effort, start next
 
@@ -34,9 +34,9 @@ lose") and the work the grant funds. Highest strategic value.
 | **S3 Versioning UX** ([proposal](PROPOSAL_S3_VERSIONING_UX.md)) | Detection done (`checkS3Versioning` in `s3-storage.ts`); the one-click fix is 0%. | S–M | No (mutates the external bucket, re-reads it) | **Best value-per-effort.** The SigV4 signing already ships — add two PUTs (`PutBucketVersioning` + lifecycle), a `/settings/s3/harden` route, and an "Enable safe defaults" button. Closes the data-loss incident class. |
 | **Calendar import + subscriptions** ([proposal](PROPOSAL_CALENDAR_IMPORT.md)) | 0%, on a complete `parseIcs` + event-pipeline foundation. | M | Yes, **low** — additive nullable `subscription` column on `calendars` | Best *new* feature: `.ics` import + read-only feed subscriptions. Workspace parity. Open decision: SSRF on server-side feed fetch (see prior MinIO-on-LAN incident). |
 | **SSO / enterprise login** ([proposal](PROPOSAL_SSO.md)) | 0%. Auth foundation ready — `user.create` hook auto-provisions org; app-password protocol-auth already works for passwordless users. | M | Yes — additive `@better-auth/sso` provider tables in `users3.db` (auth-schema migration) | OIDC + SAML via better-auth's `sso` plugin, providers registered at runtime → admin page + optional setup-wizard step. **Demand-gated:** pull forward when a concrete org needs it. Key work: Home/maildir provisioning for SSO users (they bypass the waitlist); SSO users use app passwords for IMAP/CalDAV/WebDAV. |
-| **Create/open resilience under degraded storage** | Not started — surfaced live in the 2026-07-03 nbg1 slowdown. Slow-but-successful `create` → client/proxy timeout → 500 shown → doc appears only on refresh → user re-clicks → **duplicate docs**. Read-only scan of the affected home confirmed **no data lost** (0 orphaned containers). | S–M | No | Frontend: loading state on create + reconcile against the drive listing / `DRIVE_FILE_CREATED` SSE on timeout, so the doc appears once and retries cannot dupe. Backend: make `Drive.create` (`drive.ts:257`) atomic. Full detail in the dated section at the end. |
-| **Durable home-relay outbox (queue for cross-home delivery)** | ACL fan-out is async since 2026-07-04 (bounded-concurrent, per-path FIFO, drain-on-shutdown — `acl-propagation.ts`) and the ACL route takes deltas merged server-side. Remaining: the durable outbox itself. | M | No | Persisted delivery rows + per-recipient FIFO + retry/backoff + replay-on-boot, following the existing `UploadQueue`/`ContentReindexQueue` pattern (third instance of "durable rows + self-scheduled drain"). Closes the crash-loses-in-flight-deliveries window and replaces silent per-recipient skips with retry. Also the stated sharding trajectory — in a multi-server deployment the outbox *is* the message transport (see SCALABILITY.md). **Build it in the relay, not per seam** — the 2026-07-04 seam audit found the same sync-fan-out pattern in: (1) `propagateCalendarShare` (`calendar/share-propagation.ts`, awaited on the share PUT — direct sibling of the fixed ACL bug, N sequential cold home opens); (2) chat/comment notifications (`chat.ts` mention + activity loops, awaited inside `postMessage` — cold opens for every previous participant add latency to every message send; coalesce-by-tag makes ordering a non-issue); (3) `FileHistory.notifyWatchers` (`drive/history.ts`, concurrent but **unbounded** `Promise.all` awaited on every drive mutation — the fd-burst class); (4) signup reconciliation (`share/reconciliation.ts`, sequential in the `user.create` hook — rare, note only). Calendar invitations (`invite-propagation.ts`) are already fire-and-forget but sequential and carry a real create-vs-update ordering hazard (`sequence` can apply out of order) — they need the outbox's per-target FIFO, not just parallelism. One global concurrency budget in the relay/outbox subsumes all per-seam semaphores and closes the fd-burst class everywhere at once. |
-| **File-descriptor budget: graceful exhaustion** | Compose pins `ulimits: nofile` since 2026-07-04. Discovered during the slow-share investigation: a 26-home fan-out **crashed with `SQLITE_IOERR_VNODE` under macOS's default `ulimit -n 256`**, silently skipping recipients. Budget per open Home ≈ 25–30 fds (~6 WAL databases × 3 files + ~10 maildir `fs.watch` handles). | S | No | Remaining: (1) document the `LimitNOFILE` requirement for bare-metal deploys; (2) startup check — read the soft limit (`/proc/self/limits` on Linux), log a loud warning below a threshold; (3) optional M-sized follow-up: LRU cap on concurrently open Homes (evict least-recently-used beyond N via the existing `homeFactories`/`touch()` seam) so bursts degrade to eviction instead of I/O errors, and make `ManagedDatabase.open` retry once after an eviction on `SQLITE_IOERR`. |
+| **Create/open resilience under degraded storage** ([proposal](PROPOSAL_CREATE_RESILIENCE.md)) | Not started — surfaced live in the 2026-07-03 nbg1 slowdown: slow creates → 500 shown → doc appears only on refresh → user re-clicks → **duplicate docs**. Read-only scan confirmed **no data lost** (0 orphaned containers). Proposal written + reviewed 2026-07-05; it corrects the incident mechanics (the 500s were real API responses from the `S3Storage.exists` throw — no client/proxy timeout exists). | S–M | No | Frontend: pending state on create + reconcile against the listing / `DRIVE_FILE_CREATED` SSE before declaring failure (reconcile-only; no idempotency key). Backend: make `Drive.create` atomic (roll back the container folder on provisioning failure). Plus open-path honesty + optional dangling card-chat cleanup. |
+| **Durable home-relay outbox (queue for cross-home delivery)** ([proposal](PROPOSAL_HOME_RELAY_OUTBOX.md)) | ACL fan-out is async since 2026-07-04 (bounded-concurrent, per-path FIFO, drain-on-shutdown — `acl-propagation.ts`) and the ACL route takes deltas merged server-side. Remaining: the durable outbox itself. Proposal written + reviewed 2026-07-05 (server-level `outbox.db`, per-lane FIFO + coalescing with conditional ack, global K=8 delivery budget). | M | Yes, low — new server-level `outbox.db` (additive) | Persisted delivery rows + per-recipient FIFO + retry/backoff + replay-on-boot, following the existing `UploadQueue`/`ContentReindexQueue` pattern (third instance of "durable rows + self-scheduled drain"). Closes the crash-loses-in-flight-deliveries window and replaces silent per-recipient skips with retry. Also the stated sharding trajectory — in a multi-server deployment the outbox *is* the message transport (see SCALABILITY.md). **Build it in the relay, not per seam** — the 2026-07-04 seam audit found the same sync-fan-out pattern in: (1) `propagateCalendarShare` (`calendar/share-propagation.ts`, awaited on the share PUT — direct sibling of the fixed ACL bug, N sequential cold home opens); (2) chat/comment notifications (`chat.ts` mention + activity loops, awaited inside `postMessage` — cold opens for every previous participant add latency to every message send; coalesce-by-tag makes ordering a non-issue); (3) `FileHistory.notifyWatchers` (`drive/history.ts`, concurrent but **unbounded** `Promise.all` awaited on every drive mutation — the fd-burst class); (4) signup reconciliation (`share/reconciliation.ts`, sequential in the `user.create` hook — rare, note only). Calendar invitations (`invite-propagation.ts`) are already fire-and-forget but sequential and carry a real create-vs-update ordering hazard (`sequence` can apply out of order) — they need the outbox's per-target FIFO, not just parallelism. One global concurrency budget in the relay/outbox subsumes all per-seam semaphores and closes the fd-burst class everywhere at once. |
+| **File-descriptor budget: graceful exhaustion** ([proposal](PROPOSAL_FD_BUDGET.md)) | Compose pins `ulimits: nofile` since 2026-07-04. Discovered during the slow-share investigation: a 26-home fan-out **crashed with `SQLITE_IOERR_VNODE` under macOS's default `ulimit -n 256`**, silently skipping recipients. Measured warm ceiling ≈ 30 fds per open Home (6 eager WAL databases × 3 files + 12 maildir `fs.watch` handles; more per extra mount / open doc container). Proposal written + reviewed 2026-07-05. | S | No | Phase 1: document the `LimitNOFILE` requirement for bare-metal deploys + startup check — read the soft limit via `process.report` userLimits, log a loud warning below a derived threshold. Phase 2 (optional, gated on need): LRU cap on resident Homes via the existing `homeFactories`/`touch()` seam (eviction predicate incl. open collab connections) + `ManagedDatabase.open` retry-once-after-eviction. |
 
 ## P2 — Finish what's already started
 
@@ -81,55 +81,12 @@ Large net-new builds or low value-per-effort today.
 
 ## Create/open resilience under degraded storage — 2026-07-03 incident follow-up
 
-**Context.** 2026-07-03 (~15:10–15:35 UTC) Hetzner **nbg1 Object Storage** degraded (slow→503,
-`Service is unable to handle request` / `S3Error UnknownError`) — a provider incident that recovered
-on its own. Two new testers hit it live: `Internal server error (500)` creating docs; a new doc that
-appeared only after a page refresh (→ duplicate docs from re-clicking); a sticky card that only posted
-on the 4th attempt; existing docs taking ~a minute to open. The `S3Storage.exists()` throw
-(`s3-storage.ts:134`, no try/catch) propagating out of the create/open paths is the common trigger;
-uploads themselves were safe (durable retry queue, `mount/upload-queue.ts`).
-
-**Ruled out — no data lost, no cleanup needed.** A read-only scan of the affected tester's home
-(`$EIGEN_DATA_ROOT/home/<uid>/mounts/*/metadata.db`, flagging `type IN ('doc','stickies','slides','sheets','chat')`
-rows with no non-trashed `data.db` child) returned **0 orphans**; both her docs are structurally
-intact. The 500s were *slow-but-successful* creates the client/proxy timed out on — not orphaning. So
-this workstream is UX/resilience + latent hardening, not recovery.
-
-### 1 — Frontend create UX (the real complaint). P1, effort S–M, no frozen-format.
-`POST /drive/:owner/:mount/folder/:pathId/create/:type` (`apps/api/src/routes/drive.ts:91` →
-`Drive.create`, `apps/api/src/lib/drive/drive.ts:257`) can be slow under S3 degradation; the
-client/proxy times out and shows a 500 even though the server committed the doc and emitted
-`DRIVE_FILE_CREATED` (`drive.ts:280`). No loading state, the doc is not shown until manual refresh, the
-user re-clicks → duplicates. (Tester: "the doc was still created, but only appeared after refreshing…
-I accidentally created two docs.")
-- Show a pending/loading state on "new doc/board" until the create resolves.
-- On timeout/error, reconcile against the drive listing (refetch, or trust the `DRIVE_FILE_CREATED`
-  SSE) before declaring failure, so the doc appears and the user does not retry.
-- Guard duplicate creates: disable the action while in-flight; consider an idempotency key so one user
-  intent = one doc even if the request is retried.
-- Entry points to read first: the client "new doc" mutation and how the drive list consumes
-  `SSEventType.DRIVE_FILE_CREATED`.
-- **Done when:** under throttled/failing storage, "new doc" shows a pending state and the doc appears
-  exactly once even if the request is slow or errors.
-
-### 2 — Backend: make `Drive.create` atomic. P1, effort S, no frozen-format. (Hardening — did NOT bite on 2026-07-03.)
-`Drive.create` (`drive.ts:257`) commits the container folder at `createFolder` (line 269) **before**
-provisioning (`ChatRoom.create` / `CollabDocument.create`, lines 271/276). If provisioning *hard*-fails
-(S3 `exists()` throws, `apps/api/src/lib/storage/s3-storage.ts:134`, during a full outage) the folder
-is **not** rolled back → an orphaned container with no `data.db` (later opens 503 via the `mustExist`
-guard, `apps/api/src/lib/core/managed-database.ts:72`). `provisionManagedDbs` (`drive.ts:1005`) already
-rolls back its *inner* rows; only the outer `createFolder` is unguarded. This is why the frontend fix
-(§1) alone is not enough for a *full* outage — but note it did not orphan anything on 2026-07-03
-(S3 was slow, not down, at create-moments; scan = 0).
-- Wrap provisioning in try/catch; on failure `mount.deletePath(pathId)` the container before
-  rethrowing (mirror the `provisionManagedDbs` rollback at `drive.ts:1019`).
-- **Done when:** with provisioning forced to throw, `Drive.create` leaves no `paths` row behind and a
-  retry starts clean.
-
-### 3 — Dangling card-chats (optional tidiness). Low priority.
-Adding a sticky card awaits an HTTP `create/chat` and writes the card to the board Yjs only after it
-resolves (`packages/lib/src/core/comments/hooks/use-create-comment-card.ts:58` and `:70`). A
-`create/chat` that succeeded-but-slow (client timed out) leaves a valid chat container (it *has* a
-`data.db`, so the orphan scan cannot see it) that no card references. Cosmetic litter, no breakage. To
-clean: cross-reference each board's Yjs `tasks`/`comments` card `chatName`s against the chat folders in
-the board's `chat/` subfolder; trash the unreferenced ones via the app delete path.
+**Superseded by [PROPOSAL_CREATE_RESILIENCE.md](PROPOSAL_CREATE_RESILIENCE.md)** (2026-07-05), which
+expands the seed spec that lived here into the full design and corrects its mechanics against source
+(the 500s were real API responses from the unguarded `S3Storage.exists` throw — no client or Caddy
+timeout exists; orphaned containers self-heal on open, so the atomicity fix targets the duplicate-trap
+phantom row, not a permanent 503). Kept for the incident record: 2026-07-03 ~15:10–15:35 UTC, Hetzner
+nbg1 Object Storage degraded (slow→503); testers saw 500s on doc create, docs appearing only after
+refresh (→ duplicates from re-clicking), a sticky card posting on the 4th attempt, and minute-long
+opens. A read-only orphan scan of the affected home found **0 orphans** — no data lost; uploads were
+safe throughout (durable retry queue).
