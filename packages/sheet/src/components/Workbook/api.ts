@@ -1,3 +1,4 @@
+import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { cloneDeep } from 'es-toolkit/compat';
 import { applyPatches } from 'immer';
 import type { SetContextOptions } from '../../context';
@@ -8,6 +9,7 @@ import {
     api,
     type CellWithRowAndCol,
     type Context,
+    collectMatches,
     createFilterOptions,
     deleteRowCol,
     deleteSheet,
@@ -21,10 +23,14 @@ import {
     type Range,
     removeImageByMediaName,
     replaceImageMediaName,
+    revealSearchMatch,
+    type SearchHighlight,
+    type SearchResult,
     type Selection,
     type Settings,
     type Sheet,
     type SingleRange,
+    setSearchHighlights,
 } from '../../state';
 
 export function generateAPIs(
@@ -272,6 +278,14 @@ export function generateAPIs(
         handleRedo,
 
         getFlowdata: (id?: string | null) => getFlowdata(context, id),
+
+        searchAll: (query: string, opts: DocSearchOptions): SearchResult[] => collectMatches(context, query, opts),
+
+        setSearchHighlights: (cells: SearchHighlight[]) =>
+            setContext((draftCtx) => setSearchHighlights(draftCtx, cells), { noHistory: true }),
+
+        revealSearchMatch: (cell: SearchHighlight) =>
+            setContext((draftCtx) => revealSearchMatch(draftCtx, cell), { noHistory: true }),
 
         calculateFormula: (id?: string, range?: SingleRange) => {
             setContext((draftCtx) => {
