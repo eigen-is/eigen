@@ -13,6 +13,7 @@ import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { AddColumnDialog } from './add-column-dialog';
@@ -20,6 +21,7 @@ import { Column } from './column';
 import { ColumnSettingsDialog } from './column-settings-dialog';
 import { useBoard } from './hooks/use-board';
 import { useDragAndDrop } from './hooks/use-drag-and-drop';
+import { useStickiesDocSearch } from './hooks/use-stickies-doc-search';
 import { Toolbar } from './toolbar';
 import type { ColumnItem } from './types';
 
@@ -118,6 +120,18 @@ export function StickiesBoard({
     const [colorFilter, setColorFilter] = useState<Set<string>>(new Set());
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
     const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
+
+    const boardScrollRef = useRef<HTMLDivElement>(null);
+    const {
+        controller: docSearchController,
+        highlightedCardIds,
+        highlightedColumnIds,
+    } = useStickiesDocSearch({
+        board,
+        cards,
+        colorFilter,
+        boardScrollRef,
+    });
 
     // Add-card dialog state
     const [addOpen, setAddOpen] = useState(false);
@@ -228,139 +242,151 @@ export function StickiesBoard({
             chatFolderId={chatFolderId}
         >
             <ColumnLayout>
-                <LayoutColumn
-                    id="board"
-                    width="flex"
-                    toolbarBorder="always"
-                    toolbar={
-                        <Toolbar
-                            path={path}
-                            canWrite={canWrite}
-                            undoManager={undoManager}
-                            onAccessDialogOpen={onAccessDialogOpen}
-                            onAddColumn={() => setIsAddColumnDialogOpen(true)}
-                            colorFilter={colorFilter}
-                            onColorFilterChange={setColorFilter}
-                        />
-                    }
-                >
-                    <div className="h-full w-full flex overflow-hidden">
-                        <div
-                            className="overflow-x-auto overflow-y-hidden flex-1"
-                            style={
-                                board.columnOrder.length > 0
-                                    ? {
-                                          padding: 0,
-                                          scrollSnapType: 'x mandatory',
-                                          scrollBehavior: 'smooth',
-                                      }
-                                    : {
-                                          visibility: 'hidden',
-                                      }
+                <div className="flex-1 min-w-0 h-full">
+                    <DocSearchProvider controller={docSearchController} barClassName="top-14">
+                        <LayoutColumn
+                            id="board"
+                            width="flex"
+                            toolbarBorder="always"
+                            toolbar={
+                                <Toolbar
+                                    path={path}
+                                    canWrite={canWrite}
+                                    undoManager={undoManager}
+                                    onAccessDialogOpen={onAccessDialogOpen}
+                                    onAddColumn={() => setIsAddColumnDialogOpen(true)}
+                                    colorFilter={colorFilter}
+                                    onColorFilterChange={setColorFilter}
+                                />
                             }
                         >
-                            <DndContext
-                                sensors={canWrite ? sensors : []}
-                                onDragStart={handleDragStart}
-                                onDragEnd={handleDragEnd}
-                                autoScroll={{
-                                    enabled: true,
-                                    threshold: { x: 0.2, y: 0.2 },
-                                    acceleration: 10,
-                                    interval: 10,
-                                    layoutShiftCompensation: false,
-                                }}
-                            >
-                                <div className={`flex gap-0 h-full bg-muted`}>
-                                    <SortableContext items={board.columnOrder} strategy={horizontalListSortingStrategy}>
-                                        {board.columnOrder.map((columnId) => {
-                                            const column = board.columns[columnId];
-                                            return (
-                                                <Column
-                                                    key={column.id}
-                                                    column={column}
-                                                    cards={columnCards[columnId]}
-                                                    entryByChatName={entryByChatName}
-                                                    canWrite={canWrite}
-                                                    onAddCard={handleAddCard}
-                                                    onEditColumn={handleEditColumn}
-                                                    onCardOpen={setOpenCardId}
-                                                    onCardContextMenu={canWrite ? handleCardContextMenu : undefined}
-                                                    isMobile={isMobile}
-                                                    scrollToTopSignal={
-                                                        scrollToTopOf?.columnId === column.id
-                                                            ? scrollToTopOf.n
-                                                            : undefined
-                                                    }
-                                                />
-                                            );
-                                        })}
-                                    </SortableContext>
-                                </div>
-
-                                <DragOverlay adjustScale={false}>{getActiveComponent()}</DragOverlay>
-                            </DndContext>
-
-                            <CardFormDialog
-                                open={addOpen}
-                                onOpenChange={(o) => {
-                                    setAddOpen(o);
-                                    if (!o) setAddTargetColumn(null);
-                                }}
-                                onSave={onSaveNew}
-                                allowAttachments={!!mediaFolderId}
-                                dialogTitle="Add Sticky"
-                                submitLabel="Add Sticky"
-                            />
-
-                            <AddColumnDialog
-                                isOpen={isAddColumnDialogOpen}
-                                onClose={() => setIsAddColumnDialogOpen(false)}
-                                onAddColumn={handleAddColumn}
-                            />
-
-                            {editColumnId && (
-                                <ColumnSettingsDialog
-                                    key={editColumnId}
-                                    isOpen={!!editColumnId}
-                                    onClose={() => setEditColumnId(null)}
-                                    columnId={editColumnId}
-                                    columnTitle={board.columns[editColumnId]?.title || ''}
-                                    cardCount={board.columns[editColumnId]?.taskIds.length || 0}
-                                    yjsDoc={yjsDoc}
-                                />
-                            )}
-
-                            <DeleteDialog
-                                open={!!deleteCardId}
-                                onOpenChange={(open) => !open && setDeleteCardId(null)}
-                                title="Delete Card"
-                                description="This will permanently delete the card. This action cannot be undone."
-                                onDelete={() => {
-                                    if (deleteCardId) {
-                                        const removed = cards[deleteCardId];
-                                        deleteCardFromBoard(deleteCardId);
-                                        recordHistory.mutate({
-                                            eventType: 'sticky-removed',
-                                            details: { card: removed?.title ?? '' },
-                                        });
+                            <div className="h-full w-full flex overflow-hidden">
+                                <div
+                                    ref={boardScrollRef}
+                                    className="overflow-x-auto overflow-y-hidden flex-1"
+                                    style={
+                                        board.columnOrder.length > 0
+                                            ? {
+                                                  padding: 0,
+                                                  scrollSnapType: 'x mandatory',
+                                                  scrollBehavior: 'smooth',
+                                              }
+                                            : {
+                                                  visibility: 'hidden',
+                                              }
                                     }
-                                    setDeleteCardId(null);
-                                }}
-                            />
+                                >
+                                    <DndContext
+                                        sensors={canWrite ? sensors : []}
+                                        onDragStart={handleDragStart}
+                                        onDragEnd={handleDragEnd}
+                                        autoScroll={{
+                                            enabled: true,
+                                            threshold: { x: 0.2, y: 0.2 },
+                                            acceleration: 10,
+                                            interval: 10,
+                                            layoutShiftCompensation: false,
+                                        }}
+                                    >
+                                        <div className={`flex gap-0 h-full bg-muted`}>
+                                            <SortableContext
+                                                items={board.columnOrder}
+                                                strategy={horizontalListSortingStrategy}
+                                            >
+                                                {board.columnOrder.map((columnId) => {
+                                                    const column = board.columns[columnId];
+                                                    return (
+                                                        <Column
+                                                            key={column.id}
+                                                            column={column}
+                                                            cards={columnCards[columnId]}
+                                                            entryByChatName={entryByChatName}
+                                                            canWrite={canWrite}
+                                                            onAddCard={handleAddCard}
+                                                            onEditColumn={handleEditColumn}
+                                                            onCardOpen={setOpenCardId}
+                                                            onCardContextMenu={
+                                                                canWrite ? handleCardContextMenu : undefined
+                                                            }
+                                                            highlighted={highlightedColumnIds.has(column.id)}
+                                                            highlightedCardIds={highlightedCardIds}
+                                                            isMobile={isMobile}
+                                                            scrollToTopSignal={
+                                                                scrollToTopOf?.columnId === column.id
+                                                                    ? scrollToTopOf.n
+                                                                    : undefined
+                                                            }
+                                                        />
+                                                    );
+                                                })}
+                                            </SortableContext>
+                                        </div>
 
-                            <CommentLifecycleDialogs
-                                lifecycle={lifecycle}
-                                path={path}
-                                canWrite={canWrite}
-                                commentContextMenu={cardContextMenu}
-                                onDelete={setDeleteCardId}
-                                noun="sticky"
-                                onCardDialogClose={onClearInitialChat}
-                            />
-                        </div>
-                    </div>
-                </LayoutColumn>
+                                        <DragOverlay adjustScale={false}>{getActiveComponent()}</DragOverlay>
+                                    </DndContext>
+
+                                    <CardFormDialog
+                                        open={addOpen}
+                                        onOpenChange={(o) => {
+                                            setAddOpen(o);
+                                            if (!o) setAddTargetColumn(null);
+                                        }}
+                                        onSave={onSaveNew}
+                                        allowAttachments={!!mediaFolderId}
+                                        dialogTitle="Add Sticky"
+                                        submitLabel="Add Sticky"
+                                    />
+
+                                    <AddColumnDialog
+                                        isOpen={isAddColumnDialogOpen}
+                                        onClose={() => setIsAddColumnDialogOpen(false)}
+                                        onAddColumn={handleAddColumn}
+                                    />
+
+                                    {editColumnId && (
+                                        <ColumnSettingsDialog
+                                            key={editColumnId}
+                                            isOpen={!!editColumnId}
+                                            onClose={() => setEditColumnId(null)}
+                                            columnId={editColumnId}
+                                            columnTitle={board.columns[editColumnId]?.title || ''}
+                                            cardCount={board.columns[editColumnId]?.taskIds.length || 0}
+                                            yjsDoc={yjsDoc}
+                                        />
+                                    )}
+
+                                    <DeleteDialog
+                                        open={!!deleteCardId}
+                                        onOpenChange={(open) => !open && setDeleteCardId(null)}
+                                        title="Delete Card"
+                                        description="This will permanently delete the card. This action cannot be undone."
+                                        onDelete={() => {
+                                            if (deleteCardId) {
+                                                const removed = cards[deleteCardId];
+                                                deleteCardFromBoard(deleteCardId);
+                                                recordHistory.mutate({
+                                                    eventType: 'sticky-removed',
+                                                    details: { card: removed?.title ?? '' },
+                                                });
+                                            }
+                                            setDeleteCardId(null);
+                                        }}
+                                    />
+
+                                    <CommentLifecycleDialogs
+                                        lifecycle={lifecycle}
+                                        path={path}
+                                        canWrite={canWrite}
+                                        commentContextMenu={cardContextMenu}
+                                        onDelete={setDeleteCardId}
+                                        noun="sticky"
+                                        onCardDialogClose={onClearInitialChat}
+                                    />
+                                </div>
+                            </div>
+                        </LayoutColumn>
+                    </DocSearchProvider>
+                </div>
             </ColumnLayout>
         </MediaResolverProvider>
     );
