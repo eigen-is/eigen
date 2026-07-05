@@ -1,6 +1,6 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
+import { isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { useMemo } from 'react';
 import { getFilePresentation } from '../../file-presentation';
 import { useSearch } from '../../search';
@@ -34,8 +34,12 @@ export function useFileSearchResults(
 
     const results = useMemo<PaletteResult[]>(() => {
         if (!data) return [];
+        // Carry the query into the opened document so its find bar lands on the matches.
+        const encodedQ = parsed.q ? encodeURIComponent(parsed.q) : '';
         return data.file.map((path, i) => {
             const presentation = getFilePresentation(path.mimeType, path.type);
+            // Only the four eigendoc editors consume ?q= — chat/folder/inline-edit URLs never do.
+            const carryQ = encodedQ && isCollabType(path.type) ? encodedQ : '';
             return {
                 kind: 'file' as const,
                 id: `file.${path.id}`,
@@ -46,12 +50,15 @@ export function useFileSearchResults(
                 payload: path,
                 run: (rctx) => {
                     const url = getDriveItemUrl(path);
-                    if (url) rctx.navigate(url);
-                    else rctx.openPreview(path);
+                    if (!url) {
+                        rctx.openPreview(path);
+                        return;
+                    }
+                    rctx.navigate(carryQ ? `${url}${url.includes('?') ? '&' : '?'}q=${carryQ}` : url);
                 },
             };
         });
-    }, [data]);
+    }, [data, parsed.q]);
 
     const willSearch = !scopeBlocks && parsed.q.length > 0;
     const isDebouncing = !scopeBlocks && input.trim().length > 0 && input !== debouncedInput;

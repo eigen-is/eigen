@@ -91,6 +91,7 @@ type SlideEditorProps = {
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
+    initialSearchTerm?: string;
 };
 
 export function SlideEditor({
@@ -101,6 +102,7 @@ export function SlideEditor({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: SlideEditorProps) {
     return (
         <MediaResolverProvider
@@ -117,6 +119,7 @@ export function SlideEditor({
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
                 initialChatName={initialChatName}
+                initialSearchTerm={initialSearchTerm}
             />
         </MediaResolverProvider>
     );
@@ -130,6 +133,7 @@ function SlideEditorInner({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: SlideEditorProps) {
     const {
         deck,
@@ -718,6 +722,7 @@ function SlideEditorInner({
             <div className="flex-1 min-w-0 h-full">
                 <DocSearchProvider
                     controller={docSearchController}
+                    initialSearchTerm={initialSearchTerm}
                     onOpenChange={setSearchOpen}
                     barClassName={cn('top-14', rightPanelShown && 'right-68')}
                 >

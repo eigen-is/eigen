@@ -101,6 +101,7 @@ export const CollaborativeEditor = ({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: {
     path: DrivePath;
     access: { canRead: boolean; canWrite: boolean };
@@ -108,6 +109,7 @@ export const CollaborativeEditor = ({
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
+    initialSearchTerm?: string;
 }) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
@@ -150,6 +152,7 @@ export const CollaborativeEditor = ({
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
                 initialChatName={initialChatName}
+                initialSearchTerm={initialSearchTerm}
             />
         </MediaResolverProvider>
     );
@@ -209,6 +212,7 @@ const TiptapEditor = ({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: {
     yDoc: Y.Doc;
     provider: WebsocketProvider;
@@ -218,6 +222,7 @@ const TiptapEditor = ({
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
+    initialSearchTerm?: string;
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
@@ -661,7 +666,11 @@ const TiptapEditor = ({
 
     return (
         <>
-            <DocSearchProvider controller={docSearchController} barClassName={cn('top-14', showSidebar && 'right-68')}>
+            <DocSearchProvider
+                controller={docSearchController}
+                initialSearchTerm={initialSearchTerm}
+                barClassName={cn('top-14', showSidebar && 'right-68')}
+            >
                 <Column
                     id={'doc-editor'}
                     width={'w-full'}

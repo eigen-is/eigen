@@ -29,6 +29,9 @@ export function useOptionalDocSearchBar(): DocSearchBarContextValue | null {
 
 export type DocSearchProviderProps = {
     controller: DocSearchController;
+    // A ?q= landing term: open the bar pre-filled, highlight all, reveal the first match — focus
+    // stays in the document (the bar input is NOT focused on this path). Latched once by the route.
+    initialSearchTerm?: string;
     children: React.ReactNode;
     // Per-surface bar placement (amendment 10): the default floats top-right of the wrapped subtree;
     // a surface passes offsets to clear its own chrome (docs insets it below the toolbar + clear of
@@ -47,7 +50,13 @@ export type DocSearchProviderProps = {
 // Accepted quirk: the active match is tracked by INDEX, so under remote collab edits it may drift to
 // a different occurrence when the controller republishes; reveal is best-effort. Surface controllers
 // debounce remote-origin republish coarsely (not per remote keystroke) to keep count/paint settled.
-export function DocSearchProvider({ controller, children, barClassName, onOpenChange }: DocSearchProviderProps) {
+export function DocSearchProvider({
+    controller,
+    initialSearchTerm,
+    children,
+    barClassName,
+    onOpenChange,
+}: DocSearchProviderProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [options, setOptions] = useState<DocSearchOptions>(DEFAULT_OPTIONS);
@@ -102,6 +111,17 @@ export function DocSearchProvider({ controller, children, barClassName, onOpenCh
             inputRef.current?.select();
         }
     }, [open]);
+
+    // ?q= landing: open the bar pre-filled, paint all, reveal the first match. pendingFocusRef stays
+    // false so focus stays in the document (Esc dismisses). Runs once on mount — the route latches
+    // the term, and runSearch/setQuery/setOpen are all stable, so there's nothing to re-run on.
+    useEffect(() => {
+        if (initialSearchTerm && initialSearchTerm !== '') {
+            setQuery(initialSearchTerm);
+            setOpen(true);
+            runSearch(initialSearchTerm, DEFAULT_OPTIONS, 0);
+        }
+    }, [initialSearchTerm, runSearch]);
 
     // Surfaces republish their controller when the document changes — re-run the open session's
     // search so n of m stays live. Clamp the index; do NOT reveal (don't yank the user's scroll).

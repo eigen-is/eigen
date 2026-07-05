@@ -39,6 +39,7 @@ type SheetEditorProps = {
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
+    initialSearchTerm?: string;
 };
 
 export function SheetEditor(props: SheetEditorProps) {
@@ -62,6 +63,7 @@ function SheetEditorInner({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
@@ -237,7 +239,11 @@ function SheetEditorInner({
             )}
             <div className="flex h-full w-full overflow-hidden">
                 <div className="flex-1 overflow-hidden">
-                    <DocSearchProvider controller={searchController} barClassName="top-20">
+                    <DocSearchProvider
+                        controller={searchController}
+                        initialSearchTerm={initialSearchTerm}
+                        barClassName="top-20"
+                    >
                         <Workbook
                             key={snapshotVersion}
                             ref={workbookRef}

@@ -52,6 +52,7 @@ type StickiesBoardProps = {
     onAccessDialogOpen: () => void;
     initialChatName?: string;
     onClearInitialChat?: () => void;
+    initialSearchTerm?: string;
 };
 
 export function StickiesBoard({
@@ -63,6 +64,7 @@ export function StickiesBoard({
     onAccessDialogOpen,
     initialChatName,
     onClearInitialChat,
+    initialSearchTerm,
 }: StickiesBoardProps) {
     const {
         board,
@@ -243,7 +245,11 @@ export function StickiesBoard({
         >
             <ColumnLayout>
                 <div className="flex-1 min-w-0 h-full">
-                    <DocSearchProvider controller={docSearchController} barClassName="top-14">
+                    <DocSearchProvider
+                        controller={docSearchController}
+                        initialSearchTerm={initialSearchTerm}
+                        barClassName="top-14"
+                    >
                         <LayoutColumn
                             id="board"
                             width="flex"
