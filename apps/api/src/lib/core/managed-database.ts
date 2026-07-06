@@ -88,19 +88,27 @@ export class ManagedDatabase<S extends SchemaType> {
         this.rawDb = this.mustExist
             ? new BunDatabase(this.localPath, { readwrite: true, create: false })
             : new BunDatabase(this.localPath, { create: true });
-        this.rawDb.run('PRAGMA journal_mode = WAL;');
-        this.rawDb.run('PRAGMA foreign_keys = ON;');
-        this.rawDb.run('PRAGMA busy_timeout = 5000;');
+        // A failed open — corrupt bytes tripping the first PRAGMA (SQLITE_NOTADB on a partial
+        // download) or a throwing migration — must not leak the raw handle (fd + mapped journals).
+        try {
+            this.rawDb.run('PRAGMA journal_mode = WAL;');
+            this.rawDb.run('PRAGMA foreign_keys = ON;');
+            this.rawDb.run('PRAGMA busy_timeout = 5000;');
 
-        this.rawDb.exec(`
-            CREATE TABLE IF NOT EXISTS __schema_version (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                version INTEGER NOT NULL DEFAULT 0
-            );
-            INSERT OR IGNORE INTO __schema_version (id, version) VALUES (1, 0);
-        `);
+            this.rawDb.exec(`
+                CREATE TABLE IF NOT EXISTS __schema_version (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    version INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT OR IGNORE INTO __schema_version (id, version) VALUES (1, 0);
+            `);
 
-        await this.runMigrations();
+            await this.runMigrations();
+        } catch (e) {
+            this.rawDb.close();
+            this.rawDb = null;
+            throw e;
+        }
 
         this.drizzleDb = drizzle(this.rawDb, { schema: this.config.schema }) as BunSQLiteDatabase<S>;
         this.lastSyncedChanges = 0;

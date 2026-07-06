@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { getHome } from '../lib/home';
 import { authedRequest, driveGet, drivePost, driveUpload, driveUploadMultiple, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -168,5 +169,63 @@ describe('Streaming Upload', () => {
         expect(results).toHaveLength(2);
         expect(results[0].name).toBe('same-name.txt');
         expect(results[1].name).toBe('same-name (2).txt');
+    });
+
+    test('upload exceeding the server max upload size returns 413', async () => {
+        // Read-then-restore so the finally can't pin a stale default into the shared settings store.
+        const before = await (await authedRequest(ctx.alice.user.sessionToken, '/settings/server')).json();
+        const previousMax = before.quotas.maxUploadSizeMB;
+        await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quotas: { maxUploadSizeMB: 1 } }),
+        });
+        try {
+            const file = new File(['x'.repeat(2 * 1024 * 1024)], 'over-limit.txt', { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${folderId}`,
+                { method: 'POST', body: formData },
+            );
+            expect(res.status).toBe(413);
+            // The parser's MaxFileSizeExceededError mapping in streamFilesToTemp
+            expect(await res.text()).toBe('File exceeds maximum upload size');
+        } finally {
+            await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quotas: { maxUploadSizeMB: previousMax } }),
+            });
+        }
+    });
+
+    test('upload to a mount already at quota returns 507 before the body is read', async () => {
+        // Seed so the mount has bytes, then shrink the live mount quota to exactly what's used
+        // (mirrors editor.test.ts — team overrides only *raise* the quota). remaining <= 0 makes
+        // getUploadMaxSize throw up front: even this tiny file, which the parser's maxFileSize
+        // would never reject, must bounce with 507.
+        const seed = new File(['seed'], 'quota-seed.txt', { type: 'text/plain' });
+        await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, seed);
+
+        const home = await getHome(ctx.alice.user.id);
+        const snapshot = { ...home.drive.getMountConfig(aliceMountId) };
+        const usedMB = (await home.drive.size(aliceMountId)) / (1024 * 1024);
+        await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB }, true);
+        try {
+            const file = new File(['tiny'], 'over-quota.txt', { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${folderId}`,
+                { method: 'POST', body: formData },
+            );
+            expect(res.status).toBe(507);
+            expect(await res.text()).toBe('Insufficient Storage');
+        } finally {
+            await home.drive.updateMount(snapshot, true);
+        }
     });
 });

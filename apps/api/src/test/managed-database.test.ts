@@ -1,3 +1,4 @@
+import { Database as BunDatabase } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -47,6 +48,56 @@ describe('ManagedDatabase open-vs-create intent', () => {
         writeFileSync(dbPath, '');
         const db = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
         await expect(db.open(0)).rejects.toThrow();
+    });
+});
+
+describe('ManagedDatabase migration rollback', () => {
+    test('a migration that throws mid-way rolls back atomically and leaves the db reopenable at v1', async () => {
+        const dbPath = nextDbPath();
+        const v1 = new ManagedDatabase(makeConfig(1000), dbPath, {});
+        await v1.open(0);
+        v1.db.insert(items).values({ v: 'v1-data' }).run();
+        await v1.close({ skipFinalSnapshot: true });
+
+        // The v2 migration executes DDL + DML, then throws — open() must reject and the
+        // BEGIN/ROLLBACK wrapper must discard BOTH statements, not just the version bump.
+        const failing: DatabaseConfig<Schema> = {
+            ...makeConfig(1000),
+            currentVersion: 2,
+            migrations: [
+                ...makeConfig(1000).migrations,
+                {
+                    version: 2,
+                    up: (db) => {
+                        db.run('ALTER TABLE items ADD COLUMN extra TEXT');
+                        db.run("INSERT INTO items (v) VALUES ('v2-row')");
+                        throw new Error('migration boom');
+                    },
+                },
+            ],
+        };
+        const v2 = new ManagedDatabase(failing, dbPath, {}, true);
+        await expect(v2.open(0)).rejects.toThrow('migration boom');
+        // A failed open releases its own raw handle — inspecting the file below needs no close().
+
+        // On-disk state is untouched v1: version stayed 1, no v2 row, no v2 column.
+        // (readwrite: a readonly connection can't create the -shm a WAL-mode db needs)
+        const raw = new BunDatabase(dbPath, { readwrite: true, create: false });
+        expect(
+            (raw.query('SELECT version FROM __schema_version WHERE id = 1').get() as { version: number }).version,
+        ).toBe(1);
+        expect(raw.query('SELECT v FROM items').all()).toEqual([{ v: 'v1-data' }]);
+        expect((raw.query('PRAGMA table_info(items)').all() as { name: string }[]).map((c) => c.name)).toEqual([
+            'id',
+            'v',
+        ]);
+        raw.close();
+
+        // With the failing migration removed, the file reopens cleanly at v1.
+        const reopened = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
+        await reopened.open(0);
+        expect(reopened.db.select().from(items).all()).toEqual([{ id: 1, v: 'v1-data' }]);
+        await reopened.close({ skipFinalSnapshot: true });
     });
 });
 

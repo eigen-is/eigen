@@ -5,9 +5,11 @@
 ## TLDR
 
 File uploads previously buffered entire files in memory ~3x (Elysia File + ArrayBuffer + Buffer copy). Now all file
-uploads (single and multi-file) go through a single streaming endpoint using `@mjackson/multipart-parser`. Each file
-is written to a mount temp file, hashed incrementally, then moved to storage. The old buffered endpoint and the
-separate multi-file endpoint (`/files/:pathId`) have been removed.
+uploads (single and multi-file) go through a single endpoint using `@mjackson/multipart-parser`. Each file is
+written to a mount temp file, hashed incrementally, then moved to storage — but only the write side streams: the
+parser buffers each part fully in memory before yielding it, so memory is ~1x file size per concurrent upload (see
+Memory Profile). The old buffered endpoint and the separate multi-file endpoint (`/files/:pathId`) have been
+removed.
 
 ## Architecture
 
@@ -24,7 +26,8 @@ Frontend: FormData.append('file', file) for each file → XHR POST (progress tra
 Route: parse: 'none' → getUploadMaxSize() → drive.uploadFiles(mountId, parentId, request, maxSize)
     ↓
 Drive.uploadFiles():
-  → streamFilesToTemp(mount, request, maxSize) — writes each file to mount tmp/, hashes incrementally
+  → streamFilesToTemp(mount, request, maxSize) — parses each file (fully buffered by the parser,
+    see Memory Profile), writes it to mount tmp/, hashes incrementally
   → for each result: finalizeUpload() (lib/drive/upload.ts):
     → deduplicate filename against siblings
     → mount.createFileFromTemp() — move temp→storage, insert DB row
@@ -48,7 +51,17 @@ Drive.uploadFiles():
 
 Per-file size limit is enforced by `@mjackson/multipart-parser`'s `maxFileSize` option during parsing. The limit is
 `min(serverMaxUploadSize, remainingMountQuota)`, computed in `getUploadMaxSize()` before streaming starts. If the mount
-is already full, the request is rejected immediately (413) without reading the body.
+is already full, the request is rejected immediately (507) without reading the body.
+
+### Memory Profile
+
+`@mjackson/multipart-parser` (0.10.1) yields a part only after accumulating its entire body in memory
+(`MultipartPart.content` is a buffered `Uint8Array[]`). The write side is streaming (temp write + incremental
+hash), so the old ~3x copies are genuinely gone, but each concurrent upload still holds ~1x its file size in RAM.
+
+This makes `maxUploadSizeMB` (default 35 MB) effectively a memory knob: an admin raising it to 2 GB converts every
+concurrent upload into a 2 GB RSS spike. If large uploads become a goal, swap to a parser that exposes part bodies
+as streams — `writeTempWithHash` is already stream-shaped, so only `streamFilesToTemp` changes.
 
 ### Crash Recovery
 
@@ -73,8 +86,8 @@ partial uploads behind.
 ## Dependency
 
 `@mjackson/multipart-parser` (v0.10.1) — web-standard multipart parser. Zero transitive dependencies (just
-`@mjackson/headers`). Works on Bun. The parser reads the request body stream and yields `MultipartPart` objects with
-buffered `content: Uint8Array[]` chunks.
+`@mjackson/headers`). Works on Bun. The parser reads the request body stream but yields each `MultipartPart` only
+after buffering its entire body as `content: Uint8Array[]` chunks — see Memory Profile.
 
 ## Out of Scope
 
