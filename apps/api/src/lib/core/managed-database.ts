@@ -32,7 +32,9 @@ export type SyncCallbacks = {
     onSync?: () => Promise<void>;
     // syncFailed: the close-time sync threw — the working copy holds bytes storage doesn't.
     onClose?: (syncFailed: boolean) => Promise<void>;
-    onSnapshot?: () => Promise<void>;
+    // 'skipped': the snapshot was deliberately not taken (container lock contended) — the
+    // watermark must not advance, so a tick-path skip retries next tick.
+    onSnapshot?: () => Promise<'taken' | 'skipped'>;
 };
 
 export class ManagedDatabase<S extends SchemaType> {
@@ -191,8 +193,10 @@ export class ManagedDatabase<S extends SchemaType> {
         const total = this.getTotalChanges();
         const unsnapshotted = total - this.lastSnapshotChanges;
         if (unsnapshotted <= 0 || (!force && unsnapshotted < this.config.snapshot.writesPerSnapshot)) return;
-        await this.callbacks.onSnapshot();
-        this.lastSnapshotChanges = total;
+        // A skip must stay due — advancing would record it as taken and never retry it.
+        if ((await this.callbacks.onSnapshot()) !== 'skipped') {
+            this.lastSnapshotChanges = total;
+        }
     }
 
     // Periodic auto-sync: push writes, then snapshot if the threshold is crossed.
@@ -246,11 +250,31 @@ export class ManagedDatabase<S extends SchemaType> {
                     console.error(`[${this.config.name}] close snapshot failed:`, err),
                 );
             }
-            this.rawDb?.close();
+            // Strict close, GC-assisted: drizzle leaves its prepared statements to GC, and
+            // sqlite refuses to close over them (SQLITE_BUSY) — a plain close() degrades to a
+            // LAZY close that keeps the file + -shm mapped until GC finalizes them. Collect the
+            // dropped statements and retry so the close is real. If it is STILL lazy (a
+            // genuinely live statement), keep the journals: unlinking -shm under the zombie
+            // poisons sqlite's per-inode shm node and the next open of the SAME file (every
+            // local-key reopen) fails with SQLITE_IOERR_VNODE.
+            let cleanClose = true;
+            if (this.rawDb) {
+                try {
+                    this.rawDb.close(true);
+                } catch {
+                    Bun.gc(true);
+                    try {
+                        this.rawDb.close(true);
+                    } catch {
+                        cleanClose = false;
+                        this.rawDb.close();
+                    }
+                }
+            }
             this.rawDb = null;
             this.drizzleDb = null;
 
-            this.deleteJournalFiles();
+            if (cleanClose) this.deleteJournalFiles();
 
             await this.callbacks.onClose?.(syncFailed);
         }

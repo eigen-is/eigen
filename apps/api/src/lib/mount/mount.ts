@@ -13,6 +13,7 @@ import { type DriveVisibility, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/
 import type { BunFile } from 'bun';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import type { AsyncSingleton } from '../../utils/singleton';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { FileHistory } from '../drive/history';
@@ -53,8 +54,12 @@ export class Mount {
     private getLocalDatabase: LocalDatabaseGetter;
     private ownerId: string;
     // internal — used by mount/*.ts + versioning/snapshot.ts
-    documentDbs: Map<string, () => Promise<ManagedDatabase<SchemaType>>> = new Map();
+    documentDbs: Map<string, AsyncSingleton<ManagedDatabase<SchemaType>>> = new Map();
     private pathLocks: Map<string, Promise<void>> = new Map();
+    // In-flight document-db closes by pathId — a concurrent open of the same pathId waits on
+    // this before building, so a fresh instance never shares the closing one's temp/journal
+    // files (see mount/document-db.ts). internal — used by mount/*.ts
+    closingDocumentDbs: Map<string, Promise<void>> = new Map();
 
     // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
@@ -558,6 +563,12 @@ export class Mount {
         return snapshot.snapshotContainerDataDb(this, containerId, policy);
     }
 
+    // Skip-if-contended twin for the tick/close snapshot callback — never parks on the
+    // container lock (see document-db.ts onSnapshot).
+    async trySnapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<'taken' | 'skipped'> {
+        return snapshot.trySnapshotContainerDataDb(this, containerId, policy);
+    }
+
     async replaceContainerDataDb(containerId: string, sourcePath: string): Promise<void> {
         return snapshot.replaceContainerDataDb(this, containerId, sourcePath);
     }
@@ -582,6 +593,24 @@ export class Mount {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);
         }
+        let resolve!: () => void;
+        const promise = new Promise<void>((r) => {
+            resolve = r;
+        });
+        this.pathLocks.set(pathId, promise);
+        try {
+            return await fn();
+        } finally {
+            this.pathLocks.delete(pathId);
+            resolve();
+        }
+    }
+
+    // Atomic try-acquire twin of withPathLock: returns null when the lock is held. The has-check
+    // and the set share one synchronous block — no await between them, so no TOCTOU.
+    // internal — used by versioning/snapshot.ts
+    async tryWithPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T | null> {
+        if (this.pathLocks.has(pathId)) return null;
         let resolve!: () => void;
         const promise = new Promise<void>((r) => {
             resolve = r;
@@ -990,8 +1019,13 @@ export class Mount {
 
     async cleanupTemp(tempId: string): Promise<void> {
         try {
-            const file = Bun.file(this.getTempPath(tempId));
+            const tempPath = this.getTempPath(tempId);
+            const file = Bun.file(tempPath);
             if (await file.exists()) await file.delete();
+            // A lazily-closed (zombie) connection keeps its journals on disk; a stale WAL next
+            // to a later re-download of the same path would be replayed into foreign bytes.
+            fs.rmSync(`${tempPath}-wal`, { force: true });
+            fs.rmSync(`${tempPath}-shm`, { force: true });
         } catch {}
     }
 

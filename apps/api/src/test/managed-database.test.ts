@@ -63,6 +63,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
             },
             onSnapshot: async () => {
                 snapshots++;
+                return 'taken';
             },
         });
         await db.open(0);
@@ -85,6 +86,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
             onSnapshot: async () => {
                 await new Promise((r) => setTimeout(r, 20));
                 snapshotFinished = true;
+                return 'taken';
             },
         });
         await db.open(0);
@@ -101,6 +103,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
             onSync: async () => {},
             onSnapshot: async () => {
                 snapshots++;
+                return 'taken';
             },
         });
         await db.open(10);
@@ -135,6 +138,26 @@ describe('ManagedDatabase close teardown', () => {
         expect(onCloseRan).toBe(true);
         expect(() => db.db).toThrow('Database not open');
         expect(existsSync(`${dbPath}-wal`)).toBe(false);
+    });
+});
+
+describe('ManagedDatabase close releases the file (no zombie close)', () => {
+    test('close → reopen of the SAME path works', async () => {
+        // Drizzle leaves its prepared statements to GC, so a plain rawDb.close() degrades to a
+        // LAZY close that keeps the file + -shm mapped; deleteJournalFiles then unlinks -shm
+        // under that zombie, poisoning the inode's shm node — the next open of the same file
+        // fails with SQLITE_IOERR_VNODE (macOS; Linux tolerates the unlink). Every local-key
+        // reopen takes exactly this path.
+        const dbPath = nextDbPath();
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, { onSync: async () => {} });
+        await db.open(0);
+        db.db.insert(items).values({ v: 'x' }).run();
+        await db.close({ skipFinalSnapshot: true });
+
+        const reopened = new ManagedDatabase(makeConfig(1000), dbPath, { onSync: async () => {} }, true);
+        await reopened.open(0);
+        expect(reopened.db.select().from(items).all()).toHaveLength(1);
+        await reopened.close({ skipFinalSnapshot: true });
     });
 });
 

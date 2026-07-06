@@ -184,7 +184,8 @@ A home directory with no matching auth row is itself a finding (orphan home).
 
 **A second connection on a live home's database is NOT safe here — the `atHome()` skip is
 mandatory, not an optimisation.** `ManagedDatabase.close()` runs `wal_checkpoint(TRUNCATE)` →
-`close()` → an *unconditional* `deleteJournalFiles()`. With a sweep connection also open: the
+`close()` → `deleteJournalFiles()` (post-audit-item-4: only after a genuinely clean close — a
+lazy/zombie close keeps the journals, which strengthens this argument). With a sweep connection also open: the
 checkpoint silently can't complete, SQLite doesn't auto-remove the WAL (close isn't the last
 connection), and the unlink then deletes a WAL still holding committed-but-uncheckpointed frames
 under the sweep's handle — a crash in that window loses them, and a fresh open racing the unlink
