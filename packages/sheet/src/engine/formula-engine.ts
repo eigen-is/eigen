@@ -1,5 +1,6 @@
 import { format } from 'numfmt';
 import { getCalculationOrder } from './dependency-graph';
+import { DependencyIndex } from './dependency-index';
 import { ERROR_REF, Parser } from './parser';
 import type {
     Cell,
@@ -53,6 +54,7 @@ export class FormulaEngine {
         this.state = {
             execFunctionGlobalData: {},
             formulaCellInfoMap: null,
+            dependencyIndex: new DependencyIndex(),
             cellTextToIndexList: {},
         };
 
@@ -205,6 +207,7 @@ export class FormulaEngine {
         this.state = {
             execFunctionGlobalData: {},
             formulaCellInfoMap: null,
+            dependencyIndex: new DependencyIndex(),
             cellTextToIndexList: {},
         };
     }

@@ -186,6 +186,18 @@ describe('versions HTTP routes', () => {
         // Two versions now: the manual save + the pre-restore auto-snapshot.
         const after = await listVersions(token, ownerId, aliceMountId, chat.id);
         expect(after.length).toBe(2);
+
+        // The restored data.db row's hash must be the sha256 of the restored snapshot's bytes —
+        // pins the hasher in replaceContainerDataDb (opening the chat above updates size, never hash).
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ownerId);
+        const mount = (home.drive as unknown as { getMount(id: string): Mount }).getMount(aliceMountId);
+        const versionsFolder = await mount.getChildByName(chat.id, 'versions');
+        const versionFile = await mount.getChildByName(versionsFolder!.id, saved.name);
+        const snapshotBytes = await (await mount.readFile(versionFile!.id))!.arrayBuffer();
+        const expectedHash = new Bun.CryptoHasher('sha256').update(new Uint8Array(snapshotBytes)).digest('hex');
+        const dataDb = await mount.getChildByName(chat.id, 'data.db');
+        expect(dataDb?.hash).toBe(expectedHash);
     });
 
     // replaceContainerDataDb recreates data.db without an onSync, so the chat restore must mark the

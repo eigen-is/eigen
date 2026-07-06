@@ -1,4 +1,6 @@
 import { isNil } from 'es-toolkit/compat';
+import { current, isDraft } from 'immer';
+import type { DependencyIndex } from '../../engine/dependency-index';
 import { FormulaEngine, isFormula } from '../../engine/formula-engine';
 import type {
     CalcChainEntry,
@@ -37,15 +39,36 @@ export function resetRangeIndexes() {
     formulaUIState.rangeIndexes = [];
 }
 
+// Plain (non-draft) view of the context. Formula evaluation reads cells one
+// at a time; going through immer draft proxies makes each read several times
+// slower and creates child drafts that the finalize pass must then walk.
+export function snapshotContext(ctx: Context): Context {
+    return isDraft(ctx) ? (current(ctx) as Context) : ctx;
+}
+
 // Adapts Context to the CellResolver interface expected by FormulaEngine.
-export function createContextResolver(ctx: Context): CellResolver {
+// Reads exactly the context it is handed: pass `snapshotContext(ctx)` for a
+// stable plain snapshot (correct for one dependency-ordered evaluation pass —
+// freshly computed values travel via execFunctionGlobalData, which the engine
+// checks before cell data), or the live ctx when interleaving writes with
+// evaluations that must see them, e.g. calculateFormula's cell-order sweep.
+export function createContextResolver(source: Context): CellResolver {
+    const matrices = new Map<string, CellMatrix | null>();
+    const dataFor = (sheetId: string) => {
+        let matrix = matrices.get(sheetId);
+        if (matrix === undefined) {
+            matrix = getFlowdata(source, sheetId) ?? null;
+            matrices.set(sheetId, matrix);
+        }
+        return matrix;
+    };
+
     return {
         getCell(sheetId: string, row: number, col: number) {
-            const flowdata = getFlowdata(ctx, sheetId);
-            return flowdata?.[row]?.[col] ?? null;
+            return dataFor(sheetId)?.[row]?.[col] ?? null;
         },
         getRange(sheetId: string, startRow: number, startCol: number, endRow: number, endCol: number) {
-            const flowdata = getFlowdata(ctx, sheetId);
+            const flowdata = dataFor(sheetId);
             const result: (Cell | null)[][] = [];
             for (let r = startRow; r <= endRow; r++) {
                 const rowData: (Cell | null)[] = [];
@@ -57,13 +80,13 @@ export function createContextResolver(ctx: Context): CellResolver {
             return result;
         },
         getSheetIdByName(name: string) {
-            return getSheetIdByName(ctx, name) ?? null;
+            return getSheetIdByName(source, name) ?? null;
         },
         getSheetData(sheetId: string) {
-            return getFlowdata(ctx, sheetId) ?? null;
+            return dataFor(sheetId);
         },
         getSheets() {
-            return ctx.sheets.map((f) => ({
+            return source.sheets.map((f) => ({
                 id: f.id ?? '',
                 name: f.name,
                 calculationChain: f.calcChain ?? [],
@@ -90,6 +113,16 @@ export class FormulaCache {
 
     set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
         this.engine.state.formulaCellInfoMap = v;
+        // The map is only ever reassigned to reset it (null or {}); the reverse
+        // index mirrors the map, so it resets too and refills via setFormulaCellInfo.
+        this.engine.state.dependencyIndex.clear();
+    }
+
+    // Reverse lookup cell → formulas reading it; lives in engine state next to
+    // formulaCellInfoMap (so engine resets clear both) and is kept in lockstep
+    // by setFormulaCellInfo and the setter above.
+    get dependencyIndex(): DependencyIndex {
+        return this.engine.state.dependencyIndex;
     }
 
     // UI-only state — stays on FormulaCache

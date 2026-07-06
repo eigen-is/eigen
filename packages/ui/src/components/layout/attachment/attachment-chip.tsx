@@ -1,4 +1,4 @@
-import { getDriveDownloadUrl, getDriveThumbnailUrl } from '@workspace/lib/api';
+import { getDriveDownloadUrl, getDriveItemThumbnail } from '@workspace/lib/api';
 import { useFolderLookup } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { usePreview } from '../preview-provider';
@@ -28,11 +28,10 @@ export function AttachmentChip({
     const { openPreview } = usePreview();
 
     const name = fileInfo?.details?.originalName || fileInfo?.name || fileName;
-    const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id) : '#';
-    const thumbnailUrl =
-        fileInfo?.thumbnail && fileInfo.mimeType?.startsWith('image/')
-            ? getDriveThumbnailUrl(ownerId, mountId, fileInfo.thumbnail)
-            : undefined;
+    const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id, fileInfo.updatedAt) : '#';
+    const thumbnailUrl = fileInfo?.mimeType?.startsWith('image/')
+        ? getDriveItemThumbnail(fileInfo).thumbnailUrl
+        : undefined;
 
     return (
         <SimpleAttachmentChip

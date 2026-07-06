@@ -2100,6 +2100,10 @@ export function updateDropCell(ctx: Context) {
     const hiddenRows = new Set(Object.keys(file.config?.rowhidden || {}));
     const hiddenCols = new Set(Object.keys(file.config?.colhidden || {}));
 
+    // Live resolver, hoisted: one per fill-drag instead of one snapshot per
+    // filled formula cell.
+    const resolver = formula.createContextResolver(ctx);
+
     const cfg = cloneDeep(ctx.config);
     if (cfg.borderInfo == null) {
         cfg.borderInfo = [];
@@ -2145,7 +2149,17 @@ export function updateDropCell(ctx: Context) {
 
                     if (cell?.f != null) {
                         const f = `=${formula.functionCopy(cell.f, 'down', j - apply_str_r + 1)}`;
-                        const v = formula.execfunction(ctx, f, j, i);
+                        const v = formula.execfunction(
+                            ctx,
+                            f,
+                            j,
+                            i,
+                            undefined,
+                            undefined,
+                            undefined,
+                            undefined,
+                            resolver,
+                        );
 
                         formula.execFunctionGroup(ctx, j, i, v[1], undefined, d);
 
@@ -2239,7 +2253,17 @@ export function updateDropCell(ctx: Context) {
 
                     if (cell?.f != null) {
                         const f = `=${formula.functionCopy(cell.f, 'up', apply_end_r - j + 1)}`;
-                        const v = formula.execfunction(ctx, f, j, i);
+                        const v = formula.execfunction(
+                            ctx,
+                            f,
+                            j,
+                            i,
+                            undefined,
+                            undefined,
+                            undefined,
+                            undefined,
+                            resolver,
+                        );
 
                         formula.execFunctionGroup(ctx, j, i, v[1], undefined, d);
 
@@ -2337,7 +2361,17 @@ export function updateDropCell(ctx: Context) {
 
                     if (cell?.f != null) {
                         const f = `=${formula.functionCopy(cell.f, 'right', j - apply_str_c + 1)}`;
-                        const v = formula.execfunction(ctx, f, i, j);
+                        const v = formula.execfunction(
+                            ctx,
+                            f,
+                            i,
+                            j,
+                            undefined,
+                            undefined,
+                            undefined,
+                            undefined,
+                            resolver,
+                        );
 
                         formula.execFunctionGroup(ctx, i, j, v[1], undefined, d);
 
@@ -2425,7 +2459,17 @@ export function updateDropCell(ctx: Context) {
 
                     if (cell?.f != null) {
                         const f = `=${formula.functionCopy(cell.f, 'left', apply_end_c - j + 1)}`;
-                        const v = formula.execfunction(ctx, f, i, j);
+                        const v = formula.execfunction(
+                            ctx,
+                            f,
+                            i,
+                            j,
+                            undefined,
+                            undefined,
+                            undefined,
+                            undefined,
+                            resolver,
+                        );
 
                         formula.execFunctionGroup(ctx, i, j, v[1], undefined, d);
 

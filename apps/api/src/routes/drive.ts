@@ -9,6 +9,7 @@ import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
+import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
@@ -127,7 +128,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/download',
         async ({ params, request, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return drive.serveFile(params.mountId, params.pathId, 'attachment', request.headers.get('range'));
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            return serveFile(
+                mount,
+                path,
+                'attachment',
+                request.headers.get('range'),
+                request.headers.get('if-none-match'),
+            );
         },
         { auth: true },
     )
@@ -254,7 +262,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/embed/:fileName',
         async ({ params, request, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return drive.serveFile(params.mountId, params.pathId, 'inline', request.headers.get('range'));
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            return serveFile(mount, path, 'inline', request.headers.get('range'), request.headers.get('if-none-match'));
         },
         { auth: true },
     )
@@ -535,6 +544,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/request-access',
         async ({ params, user, body }) => {
+            // Skips the SharedDrive facade by design: the caller has NO permission yet — that is
+            // the point of the request. propagateAccessRequest only notifies the owner; it never
+            // reads or returns path data to the requester.
             const home = await getHome(params.ownerId); // ownerId-routed: request targets this home
             await propagateAccessRequest(
                 home,
