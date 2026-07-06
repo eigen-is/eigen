@@ -20,6 +20,9 @@ export const searchKeys = {
             params.to ?? null,
             params.limit ?? null,
         ] as const,
+    // IN COMMENTS palette section: keyed by the capability's docKey — the OPEN DOCUMENT's
+    // `${ownerId}:${mountId}:${pathId}`, NOT ctx.ownerId (which can differ on shared docs) — + query.
+    docComments: (docKey: string, q: string) => [...searchKeys.all, 'doc-comments', docKey, q] as const,
 };
 
 // Help search runs client-side against the static Pagefind index — no ownerId or
