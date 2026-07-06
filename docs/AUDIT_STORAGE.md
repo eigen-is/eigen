@@ -275,19 +275,24 @@ proposal) accept or repair the stale hash on managed `data.db` rows.
 
 ## Recommendation summary
 
-| # | Finding | Sev | Effort |
-|---|---------|-----|--------|
-| 1 | Reserve `.trash` in `validateName` (+ restore conflict-rename) | P1 data-loss | S |
-| 2 | JS case-fold uniqueness check on path-based mounts | P2 data-loss (mac/Win self-host) | S |
-| 3 | `ETag: paths.hash` + `If-None-Match` in `serve-file.ts`; drop bare `public` | P2 correctness | S |
-| 4 | Serialize doc-DB open/close per pathId (or registry for chat/comments DBs) + interleave test | P2 robustness | M |
-| 5 | Correct STREAMING_UPLOADS.md; treat `maxUploadSizeMB` as a memory knob (streaming parser only if large uploads become a goal) | P2 doc/latent | S (doc) |
-| 6 | `validateName` length cap (255 bytes) | P3 | S |
-| 7 | Fix-or-drop `S3Storage.size()`; guard empty key segments | P3 | S |
-| 8 | try/finally in `ManagedDatabase.close()` | P3 | S |
-| 9 | Stream-hash `replaceContainerDataDb` | P3 | S |
-| 10 | MinIO-gated S3 test suite; upload-route quota test; migration-rollback test; SharedDrive gating enumeration | tests | M |
-| 11 | Consistency paper-cuts (name policy, conflict suffixes, seam comment, `/request-access` comment, document folder-size cache, debug-gate hot-path logs) | polish | S |
+| # | Finding | Sev | Effort | Status (2026-07-06) |
+|---|---------|-----|--------|---------------------|
+| 1 | Reserve `.trash` in `validateName` (+ restore conflict-rename) | P1 data-loss | S | SHIPPED — NFKC-folded reservation; restore conflict-renames legacy rows; move guard closes the re-parent vector |
+| 2 | JS case-fold uniqueness check on path-based mounts | P2 data-loss (mac/Win self-host) | S | SHIPPED — non-ASCII fallback fold, path-based only; stored-side-only residual (U+212A class) documented in code |
+| 3 | `ETag: paths.hash` + `If-None-Match` in `serve-file.ts`; drop bare `public` | P2 correctness | S | SHIPPED — ETag/304 on download+embed, `private, no-cache`; previews/thumbs `private, max-age` + `?v=` centralized in the URL builders; `/p/avatar` stays `public` by design |
+| 4 | Serialize doc-DB open/close per pathId (or registry for chat/comments DBs) + interleave test | P2 robustness | M | SHIPPED — open waits on `closingDocumentDbs`; skip-if-contended close/tick snapshots; `peek()`-only reads in snapshot.ts; plus strict GC-assisted close fixing the latent zombie-close→`SQLITE_IOERR_VNODE` reopen bug |
+| 5 | Correct STREAMING_UPLOADS.md; treat `maxUploadSizeMB` as a memory knob (streaming parser only if large uploads become a goal) | P2 doc/latent | S (doc) | SHIPPED — doc corrected (incl. mount-full = 507, not 413); parser unchanged by design |
+| 6 | `validateName` length cap (255 bytes) | P3 | S | SHIPPED — byte-counted; accepted residual: a conflict-rename on a name within 4 bytes of the cap can still exceed it |
+| 7 | Fix-or-drop `S3Storage.size()`; guard empty key segments | P3 | S | SHIPPED — `stat()`-based size (MinIO-pinned); empty-segment guard beside the `..` check |
+| 8 | try/finally in `ManagedDatabase.close()` | P3 | S | SHIPPED — teardown unconditional; refined per review: a FAILED close-sync keeps the temp as the crash-recovery marker; failed `open()` also releases its handle |
+| 9 | Stream-hash `replaceContainerDataDb` | P3 | S | SHIPPED — `writeTempWithHash` + `createFileFromTemp`, staged before the delete so a failed read leaves data.db intact |
+| 10 | MinIO-gated S3 test suite; upload-route quota test; migration-rollback test; SharedDrive gating enumeration | tests | M | SHIPPED — `s3-minio.test.ts` (S3_TEST_ENDPOINT-gated, verified live); 413+507 quota legs; rollback pin; 53-member gating enumeration with exhaustiveness trip-wire |
+| 11 | Consistency paper-cuts (name policy, conflict suffixes, seam comment, `/request-access` comment, document folder-size cache, debug-gate hot-path logs) | polish | S | SHIPPED except log-gating — dropped by owner decision (the timing/sync logs stay on in prod); suffixes unified on `name (2).txt`; folder create 400s like rename |
 
 Items 1–3 and 6–9 are each an afternoon or less and remove almost all of the residual base-layer risk;
 item 4 is the only one needing design care. Nothing here blocks building on the current base.
+
+_Status recorded 2026-07-06 after the three audit branches merged (`fix/storage-audit-small`,
+`fix/docdb-open-close-race`, `test/storage-audit-gaps`). Every fix landed TDD-red-first, passed an
+independent review subagent plus a simplify pass, and the caching change was verified against the
+running app (200/304/206/overwrite probes). Full suite at merge: 1713 pass / 0 fail._
