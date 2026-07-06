@@ -1,4 +1,4 @@
-import type { FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from './types';
+import type { FormulaCellInfo, FormulaCellInfoMap } from './types';
 
 // Topological sort: returns formula cells in evaluation order (dependencies before dependents).
 // Uses a stack-based DFS with two-color marking: gray (in-progress) → black (done).
@@ -48,48 +48,6 @@ export function getCalculationOrder(
     formulaRunList.reverse();
     return formulaRunList;
 }
-
-type MatchCallback = (key: string, r: number, c: number, sheetId: string) => void;
-
-// Iterates over all cells in each dependency range and invokes func for each.
-// Results are cached by range key to avoid redundant iteration on repeated calls.
-export const matchDependencies = (
-    arrayMatchCache: Record<string, Array<{ key: string; r: number; c: number; sheetId: string }>>,
-    formulaDependency: FormulaDependency[],
-    formulaCellInfoMap: FormulaCellInfoMap | null,
-    updateValueObjects: Record<string, unknown> | null,
-    func: MatchCallback,
-): void => {
-    for (const range of formulaDependency) {
-        const cacheKey = `r${range.row[0]}${range.row[1]}c${range.column[0]}${range.column[1]}id${range.sheetId}`;
-
-        if (cacheKey in arrayMatchCache) {
-            for (const item of arrayMatchCache[cacheKey]) {
-                func(item.key, item.r, item.c, item.sheetId);
-            }
-        } else {
-            const hits: Array<{ key: string; r: number; c: number; sheetId: string }> = [];
-
-            for (let r = range.row[0]; r <= range.row[1]; r += 1) {
-                for (let c = range.column[0]; c <= range.column[1]; c += 1) {
-                    const key = `r${r}c${c}i${range.sheetId}`;
-                    func(key, r, c, range.sheetId as string);
-
-                    if (
-                        (formulaCellInfoMap != null && key in formulaCellInfoMap) ||
-                        (updateValueObjects != null && key in updateValueObjects)
-                    ) {
-                        hits.push({ key, r, c, sheetId: range.sheetId as string });
-                    }
-                }
-            }
-
-            if (formulaCellInfoMap != null || updateValueObjects != null) {
-                arrayMatchCache[cacheKey] = hits;
-            }
-        }
-    }
-};
 
 // Returns true if the dependency graph contains a cycle.
 // Uses standard 3-color DFS: WHITE (unvisited) → GRAY (in stack) → BLACK (done).

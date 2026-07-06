@@ -29,11 +29,7 @@ export { cfSplitRange, evaluateConditionalFormat, getColorGradation } from './co
 // CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
 // are surfaced through `./types` re-exports below.
 export { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
-export {
-    detectCycle,
-    getCalculationOrder,
-    matchDependencies,
-} from './dependency-graph';
+export { detectCycle, getCalculationOrder } from './dependency-graph';
 export { datenum_local, genarate, is_date, update, valueShowEs } from './format';
 export { FormulaEngine, isCellReference, isFormula } from './formula-engine';
 export { detectAbsolute, type FormulaShiftMode, functionCopy, functionStrChange } from './formula-shift';

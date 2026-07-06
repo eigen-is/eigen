@@ -166,7 +166,7 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             for (let i = 0; i < data.length; i += 1) {
                 for (let j = 0; j < data[i].length; j += 1) {
                     expandedData[i][j] = data[i][j];
-                    setFormulaCellInfo(ctx, { r: i, c: j, id: newDatum.id! }, data);
+                    setFormulaCellInfo(ctx, { r: i, c: j, id: newDatum.id! }, data, newDatum.id);
                 }
             }
             newDatum.data = expandedData;
@@ -179,7 +179,7 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             initSheetData(ctx, index, newDatum);
             const _index = getSheetIndex(ctx, newDatum.id!) as number;
             newDatum.celldata?.forEach((d) => {
-                setFormulaCellInfo(ctx, { r: d.r, c: d.c, id: newDatum.id! }, ctx.sheets[_index].data);
+                setFormulaCellInfo(ctx, { r: d.r, c: d.c, id: newDatum.id! }, ctx.sheets[_index].data, newDatum.id);
             });
         }
     });

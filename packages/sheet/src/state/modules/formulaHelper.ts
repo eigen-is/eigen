@@ -1,5 +1,5 @@
 import { isNil } from 'es-toolkit/compat';
-import type { CellMatrix, FormulaCellInfo, FormulaDependency } from '../../engine/types';
+import type { CellMatrix, CellResolver, FormulaCellInfo, FormulaDependency } from '../../engine/types';
 import {
     type Context,
     execfunction,
@@ -10,12 +10,19 @@ import {
     isFunctionRange,
 } from '..';
 
-// Make sure setFormulaObject() is executed *after* the cell modifications
-export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix) {
+// Make sure setFormulaObject() is executed *after* the cell modifications.
+// `data` is a fast-path matrix; `dataSheetId` names the sheet it belongs to
+// (defaults to the active sheet). It is only consulted for entries on that
+// sheet — for other sheets' entries whose (r,c) also exists in this grid,
+// getcellFormula would read the wrong sheet's cell, dropping or mis-parsing
+// the formula (stale cross-sheet recalc).
+export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix, dataSheetId?: string) {
     const key = `r${formulaCell.r}c${formulaCell.c}i${formulaCell.id}`;
-    const calc_funcStr = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, data);
+    const cellData = formulaCell.id === (dataSheetId ?? ctx.currentSheetId) ? data : undefined;
+    const calc_funcStr = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, cellData);
     if (isNil(calc_funcStr)) {
         delete ctx.formulaCache.formulaCellInfoMap?.[key];
+        ctx.formulaCache.dependencyIndex.delete(key);
         return;
     }
     const txt1 = calc_funcStr.toUpperCase();
@@ -24,7 +31,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     const formulaDependency: FormulaDependency[] = [];
     if (isOffsetFunc) {
         isFunctionRange(ctx, calc_funcStr, null, null, formulaCell.id, null, (str_nb: string) => {
-            const range = getcellrange(ctx, str_nb.trim(), formulaCell.id, data);
+            const range = getcellrange(ctx, str_nb.trim(), formulaCell.id, cellData);
             if (!isNil(range)) {
                 formulaDependency.push(range);
             }
@@ -110,7 +117,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
                 continue;
             }
 
-            const range = getcellrange(ctx, t.trim(), formulaCell.id, data);
+            const range = getcellrange(ctx, t.trim(), formulaCell.id, cellData);
 
             if (isNil(range)) {
                 continue;
@@ -134,21 +141,41 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
 
     if (!ctx.formulaCache.formulaCellInfoMap) ctx.formulaCache.formulaCellInfoMap = {};
     ctx.formulaCache.formulaCellInfoMap[key] = item;
+    ctx.formulaCache.dependencyIndex.set(key, formulaDependency);
 }
 
-export function executeAffectedFormulas(ctx: Context, formulaRunList: FormulaCellInfo[], calcChains: FormulaCell[]) {
+export function executeAffectedFormulas(
+    ctx: Context,
+    formulaRunList: FormulaCellInfo[],
+    calcChains: FormulaCell[],
+    resolver: CellResolver,
+) {
     const calcChainSet = new Set<string>();
-    calcChains.forEach((item) => {
+    for (const item of calcChains) {
         calcChainSet.add(`${item.r}_${item.c}_${item.id}`);
-    });
+    }
+
+    // Collected locally and assigned once: ctx is usually an immer draft, and
+    // per-result pushes through the proxy each record a patch.
+    const refreshed: Context['groupValuesRefreshData'] = [];
 
     for (let i = 0; i < formulaRunList.length; i += 1) {
         const formulaCell = formulaRunList[i];
         const { calc_funcStr } = formulaCell;
 
-        const v = execfunction(ctx, calc_funcStr, formulaCell.r, formulaCell.c, formulaCell.id, calcChainSet);
+        const v = execfunction(
+            ctx,
+            calc_funcStr,
+            formulaCell.r,
+            formulaCell.c,
+            formulaCell.id,
+            calcChainSet,
+            undefined,
+            undefined,
+            resolver,
+        );
 
-        ctx.groupValuesRefreshData.push({
+        refreshed.push({
             r: formulaCell.r,
             c: formulaCell.c,
             v: v[1],
@@ -161,4 +188,7 @@ export function executeAffectedFormulas(ctx: Context, formulaRunList: FormulaCel
             f: v[2],
         };
     }
+
+    ctx.groupValuesRefreshData =
+        ctx.groupValuesRefreshData.length > 0 ? ctx.groupValuesRefreshData.concat(refreshed) : refreshed;
 }

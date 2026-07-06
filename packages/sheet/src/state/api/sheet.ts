@@ -1,7 +1,7 @@
 import { cloneDeep, isUndefined } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import type { CellMatrix } from '../../engine/types';
-import { api, execfunction, locale, setCellValue as setCellValueInternal } from '..';
+import { api, createContextResolver, execfunction, locale, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
 import type { FormulaCell, Sheet, SingleRange } from '../types';
 import { getSheetIndex } from '../utils';
@@ -135,11 +135,14 @@ function calculateSheetFromula(ctx: Context, id: string, range?: SingleRange) {
         (cc) => cc.id !== id || cc.r < rStart || cc.r > rEnd || cc.c < cStart || cc.c > cEnd,
     );
 
+    // Live (unsnapshotted) resolver: this sweep runs in cell order, not
+    // dependency order, and each evaluation must see the writes before it.
+    const resolver = createContextResolver(ctx);
     for (let r = rStart; r <= rEnd; r += 1) {
         for (let c = cStart; c <= cEnd; c += 1) {
             const cell = data[r][c];
             if (!cell?.f) continue;
-            const [, value] = execfunction(ctx, cell.f, r, c, id, undefined, false, true);
+            const [, value] = execfunction(ctx, cell.f, r, c, id, undefined, false, true, resolver);
             setCellValueInternal(ctx, r, c, data, value);
             newChain.push({ r, c, id });
         }

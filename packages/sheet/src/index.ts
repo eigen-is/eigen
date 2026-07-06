@@ -17,11 +17,7 @@ export type {
     EvaluateConditionalFormatOptions,
 } from './engine/conditional-format';
 export { evaluateConditionalFormat } from './engine/conditional-format';
-export {
-    detectCycle,
-    getCalculationOrder,
-    matchDependencies,
-} from './engine/dependency-graph';
+export { detectCycle, getCalculationOrder } from './engine/dependency-graph';
 export { FormulaEngine } from './engine/formula-engine';
 export {
     ERROR,

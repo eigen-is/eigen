@@ -2,7 +2,7 @@ import { clone, findIndex } from 'es-toolkit/compat';
 import numeral from 'numeral';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
-import { execfunction, functionCopy, update } from '.';
+import { createContextResolver, execfunction, functionCopy, update } from '.';
 import { jfrefreshgrid } from './refresh';
 
 export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[][]) {
@@ -65,6 +65,8 @@ export function sortDataRange(
 ) {
     const { sortedData, rowOffsets } = orderbydata(isAsc, index, dataRange);
 
+    // Live resolver, hoisted: one per sort instead of one snapshot per formula.
+    const resolver = createContextResolver(ctx);
     for (let r = str; r <= edr; r += 1) {
         for (let c = stc; c <= edc; c += 1) {
             const cell = sortedData[r - str][c - stc];
@@ -76,7 +78,7 @@ export function sortDataRange(
                 } else if (moveOffset < 0) {
                     func = `=${functionCopy(func, 'up', -moveOffset)}`;
                 }
-                const funcV = execfunction(ctx, func, r, c, undefined, undefined, true);
+                const funcV = execfunction(ctx, func, r, c, undefined, undefined, true, undefined, resolver);
                 [, cell!.v, cell!.f] = funcV;
                 cell.m = update(cell.ct?.fa || 'General', cell.v);
             }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { detectCycle, getCalculationOrder, matchDependencies } from '../dependency-graph';
+import { detectCycle, getCalculationOrder } from '../dependency-graph';
 import type { FormulaCellInfo, FormulaCellInfoMap } from '../types';
 
 // Helper to build a minimal FormulaCellInfo for test use
@@ -79,64 +79,6 @@ describe('engine/dependency-graph — getCalculationOrder', () => {
         const map: FormulaCellInfoMap = { r0c0isheet1: cell };
         const result = getCalculationOrder([cell, cell], map);
         expect(result).toHaveLength(1);
-    });
-});
-
-// ─── matchDependencies ────────────────────────────────────────────────────────
-
-describe('engine/dependency-graph — matchDependencies', () => {
-    test('invokes callback for every cell in a single-cell range', () => {
-        const calls: Array<[string, number, number, string]> = [];
-        const dep = { row: [1, 1] as [number, number], column: [2, 2] as [number, number], sheetId: 's1' };
-
-        matchDependencies({}, [dep], null, null, (key, r, c, sheetId) => {
-            calls.push([key, r, c, sheetId]);
-        });
-
-        expect(calls).toHaveLength(1);
-        expect(calls[0]).toEqual(['r1c2is1', 1, 2, 's1']);
-    });
-
-    test('invokes callback for every cell in a multi-cell range', () => {
-        const calls: string[] = [];
-        const dep = { row: [0, 1] as [number, number], column: [0, 1] as [number, number], sheetId: 's1' };
-
-        matchDependencies({}, [dep], null, null, (key) => {
-            calls.push(key);
-        });
-
-        // 2×2 range → 4 cells
-        expect(calls).toHaveLength(4);
-        expect(calls).toContain('r0c0is1');
-        expect(calls).toContain('r0c1is1');
-        expect(calls).toContain('r1c0is1');
-        expect(calls).toContain('r1c1is1');
-    });
-
-    test('uses cache on second call for the same range', () => {
-        const cache: Parameters<typeof matchDependencies>[0] = {};
-        const dep = { row: [0, 0] as [number, number], column: [0, 0] as [number, number], sheetId: 's1' };
-        const cellInfoMap: FormulaCellInfoMap = { r0c0is1: makeCell('r0c0is1') };
-
-        const calls: string[] = [];
-        const func = (key: string) => calls.push(key);
-
-        matchDependencies(cache, [dep], cellInfoMap, null, func);
-        expect(calls).toHaveLength(1);
-
-        // Second call should hit cache — same result, no re-iteration
-        matchDependencies(cache, [dep], cellInfoMap, null, func);
-        expect(calls).toHaveLength(2);
-        expect(calls[0]).toBe(calls[1]);
-    });
-
-    test('does not populate cache when both maps are null', () => {
-        const cache: Parameters<typeof matchDependencies>[0] = {};
-        const dep = { row: [0, 0] as [number, number], column: [0, 0] as [number, number], sheetId: 's1' };
-
-        matchDependencies(cache, [dep], null, null, () => {});
-
-        expect(Object.keys(cache)).toHaveLength(0);
     });
 });
 
