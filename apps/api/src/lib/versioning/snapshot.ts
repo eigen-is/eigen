@@ -15,58 +15,77 @@ import { formatSnapshotTimestamp } from './timestamp';
 // chat byte-overwrite) lives next door in restore.ts.
 
 // Snapshots the container's data.db into versions/<iso-ts>.db, then prunes per
-// the retention policy. Self-locked on the container: the timer, close, manual
-// save and a restore's pre-restore snapshot all call this directly and serialize
-// here — no caller has to remember to lock, and nothing holds the lock across
-// another snapshot, so there is no deadlock to reason about.
+// the retention policy. Self-locked on the container: the manual save and a
+// restore's pre-restore snapshot call this directly and serialize here — no
+// caller has to remember to lock, and nothing holds the lock across another
+// snapshot, so there is no deadlock to reason about. An explicit user action
+// must never silently skip, hence blocking; the timer/close path instead goes
+// through trySnapshotContainerDataDb below.
 export async function snapshotContainerDataDb(
     mount: Mount,
     containerId: string,
     policy: RetentionPolicy,
 ): Promise<DrivePath> {
-    return mount.withPathLock(containerId, async () => {
-        const dataDb = await mount.getChildByName(containerId, 'data.db');
-        if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
+    return mount.withPathLock(containerId, () => takeSnapshot(mount, containerId, policy));
+}
 
-        // Flush any cached managedDb so the on-storage data.db reflects pending
-        // writes. No-op if not cached, or cached and not dirty.
-        const cached = mount.documentDbs.get(dataDb.id);
-        if (cached) await (await cached()).flush();
+// The tick/close (ManagedDatabase onSnapshot) twin: those snapshots must never PARK on the
+// container lock — a close already holds the doc's closing slot, so waiting on a lock whose
+// holder waits on that same close deadlocks (the H→F→C cycle in the design note). A skip
+// forgoes at most one version-history entry, never bytes (the sync already staged them);
+// a tick-path skip retries next tick because snapshotIfDue doesn't advance on 'skipped'.
+export async function trySnapshotContainerDataDb(
+    mount: Mount,
+    containerId: string,
+    policy: RetentionPolicy,
+): Promise<'taken' | 'skipped'> {
+    const taken = await mount.tryWithPathLock(containerId, () => takeSnapshot(mount, containerId, policy));
+    return taken === null ? 'skipped' : 'taken';
+}
 
-        let versions = await mount.getChildByName(containerId, 'versions');
-        if (!versions) {
-            const newId = await mount.createFolder(containerId, 'versions');
-            const created = await mount.getPath(newId);
-            if (!created) throw new ApiError(500, 'Failed to create versions folder');
-            versions = created;
-        }
+async function takeSnapshot(mount: Mount, containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
+    const dataDb = await mount.getChildByName(containerId, 'data.db');
+    if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
 
-        const snapshotName = formatSnapshotTimestamp(new Date());
-        // Two snapshots in the same millisecond capture the same instant — reuse
-        // the existing one rather than failing on the duplicate name.
-        const existing = await mount.getChildByName(versions.id, snapshotName);
-        if (existing) return existing;
-        // isRemote sources the version from the freshest LOCAL bytes and ENQUEUES its upload
-        // (§3), so a close-time snapshot never blocks on the backend — copyPath would instead
-        // write the new version to storage synchronously. Local backends are synchronously
-        // current, so they keep the direct copyPath.
-        const copy = mount.isRemote
-            ? await snapshotDataDbToVersionStaged(mount, dataDb, versions.id, snapshotName)
-            : await mount.copyPath(dataDb.id, versions.id, snapshotName);
+    // Flush any cached managedDb so the on-storage data.db reflects pending
+    // writes. No-op if not cached, or cached and not dirty. peek(), never the
+    // getter: mid-close the map holds an unresolved factory awaiting this very
+    // close's deferred (C→F→C wedge), and an unresolved getter has no live db
+    // with pending writes — the staged-copy/storage fallback reads current bytes.
+    const cached = mount.documentDbs.get(dataDb.id)?.peek();
+    if (cached) await cached.flush();
 
-        // Prune. Exclude the just-written copy: retention keeps the newest per
-        // hour bucket, and excluding the fresh one lets a second snapshot taken
-        // within the same hour preserve the first until the hour rolls over.
-        const toPrune = selectSnapshotsToPrune(
-            (await mount.listFolder(versions.id))
-                .filter((e) => e.id !== copy.id)
-                .map((e) => ({ id: e.id, name: e.name })),
-            policy,
-        );
-        for (const item of toPrune) await mount.deletePath(item.id);
+    let versions = await mount.getChildByName(containerId, 'versions');
+    if (!versions) {
+        const newId = await mount.createFolder(containerId, 'versions');
+        const created = await mount.getPath(newId);
+        if (!created) throw new ApiError(500, 'Failed to create versions folder');
+        versions = created;
+    }
 
-        return copy;
-    });
+    const snapshotName = formatSnapshotTimestamp(new Date());
+    // Two snapshots in the same millisecond capture the same instant — reuse
+    // the existing one rather than failing on the duplicate name.
+    const existing = await mount.getChildByName(versions.id, snapshotName);
+    if (existing) return existing;
+    // isRemote sources the version from the freshest LOCAL bytes and ENQUEUES its upload
+    // (§3), so a close-time snapshot never blocks on the backend — copyPath would instead
+    // write the new version to storage synchronously. Local backends are synchronously
+    // current, so they keep the direct copyPath.
+    const copy = mount.isRemote
+        ? await snapshotDataDbToVersionStaged(mount, dataDb, versions.id, snapshotName)
+        : await mount.copyPath(dataDb.id, versions.id, snapshotName);
+
+    // Prune. Exclude the just-written copy: retention keeps the newest per
+    // hour bucket, and excluding the fresh one lets a second snapshot taken
+    // within the same hour preserve the first until the hour rolls over.
+    const toPrune = selectSnapshotsToPrune(
+        (await mount.listFolder(versions.id)).filter((e) => e.id !== copy.id).map((e) => ({ id: e.id, name: e.name })),
+        policy,
+    );
+    for (const item of toPrune) await mount.deletePath(item.id);
+
+    return copy;
 }
 
 // isRemote version snapshot: create the version metadata row, source its bytes from the
@@ -105,10 +124,12 @@ async function stageDataDbSnapshot(mount: Mount, dataDbPathId: string, destPath:
         return;
     }
     // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
-    // current because every upload acked (§3).
-    const cached = mount.documentDbs.get(dataDbPathId);
+    // current because every upload acked (§3). peek() as in takeSnapshot's flush step: awaiting
+    // an unresolved factory mid-close wedges on the close's own deferred (C→F→C), and an
+    // unresolved getter has no live db with pending writes anyway.
+    const cached = mount.documentDbs.get(dataDbPathId)?.peek();
     if (cached) {
-        (await cached()).stageCopy(destPath);
+        cached.stageCopy(destPath);
         return;
     }
     await Bun.write(destPath, mount.storage.read(storageKey));

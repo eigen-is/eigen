@@ -1,8 +1,12 @@
-export function createAsyncSingleton<T>(factoryFn: () => Promise<T>): () => Promise<T> {
+// peek(): the built instance or null — never triggers the factory. Callers that must not
+// wait on an in-flight build (versioning/snapshot.ts mid-close) read through it.
+export type AsyncSingleton<T> = (() => Promise<T>) & { peek: () => T | null };
+
+export function createAsyncSingleton<T>(factoryFn: () => Promise<T>): AsyncSingleton<T> {
     let instance: T | null = null;
     let initializationPromise: Promise<T> | null = null;
 
-    return async (): Promise<T> => {
+    const getter = async (): Promise<T> => {
         if (instance !== null) {
             return instance;
         }
@@ -23,4 +27,6 @@ export function createAsyncSingleton<T>(factoryFn: () => Promise<T>): () => Prom
 
         return initializationPromise;
     };
+
+    return Object.assign(getter, { peek: () => instance });
 }

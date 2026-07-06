@@ -41,6 +41,16 @@ async function openDocumentDb<S extends SchemaType>(
         mount.documentDbs.set(
             pathId,
             createAsyncSingleton(async () => {
+                // Captured synchronously with the map-set and first getter() call below (one
+                // synchronous block): any close that grabs THIS factory as its getter registers
+                // strictly after this capture, so the captured close can never transitively
+                // await this factory — exactly one entry to wait on, no loop, no cycle.
+                const closing = mount.closingDocumentDbs.get(pathId);
+                // An in-flight close of the same pathId still owns files the fresh instance
+                // would share — the live temp (local/s3) or the backing file's journals
+                // (local-key) — so building over it loses the tail. Backend-unconditional.
+                // The close's error stays with its own caller; the open builds regardless.
+                if (closing) await closing.catch(() => {});
                 // Clean up the map entry if the factory throws — otherwise a
                 // failed createDatabase leaves a getter behind whose closed-over
                 // `mode` would silently steer the next openDatabase down the
@@ -77,8 +87,10 @@ async function buildDocumentDb<S extends SchemaType>(
     const onSnapshot: SyncCallbacks['onSnapshot'] = config.snapshot
         ? async () => {
               const path = await mount.getPath(pathId);
-              if (!path?.parentId) return; // standalone or already-deleted; skip
-              await mount.snapshotContainerDataDb(path.parentId, config.snapshot!.policy);
+              // standalone or already-deleted: 'taken' so the watermark advances and the
+              // tick doesn't re-probe every 30s ('skipped' is strictly for lock contention).
+              if (!path?.parentId) return 'taken';
+              return mount.trySnapshotContainerDataDb(path.parentId, config.snapshot!.policy);
           }
         : undefined;
 
@@ -211,12 +223,30 @@ export async function closeDatabase(
     opts?: { skipFinalSnapshot?: boolean },
 ): Promise<void> {
     const getter = mount.documentDbs.get(pathId);
-    if (getter) {
-        // Delete BEFORE closing — a concurrent openDatabase() during the async
-        // close must create a fresh ManagedDatabase, not reuse the closing one.
-        mount.documentDbs.delete(pathId);
+    if (!getter) return;
+    // Delete BEFORE closing — a concurrent openDatabase() during the async
+    // close must create a fresh ManagedDatabase, not reuse the closing one.
+    mount.documentDbs.delete(pathId);
+    // Registered synchronously (before the first await) so the fresh open that
+    // delete-before-close enables waits for this close's file teardown instead of
+    // adopting the live temp / sharing its journals (see openDocumentDb).
+    let settle!: () => void;
+    const closing = new Promise<void>((r) => {
+        settle = r;
+    });
+    mount.closingDocumentDbs.set(pathId, closing);
+    try {
         const db = await getter();
         await db.close(opts);
+    } finally {
+        // Resolve in finally: a throwing close must not wedge waiters (the error still
+        // propagates to this close's caller). Delete only our own registration — a nested
+        // close may have overwritten the slot, and clobbering its entry would reopen the
+        // unguarded window.
+        settle();
+        if (mount.closingDocumentDbs.get(pathId) === closing) {
+            mount.closingDocumentDbs.delete(pathId);
+        }
     }
 }
 
@@ -256,14 +286,36 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     // so a black-holed extract can't park teardown (see ContentReindexQueue.close).
     await mount.reindexQueue?.close();
 
-    const entries = [...mount.documentDbs.entries()];
+    // Snapshot + clear + register a closing deferred for EVERY pathId in one synchronous
+    // block — per-iteration registration would leave later pathIds raceable during the
+    // earlier closes' awaits.
+    const closes: {
+        pathId: string;
+        getter: () => Promise<ManagedDatabase<SchemaType>>;
+        closing: Promise<void>;
+        settle: () => void;
+    }[] = [];
+    for (const [pathId, getter] of mount.documentDbs) {
+        let settle!: () => void;
+        const closing = new Promise<void>((r) => {
+            settle = r;
+        });
+        mount.closingDocumentDbs.set(pathId, closing);
+        closes.push({ pathId, getter, closing, settle });
+    }
     mount.documentDbs.clear();
-    for (const [pathId, getter] of entries) {
+    for (const { pathId, getter, closing, settle } of closes) {
         try {
             const db = await getter();
             await db.close(); // isRemote: onClose-time sync stages + enqueues the final state
         } catch (err) {
             console.error(`[Mount] closeAllDatabases close failed for ${pathId}:`, err);
+        } finally {
+            // Resolve in finally + identity-guarded delete, as in closeDatabase.
+            settle();
+            if (mount.closingDocumentDbs.get(pathId) === closing) {
+                mount.closingDocumentDbs.delete(pathId);
+            }
         }
     }
 

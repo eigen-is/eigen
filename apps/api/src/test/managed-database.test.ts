@@ -63,6 +63,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
             },
             onSnapshot: async () => {
                 snapshots++;
+                return 'taken';
             },
         });
         await db.open(0);
@@ -85,6 +86,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
             onSnapshot: async () => {
                 await new Promise((r) => setTimeout(r, 20));
                 snapshotFinished = true;
+                return 'taken';
             },
         });
         await db.open(0);
@@ -101,6 +103,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
             onSync: async () => {},
             onSnapshot: async () => {
                 snapshots++;
+                return 'taken';
             },
         });
         await db.open(10);

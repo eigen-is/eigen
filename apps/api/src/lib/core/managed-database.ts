@@ -32,7 +32,9 @@ export type SyncCallbacks = {
     onSync?: () => Promise<void>;
     // syncFailed: the close-time sync threw — the working copy holds bytes storage doesn't.
     onClose?: (syncFailed: boolean) => Promise<void>;
-    onSnapshot?: () => Promise<void>;
+    // 'skipped': the snapshot was deliberately not taken (container lock contended) — the
+    // watermark must not advance, so a tick-path skip retries next tick.
+    onSnapshot?: () => Promise<'taken' | 'skipped'>;
 };
 
 export class ManagedDatabase<S extends SchemaType> {
@@ -191,8 +193,10 @@ export class ManagedDatabase<S extends SchemaType> {
         const total = this.getTotalChanges();
         const unsnapshotted = total - this.lastSnapshotChanges;
         if (unsnapshotted <= 0 || (!force && unsnapshotted < this.config.snapshot.writesPerSnapshot)) return;
-        await this.callbacks.onSnapshot();
-        this.lastSnapshotChanges = total;
+        // A skip must stay due — advancing would record it as taken and never retry it.
+        if ((await this.callbacks.onSnapshot()) !== 'skipped') {
+            this.lastSnapshotChanges = total;
+        }
     }
 
     // Periodic auto-sync: push writes, then snapshot if the threshold is crossed.
