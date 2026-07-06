@@ -37,7 +37,7 @@ export const SlideThumbnail = memo(function SlideThumbnail({
                 className={cn(
                     'flex-1 min-w-0 rounded border overflow-hidden',
                     isActive ? 'border-selection-handle shadow-sm' : 'border-border',
-                    matched && !isActive && 'eigen-search-ring',
+                    matched && 'eigen-search-ring',
                 )}
                 style={{ aspectRatio: SLIDE_ASPECT_RATIO }}
             >
