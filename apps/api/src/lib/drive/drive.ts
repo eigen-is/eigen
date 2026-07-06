@@ -61,7 +61,6 @@ import {
 import { diffACLEmails, type EffectiveMember, propagateSharedPathChange, resolveACLToEmails } from './acl-propagation';
 import { CollabRegistry } from './collab-registry';
 import { LockManager } from './lock-manager';
-import { serveFile } from './serve-file';
 import { getSharedDatabase } from './shared';
 import { listSharedWithMe, listSharedWithMeByMimeType, receiveSharedPathChange } from './shared-with-me';
 import type * as sharedSchema from './sharedschema';
@@ -247,8 +246,7 @@ export default class Drive {
             throw new ApiError(403, 'No write permission');
         }
 
-        const safeName = folderName.replace(/[/\\]/g, '_');
-        const pathId = await mount.createFolder(parentId, safeName, containerType);
+        const pathId = await mount.createFolder(parentId, folderName, containerType);
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
@@ -565,15 +563,6 @@ export default class Drive {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId);
         return mount.readRange(pathId, start, end);
-    }
-
-    async serveFile(
-        mountId: string,
-        pathId: string,
-        disposition: 'attachment' | 'inline',
-        range: string | null = null,
-    ): Promise<Response> {
-        return serveFile(this.getMount(mountId), pathId, disposition, range);
     }
 
     async writeFileContent(

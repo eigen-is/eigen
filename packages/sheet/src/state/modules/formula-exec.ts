@@ -2,7 +2,7 @@
 // (formula caches, sheet data, calc chains) so they stay in the state layer.
 // The engine directory has zero state-runtime dependencies.
 import { forEach, isEmpty } from 'es-toolkit/compat';
-import { getCalculationOrder, matchDependencies } from '../../engine/dependency-graph';
+import { getCalculationOrder } from '../../engine/dependency-graph';
 import {
     calPostfixExpression,
     checkBracketNum,
@@ -10,12 +10,12 @@ import {
     operatorjson,
     operatorPriority,
 } from '../../engine/formula-utils';
-import type { Cell, CellMatrix, FormulaCellInfo, FormulaDependency } from '../../engine/types';
+import type { Cell, CellMatrix, CellResolver, FormulaCellInfo, FormulaDependency } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
 import { columnCharToIndex, getSheetIndex } from '../utils';
 import { setCellValue } from './cell';
-import { createContextResolver } from './formula-cache';
+import { createContextResolver, snapshotContext } from './formula-cache';
 import { executeAffectedFormulas, setFormulaCellInfo } from './formulaHelper';
 import { error } from './validation';
 
@@ -526,6 +526,11 @@ export function insertUpdateFunctionGroup(
         id = ctx.currentSheetId;
     }
 
+    // Answer the common already-present case from the set before touching
+    // ctx: during a recalc this runs once per formula, and sheet lookups on
+    // an immer draft are not free.
+    if (calcChainSet?.has(`${r}_${c}_${id}`)) return;
+
     const { sheets } = ctx;
     const idx = getSheetIndex(ctx, id);
     if (idx == null) {
@@ -538,9 +543,7 @@ export function insertUpdateFunctionGroup(
         calcChain = [];
     }
 
-    if (calcChainSet) {
-        if (calcChainSet.has(`${r}_${c}_${id}`)) return;
-    } else {
+    if (!calcChainSet) {
         for (let i = 0; i < calcChain.length; i += 1) {
             const calc = calcChain[i];
             if (calc.r === r && calc.c === c && calc.id === id) {
@@ -570,6 +573,7 @@ export function execfunction(
     calcChainSet?: Set<string>,
     isrefresh?: boolean,
     notInsertFunc?: boolean,
+    resolver?: CellResolver,
 ): ExecFunctionResult {
     if (txt.indexOf(error.r) > -1) {
         return [false, error.r, txt];
@@ -585,7 +589,7 @@ export function execfunction(
 
     ctx.calculateSheetId = id;
 
-    const resolver = createContextResolver(ctx);
+    resolver ??= createContextResolver(snapshotContext(ctx));
     const evalResult = ctx.formulaCache.engine.evaluate(txt, id!, r ?? 0, c ?? 0, resolver);
     const result = evalResult.value;
 
@@ -604,14 +608,21 @@ export function execfunction(
 }
 
 export function groupValuesRefresh(ctx: Context): void {
-    const { sheets } = ctx;
     if (ctx.groupValuesRefreshData.length === 0) return;
 
+    // Most recomputed formulas land on their previous value. Compare against a
+    // plain snapshot and only write real changes — draft writes are what the
+    // immer finalize/patch pass pays for.
+    const snapshot = snapshotContext(ctx);
+
     for (const item of ctx.groupValuesRefreshData) {
-        const idx = getSheetIndex(ctx, item.id);
+        const idx = getSheetIndex(snapshot, item.id);
         if (idx == null) continue;
 
-        const { data } = sheets[idx];
+        const before = snapshot.sheets[idx].data?.[item.r]?.[item.c];
+        if (before != null && before.v === item.v && before.f === item.f) continue;
+
+        const { data } = ctx.sheets[idx];
         if (data == null) continue;
 
         setCellValue(ctx, item.r, item.c, data, { v: item.v, f: item.f });
@@ -647,7 +658,6 @@ export function execFunctionGroup(
     value: unknown,
     id?: string | null,
     data?: CellMatrix | null,
-    isForce = false,
 ): void {
     // 0. null checks
     if (data == null) {
@@ -667,61 +677,61 @@ export function execFunctionGroup(
         [[ctx.formulaCache.execFunctionGlobalData[`${origin_r}_${origin_c}_${id}`]]] = cellCache;
     }
 
-    // 1. get list of all functions in the sheet
-    const calcChains: FormulaCell[] = getAllFunctionGroup(ctx);
+    // 1. plain view of the workbook, taken lazily: chains and cells are only
+    // read below, and reading them through immer draft proxies is what made
+    // recalc slow. Edits with no dependents never pay for the snapshot.
+    let snap: Context | null = null;
+    const getSnapshot = () => (snap ??= snapshotContext(ctx));
+    let allChains: FormulaCell[] | null = null;
+    const getChains = () => (allChains ??= getAllFunctionGroup(getSnapshot()));
 
-    // 2. Store the cells involved in the modification
-    const updateValueObjects: Record<string, number> = {};
-    if (ctx.formulaCache.execFunctionExist == null) {
-        const key = `r${origin_r}c${origin_c}i${id}`;
-        updateValueObjects[key] = 1;
-    } else {
-        for (const cell of ctx.formulaCache.execFunctionExist) {
-            const key = `r${cell.r}c${cell.c}i${cell.id}`;
-            updateValueObjects[key] = 1;
-        }
-    }
+    // 2. the cells this edit changed
+    const changedCells: FormulaCell[] =
+        ctx.formulaCache.execFunctionExist ??
+        (origin_r != null && origin_c != null ? [{ r: origin_r, c: origin_c, id }] : []);
 
     // 3. formulaCellInfoMap: a cache of ALL formulas vs their ranges
     if (!ctx.formulaCache.formulaCellInfoMap || isEmpty(ctx.formulaCache.formulaCellInfoMap)) {
         ctx.formulaCache.formulaCellInfoMap = {};
-        setFormulaCellInfoMap(ctx, calcChains, data);
+        setFormulaCellInfoMap(ctx, getChains(), data);
     }
-    const { formulaCellInfoMap } = ctx.formulaCache;
+    const { formulaCellInfoMap, dependencyIndex } = ctx.formulaCache;
 
-    // 4. Form a graph structure of references between formulas
-    // basically fills parents in formulaCellInfoMap[i]
-    const updateValueArray: FormulaCellInfo[] = [];
-    const arrayMatchCache: Record<string, { key: string; r: number; c: number; sheetId: string }[]> = {};
-    Object.keys(formulaCellInfoMap).forEach((key) => {
-        const formulaObject = formulaCellInfoMap[key];
-        matchDependencies(
-            arrayMatchCache,
-            formulaObject.formulaDependency,
-            formulaCellInfoMap,
-            updateValueObjects,
-            (childKey: string) => {
-                if (childKey in formulaCellInfoMap) {
-                    const childFormulaObject = formulaCellInfoMap[childKey];
-                    // formulaObject.chidren[childKey] = 1; not needed
-                    childFormulaObject.parents[key] = 1;
-                }
-                if (!isForce && childKey in updateValueObjects) {
-                    updateValueArray.push(formulaObject);
-                }
-            },
-        );
+    // 4. Collect the affected sub-graph from the reverse index: direct
+    // dependents of the changed cells, then everything downstream of those.
+    // Each affected formula's `parents` (= its dependents, see
+    // dependency-graph.ts) is refilled so the sort below sees fresh edges.
+    const affected: FormulaCellInfo[] = [];
+    const affectedKeys = new Set<string>();
+    const collect = (key: string) => {
+        const info = formulaCellInfoMap[key];
+        if (info == null || affectedKeys.has(key)) return;
+        affectedKeys.add(key);
+        affected.push(info);
+    };
 
-        if (isForce) {
-            updateValueArray.push(formulaObject);
+    for (const cell of changedCells) {
+        for (const key of dependencyIndex.dependentsOf(cell.id ?? id, cell.r, cell.c)) {
+            collect(key);
         }
-    });
+    }
+
+    for (let i = 0; i < affected.length; i += 1) {
+        const node = affected[i];
+        node.parents = {};
+        for (const key of dependencyIndex.dependentsOf(node.id, node.r, node.c)) {
+            node.parents[key] = 1;
+            collect(key);
+        }
+    }
 
     // 5. Get list of affected formulas using the graph structure by depth-first traversal
-    const formulaRunList = getCalculationOrder(updateValueArray, formulaCellInfoMap);
+    const formulaRunList = getCalculationOrder(affected, formulaCellInfoMap);
 
     // 6. execute relevant formulas
-    executeAffectedFormulas(ctx, formulaRunList, calcChains);
+    if (formulaRunList.length > 0) {
+        executeAffectedFormulas(ctx, formulaRunList, getChains(), createContextResolver(getSnapshot()));
+    }
 
     ctx.formulaCache.execFunctionExist = undefined;
 }

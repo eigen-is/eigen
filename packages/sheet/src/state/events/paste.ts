@@ -26,7 +26,13 @@ import { type Context, getFlowdata } from '../context';
 import { locale } from '../locale';
 import { getBorderInfoCompute } from '../modules/border';
 import { getdatabyselection, getQKBorder } from '../modules/cell';
-import { delFunctionGroup, execFunctionGroup, execfunction, functionCopy } from '../modules/formula-ui';
+import {
+    createContextResolver,
+    delFunctionGroup,
+    execFunctionGroup,
+    execfunction,
+    functionCopy,
+} from '../modules/formula-ui';
 import { setFormulaCellInfo } from '../modules/formulaHelper';
 import { jfrefreshgrid } from '../modules/refresh';
 import { normalizeSelection, selectionCache } from '../modules/selection';
@@ -941,6 +947,10 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
     if (!copyRange) return;
 
+    // Live resolver, hoisted: one per paste instead of one snapshot per pasted
+    // formula, and each evaluation sees the cells pasted before it.
+    const resolver = createContextResolver(ctx);
+
     const cfg = ctx.config;
     if (isNil(cfg.merge)) {
         cfg.merge = {};
@@ -1192,7 +1202,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                             func = `=${functionCopy(func, 'left', Math.abs(offsetCol))}`;
                         }
 
-                        const funcV = execfunction(ctx, func, h, c, undefined, undefined, true);
+                        const funcV = execfunction(ctx, func, h, c, undefined, undefined, true, undefined, resolver);
 
                         [, value.v, value.f] = funcV;
 

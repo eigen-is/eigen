@@ -30,8 +30,11 @@ export type DatabaseConfig<S extends SchemaType> = {
 export type SyncCallbacks = {
     onOpen?: () => Promise<void>;
     onSync?: () => Promise<void>;
-    onClose?: () => Promise<void>;
-    onSnapshot?: () => Promise<void>;
+    // syncFailed: the close-time sync threw — the working copy holds bytes storage doesn't.
+    onClose?: (syncFailed: boolean) => Promise<void>;
+    // 'skipped': the snapshot was deliberately not taken (container lock contended) — the
+    // watermark must not advance, so a tick-path skip retries next tick.
+    onSnapshot?: () => Promise<'taken' | 'skipped'>;
 };
 
 export class ManagedDatabase<S extends SchemaType> {
@@ -85,19 +88,27 @@ export class ManagedDatabase<S extends SchemaType> {
         this.rawDb = this.mustExist
             ? new BunDatabase(this.localPath, { readwrite: true, create: false })
             : new BunDatabase(this.localPath, { create: true });
-        this.rawDb.run('PRAGMA journal_mode = WAL;');
-        this.rawDb.run('PRAGMA foreign_keys = ON;');
-        this.rawDb.run('PRAGMA busy_timeout = 5000;');
+        // A failed open — corrupt bytes tripping the first PRAGMA (SQLITE_NOTADB on a partial
+        // download) or a throwing migration — must not leak the raw handle (fd + mapped journals).
+        try {
+            this.rawDb.run('PRAGMA journal_mode = WAL;');
+            this.rawDb.run('PRAGMA foreign_keys = ON;');
+            this.rawDb.run('PRAGMA busy_timeout = 5000;');
 
-        this.rawDb.exec(`
-            CREATE TABLE IF NOT EXISTS __schema_version (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                version INTEGER NOT NULL DEFAULT 0
-            );
-            INSERT OR IGNORE INTO __schema_version (id, version) VALUES (1, 0);
-        `);
+            this.rawDb.exec(`
+                CREATE TABLE IF NOT EXISTS __schema_version (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    version INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT OR IGNORE INTO __schema_version (id, version) VALUES (1, 0);
+            `);
 
-        await this.runMigrations();
+            await this.runMigrations();
+        } catch (e) {
+            this.rawDb.close();
+            this.rawDb = null;
+            throw e;
+        }
 
         this.drizzleDb = drizzle(this.rawDb, { schema: this.config.schema }) as BunSQLiteDatabase<S>;
         this.lastSyncedChanges = 0;
@@ -190,8 +201,10 @@ export class ManagedDatabase<S extends SchemaType> {
         const total = this.getTotalChanges();
         const unsnapshotted = total - this.lastSnapshotChanges;
         if (unsnapshotted <= 0 || (!force && unsnapshotted < this.config.snapshot.writesPerSnapshot)) return;
-        await this.callbacks.onSnapshot();
-        this.lastSnapshotChanges = total;
+        // A skip must stay due — advancing would record it as taken and never retry it.
+        if ((await this.callbacks.onSnapshot()) !== 'skipped') {
+            this.lastSnapshotChanges = total;
+        }
     }
 
     // Periodic auto-sync: push writes, then snapshot if the threshold is crossed.
@@ -227,23 +240,52 @@ export class ManagedDatabase<S extends SchemaType> {
             this.syncTimer = null;
         }
 
-        await this.sync();
-        // Fold the WAL into the main file before snapshotting: local backends copy
-        // this on-disk file (TRUNCATE makes it complete), remote backends copy the
-        // object sync() uploaded. A snapshot failure is caught so it can't block close.
-        this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
-        if (!opts.skipFinalSnapshot) {
-            await this.snapshotIfDue(true).catch((err) =>
-                console.error(`[${this.config.name}] close snapshot failed:`, err),
-            );
+        // The teardown runs even when onSync throws (the error still propagates to the caller) —
+        // aborting before it leaked the raw db handle + working copy. Checkpoint and snapshot stay
+        // correct after a failed sync: they copy the locally-committed on-disk bytes. onClose is
+        // told about the failure so it can leave the working copy as the crash-recovery marker.
+        let syncFailed = true;
+        try {
+            await this.sync();
+            syncFailed = false;
+        } finally {
+            // Fold the WAL into the main file before snapshotting: local backends copy
+            // this on-disk file (TRUNCATE makes it complete), remote backends copy the
+            // object sync() uploaded. A snapshot failure is caught so it can't block close.
+            this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
+            if (!opts.skipFinalSnapshot) {
+                await this.snapshotIfDue(true).catch((err) =>
+                    console.error(`[${this.config.name}] close snapshot failed:`, err),
+                );
+            }
+            // Strict close, GC-assisted: drizzle leaves its prepared statements to GC, and
+            // sqlite refuses to close over them (SQLITE_BUSY) — a plain close() degrades to a
+            // LAZY close that keeps the file + -shm mapped until GC finalizes them. Collect the
+            // dropped statements and retry so the close is real. If it is STILL lazy (a
+            // genuinely live statement), keep the journals: unlinking -shm under the zombie
+            // poisons sqlite's per-inode shm node and the next open of the SAME file (every
+            // local-key reopen) fails with SQLITE_IOERR_VNODE.
+            let cleanClose = true;
+            if (this.rawDb) {
+                try {
+                    this.rawDb.close(true);
+                } catch {
+                    Bun.gc(true);
+                    try {
+                        this.rawDb.close(true);
+                    } catch {
+                        cleanClose = false;
+                        this.rawDb.close();
+                    }
+                }
+            }
+            this.rawDb = null;
+            this.drizzleDb = null;
+
+            if (cleanClose) this.deleteJournalFiles();
+
+            await this.callbacks.onClose?.(syncFailed);
         }
-        this.rawDb?.close();
-        this.rawDb = null;
-        this.drizzleDb = null;
-
-        this.deleteJournalFiles();
-
-        await this.callbacks.onClose?.();
     }
 
     private deleteJournalFiles(): void {

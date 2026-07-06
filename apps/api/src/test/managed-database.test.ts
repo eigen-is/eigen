@@ -1,5 +1,6 @@
+import { Database as BunDatabase } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase } from '../lib/core';
@@ -50,6 +51,56 @@ describe('ManagedDatabase open-vs-create intent', () => {
     });
 });
 
+describe('ManagedDatabase migration rollback', () => {
+    test('a migration that throws mid-way rolls back atomically and leaves the db reopenable at v1', async () => {
+        const dbPath = nextDbPath();
+        const v1 = new ManagedDatabase(makeConfig(1000), dbPath, {});
+        await v1.open(0);
+        v1.db.insert(items).values({ v: 'v1-data' }).run();
+        await v1.close({ skipFinalSnapshot: true });
+
+        // The v2 migration executes DDL + DML, then throws — open() must reject and the
+        // BEGIN/ROLLBACK wrapper must discard BOTH statements, not just the version bump.
+        const failing: DatabaseConfig<Schema> = {
+            ...makeConfig(1000),
+            currentVersion: 2,
+            migrations: [
+                ...makeConfig(1000).migrations,
+                {
+                    version: 2,
+                    up: (db) => {
+                        db.run('ALTER TABLE items ADD COLUMN extra TEXT');
+                        db.run("INSERT INTO items (v) VALUES ('v2-row')");
+                        throw new Error('migration boom');
+                    },
+                },
+            ],
+        };
+        const v2 = new ManagedDatabase(failing, dbPath, {}, true);
+        await expect(v2.open(0)).rejects.toThrow('migration boom');
+        // A failed open releases its own raw handle — inspecting the file below needs no close().
+
+        // On-disk state is untouched v1: version stayed 1, no v2 row, no v2 column.
+        // (readwrite: a readonly connection can't create the -shm a WAL-mode db needs)
+        const raw = new BunDatabase(dbPath, { readwrite: true, create: false });
+        expect(
+            (raw.query('SELECT version FROM __schema_version WHERE id = 1').get() as { version: number }).version,
+        ).toBe(1);
+        expect(raw.query('SELECT v FROM items').all()).toEqual([{ v: 'v1-data' }]);
+        expect((raw.query('PRAGMA table_info(items)').all() as { name: string }[]).map((c) => c.name)).toEqual([
+            'id',
+            'v',
+        ]);
+        raw.close();
+
+        // With the failing migration removed, the file reopens cleanly at v1.
+        const reopened = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
+        await reopened.open(0);
+        expect(reopened.db.select().from(items).all()).toEqual([{ id: 1, v: 'v1-data' }]);
+        await reopened.close({ skipFinalSnapshot: true });
+    });
+});
+
 describe('ManagedDatabase snapshot lifecycle', () => {
     test('flush() pushes writes to storage but does NOT take a version snapshot', async () => {
         // Regression: flush() used to run the snapshot trigger, so a snapshot
@@ -63,6 +114,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
             },
             onSnapshot: async () => {
                 snapshots++;
+                return 'taken';
             },
         });
         await db.open(0);
@@ -85,6 +137,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
             onSnapshot: async () => {
                 await new Promise((r) => setTimeout(r, 20));
                 snapshotFinished = true;
+                return 'taken';
             },
         });
         await db.open(0);
@@ -101,6 +154,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
             onSync: async () => {},
             onSnapshot: async () => {
                 snapshots++;
+                return 'taken';
             },
         });
         await db.open(10);
@@ -109,6 +163,52 @@ describe('ManagedDatabase snapshot lifecycle', () => {
 
         expect(snapshots).toBeGreaterThanOrEqual(1);
         await db.close({ skipFinalSnapshot: true });
+    });
+});
+
+describe('ManagedDatabase close teardown', () => {
+    test('close() tears down (db closed, journals gone, onClose ran) even when onSync throws', async () => {
+        // A throwing onSync used to abort close() before the teardown, leaking the raw db
+        // handle and the working copy until process exit. The sync error must still reach
+        // the caller (they catch + log), but the teardown must run regardless.
+        let onCloseRan = false;
+        const dbPath = nextDbPath();
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, {
+            onSync: async () => {
+                throw new Error('sync boom');
+            },
+            onClose: async () => {
+                onCloseRan = true;
+            },
+        });
+        await db.open(0);
+        db.db.insert(items).values({ v: 'x' }).run();
+
+        await expect(db.close({ skipFinalSnapshot: true })).rejects.toThrow('sync boom');
+
+        expect(onCloseRan).toBe(true);
+        expect(() => db.db).toThrow('Database not open');
+        expect(existsSync(`${dbPath}-wal`)).toBe(false);
+    });
+});
+
+describe('ManagedDatabase close releases the file (no zombie close)', () => {
+    test('close → reopen of the SAME path works', async () => {
+        // Drizzle leaves its prepared statements to GC, so a plain rawDb.close() degrades to a
+        // LAZY close that keeps the file + -shm mapped; deleteJournalFiles then unlinks -shm
+        // under that zombie, poisoning the inode's shm node — the next open of the same file
+        // fails with SQLITE_IOERR_VNODE (macOS; Linux tolerates the unlink). Every local-key
+        // reopen takes exactly this path.
+        const dbPath = nextDbPath();
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, { onSync: async () => {} });
+        await db.open(0);
+        db.db.insert(items).values({ v: 'x' }).run();
+        await db.close({ skipFinalSnapshot: true });
+
+        const reopened = new ManagedDatabase(makeConfig(1000), dbPath, { onSync: async () => {} }, true);
+        await reopened.open(0);
+        expect(reopened.db.select().from(items).all()).toHaveLength(1);
+        await reopened.close({ skipFinalSnapshot: true });
     });
 });
 

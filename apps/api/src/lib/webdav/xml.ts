@@ -1,4 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { computeEtag } from '../core/http';
 
 const XML_HEADER = '<?xml version="1.0" encoding="utf-8"?>';
 
@@ -82,13 +83,6 @@ export function lockdiscoveryProp(locks: LockProps[]): string {
 
 export function supportedlockProp(): string {
     return '<D:supportedlock><D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry><D:lockentry><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry></D:supportedlock>';
-}
-
-// Files written through the drive API carry a SHA-256 hash; legacy/edge rows may
-// not, so we fall back to a synthetic id+mtime+size triple. Quotes per RFC 7232.
-export function computeEtag(path: Pick<DrivePath, 'hash' | 'id' | 'updatedAt' | 'size'>): string {
-    const value = path.hash ?? `${path.id}-${path.updatedAt.getTime()}-${path.size}`;
-    return `"${value}"`;
 }
 
 export function resourceProps(args: {

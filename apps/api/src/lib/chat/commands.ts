@@ -723,8 +723,7 @@ export function formatEmoteForViewer(
     viewerId: string,
     viewerEmail?: string,
 ): string {
-    const authorName = authorEmail.split('@')[0] || authorEmail;
-
+    // Emit full emails; the client renders them as resolved, hoverable display names.
     if (content.startsWith('$')) {
         const raw = content.slice(1);
         const colonIdx = raw.indexOf(':');
@@ -732,25 +731,24 @@ export function formatEmoteForViewer(
         const targetEmail = colonIdx > 0 ? raw.slice(colonIdx + 1) : undefined;
 
         const emote = BUILT_IN_EMOTES[emoteKey];
-        if (!emote) return `${authorName} does something mysterious.`;
+        if (!emote) return `${authorEmail} does something mysterious.`;
 
         if (targetEmail) {
-            const targetName = targetEmail.split('@')[0] || targetEmail;
             const isAuthor = authorId === viewerId;
             const isTarget = viewerEmail?.toLowerCase() === targetEmail.toLowerCase();
 
             if (isAuthor)
-                return (emote.targetedFirstPerson ?? `You emote at ${targetName}.`).replace('{target}', targetName);
+                return (emote.targetedFirstPerson ?? `You emote at ${targetEmail}.`).replace('{target}', targetEmail);
             if (isTarget)
-                return (emote.targetedSecondPerson ?? `${authorName} emotes at you.`).replace('{name}', authorName);
-            return (emote.targetedThirdPerson ?? `${authorName} emotes at ${targetName}.`)
-                .replace('{name}', authorName)
-                .replace('{target}', targetName);
+                return (emote.targetedSecondPerson ?? `${authorEmail} emotes at you.`).replace('{name}', authorEmail);
+            return (emote.targetedThirdPerson ?? `${authorEmail} emotes at ${targetEmail}.`)
+                .replace('{name}', authorEmail)
+                .replace('{target}', targetEmail);
         }
 
         if (authorId === viewerId) return emote.firstPerson ?? `You do something.`;
-        return (emote.thirdPerson ?? `${authorName} does something.`).replace('{name}', authorName);
+        return (emote.thirdPerson ?? `${authorEmail} does something.`).replace('{name}', authorEmail);
     }
 
-    return `${authorName} ${content}`;
+    return `${authorEmail} ${content}`;
 }

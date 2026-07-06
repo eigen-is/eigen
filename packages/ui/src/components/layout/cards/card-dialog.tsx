@@ -9,8 +9,8 @@ import { useState } from 'react';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
-import { useCreatedByMeta } from '../comments/comment-dialog-meta';
 import { CommentThread } from '../comments/comment-thread';
+import { CreatedByMeta } from '../comments/created-by-meta';
 import { NoteCardDialog } from '../notes/note-card-dialog';
 import { CardFormDialog } from './card-form-dialog';
 
@@ -48,8 +48,6 @@ export function CardDialog({
     const { mediaFolderId } = useMediaResolver();
     const resolveAttachments = useResolveCardAttachments(ownerId, mountId, mediaFolderId);
 
-    const meta = useCreatedByMeta(card?.creator, card?.createdAt ?? 0);
-
     if (!card) return null;
 
     const action =
@@ -83,7 +81,7 @@ export function CardDialog({
                 onOpenChange={onOpenChange}
                 title={card.title}
                 description={card.description}
-                meta={card.creator ? meta : undefined}
+                meta={card.creator ? <CreatedByMeta email={card.creator} createdAt={card.createdAt ?? 0} /> : undefined}
                 color={card.color}
                 canWrite={canWrite}
                 onEdit={onUpdate ? () => setIsSettingsOpen(true) : undefined}

@@ -134,8 +134,8 @@ export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: 
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}`;
 export const getMailDraftAttachmentUploadUrl = (ownerId: string) =>
     `${API_HOST}/mail/${ownerId}/message/draft/attachment`;
-export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string) =>
-    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download`;
+export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string, updatedAt?: Date) =>
+    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
 export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: string, format: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/export/${format}`;
 export const getDriveImportUrl = (ownerId: string, mountId: string, pathId: string) =>
@@ -143,19 +143,25 @@ export const getDriveImportUrl = (ownerId: string, mountId: string, pathId: stri
 export const getDriveImportFromDriveUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import-from-drive`;
 
-export const getDriveEmbedUrl = (ownerId: string, mountId: string, pathId: string, fileName: string) =>
-    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/embed/${fileName}`;
-export const getDrivePreviewUrl = (ownerId: string, mountId: string, pathId: string) =>
-    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/preview`;
-export const getDriveThumbnailUrl = (ownerId: string, mountId: string, fileName: string) =>
-    `${API_HOST}/drive/${ownerId}/${mountId}/thumb/${fileName}`;
+export const getDriveEmbedUrl = (
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    fileName: string,
+    updatedAt?: Date,
+) =>
+    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/embed/${fileName}${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
+export const getDrivePreviewUrl = (ownerId: string, mountId: string, pathId: string, updatedAt?: Date) =>
+    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/preview${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
+export const getDriveThumbnailUrl = (ownerId: string, mountId: string, fileName: string, updatedAt?: Date) =>
+    `${API_HOST}/drive/${ownerId}/${mountId}/thumb/${fileName}${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
 // Cache-busted thumbnail for image/video items — shared by grid tiles and the preview panel.
 // Trashed items get none: the thumb route rejects paths in trash (getActivePath).
 export const getDriveItemThumbnail = (path: DrivePath): { showThumbnail: boolean; thumbnailUrl?: string } => {
     const hasVisual = path.mimeType.startsWith('image/') || path.mimeType.startsWith('video/');
     const thumbnailUrl =
         path.thumbnail && !path.trashedAt
-            ? `${getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail)}?v=${path.updatedAt.getTime()}`
+            ? getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail, path.updatedAt)
             : undefined;
     return { showThumbnail: hasVisual && !!thumbnailUrl, thumbnailUrl };
 };

@@ -5,6 +5,14 @@ import { sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
 import { ApiError } from '../core';
 
+// Reserved: any case variant of `.trash` aliases the real trash dir (Mount.trashDir) on path-based mounts.
+// Also checked on move (updatePath) so a legacy pre-guard row can't be re-parented onto the alias.
+// NFKC before folding: APFS equates compatibility characters ('.traſh' with U+017F IS '.trash'),
+// which plain toLowerCase misses.
+export function isReservedName(name: string): boolean {
+    return name.normalize('NFKC').toLowerCase() === '.trash';
+}
+
 export function validateName(name: string): string {
     // Reject control bytes (incl. NUL) so a name creatable via the API stays reachable
     // over WebDAV, where resolvePath rejects the same [\x00-\x1f] range (RFC 4918).
@@ -14,7 +22,15 @@ export function validateName(name: string): string {
         throw new ApiError(400, `Invalid file or folder name: "${name}"`);
     }
     // Store NFC so a decomposed (NFD) name still matches the NFC-normalized getChildByName/resolvePath lookups.
-    return name.normalize('NFC');
+    const normalized = name.normalize('NFC');
+    if (isReservedName(normalized)) {
+        throw new ApiError(400, `"${name}" is a reserved name`);
+    }
+    // Filesystem ENAMETOOLONG is a byte limit, not a character limit.
+    if (Buffer.byteLength(normalized, 'utf8') > 255) {
+        throw new ApiError(400, 'File or folder name too long (max 255 bytes)');
+    }
+    return normalized;
 }
 
 // Subquery: ids of every eigendoc container (doc/stickies/slides/sheets/chat) and

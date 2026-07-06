@@ -97,8 +97,13 @@ export class S3Storage implements StorageBackend {
     private getKey(key: string): string {
         // Why: S3 keys are not filesystem paths, so `resolveWithinBase` (core/path-utils.ts) doesn't apply;
         // this segment check is the intentional distinct traversal guard for the S3 backend.
-        if (key.split('/').some((seg) => seg === '..')) {
+        const segments = key.split('/');
+        if (segments.some((seg) => seg === '..')) {
             throw new ApiError(400, 'Invalid storage path: path traversal detected');
+        }
+        // An empty segment (leading/trailing/double slash) builds `prefix//x` — an invalid S3 object name.
+        if (segments.some((seg) => seg === '')) {
+            throw new ApiError(400, 'Invalid storage path: empty path segment');
         }
         return this.prefix ? `${this.prefix}/${key}` : key;
     }
@@ -136,10 +141,11 @@ export class S3Storage implements StorageBackend {
     }
 
     async size(key: string): Promise<number | null> {
-        const file = this.read(key);
-        if (await file.exists()) {
-            return file.size;
+        // stat() throws on a missing object with no distinguishable code — map any failure to null like LocalStorage.
+        try {
+            return (await this.read(key).stat()).size;
+        } catch {
+            return null;
         }
-        return null;
     }
 }

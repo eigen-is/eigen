@@ -1,3 +1,4 @@
+import type { DependencyIndex } from './dependency-index';
 import type { CellCoordinate } from './parser/helper/cell.ts';
 
 // Sheet data shapes (Cell, CellMatrix, SingleRange, ConditionalFormatRule, …) live
@@ -116,6 +117,9 @@ export type EvaluationResult = {
 export type FormulaEngineState = {
     execFunctionGlobalData: Record<string, unknown>;
     formulaCellInfoMap: FormulaCellInfoMap | null;
+    // Reverse lookup cell → formulas reading it; mirrors formulaCellInfoMap
+    // and must reset with it.
+    dependencyIndex: DependencyIndex;
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
 

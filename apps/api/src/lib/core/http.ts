@@ -1,5 +1,29 @@
-export function setCacheHeaders(set: { headers: Record<string, string | number> }, maxAgeSeconds: number): void {
-    set.headers['Cache-Control'] = `public, max-age=${maxAgeSeconds}`;
+import type { DrivePath } from '@workspace/lib/types/drive';
+
+// Default private: these bodies are per-user; a shared cache must never store them.
+// 'public' is reserved for the unauthenticated /p/ surface (routes/public.ts).
+export function setCacheHeaders(
+    set: { headers: Record<string, string | number> },
+    maxAgeSeconds: number,
+    visibility: 'private' | 'public' = 'private',
+): void {
+    set.headers['Cache-Control'] = `${visibility}, max-age=${maxAgeSeconds}`;
+}
+
+// Files written through the drive API carry a SHA-256 hash; legacy/edge rows may
+// not, so we fall back to a synthetic id+mtime+size triple. Quotes per RFC 7232.
+export function computeEtag(path: Pick<DrivePath, 'hash' | 'id' | 'updatedAt' | 'size'>): string {
+    const value = path.hash ?? `${path.id}-${path.updatedAt.getTime()}-${path.size}`;
+    return `"${value}"`;
+}
+
+// If-None-Match matcher: weak comparison (W/ stripped) is correct for GET/304 per RFC 7232 §3.2.
+export function etagMatches(header: string, etag: string): boolean {
+    if (header.trim() === '*') return true;
+    return header
+        .split(',')
+        .map((s) => s.trim().replace(/^W\//, ''))
+        .includes(etag);
 }
 
 // RFC 7233 single byte-range. Returns the inclusive [start, end] when satisfiable,

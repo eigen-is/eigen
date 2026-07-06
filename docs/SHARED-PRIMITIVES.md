@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-776 primitives across 6 kinds. `packages/sheet` internals are excluded.
+779 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (100)
+## Components (102)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -42,6 +42,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContactAddRow` | `@workspace/ui` | packages/ui/src/components/layout/contacts/contact-add-row.tsx |
 | `ContactAutosuggest` | `@workspace/ui` | packages/ui/src/components/layout/contacts/contact-autosuggest.tsx |
 | `CountBadge` | `@workspace/ui` | packages/ui/src/components/layout/count-badge.tsx |
+| `CreatedByMeta` | `@workspace/ui` | packages/ui/src/components/layout/comments/created-by-meta.tsx |
 | `DocumentModeButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
 | `DriveAccessList` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-access-list.tsx |
 | `DriveBrowser` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-browser.tsx |
@@ -94,6 +95,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UploadContainer` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-container.tsx |
 | `UserAvatar` | `@workspace/ui` | packages/ui/src/components/layout/user-avatar.tsx |
 | `UserItem` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |
+| `UserNameCard` | `@workspace/ui` | packages/ui/src/components/layout/user-name-card.tsx |
 | `AttachmentChip` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/attachment-chip.tsx |
 | `AttachmentDraftChips` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/attachment-draft-chips.tsx |
 | `LightEditor` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/editor/light-editor.tsx |
@@ -305,6 +307,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUnreadNotificationCount` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `usePublicConfig` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
+| `usePublicUsers` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `useResolvedUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-resolved-user.ts |
 | `useDocCommentSearchHalf` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-doc-comment-search.ts |
 | `useSearch` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-search.ts |
@@ -326,7 +329,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSaveVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useApp` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
-| `useCreatedByMeta` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-dialog-meta.ts |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useMountLabel` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-mount-list.tsx |
 | `useSidebar` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
@@ -344,7 +346,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (217)
+## Types (218)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -556,6 +558,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UploadItem` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-provider.tsx |
 | `UserAvatarProps` | `@workspace/ui` | packages/ui/src/components/layout/user-avatar.tsx |
 | `UserItemProps` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |
+| `UserNameCardProps` | `@workspace/ui` | packages/ui/src/components/layout/user-name-card.tsx |
 | `DangerZoneProps` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/danger-zone.tsx |
 | `DeleteDialogProps` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/delete-dialog.tsx |
 | `OwnerInfoPopoverProps` | `@workspace/ui/components/layout/owner-info-popover` | packages/ui/src/components/layout/owner-info-popover.tsx |
