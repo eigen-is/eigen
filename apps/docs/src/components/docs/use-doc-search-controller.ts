@@ -68,11 +68,25 @@ export function useDocSearchController(editor: Editor | null, canWrite: boolean)
     return useMemo<DocSearchController>(() => {
         void docVersion; // new identity per (throttled) doc change — keeps n of m live
 
+        // context = the match inside its surrounding sentence fragment, so the palette's
+        // IN DOCUMENT rows distinguish occurrences (six bare "launch" rows don't).
+        const SNIPPET = 24;
         const toMatches = (state: EditorState, sq: SearchQuery): DocSearchMatch[] =>
-            findRanges(state, sq).map((r) => ({
-                id: `${r.from}:${r.to}`,
-                label: state.doc.textBetween(r.from, r.to, ' '),
-            }));
+            findRanges(state, sq).map((r) => {
+                const $from = state.doc.resolve(r.from);
+                const block = $from.parent.textContent;
+                const start = r.from - $from.start();
+                const end = start + (r.to - r.from);
+                const context =
+                    (start > SNIPPET ? '…' : '') +
+                    block.slice(Math.max(0, start - SNIPPET), Math.min(block.length, end + SNIPPET)) +
+                    (end + SNIPPET < block.length ? '…' : '');
+                return {
+                    id: `${r.from}:${r.to}`,
+                    label: state.doc.textBetween(r.from, r.to, ' '),
+                    context: context.trim(),
+                };
+            });
 
         return {
             search(query, opts) {
