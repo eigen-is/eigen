@@ -10,9 +10,9 @@ import { buildDocSearchQuery, searchFlashKey } from './extensions/search-highlig
 // An empty query paints nothing — used to clear the highlights.
 const EMPTY_QUERY = new SearchQuery({ search: '' });
 const FLASH_MS = 800;
-// Coarse enough that a collaborator typing doesn't republish per remote keystroke (amendment 9):
-// each edit resets the timer, so the controller identity settles only once typing pauses.
-const REPUBLISH_DEBOUNCE_MS = 300;
+// Republish cadence (amendment 9): coarse enough not to republish per keystroke, but a THROTTLE
+// not a debounce — a trailing debounce's edge never fires while edits stream in, so it must tick.
+const REPUBLISH_INTERVAL_MS = 300;
 
 // All live match ranges for a query, in document order. Zero-width matches (degenerate regexes like
 // `a*`) aren't painted by the library — skip them so n of m matches what's on screen.
@@ -35,15 +35,28 @@ export function useDocSearchController(editor: Editor | null, canWrite: boolean)
     // (ids are self-describing), so interleaved palette calls can't corrupt a bar session.
     const queryRef = useRef<SearchQuery | null>(null);
 
-    // Republish on (debounced) doc change so the provider's re-search keeps n of m live. The search
-    // plugin remaps its own decorations per transaction, but the provider's match list would freeze.
+    // Republish on doc change so the provider's re-search keeps n of m live. The search plugin remaps
+    // its own decorations per transaction, but the provider's match list would freeze otherwise.
+    // Throttled, not debounced: during sustained editing (local typing OR a remote collaborator) the
+    // `update` stream never pauses, so a trailing debounce is starved and the count sticks while the
+    // paint keeps moving. Tick at a fixed cadence while dirty; settle one tick after edits stop.
     const [docVersion, setDocVersion] = useState(0);
     useEffect(() => {
         if (!editor) return;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        let dirty = false;
+        const tick = () => {
+            if (!dirty) {
+                timer = undefined;
+                return;
+            }
+            dirty = false;
+            setDocVersion((v) => v + 1);
+            timer = setTimeout(tick, REPUBLISH_INTERVAL_MS);
+        };
         const onUpdate = () => {
-            clearTimeout(timer);
-            timer = setTimeout(() => setDocVersion((v) => v + 1), REPUBLISH_DEBOUNCE_MS);
+            dirty = true;
+            timer ??= setTimeout(tick, REPUBLISH_INTERVAL_MS);
         };
         editor.on('update', onUpdate);
         return () => {
@@ -53,7 +66,7 @@ export function useDocSearchController(editor: Editor | null, canWrite: boolean)
     }, [editor]);
 
     return useMemo<DocSearchController>(() => {
-        void docVersion; // new identity per (debounced) doc change — keeps n of m live
+        void docVersion; // new identity per (throttled) doc change — keeps n of m live
 
         const toMatches = (state: EditorState, sq: SearchQuery): DocSearchMatch[] =>
             findRanges(state, sq).map((r) => ({
