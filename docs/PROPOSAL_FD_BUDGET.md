@@ -1,6 +1,7 @@
 # Proposal: File-descriptor budget — graceful exhaustion
 
-> **Status — Proposal, written 2026-07-05, not started.** Every open Home costs ~30 file
+> **Status — Proposal, written 2026-07-05, reconciled 2026-07-06 against the merged
+> storage-audit fixes (AUDIT_STORAGE.md), not started.** Every open Home costs ~30 file
 > descriptors (SQLite WAL triples + maildir watchers). A cross-home fan-out under a small
 > `ulimit -n` exhausts them and SQLite starts failing with `SQLITE_IOERR`, which today degrades
 > *silently* (skipped recipients, swallowed watcher errors). The compose deployment pins the
@@ -48,12 +49,14 @@ A fully warm `UserHome` (`apps/api/src/lib/home/user-home.ts`) holds:
 | Maildir watchers (`MaildirStore.watch`: 6 `STANDARD_MAILBOXES` incl. INBOX × {`cur`,`new`}) | `fs.watch` handles | 12 |
 | **Total** | | **30** |
 
-The roadmap row says "~6 WAL databases × 3 files + ~10 maildir `fs.watch` handles". Measured:
-the DB count is right, and all 6 open **eagerly** during `Home.init` (`Drive.init` opens
-`shared.db` unconditionally); the watcher count is **12, not ~10** — `STANDARD_MAILBOXES` is
-`['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']`, each watched on both `cur/` and `new/`.
-So 30 fds is the warm ceiling, not the top of a 25–30 range — and it is paid at open time,
-which is exactly the crash arithmetic: 26 fan-out opens ≈ 780 fds against a 256 limit.
+All 6 DBs open **eagerly** during `Home.init` (`Drive.init` opens `shared.db`
+unconditionally); the watcher count is **12** — `STANDARD_MAILBOXES` is
+`['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']`, each watched on both `cur/` and `new/`
+(`MaildirStore.watch`). So 30 fds is the warm ceiling, not the top of a 25–30 range — and it
+is paid at open time, which is exactly the crash arithmetic: 26 fan-out opens ≈ 780 fds
+against a 256 limit. The `ROADMAP.md` row already carries these measured figures; the
+`docker-compose.yml` comment above the `ulimits` pin still says "~25-30 fds … ~10 maildir
+fs.watch handles … ~35 homes" and updates in phase 1.
 
 Per-home cost is **variable**:
 
@@ -116,9 +119,9 @@ notification would re-fire on every boot with no in-app action to take. Log only
   server hold"; cite the accounting table above. (2) The cluster overlay's `eigen-api-1..3`
   services replace `eigen-api` and must each carry the same `ulimits` block.
 - **Propagate the corrected figures** (one source per fact): the `docker-compose.yml` comment
-  block above the `ulimits` pin ("~25-30 fds … ~10 maildir fs.watch handles … ~35 homes") and
-  the `ROADMAP.md` row's "25–30 fds … ~10 handles" both update to the measured 30-fd warm
-  ceiling and 12 watchers.
+  block above the `ulimits` pin ("~25-30 fds … ~10 maildir fs.watch handles … ~35 homes")
+  updates to the measured 30-fd warm ceiling and 12 watchers. (`ROADMAP.md` already carries
+  the corrected figures.)
 
 Also fix a broken window found while reading: `MaildirStore.watch` swallows *all* `fs.watch`
 errors as "directory may not exist yet". Under fd pressure that hides `EMFILE` — log anything
@@ -175,7 +178,12 @@ that already resolved it. `getHome` already handles the converse: a cached home 
 `destruct()`) before the entry is dropped and re-created — LRU eviction rides that exact path.
 The residual window — a request holding a `Home` reference across an eviction hits
 `'Database not open'` — exists today with the 5-minute idle destruct; the 30-second min-idle
-guard makes it rarer, and it fails loud (500 + log), not silent.
+guard makes it rarer, and it fails loud (500 + log), not silent. Two audit fixes (2026-07-06)
+already hardened the close path eviction rides: document-DB open now waits on any in-flight
+close of the same `pathId` (`closingDocumentDbs`, `mount/document-db.ts`), so an eviction
+closing a container's `data.db` cannot interleave with a concurrent reopen; and
+`ManagedDatabase.close()` tears down unconditionally (try/finally), so a home whose close-sync
+throws still releases its fds — which is the whole point of a pressure valve.
 
 ### Retry-once emergency valve
 
@@ -184,14 +192,27 @@ When the cap is still too high for the actual limit, `ManagedDatabase.open`
 `new BunDatabase(...)` or the WAL pragmas throw `SQLITE_IOERR*` (`SQLITE_IOERR_VNODE` on macOS,
 `SQLITE_CANTOPEN`/`EMFILE` shapes on Linux). Wrap the `openCold` call: on a first
 exhaustion-shaped error, evict one LRU home and retry `openCold` once, logging at error level
-either way. One retry, no loop. Two care points: the hook is wired by **module-level
+either way. One retry, no loop. One care point: the hook is wired by **module-level
 registration** — `setFdExhaustionHandler(fn)` in `managed-database.ts`, registered from
 `get-home.ts` at boot, mirroring `ContentReindexQueue`'s injected extract dep — because a
 direct core→home import would be an upward import plus a module cycle, and
 `scripts/check-home-imports.ts` only greps the literal `getHome`, so the inversion would ship
-silently past the lint. And before re-running `openCold`, close the partially-opened `rawDb` —
-a `BunDatabase` that opened before a WAL pragma threw would otherwise leak the very fd being
-fought over.
+silently past the lint.
+
+Two storage-audit fixes (merged 2026-07-06) simplify and de-risk this valve; do not re-add
+what they already cover:
+
+- **Failed-open cleanup is now inside `openCold` itself** — a throw from the WAL pragmas or a
+  migration closes and nulls `rawDb` before the error propagates (AUDIT_STORAGE item 8). The
+  retry wrapper therefore only classifies, evicts, and re-calls `openCold`; it must NOT add
+  its own handle cleanup (double-close hazard).
+- **Error classification is now unambiguous.** The strict GC-assisted close eliminated the
+  zombie-close→`SQLITE_IOERR_VNODE` reopen bug (a lazy close unlinking `-shm` under a live
+  statement poisoned the next open of the same file). Before that fix, `SQLITE_IOERR_VNODE`
+  at open could mean either fd exhaustion or the zombie-shm bug — and the valve would have
+  masked the latter by evicting an innocent home. Now it is an exhaustion signal, so
+  evict-and-retry is the right recovery, not a band-aid over a reopen bug. (The rare
+  `Bun.gc(true)` inside `close()` fires only on its fallback path, so eviction stays cheap.)
 
 ### Choosing N
 
@@ -256,7 +277,7 @@ counting is Linux-only and the three points above cover the honest signal (D3).
 
 1. **S — ships immediately:** `checkFdBudget()` at boot + loud warning; `docker/SETUP-GUIDE.md`
    note for non-compose deploys; `SCALABILITY_SINGLE_MACHINE.md` corrections; the corrected
-   fd figures in the `docker-compose.yml` comment and the `ROADMAP.md` row; log non-ENOENT
-   `fs.watch` failures in `MaildirStore.watch`.
+   fd figures in the `docker-compose.yml` comment (`ROADMAP.md` is already corrected); log
+   non-ENOENT `fs.watch` failures in `MaildirStore.watch`.
 2. **M — optional, gated on need:** LRU cap over `homeFactories`/`touch()` with the safety
    predicate, derived N, and the `ManagedDatabase.open` retry-once valve.

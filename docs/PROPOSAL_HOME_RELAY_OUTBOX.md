@@ -1,6 +1,10 @@
 # Proposal: Durable home-relay outbox
 
-> **Status — Proposal, written 2026-07-05, not started.** Expands the P1 roadmap row
+> **Status — Proposal, written 2026-07-05, re-reviewed against main 2026-07-06, not started.**
+> The 2026-07-06 review re-verified every seam claim against post-unified-activity main (the
+> activity merge changed notification *rendering* — `details` payloads, `formatChatPreview` — not
+> the relay seams; the tag/coalesce facts below still hold) and confirmed no outbox code has
+> landed. Expands the P1 roadmap row
 > "Durable home-relay outbox" ([ROADMAP.md](ROADMAP.md)) into a full design. Follow-on to the
 > 2026-07-04 async ACL fan-out (`apps/api/src/lib/drive/acl-propagation.ts`): that made one seam
 > non-blocking but in-memory; this makes every cross-home push durable, ordered, and bounded.
@@ -27,7 +31,8 @@ Every place where one user's action must land in another user's Home goes throug
 ~30 file descriptors and real I/O (six eagerly-opened WAL databases, `shared.db` included, plus
 maildir watchers — the warm ceiling measured in `PROPOSAL_FD_BUDGET.md`). The relay itself is
 fine; the callers are not. The 2026-07-04 seam audit (recorded in the roadmap row, re-verified
-against source for this proposal) found five fan-out sites, each with a different failure mode:
+against source 2026-07-05 and again 2026-07-06 post-unified-activity) found five fan-out sites,
+each with a different failure mode:
 
 | Seam | File | Verified behaviour today |
 |---|---|---|
@@ -294,6 +299,18 @@ LRU bounds **resident homes** (steady state). The outbox keeps bursts from stamp
 budget; the LRU keeps the budget's total honest. K must stay comfortably below the LRU cap's
 headroom; both proposals should cite the shared ~30 fd/Home warm ceiling. Neither replaces the
 other.
+
+**Priority lanes: considered and rejected.** One budget means a heavy fan-out can sit ahead of a
+cheap notification: a 200-watcher burst enqueued first fills every batch until drained, and a
+mention enqueued behind it waits roughly (pending ÷ K) × cold-open cost — for 200 rows through
+K=8 at ~50–200 ms per cold open, single-digit seconds. That is acceptable for every queued verb:
+nothing in the outbox is read-your-writes (bell notifications, ACL mirrors, and invitations all
+tolerate seconds of skew — under retry backoff they tolerate *minutes* by design), so a priority
+column would be speculative machinery for a latency class no consumer is sensitive to. Warm-home
+deliveries shrink the real number further — the semaphore bounds opens, but a delivery to an
+already-resident home clears in milliseconds. Revisit only if `oldestPendingAt` on the admin
+surface shows real starvation in production; the change would be one column and one ORDER BY,
+not a redesign.
 
 ### Shutdown and boot
 

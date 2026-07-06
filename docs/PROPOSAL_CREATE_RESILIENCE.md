@@ -1,6 +1,12 @@
 # Create/open resilience under degraded storage
 
-> **Status — Proposal, written 2026-07-05, not started.** Design for the ROADMAP.md P1 row
+> **Status — Proposal, written 2026-07-05, not started.** Re-verified against main 2026-07-06,
+> after the storage-audit fixes ([AUDIT_STORAGE.md](AUDIT_STORAGE.md) items 1–11) landed: nothing
+> in this design has shipped, and the traces below still hold — the metadata.db v7 unique
+> active-name index and `provisionManagedDbs`' inner rollback are in main as described, and the
+> audit's `ManagedDatabase` failed-open cleanup/handle release only closes fd leaks (the
+> create-path `exists` throw happens before any handle opens), changing nothing here.
+> Design for the ROADMAP.md P1 row
 > "Create/open resilience under degraded storage" (2026-07-03 incident follow-up). Companion to
 > [PROPOSAL_DATA_INTEGRITY.md](PROPOSAL_DATA_INTEGRITY.md) (written concurrently): that one finds and
 > repairs damage in the background; this one stops the damage-shaped UX at the two request paths the
@@ -176,7 +182,15 @@ submit. For the same-name retry that still slips through, the server already ded
 win is an *automated* client retry of the POST — which this design deliberately does not do, so the
 key would ship with no caller (a placeholder, against house rules). Retry-after-reload needs no key
 either: a reload destroys the dialog; re-forming the intent in a fresh dialog *is* a new intent, and
-the reconciled listing already shows the earlier result. Revisit (b) only if a future offline/queued
+the reconciled listing already shows the earlier result.
+
+The residual window, named honestly: a create slower than the combined abort + reconcile budget
+(~25 s — nbg1 ran minute-scale) still toasts a false failure. That residual cannot *duplicate*: a
+same-name retry 409s on the v7 index while the late row still arrives via `DRIVE_FILE_CREATED`, and
+a different-name retry is a genuinely new intent — a fresh dialog would mint a fresh idempotency
+key too, so (b) closes nothing reconcile leaves open. Multi-tab and SSE-down change nothing:
+reconcile is a direct refetch (no SSE dependency), and cross-tab same-name races resolve
+server-side via the same index. Revisit (b) only if a future offline/queued
 create feature adds an automated retry path.
 
 **Card-chats get the same pattern** — see §4 (prevention).
@@ -284,7 +298,7 @@ Storage states: **healthy** / **slow** (requests succeed in 10–60 s) / **error
 | Operation | State | Today | After |
 |---|---|---|---|
 | Create doc | healthy | Works; dialog closes instantly | Same, dialog closes on resolve (sub-second) |
-| Create doc | slow | Dialog closes with no feedback; success invisible until SSE/refetch; user re-clicks → duplicate | Dialog pends (button spinner, ≤15 s); abort → reconcile finds the row → presented as success, exactly one doc |
+| Create doc | slow | Dialog closes with no feedback; success invisible until SSE/refetch; user re-clicks → duplicate | Dialog pends (button spinner, ≤15 s); abort → reconcile finds the row → presented as success, exactly one doc. Slower than the whole budget: honest may-still-complete toast; a same-name retry 409s rather than duplicating |
 | Create doc | erroring | 500 toast; container row committed but unannounced → phantom doc after refresh, errors on open until it self-heals | Rollback: no row, no event; honest toast; retry starts clean |
 | Create doc | down | As erroring | As erroring; if rollback also dies, retry 409s and the integrity sweep flags the orphan |
 | Create card-chat | slow / erroring | 500 after the chat is provisioned (`seedCommentRow`) → card unwritten, retries mint new names → dangling chats (the 4-attempt card) | Seed inside the §2 guard → rollback; client reconciles by its own generated name and reuses it on retry → card lands exactly once, no litter |

@@ -13,8 +13,10 @@
 
 Eigen's core promise is multi-user real-time collaboration on Yjs documents, and it is the one thing
 no committed test exercises end-to-end. The API integration tests (`apps/api/src/test/`) drive
-`app.handle()` in-process — no real WebSocket, no browser, no second concurrent client. `collab.test.ts`
-covers Yjs storage operations, not two editors converging. The collab data-loss incidents (the
+`app.handle()` in-process (serially: `bun test --preload ./src/test/preload.ts --concurrency 1`) — no
+real WebSocket, no browser, no second concurrent client. `collab.test.ts` covers storage operations and
+read-revocation enforcement via in-process spy connections — its own header notes the HTTP→WS upgrade
+never completes under `app.handle()` — never two real editors converging. The collab data-loss incidents (the
 2026-05-30 chat wipe, the "doc went empty" forensics work) were all failures of exactly this seam:
 client ↔ WS ↔ `CollabDocument` ↔ persistence, under concurrency, reconnects, and restores.
 
@@ -136,9 +138,21 @@ is explicit, following the `test:api`/`test:sheet` precedent:
 ```
 
 Weighed against a top-level non-workspace `e2e/` (separate install, unpinned deps) and an
-`apps/e2e` entry (would be swept into `bun run serve`'s and `build`'s `--filter './apps/*'` globs):
-the no-`test`-script workspace is the only shape that gets one lockfile *and* stays out of every
-existing glob.
+`apps/e2e` entry (swept into `build:prod`'s `--filter './apps/*'` glob): the top-level workspace is
+the only shape that gets one lockfile *and* stays out of every existing sweep. The sweeps go by
+script presence — `serve` (`bun --filter '*' dev`), `test` (`bun --filter '*' test`), `build`
+(`bun --workspaces build`) each skip workspaces lacking the script (`packages/ui` ships no
+`test`/`build` today) — so the e2e workspace ships exactly two scripts: `typecheck` (deliberately
+swept by `bun run typecheck`) and `e2e` (targeted only by the root `test:e2e`). No `test`, `dev`,
+or `build` script, ever.
+
+### Product touches
+
+Everything else lives under `e2e/`; app/API code changes in exactly three places, each one or a few
+guarded lines: (1) `apps/api/src/index.ts` reads `process.env.PORT ?? 8000`; (2) the static server's
+origin (`http://localhost:8101`) joins `trustedOrigins` in `apps/api/src/lib/auth/auth.ts`;
+(3) a `VITE_E2E`-gated `window` handle on the `WebsocketProvider` at the four creation sites
+(§ Offline / reconnect). Nothing else in product code may know the suite exists.
 
 ### Server lifecycle
 
@@ -147,10 +161,11 @@ existing glob.
 1. **Throwaway data dir** — `EIGEN_DATA_ROOT=data-test/e2e-<timestamp>` (same gitignored root the
    API tests use, previous runs cleared the same way).
 2. **Spawn the API** as a real subprocess (`bun apps/api/src/index.ts`) — a real listening server,
-   because browsers and WebSockets need one; `app.handle()` can't serve an upgrade. Port: e2e uses
-   a fixed dedicated port (8100) so the suite can run next to a dev stack on 8000. This needs the
-   one small product change this proposal asks for: `apps/api/src/index.ts` reads
-   `process.env.PORT ?? 8000`.
+   because browsers and WebSockets need one; `app.handle()` can't serve an upgrade. Spawn with an
+   explicit env, not `--env-file` (which would read the gitignored dev `.env`): `EIGEN_DATA_ROOT`,
+   `PORT=8100`, `API_URL=http://localhost:8100` (better-auth `baseURL`), `COOKIE_DOMAIN=localhost`.
+   The fixed dedicated port (8100) lets the suite run next to a dev stack on 8000, and needs product
+   touch 1 of 3 (see § Product touches): `apps/api/src/index.ts` reads `process.env.PORT ?? 8000`.
 3. **Complete the wizard via API** — `POST /setup/complete` with `storageType: 'local-id'`
    (LocalStorage; **no S3 anywhere in the suite**), same body the API tests use. No UI clicking
    through the setup wizard — that's a scenario for an admin-app test someday, not an arrange step.
@@ -166,11 +181,15 @@ existing glob.
    wherever a cross-app URL renders (the known "new frontend env vars break updates" class). A
    **committed root `.env.e2e`** carries the full `VITE_APP_*` set (prod-style relative values
    work, since the static server hosts every app under its base path on one origin) plus
-   `VITE_API_HOST=http://localhost:8100` and `VITE_E2E=1`. Vite dev servers in CI would import the two documented
+   `VITE_API_HOST=http://localhost:8100` and `VITE_E2E=1`. (The committed `.env.development` can't
+   serve here: it pins per-app dev ports 3001…3013 and API 8000 — the wrong topology twice over.)
+   Vite dev servers in CI would import the two documented
    dev-only failure classes — the stale-HMR double-`createRoot` crash and cold-transform latency
    (VERIFICATION.md) — into a suite whose whole point is determinism. Built assets are what
    production serves; direct-to-API absolute host is the same topology the dev apps use, so no
-   WS-proxy machinery is needed. The static server's origin gets one line in `trustedOrigins`.
+   WS-proxy machinery is needed. The static server runs on its own fixed port (8101 — reusing a
+   3000-range dev port would collide with a running dev stack), so its origin gets one line in
+   `trustedOrigins` (`apps/api/src/lib/auth/auth.ts`) — product touch 2 of 3.
 6. **Teardown** — SIGTERM the API (its graceful shutdown drains queues), delete the data dir on
    success, keep it on failure next to the traces.
 
@@ -191,15 +210,25 @@ type Probe = (page: Page) => Promise<string>;
 type Expected = string | ((text: string) => boolean); // predicate form for conflict cells
 
 export async function expectConverged(pages: Page[], probe: Probe, expected: Expected) {
-    const ok = typeof expected === 'string' ? (t: string) => t === expected : expected;
     for (const page of pages) {
-        await expect.poll(async () => ok(await probe(page)), { timeout: 15_000 }).toBe(true);
+        if (typeof expected === 'string') {
+            // poll the text itself, not a boolean — a failed run's trace shows the divergent content
+            await expect.poll(() => probe(page), { timeout: 15_000 }).toBe(expected);
+        } else {
+            await expect.poll(async () => expected(await probe(page)), { timeout: 15_000 }).toBe(true);
+        }
     }
     // a predicate doesn't imply identity — pin identical content across clients
     const texts = await Promise.all(pages.map(probe));
     expect(new Set(texts).size).toBe(1);
 }
 ```
+
+Semantics: "converged" means every client's probe satisfies `expected` **and** all probes read
+byte-identical — called only after every act in the scenario has completed, so once each client has
+applied all updates, CRDT determinism makes identity the correct final check. Probes must be
+read-only on the document; the sheets probe's cell-click readback mutates selection (not content),
+which is why it, too, only runs post-act.
 
 The author's page proves nothing about the server: Tiptap applies the edit to the local `Y.Doc`
 synchronously, and `CollabDocument`'s broadcast deliberately skips the origin connection — only
@@ -242,14 +271,16 @@ Two candidate mechanisms:
 - **Closing the socket directly** — deterministic, but needs a handle on the provider.
 
 Recommended: **both, combined**. The e2e build (built with `VITE_E2E=1`) exposes the
-`WebsocketProvider` on `window` at the four provider-creation sites (one guarded line each — the
-single testability seam this suite asks of app code; inactive in production bundles). The test then
+`WebsocketProvider` on `window` at the four provider-creation sites (one guarded line each). The test then
 does `setOffline(true)` (blocks reconnection and all HTTP) plus `page.evaluate` →
 `provider.ws.close()` (severs the live socket now). y-websocket schedules reconnects that fail
 while offline; the client keeps editing into its local `Y.Doc`; `setOffline(false)` lets the next
 retry connect and the sync handshake merge. That is exactly the user's laptop-lid scenario, made
 deterministic. Note `provider.disconnect()` is *not* used — it sets `shouldConnect = false`, which
-models "user closed the doc", not "network died".
+models "user closed the doc", not "network died". (Both library behaviors — Chromium's offline
+emulation vs established sockets, and y-websocket's reconnect fields — are design assumptions;
+re-verify against the pinned y-websocket during phase 1.) The guarded `window` handle at the four
+provider-creation sites is product touch 3 of 3 — inactive in production bundles.
 
 ### Scenario matrix
 
@@ -336,8 +367,8 @@ not by default.
   assets, direct-to-API (matches dev topology, no WS-proxy code, avoids the documented HMR failure
   class); the same-origin proxy variant is a later option if a prod-topology bug ever warrants it.
 - **D3 — Offline simulation.** `context.setOffline` alone vs provider-handle socket close.
-  *Recommendation:* both combined, with the `VITE_E2E`-gated `window` provider handle as the one
-  testability seam in app code (inactive in production bundles).
+  *Recommendation:* both combined, with the `VITE_E2E`-gated `window` provider handle (product
+  touch 3, § Product touches) as the only testability seam in app code.
 - **D4 — CI retries.** Playwright's common `retries: 2` in CI vs zero. *Recommendation:*
   `retries: 0` with `trace: 'retain-on-failure'`. Retries are how suites rot; the roadmap's
   constraint is explicit.

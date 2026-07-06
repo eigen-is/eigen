@@ -1,6 +1,7 @@
 # Proposal: CRDT format migration
 
-> **Status — Proposal, written 2026-07-05, not started.** Flagship P0 item from
+> **Status — Proposal, written 2026-07-05, re-verified against code 2026-07-06 (post storage-audit
+> landings), not started.** Flagship P0 item from
 > [ROADMAP.md](ROADMAP.md) § Data-trust foundation. Eigen is live and its Yjs document formats
 > (the root names and value shapes each app reads) are frozen. The day one of the four editors
 > needs to restructure its data — stickies grows swimlanes, sheets replaces its op log, docs
@@ -86,8 +87,10 @@ copies under the container's `versions/` folder (`apps/api/src/lib/versioning/`)
 **Lifecycle.** `Drive.getCollabDocument` delegates to `CollabRegistry`
 (`apps/api/src/lib/drive/collab-registry.ts`), which keys one `createAsyncSingleton` per
 `owner.mount.path` — **concurrent opens of the same doc coalesce into a single `init()`**; a second
-opener awaits the first. `CollabDocument.init` opens `data.db` via `Mount.openDatabase` (which runs
-`ManagedDatabase` SQLite migrations), then `DbProvider` hydrates a `Y.Doc` via `loadYjsState`
+opener awaits the first. `CollabDocument.init` opens `data.db` via `Drive.openDatabase` →
+`Mount.openDatabase` (`apps/api/src/lib/mount/document-db.ts`, which runs `ManagedDatabase` SQLite
+migrations; open and close are serialized per pathId via `closingDocumentDbs` — a 2026-07
+storage-audit change), then `DbProvider` hydrates a `Y.Doc` via `loadYjsState`
 (`apps/api/src/lib/collab/yjs-loader.ts`: latest snapshot + tail updates, corrupted rows skipped).
 
 **Sync protocol.** `routes/collab.ts` exposes `/ws/collab/:ownerId/:mountId/:pathId`. Auth +
@@ -128,8 +131,10 @@ types decode concretely; only roots need this. The migration runner below does i
 
 **Versioning mechanics.** `snapshotContainerDataDb` (`apps/api/src/lib/versioning/snapshot.ts`)
 copies `data.db` to `versions/<iso-ts>.db`, **self-locked on the container** via
-`mount.withPathLock` — the periodic timer, close, manual save, and a restore's pre-restore snapshot
-all serialize there. `restoreContainer` (`versioning/restore.ts`) grabs the target into the OS temp
+`mount.withPathLock` — manual save and a restore's pre-restore snapshot block on that lock, while
+the periodic timer/close path goes through the twin `trySnapshotContainerDataDb` (skip-if-contended
+via `tryWithPathLock`, so a close can never park on a held container lock — a 2026-07 storage-audit
+change). Both paths contend on the same lock, so anything holding it excludes every snapshot taker. `restoreContainer` (`versioning/restore.ts`) grabs the target into the OS temp
 dir first, takes a pre-restore snapshot, then does Yjs surgery via
 `readYjsStateFromFile` + `applySnapshotState` — never holding a lock across steps. Retention
 (`versioning/retention.ts`) prunes by parsing the timestamp filename; **names that don't match
@@ -219,7 +224,8 @@ const COLLAB_FORMAT_MIGRATIONS: Record<DriveCollabType, CollabFormatMigration[]>
 
 - `migrate` reads from a hydrated temp doc and **writes into a fresh empty doc**. The runner
   force-types `from`'s roots per `fromRoots` before calling it (`forceTypeRoot`, reused from
-  `yjs-utils.ts`), so migration authors work with concrete `Y.Map`/`Y.Array`/etc. and never touch
+  `yjs-utils.ts` — today module-private there; export it), so migration authors work with concrete
+  `Y.Map`/`Y.Array`/etc. and never touch
   the `AbstractType` gotcha. Writing into a fresh doc — rather than mutating in place — is what
   lets a migration **drop or rename a root**, which `restoreYjsDoc` alone cannot.
 - `fromRoots` is snapshotted into the entry because root schemas may change across versions;
@@ -256,12 +262,15 @@ Consequences, stated plainly:
 ### Lazy migrate-on-open
 
 `ensureCollabFormat` is a plain helper in `lib/collab/migrations.ts` with **exactly two callers**:
-`CollabDocument.init` (after `Mount.openDatabase`, before `DbProvider` hydrates or any client
-subscribes) and the dormant-doc sweep. It is deliberately *not* wired into
-`Mount.openDatabase`/`buildDocumentDb`: run inside the singleton factory it would deadlock — step 2
-flushes the cached db through the still-unresolved singleton getter — and wrapping the helper in
-`withPathLock` deadlocks too (`snapshotContainerDataDb` self-locks there, and the lock is not
-reentrant). The sequence:
+`CollabDocument.init` (after `Drive.openDatabase` resolves, before `DbProvider` hydrates or any
+client subscribes) and the dormant-doc sweep. It is deliberately *not* wired into
+`Mount.openDatabase`/`buildDocumentDb`: that seam is config-generic (the same factory serves
+`comments.db` and chat's `data.db`) and doesn't know the container's `EigenDocType`; and inside a
+still-unresolved factory the pre-migration snapshot would capture lagged bytes — `takeSnapshot`/
+`stageDataDbSnapshot` deliberately `peek()` the `documentDbs` cache and never await the getter (the
+storage-audit close-wedge fix), so an unresolved entry falls through to staged-copy/storage bytes
+instead of the live working copy. Also: never wrap the helper in `withPathLock` —
+`snapshotContainerDataDb` self-locks there and the lock is not reentrant. The sequence:
 
 1. Read `doc_format` (missing ⇒ 1). If equal to `EIGEN_DOC_TYPE_INFO[type].collabFormatVersion`,
    continue as today — one cheap SELECT on the hot path.
@@ -325,11 +334,15 @@ The chat branch of restore (byte-overwrite via `replaceContainerDataDb`) is unto
 
 ### The sync handshake
 
-**Declaring.** The client appends its understood format to the WS URL:
-`getCollabWebSocketUrl` gains `?fmt=<EIGEN_DOC_TYPE_INFO[type].collabFormatVersion>`. A query
-param, not a new protocol message: y-websocket's message handlers are fixed (sync/awareness), the
-URL is the one extension point stock clients already flow through, and the server needs the answer
-*before* accepting the first sync message anyway. Absent param ⇒ client format 1 (today's bundles).
+**Declaring.** The client declares its understood format as a query param on the WS URL:
+`?fmt=<EIGEN_DOC_TYPE_INFO[type].collabFormatVersion>`. A query param, not a new protocol message:
+y-websocket's message handlers are fixed (sync/awareness), the URL is the one extension point stock
+clients already flow through, and the server needs the answer *before* accepting the first sync
+message anyway. Absent param ⇒ client format 1 (today's bundles). Delivery detail: all four call
+sites construct `new WebsocketProvider(wsUrl, '', doc, opts)`, and y-websocket assembles its final
+URL as `serverUrl + '/' + room + '?' + params` — so `fmt` must ride in the provider's `params`
+option (which y-websocket serializes into the query string), **not** be baked into the string
+`getCollabWebSocketUrl` returns, where the provider's URL assembly would mangle it.
 
 **Enforcing.** In the `.ws('/ws/collab/...')` `open` handler in `routes/collab.ts`, after the ACL
 check and `getCollabDocument` (so lazy migration has already run): if the doc's stamp is still
@@ -504,8 +517,9 @@ Each phase ships independently; nothing user-visible changes until a real migrat
 1. **Stamp plumbing (small).** `COLLAB_DB_CONFIG` v2 + write-current-on-create + read helper;
    `collabFormatVersion` in `EIGEN_DOC_TYPE_INFO`; registry skeleton with empty arrays + the
    startup/test drift assertion; `formatVersion` in `CollabDocumentInfo`. Pure bookkeeping.
-2. **Handshake.** `?fmt=` on `getCollabWebSocketUrl`, the 4426 gate in `routes/collab.ts`, the
-   shared client guard + reload UX in the four editors. Ships while all formats are still 1, so it
+2. **Handshake.** `?fmt=` via the `WebsocketProvider` `params` option at the four editor call
+   sites, the 4426 gate in `routes/collab.ts`, the shared client guard + reload UX in the four
+   editors. Ships while all formats are still 1, so it
    fences nothing yet — which is exactly when to soak it.
 3. **Migration runner.** `migrateCollabState` + `forceTypeRoot` reuse; `ensureCollabFormat`
    called from `CollabDocument.init` with `verifySnapshotDb`-probed pre-migration snapshot + CAS
