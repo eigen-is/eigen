@@ -35,6 +35,8 @@ prose. Once curated, each kept item becomes a markdown file under `apps/index/sr
   patterns: each app's "Get started" is cross-listed into `getting-started`, and each external-client setup
   guide is cross-listed into its app (Mail/Calendar/Drive).
 - One article exists today: `connect/mount-drive-on-your-computer` (cross-listed into `drive`). ✅
+- **Build & preview.** `cd apps/index && bun run scripts/build-content.ts` regenerates the content
+  manifest; `bun run dev` then previews the help center at `http://localhost:3000/support`.
 
 ---
 

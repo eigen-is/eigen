@@ -415,7 +415,7 @@ packages/lib/src/core/
 packages/ui/src/components/layout/app/
   topbar.tsx                             # CHANGED — "Help" item in both dropdowns
 
-docs/HELP_AUTHORING.md                   # NEW — the article authoring guide
+docs/SUPPORT-STYLE-GUIDE.md              # article authoring guide (style, frontmatter, media, build)
 ```
 
 ## Phased implementation
@@ -425,7 +425,7 @@ docs/HELP_AUTHORING.md                   # NEW — the article authoring guide
 | 1 | **Shared content pipeline** — content build (parse, validate, render, TOC, related, manifest), prerender pass (route → full HTML, `hydrateRoot`), `useMediaQuery` prerender fix, **blog migrated onto it** | M | — |
 | 2 | **Help center pages** — public shell, landing, section + article (`ColumnLayout`), `/support` routes + redirect exemption, avatar-menu "Help" link, seed content (getting-started, Drive, Mail, and the `connect` section) | M | 1 |
 | 3 | **Search** — Pagefind index step, landing search box + `Cmd+K` dialog | S | 2 |
-| 4 | **Contextual help** — `getHelpUrl` helper, example `?` links, `docs/HELP_AUTHORING.md` | S | 2 |
+| 4 | **Contextual help** — `getHelpUrl` helper, example `?` links, authoring guide (`docs/SUPPORT-STYLE-GUIDE.md`) | S | 2 |
 
 Phase 1 is the foundation and the only phase that touches existing non-help code (the blog,
 the index app's render entry, the shared `useMediaQuery` hook). The whole feature stays

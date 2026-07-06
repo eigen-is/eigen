@@ -80,8 +80,13 @@
 >   reusing the same `docContainerDescendantIds` exclusion so container internals never surface.
 >   No SSE: search is a live per-query fetch (`useSearch`, 30 s `staleTime`) and the index is
 >   eventually consistent within the cap, so a push-invalidation buys nothing.
-> - **Out of scope (comments-next follow-up):** comment-thread indexing, per-room `messages_fts`
->   (full chat history / in-document search), calendar, shared-with-me, vector.
+> - **Shipped — comment-thread FTS:** each container's `comments.db` gained v3 `recentText` +
+>   `comments_fts` (the per-card comment index behind `GET /collab/:o/:m/:p/comments/search`),
+>   owned by [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md).
+> - **Out of scope (comments-next follow-up):** the drive-wide comment **fold** (folding a
+>   container's `recentText` into `path_content.body` so a board is findable drive-wide by its
+>   card comments), per-room `messages_fts` (full chat history / in-document search), calendar,
+>   shared-with-me, vector.
 >
 > **Index location: Option C — inline FTS in the canonical per-scope DB.** Mail's FTS
 > lives inside `mail.db`; drive's lives inside each mount's `metadata.db`; calendar will
@@ -90,14 +95,15 @@
 > tiebreak is recency.
 >
 > **Deferred (post-v1):** calendar event indexing; shared-with-me search; vector / semantic
-> search; comment-thread indexing + per-room `messages_fts` (in-document search). Each later phase
+> search; the drive-wide comment **fold** (folding a container's `recentText` into
+> `path_content.body`) + per-room `messages_fts` (in-document search). Each later phase
 > replicates the inline-FTS pattern in its domain DB — additive write-path + route source per
 > kind, no palette change required. (Document body indexing — **Phase 2** — is now **shipped**;
 > see the drive content index block above.)
 >
 > **In-document search is a separate surface** — searching *within* the open document (jump to a
 > sticky / cell / heading / message) and the command palette's "current document" scope are
-> specified in [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md). This document owns
+> specified in [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md). This document owns
 > the drive-*wide* content index that makes a document findable by its body; that one owns
 > finding a location *inside* the doc you already have open. They share the per-type text
 > extractors but use different indexes and different UIs.
@@ -158,7 +164,7 @@ not Yjs — its body is folded into the same content index as the latest ~100 KB
 > drive-wide content index so a file is **findable** by what it contains. Finding *where inside the
 > open document* a term appears — and the command palette's "current document" scope that fronts it
 > — is a different feature, specified in
-> [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md). The two reuse the same per-type
+> [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md). The two reuse the same per-type
 > text extraction but write to different indexes (drive `metadata.db` vs. the per-document DB) and
 > render in different UIs.
 
@@ -201,7 +207,8 @@ a normal `ManagedDatabase` migration step (one CREATE per FTS table + one CREATE
 takes its index with it; there is no cleanup to remember.
 
 **Cross-scope queries:** the search route's coordinator calls each enabled scope's
-`searchX(opts)` method in parallel and assembles `{ mail, files, events, chats }`. Same-kind
+`searchX(opts)` method in parallel and assembles the grouped response — `{ mail, file }` today,
+gaining `events` / `chats` groups when calendar and chat indexing ship (Phases 3–4). Same-kind
 results from multiple mounts (files, chats) are combined by rank position; mail and calendar
 are single-scope and rank natively.
 
@@ -273,7 +280,7 @@ CREATE VIRTUAL TABLE emails_fts USING fts5(
 ```
 
 Three triggers (`AFTER INSERT`, `AFTER DELETE`, `AFTER UPDATE`) keep the index in sync. The
-search method (`MailDB.searchMail`, future `Mount.searchFiles`, etc.) is a two-pass query —
+search method (`MailDB.searchMail`, `Mount.searchPaths`, etc.) is a two-pass query —
 first the FTS5 JOIN returns ranked ids, then Drizzle hydrates the rows so `mode: 'timestamp'`
 column conversion runs:
 
@@ -320,32 +327,18 @@ migration step populates the FTS table from existing canonical rows on upgrade.
 ## Content extraction from collaborative documents
 
 Docs, slides, and sheets store their content as binary Yjs state, not plain text. Rather than
-write a second Yjs decoder, content extraction **reuses the export pipeline's content loaders** —
-the modules that already turn each file type's Yjs state into a structured form:
+write a second Yjs decoder, extraction **reuses the shared content loaders** in
+`apps/api/src/lib/document/` — the modules that already turn each file type's Yjs state into a
+structured form for preview and export, so search's notion of "document text" can't drift from
+theirs. `apps/api/src/lib/search/extract-text.ts` (`extractText`) dispatches per type over a thin
+text collector (ProseMirror JSON → text, `DeckData` → text, `Sheet[]` → cell text), capped at
+`CONTENT_INDEX_MAX_BYTES` (~100 KB). It skips the full HTML export, which embeds fonts and base64
+images, flattens CSS, and sanitises — wasted work for an index that only wants words.
 
-- **Docs** — `export/doc/content.ts` produces ProseMirror JSON (already shared with preview)
-- **Slides** — `export/slides/content.ts` produces `DeckData`
-- **Sheets** — `export/sheets/content.ts` produces `Sheet[]`
-
-These loaders are server-side and DOM-free — the same code path the document, slides, and sheets
-export already runs in Bun. Search adds only a **thin text collector** on top: a small per-type
-walk that pulls the words out of the structured form (ProseMirror JSON → text, `DeckData` →
-text, `Sheet[]` → cell text). The hard part — decoding each file type's distinct Yjs shape — is
-delegated to code that already exists, is tested, and is shared with export and preview, so
-search's notion of "document text" can't drift from theirs. Search does **not** run the full
-HTML export: that stage embeds fonts and base64 images, flattens CSS, and sanitises — all wasted
-work for an index that only wants words.
-
-**Stickies** have no export pipeline yet, so there is no content loader to reuse. Stickies
-*content* is therefore indexed **later** — once stickies export ships and brings an
-`export/stickies/content.ts` loader, the same thin-collector approach applies to it. Until then
-a stickies file contributes only its metadata (the file name) to the index.
-
-Extraction runs during **snapshot creation**, which already happens periodically (roughly every
-hundred edits) — acceptable staleness, and it avoids re-extracting on every keystroke. With
-inline FTS5 (Option C), the mount's own FTS table is reachable directly from the snapshot code
-without threading a separate service reference. Extraction failures must never block the
-snapshot itself — they're caught and logged.
+**Stickies** and **chat** need no export pipeline: `readStickiesContent`
+(`lib/document/stickies.ts`) walks each card's `title` / `description`, and `readChatContent`
+(`lib/document/chat.ts`) reads the latest ~100 KB of the relational `messages` table — both slot
+into the same `extractText` dispatch.
 
 > **Refined 2026-06-08 — see [Phase 2 — body-content indexing](#phase-2--body-content-indexing-worked-design) below.**
 > Reading the current code corrected two things in the sketch above (the `export/*/content.ts`
@@ -379,7 +372,7 @@ Deferred: uploaded **binary** docs (PDF / Office — need real text extractors) 
 (Phase 6). Stickies and chat are **now in Phase 2 scope** (above): stickies needs only a small
 dedicated loader, and chat is already relational text, so neither has to wait. The separate
 *in-document* chat message FTS (full history, for searching within an open chat) is owned by
-[PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md), not this index.
+[IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md), not this index.
 
 **Extraction — reuse the loaders, not the preview renderers, not the export.** The reusable kernel
 is the shared content loaders `readEigendocContent()` / `readSheetsContent()` / `readSlidesContent()`
@@ -423,7 +416,7 @@ mentioned X". So `readChatContent` extracts the **latest ~100 KB**, not the firs
 
 This is deliberately the **drive-wide** view of a chat — enough to surface the file in global search
 by its recent content. Searching the *full* history of an open chat (every message, however old) is
-the job of the per-room `messages_fts` in [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md);
+the job of the per-room `messages_fts` in [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md);
 the two indexes are complementary, and once that per-room FTS exists the drive-wide collector may
 read its tail instead of re-querying `messages`.
 
@@ -504,7 +497,7 @@ than fan out across every thread DB at extract time, reuse the parent's existing
   then surfaces in the Files section for a term that appears only in a card's comment.
 - **Searching the comments themselves** ("find the card whose comments mention X") is a single
   `comments_fts MATCH` on that same in-memory `comments.db`; that surface lives in the current-document
-  scope and is specced in [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md). The per-room
+  scope and is specced in [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md). The per-room
   `messages_fts` there stays the mechanism for **standalone** chat history; comment threads are served
   by this `comments.db` aggregate, not a per-thread index.
 
@@ -548,20 +541,20 @@ are single-scope. How the combine and cross-kind ordering work — and why neith
 `bm25()` score — is set out in [Ranking and cross-kind merging](#ranking-and-cross-kind-merging).
 
 When the user is browsing a team workspace, the owner is the team, so the same endpoint searches
-the team's data under the standard team-access check. (Phase: deferred — the initial mail slice
-is personal-owner only.)
+the team's data under the standard team-access check. (Phase: deferred — the shipped `/search`
+route — mail + drive name + drive content — is personal-owner only.)
 
 ### Response shape
 
-The response is **grouped by kind** — a separate array for files, mail, events, and chats, each
-already ranked and capped. This mirrors how the palette renders search results: one fixed
-section per kind. The frontend drops each group straight into its section — no client-side
-bucketing — and only the cross-kind Top Hit needs logic that spans groups.
+The response is **grouped by kind** — a separate ranked, capped array per kind (`mail` and `file`
+today; `events` / `chats` added when those phases ship). This mirrors how the palette renders
+search results: one fixed section per kind. The frontend drops each group straight into its
+section — no client-side bucketing — and only the cross-kind Top Hit needs logic that spans groups.
 
 Grouping by *kind* (not by mount) is deliberate: it stays stable as a user adds mounts, where a
 mount-keyed shape would not. Items shared with the user appear inside their kind's group, flagged
-by a non-self owner — not as a separate group. Chat is part of the shape from day one but stays
-empty until chat indexing ships (Phase 3).
+by a non-self owner — not as a separate group. The shipped shape is `{ mail, file }`; the `events`
+and `chats` groups are added when calendar and chat indexing ship (Phases 3–4).
 
 Each hit is the canonical domain type for its kind (`EmailSummary` for mail, `DrivePath` for
 files, the canonical event/chat types for those). The grouping (`response.mail` vs
@@ -654,7 +647,7 @@ the palette. See [PROPOSAL_COMMAND_PALETTE.md](PROPOSAL_COMMAND_PALETTE.md).
 This endpoint is the *drive-wide* surface: it answers "which of my documents contain X". The
 complementary surface — "where **inside** the open document is X", plus the palette's "current
 document" scope that fronts it — is a separate provider and a separate set of indexes, specified in
-[PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md). It does *not* go through
+[IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md). It does *not* go through
 `/search/:ownerId`.
 
 ## Future: semantic / vector search
@@ -700,7 +693,7 @@ What not to do:
 | 1a    | Mail v3 migration (CREATE VIRTUAL TABLE + triggers + populate), `MailDB.searchMail` two-pass JOIN+hydrate, the `/search` route, index-on-write via FTS triggers. **Shipped — see status block.** | M |
 | 1b    | Drive name indexing — mount metadata.db v2 (`paths_fts` + 3 triggers, UPDATE gated on `name` change), `Mount.searchPaths`, `Drive.search` mount fan-out, `/search` route extended with a `file` source, eigendoc-internals exclusion. **Shipped — see status block.** | M |
 | 2     | Body-content indexing — docs / slides / sheets / **stickies** / **chat** (thin text collectors over the `lib/document/` loaders; stickies gets a small new loader; chat extracts the latest ~100 KB from its relational `messages` table) **plus plain text / code file bodies**, written to a sibling `paths_content_fts` table, populated by a dirty-flag + sweep worker hooked on the storage-agnostic `onSync` (not the S3-only upload queue). **Shipped — see status block.** ([worked design](#phase-2--body-content-indexing-worked-design)). | M |
-| 3     | In-document / in-chat message FTS — per-room `messages_fts` over the **full** chat history (for searching within an open chat). Owned by [PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md); listed here because it shares the FTS pattern. | S |
+| 3     | In-document / in-chat message FTS — per-room `messages_fts` over the **full** chat history (for searching within an open chat). Owned by [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md); listed here because it shares the FTS pattern. | S |
 | 4     | Calendar event indexing — `calendar.db` gains an `events_fts` + same trigger shape                       | S      |
 | 5     | Shared data — make items shared with the user searchable                                                 | S–M    |
 | 6     | Semantic / vector search (future, opt-in)                                                                | L      |
@@ -714,11 +707,9 @@ triggers per domain.
 **Stickies content** is now in Phase 2 (above): it needs only a small dedicated
 `readStickiesContent` loader, so it no longer waits for full stickies export.
 
-**Recommended build order** across this proposal, the command palette, and
-[PROPOSAL_IN_DOCUMENT_SEARCH.md](PROPOSAL_IN_DOCUMENT_SEARCH.md): (0) the in-document *actions*
-cleanup (tiny, independent), then (1) **this** drive-wide content index (Phase 2), then (2)
-in-document content search. Full sequence and rationale in
-[PROPOSAL_IN_DOCUMENT_SEARCH.md §Recommended build order](PROPOSAL_IN_DOCUMENT_SEARCH.md#recommended-build-order-across-both-search-proposals).
+**Build order (historical).** All three tracks shipped: the in-document *actions* cleanup, this
+drive-wide content index (Phase 2), and in-document content search
+([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md)).
 
 ## File structure
 
@@ -733,8 +724,11 @@ apps/api/src/lib/mail/
 apps/api/src/lib/mount/
   db-config.ts            # mount metadata.db migrations including v2 (paths_fts + triggers,
                           #   UPDATE gated on name change)
-  mount.ts                # Mount.searchPaths (JOIN against paths_fts) + docContainerDescendantIds
-                          #   recursive-CTE fragment shared with getPathsByMimeType
+  search-index.ts         # searchPaths (name + body FTS, name-over-body rank), upsertPathContent,
+                          #   getContentDirtyPaths, markContainerContentDirty — the content-index
+                          #   internals; reuses the shared docContainerDescendantIds exclusion CTE
+  mount.ts                # thin Mount.searchPaths + content-index facades that delegate to
+                          #   search-index.ts
 
 apps/api/src/lib/drive/
   drive.ts                # Drive.search — fan out across mounts, recency tiebreak

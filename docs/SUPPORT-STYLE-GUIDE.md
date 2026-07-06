@@ -129,12 +129,14 @@ a step-by-step how-to with a long conceptual explanation. Split them.
   ```
 
   (Blank lines inside the `<div>` let Markdown render the paragraph.)
-- **Screenshots**, when they help, via a media grid (one to three columns):
+- **Screenshots**, when they help, via a media grid (one to three columns). Put the image
+  files in `apps/index/public/data/support/media/<section>/<slug>/`; each `src` is their
+  served path under `/data/support/media/…`:
 
   ```html
   <media-grid columns="2">
-    <media src="/support/drive/share-dialog.png" type="image" caption="The Share dialog" />
-    <media src="/support/drive/general-access.png" type="image" caption="General access" />
+    <media src="/data/support/media/drive/share-a-file/share-dialog.webp" type="image" caption="The Share dialog" />
+    <media src="/data/support/media/drive/share-a-file/general-access.webp" type="image" caption="General access" />
   </media-grid>
   ```
 
@@ -175,6 +177,9 @@ updated: 2026-06-08                     # YYYY-MM-DD.
   - Each **external-client setup** guide is authored under `connect` and cross-listed into its app
     (`[mail]`, `[calendar]`, `[drive]`).
 - **`related`**: leave it off to auto-match by shared tags within the section, or set explicit slugs to control it.
+- **`draft`**: set `draft: true` to keep an article out of the build. Omit it to publish (it defaults to off).
+- **File name = permanent slug.** The filename is the article's slug, and its URL is `/support/<section>/<slug>`.
+  Never rename a published file: it breaks deep links.
 
 ## 8. Self-check before you hand the article back
 

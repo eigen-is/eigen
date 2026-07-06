@@ -5,23 +5,25 @@
 > mounted by `AppShell.PaletteRunner`.
 >
 > **Shipped:** `Mod+K` dialog with the typed result model
-> (`action` / `smart` / `contact` / `mail` / `file` / `doc-hit`), six providers
-> (`actions`, `contacts`, `smart`, `mail-search`, `file-search`, `doc-search`), the catalog (nav derived from
+> (`action` / `smart` / `contact` / `mail` / `file` / `doc-hit` / `doc-comment-hit` / `help`), eight providers
+> (`actions`, `contacts`, `smart`, `mail-search`, `file-search`, `doc-search`, `doc-comment-search`, `help-search`), the catalog (nav derived from
 > the shared `apps` registry; creates derived from `EIGEN_DOC_TYPE_INFO`; selection-aware drive
-> actions), the engine (`buildSections` with Top Hit / Suggestions / Selection / In Document / Files / Mail /
-> Contacts / Actions), scope prefixes (`mail:` / `file:` / `doc:` / `>` / `@`) and the scope chip via
-> Tab (cycle: none → doc → file → mail → actions → contacts → none; the `doc` stop is gated on a
+> actions), the engine (`buildSections` with Top Hit / Suggestions / Selection / In Document / In Comments /
+> Files / Mail / Contacts / Help / Actions), scope prefixes (`mail:` / `file:` / `doc:` / `>` / `@` / `?`) and the scope chip via
+> Tab (cycle: none → doc → file → mail → actions → contacts → help → none; the `doc` stop is gated on a
 > document being open). The `doc:` scope lists in-document matches from the open eigendoc's
 > `DocSearchController` (published to the palette by `DocSearchProvider` via `usePaletteDocSearch`);
-> Enter reveals a hit in place. Doc hits are a section only — excluded from Top-Hit candidates so a
-> matched fragment can't hijack Enter from a file the user typed. A drive/mail palette hit carries
+> Enter opens the find bar pre-filled via `docSearchSession.revealFromPalette`, with the chosen
+> match active. Doc hits are a section only — excluded from Top-Hit candidates so a
+> matched fragment can't hijack Enter from a file the user typed. The `?` scope searches the help
+> centre via the Pagefind-backed `help-search` provider and renders a Help section. A drive/mail palette hit carries
 > `?q=` into the opened doc/email so its find bar / body highlight lands on the matches. Smart parser for `email@…`
 > (deterministic Top Hit) and `http(s)://…` (deterministic with `noopener,noreferrer`). Smart
 > contact-derived `Send mail to <email>` row. Selection publication from DriveList + the four
 > eigendoc viewers. Selection-aware actions published from `DriveLayout` via
-> `usePaletteSelectionActions` (Rename / Share / Delete / Quick preview / Download / Email
-> collaborators) plus the pure ones in the catalog (Open / Open in new tab / Copy link /
-> Mail to…). Cross-app `Mail to…` carries drive attachments via
+> `usePaletteSelectionActions` (Rename / Share / Delete / Download / Email
+> collaborators) plus the pure ones in the catalog (Open / Open in new tab / Quick preview /
+> Copy link / Mail to…; Quick preview runs the global `ctx.openPreview`, not a published handler). Cross-app `Mail to…` carries drive attachments via
 > `?attach=<owner>/<mount>/<path>,…`, routed through Mail's existing `handleDriveAttach`. The
 > file row uses the same `getFilePresentation` helper as the Drive table — same mime-aware
 > icon (PDF / image / video / audio / archive / code / MS Office / eigendoc family / Folder)
@@ -30,7 +32,7 @@
 > `useOptionalCommandPalette` + `useOptionalPreview` so the marketing routes in `apps/index`
 > (which don't mount `EigenApp`'s stack) don't crash.
 >
-> **Deferred (post-v1):** Sub-action sheet (`→`); `event:` / `chat:` / `?` prefixes (no backends
+> **Deferred (post-v1):** Sub-action sheet (`→`); `event:` / `chat:` prefixes (no backends
 > yet — calendar / chat indexing are PROPOSAL_SEARCH Phase 3-4); document body content search
 > (PROPOSAL_SEARCH Phase 2); per-user recents (waits for
 > [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md)); per-user `commandPalette` opt-out
@@ -39,11 +41,12 @@
 > (natural-language datetime, math, unit conversion); pinned commands, per-command hotkeys,
 > aliases; AI assist.
 >
-> **Documented divergence from the proposal:** the engine holds the entire merge while
-> *any* search provider (mail OR file) is pending, rather than streaming sections as each
-> resolves and waiting only the Top Hit. The behaviour eliminates visible reorder/flicker as
-> remote results join the synchronously-rendered actions / contacts. Trade-off: first results
-> appear after the debounce + RTT window (~350ms) instead of immediately. See
+> **Documented divergence from the proposal:** the engine stabilises **per source**, rather than
+> holding the whole merge while any search provider is pending. The synchronous providers
+> (actions / contacts / smart / in-document) rebuild on every keystroke, so their sections react
+> instantly; each async source (mail / file / help / doc-comment) keeps its own last results on
+> screen while *its own* query is in flight, so a remote section never collapses or flickers
+> mid-type and a slow source (e.g. Pagefind's first WASM load) can't freeze the others. See
 > `packages/lib/src/core/command-palette/hooks/use-command-results.ts`.
 
 > **TLDR**: A single Cmd+K dialog mounted globally in the topbar that unifies **search**,
@@ -284,10 +287,10 @@ There is no per-source HTTP fan-out.
 | `search`   | backend call  | The `/search` endpoint — one debounced query            |
 
 The contacts provider lives in the shared lib package and composes the existing contact and
-team hooks directly. The contact merge/dedup logic that the autosuggest components already use
-should live in the shared lib package so both the autosuggest UI and the palette share one
-implementation — move it there if it isn't already. The underlying queries have a session-long
-stale time, so typing into the palette never refetches contacts.
+team hooks directly. The contact merge/dedup logic lives in the shared lib package (the
+`useContactSuggestions` hook), so the autosuggest UIs and the palette share one implementation.
+The underlying queries have a session-long stale time, so typing into the palette never
+refetches contacts.
 
 ### Search
 
@@ -333,12 +336,13 @@ provider does not change.
 
 A tiny pure function over the query string, conservative at v1. It recognises two shapes:
 
-- An **email address** → "Mail to …" (opens compose) and "Find emails from …" (opens Mail filtered by sender)
-- A **URL** → "Open link" (new tab) and "Save link to Drive"
+- An **email address** → "Mail to …" (opens compose; "Send <files> to …" when a Drive selection is live)
+- A **URL** → "Open link" (new tab, `noopener,noreferrer`)
 
-Each suggestion must navigate to a target that actually exists — "Find emails from …" depends on
-the Mail app supporting a sender filter in its URL; confirm that before shipping the suggestion,
-or drop it. Patterns explicitly deferred: natural-language datetime, math, currency, unit
+A matched contact name additionally yields a "Send mail to …" row. Two suggestions sketched in an
+earlier draft are **not built** and stay illustrative of where the parser could grow: "Find emails
+from …" (would need a Mail sender-filter URL) and "Save link to Drive". Patterns explicitly
+deferred: natural-language datetime, math, currency, unit
 conversion. Each adds risk-of-wrong-suggestion that erodes trust faster than its convenience pays
 back. Add after telemetry shows demand. Content-aware shapes (image URLs, pasted files) are a
 separate later phase — see [Content-aware input](#content-aware-input-later-phase).
@@ -481,10 +485,10 @@ file-action mode (the file shown as a chip), and suggests:
 The topbar gets one new element: a centred search pill in its currently-empty centre slot. It
 shows a search icon, placeholder text, and the `⌘K` hint; clicking it opens the dialog.
 
-The full pill is too wide for small screens and hides below the mobile breakpoint — but the
-palette is a search-first feature, so mobile still needs a **visible** entry point (a compact
-search icon button in the topbar), not only `Mod+K` (which needs a keyboard) or a buried menu
-item. See open questions.
+The full pill is `hidden md:flex`, so it drops below the `md` breakpoint; in its place mobile gets
+a compact `md:hidden` search icon button in the topbar (`command-palette-trigger.tsx`) — the
+palette is a search-first feature and needs a **visible** entry point, not only `Mod+K` (which
+needs a keyboard) or a buried menu item.
 
 ## UI components
 
@@ -550,14 +554,14 @@ command files, providers, and row components.
 | 6a     | Mail search provider — consume `/search` `sources=mail`. **Shipped.**                           | S      | 3, Prereq             |
 | 6b     | File search provider — consume `/search` `sources=file`, Files section above Mail, `file:` scope, command-row-file using shared `getFilePresentation`. **Shipped.** | S | 6a, Prereq 1b |
 | 6c     | Event / chat result kinds + sections — once calendar / chat indexing lands                      | S      | Prereq Phase 3/4      |
-| 7      | Prefix scopes and the help page                                                                 | S      | 5                     |
+| 7      | Prefix scopes and the help page. **Shipped** (ahead of Phase 5 — its nominal dependency, the sub-action sheet, is not built). | S | 5                     |
 | 8      | Recents provider — wires to `home.recents`                                                      | S      | PROPOSAL_HOME_RECENTS |
 | 9      | Content-aware input — image-URL suggestions and file paste/drop (global-helper actions first, then in-editor insert and send-by-mail) | M | 4, 6 |
 | 10     | Smart-parser growth — datetime, math, unit conversion                                           | M      | telemetry             |
 | 11     | Pinned commands, per-command hotkeys, aliases                                                   | L      | 10                    |
 
-Phases 1–4, 6a, 6b are **shipped**. The palette already does jumps, creates, contacts, smart
-parses, selection actions, mail search and drive file search. The depth of search results grows
+Phases 1–4, 6a, 6b, and 7 are **shipped**. The palette already does jumps, creates, contacts, smart
+parses, selection actions, mail search, drive file search, prefix scopes and the help scope. The depth of search results grows
 on its own as the search-index track indexes more content — no palette change beyond adding a
 new row component / provider per kind, mirroring the file kind.
 
@@ -570,9 +574,9 @@ new row component / provider per kind, mirroring the file kind.
    only on a strong structural title match or a confident smart-parse, else show no Top Hit.
    What stays open is the exact bar (how strong a prefix/contains match must be), tuned with
    telemetry.
-3. **Mobile**: the dialog form (full-screen sheet vs. bottom drawer) *and* the entry point. The
-   topbar pill hides on small screens, but a search-first feature needs a visible mobile
-   affordance — decide on a compact search icon button, don't rely on `Mod+K` and a menu item alone.
+3. **Mobile**: the entry point is **shipped** — a compact `md:hidden` search icon button in the
+   topbar (`command-palette-trigger.tsx`), so a search-first feature has a visible affordance beyond
+   `Mod+K`. What stays open is the dialog *form* on small screens (full-screen sheet vs. bottom drawer).
 4. **Result navigation in a new tab**: `⌘↵` opens a result's URL in a new tab. Actions have no
    URL — decide per-action whether a "new tab" mode applies.
 5. **Telemetry**: per-command usage would feed both ranking and product decisions. A recents-style
@@ -614,7 +618,7 @@ packages/lib/src/core/command-palette/
     recents.ts                   # wires to home.recents when it lands
   hooks/
     use-command-palette.ts       # open / close
-    use-command-results.ts       # the engine — merges providers; holds during mail OR file pending
+    use-command-results.ts       # the engine — merges providers; each async source holds its last results while its own query is pending
     use-palette-selection.ts     # apps publish their current selection
     use-debounced-value.ts       # shared debounce primitive
 

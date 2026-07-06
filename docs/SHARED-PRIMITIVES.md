@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-791 primitives across 6 kinds. `packages/sheet` internals are excluded.
+793 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (103)
+## Components (104)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -56,6 +56,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DrivePickerWithUpload` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-picker-with-upload.tsx |
 | `DrivePreview` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-preview.tsx |
 | `DriveTable` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
+| `EditMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/edit-menu.tsx |
 | `EigenApp` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-app.tsx |
 | `EigenCyclingLogo` | `@workspace/ui` | packages/ui/src/components/layout/braket/eigen-cycling-logo.tsx |
 | `EigenDocListView` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-list-view.tsx |
@@ -140,7 +141,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (203)
+## Hooks (204)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -340,6 +341,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useOptionalPreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
 | `usePreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
+| `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
 | `useListDrag` | `@workspace/ui/hooks/use-list-drag` | packages/ui/src/hooks/use-list-drag.ts |
@@ -535,6 +537,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DocSearchController` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchOptions` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
+| `DocSearchSession` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
@@ -547,7 +550,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentContextMenuItem` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-menu-items.tsx |
 | `ConfirmDialogProps` | `@workspace/ui` | packages/ui/src/components/layout/confirm-dialog.tsx |
 | `ContactAutosuggestProps` | `@workspace/ui` | packages/ui/src/components/layout/contacts/types.ts |
-| `DocumentModeButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
 | `DriveAccessListProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-access-list.tsx |
 | `DriveGridProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-grid.tsx |
 | `DriveTableProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
