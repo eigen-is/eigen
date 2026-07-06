@@ -69,11 +69,6 @@ export function NoteCard({
             {...rest}
         >
             <CardContent className="p-3 text-sm relative">
-                {resolved && (
-                    <span className="absolute top-2 right-2">
-                        <Check className="h-3.5 w-3.5 opacity-50" />
-                    </span>
-                )}
                 {coverThumbnailUrl && (
                     <img
                         src={coverThumbnailUrl}
@@ -82,7 +77,7 @@ export function NoteCard({
                         className="mb-2 h-20 w-full object-cover rounded-sm"
                     />
                 )}
-                <span className={cn('line-clamp-2', resolved && 'pr-5')}>{title}</span>
+                <span className="line-clamp-2">{title}</span>
                 {description && (
                     <div
                         className="text-xs mt-1 max-h-24 overflow-hidden opacity-70 pointer-events-none [&>*+*]:mt-1.5 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
@@ -101,7 +96,7 @@ export function NoteCard({
                         </span>
                     </div>
                 )}
-                {(!!replyCount || !!attachmentCount) && (
+                {(!!replyCount || !!attachmentCount || resolved) && (
                     <p className="text-xs mt-0.5 opacity-50 flex items-center gap-2">
                         {!!replyCount && (
                             <span>
@@ -113,6 +108,7 @@ export function NoteCard({
                                 <Paperclip className="h-3 w-3" /> {attachmentCount}
                             </span>
                         )}
+                        {resolved && <Check className="h-3 w-3 ml-auto" />}
                     </p>
                 )}
             </CardContent>
