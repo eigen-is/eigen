@@ -123,6 +123,13 @@ For production, Eigen runs as four Docker containers: **Caddy** (reverse proxy w
 step-by-step instructions, or the [Local Testing Guide](docker/LOCAL-TESTING.md) to try the full stack on your
 machine.
 
+```bash
+git clone https://github.com/eigen-is/eigen.git /opt/eigen
+cd /opt/eigen
+bun install
+bun run setup
+```
+
 ### Development
 
 ```bash

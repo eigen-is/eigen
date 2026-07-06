@@ -66,7 +66,7 @@ Mail-related DNS records (MX, SPF, DKIM, DMARC, SRV) come in step 6, after the m
 ### 3. Clone and configure
 
 ```bash
-git clone <eigen-repo-url> /opt/eigen
+git clone https://github.com/eigen-is/eigen.git /opt/eigen
 cd /opt/eigen
 bun install
 bun run setup
