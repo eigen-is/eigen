@@ -1,3 +1,4 @@
+import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import { useMediaQuery } from '@workspace/lib/media';
@@ -131,7 +132,11 @@ export function Toolbar({
             }
             right={
                 <div className="flex items-center gap-1">
-                    <TooltipButton icon={Search} tooltipText="Find in document" onClick={openSearch} />
+                    <TooltipButton
+                        icon={Search}
+                        tooltipText={`Find in document (${formatForDisplay('Mod+F')})`}
+                        onClick={openSearch}
+                    />
                     <DocumentShareCluster
                         canWrite={canWrite}
                         onAccessDialogOpen={onAccessDialogOpen}

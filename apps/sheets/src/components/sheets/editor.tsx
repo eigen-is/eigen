@@ -1,3 +1,4 @@
+import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useAuth } from '@workspace/lib/auth';
 import { useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
@@ -28,7 +29,9 @@ import { ToolbarLeftItems } from './toolbar';
 // mounts inside DocSearchProvider, so useDocSearchBar resolves at the render site.
 function FindInDocumentButton() {
     const { open } = useDocSearchBar();
-    return <TooltipButton icon={Search} tooltipText="Find in document" onClick={open} />;
+    return (
+        <TooltipButton icon={Search} tooltipText={`Find in document (${formatForDisplay('Mod+F')})`} onClick={open} />
+    );
 }
 
 type SheetEditorProps = {
