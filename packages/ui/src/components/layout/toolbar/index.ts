@@ -1,4 +1,5 @@
 export * from './document-mode-button';
+export * from './edit-menu';
 export * from './file-menu';
 export * from './toolbar';
 export * from './toolbar-separator';

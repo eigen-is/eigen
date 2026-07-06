@@ -1,6 +1,7 @@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
+import { useOptionalDocSearchBar } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { cn } from '@workspace/ui/lib/utils';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 import { DataMenu } from './data-menu';
 import { EditMenu } from './edit-menu';
 import { FormatMenu } from './format-menu';
@@ -19,6 +20,11 @@ const triggerClass = cn('px-3 h-8 text-sm rounded-sm', 'hover:bg-muted focus-vis
 // center, so FormatToolbar sits dead-center regardless of the menu / right-icon widths.
 // The center slot is always rendered so the columns stay put when the toolbar hides.
 export function MenuBar({ leftItems, rightItems }: Props) {
+    // A Find pick in EditMenu sets this so onCloseAutoFocus below suppresses Radix's focus-restore to
+    // the Edit trigger AND re-focuses the bar (open() re-focuses when already open) — Radix holds
+    // focus inside the closing menu until its exit finishes, so an earlier focus is stolen back.
+    const focusFindBarRef = useRef(false);
+    const docSearchBar = useOptionalDocSearchBar();
     return (
         <div
             className="grid items-center gap-1 app-gutter-x h-12 border-b border-border bg-background"
@@ -28,8 +34,17 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                 {leftItems}
                 <DropdownMenu>
                     <DropdownMenuTrigger className={triggerClass}>Edit</DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
-                        <EditMenu />
+                    <DropdownMenuContent
+                        align="start"
+                        className="w-56 luckysheet-mousedown-cancel"
+                        onCloseAutoFocus={(e) => {
+                            if (!focusFindBarRef.current) return;
+                            focusFindBarRef.current = false;
+                            e.preventDefault();
+                            docSearchBar?.open();
+                        }}
+                    >
+                        <EditMenu focusFindBarRef={focusFindBarRef} />
                     </DropdownMenuContent>
                 </DropdownMenu>
 

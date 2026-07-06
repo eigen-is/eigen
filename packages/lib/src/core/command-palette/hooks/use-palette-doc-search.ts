@@ -1,4 +1,4 @@
-import type { DocCommentSearch, DocSearchController } from '@workspace/lib/types/doc-search';
+import type { DocCommentSearch, DocSearchController, DocSearchSession } from '@workspace/lib/types/doc-search';
 import { useEffect, useMemo, useRef } from 'react';
 import { useOptionalCommandPalette } from './use-command-palette';
 
@@ -14,15 +14,24 @@ import { useOptionalCommandPalette } from './use-command-palette';
 // (docKey + search = useDocCommentSearchHalf bound to the open doc; reveal is app-specific);
 // published as ctx.docCommentSearch, stabilised the same way but keyed on docKey so a same-mount
 // doc switch republishes (a presence-only key would keep serving the previous doc's docKey).
-export function usePaletteDocSearch(controller: DocSearchController | null, commentSearch?: DocCommentSearch): void {
+// session is the provider's find-bar reveal capability (revealFromPalette); published as
+// ctx.docSearchSession and stabilised by presence like the controller.
+export function usePaletteDocSearch(
+    controller: DocSearchController | null,
+    commentSearch?: DocCommentSearch,
+    session?: DocSearchSession,
+): void {
     const palette = useOptionalCommandPalette();
     const setDocSearch = palette?.setDocSearch;
+    const setDocSearchSession = palette?.setDocSearchSession;
     const setDocCommentSearch = palette?.setDocCommentSearch;
 
     const controllerRef = useRef<DocSearchController | null>(controller);
     controllerRef.current = controller;
     const commentRef = useRef<DocCommentSearch>(commentSearch ?? null);
     commentRef.current = commentSearch ?? null;
+    const sessionRef = useRef<DocSearchSession | null>(session ?? null);
+    sessionRef.current = session ?? null;
 
     const present = controller != null;
 
@@ -35,6 +44,12 @@ export function usePaletteDocSearch(controller: DocSearchController | null, comm
         };
         // `present` is the only meaningful trigger; the live controller routes through the ref.
     }, [present]);
+
+    const sessionPresent = session != null;
+    const stableSession = useMemo<DocSearchSession | null>(
+        () => (sessionPresent ? { revealFromPalette: (q, id) => sessionRef.current?.revealFromPalette(q, id) } : null),
+        [sessionPresent],
+    );
 
     const docKey = commentSearch?.docKey;
     const stableComment = useMemo<DocCommentSearch>(
@@ -54,6 +69,12 @@ export function usePaletteDocSearch(controller: DocSearchController | null, comm
         setDocSearch(stable);
         return () => setDocSearch(null);
     }, [stable, setDocSearch]);
+
+    useEffect(() => {
+        if (!setDocSearchSession) return;
+        setDocSearchSession(stableSession);
+        return () => setDocSearchSession(null);
+    }, [stableSession, setDocSearchSession]);
 
     useEffect(() => {
         if (!setDocCommentSearch) return;

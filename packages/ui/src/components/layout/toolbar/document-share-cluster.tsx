@@ -1,5 +1,6 @@
 import { MessageSquare, UserRoundPlus } from 'lucide-react';
 import { CountBadge } from '../count-badge';
+import { FindInDocumentButton } from '../search/find-in-document-button';
 import { DocumentModeButton } from './document-mode-button';
 import { TooltipButton } from './tooltip-button';
 import { WatchToggleButton } from './watch-toggle-button';
@@ -23,6 +24,8 @@ export function DocumentShareCluster({
 }: DocumentShareClusterProps) {
     return (
         <>
+            {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
+            <FindInDocumentButton />
             {watchTarget && <WatchToggleButton {...watchTarget} />}
             {onToggleCommentPanel && (
                 <div className="relative">
@@ -38,7 +41,7 @@ export function DocumentShareCluster({
             {canWrite ? (
                 <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
             ) : (
-                <DocumentModeButton canWrite={canWrite} />
+                <DocumentModeButton />
             )}
         </>
     );

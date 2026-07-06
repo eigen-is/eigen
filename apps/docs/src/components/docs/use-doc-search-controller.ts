@@ -30,9 +30,10 @@ function findRanges(state: EditorState, sq: SearchQuery): { from: number; to: nu
 }
 
 export function useDocSearchController(editor: Editor | null, canWrite: boolean): DocSearchController {
-    // The query built by the LAST search(). Safe to cache (contract rule 3): highlightAll always
-    // follows the immediately-preceding search() on this controller, and reveal never reads it
-    // (ids are self-describing), so interleaved palette calls can't corrupt a bar session.
+    // The query built by the LAST search()/replace()/replaceAll(). Read ONLY by highlightAll, which
+    // is safe (contract rule 3): paint always follows the immediately-preceding search-shaped call
+    // on this controller. reveal parses its id and replace receives the query explicitly, so
+    // interleaved palette calls can't corrupt a bar session.
     const queryRef = useRef<SearchQuery | null>(null);
 
     // Republish on doc change so the provider's re-search keeps n of m live. The search plugin remaps
@@ -146,14 +147,17 @@ export function useDocSearchController(editor: Editor | null, canWrite: boolean)
             canReplace: canWrite,
 
             // Rewrite the one range the id encodes, then re-search the post-edit doc (editor state
-            // updates synchronously after dispatch). Stale-verify first: an id whose range is no
-            // longer a live match no-ops and returns the current fresh list (collab shifts positions).
-            // opts unused: the matchId self-describes the exact range and staleness is checked
-            // against the cached query, so the search options don't affect a single-range replace.
-            replace(matchId, replacement, _opts, preserveCase) {
-                const sq = queryRef.current;
-                const fresh = () => (editor && sq ? toMatches(editor.view.state, sq) : []);
-                if (!editor || !canWrite || !sq?.valid) return fresh();
+            // updates synchronously after dispatch). The query arrives explicitly and is NEVER read
+            // from queryRef — a palette search on this shared controller may have overwritten it
+            // since the bar's last search. Stale-verify first: an id whose range is no longer a live
+            // match no-ops and returns the current fresh list (collab shifts positions).
+            replace(matchId, query, replacement, opts, preserveCase) {
+                if (!editor || query === '') return [];
+                const sq = buildDocSearchQuery(query, opts);
+                if (!sq.valid) return [];
+                queryRef.current = sq; // resync the paint query — highlightAll follows this call
+                const fresh = () => toMatches(editor.view.state, sq);
+                if (!canWrite) return fresh();
                 const { view } = editor;
                 const [from, to] = matchId.split(':').map(Number);
                 if (!Number.isInteger(from) || !Number.isInteger(to)) return fresh();

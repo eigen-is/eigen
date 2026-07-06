@@ -25,10 +25,9 @@ import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/dri
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
-import { useDocSearchBar } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
+import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
-import { UndoRedoButtons } from '@workspace/ui/components/layout/toolbar/undo-redo-buttons';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import {
@@ -57,16 +56,13 @@ import {
     Pilcrow,
     Printer,
     Quote,
-    Redo,
     RemoveFormatting,
-    Search,
     Strikethrough,
     Subscript,
     Superscript,
     Table,
     Type,
     Underline,
-    Undo,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -105,7 +101,6 @@ export const EditorToolbar = ({
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
     const isMobile = useMediaQuery('(max-width: 1200px)');
-    const docSearchBar = useDocSearchBar();
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -193,28 +188,16 @@ export const EditorToolbar = ({
                             </DropdownMenuItem>
                         </FileMenu>
 
+                        <EditMenu
+                            canEdit={canWrite}
+                            canUndo={canUndo}
+                            canRedo={canRedo}
+                            onUndo={() => editor.chain().focus().undo().run()}
+                            onRedo={() => editor.chain().focus().redo().run()}
+                        />
+
                         {isMobile && (
                             <>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost">Edit</Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start">
-                                        <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().undo().run()}
-                                            disabled={!canUndo}
-                                        >
-                                            <Undo className="h-4 w-4 mr-2" /> Undo
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().redo().run()}
-                                            disabled={!canRedo}
-                                        >
-                                            <Redo className="h-4 w-4 mr-2" /> Redo
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="ghost">Format</Button>
@@ -387,16 +370,6 @@ export const EditorToolbar = ({
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </>
-                        )}
-                        {canWrite && !isMobile && (
-                            <div className="flex items-center">
-                                <UndoRedoButtons
-                                    canUndo={canUndo}
-                                    canRedo={canRedo}
-                                    onUndo={() => editor.chain().focus().undo().run()}
-                                    onRedo={() => editor.chain().focus().redo().run()}
-                                />
-                            </div>
                         )}
                     </div>
                 }
@@ -690,21 +663,14 @@ export const EditorToolbar = ({
                     )
                 }
                 right={
-                    <>
-                        <TooltipButton
-                            icon={Search}
-                            tooltipText={`Find in document (${formatForDisplay('Mod+F')})`}
-                            onClick={docSearchBar.open}
-                        />
-                        <DocumentShareCluster
-                            canWrite={canWrite}
-                            onAccessDialogOpen={onAccessDialogOpen}
-                            onToggleCommentPanel={onToggleCommentPanel}
-                            commentPanelOpen={commentPanelOpen}
-                            unresolvedCommentCount={unresolvedCommentCount}
-                            watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-                        />
-                    </>
+                    <DocumentShareCluster
+                        canWrite={canWrite}
+                        onAccessDialogOpen={onAccessDialogOpen}
+                        onToggleCommentPanel={onToggleCommentPanel}
+                        commentPanelOpen={commentPanelOpen}
+                        unresolvedCommentCount={unresolvedCommentCount}
+                        watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                    />
                 }
             />
             {onImageUpload && (

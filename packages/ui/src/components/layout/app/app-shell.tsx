@@ -107,7 +107,7 @@ function PaletteRunner() {
 function PaletteRunnerInner() {
     usePaletteShortcuts();
     const auth = useAuth();
-    const { selection, selectionActions, docSearch, docCommentSearch } = useCommandPalette();
+    const { selection, selectionActions, docSearch, docSearchSession, docCommentSearch } = useCommandPalette();
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
     const { openPreview } = usePreview();
@@ -126,6 +126,7 @@ function PaletteRunnerInner() {
             selection,
             selectionActions,
             docSearch,
+            docSearchSession,
             docCommentSearch,
             navigate: (url) => {
                 window.location.href = url;
@@ -138,7 +139,7 @@ function PaletteRunnerInner() {
             openPreview,
             toggleTheme,
         }),
-        [ownerId, selection, selectionActions, docSearch, docCommentSearch, openPreview, toggleTheme],
+        [ownerId, selection, selectionActions, docSearch, docSearchSession, docCommentSearch, openPreview, toggleTheme],
     );
 
     const eigenDocKind = createDialog && createDialog !== 'folder' ? createDialog : null;

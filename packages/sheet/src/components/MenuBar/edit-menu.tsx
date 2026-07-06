@@ -6,7 +6,7 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { useOptionalDocSearchBar } from '@workspace/ui/components/layout/search/doc-search-provider';
-import { useContext } from 'react';
+import { type RefObject, useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import {
@@ -21,7 +21,10 @@ import {
     tryDeleteRowCol,
 } from '../../state';
 
-export function EditMenu() {
+// focusFindBarRef is owned by the parent DropdownMenuContent (MenuBar): a Find pick sets it so the
+// menu's onCloseAutoFocus suppresses Radix's focus-restore to the trigger, which would otherwise
+// steal focus back from the find bar.
+export function EditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
     const { context, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
     const { toolbar, button } = locale(context);
@@ -144,8 +147,23 @@ export function EditMenu() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem disabled={!docSearchBar} onClick={() => docSearchBar?.open()}>
-                {toolbar.findAndReplace}
+            <DropdownMenuItem
+                disabled={!docSearchBar}
+                onClick={() => {
+                    focusFindBarRef.current = true;
+                    docSearchBar?.open();
+                }}
+            >
+                Find
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                disabled={!docSearchBar?.canReplace}
+                onClick={() => {
+                    focusFindBarRef.current = true;
+                    docSearchBar?.openReplace();
+                }}
+            >
+                Find and replace
             </DropdownMenuItem>
         </>
     );

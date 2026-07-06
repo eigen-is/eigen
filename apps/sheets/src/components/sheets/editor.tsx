@@ -1,4 +1,3 @@
-import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useAuth } from '@workspace/lib/auth';
 import { useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
@@ -15,24 +14,13 @@ import { CardFormDialog, CommentLifecycleDialogs, CommentPanel, LoadingState } f
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { DocSearchProvider, useDocSearchBar } from '@workspace/ui/components/layout/search/doc-search-provider';
+import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { useSheetSearchController } from './hooks/use-search-controller';
 import { useSheet } from './hooks/use-sheet';
 import { ToolbarLeftItems } from './toolbar';
-
-// Toolbar / mobile entry point (mobile has no ⌘F). Rendered inside the Workbook toolbar, which
-// mounts inside DocSearchProvider, so useDocSearchBar resolves at the render site.
-function FindInDocumentButton() {
-    const { open } = useDocSearchBar();
-    return (
-        <TooltipButton icon={Search} tooltipText={`Find in document (${formatForDisplay('Mod+F')})`} onClick={open} />
-    );
-}
 
 type SheetEditorProps = {
     ownerId: string;
@@ -208,17 +196,14 @@ function SheetEditorInner({
 
     const rightItems = useMemo(
         () => (
-            <>
-                <FindInDocumentButton />
-                <DocumentShareCluster
-                    canWrite={canWrite}
-                    onAccessDialogOpen={onAccessDialogOpen}
-                    onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
-                    commentPanelOpen={commentPanelOpen}
-                    unresolvedCommentCount={unresolvedCount}
-                    watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-                />
-            </>
+            <DocumentShareCluster
+                canWrite={canWrite}
+                onAccessDialogOpen={onAccessDialogOpen}
+                onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                commentPanelOpen={commentPanelOpen}
+                unresolvedCommentCount={unresolvedCount}
+                watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+            />
         ),
         [canWrite, onAccessDialogOpen, commentPanelOpen, unresolvedCount, path.ownerId, path.mountId, path.id],
     );
@@ -246,6 +231,8 @@ function SheetEditorInner({
                         controller={searchController}
                         initialSearchTerm={initialSearchTerm}
                         barClassName="top-20"
+                        onUndo={() => workbookRef.current?.undo()}
+                        onRedo={() => workbookRef.current?.redo()}
                     >
                         <Workbook
                             key={snapshotVersion}

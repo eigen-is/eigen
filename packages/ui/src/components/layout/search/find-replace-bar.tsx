@@ -46,10 +46,17 @@ export type FindReplaceBarProps = {
     onToggleMode: () => void;
     onReplace: () => void;
     onReplaceAll: () => void;
+    // Route the surface's own undo/redo out of the bar (⌘Z / ⇧⌘Z / Ctrl+Y). Focus lives in the bar's
+    // input after Replace, so the editor keymap never sees the key — without this the browser applies
+    // useless native input-undo. Absent → default behaviour (search-only surfaces don't wire them).
+    onUndo?: () => void;
+    onRedo?: () => void;
 };
 
 // Compact icon toggle for a search/replace option. onMouseDown-preventDefault keeps the input focused
-// so toggling a filter never interrupts typing (the repo's preventFocusLoss idiom).
+// so toggling a filter never interrupts typing (the repo's preventFocusLoss idiom). Pressed styling
+// keys off aria-pressed, NOT data-[state=on]: TooltipTrigger asChild overwrites data-state
+// (open/closed) on this same element, so Toggle's own on-state selector can never match here.
 function OptionToggle({
     pressed,
     label,
@@ -70,7 +77,7 @@ function OptionToggle({
                     aria-label={label}
                     onMouseDown={(e) => e.preventDefault()}
                     onPressedChange={onToggle}
-                    className="size-6 min-w-0 rounded-[calc(var(--radius)-5px)] px-0"
+                    className="size-6 min-w-0 rounded-[calc(var(--radius)-5px)] px-0 aria-pressed:bg-primary/15 aria-pressed:text-primary aria-pressed:hover:bg-primary/20 aria-pressed:hover:text-primary"
                 >
                     <Icon className="size-3.5" />
                 </Toggle>
@@ -101,6 +108,8 @@ export function FindReplaceBar({
     onToggleMode,
     onReplace,
     onReplaceAll,
+    onUndo,
+    onRedo,
 }: FindReplaceBarProps) {
     const noResults = query !== '' && matchCount === 0;
     // Empty query → no count at all (never "0 of 0"); non-empty + 0 matches → muted "No results".
@@ -113,6 +122,18 @@ export function FindReplaceBar({
                 'flex w-full flex-col gap-1 rounded-lg border bg-popover p-1 shadow-md sm:w-96',
                 'origin-top animate-in fade-in-0 slide-in-from-top-2 duration-150',
             )}
+            // One handler on the root — events bubble here from both inputs and the buttons.
+            onKeyDown={(e) => {
+                if (!onUndo || !(e.metaKey || e.ctrlKey)) return;
+                if (e.key === 'z' || e.key === 'Z') {
+                    e.preventDefault();
+                    if (e.shiftKey) onRedo?.();
+                    else onUndo();
+                } else if (e.key === 'y' || e.key === 'Y') {
+                    e.preventDefault(); // Windows redo
+                    onRedo?.();
+                }
+            }}
         >
             <div className="flex items-center gap-1">
                 {canReplace && (

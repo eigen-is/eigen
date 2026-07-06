@@ -276,8 +276,8 @@ export function generateAPIs(
 
         removeImageByMediaName: (name: string) => setContext((draftCtx) => removeImageByMediaName(draftCtx, name)),
 
-        handleUndo,
-        handleRedo,
+        undo: handleUndo,
+        redo: handleRedo,
 
         getFlowdata: (id?: string | null) => getFlowdata(context, id),
 

@@ -16,6 +16,8 @@ const DEBOUNCE_MS = 150;
 
 export type DocSearchBarContextValue = {
     open: () => void; // open the bar (or re-focus + select it when already open) — ⌘F / toolbar ⌕ / Edit-menu
+    openReplace: () => void; // open in replace mode when the surface canReplace, else plain search — ⌥⌘F / Edit-menu
+    canReplace: boolean; // lets chrome (Edit menu) hide "Find and replace" on read-only surfaces
 };
 
 const DocSearchBarContext = createContext<DocSearchBarContextValue | null>(null);
@@ -50,6 +52,11 @@ export type DocSearchProviderProps = {
     // bar opens/closes, so its own document-level Escape can defer to the bar-close instead of running
     // its default action. The bar owns closing itself; this is read-only awareness.
     onOpenChange?: (open: boolean) => void;
+    // The surface's own undo/redo, routed out of the bar's inputs (⌘Z / ⇧⌘Z) so Replace stays
+    // undoable without leaving the bar. Passed straight to FindReplaceBar; omitted by search-only
+    // surfaces (slides/stickies), where the default keeps native behaviour.
+    onUndo?: () => void;
+    onRedo?: () => void;
 };
 
 // Owns the find session (open state, query, options, matches, active index), the keybinds, and the
@@ -66,6 +73,8 @@ export function DocSearchProvider({
     children,
     barClassName,
     onOpenChange,
+    onUndo,
+    onRedo,
 }: DocSearchProviderProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -93,9 +102,10 @@ export function DocSearchProvider({
     // ⌘G reopen so stepping never steals focus from the document (contract rule for reveal).
     const pendingFocusRef = useRef(false);
 
-    // Run a search and paint results. revealIndex = which match to make active + reveal afterwards
-    // (clamped to range).
-    const runSearch = useCallback((q: string, opts: DocSearchOptions, revealIndex: number) => {
+    // Run a search and paint results. revealTarget = which match to make active + reveal afterwards:
+    // an index (clamped to range) or a match id (the palette hit — resolved to its index, fallback 0
+    // when it's gone, since collab may have shifted the doc since the palette searched).
+    const runSearch = useCallback((q: string, opts: DocSearchOptions, revealTarget: number | { matchId: string }) => {
         const c = controllerRef.current;
         const found = c.search(q, opts);
         setMatches(found);
@@ -104,7 +114,14 @@ export function DocSearchProvider({
             setActiveIndex(-1);
             return;
         }
-        const idx = Math.min(Math.max(revealIndex, 0), found.length - 1);
+        const raw =
+            typeof revealTarget === 'number'
+                ? revealTarget
+                : Math.max(
+                      found.findIndex((m) => m.id === revealTarget.matchId),
+                      0,
+                  );
+        const idx = Math.min(Math.max(raw, 0), found.length - 1);
         setActiveIndex(idx);
         c.reveal(found[idx].id);
     }, []);
@@ -113,6 +130,24 @@ export function DocSearchProvider({
         (q: string, opts: DocSearchOptions) => {
             clearTimeout(debounceRef.current);
             debounceRef.current = setTimeout(() => runSearch(q, opts, 0), DEBOUNCE_MS);
+        },
+        [runSearch],
+    );
+
+    // A palette IN DOCUMENT hit: adopt the palette's query, paint all, reveal the CLICKED match (n of
+    // m at its index). Focus stays in the document (pendingFocusRef false) — the ?q= landing shape.
+    // The palette searches with all-false options, so reset to DEFAULT_OPTIONS or the count would lie.
+    // Runs the search now (not debounced) so the reveal lands on this interaction.
+    const revealFromPalette = useCallback(
+        (paletteQuery: string, matchId: string) => {
+            clearTimeout(debounceRef.current);
+            clearTimeout(replacedTimeoutRef.current);
+            setQuery(paletteQuery);
+            setOptions(DEFAULT_OPTIONS);
+            setReplacedCount(null);
+            pendingFocusRef.current = false;
+            setOpen(true);
+            runSearch(paletteQuery, DEFAULT_OPTIONS, { matchId });
         },
         [runSearch],
     );
@@ -243,7 +278,7 @@ export function DocSearchProvider({
     const onReplace = useCallback(() => {
         const c = controllerRef.current;
         if (!c.replace || activeIndex < 0 || !matches[activeIndex]) return;
-        const fresh = c.replace(matches[activeIndex].id, replacement, options, preserveCase);
+        const fresh = c.replace(matches[activeIndex].id, query, replacement, options, preserveCase);
         // Advance rule: keep the index only when a match was consumed (count dropped) — the next
         // match shifted into it. If the count held (cat→cats still matches), step forward, or Replace
         // loops on the same match forever.
@@ -257,7 +292,7 @@ export function DocSearchProvider({
         setReplacedCount(null);
         clearTimeout(replacedTimeoutRef.current);
         adoptMatches(fresh, next);
-    }, [activeIndex, matches, replacement, options, preserveCase, adoptMatches]);
+    }, [activeIndex, matches, query, replacement, options, preserveCase, adoptMatches]);
 
     const onReplaceAll = useCallback(() => {
         const c = controllerRef.current;
@@ -269,23 +304,30 @@ export function DocSearchProvider({
         flashReplaced(replaced);
     }, [query, replacement, options, preserveCase, adoptMatches, flashReplaced]);
 
-    // ⌥⌘F (and Win/Linux Mod+H): open the bar in replace mode when the surface supports it, else
-    // plain search (read-only docs/sheets, slides, stickies).
-    const openReplace = useCallback(
-        (e: KeyboardEvent) => {
-            e.preventDefault();
-            setMode(controllerRef.current.canReplace ? 'replace' : 'search');
-            openBar(true);
-        },
-        [openBar],
-    );
+    // Shared by the ⌥⌘F / Win-Linux Mod+H hotkeys and the Edit-menu item: open the bar in replace
+    // mode when the surface supports it, else plain search (read-only docs/sheets, slides, stickies).
+    const openReplace = useCallback(() => {
+        setMode(controllerRef.current.canReplace ? 'replace' : 'search');
+        openBar(true);
+    }, [openBar]);
 
     useHotkey('Mod+F', (e) => {
         e.preventDefault();
         openBar(true);
     });
-    useHotkey('Mod+Alt+F', openReplace); // ⌥⌘F on macOS, Ctrl+Alt+F elsewhere (order-free at runtime)
-    useHotkey('Mod+H', openReplace, { enabled: !isMac });
+    // ⌥⌘F on macOS, Ctrl+Alt+F elsewhere (order-free at runtime)
+    useHotkey('Mod+Alt+F', (e) => {
+        e.preventDefault();
+        openReplace();
+    });
+    useHotkey(
+        'Mod+H',
+        (e) => {
+            e.preventDefault();
+            openReplace();
+        },
+        { enabled: !isMac },
+    );
     useHotkey(
         'Mod+G',
         (e) => {
@@ -337,13 +379,16 @@ export function DocSearchProvider({
         [options, query, scheduleSearch],
     );
 
-    const barContext = useMemo(() => ({ open: () => openBar(true) }), [openBar]);
+    const barContext = useMemo(
+        () => ({ open: () => openBar(true), openReplace, canReplace }),
+        [openBar, openReplace, canReplace],
+    );
 
-    // Publish the per-app controller so the palette `doc:` scope can list in-document matches and
-    // reveal one in place. usePaletteDocSearch stabilises it by shape, so the publish effect doesn't
-    // loop even though the app rebuilds the controller each render. The palette hit's run() calls
-    // controller.reveal(matchId) — reveal in place, no bar (review decision).
-    usePaletteDocSearch(controller, commentSearch);
+    // Publish the per-app controller so the palette `doc:` scope can list in-document matches, plus
+    // the session's revealFromPalette so a hit's run() opens THIS bar pre-filled + reveals the match
+    // (Reinder, 2026-07-06; was reveal-in-place). usePaletteDocSearch stabilises both by shape, so the
+    // publish effect doesn't loop even though the app rebuilds the controller each render.
+    usePaletteDocSearch(controller, commentSearch, { revealFromPalette });
 
     return (
         <DocSearchBarContext.Provider value={barContext}>
@@ -374,6 +419,8 @@ export function DocSearchProvider({
                             onToggleMode={toggleMode}
                             onReplace={onReplace}
                             onReplaceAll={onReplaceAll}
+                            onUndo={onUndo}
+                            onRedo={onRedo}
                         />
                     </div>
                 )}

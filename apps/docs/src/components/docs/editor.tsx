@@ -688,6 +688,9 @@ const TiptapEditor = ({
                 commentSearch={commentSearch}
                 initialSearchTerm={initialSearchTerm}
                 barClassName={cn('top-14', showSidebar && 'right-68')}
+                // No .focus(): focus stays in the bar so the user can keep replacing after ⌘Z.
+                onUndo={() => editor.commands.undo()}
+                onRedo={() => editor.commands.redo()}
             >
                 <Column
                     id={'doc-editor'}

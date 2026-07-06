@@ -1,18 +1,30 @@
 import type { DocSearchController, DocSearchMatch } from '@workspace/lib/types/doc-search';
 import type { SearchResult, WorkbookInstance } from '@workspace/sheet';
-import { type RefObject, useMemo, useRef } from 'react';
+import { type RefObject, useMemo } from 'react';
 
 function idOf(m: SearchResult): string {
     return `${m.sheetId}:${m.r}:${m.c}`;
+}
+
+// Inverse of idOf, parsed from the right — sheetId may itself contain ':'. Malformed ids return
+// null (contract rule 2: tolerate, never throw); stale-but-well-formed cells no-op in the engine.
+function cellOf(id: string): { sheetId: string; r: number; c: number } | null {
+    const parts = id.split(':');
+    if (parts.length < 3) return null;
+    const c = Number(parts.pop());
+    const r = Number(parts.pop());
+    if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0) return null;
+    return { sheetId: parts.join(':'), r, c };
 }
 
 function toDocMatch(m: SearchResult): DocSearchMatch {
     return { id: idOf(m), label: m.value, context: `${m.sheetName} · ${m.cellPosition}` };
 }
 
-// Adapts the live WorkbookInstance to the shared DocSearchController. search() is pure (reads the
-// engine's searchAll); the id→SearchResult map lets highlightAll/reveal/replace resolve ids back to
-// cells. `doc` is identity-only — the editor passes its live flowdata so the controller republishes
+// Adapts the live WorkbookInstance to the shared DocSearchController. STATELESS by design: ids
+// parse back to cells (idOf/cellOf) and replace receives the query explicitly, so nothing reads a
+// cached last search — the palette interleaves search() calls on this same controller (contract id
+// rule). `doc` is identity-only — the editor passes its live flowdata so the controller republishes
 // per document change (contract rule 4). The WorkbookInstance ref is re-created on every context
 // change, so methods dereference workbookRef.current lazily rather than capturing it.
 export function useSheetSearchController(
@@ -20,62 +32,42 @@ export function useSheetSearchController(
     doc: unknown,
     canWrite: boolean,
 ): DocSearchController {
-    const matches = useRef<Map<string, SearchResult>>(new Map());
-    // The query the last search() ran with. replace() gets opts but not the query (the contract's
-    // matchId self-describes the cell, not the term), so it reads the term the current matches came
-    // from — always in sync, since the provider searches before it can replace.
-    const lastQuery = useRef('');
-
     return useMemo<DocSearchController>(() => {
         void doc; // new identity per document change — keeps n of m live (contract rule 4)
 
-        const remap = (results: SearchResult[]): DocSearchMatch[] => {
-            matches.current = new Map(results.map((m) => [idOf(m), m]));
-            return results.map(toDocMatch);
-        };
+        const toMatches = (results: SearchResult[]): DocSearchMatch[] => results.map(toDocMatch);
 
         return {
             search(q, opts) {
-                lastQuery.current = q;
-                return remap(workbookRef.current?.searchAll(q, opts) ?? []);
+                return toMatches(workbookRef.current?.searchAll(q, opts) ?? []);
             },
             highlightAll(found) {
-                const cells = found
-                    .map((m) => matches.current.get(m.id))
-                    .filter((m): m is SearchResult => m != null)
-                    .map((m) => ({ sheetId: m.sheetId, r: m.r, c: m.c }));
+                const cells = found.flatMap((m) => cellOf(m.id) ?? []);
                 workbookRef.current?.setSearchHighlights(cells);
             },
             reveal(id) {
-                const m = matches.current.get(id);
-                if (m) workbookRef.current?.revealSearchMatch({ sheetId: m.sheetId, r: m.r, c: m.c });
+                const m = cellOf(id);
+                if (m) workbookRef.current?.revealSearchMatch(m);
             },
 
             canReplace: canWrite,
 
             // Rewrite the matched cell (every occurrence in it), then adopt the RETURNED fresh list —
             // sheets' React context is a render behind, so the engine computes it on a synchronously
-            // produced next-state. A stale id (not in the current map) no-ops with a plain re-search.
-            replace(matchId, replacement, opts, preserveCase) {
+            // produced next-state. A stale id no-ops inside the engine (the cell's value is
+            // re-checked against the query there) and still returns the fresh list.
+            replace(matchId, query, replacement, opts, preserveCase) {
                 const wb = workbookRef.current;
-                if (!wb || !canWrite) return remap(wb?.searchAll(lastQuery.current, opts) ?? []);
-                const m = matches.current.get(matchId);
-                if (!m) return remap(wb.searchAll(lastQuery.current, opts));
-                return remap(
-                    wb.replace(
-                        { sheetId: m.sheetId, r: m.r, c: m.c },
-                        lastQuery.current,
-                        replacement,
-                        opts,
-                        preserveCase,
-                    ),
-                );
+                if (!wb) return [];
+                const m = cellOf(matchId);
+                if (!m || !canWrite) return toMatches(wb.searchAll(query, opts));
+                return toMatches(wb.replace(m, query, replacement, opts, preserveCase));
             },
             replaceAll(query, replacement, opts, preserveCase) {
                 const wb = workbookRef.current;
-                if (!wb || !canWrite) return { replaced: 0, matches: remap(wb?.searchAll(query, opts) ?? []) };
+                if (!wb || !canWrite) return { replaced: 0, matches: toMatches(wb?.searchAll(query, opts) ?? []) };
                 const { replaced, matches: results } = wb.replaceAll(query, replacement, opts, preserveCase);
-                return { replaced, matches: remap(results) };
+                return { replaced, matches: toMatches(results) };
             },
         };
     }, [workbookRef, doc, canWrite]);

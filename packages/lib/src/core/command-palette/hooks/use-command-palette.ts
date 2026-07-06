@@ -1,5 +1,5 @@
 import type { PaletteScope, PaletteSelection, PaletteSelectionActions } from '@workspace/lib/types/command-palette';
-import type { DocCommentSearch, DocSearchController } from '@workspace/lib/types/doc-search';
+import type { DocCommentSearch, DocSearchController, DocSearchSession } from '@workspace/lib/types/doc-search';
 import type { Dispatch, SetStateAction } from 'react';
 import { createContext, useContext } from 'react';
 
@@ -16,6 +16,8 @@ export type CommandPaletteContextValue = {
     setSelectionActions: Dispatch<SetStateAction<PaletteSelectionActions>>;
     docSearch: DocSearchController | null;
     setDocSearch: Dispatch<SetStateAction<DocSearchController | null>>;
+    docSearchSession: DocSearchSession | null;
+    setDocSearchSession: Dispatch<SetStateAction<DocSearchSession | null>>;
     docCommentSearch: DocCommentSearch;
     setDocCommentSearch: Dispatch<SetStateAction<DocCommentSearch>>;
 };

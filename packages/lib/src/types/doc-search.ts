@@ -42,16 +42,33 @@ export type DocSearchController = {
     // Both methods perform the edit AND return the FRESH post-edit match list, which the provider
     // ADOPTS — it never re-runs search() after an edit (sheets' React context is one render behind
     // then). Docs re-searches synchronously after view.dispatch; sheets collects on a synchronously
-    // produced next-state inside the same commit. preserveCase is a separate arg (a replace-only
-    // concern search()/buildSearchRegex never read); the impl reapplies it via applyPreserveCase.
-    // Replacement strings are LITERAL on every surface — no $1/$& capture-group expansion.
-    replace?(matchId: string, replacement: string, opts: DocSearchOptions, preserveCase: boolean): DocSearchMatch[];
+    // produced next-state inside the same commit. The query is EXPLICIT on both — impls MUST NOT
+    // read a cached last-search term: the palette calls search() on this same controller between a
+    // bar session's calls (same interleave as the id rule above). preserveCase is a separate arg
+    // (a replace-only concern search()/buildSearchRegex never read); the impl reapplies it via
+    // applyPreserveCase. Replacement strings are LITERAL on every surface — no $1/$& expansion.
+    replace?(
+        matchId: string,
+        query: string,
+        replacement: string,
+        opts: DocSearchOptions,
+        preserveCase: boolean,
+    ): DocSearchMatch[];
     replaceAll?(
         query: string,
         replacement: string,
         opts: DocSearchOptions,
         preserveCase: boolean,
     ): { replaced: number; matches: DocSearchMatch[] };
+};
+
+// The find-bar SESSION capability the DocSearchProvider publishes to the palette — separate from the
+// per-app DocSearchController, which is the document contract each app implements. Opening a palette
+// IN DOCUMENT hit adopts the palette's query into the live find session and reveals the clicked match
+// (n of m at ITS index), leaving focus in the document — the ?q= landing shape. Published as
+// ctx.docSearchSession; null when no eigendoc is open.
+export type DocSearchSession = {
+    revealFromPalette(query: string, matchId: string): void;
 };
 
 // Phase 2 — async, server-backed comment-thread search (palette `doc:` scope only). id = the
