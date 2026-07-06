@@ -100,7 +100,14 @@ export class ManagedDatabase<S extends SchemaType> {
             INSERT OR IGNORE INTO __schema_version (id, version) VALUES (1, 0);
         `);
 
-        await this.runMigrations();
+        try {
+            await this.runMigrations();
+        } catch (e) {
+            // A failed migration must not leak the raw handle (fd + mapped journals).
+            this.rawDb.close();
+            this.rawDb = null;
+            throw e;
+        }
 
         this.drizzleDb = drizzle(this.rawDb, { schema: this.config.schema }) as BunSQLiteDatabase<S>;
         this.lastSyncedChanges = 0;
