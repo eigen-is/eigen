@@ -9,9 +9,11 @@ import {
     useNotifications,
     useUnreadNotificationCount,
 } from '@workspace/lib/notification';
+import { usePublicUsers } from '@workspace/lib/public';
 import type { Notification } from '@workspace/lib/types/notification';
+import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { Bell, Check, X } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '../../button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
 import { ActivityRow } from '../activity-row';
@@ -20,12 +22,13 @@ import { NotificationBadge } from './notification-badge';
 
 type NotificationItemProps = {
     notification: Notification;
+    previewOpts: { resolveName?: (email: string) => string | undefined; viewerEmail?: string };
     onMarkRead: (id: string) => void;
     onDismiss: (id: string) => void;
 };
 
-function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationItemProps) {
-    const lines = describeNotification(notification);
+function NotificationItem({ notification, previewOpts, onMarkRead, onDismiss }: NotificationItemProps) {
+    const lines = describeNotification(notification, previewOpts);
     const details = notification.details;
     const pathType = details && 'pathType' in details ? details.pathType : undefined;
 
@@ -73,6 +76,18 @@ export function NotificationBell() {
     const markRead = useMarkNotificationRead(ownerId);
     const dismiss = useDismissNotification(ownerId);
 
+    // Resolve display names for the emails embedded in chat-derived bodies (mentions, emote targets).
+    const emails = useMemo(() => {
+        const set = new Set<string>();
+        for (const n of notifications) for (const m of n.body?.match(EMAIL_FIND_REGEX) ?? []) set.add(m);
+        return [...set];
+    }, [notifications]);
+    const publicUsers = usePublicUsers(emails);
+    const previewOpts = useMemo(
+        () => ({ resolveName: (email: string) => publicUsers[email]?.name, viewerEmail: auth.user?.email }),
+        [publicUsers, auth.user?.email],
+    );
+
     if (!auth.isAuthenticated) return null;
 
     return (
@@ -106,6 +121,7 @@ export function NotificationBell() {
                             <div key={n.id} className="group/item border-b last:border-b-0">
                                 <NotificationItem
                                     notification={n}
+                                    previewOpts={previewOpts}
                                     onMarkRead={(id) => markRead.mutate(id)}
                                     onDismiss={(id) => dismiss.mutate(id)}
                                 />

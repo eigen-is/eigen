@@ -1,9 +1,11 @@
 import { getDriveAppUrl, getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import { useFileHistory } from '@workspace/lib/drive';
+import { usePublicUsers } from '@workspace/lib/public';
 import type { DriveItemRef, DrivePath } from '@workspace/lib/types/drive';
 import { describeFileEvent, type FileEvent } from '@workspace/lib/types/file-history';
-import { useEffect, useRef } from 'react';
+import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
+import { useEffect, useMemo, useRef } from 'react';
 import { ActivityRow } from '../activity-row';
 import { UserNameCard } from '../user-name-card';
 
@@ -25,6 +27,20 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
         }
     }, [highlight, events.length]);
 
+    // Resolve display names for the emails inside comment previews (mentions, emote targets).
+    const emails = useMemo(() => {
+        const set = new Set<string>();
+        for (const e of events)
+            if (e.eventType === 'commented' && e.details && 'preview' in e.details)
+                for (const m of e.details.preview.match(EMAIL_FIND_REGEX) ?? []) set.add(m);
+        return [...set];
+    }, [events]);
+    const publicUsers = usePublicUsers(emails);
+    const previewOpts = useMemo(
+        () => ({ resolveName: (email: string) => publicUsers[email]?.name, viewerEmail: user?.email }),
+        [publicUsers, user?.email],
+    );
+
     if (events.length === 0) return null;
 
     const isFolder = path.type === 'folder';
@@ -37,7 +53,7 @@ export function RecentActivity({ path, highlight }: RecentActivityProps) {
                 {events.map((event) => {
                     // 'own' = the file's own events (panel title already names it); else name the item.
                     const ctx = !isFolder && event.pathId === path.id ? 'own' : 'container';
-                    const lines = describeFileEvent(event, ctx);
+                    const lines = describeFileEvent(event, ctx, previewOpts);
                     const url = resolveEventUrl(event, path, ctx);
 
                     return (

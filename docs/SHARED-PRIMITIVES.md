@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-778 primitives across 6 kinds. `packages/sheet` internals are excluded.
+780 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -570,7 +570,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (244)
+## Utilities & constants (246)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -670,6 +670,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `commandNeedsSpace` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `COMMANDS_HELP` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
+| `formatChatPreview` | `@workspace/lib/chat` | packages/lib/src/core/chat/format-preview.ts |
 | `getEmoteCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/emotes.ts |
 | `getLocalCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `handleChatSSEvent` | `@workspace/lib/chat` | packages/lib/src/core/chat/sse-handlers.ts |
@@ -732,6 +733,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
 | `sendDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `updateDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
+| `CHAT_TEXT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |

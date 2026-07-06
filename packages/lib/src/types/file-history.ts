@@ -1,3 +1,4 @@
+import { formatChatPreview } from '../core/chat/format-preview';
 import { formatFileSize } from '../core/format';
 import { type DrivePathType, stripEigenExtension } from './drive';
 
@@ -106,6 +107,7 @@ export type ActivityLines = { action: string; primary?: string; secondary?: stri
 export function describeFileEvent(
     event: Pick<FileEvent, 'eventType' | 'details' | 'pathName' | 'pathType'>,
     ctx: 'own' | 'container',
+    opts?: { resolveName?: (email: string) => string | undefined; viewerEmail?: string },
 ): ActivityLines {
     const name = stripEigenExtension(event.pathName);
     const container = ctx === 'container';
@@ -150,7 +152,7 @@ export function describeFileEvent(
             const d = details && 'preview' in details ? details : null;
             return {
                 action: container ? `commented on "${name}"` : 'commented',
-                primary: d ? `“${d.preview}”` : undefined,
+                primary: d ? `“${formatChatPreview(d.preview, opts)}”` : undefined,
             };
         }
         case 'sticky-added': {
