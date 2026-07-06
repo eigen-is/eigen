@@ -398,19 +398,21 @@
     }
 
     /* In-document search highlight — the single source of truth all four editors
-       (docs/sheets/slides/stickies) paint through; docs maps prosemirror-search's
-       own class names onto these in its CSS. A warm amber wash derived from the
+       (docs/sheets/slides/stickies) paint through; prosemirror-search's own class
+       names (docs) alias the same rules here. A warm amber wash derived from the
        --warning token so it reads as a highlight in light AND dark without a harsh
        literal yellow. `-active` is the current match: stronger wash + a ring.
        Mixed with `transparent` (not --background) so the same wash works painted as
        a span background over a solid surface (docs) AND as an overlay over the
        sheets canvas, where the cell's own text must show through. */
-    .eigen-search-match {
+    .eigen-search-match,
+    .tiptap .ProseMirror-search-match {
         background-color: color-mix(in oklab, var(--warning) 22%, transparent);
         border-radius: calc(var(--radius) - 3px);
     }
 
-    .eigen-search-match-active {
+    .eigen-search-match-active,
+    .tiptap .ProseMirror-active-search-match {
         background-color: color-mix(in oklab, var(--warning) 45%, transparent);
         box-shadow: 0 0 0 1px color-mix(in oklab, var(--warning) 65%, transparent);
         border-radius: calc(var(--radius) - 3px);
