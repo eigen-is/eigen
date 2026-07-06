@@ -128,7 +128,9 @@ describe('SharedDrive gating enumeration', () => {
         },
         getWatches: {
             gate: 'ungated-by-design',
-            reason: 'self-filtering: unreadable watched paths are dropped',
+            // Pins no-throw + empty-for-a-stranger only; the read-revoke filtering itself is
+            // pinned by file-watch.test.ts (a stranger has no rows either way).
+            reason: 'per-caller listing; safe to call with no permissions',
             call: async (sd) => {
                 const paths = await sd.getWatches(charlie);
                 expect(paths.map((p) => p.id)).not.toContain(fileId);
@@ -136,7 +138,8 @@ describe('SharedDrive gating enumeration', () => {
         },
         getSharedWith: {
             gate: 'ungated-by-design',
-            reason: 'self-filtering: only returns paths the caller can already read',
+            // Same scope note as getWatches: stranger-safety pin, not a filtering pin.
+            reason: 'per-caller listing; safe to call with no permissions',
             call: async (sd) => {
                 const paths = await sd.getSharedWith(charlie);
                 expect(paths.map((p) => p.id)).not.toContain(fileId);

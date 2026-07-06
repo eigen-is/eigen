@@ -172,6 +172,9 @@ describe('Streaming Upload', () => {
     });
 
     test('upload exceeding the server max upload size returns 413', async () => {
+        // Read-then-restore so the finally can't pin a stale default into the shared settings store.
+        const before = await (await authedRequest(ctx.alice.user.sessionToken, '/settings/server')).json();
+        const previousMax = before.quotas.maxUploadSizeMB;
         await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -193,7 +196,7 @@ describe('Streaming Upload', () => {
             await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quotas: { maxUploadSizeMB: 35 } }),
+                body: JSON.stringify({ quotas: { maxUploadSizeMB: previousMax } }),
             });
         }
     });
