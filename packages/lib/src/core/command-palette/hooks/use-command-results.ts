@@ -5,6 +5,8 @@ import { buildSections } from '../engine';
 import { parseQuery } from '../parse-query';
 import { useActionResults } from '../providers/actions';
 import { useContactResults } from '../providers/contacts';
+import { useDocCommentSearchResults } from '../providers/doc-comment-search';
+import { useDocSearchResults } from '../providers/doc-search';
 import { useFileSearchResults } from '../providers/file-search';
 import { useHelpSearchResults } from '../providers/help-search';
 import { useMailSearchResults } from '../providers/mail-search';
@@ -30,10 +32,15 @@ export function useCommandResults(ctx: CommandContext, input: string, scope?: Pa
     const action = useActionResults(ctx, parsed.q);
     const contact = useContactResults(ctx, parsed.q);
     const smart = useSmartResults(ctx, input); // smart sees raw input — parses for shape
+    const doc = useDocSearchResults(ctx, input, effectiveScope);
+    const docComment = useDocCommentSearchResults(ctx, input, effectiveScope);
     const mail = useMailSearchResults(ctx, input, effectiveScope);
     const file = useFileSearchResults(ctx, input, effectiveScope);
     const help = useHelpSearchResults(input, effectiveScope);
 
+    // docComment is async but doc (sync IN DOCUMENT) is not — smoothing only the comment section
+    // keeps the sync section instant while IN COMMENTS never collapses mid-flight.
+    const stableDocComment = useStableWhilePending(docComment.results, docComment.isPending);
     const stableMail = useStableWhilePending(mail.results, mail.isPending);
     const stableFile = useStableWhilePending(file.results, file.isPending);
     const stableHelp = useStableWhilePending(help.results, help.isPending);
@@ -44,6 +51,8 @@ export function useCommandResults(ctx: CommandContext, input: string, scope?: Pa
                 action,
                 contact,
                 smart,
+                doc,
+                docComment: stableDocComment,
                 mail: stableMail,
                 file: stableFile,
                 help: stableHelp,
@@ -51,6 +60,6 @@ export function useCommandResults(ctx: CommandContext, input: string, scope?: Pa
                 scope: effectiveScope,
                 suggestedCommandIds: SUGGESTED_COMMAND_IDS,
             }),
-        [action, contact, smart, stableMail, stableFile, stableHelp, input, effectiveScope],
+        [action, contact, smart, doc, stableDocComment, stableMail, stableFile, stableHelp, input, effectiveScope],
     );
 }

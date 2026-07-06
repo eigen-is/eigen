@@ -3,13 +3,15 @@ import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { NoteCard } from '@workspace/ui';
 import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
-import { memo, useRef } from 'react';
+import { cn } from '@workspace/ui/lib/utils';
+import { memo, useCallback, useRef } from 'react';
 
 type SortableNoteCardProps = {
     card: CommentCard;
     replyCount?: number;
     resolved?: boolean;
     canWrite?: boolean;
+    highlighted?: boolean;
     onOpen?: (cardId: string) => void;
     onContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
 };
@@ -19,6 +21,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
     replyCount,
     resolved,
     canWrite = true,
+    highlighted,
     onOpen,
     onContextMenu,
 }: SortableNoteCardProps) {
@@ -28,6 +31,16 @@ export const SortableNoteCard = memo(function SortableNoteCard({
         disabled: !canWrite,
     });
     const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
+
+    // Compose dnd-kit's node ref with a stable data-attribute so the search controller can
+    // scroll-to + flash this card by its match id (NoteCard's typed props stay clean).
+    const setRef = useCallback(
+        (node: HTMLDivElement | null) => {
+            setNodeRef(node);
+            if (node) node.dataset.searchAnchor = `card:${card.id}`;
+        },
+        [setNodeRef, card.id],
+    );
 
     const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -44,7 +57,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
 
     return (
         <NoteCard
-            ref={setNodeRef}
+            ref={setRef}
             title={card.title}
             description={card.description}
             color={card.color}
@@ -57,7 +70,11 @@ export const SortableNoteCard = memo(function SortableNoteCard({
             }}
             onClick={handleClick}
             onContextMenu={onContextMenu ? (e) => onContextMenu(e, card) : undefined}
-            className={canWrite ? `cursor-grab touch-none${isDragging ? ' opacity-50' : ''}` : undefined}
+            className={cn(
+                canWrite && 'cursor-grab touch-none',
+                isDragging && 'opacity-50',
+                highlighted && 'eigen-search-ring',
+            )}
             style={{
                 transform: CSS.Transform.toString(transform) || undefined,
                 transition,

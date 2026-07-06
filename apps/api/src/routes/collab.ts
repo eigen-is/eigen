@@ -72,6 +72,19 @@ export const collabRouter = new Elysia({
         { auth: true },
     )
 
+    .get(
+        '/collab/:ownerId/:mountId/:pathId/comments/search',
+        async ({ params, query, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const index = await getCommentIndex(drive, params.mountId, params.pathId);
+            return await index.searchComments(query.q);
+        },
+        {
+            auth: true,
+            query: t.Object({ q: t.String({ minLength: 1, maxLength: 256 }) }),
+        },
+    )
+
     .patch(
         '/collab/:ownerId/:mountId/:pathId/comments/:chatName/status',
         async ({ params, body, user }) => {

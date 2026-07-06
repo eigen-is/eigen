@@ -397,6 +397,60 @@
         border-color: var(--app-current-color);
     }
 
+    /* In-document search highlight — the single source of truth all four editors
+       (docs/sheets/slides/stickies) paint through; docs maps prosemirror-search's
+       own class names onto these in its CSS. A warm amber wash derived from the
+       --warning token so it reads as a highlight in light AND dark without a harsh
+       literal yellow. `-active` is the current match: stronger wash + a ring.
+       Mixed with `transparent` (not --background) so the same wash works painted as
+       a span background over a solid surface (docs) AND as an overlay over the
+       sheets canvas, where the cell's own text must show through. */
+    .eigen-search-match {
+        background-color: color-mix(in oklab, var(--warning) 22%, transparent);
+        border-radius: calc(var(--radius) - 3px);
+    }
+
+    .eigen-search-match-active {
+        background-color: color-mix(in oklab, var(--warning) 45%, transparent);
+        box-shadow: 0 0 0 1px color-mix(in oklab, var(--warning) 65%, transparent);
+        border-radius: calc(var(--radius) - 3px);
+    }
+
+    /* Ring variants of the search highlight — same --warning token, for overlay surfaces
+       (slides objects/thumbnails, stickies cards/columns) where a background wash would
+       obscure content. `outline` (not box-shadow) so it never fights a card's own shadow.
+       The 2px `outline-offset` gap shows the surface behind the element (--background on
+       stickies), giving a neutral separator so the amber ring still reads on a same-hue
+       card (default-yellow stickies). `.eigen-search-flash` is the one-shot reveal pulse;
+       keyframe box-shadow briefly stacks over the outline, then settles back to the steady ring. */
+    .eigen-search-ring {
+        outline: 2px solid color-mix(in oklab, var(--warning) 55%, transparent);
+        outline-offset: 2px;
+        border-radius: calc(var(--radius) - 3px);
+    }
+
+    .eigen-search-ring-active {
+        outline: 2px solid color-mix(in oklab, var(--warning) 90%, transparent);
+        outline-offset: 2px;
+        border-radius: calc(var(--radius) - 3px);
+    }
+
+    .eigen-search-flash {
+        animation: eigen-search-ring-flash 1.1s ease-out;
+    }
+
+    @keyframes eigen-search-ring-flash {
+        0% {
+            box-shadow: 0 0 0 0 color-mix(in oklab, var(--warning) 80%, transparent);
+        }
+        30% {
+            box-shadow: 0 0 0 8px color-mix(in oklab, var(--warning) 45%, transparent);
+        }
+        100% {
+            box-shadow: 0 0 0 0 transparent;
+        }
+    }
+
     .drag-badge {
         position: absolute;
         top: -9999px;

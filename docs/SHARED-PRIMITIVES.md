@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-780 primitives across 6 kinds. `packages/sheet` internals are excluded.
+791 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -140,7 +140,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (201)
+## Hooks (203)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -211,6 +211,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `useCommandResults` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-results.ts |
 | `useOptionalCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
+| `usePaletteDocSearch` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-doc-search.ts |
 | `usePaletteDocSelection` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection.ts |
 | `usePaletteSelection` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection.ts |
 | `usePaletteSelectionActions` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection-actions.ts |
@@ -310,6 +311,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `usePublicUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUsers` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `useResolvedUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-resolved-user.ts |
+| `useDocCommentSearchHalf` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-doc-comment-search.ts |
 | `useSearch` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-search.ts |
 | `useCheckS3Connection` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `useServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
@@ -346,7 +348,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (219)
+## Types (224)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -528,6 +530,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActiveComments` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `DocCommentMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
+| `DocCommentSearch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
+| `DocSearchController` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
+| `DocSearchMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
+| `DocSearchOptions` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
@@ -570,7 +577,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (246)
+## Utilities & constants (250)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -685,7 +692,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `writeEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `restoreYjsDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
+| `parseQuery` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/parse-query.ts |
 | `applyCardPatch` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
+| `findCardIdByChatName` | `@workspace/lib/comments` | packages/lib/src/core/comments/find-card-id-by-chat-name.ts |
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
@@ -720,6 +729,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `formatMonth` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatTimeAgo` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
+| `applyPreserveCase` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/preserve-case.ts |
+| `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |

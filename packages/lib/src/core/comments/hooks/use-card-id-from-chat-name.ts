@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { CommentCard } from '../../../types/comments';
+import { findCardIdByChatName } from '../find-card-id-by-chat-name';
 
 // Resolves a `?chat=<chatName>` URL parameter to the matching cardId once cards have loaded.
 // Reset-on-falsy + memoise-by-value so the same editor instance can re-resolve when the URL changes.
@@ -22,12 +23,11 @@ export function useCardIdFromChatName(
             return;
         }
         if (appliedRef.current === chatName) return;
-        for (const cardId in cards) {
-            if (cards[cardId].chatName === chatName) {
-                setOpenCardId(cardId);
-                appliedRef.current = chatName;
-                return;
-            }
+        const cardId = findCardIdByChatName(cards, chatName);
+        if (cardId) {
+            setOpenCardId(cardId);
+            appliedRef.current = chatName;
+            return;
         }
         if (ready) {
             appliedRef.current = chatName;

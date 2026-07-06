@@ -26,12 +26,15 @@ import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
+import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
+import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type ArrangeOp, computeArrange } from './arrange';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
 import { useSlideDnd } from './hooks/use-slide-dnd';
+import { useSlidesDocSearch } from './hooks/use-slides-doc-search';
 import { SlideCanvas } from './slide-canvas';
 import { ReadOnlySlideObject } from './slide-object';
 import { SlidePanel } from './slide-panel';
@@ -88,6 +91,7 @@ type SlideEditorProps = {
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
+    initialSearchTerm?: string;
 };
 
 export function SlideEditor({
@@ -98,6 +102,7 @@ export function SlideEditor({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: SlideEditorProps) {
     return (
         <MediaResolverProvider
@@ -114,6 +119,7 @@ export function SlideEditor({
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
                 initialChatName={initialChatName}
+                initialSearchTerm={initialSearchTerm}
             />
         </MediaResolverProvider>
     );
@@ -127,6 +133,7 @@ function SlideEditorInner({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: SlideEditorProps) {
     const {
         deck,
@@ -161,6 +168,20 @@ function SlideEditorInner({
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
     const [isPresenting, setIsPresenting] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
+    const {
+        controller: docSearchController,
+        highlightedSlideIds,
+        matchedObjectIds,
+        searchActiveObjectId,
+        clearHighlights,
+    } = useSlidesDocSearch({ deck, setActiveSlideId });
+
+    // Entering present unmounts the DocSearchProvider subtree without closing the bar, so its rings
+    // would survive an exit-with-bar-closed. Drop them on enter.
+    useEffect(() => {
+        if (isPresenting) clearHighlights();
+    }, [isPresenting, clearHighlights]);
 
     const auth = useAuth();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
@@ -210,15 +231,34 @@ function SlideEditorInner({
         },
         { enabled: canWrite && hasSelection && !isEditing },
     );
-    useHotkey(
-        'Escape',
-        () => {
-            if (isPresenting) setIsPresenting(false);
-            else if (isEditing) setEditingObjectId(null);
-            else setSelectedObjectIds([]);
-        },
-        { enabled: true },
-    );
+    // Layered Escape (amendment 12): present → text-edit → bar → deselect. This is a capture-phase
+    // document listener (NOT useHotkey): the find bar's own Escape runs in the bubble phase and closes
+    // the bar before any bubble handler here could tell it had been open, and useHotkey's callback sync
+    // goes stale once a second document Escape (the bar's) is registered. Capturing lets us read the
+    // live state first: when the bar is open we do nothing and let Escape bubble to the bar (close
+    // without deselecting); present/text-edit claim Escape and stop it; otherwise deselect (no
+    // stopPropagation, so dialogs and other layers still receive Escape). State is read from a ref so
+    // this listener never goes stale.
+    const escStateRef = useRef({ isPresenting, isEditing, searchOpen });
+    escStateRef.current = { isPresenting, isEditing, searchOpen };
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            const { isPresenting: presenting, isEditing: editing, searchOpen: barOpen } = escStateRef.current;
+            if (presenting) {
+                e.stopPropagation();
+                setIsPresenting(false);
+            } else if (editing) {
+                e.stopPropagation();
+                setEditingObjectId(null);
+            } else if (!barOpen) {
+                // bar open ⇒ let Escape bubble to the find bar so it closes without deselecting
+                setSelectedObjectIds([]);
+            }
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+    }, []);
     const moveSelected = useCallback(
         (dx: number, dy: number) => {
             if (!yjsDoc) return;
@@ -633,6 +673,10 @@ function SlideEditorInner({
             ? resolveMediaUrl(activeSlide.background.mediaName)
             : null;
 
+    // The properties/background/comment panel is a w-64 flex sibling on the right whenever there's an
+    // active slide and the user can write (or comments are open) — inset the find bar clear of it.
+    const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || canWrite);
+
     if (!isSynced) return <LoadingState />;
 
     if (isPresenting && activeSlide) {
@@ -675,144 +719,156 @@ function SlideEditorInner({
 
     return (
         <ColumnLayout mobileColumn="editor">
-            <Column
-                id={'editor'}
-                width={'w-full'}
-                className="flex-1 h-full"
-                toolbarBorder="always"
-                toolbar={
-                    <Toolbar
-                        path={path}
-                        canWrite={canWrite}
-                        undoManager={undoManager}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        onAddText={handleAddText}
-                        onAddImage={() => setImagePickerOpen(true)}
-                        onAddSlide={() => addSlide()}
-                        onPresent={handlePresent}
-                        onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
-                        commentPanelOpen={commentPanelOpen}
-                        unresolvedCommentCount={unresolvedCount}
-                    />
-                }
-            >
-                <div className="flex-1 flex overflow-hidden h-full">
-                    <SlidePanel
-                        deck={deck}
-                        activeSlideId={activeSlideId}
-                        onSelectSlide={(id) => {
-                            setActiveSlideId(id);
-                            setSelectedObjectIds([]);
-                            setEditingObjectId(null);
-                        }}
-                        onDragStart={handleDragStart}
-                        onDragEnd={handleDragEnd}
-                        dragActiveId={dragState.activeId}
-                        onDeleteSlide={canWrite ? deleteSlide : undefined}
-                        onDuplicateSlide={canWrite ? duplicateSlide : undefined}
-                        mobile={isMobile}
-                    />
-                    {!isMobile &&
-                        (activeSlide ? (
-                            <div className="flex-1 flex overflow-hidden">
-                                <div className="flex-1 flex flex-col overflow-hidden">
-                                    <SlideCanvas
-                                        slide={activeSlide}
-                                        objects={activeObjects}
-                                        selectedObjectIds={selectedObjectIds}
-                                        editingObjectId={editingObjectId}
-                                        onSelectObject={handleSelectObject}
-                                        onSelectObjects={setSelectedObjectIds}
-                                        onStartEditing={handleStartEditing}
-                                        onUpdateObject={updateObject}
-                                        onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
-                                        onDropImage={canWrite ? handleDropImage : undefined}
-                                        onCopyObject={handleCopyObject}
-                                        onDeleteObject={canWrite ? handleDeleteObject : undefined}
-                                        onMoveUp={canWrite ? moveObjectUp : undefined}
-                                        onMoveDown={canWrite ? moveObjectDown : undefined}
-                                        onMoveToFront={canWrite ? moveObjectToFront : undefined}
-                                        onMoveToBack={canWrite ? moveObjectToBack : undefined}
-                                        canWrite={canWrite}
-                                        onAddComment={canWrite && chatFolderId ? handleAddComment : undefined}
-                                        onCommentClick={setOpenCardId}
-                                        cards={cards}
-                                        entries={allComments}
-                                        onCommentResolve={(chatName) =>
-                                            resolveComment.mutate({ chatName, status: 'resolved' })
-                                        }
-                                        onCommentReopen={(chatName) =>
-                                            resolveComment.mutate({ chatName, status: 'open' })
-                                        }
-                                        onCommentChangeColor={(cardId, color) => updateCard(cardId, { color })}
-                                        onCommentDelete={removeCommentFromObject}
-                                    />
-                                    <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
-                                        <span>
-                                            Slide {deck.slideOrder.indexOf(activeSlideId!) + 1} of{' '}
-                                            {deck.slideOrder.length}
-                                        </span>
-                                    </div>
-                                </div>
-                                {commentPanelOpen ? (
-                                    <CommentPanel
-                                        cards={cards}
-                                        entries={allComments}
-                                        activeCardIds={activeComments.ids}
-                                        anchorTexts={activeComments.anchorTexts}
-                                        currentUserEmail={auth.user!.email}
-                                        onClose={() => setCommentPanelOpen(false)}
-                                        onCommentClick={(cardId) => {
-                                            for (const obj of Object.values(deck.objects)) {
-                                                if (obj.commentCardIds?.includes(cardId)) {
-                                                    setActiveSlideId(obj.slideId);
-                                                    setSelectedObjectIds([obj.id]);
-                                                    setEditingObjectId(null);
-                                                    break;
+            <div className="flex-1 min-w-0 h-full">
+                <DocSearchProvider
+                    controller={docSearchController}
+                    initialSearchTerm={initialSearchTerm}
+                    onOpenChange={setSearchOpen}
+                    barClassName={cn('top-14', rightPanelShown && 'right-68')}
+                >
+                    <Column
+                        id={'editor'}
+                        width={'w-full'}
+                        className="flex-1 h-full"
+                        toolbarBorder="always"
+                        toolbar={
+                            <Toolbar
+                                path={path}
+                                canWrite={canWrite}
+                                undoManager={undoManager}
+                                onAccessDialogOpen={onAccessDialogOpen}
+                                onAddText={handleAddText}
+                                onAddImage={() => setImagePickerOpen(true)}
+                                onAddSlide={() => addSlide()}
+                                onPresent={handlePresent}
+                                onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                                commentPanelOpen={commentPanelOpen}
+                                unresolvedCommentCount={unresolvedCount}
+                            />
+                        }
+                    >
+                        <div className="flex-1 flex overflow-hidden h-full">
+                            <SlidePanel
+                                deck={deck}
+                                highlightedSlideIds={highlightedSlideIds}
+                                activeSlideId={activeSlideId}
+                                onSelectSlide={(id) => {
+                                    setActiveSlideId(id);
+                                    setSelectedObjectIds([]);
+                                    setEditingObjectId(null);
+                                }}
+                                onDragStart={handleDragStart}
+                                onDragEnd={handleDragEnd}
+                                dragActiveId={dragState.activeId}
+                                onDeleteSlide={canWrite ? deleteSlide : undefined}
+                                onDuplicateSlide={canWrite ? duplicateSlide : undefined}
+                                mobile={isMobile}
+                            />
+                            {!isMobile &&
+                                (activeSlide ? (
+                                    <div className="flex-1 flex overflow-hidden">
+                                        <div className="flex-1 flex flex-col overflow-hidden">
+                                            <SlideCanvas
+                                                slide={activeSlide}
+                                                objects={activeObjects}
+                                                searchActiveObjectId={searchActiveObjectId}
+                                                searchMatchedObjectIds={matchedObjectIds}
+                                                selectedObjectIds={selectedObjectIds}
+                                                editingObjectId={editingObjectId}
+                                                onSelectObject={handleSelectObject}
+                                                onSelectObjects={setSelectedObjectIds}
+                                                onStartEditing={handleStartEditing}
+                                                onUpdateObject={updateObject}
+                                                onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
+                                                onDropImage={canWrite ? handleDropImage : undefined}
+                                                onCopyObject={handleCopyObject}
+                                                onDeleteObject={canWrite ? handleDeleteObject : undefined}
+                                                onMoveUp={canWrite ? moveObjectUp : undefined}
+                                                onMoveDown={canWrite ? moveObjectDown : undefined}
+                                                onMoveToFront={canWrite ? moveObjectToFront : undefined}
+                                                onMoveToBack={canWrite ? moveObjectToBack : undefined}
+                                                canWrite={canWrite}
+                                                onAddComment={canWrite && chatFolderId ? handleAddComment : undefined}
+                                                onCommentClick={setOpenCardId}
+                                                cards={cards}
+                                                entries={allComments}
+                                                onCommentResolve={(chatName) =>
+                                                    resolveComment.mutate({ chatName, status: 'resolved' })
                                                 }
-                                            }
-                                            setOpenCardId(cardId);
-                                        }}
-                                        onCommentContextMenu={(e, card, entry) =>
-                                            commentContextMenu.handleContextMenu(e, { card, entry })
-                                        }
-                                    />
-                                ) : selectedObjects.length > 0 && canWrite ? (
-                                    <SlidePropertiesPanel
-                                        objects={selectedObjects}
-                                        onUpdate={updateObjects}
-                                        onDelete={handleDeleteSelectedObjects}
-                                        onArrange={arrangeSelected}
-                                    />
-                                ) : canWrite && activeSlideId ? (
-                                    <SlideBackgroundPanel
-                                        background={activeSlide.background}
-                                        backgroundImageUrl={slideBackgroundImageUrl}
-                                        onUpdateBackground={(background, applyTo) =>
-                                            updateSlideBackground(activeSlideId!, background, applyTo)
-                                        }
-                                        onUploadImage={handleBackgroundImageUpload}
-                                        onPickImageFromDrive={handleBackgroundImagePickFromDrive}
-                                    />
-                                ) : null}
-                            </div>
-                        ) : (
-                            <EmptyState message="No slides yet" />
-                        ))}
-                </div>
+                                                onCommentReopen={(chatName) =>
+                                                    resolveComment.mutate({ chatName, status: 'open' })
+                                                }
+                                                onCommentChangeColor={(cardId, color) => updateCard(cardId, { color })}
+                                                onCommentDelete={removeCommentFromObject}
+                                            />
+                                            <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
+                                                <span>
+                                                    Slide {deck.slideOrder.indexOf(activeSlideId!) + 1} of{' '}
+                                                    {deck.slideOrder.length}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {commentPanelOpen ? (
+                                            <CommentPanel
+                                                cards={cards}
+                                                entries={allComments}
+                                                activeCardIds={activeComments.ids}
+                                                anchorTexts={activeComments.anchorTexts}
+                                                currentUserEmail={auth.user!.email}
+                                                onClose={() => setCommentPanelOpen(false)}
+                                                onCommentClick={(cardId) => {
+                                                    for (const obj of Object.values(deck.objects)) {
+                                                        if (obj.commentCardIds?.includes(cardId)) {
+                                                            setActiveSlideId(obj.slideId);
+                                                            setSelectedObjectIds([obj.id]);
+                                                            setEditingObjectId(null);
+                                                            break;
+                                                        }
+                                                    }
+                                                    setOpenCardId(cardId);
+                                                }}
+                                                onCommentContextMenu={(e, card, entry) =>
+                                                    commentContextMenu.handleContextMenu(e, { card, entry })
+                                                }
+                                            />
+                                        ) : selectedObjects.length > 0 && canWrite ? (
+                                            <SlidePropertiesPanel
+                                                objects={selectedObjects}
+                                                onUpdate={updateObjects}
+                                                onDelete={handleDeleteSelectedObjects}
+                                                onArrange={arrangeSelected}
+                                            />
+                                        ) : canWrite && activeSlideId ? (
+                                            <SlideBackgroundPanel
+                                                background={activeSlide.background}
+                                                backgroundImageUrl={slideBackgroundImageUrl}
+                                                onUpdateBackground={(background, applyTo) =>
+                                                    updateSlideBackground(activeSlideId!, background, applyTo)
+                                                }
+                                                onUploadImage={handleBackgroundImageUpload}
+                                                onPickImageFromDrive={handleBackgroundImagePickFromDrive}
+                                            />
+                                        ) : null}
+                                    </div>
+                                ) : (
+                                    <EmptyState message="No slides yet" />
+                                ))}
+                        </div>
 
-                {mediaFolderId && (
-                    <DrivePickerWithUpload
-                        open={imagePickerOpen}
-                        onOpenChange={setImagePickerOpen}
-                        title="Add image"
-                        mimeFilter={['image/*']}
-                        onPickFromDrive={handleImagePickFromDrive}
-                        onPickFromDevice={handleImageFromDevice}
-                        accept="image/*"
-                    />
-                )}
-            </Column>
+                        {mediaFolderId && (
+                            <DrivePickerWithUpload
+                                open={imagePickerOpen}
+                                onOpenChange={setImagePickerOpen}
+                                title="Add image"
+                                mimeFilter={['image/*']}
+                                onPickFromDrive={handleImagePickFromDrive}
+                                onPickFromDevice={handleImageFromDevice}
+                                accept="image/*"
+                            />
+                        )}
+                    </Column>
+                </DocSearchProvider>
+            </div>
 
             <CardFormDialog
                 open={addOpen}

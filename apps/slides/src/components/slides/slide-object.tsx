@@ -117,6 +117,8 @@ type SlideObjectViewProps = {
     editing: boolean;
     editable: boolean;
     isMultiSelected: boolean;
+    searchActive?: boolean;
+    searchMatched?: boolean;
     onSelect: (objId: string, additive?: boolean) => void;
     onStartEditing: (objId: string) => void;
     onUpdate: (objId: string, updates: Partial<SlideObject>) => void;
@@ -142,6 +144,8 @@ export const SlideObjectView = memo(function SlideObjectView({
     editing,
     editable,
     isMultiSelected,
+    searchActive,
+    searchMatched,
     onSelect,
     onStartEditing,
     onUpdate,
@@ -185,6 +189,8 @@ export const SlideObjectView = memo(function SlideObjectView({
                 'absolute',
                 !selected && obj.type === 'text' && 'border border-dashed border-border',
                 editable && !editing ? 'cursor-move' : 'cursor-default',
+                searchMatched && !searchActive && 'eigen-search-ring',
+                searchActive && 'eigen-search-ring-active eigen-search-flash',
             )}
             style={getObjectPositionStyle(obj)}
             onMouseDown={handleMouseDown}

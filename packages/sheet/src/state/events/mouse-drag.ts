@@ -19,7 +19,6 @@ import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '.
 import { onRangeSelectionModalMove, onRangeSelectionModalMoveEnd } from '../modules/hyperlink';
 import { colLocation, rowLocation } from '../modules/location';
 import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
-import { onSearchDialogMove, onSearchDialogMoveEnd } from '../modules/searchReplace';
 import { pasteHandlerOfPaintModel } from '../modules/selection';
 import type { Settings } from '../settings';
 import type { GlobalCache } from '../types';
@@ -364,7 +363,6 @@ export function handleOverlayMouseMove(
     if (onImageMove(ctx, globalCache, e)) return;
     if (onImageResize(ctx, globalCache, e)) return;
     onCellsMove(ctx, globalCache, e, scrollEl, container);
-    onSearchDialogMove(globalCache, e);
     onRangeSelectionModalMove(globalCache, e);
 
     if (!ctx.selectionActive && !ctx.scrolling) {
@@ -399,7 +397,6 @@ export function handleOverlayMouseUp(
     onImageMoveEnd(ctx, globalCache);
     onImageResizeEnd(ctx, globalCache);
     onFormulaRangeDragEnd(ctx);
-    onSearchDialogMoveEnd(globalCache);
     onRangeSelectionModalMoveEnd(globalCache);
     onCellsMoveEnd(ctx, globalCache, e, scrollEl, container);
     if (

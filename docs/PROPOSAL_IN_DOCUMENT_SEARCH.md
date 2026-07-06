@@ -1,9 +1,16 @@
 # In-Document Search & the "Current Document" Palette Scope
 
-> **Status — design only, not built.** Depends on the command palette (shipped — see
-> [PROPOSAL_COMMAND_PALETTE.md](PROPOSAL_COMMAND_PALETTE.md)) and is a sibling of the drive-wide
-> content index ([PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) Phase 2). Nothing here changes the
-> `/search/:ownerId` endpoint.
+> **Status — SHIPPED 2026-07-06** (v1 search + navigation in docs/sheets/slides/stickies via a
+> shared find bar, v1.5 replace on docs + sheets, phase-2 comment-thread search). The built design
+> deviates from this sketch in four ways: the **native find bar** (`DocSearchProvider` +
+> `FindReplaceBar`, `packages/ui/.../layout/search/`) is the primary surface and the palette `doc:`
+> scope reuses its controller; matches are **plain data with id-based `reveal`** (not per-hit
+> closures); the "doc actions" half was **already done** (`FileMenu` publishes them under the
+> Selection section — re-homing them under a Document heading was deliberately dropped); chat
+> in-document search stays deferred. Current locations: AGENTS.md §Frontend "In-document search"
+> and "Command palette" rows. The rest of this file is the original design sketch, kept for
+> background. Sibling: the drive-wide content index ([PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md)).
+> Nothing here changed the `/search/:ownerId` endpoint.
 >
 > **What this adds:** a way to search **inside the document you currently have open** — jump to a
 > sticky, a cell, a heading, a chat message — surfaced through a new **"current document" scope**

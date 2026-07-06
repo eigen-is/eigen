@@ -197,12 +197,6 @@ export function handleWithCtrlOrMetaKey(
         handleCopy(ctx);
         e.stopPropagation();
         return;
-    } else if (e.code === 'KeyF') {
-        // Ctrl + F: find
-        ctx.showSearch = true;
-    } else if (e.code === 'KeyH') {
-        // Ctrl + H: replace
-        ctx.showReplace = true;
     } else if (e.code === 'KeyV') {
         // Ctrl + V: paste — multi-range selections are not supported, bail
         if ((ctx.selections?.length ?? 0) > 1) {
@@ -456,6 +450,10 @@ export function handleGlobalKeyDown(
         cancelNormalSelected(ctx);
         moveHighlightCell(ctx, 'down', 0, 'rangeOfSelect');
         e.preventDefault();
+    } else if (kstr === 'Escape') {
+        // Not editing: bubble to document (skip the tail's focus-steal + stopPropagation) so the
+        // shared find bar's document-level Escape hotkey can dismiss it.
+        return;
     } else if (e.ctrlKey || e.metaKey) {
         handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo, handleRedo);
         return;

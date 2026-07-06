@@ -1,3 +1,4 @@
+import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import { useMediaQuery } from '@workspace/lib/media';
@@ -11,13 +12,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { useDocSearchBar } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { UndoRedoButtons } from '@workspace/ui/components/layout/toolbar/undo-redo-buttons';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
-import { Check, Plus, Redo, SquareKanban, Undo } from 'lucide-react';
+import { Check, Plus, Redo, Search, SquareKanban, Undo } from 'lucide-react';
 import type * as Y from 'yjs';
 
 type ToolbarProps = {
@@ -40,6 +42,7 @@ export function Toolbar({
     onColorFilterChange,
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
+    const { open: openSearch } = useDocSearchBar();
     const isMobile = useMediaQuery('(max-width: 1200px)');
 
     return (
@@ -129,6 +132,11 @@ export function Toolbar({
             }
             right={
                 <div className="flex items-center gap-1">
+                    <TooltipButton
+                        icon={Search}
+                        tooltipText={`Find in document (${formatForDisplay('Mod+F')})`}
+                        onClick={openSearch}
+                    />
                     <DocumentShareCluster
                         canWrite={canWrite}
                         onAccessDialogOpen={onAccessDialogOpen}

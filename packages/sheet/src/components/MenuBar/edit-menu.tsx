@@ -5,6 +5,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { useOptionalDocSearchBar } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
@@ -24,6 +25,7 @@ export function EditMenu() {
     const { context, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
     const { toolbar, button } = locale(context);
+    const docSearchBar = useOptionalDocSearchBar();
 
     const selection = context.selections?.[0];
     const canUndo = refs.globalCache.undoList.length > 0;
@@ -142,13 +144,7 @@ export function EditMenu() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-                onClick={() => {
-                    setContext((draftCtx) => {
-                        draftCtx.showSearch = true;
-                    });
-                }}
-            >
+            <DropdownMenuItem disabled={!docSearchBar} onClick={() => docSearchBar?.open()}>
                 {toolbar.findAndReplace}
             </DropdownMenuItem>
         </>

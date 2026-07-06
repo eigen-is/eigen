@@ -1,4 +1,4 @@
-import { useCommandPalette, useCommandResults } from '@workspace/lib/command-palette';
+import { parseQuery, useCommandPalette, useCommandResults } from '@workspace/lib/command-palette';
 import type { CommandContext, PaletteResult, PaletteScope, Sections } from '@workspace/lib/types/command-palette';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandList } from '@workspace/ui/components/command';
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
@@ -8,6 +8,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CommandFooter } from './command-footer';
 import { CommandRowAction } from './command-row-action';
 import { CommandRowContact } from './command-row-contact';
+import { CommandRowDocCommentHit } from './command-row-doc-comment-hit';
+import { CommandRowDocHit } from './command-row-doc-hit';
 import { CommandRowFile } from './command-row-file';
 import { CommandRowHelp } from './command-row-help';
 import { CommandRowMail } from './command-row-mail';
@@ -18,15 +20,18 @@ type Props = { ctx: CommandContext };
 const SCOPE_CHIPS: Record<PaletteScope, string> = {
     mail: 'Mail',
     file: 'Files',
+    doc: 'In document',
     actions: 'Actions',
     contacts: 'Contacts',
     help: 'Help',
 };
 
-// Tab cycles through scopes. The lookup makes the order obvious at a glance and is
-// easier to maintain than a chained ternary.
+// Tab cycles through scopes. The lookup makes the order obvious at a glance and is easier to
+// maintain than a chained ternary. `doc` is offered first (most contextual) but only when a
+// document is open — the Tab handler skips it otherwise (see handleKeyDown).
 const NEXT_SCOPE: Record<PaletteScope | 'none', PaletteScope | undefined> = {
-    none: 'file',
+    none: 'doc',
+    doc: 'file',
     file: 'mail',
     mail: 'actions',
     actions: 'contacts',
@@ -49,6 +54,10 @@ export function CommandPalette({ ctx }: Props) {
     const { open, setOpen, input, setInput, scope, setScope } = useCommandPalette();
     const sections = useCommandResults(ctx, input, scope);
 
+    // The `doc:` scope is reachable by typing the prefix even with no document open (the Tab
+    // stop is gated, the prefix isn't). Guide the user instead of a bare "No results.".
+    const docScopeNoDoc = (parseQuery(input).scope ?? scope) === 'doc' && !ctx.docSearch;
+
     const firstId = useMemo(() => firstResultId(sections), [sections]);
     const [selectedValue, setSelectedValue] = useState<string | undefined>(firstId);
     const listRef = useRef<HTMLDivElement>(null);
@@ -70,7 +79,12 @@ export function CommandPalette({ ctx }: Props) {
         }
         if (e.key === 'Tab') {
             e.preventDefault();
-            setScope((prev) => NEXT_SCOPE[prev ?? 'none']);
+            setScope((prev) => {
+                const next = NEXT_SCOPE[prev ?? 'none'];
+                // `doc` only exists while a document is open (a controller is published). With
+                // none, skip past it so Tab never lands on an empty scope.
+                return next === 'doc' && !ctx.docSearch ? NEXT_SCOPE.doc : next;
+            });
         }
     };
 
@@ -104,6 +118,10 @@ export function CommandPalette({ ctx }: Props) {
                 return <CommandRowMail key={r.id} result={r} onSelect={onSelect} />;
             case 'file':
                 return <CommandRowFile key={r.id} result={r} onSelect={onSelect} />;
+            case 'doc-hit':
+                return <CommandRowDocHit key={r.id} result={r} onSelect={onSelect} />;
+            case 'doc-comment-hit':
+                return <CommandRowDocCommentHit key={r.id} result={r} onSelect={onSelect} />;
             case 'help':
                 return <CommandRowHelp key={r.id} result={r} onSelect={onSelect} />;
             default: {
@@ -138,7 +156,9 @@ export function CommandPalette({ ctx }: Props) {
                     />
                     {/* Fixed height keeps the dialog from jumping as the result set shrinks/grows. */}
                     <CommandList ref={listRef} className="h-[420px] max-h-[420px]">
-                        <CommandEmpty>No results.</CommandEmpty>
+                        <CommandEmpty>
+                            {docScopeNoDoc ? 'Open a document to search inside it' : 'No results.'}
+                        </CommandEmpty>
                         {sections.topHit && (
                             <CommandGroup heading="Top Hit">{renderResult(sections.topHit)}</CommandGroup>
                         )}

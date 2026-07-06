@@ -25,6 +25,7 @@ import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/dri
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
+import { useDocSearchBar } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { UndoRedoButtons } from '@workspace/ui/components/layout/toolbar/undo-redo-buttons';
@@ -58,6 +59,7 @@ import {
     Quote,
     Redo,
     RemoveFormatting,
+    Search,
     Strikethrough,
     Subscript,
     Superscript,
@@ -103,6 +105,7 @@ export const EditorToolbar = ({
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
     const isMobile = useMediaQuery('(max-width: 1200px)');
+    const docSearchBar = useDocSearchBar();
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -687,14 +690,21 @@ export const EditorToolbar = ({
                     )
                 }
                 right={
-                    <DocumentShareCluster
-                        canWrite={canWrite}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        onToggleCommentPanel={onToggleCommentPanel}
-                        commentPanelOpen={commentPanelOpen}
-                        unresolvedCommentCount={unresolvedCommentCount}
-                        watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-                    />
+                    <>
+                        <TooltipButton
+                            icon={Search}
+                            tooltipText={`Find in document (${formatForDisplay('Mod+F')})`}
+                            onClick={docSearchBar.open}
+                        />
+                        <DocumentShareCluster
+                            canWrite={canWrite}
+                            onAccessDialogOpen={onAccessDialogOpen}
+                            onToggleCommentPanel={onToggleCommentPanel}
+                            commentPanelOpen={commentPanelOpen}
+                            unresolvedCommentCount={unresolvedCommentCount}
+                            watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                        />
+                    </>
                 }
             />
             {onImageUpload && (

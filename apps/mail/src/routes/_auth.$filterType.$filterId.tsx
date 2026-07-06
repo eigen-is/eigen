@@ -24,6 +24,10 @@ export type MailSearchParams = {
     // them to the composer, which runs them through the same handleDriveAttach the in-app
     // picker uses.
     attach?: string;
+    // ?q= from a palette mail hit — highlighted in the open email body. Not latched-and-cleared
+    // like the editors: the highlight is idempotent and stays active as the user moves between
+    // emails. The list searchQuery filter is intentionally NOT seeded from it.
+    q?: string;
 };
 
 function parseAttachRefs(attach: string | undefined): { ownerId: string; mountId: string; pathId: string }[] {
@@ -44,14 +48,15 @@ export const Route = createFileRoute('/_auth/$filterType/$filterId')({
         // we keep mode so the composer session stays stable (key-identity, toolbar, etc.).
         const mode = typeof search.mode === 'string' ? search.mode : undefined;
         const attach = typeof search.attach === 'string' ? search.attach : undefined;
+        const q = typeof search.q === 'string' ? search.q : undefined;
 
-        return { mailId, mode, to, attach } as MailSearchParams;
+        return { mailId, mode, to, attach, q } as MailSearchParams;
     },
 });
 
 function MailRoute() {
     const { filterType, filterId } = Route.useParams();
-    const { mailId, mode, to, attach } = Route.useSearch();
+    const { mailId, mode, to, attach, q } = Route.useSearch();
     const navigate = useNavigate();
     const { isTablet } = useLayout();
     // Reply/Forward/Compose all write to history state (see use-mail-actions.ts). prefillDraft
@@ -240,7 +245,11 @@ function MailRoute() {
                                 onFilePickerOpenChange={setFilePickerOpen}
                             />
                         ) : (
-                            <EmailDetail email={selectedEmail} toggleMailRead={actions.handleToggleMailRead} />
+                            <EmailDetail
+                                email={selectedEmail}
+                                toggleMailRead={actions.handleToggleMailRead}
+                                highlightTerm={q}
+                            />
                         )
                     ) : (
                         <EmptyState message="Select an email to view details" />

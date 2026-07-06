@@ -2,6 +2,47 @@ import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { cn } from '../../lib/utils';
 
+const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
+
+// Wrap case-insensitive literal matches of `term` under `root` in <mark class="search-highlight">
+// and scroll the first into view. Literal (no option toggles) — mail's ?q= landing has no find
+// bar. Runs inside the closed shadow root we own; the mark style is injected with the content
+// (see styleElement below), since app CSS can't reach across the boundary.
+function highlightMatches(root: HTMLElement, term: string): void {
+    const regex = new RegExp(term.replace(REGEX_SPECIALS, '\\$&'), 'gi');
+    // Sanitized email HTML keeps <style> elements — a <mark> around "red"/"10px" mid-rule would
+    // corrupt the email's CSS. Skip text under non-rendered elements.
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode: (n) =>
+            n.parentElement?.closest('style,script,title') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+    });
+    const targets: Text[] = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (n.nodeValue && regex.test(n.nodeValue)) targets.push(n as Text);
+        regex.lastIndex = 0;
+    }
+    let first: HTMLElement | null = null;
+    for (const textNode of targets) {
+        const text = textNode.nodeValue ?? '';
+        const frag = document.createDocumentFragment();
+        let last = 0;
+        regex.lastIndex = 0;
+        for (let m = regex.exec(text); m; m = regex.exec(text)) {
+            if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+            const mark = document.createElement('mark');
+            mark.className = 'search-highlight';
+            mark.textContent = m[0];
+            if (!first) first = mark;
+            frag.appendChild(mark);
+            last = m.index + m[0].length;
+            if (m[0].length === 0) regex.lastIndex++;
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        textNode.parentNode?.replaceChild(frag, textNode);
+    }
+    first?.scrollIntoView({ block: 'center' });
+}
+
 type ShadowContentProps = {
     content: string;
     className?: string;
@@ -11,6 +52,9 @@ type ShadowContentProps = {
     // 'light' renders it on a light canvas regardless of app theme (what mail clients do);
     // 'theme' keeps unstyled/derived content theme-native.
     scheme?: 'light' | 'theme';
+    // A ?q= landing term: literal matches in the rendered body are wrapped in <mark> and the
+    // first is scrolled into view. Highlighting lives here because the shadow root is closed.
+    highlightTerm?: string;
 };
 
 // HTML content is sanitized server-side using DOMPurify before storage.
@@ -20,6 +64,7 @@ export function ShadowContent({
     className,
     contentType = 'html',
     scheme = 'theme',
+    highlightTerm,
     ...props
 }: ShadowContentProps & React.HTMLAttributes<HTMLDivElement>) {
     const shadowHostRef = useRef<HTMLDivElement>(null);
@@ -98,6 +143,7 @@ export function ShadowContent({
       a { color: #2563eb; text-decoration: none; }
       a:hover { text-decoration: underline; }
       img { max-width: 100%; height: auto; }
+      mark.search-highlight { background-color: #fde047; color: #1f2937; border-radius: 2px; }
 
       /* Add prose-like styling for better readability */
       p, ul, ol, blockquote { margin-bottom: 1em; }
@@ -107,7 +153,9 @@ export function ShadowContent({
         // Append style and content to shadow DOM
         shadowRoot.appendChild(styleElement);
         shadowRoot.appendChild(contentContainer);
-    }, [content, contentType, scheme]);
+
+        if (highlightTerm) highlightMatches(contentContainer, highlightTerm);
+    }, [content, contentType, scheme, highlightTerm]);
 
     return <div ref={shadowHostRef} className={cn('shadow-host', className)} {...props} />;
 }

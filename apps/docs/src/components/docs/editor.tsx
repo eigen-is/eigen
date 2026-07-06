@@ -8,7 +8,7 @@ import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import { useCommentLifecycle } from '@workspace/lib/comments';
+import { findCardIdByChatName, useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
@@ -19,9 +19,11 @@ import {
     useUploadFile,
 } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
+import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
+import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     CardFormDialog,
@@ -39,6 +41,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -47,9 +50,11 @@ import * as Y from 'yjs';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
+import { SearchHighlight } from './extensions/search-highlight';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
+import { useDocSearchController } from './use-doc-search-controller';
 
 function findCommentMarkPositions(doc: Node, cardId: string): { pos: number; end: number }[] {
     const positions: { pos: number; end: number }[] = [];
@@ -98,6 +103,7 @@ export const CollaborativeEditor = ({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: {
     path: DrivePath;
     access: { canRead: boolean; canWrite: boolean };
@@ -105,6 +111,7 @@ export const CollaborativeEditor = ({
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
+    initialSearchTerm?: string;
 }) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
@@ -147,6 +154,7 @@ export const CollaborativeEditor = ({
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
                 initialChatName={initialChatName}
+                initialSearchTerm={initialSearchTerm}
             />
         </MediaResolverProvider>
     );
@@ -206,6 +214,7 @@ const TiptapEditor = ({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: {
     yDoc: Y.Doc;
     provider: WebsocketProvider;
@@ -215,6 +224,7 @@ const TiptapEditor = ({
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
+    initialSearchTerm?: string;
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
@@ -271,6 +281,7 @@ const TiptapEditor = ({
                 ...getDocExtensions({ lowlight, exclude: ['figure', 'comment'] }),
                 Figure,
                 TableWidthClamp,
+                SearchHighlight,
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
                     onCommentContextMenu: (cardId, event) => {
@@ -639,6 +650,9 @@ const TiptapEditor = ({
         return () => clearTimeout(timer);
     }, [editor]);
 
+    const docSearchController = useDocSearchController(editor, access.canWrite);
+    const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
+
     const isWide = !useMediaQuery('(max-width: 1200px)');
 
     if (!editor) return null;
@@ -653,98 +667,119 @@ const TiptapEditor = ({
         }
     };
 
+    // Palette IN COMMENTS capability — reveal resolves chatName → cardId client-side, opens the
+    // panel, scrolls to the mark, and opens the card (the panel's own click pair). Plain object per
+    // render; usePaletteDocSearch stabilises it, so the closure sees the current cardsRef.
+    const commentSearch: DocCommentSearch = {
+        ...commentSearchHalf,
+        reveal: (chatName) => {
+            const cardId = findCardIdByChatName(cardsRef.current, chatName);
+            if (!cardId) return;
+            setCommentPanelOpen(true);
+            handleScrollToComment(cardId);
+            setOpenCardId(cardId);
+        },
+    };
+
     return (
         <>
-            <Column
-                id={'doc-editor'}
-                width={'w-full'}
-                toolbarBorder="always"
-                toolbar={
-                    <EditorToolbar
-                        editor={editor}
-                        path={path}
-                        canWrite={access.canWrite}
-                        canUndo={canUndo}
-                        canRedo={canRedo}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
-                        commentPanelOpen={commentPanelOpen}
-                        unresolvedCommentCount={unresolvedCount}
-                        onImageUpload={mediaFolderId ? handleImageUpload : undefined}
-                        onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
-                    />
-                }
+            <DocSearchProvider
+                controller={docSearchController}
+                commentSearch={commentSearch}
+                initialSearchTerm={initialSearchTerm}
+                barClassName={cn('top-14', showSidebar && 'right-68')}
             >
-                <div className="h-full relative overflow-hidden">
-                    <div
-                        ref={scrollContainerRef}
-                        className={cn(
-                            'h-full w-full overflow-y-scroll bg-muted p-4',
-                            needsScale && 'overflow-x-hidden',
+                <Column
+                    id={'doc-editor'}
+                    width={'w-full'}
+                    toolbarBorder="always"
+                    toolbar={
+                        <EditorToolbar
+                            editor={editor}
+                            path={path}
+                            canWrite={access.canWrite}
+                            canUndo={canUndo}
+                            canRedo={canRedo}
+                            onAccessDialogOpen={onAccessDialogOpen}
+                            onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                            commentPanelOpen={commentPanelOpen}
+                            unresolvedCommentCount={unresolvedCount}
+                            onImageUpload={mediaFolderId ? handleImageUpload : undefined}
+                            onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
+                        />
+                    }
+                >
+                    <div className="h-full relative overflow-hidden">
+                        <div
+                            ref={scrollContainerRef}
+                            className={cn(
+                                'h-full w-full overflow-y-scroll bg-muted p-4',
+                                needsScale && 'overflow-x-hidden',
+                            )}
+                            onClick={(e) => {
+                                if (e.target === scrollContainerRef.current) {
+                                    editor.commands.blur();
+                                }
+                            }}
+                        >
+                            <div
+                                data-document="true"
+                                className={cn(
+                                    'grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
+                                    !needsScale && 'min-h-full m-auto',
+                                )}
+                                ref={documentRef}
+                                style={
+                                    needsScale
+                                        ? {
+                                              transform: `scale(${canvasScale})`,
+                                              transformOrigin: 'top left',
+                                              marginBottom: -(1 - canvasScale) * docHeight,
+                                          }
+                                        : undefined
+                                }
+                            >
+                                <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
+                            </div>
+                        </div>
+                        {isWide && (
+                            <div
+                                className={cn(
+                                    'absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out',
+                                    showSidebar ? 'translate-x-0' : 'translate-x-full',
+                                )}
+                            >
+                                {activePanel === 'comments' ? (
+                                    <CommentPanel
+                                        cards={cards}
+                                        entries={allComments}
+                                        activeCardIds={activeComments.ids}
+                                        anchorTexts={activeComments.anchorTexts}
+                                        currentUserEmail={auth.user!.email}
+                                        onClose={() => setCommentPanelOpen(false)}
+                                        onCommentClick={(cardId) => {
+                                            handleScrollToComment(cardId);
+                                            setOpenCardId(cardId);
+                                        }}
+                                        onCommentContextMenu={(e, card, entry) => {
+                                            commentContextMenu.handleContextMenu(e, { card, entry });
+                                        }}
+                                    />
+                                ) : lastPanelRef.current === 'figure' ? (
+                                    <FigurePropertiesPanel
+                                        key={editor.state.selection.from}
+                                        editor={editor}
+                                        onReplaceImage={handleReplaceImage}
+                                        onReplaceImageFromDrive={handleReplaceImageFromDrive}
+                                    />
+                                ) : (
+                                    <TablePropertiesPanel editor={editor} />
+                                )}
+                            </div>
                         )}
-                        onClick={(e) => {
-                            if (e.target === scrollContainerRef.current) {
-                                editor.commands.blur();
-                            }
-                        }}
-                    >
-                        <div
-                            data-document="true"
-                            className={cn(
-                                'grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
-                                !needsScale && 'min-h-full m-auto',
-                            )}
-                            ref={documentRef}
-                            style={
-                                needsScale
-                                    ? {
-                                          transform: `scale(${canvasScale})`,
-                                          transformOrigin: 'top left',
-                                          marginBottom: -(1 - canvasScale) * docHeight,
-                                      }
-                                    : undefined
-                            }
-                        >
-                            <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
-                        </div>
                     </div>
-                    {isWide && (
-                        <div
-                            className={cn(
-                                'absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out',
-                                showSidebar ? 'translate-x-0' : 'translate-x-full',
-                            )}
-                        >
-                            {activePanel === 'comments' ? (
-                                <CommentPanel
-                                    cards={cards}
-                                    entries={allComments}
-                                    activeCardIds={activeComments.ids}
-                                    anchorTexts={activeComments.anchorTexts}
-                                    currentUserEmail={auth.user!.email}
-                                    onClose={() => setCommentPanelOpen(false)}
-                                    onCommentClick={(cardId) => {
-                                        handleScrollToComment(cardId);
-                                        setOpenCardId(cardId);
-                                    }}
-                                    onCommentContextMenu={(e, card, entry) => {
-                                        commentContextMenu.handleContextMenu(e, { card, entry });
-                                    }}
-                                />
-                            ) : lastPanelRef.current === 'figure' ? (
-                                <FigurePropertiesPanel
-                                    key={editor.state.selection.from}
-                                    editor={editor}
-                                    onReplaceImage={handleReplaceImage}
-                                    onReplaceImageFromDrive={handleReplaceImageFromDrive}
-                                />
-                            ) : (
-                                <TablePropertiesPanel editor={editor} />
-                            )}
-                        </div>
-                    )}
-                </div>
-            </Column>
+                </Column>
+            </DocSearchProvider>
 
             <CardFormDialog
                 open={addOpen}

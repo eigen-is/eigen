@@ -1,3 +1,4 @@
+import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { useExportDocument } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
@@ -13,10 +14,11 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
+import { useDocSearchBar } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { UndoRedoButtons } from '@workspace/ui/components/layout/toolbar/undo-redo-buttons';
-import { ImagePlus, Play, Plus, Presentation, Redo, Type, Undo } from 'lucide-react';
+import { ImagePlus, Play, Plus, Presentation, Redo, Search, Type, Undo } from 'lucide-react';
 import type * as Y from 'yjs';
 
 type ToolbarProps = {
@@ -49,6 +51,7 @@ export function Toolbar({
     const { exportDocument, isExporting } = useExportDocument();
     const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
+    const { open: openSearch } = useDocSearchBar();
     const isMobile = useMediaQuery('(max-width: 1200px)');
     // Below the 768px system breakpoint the slide canvas unmounts (view-only), so the mobile
     // Edit menu belongs only in the 769–1200px band: editing is live but the inline toolbar
@@ -116,14 +119,21 @@ export function Toolbar({
                     </>
                 }
                 right={
-                    <DocumentShareCluster
-                        canWrite={canWrite}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        onToggleCommentPanel={onToggleCommentPanel}
-                        commentPanelOpen={commentPanelOpen}
-                        unresolvedCommentCount={unresolvedCommentCount}
-                        watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-                    />
+                    <div className="flex items-center gap-1">
+                        <TooltipButton
+                            icon={Search}
+                            tooltipText={`Find in document (${formatForDisplay('Mod+F')})`}
+                            onClick={openSearch}
+                        />
+                        <DocumentShareCluster
+                            canWrite={canWrite}
+                            onAccessDialogOpen={onAccessDialogOpen}
+                            onToggleCommentPanel={onToggleCommentPanel}
+                            commentPanelOpen={commentPanelOpen}
+                            unresolvedCommentCount={unresolvedCommentCount}
+                            watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                        />
+                    </div>
                 }
             />
             <ExportProgressDialog open={isExporting} />

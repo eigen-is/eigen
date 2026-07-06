@@ -1,11 +1,19 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { DocCommentMatch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { sanitizeFtsQuery } from '../core';
 import { ApiError } from '../core/errors';
 import type { Drive, SharedDrive } from '../drive';
 import { COMMENT_INDEX_DB_CONFIG } from './comment-db-config';
 import * as commentSchema from './comment-schema';
+
+// Newest-first tail per thread that comment search indexes (~8 KB). Older text past the cap
+// falls off and stops being searchable — the stated phase-2 limitation. chat.ts's recompute
+// caps against it.
+export const RECENT_TEXT_CAP = 8192;
+const COMMENT_SEARCH_LIMIT = 8;
 
 export class CommentIndex {
     private db: BunSQLiteDatabase<typeof commentSchema>;
@@ -42,6 +50,13 @@ export class CommentIndex {
                 lastActivityAt: new Date(),
                 ...(incrementCount && { messageCount: sql`messageCount + 1` }),
             })
+            .where(eq(commentSchema.comments.chatName, chatName));
+    }
+
+    async setRecentText(chatName: string, recentText: string | null): Promise<void> {
+        await this.db
+            .update(commentSchema.comments)
+            .set({ recentText })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
@@ -91,6 +106,40 @@ export class CommentIndex {
         return comments.map((c) => ({
             ...c,
             mentions: mentionsByChat.get(c.chatName) ?? [],
+        }));
+    }
+
+    async searchComments(query: string): Promise<DocCommentMatch[]> {
+        const match = sanitizeFtsQuery(query);
+        if (!match) return [];
+
+        // Pass 1: rank via FTS5; pull each thread's chatName + a highlighted excerpt of the matched
+        // recentText. snippet() reads the column back through the external-content table.
+        const ranked = this.db.all(sql`
+            SELECT c.chatName AS chatName,
+                   snippet(comments_fts, 0, '', '', '…', 10) AS snippet
+            FROM comments_fts
+            JOIN comments c ON c.rowid = comments_fts.rowid
+            WHERE comments_fts MATCH ${match}
+            ORDER BY bm25(comments_fts)
+            LIMIT ${COMMENT_SEARCH_LIMIT}
+        `) as { chatName: string; snippet: string }[];
+        if (ranked.length === 0) return [];
+
+        // Pass 2: hydrate the ranked threads for context (who last spoke), order-preserving.
+        const names = ranked.map((r) => r.chatName);
+        const rows = await this.db
+            .select()
+            .from(commentSchema.comments)
+            .where(inArray(commentSchema.comments.chatName, names))
+            .all();
+        const byName = new Map(rows.map((r) => [r.chatName, r]));
+
+        return ranked.map((r) => ({
+            // id is the thread's chatName; the FE reveal resolves chatName → cardId client-side.
+            id: r.chatName,
+            label: r.snippet,
+            context: byName.get(r.chatName)?.lastAuthorEmail ?? undefined,
         }));
     }
 }

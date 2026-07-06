@@ -23,7 +23,7 @@ export function useMailSearchResults(
 
     // Skip the network call when scope excludes mail. The effective scope already
     // merges the typed prefix (`mail:`, `>`, `@`) with the chip scope set via Tab.
-    const scopeBlocks = scope === 'actions' || scope === 'contacts';
+    const scopeBlocks = scope === 'actions' || scope === 'contacts' || scope === 'doc';
 
     const { data, isFetching } = useSearch({
         ownerId: ctx.ownerId,
@@ -37,6 +37,7 @@ export function useMailSearchResults(
 
     const results = useMemo<PaletteResult[]>(() => {
         if (!data) return [];
+        const encodedQ = parsed.q ? encodeURIComponent(parsed.q) : '';
         return data.mail.map((email, i) => {
             // The mail route lives at /_auth/$filterType/$filterId — `box/<mailbox>` is
             // its canonical shape. Inbox is stored as the empty string in mail.db; route
@@ -51,10 +52,13 @@ export function useMailSearchResults(
                 group: 'mail',
                 rank: -i,
                 payload: email,
-                run: (rctx) => rctx.navigate(getMailAppUrl(`box/${filterId}?mailId=${email.id}`)),
+                run: (rctx) =>
+                    rctx.navigate(
+                        getMailAppUrl(`box/${filterId}?mailId=${email.id}${encodedQ ? `&q=${encodedQ}` : ''}`),
+                    ),
             };
         });
-    }, [data]);
+    }, [data, parsed.q]);
 
     // `willSearch` matches the `enabled` predicate above — same shape both ways so
     // typing only an operator (`from:alice@x` with no q) doesn't stick `isPending`

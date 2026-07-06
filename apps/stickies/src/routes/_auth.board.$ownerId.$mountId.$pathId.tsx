@@ -3,7 +3,7 @@ import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/layout/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { useEigenDocEditorRoute } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StickiesBoard } from '../components/stickies/board';
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
@@ -13,8 +13,10 @@ export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
 
 function StickiesRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    const { chat, card } = Route.useSearch();
+    const { chat, card, q } = Route.useSearch();
     const navigate = useNavigate();
+    // Latch once — the board gates on Yjs sync, so a clear can outrun the provider's mount.
+    const [initialSearchTerm] = useState(q);
     const {
         docInfo,
         isLoading,
@@ -34,6 +36,19 @@ function StickiesRoute() {
             replace: true,
         });
     }, [navigate, ownerId, mountId, pathId]);
+
+    // handleClearChat above is child-driven (the board fires it after consuming ?chat=); the ?q=
+    // clear is parent-driven and safe only because initialSearchTerm is latched.
+    useEffect(() => {
+        if (q) {
+            navigate({
+                to: Route.fullPath,
+                params: { ownerId, mountId, pathId },
+                search: (prev) => ({ ...prev, q: undefined }),
+                replace: true,
+            });
+        }
+    }, [q, navigate, ownerId, mountId, pathId]);
 
     const handleClearCard = useCallback(() => {
         navigate({
@@ -60,6 +75,7 @@ function StickiesRoute() {
                 onAccessDialogOpen={openAccessDialog}
                 initialChatName={chat}
                 onClearInitialChat={handleClearChat}
+                initialSearchTerm={initialSearchTerm}
                 initialCardId={card}
                 onClearInitialCard={handleClearCard}
             />

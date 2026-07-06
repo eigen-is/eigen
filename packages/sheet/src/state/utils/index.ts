@@ -160,11 +160,6 @@ export function replaceHtml(temp: string, dataarry: Record<string, string | numb
     });
 }
 
-// get regex string (handle . * ? ~* ~?)
-export function getRegExpStr(str: string) {
-    return str.replace('~*', '\\*').replace('~?', '\\?').replace('.', '\\.').replace('*', '.*').replace('?', '.');
-}
-
 // column index: number to letter
 export function chatatABC(n: number) {
     // let wordlen = columeHeader_word.length;

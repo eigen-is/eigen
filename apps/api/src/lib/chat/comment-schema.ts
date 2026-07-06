@@ -12,6 +12,8 @@ export const comments = sqliteTable('comments', {
     messageCount: integer('messageCount').notNull().default(0),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     createdBy: text('createdBy'),
+    // Newest-first ~8 KB tail of the thread's messages — the body comment search (v3) indexes.
+    recentText: text('recentText'),
 });
 
 export const commentMentions = sqliteTable(
