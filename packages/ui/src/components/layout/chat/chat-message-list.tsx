@@ -44,7 +44,7 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
 }
 
 function InlineEmail({ email }: { email: string }) {
-    return <UserNameCard email={email} mailLink className="text-primary cursor-default font-medium" />;
+    return <UserNameCard email={email} mailLink className="cursor-default font-medium" />;
 }
 
 // Matches http(s) URLs, trimming trailing punctuation.
