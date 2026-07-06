@@ -68,7 +68,7 @@ describe('Streaming Upload', () => {
         const data2 = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, file2);
 
         expect(data1.name).toBe('duplicate.txt');
-        expect(data2.name).toBe('duplicate#1.txt');
+        expect(data2.name).toBe('duplicate (2).txt');
     });
 
     test('upload to non-existent folder returns 404', async () => {
@@ -167,6 +167,6 @@ describe('Streaming Upload', () => {
 
         expect(results).toHaveLength(2);
         expect(results[0].name).toBe('same-name.txt');
-        expect(results[1].name).toBe('same-name#1.txt');
+        expect(results[1].name).toBe('same-name (2).txt');
     });
 });

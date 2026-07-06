@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
+import { writeTempWithHash } from '../drive/streaming';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
@@ -121,24 +123,31 @@ async function stageDataDbSnapshot(mount: Mount, dataDbPathId: string, destPath:
 // stale vnode (SQLITE_IOERR_VNODE) when the db is reopened.
 export async function replaceContainerDataDb(mount: Mount, containerId: string, sourcePath: string): Promise<void> {
     return mount.withPathLock(containerId, async () => {
-        const file = Bun.file(sourcePath);
         // data.db is normally present, but a prior restore that crashed between the
         // delete and recreate below would leave it absent; tolerate that so simply
         // re-running restore self-heals instead of 404-ing forever. The fallback
         // mime matches provisionManagedDbs.
         const dataDb = await mount.getChildByName(containerId, 'data.db');
-        if (dataDb) {
-            await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
-            await mount.deletePath(dataDb.id);
+        // Stage + hash the replacement (streamed) before the delete, so a failed source read leaves data.db intact.
+        const tempId = randomUUID();
+        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Bun.file(sourcePath));
+        try {
+            if (dataDb) {
+                await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+                await mount.deletePath(dataDb.id);
+            }
+            const newId = await mount.createFileFromTemp(
+                containerId,
+                'data.db',
+                dataDb?.mimeType ?? 'application/x-sqlite3',
+                size,
+                hash,
+                tempId,
+            );
+            // createFileFromTemp fires no onSync — mark the container for re-extraction like a synced data.db would.
+            await markContainerContentDirty(mount, newId);
+        } finally {
+            await mount.cleanupTemp(tempId);
         }
-        const newId = await mount.createFile(
-            containerId,
-            'data.db',
-            dataDb?.mimeType ?? 'application/x-sqlite3',
-            file.size,
-            file,
-        );
-        // createFile fires no onSync — mark the container for re-extraction like a synced data.db would.
-        await markContainerContentDirty(mount, newId);
     });
 }

@@ -1,24 +1,27 @@
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
-import { contentDisposition, parseByteRange } from '../core/http';
+import { computeEtag, contentDisposition, etagMatches, parseByteRange } from '../core/http';
 import type { Mount } from '../mount';
 
 // Header/range/CSP mechanics for serving a file body. Pure Mount function —
-// Drive.serveFile resolves the mount and delegates here.
+// the drive routes resolve mount + path (via SharedDrive ACL) and delegate here.
 export async function serveFile(
     mount: Mount,
-    pathId: string,
+    path: DrivePath,
     disposition: 'attachment' | 'inline',
     range: string | null,
+    ifNoneMatch: string | null = null,
 ): Promise<Response> {
-    const path = await mount.getActivePath(pathId);
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
     const mimeType = path.mimeType || 'application/octet-stream';
+    const etag = computeEtag(path);
     const headers: Record<string, string> = {
         'Content-Type': mimeType,
         'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
-        'Cache-Control': 'public, max-age=86400',
-        Expires: new Date(Date.now() + 86400000).toUTCString(),
+        // no-cache = revalidate on every use; the ETag makes that a cheap 304 round-trip.
+        'Cache-Control': 'private, no-cache',
+        ETag: etag,
         // Stored MIME is the upload's own Content-Type, served verbatim — nosniff stops the
         // browser re-sniffing a disguised payload (e.g. HTML bytes uploaded as image/png).
         'X-Content-Type-Options': 'nosniff',
@@ -36,6 +39,11 @@ export async function serveFile(
         }
     }
 
+    // RFC 7232 §6: a matching conditional GET returns 304 regardless of Range.
+    if (ifNoneMatch && etagMatches(ifNoneMatch, etag)) {
+        return new Response(null, { status: 304, headers });
+    }
+
     const parsed = parseByteRange(range, path.size);
     if (parsed === 'unsatisfiable') {
         return new Response(null, {
@@ -44,7 +52,7 @@ export async function serveFile(
         });
     }
     if (parsed) {
-        const slice = await mount.readRange(pathId, parsed.start, parsed.end + 1);
+        const slice = await mount.readRange(path.id, parsed.start, parsed.end + 1);
         if (!slice) throw new ApiError(404, 'File not found');
         // Stream the slice. Passing the BunFile/S3File directly loses the slice bounds
         // somewhere in the response pipeline, so route through .stream() which respects them.
@@ -58,7 +66,7 @@ export async function serveFile(
         });
     }
 
-    const file = await mount.readFile(pathId);
+    const file = await mount.readFile(path.id);
     if (!file) throw new ApiError(404, 'File not found');
     // S3File doesn't support ResponseInit options — stream it instead
     const body: BodyInit = 'bucket' in file ? file.stream() : file;

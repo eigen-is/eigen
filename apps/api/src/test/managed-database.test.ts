@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase } from '../lib/core';
@@ -109,6 +109,32 @@ describe('ManagedDatabase snapshot lifecycle', () => {
 
         expect(snapshots).toBeGreaterThanOrEqual(1);
         await db.close({ skipFinalSnapshot: true });
+    });
+});
+
+describe('ManagedDatabase close teardown', () => {
+    test('close() tears down (db closed, journals gone, onClose ran) even when onSync throws', async () => {
+        // A throwing onSync used to abort close() before the teardown, leaking the raw db
+        // handle and the working copy until process exit. The sync error must still reach
+        // the caller (they catch + log), but the teardown must run regardless.
+        let onCloseRan = false;
+        const dbPath = nextDbPath();
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, {
+            onSync: async () => {
+                throw new Error('sync boom');
+            },
+            onClose: async () => {
+                onCloseRan = true;
+            },
+        });
+        await db.open(0);
+        db.db.insert(items).values({ v: 'x' }).run();
+
+        await expect(db.close({ skipFinalSnapshot: true })).rejects.toThrow('sync boom');
+
+        expect(onCloseRan).toBe(true);
+        expect(() => db.db).toThrow('Database not open');
+        expect(existsSync(`${dbPath}-wal`)).toBe(false);
     });
 });
 

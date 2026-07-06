@@ -119,6 +119,18 @@ Org data: `data/org/{orgId}/` — minimal (filesystem only, no domain services).
 - `StorageFile` (`apps/api/src/lib/storage/types.ts`) — `BunFile | S3File`, lazy file reference returned by `read()`
 - `StorageBackend` — interface implemented by both storage backends
 
+## Folder Sizes (lazy cache)
+
+Folder rows cache their recursive size in `paths.size`; `NULL` means "stale". Mutations don't
+recompute — they NULL the whole ancestor chain (`invalidateSizesFrom`, or `invalidateAncestorsOf`
+for content writes). The next read that hydrates the folder (`toDrivePath`) recomputes the subtree
+bottom-up inside one transaction and writes the totals back (`computeAndCacheFolderSize`), reusing
+any still-cached descendant totals. Two consequences worth knowing: **GET paths perform writes**
+(a listing after a deep invalidation recomputes and caches synchronously — relevant for any future
+read-replica idea), and the first listing after a large move/delete pays the recompute; every later
+read is a plain column read. Trash-view rows (`trashedFrom IS NOT NULL`) are excluded from parent
+totals, but trashed bytes still count toward the quota via `getTotalSize`.
+
 ## Soft Delete (Trash)
 
 Delete operations are soft — items are moved to trash instead of being permanently deleted. Two columns on
