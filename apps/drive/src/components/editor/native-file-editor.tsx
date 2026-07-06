@@ -87,7 +87,6 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
 
     const updatedAt = data!.updatedAt;
     const editorProps = {
-        key: reloadKey,
         content: data!.content,
         updatedAt,
         ownerId: path.ownerId,
@@ -107,9 +106,9 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
             <div className="flex-1 min-w-0 h-full">
                 <Suspense fallback={<LoadingState />}>
                     {data!.editMode === 'markdown' ? (
-                        <MarkdownEditor {...editorProps} frontmatter={data!.frontmatter ?? null} />
+                        <MarkdownEditor key={reloadKey} {...editorProps} frontmatter={data!.frontmatter ?? null} />
                     ) : (
-                        <CodeEditor {...editorProps} />
+                        <CodeEditor key={reloadKey} {...editorProps} />
                     )}
                 </Suspense>
             </div>
