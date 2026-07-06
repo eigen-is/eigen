@@ -8814,7 +8814,6 @@ export const en = {
         sort: 'Sort',
         filter: 'Filter',
         sortAndFilter: 'Sort and filter',
-        findAndReplace: 'Find and replace',
         'formula-sum': 'SUM',
         autoSum: 'Auto SUM',
         moreFunction: 'More functions',
@@ -9329,65 +9328,6 @@ export const en = {
         semicolon: 'semicolon',
         comma: 'comma',
         space: 'space',
-    },
-    findAndReplace: {
-        find: 'Find',
-        replace: 'Replace',
-        goto: 'Go to',
-        location: 'Location',
-        formula: 'Formula',
-        date: 'Date',
-        number: 'Number',
-        string: 'String',
-        error: 'Error',
-        condition: 'Condition',
-        rowSpan: 'Row span',
-        columnSpan: 'Column span',
-        locationExample: 'Location',
-        lessTwoRowTip: 'Please select at least two rows',
-        lessTwoColumnTip: 'Please select at least two columns',
-
-        findTextbox: 'Find Content',
-        replaceTextbox: 'Replace Content',
-
-        regexTextbox: 'Regular Expression',
-        wholeTextbox: 'Whole word',
-        distinguishTextbox: 'Case sensitive',
-
-        allReplaceBtn: 'Replace All',
-        replaceBtn: 'Replace',
-        allFindBtn: 'Find All',
-        findBtn: 'Find next',
-
-        noFindTip: 'The content was not found',
-        modeTip: 'This operation is not available in this mode',
-
-        searchTargetSheet: 'Sheet',
-        searchTargetCell: 'Cell',
-        searchTargetValue: 'Value',
-
-        searchInputTip: 'Please enter the search content',
-
-        noReplceTip: 'There is nothing to replace',
-        noMatchTip: 'No match found',
-
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
-        successTip: '${xlength} items found',
-
-        locationConstant: 'Constant',
-        locationFormula: 'Formula',
-        locationDate: 'Date',
-        locationDigital: 'Number',
-        locationString: 'String',
-        locationBool: 'Logical',
-        locationError: 'Error',
-        locationNull: 'Null',
-        locationRowSpan: 'Row span',
-        locationColumnSpan: 'Column span',
-
-        locationTiplessTwoRow: 'Please select at least two rows',
-        locationTiplessTwoColumn: 'Please select at least two columns',
-        locationTipNotFindCell: 'Cell not found',
     },
     sheetconfig: {
         delete: 'Delete',
