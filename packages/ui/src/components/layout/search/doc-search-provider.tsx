@@ -245,7 +245,9 @@ export function DocSearchProvider({
         const c = controllerRef.current;
         if (!c.replaceAll) return;
         const { replaced, matches: fresh } = c.replaceAll(query, replacement, options, preserveCase);
-        adoptMatches(fresh, null); // skipped formula/locked cells may remain matched; nothing active
+        // Skipped formula/locked cells may remain matched — activate the first so the count never
+        // reads "0 of N" and Replace/next stay live on the residue.
+        adoptMatches(fresh, fresh.length > 0 ? 0 : null);
         flashReplaced(replaced);
     }, [query, replacement, options, preserveCase, adoptMatches, flashReplaced]);
 
