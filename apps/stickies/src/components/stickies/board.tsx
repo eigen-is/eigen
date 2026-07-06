@@ -4,8 +4,10 @@ import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { useCommentLifecycle } from '@workspace/lib/comments';
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
+import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
+import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CardFormDialog, CommentLifecycleDialogs, LoadingState, NoteCard } from '@workspace/ui';
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
@@ -100,6 +102,23 @@ export function StickiesBoard({
         onChatNotFound: onClearInitialChat,
     });
     const { allComments, cards, createCard, setOpenCardId } = lifecycle;
+
+    // Palette IN COMMENTS capability. Plain object per render — usePaletteDocSearch stabilises via
+    // ref + docKey, so the reveal closure always sees the current cards.
+    const commentSearchHalf = useDocCommentSearchHalf(ownerId, path.mountId, path.id);
+    const commentSearch: DocCommentSearch = {
+        ...commentSearchHalf,
+        // chatName → cardId client-side (the use-card-id-from-chat-name pattern); a stale or unknown
+        // chatName no-ops — never throws.
+        reveal: (chatName) => {
+            for (const cardId in cards) {
+                if (cards[cardId].chatName === chatName) {
+                    setOpenCardId(cardId);
+                    return;
+                }
+            }
+        },
+    };
 
     const recordHistory = useRecordHistory(ownerId, path.mountId, path.id);
     const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({
@@ -247,6 +266,7 @@ export function StickiesBoard({
                 <div className="flex-1 min-w-0 h-full">
                     <DocSearchProvider
                         controller={docSearchController}
+                        commentSearch={commentSearch}
                         initialSearchTerm={initialSearchTerm}
                         barClassName="top-14"
                     >
