@@ -2,15 +2,27 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { type FileEvent, fileEventSummary, fileEventVerb, toFileEventType } from '@workspace/lib/types/file-history';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { describeFileEvent, type FileEvent, toFileEventType } from '@workspace/lib/types/file-history';
+import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
+import { getHome } from '../lib/home';
 import { createDefaultMountConfig } from '../lib/mount/helpers';
 import { Mount } from '../lib/mount/mount';
 import { fileEvents } from '../lib/mount/schema';
 import { getUserById } from '../lib/user';
 import type { TestContext } from './setup';
-import { authedRequest, driveDelete, driveGet, drivePost, drivePut, driveUpload, getTestContext } from './setup';
+import {
+    assertJson,
+    authedRequest,
+    driveDelete,
+    driveGet,
+    drivePost,
+    drivePut,
+    driveUpload,
+    getTestContext,
+} from './setup';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-file-history-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -42,9 +54,10 @@ afterAll(() => {
 });
 
 describe('file event phrasing', () => {
-    test('known event types resolve to their phrase', () => {
-        expect(fileEventSummary('edited')).toBe('edited');
-        expect(fileEventVerb('renamed')).toBe('renamed');
+    test('known event types resolve to their phrase via describeFileEvent', () => {
+        const file = { pathName: 'x.txt', pathType: 'file' } as const;
+        expect(describeFileEvent({ ...file, eventType: 'edited', details: null }, 'own').action).toBe('edited');
+        expect(describeFileEvent({ ...file, eventType: 'renamed', details: null }, 'own').action).toBe('renamed');
     });
 
     test('known event types pass through toFileEventType unchanged', () => {
@@ -61,6 +74,49 @@ describe('file event phrasing', () => {
         expect(toFileEventType('sheet-rows-inserted')).toBe('edited');
         expect(toFileEventType('slide-removed')).toBe('edited');
         expect(toFileEventType('totally-made-up')).toBe('edited');
+    });
+});
+
+describe('describeFileEvent', () => {
+    const base = { pathName: 'Roadmap.eigenstickies', pathType: 'stickies' } as const;
+    test('sticky-moved, container ctx', () => {
+        expect(
+            describeFileEvent(
+                { ...base, eventType: 'sticky-moved', details: { card: 'Fix flaky test', toColumn: 'Done' } },
+                'container',
+            ),
+        ).toEqual({ action: 'moved a card in "Roadmap"', primary: 'Fix flaky test → Done' });
+    });
+    test('sticky-added, own ctx keeps column in action', () => {
+        expect(
+            describeFileEvent(
+                { ...base, eventType: 'sticky-added', details: { card: 'Welcome', toColumn: 'To Do' } },
+                'own',
+            ),
+        ).toEqual({ action: 'added a card to To Do', primary: 'Welcome' });
+    });
+    test('renamed shows old → new as primary in both ctx', () => {
+        const e = { ...base, eventType: 'renamed', details: { oldName: 'a.txt', newName: 'b.txt' } } as const;
+        expect(describeFileEvent(e, 'own').primary).toBe('a.txt → b.txt');
+        expect(describeFileEvent(e, 'container').primary).toBe('a.txt → b.txt');
+    });
+    test('created: names the item in the own-ctx action, name as primary in container ctx', () => {
+        const e = { pathName: 'notes.txt', pathType: 'file', eventType: 'created', details: null } as const;
+        expect(describeFileEvent(e, 'own')).toEqual({ action: 'created "notes.txt"' });
+        expect(describeFileEvent(e, 'container')).toEqual({ action: 'created', primary: 'notes.txt' });
+    });
+    test('commented quotes the preview and names the doc in container ctx', () => {
+        const e = { ...base, eventType: 'commented', details: { preview: 'looks good' } } as const;
+        expect(describeFileEvent(e, 'container')).toEqual({
+            action: 'commented on "Roadmap"',
+            primary: '“looks good”',
+        });
+    });
+    test('acl-changed secondary joins the diff', () => {
+        // as const only on eventType — a whole-object as const would make added/removed
+        // readonly, which is not assignable to FileEventDetailsMap['acl-changed'].string[].
+        const e = { ...base, eventType: 'acl-changed' as const, details: { added: ['a@x.nl'], removed: ['b@x.nl'] } };
+        expect(describeFileEvent(e, 'own').secondary).toBe('Added a@x.nl · removed b@x.nl');
     });
 });
 
@@ -398,7 +454,6 @@ describe('Drive history recording', () => {
     });
 
     test('copy records copied on root and descendants', async () => {
-        const { getHome } = await import('../lib/home');
         const home = await getHome(aliceOwnerId);
 
         const folder = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
@@ -482,7 +537,6 @@ describe('Drive history recording', () => {
     });
 
     test('version-restored after save+restore', async () => {
-        const { getHome } = await import('../lib/home');
         const home = await getHome(aliceOwnerId);
 
         const alice = await getUserById(ctx.alice.user.id);
@@ -499,5 +553,91 @@ describe('Drive history recording', () => {
         const versionRestored = events.find((e) => e.eventType === 'version-restored');
         expect(versionRestored).toBeDefined();
         expect((versionRestored!.details as { versionName: string }).versionName).toBe(version.name);
+    });
+});
+
+// The file-event notification now carries the whole event: title = action line, body = primary
+// content, details = { secondary, cardId, chatName, pathType } — composed through describeFileEvent,
+// the same phrasing the activity panel renders with.
+describe('file-event notifications carry the event details', () => {
+    let ctx: TestContext;
+    let aliceToken: string;
+    let bobToken: string;
+    let aliceOwnerId: string;
+    let mountId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        aliceToken = ctx.alice.user.sessionToken;
+        bobToken = ctx.bob.user.sessionToken;
+        aliceOwnerId = ctx.alice.user.id;
+
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(aliceToken, `/drive/${aliceOwnerId}/mounts`),
+        );
+        mountId = mounts[0].id;
+        const root = await assertJson<{ id: string }>(
+            await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/root`),
+        );
+        rootId = root.id;
+    });
+
+    async function notificationsFor(userId: string): Promise<Notification[]> {
+        const home = await getHome(userId);
+        return home.notifications.list();
+    }
+
+    function fileEventTag(pathId: string): string {
+        return `file-event:${aliceOwnerId}:${mountId}:${pathId}`;
+    }
+
+    function postSticky(pathId: string, body: Record<string, unknown>): Promise<Response> {
+        return authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/path/${pathId}/history`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    }
+
+    test('a sticky-added event reaches the watcher with body + card details, and coalesces to the latest', async () => {
+        const board = await drivePost<DrivePath>(
+            aliceToken,
+            aliceOwnerId,
+            mountId,
+            `folder/${rootId}/create/stickies`,
+            {
+                fileName: 'DetailBoard',
+            },
+        );
+        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${board.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+        await authedRequest(bobToken, `/drive/${aliceOwnerId}/${mountId}/path/${board.id}/watch`, { method: 'POST' });
+
+        const added = await postSticky(board.id, {
+            eventType: 'sticky-added',
+            details: { card: 'Hello', toColumn: 'To Do', cardId: 'c1' },
+        });
+        expect(added.status).toBe(200);
+
+        const row = (await notificationsFor(ctx.bob.user.id)).find((n) => n.tag === fileEventTag(board.id));
+        expect(row).toBeDefined();
+        expect(row!.title).toBe('Alice Test added a card to "DetailBoard"');
+        expect(row!.body).toBe('Hello');
+        expect(row!.details).toEqual({ cardId: 'c1', secondary: 'in To Do', pathType: 'stickies' });
+
+        // A second, different event on the same board upserts the ONE tagged row to the latest change
+        const moved = await postSticky(board.id, {
+            eventType: 'sticky-moved',
+            details: { card: 'Hello', toColumn: 'Done', cardId: 'c1' },
+        });
+        expect(moved.status).toBe(200);
+
+        const rows = (await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === fileEventTag(board.id));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].title).toBe('Alice Test moved a card in "DetailBoard"');
+        expect(rows[0].body).toBe('Hello → Done');
+        expect(rows[0].details).toEqual({ cardId: 'c1', pathType: 'stickies' });
     });
 });

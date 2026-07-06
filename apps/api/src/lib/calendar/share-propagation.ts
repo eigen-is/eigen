@@ -85,6 +85,7 @@ export async function propagateCalendarShare(
                 color: calendar.color,
                 permission,
                 actorEmail: ownerHome.user.email,
+                actorName: ownerHome.user.name,
             });
         } catch (error) {
             console.error('Failed to propagate calendar share:', error);

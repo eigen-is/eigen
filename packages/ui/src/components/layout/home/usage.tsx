@@ -1,7 +1,7 @@
+import { formatFileSize } from '@workspace/lib/format';
 import { useHomeSize } from '@workspace/lib/home';
 import { EigenLoader } from '@workspace/ui';
 import { Progress } from '@workspace/ui/components/progress';
-import { formatFileSize } from '@workspace/ui/lib/formatFileSize';
 import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
 

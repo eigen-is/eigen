@@ -8,6 +8,10 @@ import { type auth, getAuthDrizzleDb } from '../auth/auth.ts';
 // served by `auth.api.getSession()` to Elysia route handlers.
 export type User = typeof auth.$Infer.Session.user;
 
+// Actor display: name, else email local-part, else undefined (callers guard the undefined case).
+export const actorDisplayName = (name?: string | null, email?: string | null): string | undefined =>
+    name ?? email?.split('@')[0];
+
 export async function getUserByEmail(email: string): Promise<User | null> {
     const db = getAuthDrizzleDb();
     return (await db.select().from(user).where(eq(user.email, email.toLowerCase())).get()) ?? null;

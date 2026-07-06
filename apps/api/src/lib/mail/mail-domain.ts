@@ -83,11 +83,13 @@ export class Mail {
                     this.home.notifications?.persist({
                         type: 'mail',
                         actorEmail: email.from?.value?.[0]?.address ?? null,
-                        title: 'New email',
-                        body: email.subject
-                            ? `From ${email.fromShort}: ${email.subject}`
-                            : `New email from ${email.fromShort}`,
+                        title: `New mail from ${email.fromShort}`,
+                        body: email.subject || '(no subject)',
                         tag: 'mail:new',
+                        details: {
+                            mailId: email.id,
+                            snippet: email.textShort ? email.textShort.slice(0, 120) : undefined,
+                        },
                     });
                 }
             },

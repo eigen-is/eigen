@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
 
 function StickiesRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    const { chat } = Route.useSearch();
+    const { chat, card } = Route.useSearch();
     const navigate = useNavigate();
     const {
         docInfo,
@@ -35,6 +35,15 @@ function StickiesRoute() {
         });
     }, [navigate, ownerId, mountId, pathId]);
 
+    const handleClearCard = useCallback(() => {
+        navigate({
+            to: Route.fullPath,
+            params: { ownerId, mountId, pathId },
+            search: (prev) => ({ ...prev, card: undefined }),
+            replace: true,
+        });
+    }, [navigate, ownerId, mountId, pathId]);
+
     if (isLoading) return <LoadingState />;
     if (!docInfo?.canRead || !path) {
         return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
@@ -51,6 +60,8 @@ function StickiesRoute() {
                 onAccessDialogOpen={openAccessDialog}
                 initialChatName={chat}
                 onClearInitialChat={handleClearChat}
+                initialCardId={card}
+                onClearInitialCard={handleClearCard}
             />
             <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={path} />
         </>

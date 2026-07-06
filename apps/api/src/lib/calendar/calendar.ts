@@ -21,7 +21,7 @@ import { ApiError, PATHS } from '../core';
 import type { ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
-import type { User } from '../user';
+import { actorDisplayName, type User } from '../user';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
@@ -724,6 +724,7 @@ export class Calendar {
         _calendarColor: string,
         permission: CalendarShare['permission'],
         actorEmail?: string,
+        actorName?: string,
     ): void {
         const existing = this.db
             .select()
@@ -754,12 +755,13 @@ export class Calendar {
         this.home.notifications?.persist({
             type: 'calendar-share',
             actorEmail,
-            title: `"${calendarName}" was shared with you`,
+            title: `${actorDisplayName(actorName, actorEmail)} shared a calendar`,
+            body: calendarName,
             tag: `calendar-share:${calendarId}:${ownerUserId}`,
         });
     }
 
-    public removeShare(ownerUserId: string, calendarId: string, actorEmail?: string): void {
+    public removeShare(ownerUserId: string, calendarId: string, actorEmail?: string, actorName?: string): void {
         const existing = this.db
             .select()
             .from(schema.sharedCalendars)
@@ -777,7 +779,8 @@ export class Calendar {
             this.home.notifications?.persist({
                 type: 'calendar-unshare',
                 actorEmail,
-                title: `"${existing.calendarName}" is no longer shared with you`,
+                title: `${actorDisplayName(actorName, actorEmail)} removed your access`,
+                body: existing.calendarName,
             });
         }
     }
@@ -943,11 +946,14 @@ export class Calendar {
 
         this.incrementCtag(defaultCal.id);
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, payload.organizerUserId));
+        const organizer = payload.data?.organizer;
         this.home.notifications?.persist({
             type: 'calendar-invite',
-            actorEmail: payload.data?.organizer?.email,
-            title: `New invitation: ${payload.title}`,
+            actorEmail: organizer?.email,
+            title: `${actorDisplayName(organizer?.name, organizer?.email)} invited you`,
+            body: payload.title,
             tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime.getTime()}`,
+            details: { startTime: payload.startTime.getTime() },
         });
         return id;
     }
@@ -1006,11 +1012,14 @@ export class Calendar {
 
         this.incrementCtag(linked.calendarId);
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
+        const organizer = linked.data?.organizer;
         this.home.notifications?.persist({
             type: 'calendar-invite-updated',
-            actorEmail: linked.data?.organizer?.email,
-            title: `Updated: ${payload.title}`,
+            actorEmail: organizer?.email,
+            title: `${actorDisplayName(organizer?.name, organizer?.email)} updated an invitation`,
+            body: payload.title,
             tag: `calendar-invite:${orgEventId}:${payload.startTime.getTime()}`,
+            details: { startTime: payload.startTime.getTime() },
         });
     }
 
@@ -1021,10 +1030,12 @@ export class Calendar {
         this.db.delete(schema.events).where(eq(schema.events.id, linked.id)).run();
         this.incrementCtag(linked.calendarId);
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
+        const organizer = linked.data?.organizer;
         this.home.notifications?.persist({
             type: 'calendar-invite-cancelled',
-            actorEmail: linked.data?.organizer?.email,
-            title: `Cancelled: ${linked.title}`,
+            actorEmail: organizer?.email,
+            title: `${actorDisplayName(organizer?.name, organizer?.email)} cancelled an invitation`,
+            body: linked.title,
             tag: `calendar-invite:${orgEventId}:${linked.startTime.getTime()}`,
         });
     }

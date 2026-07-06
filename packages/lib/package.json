@@ -26,6 +26,7 @@
     "./api-error": "./src/core/api-error.ts",
     "./apps": "./src/core/apps.ts",
     "./date": "./src/core/date.ts",
+    "./format": "./src/core/format.ts",
     "./auth": "./src/core/auth/index.ts",
     "./calendar": "./src/core/calendar/index.ts",
     "./chat": "./src/core/chat/index.ts",

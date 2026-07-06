@@ -11,7 +11,9 @@ import { getUserByEmail } from '../user/';
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
-    for (const acl of acls) {
+    // Dedupe by id up front — only acl.id drives resolution, and the restore path feeds [...acl, ...acl].
+    const uniqueAcls = [...new Map(acls.map((acl) => [acl.id, acl])).values()];
+    for (const acl of uniqueAcls) {
         const parsed = parseOwnerId(acl.id);
         if (parsed.type === 'user') {
             const user = await getUserByEmail(acl.id);
@@ -108,7 +110,13 @@ const FAN_OUT_CONCURRENCY = 8;
 const fanOutSemaphore = new Semaphore(FAN_OUT_CONCURRENCY);
 const pendingFanOuts = new Map<string, Promise<void>>();
 
-function queueACLFanOut(ids: Set<string>, path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): void {
+function queueACLFanOut(
+    ids: Set<string>,
+    path: DrivePath,
+    newACL: DriveACL[] | null,
+    actorEmail?: string,
+    actorName?: string,
+): void {
     if (ids.size === 0) return;
     const prev = pendingFanOuts.get(path.id) ?? Promise.resolve();
     const next = prev.then(() =>
@@ -116,7 +124,7 @@ function queueACLFanOut(ids: Set<string>, path: DrivePath, newACL: DriveACL[] | 
             [...ids].map((id) =>
                 fanOutSemaphore.run(async () => {
                     try {
-                        await sendToHome(id, { type: 'drive:acl-change', path, acl: newACL, actorEmail });
+                        await sendToHome(id, { type: 'drive:acl-change', path, acl: newACL, actorEmail, actorName });
                     } catch (error) {
                         console.error(`Failed to propagate ACL change to ${id}:`, error);
                     }
@@ -151,7 +159,7 @@ export async function propagateSharedPathChange(
     // record for not-yet-registered targets and must survive the request.
     const ids = await resolveACLUserIds(path.ownerId, [...(oldACL || []), ...(newACL || [])]);
 
-    queueACLFanOut(ids, path, newACL, actor?.email);
+    queueACLFanOut(ids, path, newACL, actor?.email, actor?.name);
 
     if (actor && newACL) {
         const addedUserEmails = diffACLEmails(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');

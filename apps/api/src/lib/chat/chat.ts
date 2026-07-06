@@ -168,6 +168,7 @@ export class ChatRoom {
             // Mention notifications (non-whisper only)
             const mentionedEmailSet = new Set<string>();
             if (type !== 'whisper') {
+                const mentionTitle = `${author.name} mentioned you in "${displayName}"`;
                 for (const email of extractMentionedEmails(content)) {
                     if (email === authorEmail.toLowerCase()) continue;
                     if (!memberEmails.has(email)) continue;
@@ -177,15 +178,22 @@ export class ChatRoom {
                         if (!mentionedUser) continue;
                         await sendToHome(mentionedUser.id, {
                             type: 'notification',
-                            notification: {
-                                type: this.containerPath ? 'mention-comment' : 'mention-chat',
-                                actorEmail: authorEmail,
-                                title: `You were mentioned in "${displayName}"`,
-                                body,
-                                tag: this.containerPath
-                                    ? `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}:${email}`
-                                    : `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
-                            },
+                            notification: this.containerPath
+                                ? {
+                                      type: 'mention-comment',
+                                      actorEmail: authorEmail,
+                                      title: mentionTitle,
+                                      body,
+                                      tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}:${email}`,
+                                      details: { pathType: this.containerPath.type },
+                                  }
+                                : {
+                                      type: 'mention-chat',
+                                      actorEmail: authorEmail,
+                                      title: mentionTitle,
+                                      body,
+                                      tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
+                                  },
                         });
                     } catch {
                         // user or home may not exist
@@ -195,21 +203,26 @@ export class ChatRoom {
 
             // Activity notifications: whispers → recipient only, messages/emotes → previous participants + owner
             const activityNotifiedEmails = new Set<string>();
-            const activityType = this.containerPath ? 'comment-reply' : 'chat-message';
-            const activityTag = this.containerPath
-                ? `${activityType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}`
-                : `${activityType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`;
             const notifyActivity = async (userId: string) => {
                 try {
                     await sendToHome(userId, {
                         type: 'notification',
-                        notification: {
-                            type: activityType,
-                            actorEmail: authorEmail,
-                            title: `New message in "${displayName}"`,
-                            body,
-                            tag: activityTag,
-                        },
+                        notification: this.containerPath
+                            ? {
+                                  type: 'comment-reply',
+                                  actorEmail: authorEmail,
+                                  title: `${author.name} commented on "${displayName}"`,
+                                  body,
+                                  tag: `comment-reply:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}`,
+                                  details: { pathType: this.containerPath.type },
+                              }
+                            : {
+                                  type: 'chat-message',
+                                  actorEmail: authorEmail,
+                                  title: `New message from ${author.name} in "${displayName}"`,
+                                  body,
+                                  tag: `chat-message:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`,
+                              },
                     });
                 } catch {
                     // user home may not exist
@@ -260,7 +273,7 @@ export class ChatRoom {
                     targetPath.id,
                     author,
                     'commented',
-                    { preview: content.slice(0, 80) },
+                    { preview: content.slice(0, 80), chatName: this.path.name },
                     { excludeEmails: coveredEmails },
                 );
             }

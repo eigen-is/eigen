@@ -4,6 +4,7 @@ import { useComments, useResolveComment } from '../../chat';
 import { useCardIdFromChatName } from './use-card-id-from-chat-name';
 import { useCommentCards } from './use-comment-cards';
 import { useCreateCommentCard } from './use-create-comment-card';
+import { useOpenCardById } from './use-open-card-by-id';
 import { useOpenCommentCard } from './use-open-comment-card';
 import { useUnresolvedCommentCount } from './use-unresolved-comment-count';
 import { useUpdateCommentCard } from './use-update-comment-card';
@@ -31,6 +32,8 @@ export function useCommentLifecycle({
     mapName = 'comments',
     ready,
     onChatNotFound,
+    initialCardId,
+    onCardNotFound,
 }: {
     ownerId: string;
     mountId: string;
@@ -43,6 +46,8 @@ export function useCommentLifecycle({
     mapName?: 'comments' | 'tasks';
     ready?: boolean;
     onChatNotFound?: () => void;
+    initialCardId?: string;
+    onCardNotFound?: () => void;
 }) {
     const [openCardId, setOpenCardId] = useState<string | null>(null);
 
@@ -55,6 +60,7 @@ export function useCommentLifecycle({
     const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeCardIds);
     const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, allComments, openCardId);
     useCardIdFromChatName(cards, initialChatName, setOpenCardId, { ready, onChatNotFound });
+    useOpenCardById(cards, initialCardId, setOpenCardId, { ready, onCardNotFound });
 
     return {
         allComments,

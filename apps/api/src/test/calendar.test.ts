@@ -6,6 +6,7 @@ import type {
     FreeBusyBlock,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
+import type { Notification } from '@workspace/lib/types/notification';
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 describe('Calendar', () => {
@@ -843,6 +844,15 @@ describe('Calendar', () => {
             const found = findOrFail(shared, (s) => s.calendarId === sharedCalendarId);
             expect(found.calendarName).toBe('Shared Cal');
             expect(found.permission).toBe('read');
+        });
+
+        test('Bob gets a calendar-share notification with the actor display name', async () => {
+            const notifs = await assertJson<Notification[]>(
+                await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+            );
+            const shared = notifs.find((n) => n.tag === `calendar-share:${sharedCalendarId}:${ctx.alice.user.id}`);
+            expect(shared?.title).toBe(`${ctx.alice.user.name} shared a calendar`);
+            expect(shared?.body).toBe('Shared Cal');
         });
 
         test('Bob can read events from shared calendar', async () => {
