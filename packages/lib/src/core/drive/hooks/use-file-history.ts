@@ -5,10 +5,12 @@ import { AppError, onMutationError } from '../../api-error';
 import { driveKeys } from './use-drive';
 
 // Discriminated client-event shape — mirrors the POST /history route's typebox union.
-// Not exported: domain barrels export values only; apps derive their variant from
-// FileEventDetailsMap in @workspace/lib/types/file-history directly.
+// cardId is required on the wire; it stays optional in FileEventDetailsMap only because
+// old persisted rows lack it (read shape). Not exported: domain barrels export values
+// only; apps derive their variant from FileEventDetailsMap in
+// @workspace/lib/types/file-history directly.
 type RecordHistoryInput = {
-    [K in ClientFileEventType]: { eventType: K; details: FileEventDetailsMap[K] };
+    [K in ClientFileEventType]: { eventType: K; details: FileEventDetailsMap[K] & { cardId: string } };
 }[ClientFileEventType];
 
 // RECORD CLIENT-EMITTED HISTORY EVENT (the sticky-* card events)

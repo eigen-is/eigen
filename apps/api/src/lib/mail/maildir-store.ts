@@ -1,9 +1,10 @@
 import type { FSWatcher } from 'node:fs';
 import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
+import { Semaphore } from '../../utils/semaphore';
 import { ApiError, LocalFilesystem, PATHS, STANDARD_MAILBOXES } from '../core';
 import type { Home } from '../home';
-import { parseEml } from './mail-parse';
+import { parseEml, parseEmlBytes } from './mail-parse';
 import type { MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
 import MailDB from './maildb';
 import {
@@ -22,6 +23,8 @@ export class MaildirStore implements MailStore {
     private db!: MailDB;
     private events!: MailStoreEvents;
     private syncingMailboxes = new Map<string, Promise<void>>();
+    // Reconciliation (doSyncMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
+    private storeLock = new Semaphore(1);
     private watchers: FSWatcher[] = [];
     private readonly CUR: string;
     private readonly NEW: string;
@@ -152,63 +155,74 @@ export class MaildirStore implements MailStore {
     }
 
     async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string> {
-        const { uniqueId } = await this.deliverAtomic(message, mailbox);
+        // Lock covers only the delivery — the follow-up sync takes the lock itself.
+        const { uniqueId } = await this.storeLock.run(() => this.deliverAtomic(message, mailbox));
         if (!opts?.skipSync) await this.syncMailbox(mailbox);
         return uniqueId;
     }
 
     async saveDraft(raw: string, existingId?: string): Promise<Email> {
-        const { uniqueId, filename } = await this.deliverToCur('Drafts', raw, { draft: true, seen: true }, existingId);
+        // Parse the in-memory bytes up front so the heavyweight MIME parse stays off the lock —
+        // the bytes we write are exactly what parseEml would read back from the delivered file.
+        const messageId = existingId ?? createUniqueMessageId();
+        const bytes = Buffer.from(raw, 'utf-8');
+        const parsed = await parseEmlBytes(messageId, 'Drafts', bytes, bytes.length);
 
-        const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
-        if (!parsed) {
-            await this.deleteMessage('Drafts', filename).catch(() => {});
-            throw new ApiError(500, 'Failed to parse saved draft');
-        }
+        // Hold the lock across the fs write + db.addEmail pair so a concurrent watcher sync can't
+        // ingest the draft file first and fire a spurious received(isNew) event.
+        return this.storeLock.run(async () => {
+            const { filename } = await this.deliverToCur('Drafts', raw, { draft: true, seen: true }, messageId);
 
-        applyFlagsFromFilename(parsed, filename);
-        parsed.filename = filename;
-        parsed.mailbox = 'Drafts';
-        this.db.addEmail(parsed as EmailSummary);
-        return parsed;
+            applyFlagsFromFilename(parsed, filename);
+            parsed.filename = filename;
+            parsed.mailbox = 'Drafts';
+            this.db.addEmail(parsed as EmailSummary);
+            return parsed;
+        });
     }
 
     async delete(messageId: string): Promise<void> {
-        const email = this.db.getEmail(messageId);
-        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+        return this.storeLock.run(async () => {
+            const email = this.db.getEmail(messageId);
+            if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
-        await this.deleteMessage(email.mailbox, email.filename);
-        this.db.deleteEmail(messageId);
+            await this.deleteMessage(email.mailbox, email.filename);
+            this.db.deleteEmail(messageId);
+        });
     }
 
     async move(messageId: string, targetMailbox: string): Promise<void> {
-        const email = this.db.getEmail(messageId);
-        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+        return this.storeLock.run(async () => {
+            const email = this.db.getEmail(messageId);
+            if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
-        if (!(await this.mailboxDirExists(targetMailbox))) {
-            throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
-        }
+            if (!(await this.mailboxDirExists(targetMailbox))) {
+                throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
+            }
 
-        await this.moveMessage(email.mailbox, email.filename, targetMailbox);
-        this.db.moveEmail(messageId, targetMailbox);
+            await this.moveMessage(email.mailbox, email.filename, targetMailbox);
+            this.db.moveEmail(messageId, targetMailbox);
+        });
     }
 
     async setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void> {
-        const email = this.db.getEmail(messageId);
-        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+        return this.storeLock.run(async () => {
+            const email = this.db.getEmail(messageId);
+            if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
-        const newFlagStr = rebuildFlagsSuffix(email.filename, changes);
-        const uniqueWithSize = email.filename.split(':')[0];
-        const newFilename = `${uniqueWithSize}:2,${newFlagStr}`;
+            const newFlagStr = rebuildFlagsSuffix(email.filename, changes);
+            const uniqueWithSize = email.filename.split(':')[0];
+            const newFilename = `${uniqueWithSize}:2,${newFlagStr}`;
 
-        if (newFilename !== email.filename) {
-            await this.renameInCur(email.mailbox, email.filename, newFilename);
-            this.db.setFilename(messageId, newFilename);
-        }
+            if (newFilename !== email.filename) {
+                await this.renameInCur(email.mailbox, email.filename, newFilename);
+                this.db.setFilename(messageId, newFilename);
+            }
 
-        if (changes.seen !== undefined) this.db.setRead(messageId, changes.seen);
-        if (changes.flagged !== undefined) this.db.setFlagged(messageId, changes.flagged);
-        if (changes.draft !== undefined) this.db.setDraft(messageId, changes.draft);
+            if (changes.seen !== undefined) this.db.setRead(messageId, changes.seen);
+            if (changes.flagged !== undefined) this.db.setFlagged(messageId, changes.flagged);
+            if (changes.draft !== undefined) this.db.setDraft(messageId, changes.draft);
+        });
     }
 
     updateDraftContent(
@@ -229,7 +243,7 @@ export class MaildirStore implements MailStore {
         const running = this.syncingMailboxes.get(mailbox);
         if (running) return running;
 
-        const promise = this.doSyncMailbox(mailbox);
+        const promise = this.storeLock.run(() => this.doSyncMailbox(mailbox));
         this.syncingMailboxes.set(mailbox, promise);
         try {
             await promise;

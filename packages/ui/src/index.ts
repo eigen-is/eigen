@@ -1,5 +1,6 @@
 // Export all components
 
+export * from './components/layout/activity-row';
 export * from './components/layout/app';
 export * from './components/layout/braket';
 export * from './components/layout/cards';

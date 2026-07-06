@@ -55,6 +55,8 @@ type StickiesBoardProps = {
     initialChatName?: string;
     onClearInitialChat?: () => void;
     initialSearchTerm?: string;
+    initialCardId?: string;
+    onClearInitialCard?: () => void;
 };
 
 export function StickiesBoard({
@@ -67,6 +69,8 @@ export function StickiesBoard({
     initialChatName,
     onClearInitialChat,
     initialSearchTerm,
+    initialCardId,
+    onClearInitialCard,
 }: StickiesBoardProps) {
     const {
         board,
@@ -100,6 +104,8 @@ export function StickiesBoard({
         mapName: 'tasks',
         ready: isSynced,
         onChatNotFound: onClearInitialChat,
+        initialCardId,
+        onCardNotFound: onClearInitialCard,
     });
     const { allComments, cards, createCard, setOpenCardId } = lifecycle;
 
@@ -167,7 +173,9 @@ export function StickiesBoard({
         ) => {
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
+            let newCardId = '';
             await createCard({ ...patch, attachments }, (card) => {
+                newCardId = card.id;
                 const col = yjsDoc.getMap('columns').get(targetColumnId) as Y.Map<unknown> | undefined;
                 if (!col) return;
                 let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
@@ -179,7 +187,11 @@ export function StickiesBoard({
             });
             recordHistory.mutate({
                 eventType: 'sticky-added',
-                details: { card: patch.title ?? '', toColumn: board.columns[targetColumnId]?.title ?? '' },
+                details: {
+                    card: patch.title ?? '',
+                    toColumn: board.columns[targetColumnId]?.title ?? '',
+                    cardId: newCardId,
+                },
             });
             setScrollToTopOf((prev) => ({ columnId: targetColumnId, n: (prev?.n ?? 0) + 1 }));
             setAddTargetColumn(null);
@@ -392,7 +404,7 @@ export function StickiesBoard({
                                                 deleteCardFromBoard(deleteCardId);
                                                 recordHistory.mutate({
                                                     eventType: 'sticky-removed',
-                                                    details: { card: removed?.title ?? '' },
+                                                    details: { card: removed?.title ?? '', cardId: deleteCardId },
                                                 });
                                             }
                                             setDeleteCardId(null);

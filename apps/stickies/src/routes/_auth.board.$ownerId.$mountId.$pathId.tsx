@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
 
 function StickiesRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    const { chat, q } = Route.useSearch();
+    const { chat, card, q } = Route.useSearch();
     const navigate = useNavigate();
     // Latch once — the board gates on Yjs sync, so a clear can outrun the provider's mount.
     const [initialSearchTerm] = useState(q);
@@ -50,6 +50,15 @@ function StickiesRoute() {
         }
     }, [q, navigate, ownerId, mountId, pathId]);
 
+    const handleClearCard = useCallback(() => {
+        navigate({
+            to: Route.fullPath,
+            params: { ownerId, mountId, pathId },
+            search: (prev) => ({ ...prev, card: undefined }),
+            replace: true,
+        });
+    }, [navigate, ownerId, mountId, pathId]);
+
     if (isLoading) return <LoadingState />;
     if (!docInfo?.canRead || !path) {
         return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
@@ -67,6 +76,8 @@ function StickiesRoute() {
                 initialChatName={chat}
                 onClearInitialChat={handleClearChat}
                 initialSearchTerm={initialSearchTerm}
+                initialCardId={card}
+                onClearInitialCard={handleClearCard}
             />
             <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={path} />
         </>

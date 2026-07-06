@@ -1,6 +1,6 @@
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
-import { formatTimeAgo } from '@workspace/lib/date';
 import {
+    describeNotification,
     isClickableNotification,
     resolveNotificationLink,
     useDismissNotification,
@@ -9,79 +9,60 @@ import {
     useNotifications,
     useUnreadNotificationCount,
 } from '@workspace/lib/notification';
+import { usePublicUsers } from '@workspace/lib/public';
 import type { Notification } from '@workspace/lib/types/notification';
-import { cn } from '@workspace/ui/lib/utils';
+import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { Bell, Check, X } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '../../button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
+import { ActivityRow } from '../activity-row';
 import { CountBadge } from '../count-badge';
-import { UserAvatar } from '../user-avatar';
+import { NotificationBadge } from './notification-badge';
 
 type NotificationItemProps = {
     notification: Notification;
+    previewOpts: { resolveName?: (email: string) => string | undefined; viewerEmail?: string };
     onMarkRead: (id: string) => void;
     onDismiss: (id: string) => void;
 };
 
-function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationItemProps) {
-    const isClickable = isClickableNotification(notification.type);
+function NotificationItem({ notification, previewOpts, onMarkRead, onDismiss }: NotificationItemProps) {
+    const lines = describeNotification(notification, previewOpts);
+    const details = notification.details;
+    const pathType = details && 'pathType' in details ? details.pathType : undefined;
 
-    const handleClick = async () => {
+    const handleOpen = async () => {
         if (!notification.read) onMarkRead(notification.id);
         const url = await resolveNotificationLink(notification);
-        if (url) window.location.href = url;
+        if (url) window.open(url, '_blank', 'noopener');
     };
 
     return (
-        <div
-            role="button"
-            tabIndex={0}
-            className={cn(
-                'flex items-start gap-3 px-3 py-2.5 transition-colors',
-                isClickable && 'cursor-pointer hover:bg-muted/50',
-                !notification.read && 'bg-primary/5',
-            )}
-            onClick={handleClick}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleClick();
-                }
-            }}
-        >
-            {notification.actorEmail && (
-                <div className="shrink-0 pt-0.5">
-                    <UserAvatar email={notification.actorEmail} size="sm" />
-                </div>
-            )}
-            <div className="flex-1 min-w-0">
-                <p
-                    className={cn(
-                        'text-sm leading-tight truncate',
-                        !notification.read ? 'font-medium' : 'text-muted-foreground',
-                    )}
+        <ActivityRow
+            actorEmail={notification.actorEmail}
+            badge={<NotificationBadge type={notification.type} pathType={pathType} />}
+            action={lines.action}
+            primary={lines.primary}
+            secondary={lines.secondary}
+            createdAt={notification.createdAt}
+            unread={!notification.read}
+            onOpen={isClickableNotification(notification.type) ? handleOpen : undefined}
+            trailing={
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Dismiss notification"
+                    className="shrink-0 h-6 w-6 opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onDismiss(notification.id);
+                    }}
                 >
-                    {notification.title}
-                </p>
-                {notification.body && (
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{notification.body}</p>
-                )}
-                <p className="text-xs text-muted-foreground/70 mt-0.5">{formatTimeAgo(notification.createdAt)}</p>
-            </div>
-            <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Dismiss notification"
-                className="shrink-0 h-6 w-6 opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onDismiss(notification.id);
-                }}
-            >
-                <X className="h-3 w-3" />
-            </Button>
-        </div>
+                    <X className="h-3 w-3" />
+                </Button>
+            }
+        />
     );
 }
 
@@ -94,6 +75,18 @@ export function NotificationBell() {
     const markAllRead = useMarkAllNotificationsRead(ownerId);
     const markRead = useMarkNotificationRead(ownerId);
     const dismiss = useDismissNotification(ownerId);
+
+    // Resolve display names for the emails embedded in chat-derived bodies (mentions, emote targets).
+    const emails = useMemo(() => {
+        const set = new Set<string>();
+        for (const n of notifications) for (const m of n.body?.match(EMAIL_FIND_REGEX) ?? []) set.add(m);
+        return [...set];
+    }, [notifications]);
+    const publicUsers = usePublicUsers(emails);
+    const previewOpts = useMemo(
+        () => ({ resolveName: (email: string) => publicUsers[email]?.name, viewerEmail: auth.user?.email }),
+        [publicUsers, auth.user?.email],
+    );
 
     if (!auth.isAuthenticated) return null;
 
@@ -128,6 +121,7 @@ export function NotificationBell() {
                             <div key={n.id} className="group/item border-b last:border-b-0">
                                 <NotificationItem
                                     notification={n}
+                                    previewOpts={previewOpts}
                                     onMarkRead={(id) => markRead.mutate(id)}
                                     onDismiss={(id) => dismiss.mutate(id)}
                                 />

@@ -22,9 +22,10 @@ export async function propagateAccessRequest(
         notification: {
             type: 'access-request',
             tag: `access-request:${home.user.id}:${mountId}:${pathId}:${requester.email}`,
-            title: `${requesterName} requested access to "${stripEigenExtension(path.name)}"`,
-            body: message,
+            title: `${requesterName} requested access`,
+            body: stripEigenExtension(path.name),
             actorEmail: requester.email,
+            details: { message: message ?? undefined, pathType: path.type },
         },
     });
 

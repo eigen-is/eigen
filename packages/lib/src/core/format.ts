@@ -1,4 +1,4 @@
-export function formatFileSize(size: number) {
+export function formatFileSize(size: number): string {
     if (Number.isNaN(size)) return 'unknown';
     if (size === 0) return '0 Bytes';
     const units = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];

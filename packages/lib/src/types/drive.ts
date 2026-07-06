@@ -63,6 +63,8 @@ export type EigenDocTypeInfo = {
     extension: string;
     label: string;
     labelPlural: string;
+    // Share-notification noun when label.toLowerCase() reads wrong (stickies → "shared a board").
+    noun?: string;
     colorVar: string;
     softColorVar: string;
     appName: string;
@@ -89,6 +91,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         extension: '.eigenstickies',
         label: 'Stickies',
         labelPlural: 'Stickies',
+        noun: 'board',
         colorVar: '--app-stickies-color',
         softColorVar: '--app-stickies-color-soft',
         appName: 'stickies',

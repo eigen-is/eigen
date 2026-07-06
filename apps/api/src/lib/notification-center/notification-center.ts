@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Notification } from '@workspace/lib/types/notification';
+import type { Notification, NotificationPersistInput } from '@workspace/lib/types/notification';
 import { desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { ManagedDatabase } from '../core';
@@ -7,18 +7,6 @@ import type { Home } from '../home';
 import { NOTIFICATION_CENTER_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 import { buildNotificationChangedEvent, buildNotificationCreatedEvent } from './sse-events';
-
-export type PersistInput = {
-    type: string;
-    actorEmail?: string | null;
-    title: string;
-    body?: string | null;
-    tag?: string | null;
-    // Tag-coalescing: when a row with the same tag was created within the window,
-    // the upsert still refreshes the row but the SSE broadcast is skipped, so a
-    // burst of events yields one toast (the bell catches up on refetch).
-    coalesce?: boolean;
-};
 
 const COALESCE_WINDOW_MS = 30_000;
 
@@ -32,6 +20,7 @@ function toNotification(row: typeof schema.notifications.$inferSelect): Notifica
         tag: row.tag,
         read: row.read,
         createdAt: row.createdAt,
+        details: row.details,
     };
 }
 
@@ -58,7 +47,7 @@ export class NotificationCenter {
         }
     }
 
-    persist(input: PersistInput): Notification {
+    persist(input: NotificationPersistInput): Notification {
         const id = randomUUID();
         const now = new Date();
         // Select BEFORE the upsert — afterwards the row always exists with createdAt = now.
@@ -75,6 +64,7 @@ export class NotificationCenter {
             tag: input.tag ?? null,
             read: false,
             createdAt: now,
+            details: input.details ?? null,
         };
 
         this.db
@@ -89,6 +79,7 @@ export class NotificationCenter {
                     body: row.body,
                     read: false,
                     createdAt: now,
+                    details: row.details,
                 },
             })
             .run();

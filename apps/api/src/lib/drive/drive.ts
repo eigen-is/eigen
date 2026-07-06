@@ -358,6 +358,7 @@ export default class Drive {
                 path: lastUploaded,
                 chainRootIds: [parentId],
                 burst: true,
+                details: { size: lastUploaded.size ?? 0 },
                 verifyAncestors: () => mount.getBreadcrumb(lastUploaded.id),
             });
         }
@@ -395,6 +396,7 @@ export default class Drive {
                     path: created,
                     chainRootIds: [created.parentId],
                     burst: true,
+                    details: { size: created.size ?? 0 },
                     verifyAncestors: () => mount.getBreadcrumb(created.id),
                 });
             }
@@ -484,6 +486,7 @@ export default class Drive {
                 actor: user,
                 path: movedPath,
                 chainRootIds: [oldParentId, targetParentId],
+                details: { oldParentId, newParentId: targetParentId },
                 verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(pathId))],
             });
         }
@@ -972,6 +975,7 @@ export default class Drive {
             chainRootIds: [path.parentId],
             burst: opts?.burst,
             excludeEmails: opts?.excludeEmails,
+            details,
             verifyAncestors: () => mount.getBreadcrumb(pathId),
         });
     }
@@ -1110,8 +1114,13 @@ export default class Drive {
 
     // Called by: home-relay (cross-home ACL propagation receiver) and share/reconciliation.
     // Not route-callable — inbound side of the sharding seam.
-    async receiveSharedPathChange(path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
-        return receiveSharedPathChange(this.sharedDb, this.home, path, newACL, actorEmail);
+    async receiveSharedPathChange(
+        path: DrivePath,
+        newACL: DriveACL[] | null,
+        actorEmail?: string,
+        actorName?: string,
+    ): Promise<void> {
+        return receiveSharedPathChange(this.sharedDb, this.home, path, newACL, actorEmail, actorName);
     }
 
     async destruct(): Promise<void> {

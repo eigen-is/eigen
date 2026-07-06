@@ -1265,6 +1265,7 @@ describe('Chat', () => {
             );
             expect(chatNotification).toBeDefined();
             expect(chatNotification!.actorEmail).toBe(ctx.bob.user.email);
+            expect(chatNotification!.title).toBe('New message from Bob Test in "Notification Chat"');
             expect(chatNotification!.body).toBe('Hello from Bob');
         });
 
@@ -1332,6 +1333,7 @@ describe('Chat', () => {
             const chatMessage = unread.find((n) => n.type === 'chat-message');
             expect(mention).toBeDefined();
             expect(chatMessage).toBeUndefined();
+            expect(mention!.title).toBe('Alice Test mentioned you in "Notification Chat"');
         });
 
         test('embedded chat uses comment-reply notification type', async () => {
@@ -1396,8 +1398,9 @@ describe('Chat', () => {
             const notifications = (await res.json()) as Notification[];
             const commentNotif = notifications.find((n) => !n.read && n.type === 'comment-reply');
             expect(commentNotif).toBeDefined();
-            expect(commentNotif!.title).toContain('Comment Notify Doc');
+            expect(commentNotif!.title).toBe('Bob Test commented on "Comment Notify Doc"');
             expect(commentNotif!.body).toBe('Reply comment');
+            expect(commentNotif!.details).toEqual({ pathType: 'doc' });
         });
     });
 });

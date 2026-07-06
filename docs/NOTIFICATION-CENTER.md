@@ -74,12 +74,21 @@ export const notifications = sqliteTable('notifications', {
     tag: text('tag').unique(),
     read: integer('read', {mode: 'boolean'}).notNull().default(false),
     createdAt: integer('createdAt', {mode: 'timestamp'}).notNull().default(sql`(unixepoch())`),
+    details: text('details', {mode: 'json'}).$type<NotificationDetails | null>(), // v2
 });
 ```
 
 The `tag` column with `UNIQUE` constraint enables `INSERT ... ON CONFLICT(tag) DO UPDATE` upsert. Multiple mentions in
 the same chat produce one notification (refreshed, not duplicated). `NULL` tags are exempt (SQLite treats NULLs as
 distinct).
+
+`details` (**v2 migration** — `ALTER TABLE notifications ADD COLUMN details TEXT`) holds a typed JSON blob keyed by
+notification type (`NotificationDetailsMap` in `packages/lib/src/types/notification.ts`): the activity-row secondary
+line plus deep-link parameters — `mail.{mailId, snippet}`, `calendar-invite(-updated).startTime`,
+`file-event.{secondary, cardId, chatName, pathType}`, `access-request.{message, pathType}`, `*.pathType`. Additive and
+nullable — pre-v2 rows read `null` and degrade to a plain title + body row. `PersistInput` is a discriminated write
+input (`NotificationPersistInput`): `details` is allowed exactly for the types that define a `NotificationDetailsMap`
+entry.
 
 ### Coalesce flag
 
@@ -88,6 +97,24 @@ row updated within the last 30 s, the SSE broadcast is skipped — the DB row st
 `createdAt`), so the bell stays correct, but rapid events on one tag don't toast-storm. The window slides: a
 sustained sub-30 s event stream suppresses broadcasts for its whole duration; the bell catches up on the next
 refetch. Only `file-event` notifications set it today; all other callers keep the always-broadcast default.
+
+## Row content contract (unified activity)
+
+The bell and the Drive *Recent activity* panel render the same row anatomy through one shared
+`ActivityRow` (`packages/ui/src/components/layout/activity-row.tsx`). Every producer persists to one contract:
+
+- **`title` = the action sentence** — who did what, where (`New mail from Hanne Oberman`,
+  `Mark added a card to "Eigen Feedback"`). Rendered as the small muted first line.
+- **`body` = the primary content** — the thing the user scans for: mail subject, card title, `old → new` rename,
+  item name. Rendered as the normal-size second line.
+- **`details` = structured extras** — the optional secondary line (mail snippet, invite start time, `in To Do`) plus
+  the deep-link parameters. Never a display string the toast needs.
+
+The server composes file-event strings with `describeFileEvent` (`packages/lib/src/types/file-history.ts`), the
+same phrasing the activity panel renders with; the client mirrors non-file notifications with `describeNotification`
+(`packages/lib/src/core/notification/describe.ts`), which derives the secondary line from `details` (e.g. the invite
+start time is formatted client-side with the `en-GB` locale, not baked into a stored string). Old rows without
+`details` render title + body only. Full spec: [PROPOSAL_UNIFIED_ACTIVITY.md](PROPOSAL_UNIFIED_ACTIVITY.md).
 
 ## API Routes
 
@@ -109,14 +136,14 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 | Drive unshare          | `Drive.receiveSharedPathChange()` (removed)     | `unshare`                   | (no tag)                                            |
 | Calendar share         | `Calendar.receiveShare()`                | `calendar-share`            | `calendar-share:{calId}:{ownerUserId}`              |
 | Calendar unshare       | `Calendar.removeShare()`                 | `calendar-unshare`          | (no tag)                                            |
-| Calendar invite        | `invite-propagation.ts`                  | `calendar-invite`           | `calendar-invite:{eventId}`                         |
-| Calendar invite update | `invite-propagation.ts`                  | `calendar-invite-updated`   | `calendar-invite:{eventId}`                         |
-| Calendar invite cancel | `invite-propagation.ts`                  | `calendar-invite-cancelled` | `calendar-invite:{eventId}`                         |
-| Incoming mail          | `Maildir` sync                           | `mail`                      | `mail:{messageId}`                                  |
+| Calendar invite        | `invite-propagation.ts`                  | `calendar-invite`           | `calendar-invite:{eventId}:{startTime}`             |
+| Calendar invite update | `invite-propagation.ts`                  | `calendar-invite-updated`   | `calendar-invite:{eventId}:{startTime}`             |
+| Calendar invite cancel | `invite-propagation.ts`                  | `calendar-invite-cancelled` | `calendar-invite:{eventId}:{startTime}`             |
+| Incoming mail          | `Maildir` sync                           | `mail`                      | `mail:new` (constant — coalesces all incoming mail into one refreshed row) |
 | Chat @mention          | `ChatRoom.postMessage()`                 | `mention-chat`              | `mention:{ownerId}:{mountId}:{chatId}:{email}`      |
-| Comment @mention       | `ChatRoom.postMessage()` (embedded chat) | `mention-comment`           | `mention:{ownerId}:{mountId}:{containerId}:{email}` |
+| Comment @mention       | `ChatRoom.postMessage()` (embedded chat) | `mention-comment`           | `mention:{ownerId}:{mountId}:{containerId}:{name}:{email}` |
 | Chat activity          | `ChatRoom.postMessage()` (regular msg)   | `chat-message`              | `chat-message:{ownerId}:{mountId}:{chatId}`         |
-| Comment activity       | `ChatRoom.postMessage()` (embedded chat) | `comment-reply`             | `comment-reply:{ownerId}:{mountId}:{containerId}`   |
+| Comment activity       | `ChatRoom.postMessage()` (embedded chat) | `comment-reply`             | `comment-reply:{ownerId}:{mountId}:{containerId}:{name}` |
 | Access request         | `POST .../request-access` route          | `access-request`            | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 | File event (watch)     | `FileHistory.notifyWatchers()` via relay | `file-event`                | `file-event:{ownerId}:{mountId}:{pathId}` — burst events (`created`/`uploaded`/`copied`) tag the parent folder; always sent with `coalesce: true`. See [AGENTS.md § File history + watch](../AGENTS.md) |
 
@@ -138,11 +165,14 @@ Links are constructed client-side based on notification `type` and `tag`:
 - `access-request` → async: fetches `DrivePath` to resolve parent folder, navigates to Drive at
   `/fs/{ownerId}/{mountId}/{parentId}?sharePathId={pathId}&shareEmail={email}`, auto-opening the share dialog
   with the requester's email pre-filled
-- `calendar-share`, `calendar-unshare`, `calendar-invite`, `calendar-invite-updated`, `calendar-invite-cancelled` →
-  `getCalendarAppUrl()`
-- `mail` → `getMailAppUrl('box/inbox')`
-- `file-event` → async: fetches `DrivePath`; collab/chat docs open in their app via `getDriveItemUrl()`; plain
-  files and folders land on Drive at `/fs/{ownerId}/{mountId}/{parentId}?pid={pathId}&showHistory=1` (item
+- `calendar-invite`, `calendar-invite-updated`, `calendar-invite-cancelled` → month view
+  `view/month/{from}/{to}?eventId={eventId}`, the month derived from the tag's `{startTime}` (falls back to
+  `getCalendarAppUrl()` when the tag has no start time)
+- `calendar-share`, `calendar-unshare` → `getCalendarAppUrl()`
+- `mail` → `getMailAppUrl('box/inbox?mailId={id}')` when `details.mailId` is set (v2), else bare `box/inbox`
+- `file-event` → async: fetches `DrivePath`; collab/chat docs open in their app via `getDriveItemUrl()`, appending
+  `?card={cardId}` or `?chat={chatName}` when `details` carries them (deep-links to the exact card / comment thread);
+  plain files and folders land on Drive at `/fs/{ownerId}/{mountId}/{parentId}?pid={pathId}&showHistory=1` (item
   selected, details sidebar open, Recent Activity scrolled into view)
 - `unshare` → not clickable (resource no longer accessible)
 
@@ -160,6 +190,16 @@ the stored title as-is.
 `UserAvatar` (from `packages/ui/src/components/layout/user-avatar.tsx`) renders the `actorEmail` avatar next to each
 notification item.
 
+### Bell app badge
+
+`NotificationBadge` (`packages/ui/src/components/layout/app/notification-badge.tsx`) overlaps a small circular
+app-colored badge on the avatar's bottom-right so the source app reads pre-attentively. It maps the notification
+`type` — plus `details.pathType` when the row concerns a specific drive item — to an app icon + color from the
+single sources (`EIGEN_DOC_ICONS`, `getEigenDocInfoByType().colorVar`, the `--app-*-color` vars, and lucide
+`Mail`/`Calendar`/`MessageSquare`/`Folder`/`File` for the non-eigendoc cases). Rows without a `pathType` fall back
+per type (chat → chat glyph, share/file-event → folder on `--app-drive-color`), never blank. The badge is
+**bell-only** — the *Recent activity* panel is already scoped to one item, so it renders no badge.
+
 ### SSE Handler
 
 `handleNotificationSSEvent()` listens for `notification:created` → shows toast + invalidates notification queries.
@@ -175,24 +215,36 @@ type SSEventNotificationCreated = {
     type: typeof SSEventType.NOTIFICATION_CREATED;
     title: string;
     body?: string;
+    notificationType?: string; // the notification's `type` — lets the toast resolve a "View" link
+    tag?: string;              // the notification's tag — the other half of link resolution
 };
 ```
 
-Minimal — only what the toast needs. The notification list is fetched via API, not populated from SSE.
+`title`/`body` feed the toast (`toast(title, { description: body })`); `notificationType` + `tag` let the toast's
+**View** action resolve the same target the bell uses (`resolveNotificationLink({ type, tag, details: null })`) and
+open it in a new tab. Still minimal — no full row, no `details` (so the View link uses only tag-derivable targets;
+`?card=`/`?mailId=` come from the fetched row in the bell). The list is fetched via API, not populated from SSE. A
+sibling `SSEventNotificationChanged` (`notification:changed`, bare `{ type }`) tells the bell to refetch its
+count/list without toasting (e.g. after a read or dismiss).
 
 ## Files
 
 | File                                                            | Purpose                          |
 |-----------------------------------------------------------------|----------------------------------|
-| `packages/lib/src/types/notification.ts`                        | Shared `Notification` type       |
+| `packages/lib/src/types/notification.ts`                        | `Notification` type, `NotificationType` union, `NotificationDetailsMap` |
+| `packages/lib/src/types/file-history.ts`                        | `describeFileEvent` — file-event phrasing (action/primary/secondary) |
 | `packages/lib/src/types/drive.ts`                               | `stripEigenExtension()` utility  |
 | `packages/lib/src/core/date.ts`                                 | `formatTimeAgo()` utility        |
-| `apps/api/src/lib/notification-center/schema.ts`                | Drizzle schema                   |
-| `apps/api/src/lib/notification-center/db-config.ts`             | DatabaseConfig + migration       |
-| `apps/api/src/lib/notification-center/notification-center.ts`   | Domain service class             |
+| `apps/api/src/lib/notification-center/schema.ts`                | Drizzle schema (incl. `details`) |
+| `apps/api/src/lib/notification-center/db-config.ts`             | DatabaseConfig + migrations (v2 `details`) |
+| `apps/api/src/lib/notification-center/notification-center.ts`   | Domain service class (persist + coalesce + `details`) |
 | `apps/api/src/lib/notification-center/sse-events.ts`            | SSE event builder                |
 | `apps/api/src/routes/notification.ts`                           | API routes                       |
 | `packages/lib/src/core/notification/hooks/use-notifications.ts` | Query + mutation hooks           |
 | `packages/lib/src/core/notification/sse-handlers.ts`            | SSE handler (toast + invalidate) |
+| `packages/lib/src/core/notification/resolve-link.ts`            | Notification `type`+`tag`+`details` → deep link |
+| `packages/lib/src/core/notification/describe.ts`                | `describeNotification` — client row-content mirror |
+| `packages/ui/src/components/layout/activity-row.tsx`            | Shared row for bell + Recent activity panel |
 | `packages/ui/src/components/layout/app/notification-bell.tsx`   | Topbar bell + popover            |
+| `packages/ui/src/components/layout/app/notification-badge.tsx`  | Bell avatar app badge            |
 | `packages/ui/src/components/layout/user-avatar.tsx`            | Actor avatar in notification item |

@@ -5,18 +5,19 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-779 primitives across 6 kinds. `packages/sheet` internals are excluded.
+790 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (102)
+## Components (103)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
 | `AccessDenied` | `@workspace/ui` | packages/ui/src/components/layout/app/access-denied.tsx |
+| `ActivityRow` | `@workspace/ui` | packages/ui/src/components/layout/activity-row.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
 | `AppSidebar` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
@@ -139,7 +140,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (202)
+## Hooks (203)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -218,6 +219,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCommentCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `useCommentLifecycle` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-lifecycle.ts |
 | `useCreateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
+| `useOpenCardById` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-open-card-by-id.ts |
 | `useOpenCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-open-comment-card.ts |
 | `useResolveCardAttachments` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-resolve-card-attachments.ts |
 | `useUnresolvedCommentCount` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-unresolved-comment-count.ts |
@@ -346,7 +348,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (218)
+## Types (224)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -391,6 +393,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SlideItem` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `SlideObject` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `TextObject` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
+| `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `Address` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `AddressObject` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `AdminUser` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
@@ -474,6 +477,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MountSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `NewDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Notification` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `NotificationDetails` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `NotificationDetailsMap` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `NotificationPersistInput` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `NotificationType` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `OrgMember` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OrgTeam` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OwnerType` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
@@ -532,6 +539,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
+| `ActivityRowProps` | `@workspace/ui` | packages/ui/src/components/layout/activity-row.tsx |
 | `ChatMessageInputHandle` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-message-input.tsx |
 | `ColorPickerButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker-button.tsx |
 | `ColorPickerProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
@@ -569,7 +577,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (246)
+## Utilities & constants (249)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -669,6 +677,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `commandNeedsSpace` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `COMMANDS_HELP` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
+| `formatChatPreview` | `@workspace/lib/chat` | packages/lib/src/core/chat/format-preview.ts |
 | `getEmoteCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/emotes.ts |
 | `getLocalCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `handleChatSSEvent` | `@workspace/lib/chat` | packages/lib/src/core/chat/sse-handlers.ts |
@@ -729,10 +738,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `createDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
 | `sendDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `updateDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
+| `CHAT_TEXT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
+| `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `resolveNotificationLink` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
@@ -747,6 +759,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `DRIVE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_DOC` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -766,8 +779,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_DOCUMENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
-| `fileEventSummary` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
-| `fileEventVerb` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `IMIP_METHODS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |

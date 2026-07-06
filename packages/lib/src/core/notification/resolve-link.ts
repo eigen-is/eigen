@@ -53,11 +53,8 @@ async function resolveDriveLink(tag: string, hasChatName = false): Promise<strin
     if (response.error || !response.data) return getDriveAppUrl();
 
     const path = response.data;
-    const itemUrl = getDriveItemUrl(path);
-    if (itemUrl) {
-        if (parsed.chatName) return `${itemUrl}?chat=${encodeURIComponent(parsed.chatName)}`;
-        return itemUrl;
-    }
+    const itemUrl = getDriveItemUrl(path, { chat: parsed.chatName });
+    if (itemUrl) return itemUrl;
 
     // Regular files (images, PDFs, etc.) open in shared-with-me with the file pre-selected
     return getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`);
@@ -97,9 +94,9 @@ export function isClickableNotification(type: string): boolean {
 }
 
 export async function resolveNotificationLink(
-    notification: Pick<Notification, 'type' | 'tag'>,
+    notification: Pick<Notification, 'type' | 'tag' | 'details'>,
 ): Promise<string | null> {
-    const { type, tag } = notification;
+    const { type, tag, details } = notification;
     if (!tag) return null;
 
     switch (type) {
@@ -117,7 +114,7 @@ export async function resolveNotificationLink(
         case 'calendar-invite-cancelled': {
             const parsed = parseCalendarInviteTag(tag);
             if (parsed?.startTime) {
-                const { from, to } = getMonthRange(new Date(parsed.startTime * 1000));
+                const { from, to } = getMonthRange(new Date(parsed.startTime));
                 return getCalendarAppUrl(`view/month/${from}/${to}?eventId=${encodeURIComponent(parsed.eventId)}`);
             }
             return getCalendarAppUrl();
@@ -127,8 +124,10 @@ export async function resolveNotificationLink(
         case 'calendar-unshare':
             return getCalendarAppUrl();
 
-        case 'mail':
-            return getMailAppUrl('box/inbox');
+        case 'mail': {
+            const mailId = details && 'mailId' in details ? details.mailId : undefined;
+            return getMailAppUrl(mailId ? `box/inbox?mailId=${encodeURIComponent(mailId)}` : 'box/inbox');
+        }
 
         case 'access-request':
             return resolveAccessRequestLink(tag);
@@ -144,7 +143,9 @@ export async function resolveNotificationLink(
             // Only collab/chat types navigate directly into their app; plain files and folders
             // land on the fs view with history open so the user sees what changed.
             if (isCollabType(path.type) || isChatType(path.type)) {
-                const itemUrl = getDriveItemUrl(path);
+                const cardId = details && 'cardId' in details ? details.cardId : undefined;
+                const chatName = details && 'chatName' in details ? details.chatName : undefined;
+                const itemUrl = getDriveItemUrl(path, { card: cardId, chat: chatName });
                 if (itemUrl) return itemUrl;
             }
             return getDriveAppUrl(
