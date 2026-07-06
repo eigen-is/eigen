@@ -138,12 +138,14 @@ describe('Comment search', () => {
             add: [{ id: CHARLIE_EMAIL, read: true, write: true }],
         });
         const t4 = await createThread(ctx, mountId, chatFolderId, 'thread-whisper');
-        await postComment(ctx, mountId, t4.id, 'a normal keepthethread message');
+        // Whisper FIRST: a whisper never triggers a recompute itself, so the filter is only
+        // exercised when a later normal message rebuilds recentText over the whole thread.
         await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${t4.id}/messages`, {
             content: 'secretwhisperterm for your eyes only',
             type: 'whisper',
             whisperTo: CHARLIE_EMAIL,
         });
+        await postComment(ctx, mountId, t4.id, 'a normal keepthethread message');
 
         const res = await assertJson<DocCommentMatch[]>(
             await commentSearch(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'secretwhisperterm'),
