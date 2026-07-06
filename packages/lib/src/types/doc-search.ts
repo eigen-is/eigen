@@ -53,3 +53,25 @@ export type DocSearchController = {
         preserveCase: boolean,
     ): { replaced: number; matches: DocSearchMatch[] };
 };
+
+// Phase 2 — async, server-backed comment-thread search (palette `doc:` scope only). id = the
+// thread's chatName; the client resolves chatName → cardId itself, so there is no cardId field —
+// nothing populates it server-side (no placeholder fields).
+export type DocCommentMatch = {
+    id: string;
+    label: string; // FTS snippet of the matched message tail
+    context?: string; // who last spoke in the thread
+};
+
+// The app pairs the document-bound { docKey, search } (useDocCommentSearchHalf) with its own
+// reveal (stickies: chatName → cardId → open card; docs: comments panel + scroll). Published as
+// ctx.docCommentSearch; null is the "no open document publishes comment search" state.
+export type DocCommentSearch = {
+    // Query-key identity: `${ownerId}:${mountId}:${pathId}` of the OPEN DOCUMENT — which can
+    // differ from the palette's ctx.ownerId on shared docs.
+    docKey: string;
+    search(query: string): Promise<DocCommentMatch[]>;
+    // scroll-to / open the thread; MUST tolerate stale ids (thread deleted since search) — no-op,
+    // never throw.
+    reveal(matchId: string): void;
+} | null;

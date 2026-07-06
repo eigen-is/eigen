@@ -3,7 +3,7 @@ import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { desc, eq, isNull, lt } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, ne } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -13,7 +13,7 @@ import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
 import { getUserByEmail, type User } from '../user/';
 import { formatEmoteForViewer, parseCommand } from './commands';
-import { type CommentIndex, openCommentIndex } from './comment-index';
+import { type CommentIndex, openCommentIndex, RECENT_TEXT_CAP } from './comment-index';
 import { CHAT_ROOM_DB_CONFIG } from './db-config';
 import { extractMentionedEmails } from './mentions';
 import * as schema from './schema';
@@ -428,6 +428,7 @@ export class ChatRoom {
         try {
             const index = await openCommentIndex(this.drive, this.containerPath);
             await fn(index);
+            await index.setRecentText(this.path.name, await this.buildRecentText());
 
             const event = buildCommentIndexUpdatedEvent(this.containerPath.id, this.path.ownerId, this.path.mountId);
             this.home.broadcast(event);
@@ -435,6 +436,24 @@ export class ChatRoom {
         } catch (error) {
             console.error('Failed to update comment index:', error);
         }
+    }
+
+    // Newest-first tail of the live thread text, rebuilt in full on every indexed write (recompute,
+    // not append — deleted messages leave the index, edits don't duplicate; threads are short).
+    private async buildRecentText(): Promise<string> {
+        const rows = await this.db
+            .select({ content: schema.messages.content })
+            .from(schema.messages)
+            .where(and(isNull(schema.messages.deletedAt), ne(schema.messages.type, 'whisper')))
+            .orderBy(desc(schema.messages.createdAt))
+            .all();
+        let text = '';
+        for (const row of rows) {
+            if (!row.content) continue;
+            text = text ? `${text}\n${row.content}` : row.content;
+            if (text.length >= RECENT_TEXT_CAP) break;
+        }
+        return text.slice(0, RECENT_TEXT_CAP);
     }
 
     // Uses getEffectiveMembers to resolve all users with access — handles inherited

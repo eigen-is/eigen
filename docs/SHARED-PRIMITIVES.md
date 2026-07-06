@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-773 primitives across 6 kinds. `packages/sheet` internals are excluded.
+775 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -343,7 +343,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (215)
+## Types (217)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -520,6 +520,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActiveComments` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `DocCommentMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
+| `DocCommentSearch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchController` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchOptions` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
