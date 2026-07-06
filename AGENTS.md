@@ -165,7 +165,7 @@ of changes needs all of it.
 | **Storage backends**  | `apps/api/src/lib/storage/`                  | Two classes — `LocalStorage` (serves both `local` + `local-key` modes) and `S3Storage`                     |
 | **Errors**            | `apps/api/src/lib/core/errors.ts`            | `throw new ApiError(status, message)`                                                                      |
 | **SSE emission**      | `apps/api/src/lib/[domain]/sse-events.ts`    | `home.broadcast(buildEvent(...))`                                                                          |
-| **Notifications**     | `apps/api/src/lib/notification-center/`      | `home.notifications.persist({...})` — per-user SQLite, broadcasts SSE; rows carry typed `details` JSON (v2 migration) for the activity-row secondary line + deep-link params |
+| **Notifications**     | `apps/api/src/lib/notification-center/`      | `home.notifications.persist({...})` — per-user SQLite, broadcasts SSE; rows carry typed `details` JSON (v2 migration) for the activity-row secondary line + deep-link params; chat-derived bodies persist raw and render through `formatChatPreview` — row strings/links in [ACTIVITY-ROWS.md](docs/ACTIVITY-ROWS.md) |
 | **Auth**              | `apps/api/src/lib/auth/auth.ts`              | better-auth with org/team/2FA/API key plugins                                                              |
 | **Protocol auth**     | `apps/api/src/lib/auth/protocol-auth.ts`     | `verifyProtocolAuth()` — shared IMAP/CalDAV/WebDAV auth (app password → primary password fallback)         |
 | **WebDAV**            | `apps/api/src/lib/webdav/`                   | RFC 4918 Class 1+2 server at `/webdav/:ownerId/:mountId/*`; mirrors CalDAV layer                           |

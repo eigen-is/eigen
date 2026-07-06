@@ -113,8 +113,11 @@ The bell and the Drive *Recent activity* panel render the same row anatomy throu
 The server composes file-event strings with `describeFileEvent` (`packages/lib/src/types/file-history.ts`), the
 same phrasing the activity panel renders with; the client mirrors non-file notifications with `describeNotification`
 (`packages/lib/src/core/notification/describe.ts`), which derives the secondary line from `details` (e.g. the invite
-start time is formatted client-side with the `en-GB` locale, not baked into a stored string). Old rows without
-`details` render title + body only. Full spec: [PROPOSAL_UNIFIED_ACTIVITY.md](PROPOSAL_UNIFIED_ACTIVITY.md).
+start time is formatted client-side with the `en-GB` locale, not baked into a stored string). Chat-derived bodies
+(mentions, chat messages, comment previews) are persisted raw and normalized at render time by `formatChatPreview`
+(`packages/lib/src/core/chat/format-preview.ts`): emote wire syntax becomes the chat-style sentence, emails resolve
+to display names — so the stored `body` intentionally differs from what the bell/toast/panel show. Old rows without
+`details` render title + body only. Per-type strings and link targets: [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
 
 ## API Routes
 

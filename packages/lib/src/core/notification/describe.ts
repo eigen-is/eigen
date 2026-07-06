@@ -31,7 +31,7 @@ export function describeNotification(
             case 'calendar-invite':
             case 'calendar-invite-updated':
                 // Formatted from the stored epoch (en-GB) so the viewer's timezone applies, not the
-                // server's — see PROPOSAL_UNIFIED_ACTIVITY Inventory A footnote 2.
+                // server's — see docs/ACTIVITY-ROWS.md § Notification rows.
                 if ('startTime' in details)
                     secondary = new Date(details.startTime).toLocaleString('en-GB', {
                         day: 'numeric',
