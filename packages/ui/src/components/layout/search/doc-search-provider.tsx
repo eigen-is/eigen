@@ -151,17 +151,25 @@ export function DocSearchProvider({
 
     // Surfaces republish their controller when the document changes — re-run the open session's
     // search so n of m stays live. Clamp the index; do NOT reveal (don't yank the user's scroll).
+    // Throttle, not debounce: slides/stickies republish per Yjs transaction, so a sustained remote
+    // edit stream would reset a trailing debounce forever and freeze the session (the F1 shape). A
+    // scheduled tick is never cancelled by the next republish — it reads the live controllerRef.
+    const republishTickRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     useEffect(() => {
-        const t = setTimeout(() => {
+        void controller;
+        if (republishTickRef.current !== undefined) return;
+        republishTickRef.current = setTimeout(() => {
+            republishTickRef.current = undefined;
             const session = sessionRef.current;
             if (!session.open || session.query === '') return;
-            const found = controller.search(session.query, session.options);
+            const c = controllerRef.current;
+            const found = c.search(session.query, session.options);
             setMatches(found);
-            controller.highlightAll(found);
+            c.highlightAll(found);
             setActiveIndex((prev) => (found.length === 0 ? -1 : Math.min(Math.max(prev, 0), found.length - 1)));
         }, DEBOUNCE_MS);
-        return () => clearTimeout(t);
     }, [controller]);
+    useEffect(() => () => clearTimeout(republishTickRef.current), []);
 
     const close = useCallback(() => {
         clearTimeout(debounceRef.current);
