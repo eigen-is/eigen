@@ -1,7 +1,7 @@
 import { CommandPaletteContext } from '@workspace/lib/command-palette';
 import type { CommandPaletteContextValue } from '@workspace/lib/command-palette/hooks/use-command-palette';
 import type { PaletteScope, PaletteSelection, PaletteSelectionActions } from '@workspace/lib/types/command-palette';
-import type { DocSearchController } from '@workspace/lib/types/doc-search';
+import type { DocCommentSearch, DocSearchController } from '@workspace/lib/types/doc-search';
 import { type ReactNode, useMemo, useState } from 'react';
 
 type Props = { children: ReactNode };
@@ -13,6 +13,7 @@ export function CommandPaletteProvider({ children }: Props) {
     const [selection, setSelection] = useState<PaletteSelection>(null);
     const [selectionActions, setSelectionActions] = useState<PaletteSelectionActions>(null);
     const [docSearch, setDocSearch] = useState<DocSearchController | null>(null);
+    const [docCommentSearch, setDocCommentSearch] = useState<DocCommentSearch>(null);
 
     const value = useMemo<CommandPaletteContextValue>(
         () => ({
@@ -28,8 +29,10 @@ export function CommandPaletteProvider({ children }: Props) {
             setSelectionActions,
             docSearch,
             setDocSearch,
+            docCommentSearch,
+            setDocCommentSearch,
         }),
-        [open, input, scope, selection, selectionActions, docSearch],
+        [open, input, scope, selection, selectionActions, docSearch, docCommentSearch],
     );
 
     return <CommandPaletteContext.Provider value={value}>{children}</CommandPaletteContext.Provider>;

@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CommandFooter } from './command-footer';
 import { CommandRowAction } from './command-row-action';
 import { CommandRowContact } from './command-row-contact';
+import { CommandRowDocCommentHit } from './command-row-doc-comment-hit';
 import { CommandRowDocHit } from './command-row-doc-hit';
 import { CommandRowFile } from './command-row-file';
 import { CommandRowHelp } from './command-row-help';
@@ -119,6 +120,8 @@ export function CommandPalette({ ctx }: Props) {
                 return <CommandRowFile key={r.id} result={r} onSelect={onSelect} />;
             case 'doc-hit':
                 return <CommandRowDocHit key={r.id} result={r} onSelect={onSelect} />;
+            case 'doc-comment-hit':
+                return <CommandRowDocCommentHit key={r.id} result={r} onSelect={onSelect} />;
             case 'help':
                 return <CommandRowHelp key={r.id} result={r} onSelect={onSelect} />;
             default: {

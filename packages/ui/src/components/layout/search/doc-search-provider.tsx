@@ -1,6 +1,11 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { usePaletteDocSearch } from '@workspace/lib/command-palette';
-import type { DocSearchController, DocSearchMatch, DocSearchOptions } from '@workspace/lib/types/doc-search';
+import type {
+    DocCommentSearch,
+    DocSearchController,
+    DocSearchMatch,
+    DocSearchOptions,
+} from '@workspace/lib/types/doc-search';
 import { FindReplaceBar } from '@workspace/ui/components/layout/search/find-replace-bar';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
@@ -29,6 +34,10 @@ export function useOptionalDocSearchBar(): DocSearchBarContextValue | null {
 
 export type DocSearchProviderProps = {
     controller: DocSearchController;
+    // Optional comment-thread search capability (stickies + docs today). Published alongside the
+    // controller so the palette `doc:` scope gains its async IN COMMENTS section; apps that omit it
+    // publish null and nothing changes for them.
+    commentSearch?: DocCommentSearch;
     // A ?q= landing term: open the bar pre-filled, highlight all, reveal the first match — focus
     // stays in the document (the bar input is NOT focused on this path). Latched once by the route.
     initialSearchTerm?: string;
@@ -52,6 +61,7 @@ export type DocSearchProviderProps = {
 // debounce remote-origin republish coarsely (not per remote keystroke) to keep count/paint settled.
 export function DocSearchProvider({
     controller,
+    commentSearch,
     initialSearchTerm,
     children,
     barClassName,
@@ -325,7 +335,7 @@ export function DocSearchProvider({
     // reveal one in place. usePaletteDocSearch stabilises it by shape, so the publish effect doesn't
     // loop even though the app rebuilds the controller each render. The palette hit's run() calls
     // controller.reveal(matchId) — reveal in place, no bar (review decision).
-    usePaletteDocSearch(controller);
+    usePaletteDocSearch(controller, commentSearch);
 
     return (
         <DocSearchBarContext.Provider value={barContext}>
