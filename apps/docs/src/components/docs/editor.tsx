@@ -19,9 +19,11 @@ import {
     useUploadFile,
 } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
+import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
+import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     CardFormDialog,
@@ -649,6 +651,7 @@ const TiptapEditor = ({
     }, [editor]);
 
     const docSearchController = useDocSearchController(editor, access.canWrite);
+    const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
     const isWide = !useMediaQuery('(max-width: 1200px)');
 
@@ -664,10 +667,29 @@ const TiptapEditor = ({
         }
     };
 
+    // Palette IN COMMENTS capability — reveal resolves chatName → cardId client-side, opens the
+    // panel, scrolls to the mark, and opens the card (the panel's own click pair). Plain object per
+    // render; usePaletteDocSearch stabilises it, so the closure sees the current cardsRef.
+    const commentSearch: DocCommentSearch = {
+        ...commentSearchHalf,
+        reveal: (chatName) => {
+            const cards = cardsRef.current;
+            for (const cardId in cards) {
+                if (cards[cardId].chatName === chatName) {
+                    setCommentPanelOpen(true);
+                    handleScrollToComment(cardId);
+                    setOpenCardId(cardId);
+                    return;
+                }
+            }
+        },
+    };
+
     return (
         <>
             <DocSearchProvider
                 controller={docSearchController}
+                commentSearch={commentSearch}
                 initialSearchTerm={initialSearchTerm}
                 barClassName={cn('top-14', showSidebar && 'right-68')}
             >
