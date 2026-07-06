@@ -100,9 +100,9 @@ describe('describeFileEvent', () => {
         expect(describeFileEvent(e, 'own').primary).toBe('a.txt → b.txt');
         expect(describeFileEvent(e, 'container').primary).toBe('a.txt → b.txt');
     });
-    test('created: action-only in own ctx, name as primary in container ctx', () => {
+    test('created: names the item in the own-ctx action, name as primary in container ctx', () => {
         const e = { pathName: 'notes.txt', pathType: 'file', eventType: 'created', details: null } as const;
-        expect(describeFileEvent(e, 'own')).toEqual({ action: 'created' });
+        expect(describeFileEvent(e, 'own')).toEqual({ action: 'created "notes.txt"' });
         expect(describeFileEvent(e, 'container')).toEqual({ action: 'created', primary: 'notes.txt' });
     });
     test('commented quotes the preview and names the doc in container ctx', () => {

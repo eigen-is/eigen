@@ -116,10 +116,14 @@ export function describeFileEvent(
             const d = details && 'oldName' in details ? details : null;
             return { action: 'renamed', primary: d ? `${d.oldName} → ${d.newName}` : undefined };
         }
+        // created/uploaded name the item in the own-ctx action line — a bare "created" row on the
+        // item's own panel reads dangling; the other drive verbs read fine bare.
+        case 'created':
+            return { action: container ? 'created' : `created "${name}"`, primary: container ? name : undefined };
         case 'uploaded': {
             const d = details && 'size' in details ? details : null;
             return {
-                action: 'uploaded',
+                action: container ? 'uploaded' : `uploaded "${name}"`,
                 primary: container ? name : undefined,
                 secondary: d ? formatFileSize(d.size) : undefined,
             };
@@ -172,7 +176,7 @@ export function describeFileEvent(
             };
         }
         default:
-            // created/edited/moved/copied/trashed/restored/deleted: bare verb; name is the primary line.
+            // edited/moved/copied/trashed/restored/deleted: bare verb; name is the primary line.
             return { action: FILE_EVENT_PHRASES[event.eventType], primary: container ? name : undefined };
     }
 }
