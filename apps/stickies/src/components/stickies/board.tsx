@@ -1,7 +1,7 @@
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { useCommentLifecycle } from '@workspace/lib/comments';
+import { findCardIdByChatName, useCommentLifecycle } from '@workspace/lib/comments';
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
@@ -114,15 +114,10 @@ export function StickiesBoard({
     const commentSearchHalf = useDocCommentSearchHalf(ownerId, path.mountId, path.id);
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
-        // chatName → cardId client-side (the use-card-id-from-chat-name pattern); a stale or unknown
-        // chatName no-ops — never throws.
+        // chatName → cardId client-side; a stale or unknown chatName no-ops — never throws.
         reveal: (chatName) => {
-            for (const cardId in cards) {
-                if (cards[cardId].chatName === chatName) {
-                    setOpenCardId(cardId);
-                    return;
-                }
-            }
+            const cardId = findCardIdByChatName(cards, chatName);
+            if (cardId) setOpenCardId(cardId);
         },
     };
 

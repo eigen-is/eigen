@@ -8,7 +8,7 @@ import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import { useCommentLifecycle } from '@workspace/lib/comments';
+import { findCardIdByChatName, useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
@@ -673,15 +673,11 @@ const TiptapEditor = ({
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
         reveal: (chatName) => {
-            const cards = cardsRef.current;
-            for (const cardId in cards) {
-                if (cards[cardId].chatName === chatName) {
-                    setCommentPanelOpen(true);
-                    handleScrollToComment(cardId);
-                    setOpenCardId(cardId);
-                    return;
-                }
-            }
+            const cardId = findCardIdByChatName(cardsRef.current, chatName);
+            if (!cardId) return;
+            setCommentPanelOpen(true);
+            handleScrollToComment(cardId);
+            setOpenCardId(cardId);
         },
     };
 
