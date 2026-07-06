@@ -5,7 +5,7 @@ import { applyPreserveCase } from '@workspace/lib/doc-search';
 import type { DocSearchController, DocSearchMatch } from '@workspace/lib/types/doc-search';
 import { getSearchState, SearchQuery, setSearchState } from 'prosemirror-search';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildDocSearchQuery, searchFlashKey } from './extensions/search-highlight';
+import { buildDocSearchQuery, searchFlashKey } from './prosemirror-search-highlight';
 
 // An empty query paints nothing — used to clear the highlights.
 const EMPTY_QUERY = new SearchQuery({ search: '' });
@@ -29,7 +29,7 @@ function findRanges(state: EditorState, sq: SearchQuery): { from: number; to: nu
     return out;
 }
 
-export function useDocSearchController(editor: Editor | null, canWrite: boolean): DocSearchController {
+export function useProseMirrorSearchController(editor: Editor | null, canWrite: boolean): DocSearchController {
     // The query built by the LAST search()/replace()/replaceAll(). Read ONLY by highlightAll, which
     // is safe (contract rule 3): paint always follows the immediately-preceding search-shaped call
     // on this controller. reveal parses its id and replace receives the query explicitly, so

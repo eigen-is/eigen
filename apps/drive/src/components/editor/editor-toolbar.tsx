@@ -10,6 +10,7 @@ import {
     BreadcrumbSeparator,
 } from '@workspace/ui/components/breadcrumb';
 import { Button } from '@workspace/ui/components/button';
+import { FindInDocumentButton } from '@workspace/ui/components/layout/search/find-in-document-button';
 import { ArrowLeft } from 'lucide-react';
 import { Fragment } from 'react';
 
@@ -68,6 +69,7 @@ export function EditToolbar({ onBack, onCancel, onSave, isSaving, children }: Ed
             <div className="flex items-center gap-1">
                 <TooltipButton icon={ArrowLeft} tooltipText="Back to files" onClick={onBack} />
                 {children}
+                <FindInDocumentButton />
             </div>
             <div className="flex items-center gap-2">
                 <Button size="sm" variant="secondary" onClick={onCancel}>

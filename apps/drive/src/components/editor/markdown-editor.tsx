@@ -1,3 +1,5 @@
+import { redo, undo } from '@codemirror/commands';
+import type { EditorView } from '@codemirror/view';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Image from '@tiptap/extension-image';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
@@ -7,6 +9,9 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { ConfirmDialog } from '@workspace/ui';
 import { Column } from '@workspace/ui/components/layout/app/column-layout';
+import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
+import { useProseMirrorSearchController } from '@workspace/ui/components/layout/search/prosemirror-search-controller';
+import { SearchHighlight } from '@workspace/ui/components/layout/search/prosemirror-search-highlight';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useRef, useState } from 'react';
 import { Markdown } from 'tiptap-markdown';
@@ -14,6 +19,7 @@ import { CodeEditorView } from './code-editor';
 import { ConflictDialog } from './conflict-dialog';
 import { EditToolbar } from './editor-toolbar';
 import { MarkdownToolbarButtons } from './markdown-toolbar';
+import { useCodeMirrorSearchController } from './use-codemirror-search-controller';
 import { useEditorSave } from './use-editor-save';
 
 const lowlight = createLowlight(common);
@@ -56,6 +62,7 @@ function useMarkdownExtensions(content: string) {
         TableRow,
         TableCell,
         TableHeader,
+        SearchHighlight,
     ];
 }
 
@@ -68,6 +75,7 @@ type MarkdownEditorProps = {
     mountId: string;
     pathId: string;
     fileName: string;
+    canWrite: boolean;
     onBack: () => void;
     onCancel: () => void;
     onSaved: () => void;
@@ -82,6 +90,7 @@ export function MarkdownEditor({
     mountId,
     pathId,
     fileName,
+    canWrite,
     onBack,
     onCancel,
     onSaved,
@@ -89,6 +98,7 @@ export function MarkdownEditor({
 }: MarkdownEditorProps) {
     const [sourceMode, setSourceMode] = useState(false);
     const [sourceContent, setSourceContent] = useState('');
+    const [sourceView, setSourceView] = useState<EditorView | null>(null);
     const lineEndingRef = useRef(detectLineEnding(content));
 
     const editor = useEditor({
@@ -98,6 +108,13 @@ export function MarkdownEditor({
             markDirty();
         },
     });
+
+    // One find bar over whichever surface is active: the TipTap doc in WYSIWYG, the CodeMirror source
+    // view in source mode. Swapping the controller identity makes the provider re-run the open search
+    // against the newly-active editor.
+    const pmController = useProseMirrorSearchController(editor, canWrite);
+    const cmController = useCodeMirrorSearchController(sourceView, canWrite);
+    const searchController = sourceMode ? cmController : pmController;
 
     const getContent = useCallback((): string => {
         if (sourceMode) return sourceContent;
@@ -170,46 +187,54 @@ export function MarkdownEditor({
     );
 
     return (
-        <Column id="list" width="flex" toolbar={toolbar}>
-            <div className="h-full overflow-auto">
-                {sourceMode ? (
-                    <CodeEditorView
-                        content={sourceContent}
-                        language="markdown"
-                        onChange={(val) => {
-                            setSourceContent(val);
-                            markDirty();
-                        }}
-                    />
-                ) : (
-                    <div className="w-full px-12 py-6">
-                        <EditorContent editor={editor} />
-                    </div>
-                )}
-            </div>
-            <ConflictDialog
-                open={showConflict}
-                onOpenChange={setShowConflict}
-                onOverwrite={() => {
-                    setShowConflict(false);
-                    doSave(true);
-                }}
-                onReload={() => {
-                    setShowConflict(false);
-                    onReload();
-                }}
-                onDownload={handleDownload}
-            />
-            <ConfirmDialog
-                open={showDiscardConfirm}
-                onOpenChange={(open) => {
-                    if (!open) handleDiscardCancel();
-                }}
-                title="Discard changes?"
-                description="You have unsaved changes. Discard them?"
-                confirmText="Discard"
-                onConfirm={handleDiscardConfirm}
-            />
-        </Column>
+        <DocSearchProvider
+            controller={searchController}
+            barClassName="top-14"
+            onUndo={() => (sourceMode ? sourceView && undo(sourceView) : editor?.commands.undo())}
+            onRedo={() => (sourceMode ? sourceView && redo(sourceView) : editor?.commands.redo())}
+        >
+            <Column id="list" width="flex" toolbar={toolbar}>
+                <div className="h-full overflow-auto">
+                    {sourceMode ? (
+                        <CodeEditorView
+                            content={sourceContent}
+                            language="markdown"
+                            onChange={(val) => {
+                                setSourceContent(val);
+                                markDirty();
+                            }}
+                            onViewReady={setSourceView}
+                        />
+                    ) : (
+                        <div className="w-full px-12 py-6">
+                            <EditorContent editor={editor} />
+                        </div>
+                    )}
+                </div>
+                <ConflictDialog
+                    open={showConflict}
+                    onOpenChange={setShowConflict}
+                    onOverwrite={() => {
+                        setShowConflict(false);
+                        doSave(true);
+                    }}
+                    onReload={() => {
+                        setShowConflict(false);
+                        onReload();
+                    }}
+                    onDownload={handleDownload}
+                />
+                <ConfirmDialog
+                    open={showDiscardConfirm}
+                    onOpenChange={(open) => {
+                        if (!open) handleDiscardCancel();
+                    }}
+                    title="Discard changes?"
+                    description="You have unsaved changes. Discard them?"
+                    confirmText="Discard"
+                    onConfirm={handleDiscardConfirm}
+                />
+            </Column>
+        </DocSearchProvider>
     );
 }

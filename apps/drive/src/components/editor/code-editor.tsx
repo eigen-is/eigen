@@ -23,10 +23,12 @@ import {
 } from '@codemirror/view';
 import { ConfirmDialog, TooltipButton } from '@workspace/ui';
 import { Column } from '@workspace/ui/components/layout/app/column-layout';
+import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { Redo, Undo } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ConflictDialog } from './conflict-dialog';
 import { EditToolbar } from './editor-toolbar';
+import { useCodeMirrorSearchController } from './use-codemirror-search-controller';
 import { useEditorSave } from './use-editor-save';
 
 function getLanguageExtension(language: string | null) {
@@ -164,8 +166,10 @@ export const CodeEditorView = forwardRef<
         content: string;
         language: string | null;
         onChange?: (value: string) => void;
+        // Publishes the live view (null on teardown) so a parent can drive the find bar over it.
+        onViewReady?: (view: EditorView | null) => void;
     }
->(function CodeEditorView({ content, language, onChange }, ref) {
+>(function CodeEditorView({ content, language, onChange, onViewReady }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const isDark = useDarkMode();
@@ -188,7 +192,11 @@ export const CodeEditorView = forwardRef<
         const state = EditorState.create({ doc: content, extensions });
         const view = new EditorView({ state, parent: containerRef.current });
         viewRef.current = view;
-        return () => view.destroy();
+        onViewReady?.(view);
+        return () => {
+            view.destroy();
+            onViewReady?.(null);
+        };
     }, [isDark]);
 
     return <div ref={containerRef} className="h-full overflow-hidden" />;
@@ -202,6 +210,7 @@ type CodeEditorProps = {
     mountId: string;
     pathId: string;
     fileName: string;
+    canWrite: boolean;
     onBack: () => void;
     onCancel: () => void;
     onSaved: () => void;
@@ -215,6 +224,7 @@ export function CodeEditor({
     mountId,
     pathId,
     fileName,
+    canWrite,
     onBack,
     onCancel,
     onSaved,
@@ -222,6 +232,8 @@ export function CodeEditor({
 }: CodeEditorProps) {
     const contentRef = useRef(content);
     const editorViewRef = useRef<CodeEditorViewHandle>(null);
+    const [view, setView] = useState<EditorView | null>(null);
+    const searchController = useCodeMirrorSearchController(view, canWrite);
     const language = getLanguageFromName(fileName);
 
     const getContent = useCallback(() => contentRef.current, []);
@@ -281,33 +293,46 @@ export function CodeEditor({
     );
 
     return (
-        <Column id="list" width="flex" toolbar={toolbar}>
-            <div className="h-full overflow-hidden">
-                <CodeEditorView ref={editorViewRef} content={content} language={language} onChange={handleChange} />
-            </div>
-            <ConflictDialog
-                open={showConflict}
-                onOpenChange={setShowConflict}
-                onOverwrite={() => {
-                    setShowConflict(false);
-                    doSave(true);
-                }}
-                onReload={() => {
-                    setShowConflict(false);
-                    onReload();
-                }}
-                onDownload={handleDownload}
-            />
-            <ConfirmDialog
-                open={showDiscardConfirm}
-                onOpenChange={(open) => {
-                    if (!open) handleDiscardCancel();
-                }}
-                title="Discard changes?"
-                description="You have unsaved changes. Discard them?"
-                confirmText="Discard"
-                onConfirm={handleDiscardConfirm}
-            />
-        </Column>
+        <DocSearchProvider
+            controller={searchController}
+            barClassName="top-14"
+            onUndo={() => editorViewRef.current?.undo()}
+            onRedo={() => editorViewRef.current?.redo()}
+        >
+            <Column id="list" width="flex" toolbar={toolbar}>
+                <div className="h-full overflow-hidden">
+                    <CodeEditorView
+                        ref={editorViewRef}
+                        content={content}
+                        language={language}
+                        onChange={handleChange}
+                        onViewReady={setView}
+                    />
+                </div>
+                <ConflictDialog
+                    open={showConflict}
+                    onOpenChange={setShowConflict}
+                    onOverwrite={() => {
+                        setShowConflict(false);
+                        doSave(true);
+                    }}
+                    onReload={() => {
+                        setShowConflict(false);
+                        onReload();
+                    }}
+                    onDownload={handleDownload}
+                />
+                <ConfirmDialog
+                    open={showDiscardConfirm}
+                    onOpenChange={(open) => {
+                        if (!open) handleDiscardCancel();
+                    }}
+                    title="Discard changes?"
+                    description="You have unsaved changes. Discard them?"
+                    confirmText="Discard"
+                    onConfirm={handleDiscardConfirm}
+                />
+            </Column>
+        </DocSearchProvider>
     );
 }

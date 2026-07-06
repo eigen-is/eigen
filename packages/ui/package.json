@@ -34,6 +34,7 @@
     "@workspace/lib": "workspace:*",
     "cmdk": "^1.1.1",
     "input-otp": "^1.4.2",
+    "prosemirror-search": "^1.1.1",
     "radix-ui": "^1.4.3"
   },
   "peerDependencies": {

@@ -94,6 +94,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
         mountId: path.mountId,
         pathId: path.id,
         fileName: path.name,
+        canWrite,
         onBack: onClose,
         onCancel: exitEditMode,
         onSaved: exitEditMode,
@@ -102,13 +103,16 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
 
     return (
         <ColumnLayout>
-            <Suspense fallback={<LoadingState />}>
-                {data!.editMode === 'markdown' ? (
-                    <MarkdownEditor {...editorProps} frontmatter={data!.frontmatter ?? null} />
-                ) : (
-                    <CodeEditor {...editorProps} />
-                )}
-            </Suspense>
+            {/* The editor returns a find-bar provider wrapping its Column; this grows it in the row. */}
+            <div className="flex-1 min-w-0 h-full">
+                <Suspense fallback={<LoadingState />}>
+                    {data!.editMode === 'markdown' ? (
+                        <MarkdownEditor {...editorProps} frontmatter={data!.frontmatter ?? null} />
+                    ) : (
+                        <CodeEditor {...editorProps} />
+                    )}
+                </Suspense>
+            </div>
             {detailColumn}
         </ColumnLayout>
     );

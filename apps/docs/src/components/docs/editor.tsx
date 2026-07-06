@@ -42,6 +42,8 @@ import {
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
+import { useProseMirrorSearchController } from '@workspace/ui/components/layout/search/prosemirror-search-controller';
+import { SearchHighlight } from '@workspace/ui/components/layout/search/prosemirror-search-highlight';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -50,11 +52,9 @@ import * as Y from 'yjs';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
-import { SearchHighlight } from './extensions/search-highlight';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
-import { useDocSearchController } from './use-doc-search-controller';
 
 function findCommentMarkPositions(doc: Node, cardId: string): { pos: number; end: number }[] {
     const positions: { pos: number; end: number }[] = [];
@@ -650,7 +650,7 @@ const TiptapEditor = ({
         return () => clearTimeout(timer);
     }, [editor]);
 
-    const docSearchController = useDocSearchController(editor, access.canWrite);
+    const docSearchController = useProseMirrorSearchController(editor, access.canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
     const isWide = !useMediaQuery('(max-width: 1200px)');
