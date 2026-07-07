@@ -3,6 +3,7 @@ import { type Editor, EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import { useEffect, useRef } from 'react';
+import { isFilesOnlyClipboard } from '../../../hooks/use-file-paste-target';
 import { cn } from '../../../lib/utils';
 import { LightEditorToolbar } from './light-editor-toolbar';
 
@@ -68,12 +69,8 @@ export function LightEditor({
                 class: cn(proseStyle && 'eigen-prose', 'outline-none min-h-[100px]', className),
                 ...(placeholder ? { 'data-placeholder': placeholder } : {}),
             },
-            // Files-only paste is a host attachment, not editor content: swallow it (the event still bubbles to the host); text and mixed text+file clipboards paste normally.
-            handlePaste: (_view, event) => {
-                const data = event.clipboardData;
-                if (!data || data.files.length === 0) return false;
-                return !data.types.includes('text/plain');
-            },
+            // No file node in the schema: decline files-only pastes so the event bubbles to the host's attach flow.
+            handlePaste: (_view, event) => event.clipboardData != null && isFilesOnlyClipboard(event.clipboardData),
         },
         onUpdate: ({ editor: e }) => {
             onChange?.(trimEmptyEdges(e.getHTML()));

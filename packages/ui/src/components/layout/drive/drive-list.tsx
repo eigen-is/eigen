@@ -20,7 +20,8 @@ import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-gr
 import { cn } from '@workspace/ui/lib/utils';
 import { ArrowDown, ArrowUp, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
 import type React from 'react';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
+import { useFileDropTarget } from '../../../hooks/use-file-drop-target';
 import { useListSelection } from '../../../hooks/use-list-selection';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
@@ -235,8 +236,6 @@ export function DriveList({
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
     const { mode } = useDriveViewPreferences();
-    const [isDragging, setIsDragging] = useState(false);
-    const dragCounter = useRef(0);
 
     // Selection lives here (not per view) so it survives list/grid toggles.
     const selection = useListSelection({ items, getId: (item: DrivePath) => item.id });
@@ -259,63 +258,10 @@ export function DriveList({
         }
     };
 
-    const isValidDataTransfer = (data: DataTransfer) => data.types.includes('Files');
-
-    // Drag and drop handlers
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        // Only handle external file drops, not internal drag operations
-        if (isValidDataTransfer(e.dataTransfer)) {
-            e.preventDefault(); // Necessary to allow drops
-            e.stopPropagation();
-        }
-    };
-
-    const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-        // Only handle external file drops, not internal drag operations
-        if (isValidDataTransfer(e.dataTransfer)) {
-            e.preventDefault();
-            e.stopPropagation();
-
-            // Increment counter when entering any element
-            dragCounter.current += 1;
-
-            // Only set dragging state if this is first entrance
-            if (dragCounter.current === 1) {
-                setIsDragging(true);
-            }
-        }
-    };
-
-    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-        // Only handle external file drops, not internal drag operations
-        if (isValidDataTransfer(e.dataTransfer)) {
-            e.preventDefault();
-            e.stopPropagation();
-
-            // Decrement counter when leaving any element
-            dragCounter.current -= 1;
-
-            // Only set dragging state to false if we've left all elements
-            if (dragCounter.current === 0) {
-                setIsDragging(false);
-            }
-        }
-    };
-
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-        // Only handle external file drops, not internal drag operations
-        const files = Array.from(e.dataTransfer.files);
-        if (files.length > 0 && onUploadFiles) {
-            e.preventDefault();
-            e.stopPropagation();
-
-            // Reset counter and dragging state
-            dragCounter.current = 0;
-            setIsDragging(false);
-
-            onUploadFiles(files);
-        }
-    };
+    const { targetProps, isDragging } = useFileDropTarget(
+        (files) => onUploadFiles?.(files),
+        allowUpload && !!onUploadFiles,
+    );
 
     const createItems = getCreateMenuItems({ onCreateFolder, onUploadFile, onCreateEigenDoc });
 
@@ -353,13 +299,7 @@ export function DriveList({
     };
 
     const contentDiv = (
-        <div
-            className="h-full flex flex-col relative border-r"
-            onDragOver={handleDragOver}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-        >
+        <div className="h-full flex flex-col relative border-r" {...targetProps}>
             {allowUpload && (
                 <div
                     className={cn(
