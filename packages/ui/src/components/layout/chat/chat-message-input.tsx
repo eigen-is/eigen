@@ -3,6 +3,7 @@ import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useFileDropTarget } from '../../../hooks/use-file-drop-target';
+import { useFilePasteTarget } from '../../../hooks/use-file-paste-target';
 import { useSuggestions } from '../../../hooks/use-suggestions';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
@@ -200,20 +201,13 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         }
     };
 
-    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-        const pastedFiles = Array.from(e.clipboardData.files);
-        if (pastedFiles.length > 0) {
-            e.preventDefault();
-            setFiles((prev) => [...prev, ...pastedFiles]);
-        }
-    };
-
     const removeFile = (index: number) => {
         setFiles((prev) => prev.filter((_, i) => i !== index));
     };
 
-    const stageDroppedFiles = useCallback((dropped: File[]) => setFiles((prev) => [...prev, ...dropped]), []);
-    const dropProps = useFileDropTarget(stageDroppedFiles, !disabled);
+    const stageFiles = useCallback((staged: File[]) => setFiles((prev) => [...prev, ...staged]), []);
+    const { targetProps } = useFileDropTarget(stageFiles, !disabled);
+    const { onPaste } = useFilePasteTarget(stageFiles, !disabled);
 
     if (readOnly) {
         return (
@@ -224,7 +218,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
     }
 
     return (
-        <div className={cn('border-t app-gutter-x py-3', className)} {...dropProps}>
+        <div className={cn('border-t app-gutter-x py-3', className)} {...targetProps}>
             <AttachmentDraftChips
                 items={[...(driveAttachments ?? []), ...files]}
                 className="mb-2"
@@ -283,7 +277,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                         e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                     }}
                     onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
+                    onPaste={onPaste}
                     placeholder={placeholder}
                     rows={1}
                     className="flex-1 min-w-0 resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"

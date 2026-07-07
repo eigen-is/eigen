@@ -68,6 +68,12 @@ export function LightEditor({
                 class: cn(proseStyle && 'eigen-prose', 'outline-none min-h-[100px]', className),
                 ...(placeholder ? { 'data-placeholder': placeholder } : {}),
             },
+            // Files-only paste is a host attachment, not editor content: swallow it (the event still bubbles to the host); text and mixed text+file clipboards paste normally.
+            handlePaste: (_view, event) => {
+                const data = event.clipboardData;
+                if (!data || data.files.length === 0) return false;
+                return !data.types.includes('text/plain');
+            },
         },
         onUpdate: ({ editor: e }) => {
             onChange?.(trimEmptyEdges(e.getHTML()));

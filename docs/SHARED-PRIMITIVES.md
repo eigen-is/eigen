@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-793 primitives across 6 kinds. `packages/sheet` internals are excluded.
+794 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -141,7 +141,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (204)
+## Hooks (205)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -343,6 +343,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
+| `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
 | `useListDrag` | `@workspace/ui/hooks/use-list-drag` | packages/ui/src/hooks/use-list-drag.ts |
 | `useListDropTarget` | `@workspace/ui/hooks/use-list-drop-target` | packages/ui/src/hooks/use-list-drop-target.ts |

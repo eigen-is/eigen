@@ -16,6 +16,8 @@ import {
 import { Input } from '@workspace/ui/components/input';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
+import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
+import { useFilePasteTarget } from '@workspace/ui/hooks/use-file-paste-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -87,9 +89,7 @@ export function EmailDraft({
 }: EmailDraftProps) {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
-    const [isDragging, setIsDragging] = useState(false);
     const { user } = useAuth();
-    const dragCounterRef = useRef(0);
     const uploadMutation = useUploadDraftAttachment();
     const attachFromDriveMutation = useAttachFromDrive();
 
@@ -209,45 +209,13 @@ export function EmailDraft({
         await sendWithFreshDraft();
     };
 
-    const handleDragEnter = (e: React.DragEvent) => {
-        if (!e.dataTransfer?.types?.includes('Files')) return;
-        e.preventDefault();
-        dragCounterRef.current += 1;
-        setIsDragging(true);
-    };
-
-    const handleDragLeave = (e: React.DragEvent) => {
-        e.preventDefault();
-        dragCounterRef.current -= 1;
-        if (dragCounterRef.current <= 0) {
-            dragCounterRef.current = 0;
-            setIsDragging(false);
-        }
-    };
-
-    const handleDragOver = (e: React.DragEvent) => {
-        if (!e.dataTransfer?.types?.includes('Files')) return;
-        e.preventDefault();
-    };
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        dragCounterRef.current = 0;
-        setIsDragging(false);
-        const files = e.dataTransfer?.files;
-        if (files && files.length > 0) void uploadFiles(files);
-    };
+    const { targetProps, isDragging } = useFileDropTarget(uploadFiles);
+    const { onPaste } = useFilePasteTarget(uploadFiles);
 
     const fromDisplay = user ? `${user.name || user.email} <${user.email}>` : '';
 
     return (
-        <div
-            className="relative flex flex-col h-full w-full"
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-        >
+        <div className="relative flex flex-col h-full w-full" {...targetProps} onPaste={onPaste}>
             <form
                 id="draft-form"
                 className="flex flex-col flex-1 min-h-0"

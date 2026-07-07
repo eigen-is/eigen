@@ -11,6 +11,7 @@ import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-b
 import { Paperclip } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useFileDropTarget } from '../../../hooks/use-file-drop-target';
+import { useFilePasteTarget } from '../../../hooks/use-file-paste-target';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 
@@ -68,17 +69,8 @@ function CardFormDialogContent({
     const canonicalInitialDescription = useRef(initialDescription);
 
     const stageFiles = (files: File[]) => setDrafts((prev) => [...prev, ...files]);
-    const dropProps = useFileDropTarget(stageFiles, allowAttachments);
-
-    const handlePaste = (e: React.ClipboardEvent) => {
-        if (!allowAttachments) return;
-        const pastedFiles = Array.from(e.clipboardData.files);
-        if (pastedFiles.length === 0) return;
-        // A text+files clipboard (e.g. copied Excel cells) should still paste its text into
-        // the focused field; only swallow the event when the clipboard is files-only.
-        if (!e.clipboardData.types.includes('text/plain')) e.preventDefault();
-        stageFiles(pastedFiles);
-    };
+    const { targetProps } = useFileDropTarget(stageFiles, allowAttachments);
+    const { onPaste } = useFilePasteTarget(stageFiles, allowAttachments);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -113,7 +105,7 @@ function CardFormDialogContent({
     };
 
     return (
-        <form onSubmit={handleSubmit} onPaste={handlePaste} {...dropProps}>
+        <form onSubmit={handleSubmit} onPaste={onPaste} {...targetProps}>
             <DialogHeader>
                 <DialogTitle>{dialogTitle}</DialogTitle>
             </DialogHeader>
