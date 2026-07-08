@@ -149,16 +149,11 @@ export function EmailList({
                                 >
                                     <div
                                         className={cn(
-                                            'flex items-start py-2 px-3 eigen-list-item',
+                                            'flex items-start gap-2.5 py-2 pl-4 pr-3 eigen-list-item',
                                             index > 0 && 'border-t border-border',
                                             (activeRowId === email.id || selectedIndex === index) &&
                                                 'eigen-list-item-active',
                                             selection.isSelected(email.id) && 'eigen-list-item-selected',
-                                            !email.isRead &&
-                                                activeRowId !== email.id &&
-                                                selectedIndex !== index &&
-                                                !selection.isSelected(email.id) &&
-                                                'eigen-list-item-unread',
                                         )}
                                         onClick={(e) => {
                                             selection.handleItemClick(email.id, e);
@@ -169,6 +164,16 @@ export function EmailList({
                                         onContextMenu={(e) => handleContextMenu(e, email)}
                                         {...drag.getDragProps(email)}
                                     >
+                                        {/* Reserved dot gutter — fixed width so read/unread rows don't shift. */}
+                                        <div className="w-1.5 shrink-0 mt-2">
+                                            {!email.isRead && (
+                                                <span
+                                                    aria-hidden
+                                                    className="block h-1.5 w-1.5 rounded-full"
+                                                    style={{ backgroundColor: 'var(--app-current-color)' }}
+                                                />
+                                            )}
+                                        </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-baseline">
                                                 <div
