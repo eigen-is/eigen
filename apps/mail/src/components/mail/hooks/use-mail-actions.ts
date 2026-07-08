@@ -8,6 +8,7 @@ import {
     useEmailById,
     useMoveEmail,
     useSendDraft,
+    useToggleFlaggedEmail,
     useToggleReadEmail,
     useUpdateDraft,
 } from '@workspace/lib/mail';
@@ -21,6 +22,7 @@ export function useMailActions() {
     const deleteMail = useDeleteEmail();
     const moveMail = useMoveEmail();
     const toggleMailRead = useToggleReadEmail();
+    const toggleMailFlagged = useToggleFlaggedEmail();
     const updateDraft = useUpdateDraft();
     const sendDraftMutation = useSendDraft();
     const getEmailById = useEmailById();
@@ -104,12 +106,6 @@ export function useMailActions() {
         }
     };
 
-    const handleDeleteEmailById = async (emailId: string) => {
-        const email = await getEmailById(emailId);
-        if (email) return handleDeleteEmail(email);
-        return { needsConfirmation: false as const };
-    };
-
     const handleDeleteEmailsByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         const trashEmails = emails.filter((e) => e.mailbox === 'Trash');
@@ -138,26 +134,41 @@ export function useMailActions() {
         navigateToList();
     };
 
-    const handleArchiveEmailById = async (emailId: string) => {
-        const email = await getEmailById(emailId);
-        if (email) await handleMoveEmail(email, 'Archive');
-    };
-
     const handleArchiveEmailsByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Archive' })));
         navigateToList();
     };
 
-    const handleReportSpamById = async (emailId: string) => {
-        const email = await getEmailById(emailId);
-        if (email) await handleMoveEmail(email, 'Junk');
-    };
-
     const handleReportSpamByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Junk' })));
         navigateToList();
+    };
+
+    // Mutation-only variants (no navigateToList) for the open-conversation + cursored-row paths —
+    // the route/shortcuts layer owns where to land after these.
+    const moveEmailByIdOnly = async (emailId: string, mailbox: string) => {
+        const email = await getEmailById(emailId);
+        if (email) await moveMail.mutateAsync({ email, mailbox });
+    };
+
+    const deleteEmailByIdOnly = async (emailId: string) => {
+        const email = await getEmailById(emailId);
+        if (!email) return { needsConfirmation: false as const };
+        if (email.mailbox === 'Trash') return { needsConfirmation: true as const, emails: [email] };
+        await deleteMail.mutateAsync(email);
+        return { needsConfirmation: false as const };
+    };
+
+    const setReadById = async (emailId: string, isRead: boolean) => {
+        const email = await getEmailById(emailId);
+        if (email) toggleMailRead.mutate({ email, isRead });
+    };
+
+    const setFlaggedById = async (emailId: string, flagged: boolean) => {
+        const email = await getEmailById(emailId);
+        if (email) toggleMailFlagged.mutate({ email, isFlagged: flagged });
     };
 
     const formatEmailQuote = (email: Email) => {
@@ -223,15 +234,16 @@ export function useMailActions() {
         openCompose,
         handleDeleteEmail,
         confirmDeleteEmails,
-        handleDeleteEmailById,
         handleDeleteEmailsByIds,
         handleMoveEmail,
         handleMoveEmailToFolderById,
         handleMoveEmailsToFolderByIds,
-        handleArchiveEmailById,
         handleArchiveEmailsByIds,
-        handleReportSpamById,
         handleReportSpamByIds,
+        moveEmailByIdOnly,
+        deleteEmailByIdOnly,
+        setReadById,
+        setFlaggedById,
         handleReplyEmail,
         handleReplyAllEmail,
         handleForwardEmail,

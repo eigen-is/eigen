@@ -120,7 +120,7 @@ function MailRoute() {
 
     // Ordered rows + selection + keyboard cursor live here (not in EmailList) so
     // useMailShortcuts can act on the same list the route renders.
-    const { orderedEmails, selection, cursorIndex, setCursorIndex } = useMailList({
+    const { orderedEmails, selection, cursorIndex, setCursorIndex, setCursorById } = useMailList({
         emails: displayEmails,
         searchQuery,
         activeId: mailId,
@@ -129,24 +129,10 @@ function MailRoute() {
     // Gmail keyboard layer — opt-in via the space setting, inert while composing/editing a draft
     // or while the help overlay is open.
     const shortcutsEnabled = spaceSettings?.email?.keyboardShortcuts ?? false;
+    const autoAdvance = spaceSettings?.email?.autoAdvance ?? 'older';
     const isComposing = mode === 'compose' || !!selectedEmail?.isDraft;
     const searchInputRef = useRef<HTMLInputElement>(null);
     const [helpOpen, setHelpOpen] = useState(false);
-
-    useMailShortcuts({
-        orderedEmails,
-        cursorIndex,
-        setCursorIndex,
-        selection,
-        isComposing,
-        helpOpen,
-        shortcutsEnabled,
-        onRowClick: actions.handleRowClick,
-        navigateToList: actions.navigateToList,
-        onCompose: actions.openCompose,
-        focusSearch: () => searchInputRef.current?.focus(),
-        openHelp: () => setHelpOpen((o) => !o),
-    });
 
     const handleDeleteEmail = async (mail: Email) => {
         const result = await actions.handleDeleteEmail(mail);
@@ -164,14 +150,6 @@ function MailRoute() {
         }
     };
 
-    const handleDeleteEmailById = async (emailId: string) => {
-        const result = await actions.handleDeleteEmailById(emailId);
-        if (result.needsConfirmation) {
-            setPendingDeleteEmails(result.emails);
-            setDeleteDialogOpen(true);
-        }
-    };
-
     const confirmDeleteEmails = async () => {
         if (pendingDeleteEmails.length > 0) {
             await actions.confirmDeleteEmails(pendingDeleteEmails);
@@ -179,6 +157,73 @@ function MailRoute() {
             setPendingDeleteEmails([]);
         }
     };
+
+    // Owns the open-conversation landing (auto-advance), shared by the detail toolbar and the
+    // keyboard layer. The land target is computed BEFORE the mutation so the id still resolves.
+    const actOnOpenEmail = async (action: 'archive' | 'delete' | 'spam') => {
+        const id = mailId;
+        if (!id) return;
+        const idx = orderedEmails.findIndex((e) => e.id === id);
+        const landId =
+            autoAdvance === 'list'
+                ? undefined
+                : autoAdvance === 'older'
+                  ? orderedEmails[idx + 1]?.id
+                  : orderedEmails[idx - 1]?.id;
+        if (action === 'delete') {
+            const res = await actions.deleteEmailByIdOnly(id);
+            if (res.needsConfirmation) {
+                setPendingDeleteEmails(res.emails);
+                setDeleteDialogOpen(true);
+                return;
+            }
+        } else {
+            await actions.moveEmailByIdOnly(id, action === 'archive' ? 'Archive' : 'Junk');
+        }
+        if (landId) actions.handleRowClick(landId);
+        else actions.navigateToList();
+    };
+
+    // Delete a single row by id, opening the Trash confirm dialog when needed. Resolves true once
+    // actually deleted, false when the dialog was opened — lets the cursor path slide only on a
+    // real delete.
+    const requestDeleteById = async (emailId: string) => {
+        const res = await actions.deleteEmailByIdOnly(emailId);
+        if (res.needsConfirmation) {
+            setPendingDeleteEmails(res.emails);
+            setDeleteDialogOpen(true);
+            return false;
+        }
+        return true;
+    };
+
+    useMailShortcuts({
+        orderedEmails,
+        cursorIndex,
+        setCursorIndex,
+        setCursorById,
+        selection,
+        isComposing,
+        helpOpen,
+        shortcutsEnabled,
+        openEmailId: mailId,
+        onRowClick: actions.handleRowClick,
+        navigateToList: actions.navigateToList,
+        onCompose: actions.openCompose,
+        focusSearch: () => searchInputRef.current?.focus(),
+        openHelp: () => setHelpOpen((o) => !o),
+        actOnOpenEmail,
+        requestDeleteById,
+        moveEmailByIdOnly: actions.moveEmailByIdOnly,
+        setReadById: actions.setReadById,
+        setFlaggedById: actions.setFlaggedById,
+        archiveEmailsByIds: actions.handleArchiveEmailsByIds,
+        reportSpamByIds: actions.handleReportSpamByIds,
+        deleteEmailsByIds: handleDeleteEmailsByIds,
+        onReply: actions.handleReplyEmail,
+        onReplyAll: actions.handleReplyAllEmail,
+        onForward: actions.handleForwardEmail,
+    });
 
     const [filePickerOpen, setFilePickerOpen] = useState(false);
     const listWidth = isTablet ? '320px' : '400px';
@@ -199,9 +244,9 @@ function MailRoute() {
     ) : selectedEmail ? (
         <EmailDetailToolbar
             email={selectedEmail}
-            onDelete={handleDeleteEmailById}
-            onArchive={actions.handleArchiveEmailById}
-            onReportSpam={actions.handleReportSpamById}
+            onDelete={() => actOnOpenEmail('delete')}
+            onArchive={() => actOnOpenEmail('archive')}
+            onReportSpam={() => actOnOpenEmail('spam')}
             onMoveToFolder={actions.handleMoveEmailToFolderById}
             onReply={actions.handleReplyEmail}
             onReplyAll={actions.handleReplyAllEmail}

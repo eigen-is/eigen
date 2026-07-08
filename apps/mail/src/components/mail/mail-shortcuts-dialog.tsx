@@ -20,6 +20,27 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
         shortcuts: [{ keys: ['x'], label: 'Select conversation' }],
     },
     {
+        title: 'Actions',
+        shortcuts: [
+            { keys: ['e'], label: 'Archive' },
+            { keys: ['#'], label: 'Delete' },
+            { keys: ['!'], label: 'Report spam' },
+            { keys: ['s'], label: 'Toggle star' },
+            { keys: ['Shift', 'i'], label: 'Mark as read' },
+            { keys: ['Shift', 'u'], label: 'Mark as unread' },
+            { keys: [']'], label: 'Archive & newer' },
+            { keys: ['['], label: 'Archive & older' },
+        ],
+    },
+    {
+        title: 'Conversation',
+        shortcuts: [
+            { keys: ['r'], label: 'Reply' },
+            { keys: ['a'], label: 'Reply all' },
+            { keys: ['f'], label: 'Forward' },
+        ],
+    },
+    {
         title: 'Application',
         shortcuts: [
             { keys: ['c'], label: 'Compose' },

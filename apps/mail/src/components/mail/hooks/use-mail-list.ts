@@ -13,6 +13,7 @@ type UseMailListReturn = {
     selection: UseListSelectionReturn<EmailSummary>;
     cursorIndex: number;
     setCursorIndex: (index: number) => void;
+    setCursorById: (id: string | undefined) => void;
 };
 
 // Single source of truth for the thread-list's ordered data, selection, and
@@ -69,5 +70,7 @@ export function useMailList({ emails, searchQuery, activeId }: UseMailListOption
         }
     }, [activeId, orderedEmails]);
 
-    return { orderedEmails, selection, cursorIndex, setCursorIndex };
+    // setCursorById lets Phase 3 slide the cursor to a neighbour computed BEFORE a mutation
+    // removes the acted row — id tracking lands it correctly once the list updates.
+    return { orderedEmails, selection, cursorIndex, setCursorIndex, setCursorById: setCursorId };
 }
