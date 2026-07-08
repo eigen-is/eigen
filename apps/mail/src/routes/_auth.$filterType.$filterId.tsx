@@ -109,10 +109,14 @@ function MailRoute() {
 
     const actions = useMailActions();
 
-    const selectedEmailInData = emails.find((m) => m.id === selectedEmail?.id);
-    const displayEmails = selectedEmailInData
-        ? emails.map((m) => (m.id === selectedEmail?.id ? { ...m, isRead: true } : m))
-        : emails;
+    // Memoized so it keeps a stable identity across renders while a conversation is open —
+    // otherwise the isRead remap yields a fresh array every render, re-running useMailList's
+    // filter+sort (costly at large mailbox sizes) and churning downstream effects.
+    const displayEmails = useMemo(() => {
+        const openId = selectedEmail?.id;
+        if (!openId || !emails.some((m) => m.id === openId)) return emails;
+        return emails.map((m) => (m.id === openId ? { ...m, isRead: true } : m));
+    }, [emails, selectedEmail?.id]);
 
     // Ordered rows + selection + keyboard cursor live here (not in EmailList) so
     // useMailShortcuts can act on the same list the route renders.
@@ -122,33 +126,24 @@ function MailRoute() {
         activeId: mailId,
     });
 
-    // Gmail keyboard layer — opt-in via the space setting, inert while composing.
+    // Gmail keyboard layer — opt-in via the space setting, inert while composing/editing a draft
+    // or while the help overlay is open.
     const shortcutsEnabled = spaceSettings?.email?.keyboardShortcuts ?? false;
-    const isComposing = mode === 'compose';
+    const isComposing = mode === 'compose' || !!selectedEmail?.isDraft;
     const searchInputRef = useRef<HTMLInputElement>(null);
     const [helpOpen, setHelpOpen] = useState(false);
-
-    // Fresh composeSessionKey remounts any open composer — mirrors EmailComposeButton.
-    const onCompose = () => {
-        navigate({
-            to: Route.fullPath,
-            params: { filterType, filterId },
-            search: { mode: 'compose' },
-            state: { composeSessionKey: crypto.randomUUID() },
-        });
-    };
 
     useMailShortcuts({
         orderedEmails,
         cursorIndex,
         setCursorIndex,
         selection,
-        openEmailId: mailId,
         isComposing,
+        helpOpen,
         shortcutsEnabled,
         onRowClick: actions.handleRowClick,
         navigateToList: actions.navigateToList,
-        onCompose,
+        onCompose: actions.openCompose,
         focusSearch: () => searchInputRef.current?.focus(),
         openHelp: () => setHelpOpen((o) => !o),
     });

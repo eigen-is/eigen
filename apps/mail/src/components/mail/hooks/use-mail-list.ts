@@ -1,6 +1,6 @@
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import { type UseListSelectionReturn, useListSelection } from '@workspace/ui/hooks/use-list-selection';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type UseMailListOptions = {
     emails: EmailSummary[];
@@ -36,25 +36,38 @@ export function useMailList({ emails, searchQuery, activeId }: UseMailListOption
 
     const selection = useListSelection({ items: orderedEmails, getId: (e) => e.id });
 
-    const [cursorIndex, setCursorIndex] = useState(-1);
+    // Cursor tracked by email ID, not a bare index, so it stays on its row across sort/filter/
+    // new-mail changes — a raw index silently points at a different email once the list mutates,
+    // and o/x would then act on the wrong one. cursorIndex is derived; setCursorIndex maps an
+    // index back to its id for the keydown/shortcut callers.
+    const [cursorId, setCursorId] = useState<string | undefined>(undefined);
+    const cursorIndex = useMemo(
+        () => (cursorId ? orderedEmails.findIndex((e) => e.id === cursorId) : -1),
+        [cursorId, orderedEmails],
+    );
+    const setCursorIndex = useCallback(
+        (index: number) => {
+            setCursorId(index >= 0 && index < orderedEmails.length ? orderedEmails[index].id : undefined);
+        },
+        [orderedEmails],
+    );
 
-    // Cursor↔activeId sync: an open row drives the cursor to its index. Clearing activeId does
-    // NOT reset the cursor — after closing a conversation (or `u`) it stays put so j/k keeps
-    // going from there (the Gmail model). The shrink-clamp below keeps a stale index in range.
+    // Move the cursor to a conversation only when it newly opens (activeId transition), not on
+    // every orderedEmails change, so j/k moves freely while one stays open. Clearing activeId
+    // keeps the cursor put (Gmail model). prevActiveId advances only once the row is located, so
+    // a deep-link whose email arrives a tick later still syncs.
+    const prevActiveId = useRef<string | undefined>(undefined);
     useEffect(() => {
-        if (activeId && orderedEmails.length > 0) {
-            const index = orderedEmails.findIndex((e) => e.id === activeId);
-            if (index !== -1) setCursorIndex(index);
+        if (activeId === prevActiveId.current) return;
+        if (!activeId) {
+            prevActiveId.current = activeId;
+            return;
+        }
+        if (orderedEmails.some((e) => e.id === activeId)) {
+            setCursorId(activeId);
+            prevActiveId.current = activeId;
         }
     }, [activeId, orderedEmails]);
-
-    // Keep the cursor in range when the list shrinks (filter change / delete) —
-    // the shared hook left a stale index that could read past the end.
-    useEffect(() => {
-        if (cursorIndex > orderedEmails.length - 1) {
-            setCursorIndex(orderedEmails.length - 1);
-        }
-    }, [orderedEmails.length, cursorIndex]);
 
     return { orderedEmails, selection, cursorIndex, setCursorIndex };
 }

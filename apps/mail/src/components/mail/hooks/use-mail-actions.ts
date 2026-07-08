@@ -41,6 +41,16 @@ export function useMailActions() {
         });
     };
 
+    // Fresh composeSessionKey remounts any open composer (see the session-key contract below).
+    const openCompose = () => {
+        navigate({
+            to: Route.fullPath,
+            params: { filterType, filterId },
+            search: { mode: 'compose' },
+            state: { composeSessionKey: crypto.randomUUID() },
+        });
+    };
+
     const handleMoveEmail = async (mail: Email, mailbox: string) => {
         await moveMail.mutateAsync({ email: mail, mailbox });
         navigateToList();
@@ -210,6 +220,7 @@ export function useMailActions() {
     return {
         navigateToList,
         handleRowClick,
+        openCompose,
         handleDeleteEmail,
         confirmDeleteEmails,
         handleDeleteEmailById,
