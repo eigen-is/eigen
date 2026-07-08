@@ -20,8 +20,8 @@ import { Route } from '../../../routes/_auth.$filterType.$filterId';
 // Single-slot undo (Gmail-style): only the most recent reversible action is remembered.
 type Undoable =
     | { kind: 'move'; items: { emailId: string; from: string }[]; to: string }
-    | { kind: 'read'; emailId: string; prevIsRead: boolean }
-    | { kind: 'flag'; emailId: string; prevIsFlagged: boolean };
+    | { kind: 'read'; items: { emailId: string; prevIsRead: boolean }[] }
+    | { kind: 'flag'; items: { emailId: string; prevIsFlagged: boolean }[] };
 
 export function useMailActions() {
     const { filterType, filterId } = Route.useParams();
@@ -38,36 +38,57 @@ export function useMailActions() {
     // Single-slot undo: overwritten by each new reversible action; `z` / the toast Undo reverses it.
     const lastAction = useRef<Undoable | null>(null);
 
-    // Reverse the recorded action with the RAW mutations (never the recording helpers, or the undo
-    // would record itself). The {...email, isRead/isFlagged: !prev} spread defeats each mutation's own
-    // no-op guard so a genuine reversal always fires. Consumes the slot up front; no-op when empty.
-    const undoLast = async () => {
-        const action = lastAction.current;
-        if (!action) return;
-        lastAction.current = null;
+    // Reverse a specific recorded action with the RAW mutations (never the recording helpers, or the
+    // undo would record itself). The {...email, isRead/isFlagged: !prev} spread defeats each mutation's
+    // own no-op guard so a genuine reversal always fires. Reverses the passed snapshot, not the slot —
+    // so an old toast undoes the action it was shown for even after later actions overwrote the slot.
+    const reverse = async (action: Undoable) => {
         if (action.kind === 'move') {
             for (const item of action.items) {
                 const email = await getEmailById(item.emailId);
                 if (email) moveMail.mutate({ email, mailbox: item.from });
             }
         } else if (action.kind === 'read') {
-            const email = await getEmailById(action.emailId);
-            if (email)
-                toggleMailRead.mutate({ email: { ...email, isRead: !action.prevIsRead }, isRead: action.prevIsRead });
+            for (const item of action.items) {
+                const email = await getEmailById(item.emailId);
+                if (email)
+                    toggleMailRead.mutate({ email: { ...email, isRead: !item.prevIsRead }, isRead: item.prevIsRead });
+            }
         } else {
-            const email = await getEmailById(action.emailId);
-            if (email)
-                toggleMailFlagged.mutate({
-                    email: { ...email, isFlagged: !action.prevIsFlagged },
-                    isFlagged: action.prevIsFlagged,
-                });
+            for (const item of action.items) {
+                const email = await getEmailById(item.emailId);
+                if (email)
+                    toggleMailFlagged.mutate({
+                        email: { ...email, isFlagged: !item.prevIsFlagged },
+                        isFlagged: item.prevIsFlagged,
+                    });
+            }
         }
         toast.success('Undone');
     };
 
+    // `z` key: reverse whatever is currently in the single slot. Consumes the slot up front; no-op
+    // when empty. Keeps the "latest action" semantics.
+    const undoLast = async () => {
+        const action = lastAction.current;
+        if (!action) return;
+        lastAction.current = null;
+        await reverse(action);
+    };
+
     // Success toast with an Undo action, fired only for the destructive moves (archive/spam/delete).
-    const undoToast = (message: string) => {
-        toast.success(message, { action: { label: 'Undo', onClick: () => void undoLast() } });
+    // Captures the exact `action` snapshot so the button reverses THAT, not the live slot. Clears the
+    // slot only when it's still this same action, so `z` won't double-undo what the toast already did.
+    const undoToast = (message: string, action: Undoable) => {
+        toast.success(message, {
+            action: {
+                label: 'Undo',
+                onClick: () => {
+                    if (lastAction.current === action) lastAction.current = null;
+                    void reverse(action);
+                },
+            },
+        });
     };
 
     const navigateToList = () => {
@@ -156,12 +177,13 @@ export function useMailActions() {
 
         if (nonTrashEmails.length > 0) {
             await Promise.allSettled(nonTrashEmails.map((mail) => deleteMail.mutateAsync(mail)));
-            lastAction.current = {
+            const action: Undoable = {
                 kind: 'move',
                 items: nonTrashEmails.map((e) => ({ emailId: e.id, from: e.mailbox })),
                 to: 'Trash',
             };
-            undoToast(`${nonTrashEmails.length} moved to Trash`);
+            lastAction.current = action;
+            undoToast(`${nonTrashEmails.length} moved to Trash`, action);
         }
         if (trashEmails.length > 0) {
             return { needsConfirmation: true as const, emails: trashEmails };
@@ -187,12 +209,13 @@ export function useMailActions() {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Archive' })));
         if (emails.length > 0) {
-            lastAction.current = {
+            const action: Undoable = {
                 kind: 'move',
                 items: emails.map((e) => ({ emailId: e.id, from: e.mailbox })),
                 to: 'Archive',
             };
-            undoToast(`${emails.length} archived`);
+            lastAction.current = action;
+            undoToast(`${emails.length} archived`, action);
         }
         navigateToList();
     };
@@ -201,12 +224,13 @@ export function useMailActions() {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Junk' })));
         if (emails.length > 0) {
-            lastAction.current = {
+            const action: Undoable = {
                 kind: 'move',
                 items: emails.map((e) => ({ emailId: e.id, from: e.mailbox })),
                 to: 'Junk',
             };
-            undoToast(`${emails.length} reported as spam`);
+            lastAction.current = action;
+            undoToast(`${emails.length} reported as spam`, action);
         }
         navigateToList();
     };
@@ -219,9 +243,10 @@ export function useMailActions() {
         const email = await getEmailById(emailId);
         if (!email) return;
         moveMail.mutate({ email, mailbox });
-        lastAction.current = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: mailbox };
-        if (mailbox === 'Archive') undoToast('Archived');
-        else if (mailbox === 'Junk') undoToast('Reported as spam');
+        const action: Undoable = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: mailbox };
+        lastAction.current = action;
+        if (mailbox === 'Archive') undoToast('Archived', action);
+        else if (mailbox === 'Junk') undoToast('Reported as spam', action);
     };
 
     const deleteEmailByIdOnly = async (emailId: string) => {
@@ -229,8 +254,9 @@ export function useMailActions() {
         if (!email) return { needsConfirmation: false as const };
         if (email.mailbox === 'Trash') return { needsConfirmation: true as const, emails: [email] };
         deleteMail.mutate(email);
-        lastAction.current = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: 'Trash' };
-        undoToast('Moved to Trash');
+        const action: Undoable = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: 'Trash' };
+        lastAction.current = action;
+        undoToast('Moved to Trash', action);
         return { needsConfirmation: false as const };
     };
 
@@ -243,7 +269,7 @@ export function useMailActions() {
         const email = await getEmailById(emailId);
         if (!email) return;
         toggleMailRead.mutate({ email: { ...email, isRead: currentIsRead }, isRead });
-        lastAction.current = { kind: 'read', emailId, prevIsRead: currentIsRead };
+        lastAction.current = { kind: 'read', items: [{ emailId, prevIsRead: currentIsRead }] };
     };
 
     const setFlaggedById = async (emailId: string, flagged: boolean, currentFlagged: boolean) => {
@@ -251,7 +277,34 @@ export function useMailActions() {
         const email = await getEmailById(emailId);
         if (!email) return;
         toggleMailFlagged.mutate({ email: { ...email, isFlagged: currentFlagged }, isFlagged: flagged });
-        lastAction.current = { kind: 'flag', emailId, prevIsFlagged: currentFlagged };
+        lastAction.current = { kind: 'flag', items: [{ emailId, prevIsFlagged: currentFlagged }] };
+    };
+
+    // Batch read/flag: fire each mutation, then record ONE Undoable holding every changed item so `z`
+    // reverts all N (a per-item loop would leave the slot holding only the last). Skips items already
+    // at the target — same pre-guard as the single-id versions.
+    const setReadByIds = async (items: { id: string; currentIsRead: boolean }[], isRead: boolean) => {
+        const undoItems: { emailId: string; prevIsRead: boolean }[] = [];
+        for (const it of items) {
+            if (it.currentIsRead === isRead) continue;
+            const email = await getEmailById(it.id);
+            if (!email) continue;
+            toggleMailRead.mutate({ email: { ...email, isRead: it.currentIsRead }, isRead });
+            undoItems.push({ emailId: it.id, prevIsRead: it.currentIsRead });
+        }
+        if (undoItems.length > 0) lastAction.current = { kind: 'read', items: undoItems };
+    };
+
+    const setFlaggedByIds = async (items: { id: string; currentFlagged: boolean }[], flagged: boolean) => {
+        const undoItems: { emailId: string; prevIsFlagged: boolean }[] = [];
+        for (const it of items) {
+            if (it.currentFlagged === flagged) continue;
+            const email = await getEmailById(it.id);
+            if (!email) continue;
+            toggleMailFlagged.mutate({ email: { ...email, isFlagged: it.currentFlagged }, isFlagged: flagged });
+            undoItems.push({ emailId: it.id, prevIsFlagged: it.currentFlagged });
+        }
+        if (undoItems.length > 0) lastAction.current = { kind: 'flag', items: undoItems };
     };
 
     const formatEmailQuote = (email: Email) => {
@@ -327,6 +380,8 @@ export function useMailActions() {
         deleteEmailByIdOnly,
         setReadById,
         setFlaggedById,
+        setReadByIds,
+        setFlaggedByIds,
         undoLast,
         handleReplyEmail,
         handleReplyAllEmail,

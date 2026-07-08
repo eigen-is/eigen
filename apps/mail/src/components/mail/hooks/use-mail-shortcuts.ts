@@ -25,6 +25,8 @@ type UseMailShortcutsOptions = {
     moveEmailByIdOnly: (emailId: string, mailbox: string) => Promise<void>;
     setReadById: (emailId: string, isRead: boolean, currentIsRead: boolean) => void | Promise<void>;
     setFlaggedById: (emailId: string, flagged: boolean, currentFlagged: boolean) => void | Promise<void>;
+    setReadByIds: (items: { id: string; currentIsRead: boolean }[], isRead: boolean) => void | Promise<void>;
+    setFlaggedByIds: (items: { id: string; currentFlagged: boolean }[], flagged: boolean) => void | Promise<void>;
     archiveEmailsByIds: (emailIds: string[]) => void | Promise<void>;
     reportSpamByIds: (emailIds: string[]) => void | Promise<void>;
     deleteEmailsByIds: (emailIds: string[]) => void | Promise<void>;
@@ -58,6 +60,8 @@ export function useMailShortcuts({
     moveEmailByIdOnly,
     setReadById,
     setFlaggedById,
+    setReadByIds,
+    setFlaggedByIds,
     archiveEmailsByIds,
     reportSpamByIds,
     deleteEmailsByIds,
@@ -159,7 +163,9 @@ export function useMailShortcuts({
         const delta = direction === 'newer' ? -1 : 1;
         if (open && openEmailId) {
             const idx = orderedEmails.findIndex((e) => e.id === openEmailId);
-            const neighbourId = orderedEmails[idx + delta]?.id;
+            // idx<0 (open email not in the list) would make orderedEmails[idx+1]=[0] land on the top
+            // row for 'older'/[ — guard it so the neighbour is undefined and we fall back to the list.
+            const neighbourId = idx < 0 ? undefined : orderedEmails[idx + delta]?.id;
             void moveEmailByIdOnly(openEmailId, 'Archive');
             if (neighbourId) onRowClick(neighbourId);
             else navigateToList();
@@ -185,7 +191,13 @@ export function useMailShortcuts({
             return;
         }
         if (selection.selectedCount > 0) {
-            for (const e of selection.selectedItems) setFlaggedById(e.id, !e.isFlagged, e.isFlagged);
+            // Collapse the toggle to a single direction so ONE Undoable covers the whole batch: flag
+            // all if any is unflagged, otherwise unflag all (matches the all-same cases exactly).
+            const flagged = selection.selectedItems.some((e) => !e.isFlagged);
+            void setFlaggedByIds(
+                selection.selectedItems.map((e) => ({ id: e.id, currentFlagged: e.isFlagged })),
+                flagged,
+            );
             return;
         }
         if (cursorId) {
@@ -205,7 +217,10 @@ export function useMailShortcuts({
             return;
         }
         if (selection.selectedCount > 0) {
-            for (const e of selection.selectedItems) void setReadById(e.id, isRead, e.isRead);
+            void setReadByIds(
+                selection.selectedItems.map((e) => ({ id: e.id, currentIsRead: e.isRead })),
+                isRead,
+            );
             return;
         }
         if (cursorId) {

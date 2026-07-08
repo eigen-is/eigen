@@ -167,8 +167,10 @@ function MailRoute() {
         const id = mailId;
         if (!id) return;
         const idx = orderedEmails.findIndex((e) => e.id === id);
+        // idx<0 (open email not in the list) would make orderedEmails[idx+1]=[0] land on the top row
+        // for 'older' — guard it so we fall back to the list instead of jumping to the first email.
         const landId =
-            autoAdvance === 'list'
+            idx < 0 || autoAdvance === 'list'
                 ? undefined
                 : autoAdvance === 'older'
                   ? orderedEmails[idx + 1]?.id
@@ -220,6 +222,8 @@ function MailRoute() {
         moveEmailByIdOnly: actions.moveEmailByIdOnly,
         setReadById: actions.setReadById,
         setFlaggedById: actions.setFlaggedById,
+        setReadByIds: actions.setReadByIds,
+        setFlaggedByIds: actions.setFlaggedByIds,
         archiveEmailsByIds: actions.handleArchiveEmailsByIds,
         reportSpamByIds: actions.handleReportSpamByIds,
         deleteEmailsByIds: handleDeleteEmailsByIds,
