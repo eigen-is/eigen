@@ -3,20 +3,14 @@ import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
 import { useEffect, useRef, useState } from 'react';
 
-// useHotkeySequence takes Hotkey STRINGS (each is parsed via split('+')), so the RawHotkey object
-// form the single keys use for '?'/'#'/'!' can't be a sequence element. '*' is Shift+8: 'Shift+8'
-// is a valid Hotkey and matches an actual '*' press through the matcher's Digit-code fallback.
+// `g`-jump chords go through useHotkeySequence (plain letters, no single-key conflict). The `*`-select
+// chords do NOT — a '*' press emits a Shift keydown first, which the sequence matcher trips over, so
+// they run in one capture-phase listener below (§ `*` select chords).
 type MailSequence = Parameters<typeof useHotkeySequence>[0];
 const SEQ_JUMP_INBOX: MailSequence = ['G', 'I'];
 const SEQ_JUMP_SENT: MailSequence = ['G', 'T'];
 const SEQ_JUMP_DRAFTS: MailSequence = ['G', 'D'];
-const SEQ_SELECT_ALL: MailSequence = ['Shift+8', 'A'];
-const SEQ_SELECT_NONE: MailSequence = ['Shift+8', 'N'];
-const SEQ_SELECT_READ: MailSequence = ['Shift+8', 'R'];
-const SEQ_SELECT_UNREAD: MailSequence = ['Shift+8', 'U'];
-const SEQ_SELECT_STARRED: MailSequence = ['Shift+8', 'S'];
-const SEQ_SELECT_UNSTARRED: MailSequence = ['Shift+8', 'T'];
-// The window in which a '*' arms the next key — kept equal to the sequence timeout we pass below.
+// The window in which a '*' arms the next key as a select-chord tail.
 const CHORD_TIMEOUT_MS = 1000;
 
 // Mirror of the hotkey lib's own input check. Sequences (unlike single keys) have no built-in input
@@ -118,10 +112,14 @@ export function useMailShortcuts({
     }, [enabled]);
     const chordsEnabled = enabled && !inputFocused;
 
-    // A `*` (Shift+8) arms a select-chord whose tail letter (a/r/s/u) doubles as a single-key action.
-    // The sequence and single-key matchers listen independently, so without this `* a` would ALSO fire
-    // reply-all, etc. This capture-phase listener runs before both matchers and flags the key right
-    // after a `*` as a chord tail, so those single keys can bow out; the sequence still fires.
+    // `*` select chords in one capture-phase listener: `*` arms, and the key right after it (within
+    // CHORD_TIMEOUT_MS) SETS the selection to a subset (Gmail's * a/n/r/u/s/t). The same tail flag lets
+    // the single keys it shadows (a/r/u/s) bow out below — n/t aren't single keys so never conflict.
+    // Refs feed the listener the current rows/selection without re-registering it every render.
+    const orderedRef = useRef(orderedEmails);
+    orderedRef.current = orderedEmails;
+    const selectionRef = useRef(selection);
+    selectionRef.current = selection;
     const starTail = useRef(false);
     const lastStarAt = useRef(0);
     useEffect(() => {
@@ -133,7 +131,30 @@ export function useMailShortcuts({
                 return;
             }
             starTail.current = Date.now() - lastStarAt.current <= CHORD_TIMEOUT_MS;
-            lastStarAt.current = 0; // consume: only the key immediately after a `*` is a tail
+            lastStarAt.current = 0; // only the key immediately after a `*` is a tail
+            if (!starTail.current) return;
+            const sel = selectionRef.current;
+            const rows = orderedRef.current;
+            switch (e.key.toLowerCase()) {
+                case 'a':
+                    sel.setSelection(rows.map((m) => m.id));
+                    break;
+                case 'n':
+                    sel.clearSelection();
+                    break;
+                case 'r':
+                    sel.setSelection(rows.filter((m) => m.isRead).map((m) => m.id));
+                    break;
+                case 'u':
+                    sel.setSelection(rows.filter((m) => !m.isRead).map((m) => m.id));
+                    break;
+                case 's':
+                    sel.setSelection(rows.filter((m) => m.isFlagged).map((m) => m.id));
+                    break;
+                case 't':
+                    sel.setSelection(rows.filter((m) => !m.isFlagged).map((m) => m.id));
+                    break;
+            }
         };
         document.addEventListener('keydown', onKeyDown, true);
         return () => document.removeEventListener('keydown', onKeyDown, true);
@@ -350,35 +371,6 @@ export function useMailShortcuts({
         timeout: CHORD_TIMEOUT_MS,
     });
     useHotkeySequence(SEQ_JUMP_DRAFTS, () => navigateToMailbox('drafts'), {
-        enabled: chordsEnabled,
-        timeout: CHORD_TIMEOUT_MS,
-    });
-
-    // Select chords — `*` then a/n/r/u/s/t SET the selection to the named subset (Gmail semantics,
-    // not additive).
-    const selectWhere = (predicate: (e: EmailSummary) => boolean) =>
-        selection.setSelection(orderedEmails.filter(predicate).map((e) => e.id));
-    useHotkeySequence(SEQ_SELECT_ALL, () => selection.selectAll(), {
-        enabled: chordsEnabled,
-        timeout: CHORD_TIMEOUT_MS,
-    });
-    useHotkeySequence(SEQ_SELECT_NONE, () => selection.clearSelection(), {
-        enabled: chordsEnabled,
-        timeout: CHORD_TIMEOUT_MS,
-    });
-    useHotkeySequence(SEQ_SELECT_READ, () => selectWhere((e) => e.isRead), {
-        enabled: chordsEnabled,
-        timeout: CHORD_TIMEOUT_MS,
-    });
-    useHotkeySequence(SEQ_SELECT_UNREAD, () => selectWhere((e) => !e.isRead), {
-        enabled: chordsEnabled,
-        timeout: CHORD_TIMEOUT_MS,
-    });
-    useHotkeySequence(SEQ_SELECT_STARRED, () => selectWhere((e) => e.isFlagged), {
-        enabled: chordsEnabled,
-        timeout: CHORD_TIMEOUT_MS,
-    });
-    useHotkeySequence(SEQ_SELECT_UNSTARRED, () => selectWhere((e) => !e.isFlagged), {
         enabled: chordsEnabled,
         timeout: CHORD_TIMEOUT_MS,
     });
