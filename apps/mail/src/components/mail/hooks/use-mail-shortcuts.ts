@@ -31,6 +31,7 @@ type UseMailShortcutsOptions = {
     onReply: (emailId: string) => void;
     onReplyAll: (emailId: string) => void;
     onForward: (emailId: string) => void;
+    undoLast: () => void | Promise<void>;
 };
 
 // The Gmail keyboard layer for mail. Pure registration, called from MailRoute so every key acts on
@@ -63,6 +64,7 @@ export function useMailShortcuts({
     onReply,
     onReplyAll,
     onForward,
+    undoLast,
 }: UseMailShortcutsOptions): void {
     const enabled = shortcutsEnabled && !isComposing && !helpOpen;
 
@@ -213,6 +215,9 @@ export function useMailShortcuts({
     };
     useHotkey({ key: 'I', shift: true }, () => setRead(true), { enabled });
     useHotkey({ key: 'U', shift: true }, () => setRead(false), { enabled });
+
+    // z — undo the last reversible action (move/read/flag). No-op when nothing is recorded.
+    useHotkey('Z', () => void undoLast(), { enabled });
 
     // r reply / a reply-all / f forward — target the open email, else the cursored row. No batch.
     const reply = (handler: (emailId: string) => void) => {

@@ -226,6 +226,7 @@ function MailRoute() {
         onReply: actions.handleReplyEmail,
         onReplyAll: actions.handleReplyAllEmail,
         onForward: actions.handleForwardEmail,
+        undoLast: actions.undoLast,
     });
 
     const [filePickerOpen, setFilePickerOpen] = useState(false);

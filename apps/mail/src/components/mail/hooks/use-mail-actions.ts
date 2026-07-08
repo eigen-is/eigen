@@ -13,7 +13,15 @@ import {
     useUpdateDraft,
 } from '@workspace/lib/mail';
 import type { Email, NewDraft } from '@workspace/lib/types/mail';
+import { useRef } from 'react';
+import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
+
+// Single-slot undo (Gmail-style): only the most recent reversible action is remembered.
+type Undoable =
+    | { kind: 'move'; items: { emailId: string; from: string }[]; to: string }
+    | { kind: 'read'; emailId: string; prevIsRead: boolean }
+    | { kind: 'flag'; emailId: string; prevIsFlagged: boolean };
 
 export function useMailActions() {
     const { filterType, filterId } = Route.useParams();
@@ -26,6 +34,41 @@ export function useMailActions() {
     const updateDraft = useUpdateDraft();
     const sendDraftMutation = useSendDraft();
     const getEmailById = useEmailById();
+
+    // Single-slot undo: overwritten by each new reversible action; `z` / the toast Undo reverses it.
+    const lastAction = useRef<Undoable | null>(null);
+
+    // Reverse the recorded action with the RAW mutations (never the recording helpers, or the undo
+    // would record itself). The {...email, isRead/isFlagged: !prev} spread defeats each mutation's own
+    // no-op guard so a genuine reversal always fires. Consumes the slot up front; no-op when empty.
+    const undoLast = async () => {
+        const action = lastAction.current;
+        if (!action) return;
+        lastAction.current = null;
+        if (action.kind === 'move') {
+            for (const item of action.items) {
+                const email = await getEmailById(item.emailId);
+                if (email) moveMail.mutate({ email, mailbox: item.from });
+            }
+        } else if (action.kind === 'read') {
+            const email = await getEmailById(action.emailId);
+            if (email)
+                toggleMailRead.mutate({ email: { ...email, isRead: !action.prevIsRead }, isRead: action.prevIsRead });
+        } else {
+            const email = await getEmailById(action.emailId);
+            if (email)
+                toggleMailFlagged.mutate({
+                    email: { ...email, isFlagged: !action.prevIsFlagged },
+                    isFlagged: action.prevIsFlagged,
+                });
+        }
+        toast.success('Undone');
+    };
+
+    // Success toast with an Undo action, fired only for the destructive moves (archive/spam/delete).
+    const undoToast = (message: string) => {
+        toast.success(message, { action: { label: 'Undo', onClick: () => void undoLast() } });
+    };
 
     const navigateToList = () => {
         navigate({
@@ -113,6 +156,12 @@ export function useMailActions() {
 
         if (nonTrashEmails.length > 0) {
             await Promise.allSettled(nonTrashEmails.map((mail) => deleteMail.mutateAsync(mail)));
+            lastAction.current = {
+                kind: 'move',
+                items: nonTrashEmails.map((e) => ({ emailId: e.id, from: e.mailbox })),
+                to: 'Trash',
+            };
+            undoToast(`${nonTrashEmails.length} moved to Trash`);
         }
         if (trashEmails.length > 0) {
             return { needsConfirmation: true as const, emails: trashEmails };
@@ -137,12 +186,28 @@ export function useMailActions() {
     const handleArchiveEmailsByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Archive' })));
+        if (emails.length > 0) {
+            lastAction.current = {
+                kind: 'move',
+                items: emails.map((e) => ({ emailId: e.id, from: e.mailbox })),
+                to: 'Archive',
+            };
+            undoToast(`${emails.length} archived`);
+        }
         navigateToList();
     };
 
     const handleReportSpamByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Junk' })));
+        if (emails.length > 0) {
+            lastAction.current = {
+                kind: 'move',
+                items: emails.map((e) => ({ emailId: e.id, from: e.mailbox })),
+                to: 'Junk',
+            };
+            undoToast(`${emails.length} reported as spam`);
+        }
         navigateToList();
     };
 
@@ -152,7 +217,11 @@ export function useMailActions() {
     // must not block on the move/delete round-trip. Errors surface via the mutation's onMutationError.
     const moveEmailByIdOnly = async (emailId: string, mailbox: string) => {
         const email = await getEmailById(emailId);
-        if (email) moveMail.mutate({ email, mailbox });
+        if (!email) return;
+        moveMail.mutate({ email, mailbox });
+        lastAction.current = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: mailbox };
+        if (mailbox === 'Archive') undoToast('Archived');
+        else if (mailbox === 'Junk') undoToast('Reported as spam');
     };
 
     const deleteEmailByIdOnly = async (emailId: string) => {
@@ -160,6 +229,8 @@ export function useMailActions() {
         if (!email) return { needsConfirmation: false as const };
         if (email.mailbox === 'Trash') return { needsConfirmation: true as const, emails: [email] };
         deleteMail.mutate(email);
+        lastAction.current = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: 'Trash' };
+        undoToast('Moved to Trash');
         return { needsConfirmation: false as const };
     };
 
@@ -170,13 +241,17 @@ export function useMailActions() {
     const setReadById = async (emailId: string, isRead: boolean, currentIsRead: boolean) => {
         if (currentIsRead === isRead) return;
         const email = await getEmailById(emailId);
-        if (email) toggleMailRead.mutate({ email: { ...email, isRead: currentIsRead }, isRead });
+        if (!email) return;
+        toggleMailRead.mutate({ email: { ...email, isRead: currentIsRead }, isRead });
+        lastAction.current = { kind: 'read', emailId, prevIsRead: currentIsRead };
     };
 
     const setFlaggedById = async (emailId: string, flagged: boolean, currentFlagged: boolean) => {
         if (currentFlagged === flagged) return;
         const email = await getEmailById(emailId);
-        if (email) toggleMailFlagged.mutate({ email: { ...email, isFlagged: currentFlagged }, isFlagged: flagged });
+        if (!email) return;
+        toggleMailFlagged.mutate({ email: { ...email, isFlagged: currentFlagged }, isFlagged: flagged });
+        lastAction.current = { kind: 'flag', emailId, prevIsFlagged: currentFlagged };
     };
 
     const formatEmailQuote = (email: Email) => {
@@ -252,6 +327,7 @@ export function useMailActions() {
         deleteEmailByIdOnly,
         setReadById,
         setFlaggedById,
+        undoLast,
         handleReplyEmail,
         handleReplyAllEmail,
         handleForwardEmail,

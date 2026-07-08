@@ -30,6 +30,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
             { keys: ['Shift', 'u'], label: 'Mark as unread' },
             { keys: [']'], label: 'Archive & newer' },
             { keys: ['['], label: 'Archive & older' },
+            { keys: ['z'], label: 'Undo last action' },
         ],
     },
     {
