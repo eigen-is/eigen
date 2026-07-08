@@ -23,8 +23,8 @@ type UseMailShortcutsOptions = {
     // Trash confirm dialog was opened instead (so the cursor only slides on a real delete).
     requestDeleteById: (emailId: string) => Promise<boolean>;
     moveEmailByIdOnly: (emailId: string, mailbox: string) => Promise<void>;
-    setReadById: (emailId: string, isRead: boolean) => void | Promise<void>;
-    setFlaggedById: (emailId: string, flagged: boolean) => void | Promise<void>;
+    setReadById: (emailId: string, isRead: boolean, currentIsRead: boolean) => void | Promise<void>;
+    setFlaggedById: (emailId: string, flagged: boolean, currentFlagged: boolean) => void | Promise<void>;
     archiveEmailsByIds: (emailIds: string[]) => void | Promise<void>;
     reportSpamByIds: (emailIds: string[]) => void | Promise<void>;
     deleteEmailsByIds: (emailIds: string[]) => void | Promise<void>;
@@ -174,35 +174,42 @@ export function useMailShortcuts({
     // [ — archive and go to the older neighbour.
     useHotkey('[', () => archiveAndAdvance('older'), { enabled });
 
-    // s — toggle flag. Priority open > selection > cursor; no landing change.
+    // s — toggle flag. Priority open > selection > cursor; no landing change. Pass the row's CURRENT
+    // isFlagged (fresh list summary) so the mutation guards on what the user sees, not the stale detail.
     const toggleFlag = () => {
         if (open && openEmailId) {
-            const current = orderedEmails.find((e) => e.id === openEmailId);
-            setFlaggedById(openEmailId, !current?.isFlagged);
+            const s = orderedEmails.find((e) => e.id === openEmailId);
+            if (s) setFlaggedById(openEmailId, !s.isFlagged, s.isFlagged);
             return;
         }
         if (selection.selectedCount > 0) {
-            for (const e of selection.selectedItems) setFlaggedById(e.id, !e.isFlagged);
+            for (const e of selection.selectedItems) setFlaggedById(e.id, !e.isFlagged, e.isFlagged);
             return;
         }
         if (cursorId) {
-            const current = orderedEmails.find((e) => e.id === cursorId);
-            if (current) setFlaggedById(cursorId, !current.isFlagged);
+            const s = orderedEmails.find((e) => e.id === cursorId);
+            if (s) setFlaggedById(cursorId, !s.isFlagged, s.isFlagged);
         }
     };
     useHotkey('S', () => toggleFlag(), { enabled });
 
     // Shift+i mark read / Shift+u mark unread. Priority open > selection > cursor; no landing change.
+    // Pass the row's CURRENT isRead (fresh list summary) so the mutation guards against what the user
+    // sees, not the possibly-stale detail cache.
     const setRead = (isRead: boolean) => {
         if (open && openEmailId) {
-            void setReadById(openEmailId, isRead);
+            const s = orderedEmails.find((e) => e.id === openEmailId);
+            if (s) void setReadById(openEmailId, isRead, s.isRead);
             return;
         }
         if (selection.selectedCount > 0) {
-            for (const e of selection.selectedItems) void setReadById(e.id, isRead);
+            for (const e of selection.selectedItems) void setReadById(e.id, isRead, e.isRead);
             return;
         }
-        if (cursorId) void setReadById(cursorId, isRead);
+        if (cursorId) {
+            const s = orderedEmails.find((e) => e.id === cursorId);
+            if (s) void setReadById(cursorId, isRead, s.isRead);
+        }
     };
     useHotkey({ key: 'I', shift: true }, () => setRead(true), { enabled });
     useHotkey({ key: 'U', shift: true }, () => setRead(false), { enabled });

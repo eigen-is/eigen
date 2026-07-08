@@ -148,27 +148,35 @@ export function useMailActions() {
 
     // Mutation-only variants (no navigateToList) for the open-conversation + cursored-row paths —
     // the route/shortcuts layer owns where to land after these.
+    // Fire-and-forget (.mutate, not awaited mutateAsync): callers navigate/advance immediately and
+    // must not block on the move/delete round-trip. Errors surface via the mutation's onMutationError.
     const moveEmailByIdOnly = async (emailId: string, mailbox: string) => {
         const email = await getEmailById(emailId);
-        if (email) await moveMail.mutateAsync({ email, mailbox });
+        if (email) moveMail.mutate({ email, mailbox });
     };
 
     const deleteEmailByIdOnly = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) return { needsConfirmation: false as const };
         if (email.mailbox === 'Trash') return { needsConfirmation: true as const, emails: [email] };
-        await deleteMail.mutateAsync(email);
+        deleteMail.mutate(email);
         return { needsConfirmation: false as const };
     };
 
-    const setReadById = async (emailId: string, isRead: boolean) => {
+    // currentIsRead/currentFlagged come from the fresh list summary. The detail from getEmailById can
+    // carry a stale flag (staleTime:Infinity), which would make the mutation's own no-op guard
+    // (isRead === email.isRead) skip a real change — so pre-guard on the fresh value AND overwrite the
+    // detail's field with it before handing off, keeping both guards consistent.
+    const setReadById = async (emailId: string, isRead: boolean, currentIsRead: boolean) => {
+        if (currentIsRead === isRead) return;
         const email = await getEmailById(emailId);
-        if (email) toggleMailRead.mutate({ email, isRead });
+        if (email) toggleMailRead.mutate({ email: { ...email, isRead: currentIsRead }, isRead });
     };
 
-    const setFlaggedById = async (emailId: string, flagged: boolean) => {
+    const setFlaggedById = async (emailId: string, flagged: boolean, currentFlagged: boolean) => {
+        if (currentFlagged === flagged) return;
         const email = await getEmailById(emailId);
-        if (email) toggleMailFlagged.mutate({ email, isFlagged: flagged });
+        if (email) toggleMailFlagged.mutate({ email: { ...email, isFlagged: currentFlagged }, isFlagged: flagged });
     };
 
     const formatEmailQuote = (email: Email) => {

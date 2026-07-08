@@ -159,8 +159,11 @@ function MailRoute() {
     };
 
     // Owns the open-conversation landing (auto-advance), shared by the detail toolbar and the
-    // keyboard layer. The land target is computed BEFORE the mutation so the id still resolves.
-    const actOnOpenEmail = async (action: 'archive' | 'delete' | 'spam') => {
+    // keyboard layer. The land target is computed BEFORE the mutation. The mutation is fired but
+    // NOT awaited — navigation must be instant; blocking on the move/delete round-trip leaves the
+    // user staring at the just-actioned email. The Trash confirm is decided from the open email's
+    // own mailbox (no fetch), so no await is needed for that branch either.
+    const actOnOpenEmail = (action: 'archive' | 'delete' | 'spam') => {
         const id = mailId;
         if (!id) return;
         const idx = orderedEmails.findIndex((e) => e.id === id);
@@ -171,14 +174,14 @@ function MailRoute() {
                   ? orderedEmails[idx + 1]?.id
                   : orderedEmails[idx - 1]?.id;
         if (action === 'delete') {
-            const res = await actions.deleteEmailByIdOnly(id);
-            if (res.needsConfirmation) {
-                setPendingDeleteEmails(res.emails);
+            if (selectedEmail?.mailbox === 'Trash') {
+                setPendingDeleteEmails([selectedEmail]);
                 setDeleteDialogOpen(true);
                 return;
             }
+            void actions.deleteEmailByIdOnly(id);
         } else {
-            await actions.moveEmailByIdOnly(id, action === 'archive' ? 'Archive' : 'Junk');
+            void actions.moveEmailByIdOnly(id, action === 'archive' ? 'Archive' : 'Junk');
         }
         if (landId) actions.handleRowClick(landId);
         else actions.navigateToList();
