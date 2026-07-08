@@ -366,6 +366,12 @@
         box-shadow: inset 2px 0 0 0 var(--app-current-color);
     }
 
+    /* Keyboard cursor: the 2px stripe WITHOUT the wash, so it reads as distinct
+       from the open/active row (stripe + wash). */
+    .eigen-list-item-cursor {
+        box-shadow: inset 2px 0 0 0 var(--app-current-color);
+    }
+
     .eigen-list-item.eigen-list-item-selected {
         background-color: var(--app-current-color-soft);
     }

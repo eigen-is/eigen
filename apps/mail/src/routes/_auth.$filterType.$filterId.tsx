@@ -14,6 +14,7 @@ import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail
 import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
 import { EmailList, EmailListToolbar } from '../components/mail/email-list';
 import { useMailActions } from '../components/mail/hooks/use-mail-actions';
+import { useMailList } from '../components/mail/hooks/use-mail-list';
 
 export type MailSearchParams = {
     mailId?: string;
@@ -111,6 +112,14 @@ function MailRoute() {
         ? emails.map((m) => (m.id === selectedEmail?.id ? { ...m, isRead: true } : m))
         : emails;
 
+    // Ordered rows + selection + keyboard cursor live here (not in EmailList) so
+    // Phase 2's useMailShortcuts can act on the same list the route renders.
+    const { orderedEmails, selection, cursorIndex, setCursorIndex } = useMailList({
+        emails: displayEmails,
+        searchQuery,
+        activeId: mailId,
+    });
+
     const handleDeleteEmail = async (mail: Email) => {
         const result = await actions.handleDeleteEmail(mail);
         if (result.needsConfirmation) {
@@ -194,8 +203,10 @@ function MailRoute() {
                 <Column id="list" width={listWidth} toolbar={listToolbar}>
                     <div className="flex flex-col border-r h-full overflow-hidden">
                         <EmailList
-                            emails={displayEmails}
-                            searchQuery={searchQuery}
+                            orderedEmails={orderedEmails}
+                            selection={selection}
+                            cursorIndex={cursorIndex}
+                            setCursorIndex={setCursorIndex}
                             isLoading={isEmailsLoading}
                             error={emailsError}
                             onRowClick={actions.handleRowClick}
