@@ -14,9 +14,11 @@ import { EmailContextMenu } from './email-context-menu';
 type EmailListToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
+    // Handle for the `/` shortcut to focus the search input.
+    inputRef?: React.RefObject<HTMLInputElement | null>;
 };
 
-export function EmailListToolbar({ searchQuery, onSearchChange }: EmailListToolbarProps) {
+export function EmailListToolbar({ searchQuery, onSearchChange, inputRef }: EmailListToolbarProps) {
     return (
         <Toolbar>
             <SearchBar
@@ -25,6 +27,7 @@ export function EmailListToolbar({ searchQuery, onSearchChange }: EmailListToolb
                 onChange={onSearchChange}
                 maxWidth="full"
                 inputClassName="h-8 bg-background"
+                inputRef={inputRef}
             />
         </Toolbar>
     );

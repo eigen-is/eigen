@@ -1,7 +1,7 @@
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
 import { cn } from '@workspace/ui/lib/utils';
 import { Search } from 'lucide-react';
-import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, type RefObject, useEffect, useRef, useState } from 'react';
 
 export type SearchBarProps = {
     placeholder?: string;
@@ -11,6 +11,9 @@ export type SearchBarProps = {
     inputClassName?: string;
     maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
     debounceMs?: number;
+    // Optional handle for imperative focus (mail's `/` shortcut). Forwarded to the input; callers
+    // that don't pass it are unaffected.
+    inputRef?: RefObject<HTMLInputElement | null>;
 };
 
 export function SearchBar({
@@ -21,6 +24,7 @@ export function SearchBar({
     inputClassName,
     maxWidth = 'sm',
     debounceMs = 200,
+    inputRef,
 }: SearchBarProps) {
     const maxWidthClasses = {
         xs: 'max-w-xs',
@@ -62,6 +66,7 @@ export function SearchBar({
                     </InputGroupText>
                 </InputGroupAddon>
                 <InputGroupInput
+                    ref={inputRef}
                     type="text"
                     placeholder={placeholder}
                     className={cn('w-full', inputClassName)}

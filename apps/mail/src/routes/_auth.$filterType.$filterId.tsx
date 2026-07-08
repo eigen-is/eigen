@@ -9,12 +9,14 @@ import { EmptyState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
 import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
 import { EmailList, EmailListToolbar } from '../components/mail/email-list';
 import { useMailActions } from '../components/mail/hooks/use-mail-actions';
 import { useMailList } from '../components/mail/hooks/use-mail-list';
+import { useMailShortcuts } from '../components/mail/hooks/use-mail-shortcuts';
+import { MailShortcutsDialog } from '../components/mail/mail-shortcuts-dialog';
 
 export type MailSearchParams = {
     mailId?: string;
@@ -113,11 +115,42 @@ function MailRoute() {
         : emails;
 
     // Ordered rows + selection + keyboard cursor live here (not in EmailList) so
-    // Phase 2's useMailShortcuts can act on the same list the route renders.
+    // useMailShortcuts can act on the same list the route renders.
     const { orderedEmails, selection, cursorIndex, setCursorIndex } = useMailList({
         emails: displayEmails,
         searchQuery,
         activeId: mailId,
+    });
+
+    // Gmail keyboard layer — opt-in via the space setting, inert while composing.
+    const shortcutsEnabled = spaceSettings?.email?.keyboardShortcuts ?? false;
+    const isComposing = mode === 'compose';
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const [helpOpen, setHelpOpen] = useState(false);
+
+    // Fresh composeSessionKey remounts any open composer — mirrors EmailComposeButton.
+    const onCompose = () => {
+        navigate({
+            to: Route.fullPath,
+            params: { filterType, filterId },
+            search: { mode: 'compose' },
+            state: { composeSessionKey: crypto.randomUUID() },
+        });
+    };
+
+    useMailShortcuts({
+        orderedEmails,
+        cursorIndex,
+        setCursorIndex,
+        selection,
+        openEmailId: mailId,
+        isComposing,
+        shortcutsEnabled,
+        onRowClick: actions.handleRowClick,
+        navigateToList: actions.navigateToList,
+        onCompose,
+        focusSearch: () => searchInputRef.current?.focus(),
+        openHelp: () => setHelpOpen((o) => !o),
     });
 
     const handleDeleteEmail = async (mail: Email) => {
@@ -157,7 +190,9 @@ function MailRoute() {
     const showDetail = !!(selectedEmail || mode === 'compose');
     const isDraft = mode === 'compose' || selectedEmail?.isDraft;
 
-    const listToolbar = <EmailListToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />;
+    const listToolbar = (
+        <EmailListToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} inputRef={searchInputRef} />
+    );
 
     const detailToolbar = isDraft ? (
         <EmailDraftToolbar
@@ -182,6 +217,7 @@ function MailRoute() {
 
     return (
         <>
+            <MailShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
             <DeleteDialog
                 open={deleteDialogOpen}
                 onOpenChange={(open) => {

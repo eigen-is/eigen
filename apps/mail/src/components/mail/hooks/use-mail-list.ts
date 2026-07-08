@@ -38,15 +38,13 @@ export function useMailList({ emails, searchQuery, activeId }: UseMailListOption
 
     const [cursorIndex, setCursorIndex] = useState(-1);
 
-    // Cursor↔activeId sync — parity with use-keyboard-list-navigation.ts (43-52):
-    // an open row drives the cursor to its index; no open row resets to -1. Runs
-    // on every orderedEmails change, matching the shared hook's [activeId, items].
+    // Cursor↔activeId sync: an open row drives the cursor to its index. Clearing activeId does
+    // NOT reset the cursor — after closing a conversation (or `u`) it stays put so j/k keeps
+    // going from there (the Gmail model). The shrink-clamp below keeps a stale index in range.
     useEffect(() => {
         if (activeId && orderedEmails.length > 0) {
             const index = orderedEmails.findIndex((e) => e.id === activeId);
             if (index !== -1) setCursorIndex(index);
-        } else {
-            setCursorIndex(-1);
         }
     }, [activeId, orderedEmails]);
 
