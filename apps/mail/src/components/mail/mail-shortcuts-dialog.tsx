@@ -16,8 +16,27 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
         ],
     },
     {
+        title: 'Jump',
+        shortcuts: [
+            { keys: ['g', 'i'], label: 'Inbox' },
+            { keys: ['g', 't'], label: 'Sent' },
+            { keys: ['g', 'd'], label: 'Drafts' },
+        ],
+    },
+    {
         title: 'Selection',
         shortcuts: [{ keys: ['x'], label: 'Select conversation' }],
+    },
+    {
+        title: 'Select',
+        shortcuts: [
+            { keys: ['*', 'a'], label: 'All' },
+            { keys: ['*', 'n'], label: 'None' },
+            { keys: ['*', 'r'], label: 'Read' },
+            { keys: ['*', 'u'], label: 'Unread' },
+            { keys: ['*', 's'], label: 'Starred' },
+            { keys: ['*', 't'], label: 'Unstarred' },
+        ],
     },
     {
         title: 'Actions',
@@ -62,7 +81,7 @@ export function MailShortcutsDialog({ open, onOpenChange }: MailShortcutsDialogP
             <DialogContent size="lg">
                 <DialogHeader>
                     <DialogTitle>Keyboard shortcuts</DialogTitle>
-                    <DialogDescription>Single-key shortcuts to move around Mail without the mouse.</DialogDescription>
+                    <DialogDescription>Keyboard shortcuts to move around Mail without the mouse.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-6 sm:grid-cols-2">
                     {SHORTCUT_GROUPS.map((group) => (

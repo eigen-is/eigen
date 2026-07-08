@@ -1,6 +1,34 @@
-import { useHotkey } from '@tanstack/react-hotkeys';
+import { useHotkey, useHotkeySequence } from '@tanstack/react-hotkeys';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
+import { useEffect, useRef, useState } from 'react';
+
+// useHotkeySequence takes Hotkey STRINGS (each is parsed via split('+')), so the RawHotkey object
+// form the single keys use for '?'/'#'/'!' can't be a sequence element. '*' is Shift+8: 'Shift+8'
+// is a valid Hotkey and matches an actual '*' press through the matcher's Digit-code fallback.
+type MailSequence = Parameters<typeof useHotkeySequence>[0];
+const SEQ_JUMP_INBOX: MailSequence = ['G', 'I'];
+const SEQ_JUMP_SENT: MailSequence = ['G', 'T'];
+const SEQ_JUMP_DRAFTS: MailSequence = ['G', 'D'];
+const SEQ_SELECT_ALL: MailSequence = ['Shift+8', 'A'];
+const SEQ_SELECT_NONE: MailSequence = ['Shift+8', 'N'];
+const SEQ_SELECT_READ: MailSequence = ['Shift+8', 'R'];
+const SEQ_SELECT_UNREAD: MailSequence = ['Shift+8', 'U'];
+const SEQ_SELECT_STARRED: MailSequence = ['Shift+8', 'S'];
+const SEQ_SELECT_UNSTARRED: MailSequence = ['Shift+8', 'T'];
+// The window in which a '*' arms the next key — kept equal to the sequence timeout we pass below.
+const CHORD_TIMEOUT_MS = 1000;
+
+// Mirror of the hotkey lib's own input check. Sequences (unlike single keys) have no built-in input
+// guard, so we suppress the chords while the user is typing in a field.
+function isEditableTarget(el: Element | null): boolean {
+    if (el instanceof HTMLInputElement) {
+        const type = el.type.toLowerCase();
+        return type !== 'button' && type !== 'submit' && type !== 'reset';
+    }
+    if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return true;
+    return el instanceof HTMLElement && el.isContentEditable;
+}
 
 type UseMailShortcutsOptions = {
     orderedEmails: EmailSummary[];
@@ -14,6 +42,7 @@ type UseMailShortcutsOptions = {
     openEmailId: string | undefined;
     onRowClick: (emailId: string) => void;
     navigateToList: () => void;
+    navigateToMailbox: (filterId: string) => void;
     onCompose: () => void;
     focusSearch: () => void;
     openHelp: () => void;
@@ -52,6 +81,7 @@ export function useMailShortcuts({
     openEmailId,
     onRowClick,
     navigateToList,
+    navigateToMailbox,
     onCompose,
     focusSearch,
     openHelp,
@@ -71,6 +101,43 @@ export function useMailShortcuts({
     undoLast,
 }: UseMailShortcutsOptions): void {
     const enabled = shortcutsEnabled && !isComposing && !helpOpen;
+
+    // The sequence matcher (unlike the single-key one) fires even inside inputs, so gate the chords
+    // off while a field is focused — otherwise typing e.g. "git" in search would trigger `g i`.
+    const [inputFocused, setInputFocused] = useState(false);
+    useEffect(() => {
+        if (!enabled) return;
+        const sync = () => setInputFocused(isEditableTarget(document.activeElement));
+        sync();
+        document.addEventListener('focusin', sync);
+        document.addEventListener('focusout', sync);
+        return () => {
+            document.removeEventListener('focusin', sync);
+            document.removeEventListener('focusout', sync);
+        };
+    }, [enabled]);
+    const chordsEnabled = enabled && !inputFocused;
+
+    // A `*` (Shift+8) arms a select-chord whose tail letter (a/r/s/u) doubles as a single-key action.
+    // The sequence and single-key matchers listen independently, so without this `* a` would ALSO fire
+    // reply-all, etc. This capture-phase listener runs before both matchers and flags the key right
+    // after a `*` as a chord tail, so those single keys can bow out; the sequence still fires.
+    const starTail = useRef(false);
+    const lastStarAt = useRef(0);
+    useEffect(() => {
+        if (!chordsEnabled) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === '*') {
+                lastStarAt.current = Date.now();
+                starTail.current = false;
+                return;
+            }
+            starTail.current = Date.now() - lastStarAt.current <= CHORD_TIMEOUT_MS;
+            lastStarAt.current = 0; // consume: only the key immediately after a `*` is a tail
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+    }, [chordsEnabled]);
 
     // Target-resolution snapshot, recomputed each render (useHotkey re-syncs callbacks so no stale
     // closures). `open` gates the open-conversation branch; cursorId is the cursored row's id.
@@ -105,8 +172,15 @@ export function useMailShortcuts({
         },
         { enabled },
     );
-    // u — back to the list from an open conversation.
-    useHotkey('U', () => navigateToList(), { enabled });
+    // u — back to the list from an open conversation. Bows out when it's a `* u` chord tail.
+    useHotkey(
+        'U',
+        () => {
+            if (starTail.current) return;
+            navigateToList();
+        },
+        { enabled },
+    );
     // x — toggle the cursored row's checkbox selection.
     useHotkey(
         'X',
@@ -205,7 +279,15 @@ export function useMailShortcuts({
             if (s) setFlaggedById(cursorId, !s.isFlagged, s.isFlagged);
         }
     };
-    useHotkey('S', () => toggleFlag(), { enabled });
+    // Bows out when it's a `* s` chord tail (select starred).
+    useHotkey(
+        'S',
+        () => {
+            if (starTail.current) return;
+            toggleFlag();
+        },
+        { enabled },
+    );
 
     // Shift+i mark read / Shift+u mark unread. Priority open > selection > cursor; no landing change.
     // Pass the row's CURRENT isRead (fresh list summary) so the mutation guards against what the user
@@ -239,7 +321,65 @@ export function useMailShortcuts({
         const id = open && openEmailId ? openEmailId : cursorId;
         if (id) handler(id);
     };
-    useHotkey('R', () => reply(onReply), { enabled });
-    useHotkey('A', () => reply(onReplyAll), { enabled });
+    // r and a bow out when they're a `* r`/`* a` chord tail; f has no chord so it never conflicts.
+    useHotkey(
+        'R',
+        () => {
+            if (starTail.current) return;
+            reply(onReply);
+        },
+        { enabled },
+    );
+    useHotkey(
+        'A',
+        () => {
+            if (starTail.current) return;
+            reply(onReplyAll);
+        },
+        { enabled },
+    );
     useHotkey('F', () => reply(onForward), { enabled });
+
+    // Jump chords — `g` then i/t/d navigate to a mailbox (no single-key i/t/d, so no tail conflict).
+    useHotkeySequence(SEQ_JUMP_INBOX, () => navigateToMailbox('inbox'), {
+        enabled: chordsEnabled,
+        timeout: CHORD_TIMEOUT_MS,
+    });
+    useHotkeySequence(SEQ_JUMP_SENT, () => navigateToMailbox('sent'), {
+        enabled: chordsEnabled,
+        timeout: CHORD_TIMEOUT_MS,
+    });
+    useHotkeySequence(SEQ_JUMP_DRAFTS, () => navigateToMailbox('drafts'), {
+        enabled: chordsEnabled,
+        timeout: CHORD_TIMEOUT_MS,
+    });
+
+    // Select chords — `*` then a/n/r/u/s/t SET the selection to the named subset (Gmail semantics,
+    // not additive).
+    const selectWhere = (predicate: (e: EmailSummary) => boolean) =>
+        selection.setSelection(orderedEmails.filter(predicate).map((e) => e.id));
+    useHotkeySequence(SEQ_SELECT_ALL, () => selection.selectAll(), {
+        enabled: chordsEnabled,
+        timeout: CHORD_TIMEOUT_MS,
+    });
+    useHotkeySequence(SEQ_SELECT_NONE, () => selection.clearSelection(), {
+        enabled: chordsEnabled,
+        timeout: CHORD_TIMEOUT_MS,
+    });
+    useHotkeySequence(SEQ_SELECT_READ, () => selectWhere((e) => e.isRead), {
+        enabled: chordsEnabled,
+        timeout: CHORD_TIMEOUT_MS,
+    });
+    useHotkeySequence(SEQ_SELECT_UNREAD, () => selectWhere((e) => !e.isRead), {
+        enabled: chordsEnabled,
+        timeout: CHORD_TIMEOUT_MS,
+    });
+    useHotkeySequence(SEQ_SELECT_STARRED, () => selectWhere((e) => e.isFlagged), {
+        enabled: chordsEnabled,
+        timeout: CHORD_TIMEOUT_MS,
+    });
+    useHotkeySequence(SEQ_SELECT_UNSTARRED, () => selectWhere((e) => !e.isFlagged), {
+        enabled: chordsEnabled,
+        timeout: CHORD_TIMEOUT_MS,
+    });
 }

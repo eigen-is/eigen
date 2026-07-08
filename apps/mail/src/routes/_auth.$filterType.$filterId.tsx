@@ -214,6 +214,8 @@ function MailRoute() {
         openEmailId: mailId,
         onRowClick: actions.handleRowClick,
         navigateToList: actions.navigateToList,
+        navigateToMailbox: (targetFilterId: string) =>
+            navigate({ to: Route.fullPath, params: { filterType: 'box', filterId: targetFilterId }, search: {} }),
         onCompose: actions.openCompose,
         focusSearch: () => searchInputRef.current?.focus(),
         openHelp: () => setHelpOpen((o) => !o),
