@@ -7,7 +7,7 @@ import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar
 import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
 import { cn } from '@workspace/ui/lib/utils';
-import { Paperclip } from 'lucide-react';
+import { Paperclip, Star } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { EmailContextMenu } from './email-context-menu';
 
@@ -263,8 +263,17 @@ export function EmailList({
                                                 >
                                                     {email.fromShort || 'Unknown'}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground whitespace-nowrap ml-2">
-                                                    {formattedDate}
+                                                <div className="flex items-center gap-1 ml-2 shrink-0">
+                                                    {email.isFlagged && (
+                                                        <Star
+                                                            aria-hidden
+                                                            className="h-3.5 w-3.5 fill-current"
+                                                            style={{ color: 'var(--app-current-color)' }}
+                                                        />
+                                                    )}
+                                                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                        {formattedDate}
+                                                    </span>
                                                 </div>
                                             </div>
                                             <div
