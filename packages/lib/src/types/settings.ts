@@ -17,6 +17,8 @@ export type EmailSignature = {
 
 export type EmailSettings = {
     signatures?: EmailSignature[];
+    keyboardShortcuts?: boolean;
+    autoAdvance?: 'older' | 'newer' | 'list';
 };
 
 export type UserSettings = {

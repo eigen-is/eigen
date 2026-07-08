@@ -571,6 +571,49 @@ describe('User Settings', () => {
         });
         expect(res.status).toBe(422);
     });
+
+    test('PUT and GET round-trips email keyboardShortcuts and autoAdvance', async () => {
+        const putRes = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: { keyboardShortcuts: true, autoAdvance: 'newer' } }),
+        });
+        expect(putRes.status).toBe(200);
+
+        const getRes = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`);
+        const data = await assertJson<UserSettings>(getRes);
+        expect(data.email?.keyboardShortcuts).toBe(true);
+        expect(data.email?.autoAdvance).toBe('newer');
+    });
+
+    test('PUT with invalid autoAdvance returns 422', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: { autoAdvance: 'bogus' } }),
+        });
+        expect(res.status).toBe(422);
+    });
+
+    test('updating autoAdvance does not clobber email.signatures (deep merge)', async () => {
+        const sig = { id: 'sig-autoadvance', name: 'Default', html: '<p>Regards</p>' };
+        await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: { signatures: [sig] } }),
+        });
+
+        await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: { autoAdvance: 'list' } }),
+        });
+
+        const getRes = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`);
+        const data = await assertJson<UserSettings>(getRes);
+        expect(data.email?.autoAdvance).toBe('list');
+        expect(data.email?.signatures).toEqual([sig]);
+    });
 });
 
 describe('S3 Config Persistence', () => {

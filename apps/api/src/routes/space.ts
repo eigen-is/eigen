@@ -41,6 +41,8 @@ export const spaceRouter = new Elysia({ name: 'space' })
                                 }),
                             ),
                         ),
+                        keyboardShortcuts: t.Optional(t.Boolean()),
+                        autoAdvance: t.Optional(t.Union([t.Literal('older'), t.Literal('newer'), t.Literal('list')])),
                     }),
                 ),
                 driveView: t.Optional(
