@@ -1,7 +1,14 @@
 # Proposal: Mail performance at large mailbox sizes
 
-Status: proposal — researched 2026-07-09, nothing implemented. Reviewed against the code
-2026-07-09: solutions confirmed viable; per-step implementation notes added (marked *Review:*).
+Status: **Steps 1, 2, 3 IMPLEMENTED** on branch `feat/mail-performance` (2026-07-09), verified
+at full scale (a throwaway dev user with 50,000 Inbox + 50,000 Archive). `bun run check` green
+(1744 pass / 0 fail, lint + typecheck clean); independent whole-branch review "sound to merge".
+Measured live: first inbox paint ~130 KB / one 200-row page (was ~34 MB), keyset scroll pages
+with no gaps/dups, instant optimistic archive, inbox-scoped server search, non-blocking sync
+serving stale in ~5 ms while the background cold-index runs (~1.6k msg/s). NOT pushed / no PR —
+the branch sits on top of the unmerged `feat/mail-gmail-shortcuts`. Step 4 (worker offload) and
+the "recently-mutated registry" (Step 1 option b) remain deferred follow-ups (see the note at the
+end of Step 1 and § What NOT to do); the shipped Step 1 uses the chosen default, option (a).
 Scenario studied: a real account shape of **~50,000 mails in Inbox + ~50,000 in Archive**.
 
 ## Current situation
