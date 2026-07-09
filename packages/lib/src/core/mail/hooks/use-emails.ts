@@ -9,6 +9,7 @@ import {
 import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { Email, EmailSummary } from '@workspace/lib/types/mail';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateMailboxes } from './use-mailboxes';
@@ -127,6 +128,10 @@ export function useDeleteEmail() {
                 queryKey: emailKeys.lists(ownerId),
             });
             patchEmailInLists(queryClient, ownerId, email.id, 'remove');
+            markRecentMailMutation(
+                email.mailbox === 'Trash' ? SSEventType.MAIL_DELETED : SSEventType.MAIL_MOVED,
+                email.id,
+            );
             return { snapshot };
         },
         onSuccess: (email) => {
@@ -167,6 +172,7 @@ export function useToggleReadEmail() {
                 queryKey: emailKeys.lists(ownerId),
             });
             patchEmailInLists(queryClient, ownerId, email.id, (e) => ({ ...e, isRead }));
+            markRecentMailMutation(SSEventType.MAIL_READ_CHANGED, email.id);
             return { snapshot };
         },
         onSuccess: (email) => {
@@ -203,6 +209,7 @@ export function useToggleFlaggedEmail() {
                 queryKey: emailKeys.lists(ownerId),
             });
             patchEmailInLists(queryClient, ownerId, email.id, (e) => ({ ...e, isFlagged }));
+            markRecentMailMutation(SSEventType.MAIL_FLAGS_CHANGED, email.id);
             return { snapshot };
         },
         onSuccess: (email) => queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) }),
@@ -233,6 +240,7 @@ export function useMoveEmail() {
                 queryKey: emailKeys.lists(ownerId),
             });
             patchEmailInLists(queryClient, ownerId, email.id, 'remove');
+            markRecentMailMutation(SSEventType.MAIL_MOVED, email.id);
             return { snapshot };
         },
         onSuccess: (email) => {
@@ -277,6 +285,30 @@ function patchEmailInLists(queryClient: QueryClient, ownerId: string, messageId:
         });
         return changed ? { ...data, pages } : data;
     });
+}
+
+// The server echoes every mutation back to its originator over SSE, and the SSE handler would then
+// invalidate the list — refetching every loaded page of the infinite query for a change we already
+// patched in optimistically. Each mutation records the echo it expects here; the SSE handler consumes
+// the entry and skips its list refetch. Keyed by `${event}:${messageId}`, short-TTL and consumed once so
+// a genuinely later external change to the same message still refreshes. Module-level: this is a
+// per-tab suppression of our OWN echo, never another client's changes.
+const RECENT_MAIL_MUTATION_TTL_MS = 5_000;
+const recentMailMutations = new Map<string, number>();
+
+function markRecentMailMutation(event: string, messageId: string): void {
+    const now = Date.now();
+    // Prune expired entries so a dropped echo can't leak them forever.
+    for (const [key, expiry] of recentMailMutations) if (expiry <= now) recentMailMutations.delete(key);
+    recentMailMutations.set(`${event}:${messageId}`, now + RECENT_MAIL_MUTATION_TTL_MS);
+}
+
+export function consumeRecentMailMutation(event: string, messageId: string): boolean {
+    const key = `${event}:${messageId}`;
+    const expiry = recentMailMutations.get(key);
+    if (expiry === undefined) return false;
+    recentMailMutations.delete(key);
+    return expiry > Date.now();
 }
 
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)
