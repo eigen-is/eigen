@@ -44,6 +44,8 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             return true;
 
         case SSEventType.MAIL_MOVED: {
+            // Own move: source list already patched + target list invalidated in the mutation onSuccess,
+            // so skip the echo. A move by another client (no registry entry) invalidates both lists here.
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
                 const toMailbox = mail.toMailbox != null ? normalizeMailbox(mail.toMailbox) : null;
                 invalidateMailMoved(queryClient, userId, mail.messageId, mailbox, toMailbox);

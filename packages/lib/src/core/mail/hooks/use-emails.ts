@@ -139,6 +139,8 @@ export function useDeleteEmail() {
                 queryClient.removeQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             } else {
                 queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
+                // Moved to Trash — the Trash list wasn't optimistically patched, so refresh it.
+                queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Trash') });
             }
             invalidateMailboxes(queryClient, ownerId);
         },
@@ -243,8 +245,11 @@ export function useMoveEmail() {
             markRecentMailMutation(SSEventType.MAIL_MOVED, email.id);
             return { snapshot };
         },
-        onSuccess: (email) => {
+        onSuccess: (email, variables) => {
             queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
+            // The target list wasn't optimistically patched (only the source row was removed) — refresh it
+            // so the moved message appears there. Usually unmounted → marked stale, refetches on next visit.
+            queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, variables.mailbox) });
             invalidateMailboxes(queryClient, ownerId);
         },
         onError: (error, _vars, context) => {
