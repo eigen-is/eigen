@@ -92,15 +92,24 @@ export function useDeleteEmail() {
             }
             return email;
         },
+        onMutate: async (email) => {
+            await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
+            const snapshot = queryClient.getQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) });
+            patchEmailInLists(queryClient, ownerId, email.id, 'remove');
+            return { snapshot };
+        },
         onSuccess: (email) => {
             if (email.mailbox === 'Trash') {
-                invalidateMailDeleted(queryClient, ownerId, email.id, 'Trash');
+                queryClient.removeQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             } else {
-                invalidateMailMoved(queryClient, ownerId, email.id, email.mailbox, 'Trash');
+                queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             }
             invalidateMailboxes(queryClient, ownerId);
         },
-        onError: onMutationError,
+        onError: (error, _email, context) => {
+            if (context) for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
+            onMutationError(error);
+        },
     });
 }
 
@@ -120,11 +129,21 @@ export function useToggleReadEmail() {
             if (response.error) throw new AppError(response);
             return email;
         },
+        onMutate: async ({ email, isRead }) => {
+            if (isRead === email.isRead) return;
+            await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
+            const snapshot = queryClient.getQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) });
+            patchEmailInLists(queryClient, ownerId, email.id, (e) => ({ ...e, isRead }));
+            return { snapshot };
+        },
         onSuccess: (email) => {
-            invalidateMailReadChanged(queryClient, ownerId, email.id, email.mailbox);
+            queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             invalidateMailboxes(queryClient, ownerId);
         },
-        onError: onMutationError,
+        onError: (error, _vars, context) => {
+            if (context) for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
+            onMutationError(error);
+        },
     });
 }
 
@@ -144,8 +163,18 @@ export function useToggleFlaggedEmail() {
             if (response.error) throw new AppError(response);
             return email;
         },
-        onSuccess: (email) => invalidateMailFlagsChanged(queryClient, ownerId, email.id, email.mailbox),
-        onError: onMutationError,
+        onMutate: async ({ email, isFlagged }) => {
+            if (isFlagged === email.isFlagged) return;
+            await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
+            const snapshot = queryClient.getQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) });
+            patchEmailInLists(queryClient, ownerId, email.id, (e) => ({ ...e, isFlagged }));
+            return { snapshot };
+        },
+        onSuccess: (email) => queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) }),
+        onError: (error, _vars, context) => {
+            if (context) for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
+            onMutationError(error);
+        },
     });
 }
 
@@ -163,11 +192,20 @@ export function useMoveEmail() {
             if (response.error) throw new AppError(response);
             return email;
         },
-        onSuccess: (email, variables) => {
-            invalidateMailMoved(queryClient, ownerId, email.id, email.mailbox, variables.mailbox);
+        onMutate: async ({ email }) => {
+            await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
+            const snapshot = queryClient.getQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) });
+            patchEmailInLists(queryClient, ownerId, email.id, 'remove');
+            return { snapshot };
+        },
+        onSuccess: (email) => {
+            queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             invalidateMailboxes(queryClient, ownerId);
         },
-        onError: onMutationError,
+        onError: (error, _vars, context) => {
+            if (context) for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
+            onMutationError(error);
+        },
     });
 }
 
@@ -175,6 +213,26 @@ export function useOpenWriteEmailTo() {
     return (address: string) => {
         window.location.href = getMailComposeUrl(address);
     };
+}
+
+type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
+
+// Patch a row by id across every cached list (sidesteps the ''/'inbox'/case mailbox-key pitfalls).
+function patchEmailInLists(queryClient: QueryClient, ownerId: string, messageId: string, patch: EmailListPatch): void {
+    queryClient.setQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) }, (list) => {
+        if (!list) return list;
+        if (patch === 'remove') {
+            const next = list.filter((e) => e.id !== messageId);
+            return next.length === list.length ? list : next; // keep ref stable if unchanged
+        }
+        let changed = false;
+        const next = list.map((e) => {
+            if (e.id !== messageId) return e;
+            changed = true;
+            return patch(e);
+        });
+        return changed ? next : list;
+    });
 }
 
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)
