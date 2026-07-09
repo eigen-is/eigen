@@ -148,6 +148,20 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailboxes`);
     });
 
+    // A non-empty mailbox is served stale + reconciled by a background sync (Step 3). Poll until
+    // an external maildir change is picked up, then assert.
+    async function pollList(box: string, predicate: (rows: EmailSummary[]) => boolean): Promise<EmailSummary[]> {
+        let rows: EmailSummary[] = [];
+        for (let i = 0; i < 60; i++) {
+            rows = await assertJson<EmailSummary[]>(
+                await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/${box}`),
+            );
+            if (predicate(rows)) return rows;
+            await Bun.sleep(50);
+        }
+        return rows; // let the caller's assertion produce the failure message
+    }
+
     // -- Mailbox structure --
 
     test('standard mailboxes use canonical case', async () => {
@@ -315,9 +329,8 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         // Simulate Dovecot placing a file directly in cur/
         writeFileSync(join(curDir(charlieId, ''), filename), eml);
 
-        // Trigger sync via mailboxGet
-        const res = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/inbox`);
-        const messages = await assertJson<EmailSummary[]>(res);
+        // Background sync reconciles it eventually — poll until it shows up.
+        const messages = await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));
 
         const found = findOrFail(messages, (m) => m.id === uniqueId);
         expect(found.subject).toBe('Dovecot Delivered');
@@ -334,9 +347,8 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         // Place in new/ (no :2, suffix — raw delivery)
         writeFileSync(join(newDir(charlieId, ''), filename), eml);
 
-        // Trigger sync
-        const res = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/inbox`);
-        const messages = await assertJson<EmailSummary[]>(res);
+        // Background sync reconciles it eventually — poll until it shows up.
+        const messages = await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));
 
         const found = findOrFail(messages, (m) => m.id === uniqueId);
         expect(found.subject).toBe('Standalone New');
@@ -362,9 +374,9 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         const newFilename = `${uniqueWithSize}:2,DFRS`;
         renameSync(join(draftsDir, originalFile), join(draftsDir, newFilename));
 
-        // Trigger sync
-        const res = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/Drafts`);
-        expect(res.status).toBe(200);
+        // Poll until the background sync picks up the renamed flags, THEN read the message — this
+        // waits out the transient 500 window where the DB still points at the pre-rename filename.
+        await pollList('Drafts', (rows) => rows.some((m) => m.id === draft.id && m.isFlagged && m.isReplied));
 
         // Verify flags updated in DB
         const getRes = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/message/${draft.id}`);
@@ -393,8 +405,9 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         const draftFile = findOrFail(files, (f) => f.startsWith(draft.id));
         unlinkSync(join(draftsDir, draftFile));
 
-        // Trigger sync
-        await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/Drafts`);
+        // Poll until the background sync removes the stale DB row — only then is the message GET
+        // a clean 404, not the transient 500 mid-reconcile.
+        await pollList('Drafts', (rows) => !rows.some((m) => m.id === draft.id));
 
         // Message should be gone
         const afterRes = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/message/${draft.id}`);
@@ -410,8 +423,8 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
 
         writeFileSync(join(curDir(charlieId, ''), filename), eml);
 
-        // Sync inbox so it's in DB
-        await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/inbox`);
+        // Poll inbox until the background sync indexes it, so it's in DB before we read it.
+        await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));
 
         // Verify it's there
         const getRes = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/message/${uniqueId}`);
@@ -421,12 +434,10 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         unlinkSync(join(curDir(charlieId, ''), filename));
         writeFileSync(join(curDir(charlieId, 'Archive'), filename), eml);
 
-        // Sync both mailboxes
-        await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/inbox`);
-        const archiveRes = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/Archive`);
-        const archiveMessages = await assertJson<EmailSummary[]>(archiveRes);
+        // Poll both mailboxes until the move is reconciled: gone from inbox, present in Archive.
+        await pollList('inbox', (rows) => !rows.some((m) => m.id === uniqueId));
+        const archiveMessages = await pollList('Archive', (rows) => rows.some((m) => m.id === uniqueId));
 
-        // Gone from inbox (sync deleted it from DB for inbox)
         // Present in archive
         const inArchive = findOrFail(archiveMessages, (m) => m.id === uniqueId);
         expect(inArchive.mailbox).toBe('Archive');
@@ -441,12 +452,10 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
 
         writeFileSync(join(curDir(charlieId, ''), filename), eml);
 
-        // Sync
-        const res = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/inbox`);
-        expect(res.status).toBe(200);
+        // Poll until the background sync indexes it.
+        const messages = await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));
 
         // Message is seen (S flag), but Eigen preserves the 'ab' keyword flags
-        const messages = await assertJson<EmailSummary[]>(res);
         const found = findOrFail(messages, (m) => m.id === uniqueId);
         expect(found.isRead).toBe(true);
 
@@ -599,8 +608,8 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         const uniqueId = createUniqueMessageId();
         writeFileSync(join(curDir(charlieId, ''), `${uniqueId},S=${rawEml.byteLength}:2,S`), rawEml);
 
-        // Sync so the DB learns of it, then copy to Archive.
-        await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox/inbox`);
+        // Poll until the background sync learns of it, then copy to Archive.
+        await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));
         const copyRes = await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/message/copy`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
