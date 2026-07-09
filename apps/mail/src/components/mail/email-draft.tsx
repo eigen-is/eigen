@@ -1,3 +1,4 @@
+import { useHotkey } from '@tanstack/react-hotkeys';
 import { useAuth } from '@workspace/lib/auth';
 import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -209,6 +210,11 @@ export function EmailDraft({
         await sendWithFreshDraft();
     };
 
+    // ⌘/Ctrl+Enter sends from subject, recipients, or body. Mod+Enter is a modifier
+    // combo so the app-wide hotkey listener fires it even while an input/editor is
+    // focused; the body editor's submitOnModEnter keeps HardBreak from firing first.
+    useHotkey('Mod+Enter', () => void handleSendEmail(), { enabled: !isSending });
+
     const { targetProps, isDragging } = useFileDropTarget(uploadFiles);
     const { onPaste } = useFilePasteTarget(uploadFiles);
 
@@ -315,6 +321,7 @@ export function EmailDraft({
                         toolbar="floating"
                         className="w-full h-full"
                         editable={!isSending}
+                        submitOnModEnter
                     />
                 </div>
             </form>

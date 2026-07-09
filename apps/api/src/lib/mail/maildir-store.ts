@@ -114,12 +114,21 @@ export class MaildirStore implements MailStore {
         return this.getMailboxInfo(mailbox);
     }
 
-    async listMessages(mailbox: string): Promise<EmailSummary[]> {
+    async listMessages(
+        mailbox: string,
+        opts: { limit: number; before?: { date: Date; id: string } },
+    ): Promise<EmailSummary[]> {
         if (!(await this.mailboxDirExists(mailbox))) {
             throw new ApiError(404, `Mailbox '${mailbox}' not found`);
         }
-        await this.syncMailbox(mailbox);
-        return this.db.getAllEmails(mailbox);
+        // First open (empty DB) blocks so the user sees content immediately; otherwise serve the
+        // DB now and reconcile in the background — new/changed rows arrive via the sync's SSE events.
+        if (this.db.getEmailsCount(mailbox) === 0) {
+            await this.syncMailbox(mailbox);
+        } else {
+            this.syncMailbox(mailbox).catch((err) => console.error('maildir: background mailbox sync failed', err));
+        }
+        return this.db.listMessages(mailbox, opts);
     }
 
     // -- Message operations --
@@ -268,23 +277,34 @@ export class MaildirStore implements MailStore {
         const dbRecords = this.db.getAllEmails(mailbox);
         const dbById = new Map(dbRecords.map((r) => [r.id, r]));
 
-        // New messages (on disk but not in DB)
-        for (const [id, fileName] of diskFiles) {
-            if (!dbById.has(id)) {
-                // Bulk sweep: parseEml throws on a bad message; log + skip so one unreadable
-                // .eml can't abort the whole mailbox sync. ENOENT is a benign mid-sync race.
+        // New messages (on disk but not in DB): parse in chunks, then bulk-insert each chunk in
+        // one transaction — with `addEmail` at ~71% of a 92s cold sync of 100k messages, batching
+        // the inserts (and skipping the per-row SELECT the diff map already made redundant) is the
+        // single biggest cold-index win. `received` fires per message but after the chunk commits,
+        // so a big sync is naturally throttled to one SSE burst per chunk instead of per message.
+        const NEW_CHUNK = 250;
+        const newEntries = [...diskFiles].filter(([id]) => !dbById.has(id));
+        for (let i = 0; i < newEntries.length; i += NEW_CHUNK) {
+            const chunk = newEntries.slice(i, i + NEW_CHUNK);
+            // Keep the parsed Email (not EmailSummary) — events.received needs the full parse
+            // (e.g. `from`) for the notification; insertEmails only reads the EmailSummary subset.
+            const parsed: Email[] = [];
+            for (const [id, fileName] of chunk) {
+                // parseEml throws on a bad message; log + skip so one unreadable .eml can't drop
+                // the rest of the chunk. ENOENT is a benign mid-sync race.
                 try {
                     const file = this.getMessageFile(mailbox, fileName);
-                    const parsed = await parseEml(id, mailbox, file);
-                    applyFlagsFromFilename(parsed, fileName);
-                    parsed.filename = fileName;
-                    const isNew = this.db.addEmail(parsed as EmailSummary);
-                    this.events.received(parsed, isNew);
+                    const p = await parseEml(id, mailbox, file);
+                    applyFlagsFromFilename(p, fileName);
+                    p.filename = fileName;
+                    parsed.push(p);
                 } catch (e: unknown) {
                     if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT'))
                         console.warn(`syncMailbox: failed to parse ${fileName}:`, e instanceof Error ? e.message : e);
                 }
             }
+            this.db.insertEmails(parsed);
+            for (const p of parsed) this.events.received(p, true);
         }
 
         // Flag changes (on disk with different filename)

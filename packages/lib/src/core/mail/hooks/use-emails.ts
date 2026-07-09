@@ -1,7 +1,16 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+    type InfiniteData,
+    type QueryClient,
+    useInfiniteQuery,
+    useMutation,
+    useQuery,
+    useQueryClient,
+} from '@tanstack/react-query';
 import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { Email, EmailSummary } from '@workspace/lib/types/mail';
+import { SSEventType } from '@workspace/lib/types/sse';
+import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateMailboxes } from './use-mailboxes';
 
@@ -9,30 +18,59 @@ export const emailKeys = {
     all: ['emails'] as const,
     owner: (ownerId: string) => [...emailKeys.all, ownerId] as const,
     lists: (ownerId: string) => [...emailKeys.owner(ownerId), 'list'] as const,
-    // toLowerCase() ensures query key consistency: sidebar URLs are lowercase (e.g. /box/sent)
-    // but SSE events use canonical case (e.g. 'Sent'). Without normalization, SSE invalidation
-    // would miss the cached query key, causing silent cache staleness.
+    // Normalize the mailbox so every spelling of a box maps to one key. toLowerCase() reconciles the
+    // lowercase sidebar URLs (/box/sent) with the canonical-case SSE events ('Sent'); the ''→'inbox'
+    // step reconciles the server-canonical inbox ('') that rides on EmailSummary.mailbox with the
+    // 'inbox' the route mounts under. Without it, invalidating list(ownerId, '') on a move/undo INTO
+    // the inbox would miss the open {mailbox:'inbox'} query and the row wouldn't reappear.
     list: (ownerId: string, mailbox: string) =>
-        [...emailKeys.lists(ownerId), { mailbox: mailbox.toLowerCase() }] as const,
+        [...emailKeys.lists(ownerId), { mailbox: mailbox === '' ? 'inbox' : mailbox.toLowerCase() }] as const,
     details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,
     detail: (ownerId: string, id: string) => [...emailKeys.details(ownerId), id] as const,
 };
 
+const MAIL_PAGE_SIZE = 200;
+
+// Newest-first paginated mailbox. Composite cursor (beforeDate=epoch MS, beforeId) matches the
+// server's date-desc/id-desc order. Returns a flat `emails` array alongside the paging controls;
+// the sole caller (the mail route) consumes the flat shape.
 export function useEmails(mailboxPath: string) {
     const { user } = useAuth();
     const ownerId = user?.id || '';
 
-    return useQuery({
+    const query = useInfiniteQuery({
         queryKey: emailKeys.list(ownerId, mailboxPath),
-        queryFn: async (): Promise<EmailSummary[]> => {
-            const response = await mailApi({ ownerId }).mailbox({ mailboxPath: mailboxPath.toLowerCase() }).get();
+        queryFn: async ({ pageParam }): Promise<EmailSummary[]> => {
+            const q: { limit: number; beforeDate?: number; beforeId?: string } = { limit: MAIL_PAGE_SIZE };
+            if (pageParam) {
+                q.beforeDate = pageParam.beforeDate;
+                q.beforeId = pageParam.beforeId;
+            }
+            const response = await mailApi({ ownerId })
+                .mailbox({ mailboxPath: mailboxPath.toLowerCase() })
+                .get({ query: q });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 1 * 60 * 1000,
+        initialPageParam: undefined as { beforeDate: number; beforeId: string } | undefined,
+        // Terminate on an empty page, NOT on a short one: an optimistic move/delete removes a row
+        // from the loaded page (patchEmailInLists), which would drop a full 200-row first page to
+        // 199 — and a `< MAIL_PAGE_SIZE` terminator would then read that as "last page" and freeze
+        // pagination after the very first archive. Keyset stays correct: the oldest remaining row is
+        // always a valid cursor, and the server returns [] once past the end (one cheap trailing
+        // fetch when the user scrolls to the bottom).
+        getNextPageParam: (lastPage) => {
+            if (lastPage.length === 0) return undefined;
+            const oldest = lastPage[lastPage.length - 1];
+            return { beforeDate: new Date(oldest.date).getTime(), beforeId: oldest.id };
+        },
+        staleTime: 60_000,
         retry: 1,
         enabled: !!ownerId,
     });
+
+    const emails = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
+    return { ...query, emails };
 }
 
 export function useEmail(messageId: string | undefined) {
@@ -92,15 +130,28 @@ export function useDeleteEmail() {
             }
             return email;
         },
+        onMutate: (email) =>
+            beginOptimisticMailMutation(
+                queryClient,
+                ownerId,
+                email.id,
+                'remove',
+                email.mailbox === 'Trash' ? SSEventType.MAIL_DELETED : SSEventType.MAIL_MOVED,
+            ),
         onSuccess: (email) => {
             if (email.mailbox === 'Trash') {
-                invalidateMailDeleted(queryClient, ownerId, email.id, 'Trash');
+                queryClient.removeQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             } else {
-                invalidateMailMoved(queryClient, ownerId, email.id, email.mailbox, 'Trash');
+                queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
+                // Moved to Trash — the Trash list wasn't optimistically patched, so refresh it.
+                queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Trash') });
             }
             invalidateMailboxes(queryClient, ownerId);
         },
-        onError: onMutationError,
+        onError: (error, _email, context) => {
+            rollbackMailMutation(queryClient, context);
+            onMutationError(error);
+        },
     });
 }
 
@@ -120,11 +171,24 @@ export function useToggleReadEmail() {
             if (response.error) throw new AppError(response);
             return email;
         },
+        onMutate: ({ email, isRead }) => {
+            if (isRead === email.isRead) return;
+            return beginOptimisticMailMutation(
+                queryClient,
+                ownerId,
+                email.id,
+                (e) => ({ ...e, isRead }),
+                SSEventType.MAIL_READ_CHANGED,
+            );
+        },
         onSuccess: (email) => {
-            invalidateMailReadChanged(queryClient, ownerId, email.id, email.mailbox);
+            queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             invalidateMailboxes(queryClient, ownerId);
         },
-        onError: onMutationError,
+        onError: (error, _vars, context) => {
+            rollbackMailMutation(queryClient, context);
+            onMutationError(error);
+        },
     });
 }
 
@@ -144,8 +208,21 @@ export function useToggleFlaggedEmail() {
             if (response.error) throw new AppError(response);
             return email;
         },
-        onSuccess: (email) => invalidateMailFlagsChanged(queryClient, ownerId, email.id, email.mailbox),
-        onError: onMutationError,
+        onMutate: ({ email, isFlagged }) => {
+            if (isFlagged === email.isFlagged) return;
+            return beginOptimisticMailMutation(
+                queryClient,
+                ownerId,
+                email.id,
+                (e) => ({ ...e, isFlagged }),
+                SSEventType.MAIL_FLAGS_CHANGED,
+            );
+        },
+        onSuccess: (email) => queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) }),
+        onError: (error, _vars, context) => {
+            rollbackMailMutation(queryClient, context);
+            onMutationError(error);
+        },
     });
 }
 
@@ -163,11 +240,19 @@ export function useMoveEmail() {
             if (response.error) throw new AppError(response);
             return email;
         },
+        onMutate: ({ email }) =>
+            beginOptimisticMailMutation(queryClient, ownerId, email.id, 'remove', SSEventType.MAIL_MOVED),
         onSuccess: (email, variables) => {
-            invalidateMailMoved(queryClient, ownerId, email.id, email.mailbox, variables.mailbox);
+            queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
+            // The target list wasn't optimistically patched (only the source row was removed) — refresh it
+            // so the moved message appears there. Usually unmounted → marked stale, refetches on next visit.
+            queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, variables.mailbox) });
             invalidateMailboxes(queryClient, ownerId);
         },
-        onError: onMutationError,
+        onError: (error, _vars, context) => {
+            rollbackMailMutation(queryClient, context);
+            onMutationError(error);
+        },
     });
 }
 
@@ -175,6 +260,79 @@ export function useOpenWriteEmailTo() {
     return (address: string) => {
         window.location.href = getMailComposeUrl(address);
     };
+}
+
+type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
+type MailMutationContext = { snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][] };
+
+// Shared optimistic-mutation plumbing for the four mail mutations (move/delete/read/flag): cancel
+// in-flight list fetches, snapshot every cached list for rollback, patch the row by id, and record
+// the echo to suppress. Returns the rollback context.
+async function beginOptimisticMailMutation(
+    queryClient: QueryClient,
+    ownerId: string,
+    messageId: string,
+    patch: EmailListPatch,
+    event: string,
+): Promise<MailMutationContext> {
+    await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
+    const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) });
+    patchEmailInLists(queryClient, ownerId, messageId, patch);
+    markRecentMailMutation(event, messageId);
+    return { snapshot };
+}
+
+function rollbackMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): void {
+    if (context) for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
+}
+
+// Patch a row by id across every cached list (sidesteps the ''/'inbox'/case mailbox-key pitfalls).
+// Lists are infinite queries, so patch each loaded page and keep refs stable when unchanged.
+function patchEmailInLists(queryClient: QueryClient, ownerId: string, messageId: string, patch: EmailListPatch): void {
+    queryClient.setQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) }, (data) => {
+        if (!data) return data;
+        let changed = false;
+        const pages = data.pages.map((page) => {
+            if (patch === 'remove') {
+                const next = page.filter((e) => e.id !== messageId);
+                if (next.length !== page.length) changed = true;
+                return next;
+            }
+            let pageChanged = false;
+            const next = page.map((e) => {
+                if (e.id !== messageId) return e;
+                pageChanged = true;
+                changed = true;
+                return patch(e);
+            });
+            return pageChanged ? next : page;
+        });
+        return changed ? { ...data, pages } : data;
+    });
+}
+
+// The server echoes every mutation back to its originator over SSE, and the SSE handler would then
+// invalidate the list — refetching every loaded page of the infinite query for a change we already
+// patched in optimistically. Each mutation records the echo it expects here; the SSE handler consumes
+// the entry and skips its list refetch. Keyed by `${event}:${messageId}`, short-TTL and consumed once so
+// a genuinely later external change to the same message still refreshes. Module-level: this is a
+// per-tab suppression of our OWN echo, never another client's changes.
+const RECENT_MAIL_MUTATION_TTL_MS = 5_000;
+const recentMailMutations = new Map<string, number>();
+
+function markRecentMailMutation(event: string, messageId: string): void {
+    const now = Date.now();
+    // Prune expired entries so a dropped echo can't leak them forever.
+    for (const [key, expiry] of recentMailMutations) if (expiry <= now) recentMailMutations.delete(key);
+    recentMailMutations.set(`${event}:${messageId}`, now + RECENT_MAIL_MUTATION_TTL_MS);
+}
+
+export function consumeRecentMailMutation(event: string, messageId: string): boolean {
+    const key = `${event}:${messageId}`;
+    const expiry = recentMailMutations.get(key);
+    if (expiry === undefined) return false;
+    recentMailMutations.delete(key);
+    return expiry > Date.now();
 }
 
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)

@@ -22,6 +22,9 @@ type LightEditorProps = {
     containerClassName?: string;
     // Read once at mount — useEditor doesn't re-initialise on prop change.
     taskList?: boolean;
+    // Inside a form: swallow Mod+Enter so StarterKit's HardBreak doesn't insert a
+    // line break before the host's submit hotkey fires. Read once at mount.
+    submitOnModEnter?: boolean;
 };
 
 // TipTap leaves an empty paragraph at the end after Enter and sometimes at the
@@ -46,6 +49,7 @@ export function LightEditor({
     proseStyle = true,
     containerClassName = 'relative flex flex-col h-full',
     taskList = false,
+    submitOnModEnter = false,
 }: LightEditorProps) {
     const editor = useEditor({
         extensions: [
@@ -71,6 +75,9 @@ export function LightEditor({
             },
             // No file node in the schema: decline files-only pastes so the event bubbles to the host's attach flow.
             handlePaste: (_view, event) => event.clipboardData != null && isFilesOnlyClipboard(event.clipboardData),
+            // Swallow Mod+Enter (runs before the HardBreak keymap) so the host's submit hotkey gets a clean event.
+            handleKeyDown: (_view, event) =>
+                submitOnModEnter && (event.metaKey || event.ctrlKey) && event.key === 'Enter',
         },
         onUpdate: ({ editor: e }) => {
             onChange?.(trimEmptyEdges(e.getHTML()));

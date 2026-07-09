@@ -1,6 +1,8 @@
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
+import { useAuth } from '@workspace/lib/auth';
 import { usePathInfos } from '@workspace/lib/drive';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
+import { useSearch } from '@workspace/lib/search';
 import { useSpaceSettings } from '@workspace/lib/space';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
@@ -9,11 +11,14 @@ import { EmptyState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
 import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
 import { EmailList, EmailListToolbar } from '../components/mail/email-list';
 import { useMailActions } from '../components/mail/hooks/use-mail-actions';
+import { useMailList } from '../components/mail/hooks/use-mail-list';
+import { useMailShortcuts } from '../components/mail/hooks/use-mail-shortcuts';
+import { MailShortcutsDialog } from '../components/mail/mail-shortcuts-dialog';
 
 export type MailSearchParams = {
     mailId?: string;
@@ -95,21 +100,66 @@ function MailRoute() {
         });
     }, [attach, allSettled, navigate, filterType, filterId]);
 
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pendingDeleteEmails, setPendingDeleteEmails] = useState<Email[]>([]);
-    const { data: emails = [], isLoading: isEmailsLoading, error: emailsError } = useEmails(filterId);
+    const {
+        emails,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+        isLoading: isEmailsLoading,
+        error: emailsError,
+    } = useEmails(filterId);
     const { data: selectedEmail = null } = useEmail(mailId);
     const { data: mailboxes = [] } = useMailboxes();
     const { data: spaceSettings } = useSpaceSettings();
     const signatureHtml = spaceSettings?.email?.signatures?.[0]?.html;
 
+    // The search box hits the server FTS index scoped to the current mailbox instead of
+    // client-filtering the loaded window. filterId ('inbox'/'sent'/…) is passed verbatim — the
+    // BE canonicalises it (inbox -> ''); passing '' here would strip the filter and search all
+    // mailboxes. Capped at the search route's max (50); results replace the paginated list while
+    // searching.
+    const isSearching = searchQuery.trim().length > 0;
+    const { data: searchData, isFetching: isSearchFetching } = useSearch({
+        ownerId,
+        q: searchQuery,
+        sources: ['mail'],
+        mailbox: filterId,
+        limit: 50,
+        enabled: isSearching,
+    });
+    const listEmails = isSearching ? (searchData?.mail ?? []) : emails;
+    const isListLoading = isSearching ? isSearchFetching : isEmailsLoading;
+
     const actions = useMailActions();
 
-    const selectedEmailInData = emails.find((m) => m.id === selectedEmail?.id);
-    const displayEmails = selectedEmailInData
-        ? emails.map((m) => (m.id === selectedEmail?.id ? { ...m, isRead: true } : m))
-        : emails;
+    // Memoized so it keeps a stable identity across renders while a conversation is open —
+    // otherwise the isRead remap yields a fresh array every render, re-running useMailList's
+    // sort (costly at large mailbox sizes) and churning downstream effects.
+    const displayEmails = useMemo(() => {
+        const openId = selectedEmail?.id;
+        if (!openId || !listEmails.some((m) => m.id === openId)) return listEmails;
+        return listEmails.map((m) => (m.id === openId ? { ...m, isRead: true } : m));
+    }, [listEmails, selectedEmail?.id]);
+
+    // Ordered rows + selection + keyboard cursor live here (not in EmailList) so
+    // useMailShortcuts can act on the same list the route renders.
+    const { orderedEmails, selection, cursorIndex, setCursorIndex, setCursorById } = useMailList({
+        emails: displayEmails,
+        activeId: mailId,
+    });
+
+    // Gmail keyboard layer — opt-in via the space setting, inert while composing/editing a draft
+    // or while the help overlay is open.
+    const shortcutsEnabled = spaceSettings?.email?.keyboardShortcuts ?? false;
+    const autoAdvance = spaceSettings?.email?.autoAdvance ?? 'older';
+    const isComposing = mode === 'compose' || !!selectedEmail?.isDraft;
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const [helpOpen, setHelpOpen] = useState(false);
 
     const handleDeleteEmail = async (mail: Email) => {
         const result = await actions.handleDeleteEmail(mail);
@@ -127,14 +177,6 @@ function MailRoute() {
         }
     };
 
-    const handleDeleteEmailById = async (emailId: string) => {
-        const result = await actions.handleDeleteEmailById(emailId);
-        if (result.needsConfirmation) {
-            setPendingDeleteEmails(result.emails);
-            setDeleteDialogOpen(true);
-        }
-    };
-
     const confirmDeleteEmails = async () => {
         if (pendingDeleteEmails.length > 0) {
             await actions.confirmDeleteEmails(pendingDeleteEmails);
@@ -143,12 +185,91 @@ function MailRoute() {
         }
     };
 
+    // Owns the open-conversation landing (auto-advance), shared by the detail toolbar and the
+    // keyboard layer. The land target is computed BEFORE the mutation. The mutation is fired but
+    // NOT awaited — navigation must be instant; blocking on the move/delete round-trip leaves the
+    // user staring at the just-actioned email. The Trash confirm is decided from the open email's
+    // own mailbox (no fetch), so no await is needed for that branch either.
+    const actOnOpenEmail = (action: 'archive' | 'delete' | 'spam') => {
+        const id = mailId;
+        if (!id) return;
+        const idx = orderedEmails.findIndex((e) => e.id === id);
+        // idx<0 (open email not in the list) would make orderedEmails[idx+1]=[0] land on the top row
+        // for 'older' — guard it so we fall back to the list instead of jumping to the first email.
+        const landId =
+            idx < 0 || autoAdvance === 'list'
+                ? undefined
+                : autoAdvance === 'older'
+                  ? orderedEmails[idx + 1]?.id
+                  : orderedEmails[idx - 1]?.id;
+        if (action === 'delete') {
+            if (selectedEmail?.mailbox === 'Trash') {
+                setPendingDeleteEmails([selectedEmail]);
+                setDeleteDialogOpen(true);
+                return;
+            }
+            void actions.deleteEmailByIdOnly(id);
+        } else {
+            void actions.moveEmailByIdOnly(id, action === 'archive' ? 'Archive' : 'Junk');
+        }
+        if (landId) actions.handleRowClick(landId);
+        else actions.navigateToList();
+    };
+
+    // Delete a single row by id, opening the Trash confirm dialog when needed. Resolves true once
+    // actually deleted, false when the dialog was opened — lets the cursor path slide only on a
+    // real delete.
+    const requestDeleteById = async (emailId: string) => {
+        const res = await actions.deleteEmailByIdOnly(emailId);
+        if (res.needsConfirmation) {
+            setPendingDeleteEmails(res.emails);
+            setDeleteDialogOpen(true);
+            return false;
+        }
+        return true;
+    };
+
+    useMailShortcuts({
+        orderedEmails,
+        cursorIndex,
+        setCursorIndex,
+        setCursorById,
+        selection,
+        isComposing,
+        helpOpen,
+        shortcutsEnabled,
+        openEmailId: mailId,
+        onRowClick: actions.handleRowClick,
+        navigateToList: actions.navigateToList,
+        navigateToMailbox: (targetFilterId: string) =>
+            navigate({ to: Route.fullPath, params: { filterType: 'box', filterId: targetFilterId }, search: {} }),
+        onCompose: actions.openCompose,
+        focusSearch: () => searchInputRef.current?.focus(),
+        openHelp: () => setHelpOpen((o) => !o),
+        actOnOpenEmail,
+        requestDeleteById,
+        moveEmailByIdOnly: actions.moveEmailByIdOnly,
+        setReadById: actions.setReadById,
+        setFlaggedById: actions.setFlaggedById,
+        setReadByIds: actions.setReadByIds,
+        setFlaggedByIds: actions.setFlaggedByIds,
+        archiveEmailsByIds: actions.handleArchiveEmailsByIds,
+        reportSpamByIds: actions.handleReportSpamByIds,
+        deleteEmailsByIds: handleDeleteEmailsByIds,
+        onReply: actions.handleReplyEmail,
+        onReplyAll: actions.handleReplyAllEmail,
+        onForward: actions.handleForwardEmail,
+        undoLast: actions.undoLast,
+    });
+
     const [filePickerOpen, setFilePickerOpen] = useState(false);
     const listWidth = isTablet ? '320px' : '400px';
     const showDetail = !!(selectedEmail || mode === 'compose');
     const isDraft = mode === 'compose' || selectedEmail?.isDraft;
 
-    const listToolbar = <EmailListToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />;
+    const listToolbar = (
+        <EmailListToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} inputRef={searchInputRef} />
+    );
 
     const detailToolbar = isDraft ? (
         <EmailDraftToolbar
@@ -160,9 +281,9 @@ function MailRoute() {
     ) : selectedEmail ? (
         <EmailDetailToolbar
             email={selectedEmail}
-            onDelete={handleDeleteEmailById}
-            onArchive={actions.handleArchiveEmailById}
-            onReportSpam={actions.handleReportSpamById}
+            onDelete={() => actOnOpenEmail('delete')}
+            onArchive={() => actOnOpenEmail('archive')}
+            onReportSpam={() => actOnOpenEmail('spam')}
             onMoveToFolder={actions.handleMoveEmailToFolderById}
             onReply={actions.handleReplyEmail}
             onReplyAll={actions.handleReplyAllEmail}
@@ -173,6 +294,7 @@ function MailRoute() {
 
     return (
         <>
+            <MailShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
             <DeleteDialog
                 open={deleteDialogOpen}
                 onOpenChange={(open) => {
@@ -194,10 +316,23 @@ function MailRoute() {
                 <Column id="list" width={listWidth} toolbar={listToolbar}>
                     <div className="flex flex-col border-r h-full overflow-hidden">
                         <EmailList
-                            emails={displayEmails}
-                            searchQuery={searchQuery}
-                            isLoading={isEmailsLoading}
+                            // View identity: on a mailbox switch OR any change to the search text,
+                            // EmailList resets the virtualizer to the top. Folding the query in (not just
+                            // isSearching) matters because refining one search into another keeps the same
+                            // mailbox and stays "searching" — a drastic result-set size change under a
+                            // scrolled position otherwise leaves the virtual window desynced from the scroll
+                            // offset (blank list until you nudge the scroll).
+                            resetKey={`${filterId}:${searchQuery.trim()}`}
+                            orderedEmails={orderedEmails}
+                            selection={selection}
+                            cursorIndex={cursorIndex}
+                            setCursorIndex={setCursorIndex}
+                            isLoading={isListLoading}
                             error={emailsError}
+                            // Paging only applies to the live mailbox; search returns a single capped set.
+                            hasMore={!isSearching && !!hasNextPage}
+                            isFetchingMore={isFetchingNextPage}
+                            onLoadMore={fetchNextPage}
                             onRowClick={actions.handleRowClick}
                             activeRowId={mailId}
                             mailboxes={mailboxes}

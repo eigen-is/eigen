@@ -4,6 +4,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateHomeSize } from '../home';
 import { invalidateSearchOwner } from '../search';
 import {
+    consumeRecentMailMutation,
     invalidateDraftUpdated,
     invalidateMailDeleted,
     invalidateMailFlagsChanged,
@@ -30,23 +31,34 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             invalidateSearchOwner(queryClient, userId);
             return true;
 
+        // For the four cases below, skip the list refetch when this is the echo of our own optimistic
+        // mutation (the list is already patched); the cheap counts/search/home invalidations still run.
+
         case SSEventType.MAIL_DELETED:
-            invalidateMailDeleted(queryClient, userId, mail.messageId, mailbox);
+            if (!consumeRecentMailMutation(event.type, mail.messageId)) {
+                invalidateMailDeleted(queryClient, userId, mail.messageId, mailbox);
+            }
             invalidateMailboxes(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_MOVED: {
-            const toMailbox = mail.toMailbox != null ? normalizeMailbox(mail.toMailbox) : null;
-            invalidateMailMoved(queryClient, userId, mail.messageId, mailbox, toMailbox);
+            // Own move: source list already patched + target list invalidated in the mutation onSuccess,
+            // so skip the echo. A move by another client (no registry entry) invalidates both lists here.
+            if (!consumeRecentMailMutation(event.type, mail.messageId)) {
+                const toMailbox = mail.toMailbox != null ? normalizeMailbox(mail.toMailbox) : null;
+                invalidateMailMoved(queryClient, userId, mail.messageId, mailbox, toMailbox);
+            }
             invalidateMailboxes(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);
             return true;
         }
 
         case SSEventType.MAIL_READ_CHANGED:
-            invalidateMailReadChanged(queryClient, userId, mail.messageId, mailbox);
+            if (!consumeRecentMailMutation(event.type, mail.messageId)) {
+                invalidateMailReadChanged(queryClient, userId, mail.messageId, mailbox);
+            }
             invalidateMailboxes(queryClient, userId);
             // Palette mail rows carry isRead on the EmailSummary and bold-on-unread —
             // invalidate so the cached search response reflects the new flag.
@@ -54,7 +66,9 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             return true;
 
         case SSEventType.MAIL_FLAGS_CHANGED:
-            invalidateMailFlagsChanged(queryClient, userId, mail.messageId, mailbox);
+            if (!consumeRecentMailMutation(event.type, mail.messageId)) {
+                invalidateMailFlagsChanged(queryClient, userId, mail.messageId, mailbox);
+            }
             invalidateSearchOwner(queryClient, userId);
             return true;
 

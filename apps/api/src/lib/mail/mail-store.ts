@@ -33,7 +33,10 @@ export interface MailStore {
     mailboxesList(): Promise<MaildirMailbox[]>;
     mailboxCreate(mailbox: string): Promise<void>;
     mailboxExists(mailbox: string): Promise<MaildirMailbox | false>;
-    listMessages(mailbox: string): Promise<EmailSummary[]>;
+    listMessages(
+        mailbox: string,
+        opts: { limit: number; before?: { date: Date; id: string } },
+    ): Promise<EmailSummary[]>;
 
     getSummary(messageId: string): EmailSummary | undefined;
     getMessage(messageId: string): Promise<Email | null>;

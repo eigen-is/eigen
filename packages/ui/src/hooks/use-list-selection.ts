@@ -15,6 +15,7 @@ export type UseListSelectionReturn<T> = {
     toggle: (id: string) => void;
     selectRange: (toId: string) => void;
     selectAll: () => void;
+    setSelection: (ids: string[]) => void;
     clearSelection: () => void;
     handleItemClick: (id: string, e: React.MouseEvent) => void;
     anchorId: string | null;
@@ -78,6 +79,11 @@ export function useListSelection<T>({ items, getId }: UseListSelectionOptions<T>
         setSelectedIds(new Set(items.map(getId)));
     }, [items, getId]);
 
+    // Set the whole selection to an explicit subset (leaves the anchor untouched, like selectAll).
+    const setSelection = useCallback((ids: string[]) => {
+        setSelectedIds(new Set(ids));
+    }, []);
+
     const clearSelection = useCallback(() => {
         setSelectedIds(new Set());
         setAnchor(null);
@@ -109,6 +115,7 @@ export function useListSelection<T>({ items, getId }: UseListSelectionOptions<T>
         toggle,
         selectRange,
         selectAll,
+        setSelection,
         clearSelection,
         handleItemClick,
         anchorId,

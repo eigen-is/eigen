@@ -1,5 +1,5 @@
 import type { EmailSummary } from '@workspace/lib/types/mail';
-import { and, count, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS, sanitizeFtsQuery } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -25,10 +25,10 @@ export default class MailDB {
         this.db = this.managedDb.db;
     }
 
-    addEmail(email: EmailSummary): boolean {
+    private toRecord(email: EmailSummary) {
         const date = email.date instanceof Date ? email.date : email.date ? new Date(email.date) : new Date();
 
-        const record = {
+        return {
             id: email.id,
             filename: email.filename,
             subject: email.subject?.toString() || '',
@@ -49,6 +49,10 @@ export default class MailDB {
             createdAt: new Date(),
             updatedAt: new Date(),
         };
+    }
+
+    addEmail(email: EmailSummary): boolean {
+        const record = this.toRecord(email);
 
         const existing = this.db.select().from(schema.emails).where(eq(schema.emails.id, record.id)).get();
         let inserted: boolean;
@@ -61,6 +65,27 @@ export default class MailDB {
             inserted = true;
         }
         return inserted;
+    }
+
+    // Bulk insert-only path for the sync's cold-index loop: the caller's diff map already proved
+    // every id is new, so this skips addEmail's per-row SELECT and commits the whole chunk in one
+    // transaction. Upsert (not a plain insert) on the id PK: a cross-mailbox id collision (e.g. a
+    // file whose message-id already lives in another mailbox's row, from a crash mid-move) would
+    // make a plain insert throw and roll back the entire chunk — and the next sync would retry the
+    // same chunk and roll back again, permanently stuck. Upsert re-homes the row instead, matching
+    // addEmail's own check-then-update semantics, while staying a single statement per row.
+    insertEmails(emails: EmailSummary[]): void {
+        if (emails.length === 0) return;
+        this.db.transaction((tx) => {
+            for (const email of emails) {
+                const record = this.toRecord(email);
+                const { id: _id, ...rest } = record;
+                tx.insert(schema.emails)
+                    .values(record)
+                    .onConflictDoUpdate({ target: schema.emails.id, set: rest })
+                    .run();
+            }
+        });
     }
 
     size() {
@@ -147,6 +172,30 @@ export default class MailDB {
 
     getAllEmails(mailbox: string) {
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
+    }
+
+    // Keyset pagination, newest-first. Composite (date, id) cursor because `date` has duplicate
+    // values in practice; `id` (TEXT PK) is the tiebreak. Drizzle serializes the Date param to the
+    // column's second unit, matching the stored value.
+    listMessages(mailbox: string, opts: { limit: number; before?: { date: Date; id: string } }): EmailSummary[] {
+        const conditions = [eq(schema.emails.mailbox, mailbox)];
+        if (opts.before) {
+            conditions.push(
+                or(
+                    lt(schema.emails.date, opts.before.date),
+                    and(eq(schema.emails.date, opts.before.date), lt(schema.emails.id, opts.before.id)),
+                )!,
+            );
+        }
+        const rows = this.db
+            .select()
+            .from(schema.emails)
+            .where(and(...conditions))
+            .orderBy(desc(schema.emails.date), desc(schema.emails.id))
+            .limit(opts.limit)
+            .all();
+        // Cap the list-view preview at the response seam — the FULL textShort stays in the DB for FTS5.
+        return rows.map((r) => (r.textShort.length > 200 ? { ...r, textShort: r.textShort.slice(0, 200) } : r));
     }
 
     searchMail(opts: MailSearchOptions): EmailSummary[] {

@@ -1,7 +1,13 @@
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupButton,
+    InputGroupInput,
+    InputGroupText,
+} from '@workspace/ui/components/input-group';
 import { cn } from '@workspace/ui/lib/utils';
-import { Search } from 'lucide-react';
-import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { Search, X } from 'lucide-react';
+import { type ChangeEvent, type RefObject, useEffect, useRef, useState } from 'react';
 
 export type SearchBarProps = {
     placeholder?: string;
@@ -11,6 +17,9 @@ export type SearchBarProps = {
     inputClassName?: string;
     maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
     debounceMs?: number;
+    // Optional handle for imperative focus (mail's `/` shortcut). Forwarded to the input; callers
+    // that don't pass it are unaffected.
+    inputRef?: RefObject<HTMLInputElement | null>;
 };
 
 export function SearchBar({
@@ -21,6 +30,7 @@ export function SearchBar({
     inputClassName,
     maxWidth = 'sm',
     debounceMs = 200,
+    inputRef,
 }: SearchBarProps) {
     const maxWidthClasses = {
         xs: 'max-w-xs',
@@ -34,6 +44,7 @@ export function SearchBar({
     const [displayValue, setDisplayValue] = useState(value);
     const lastEmittedRef = useRef(value);
     const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+    const internalRef = useRef<HTMLInputElement>(null);
 
     // Sync from parent only for external changes (e.g. clear button)
     if (value !== lastEmittedRef.current && value !== displayValue) {
@@ -42,6 +53,12 @@ export function SearchBar({
     }
 
     useEffect(() => () => clearTimeout(timerRef.current), []);
+
+    // Merge the optional external ref with the internal one used for the clear button's refocus.
+    const setInputRef = (el: HTMLInputElement | null) => {
+        internalRef.current = el;
+        if (inputRef) inputRef.current = el;
+    };
 
     const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
@@ -53,6 +70,15 @@ export function SearchBar({
         }, debounceMs);
     };
 
+    // Clear immediately (no debounce) and keep focus in the field so the user can retype.
+    const handleClear = () => {
+        clearTimeout(timerRef.current);
+        setDisplayValue('');
+        lastEmittedRef.current = '';
+        onChange('');
+        internalRef.current?.focus();
+    };
+
     return (
         <div className={cn('w-full', maxWidthClasses[maxWidth], className)}>
             <InputGroup>
@@ -62,6 +88,7 @@ export function SearchBar({
                     </InputGroupText>
                 </InputGroupAddon>
                 <InputGroupInput
+                    ref={setInputRef}
                     type="text"
                     placeholder={placeholder}
                     className={cn('w-full', inputClassName)}
@@ -69,6 +96,13 @@ export function SearchBar({
                     onChange={handleChange}
                     autoComplete="one-time-code"
                 />
+                {displayValue && (
+                    <InputGroupAddon align="inline-end">
+                        <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={handleClear}>
+                            <X />
+                        </InputGroupButton>
+                    </InputGroupAddon>
+                )}
             </InputGroup>
         </div>
     );

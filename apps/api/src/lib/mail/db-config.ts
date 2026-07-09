@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mail',
-    currentVersion: 3,
+    currentVersion: 4,
     schema,
     migrations: [
         {
@@ -92,6 +92,13 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 -- prevents this block from running twice.
                 INSERT INTO emails_fts(rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
                 SELECT rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort FROM emails;
+            `),
+        },
+        {
+            version: 4,
+            up: (db) =>
+                db.exec(`
+                CREATE INDEX IF NOT EXISTS idx_emails_mailbox_date ON emails(mailbox, date DESC, id DESC);
             `),
         },
     ],
