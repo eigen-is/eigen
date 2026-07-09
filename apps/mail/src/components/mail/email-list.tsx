@@ -283,7 +283,10 @@ export function EmailList({
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-baseline">
+                                            {/* items-center (not items-baseline): the flag star is a non-text child, and
+                                                under baseline alignment its presence shifts the date up. Centering keeps
+                                                the date fixed whether or not the row is starred. */}
+                                            <div className="flex justify-between items-center">
                                                 <div
                                                     className={cn(
                                                         'text-sm font-medium text-foreground',
@@ -294,9 +297,11 @@ export function EmailList({
                                                 </div>
                                                 <div className="flex items-center gap-1 ml-2 shrink-0">
                                                     {email.isFlagged && (
+                                                        // Match the date's text size so a flagged row doesn't grow the
+                                                        // line box and nudge the date up (the row aligns to baseline).
                                                         <Star
                                                             aria-hidden
-                                                            className="h-3.5 w-3.5 fill-current"
+                                                            className="h-3 w-3 shrink-0 fill-current"
                                                             style={{ color: 'var(--app-current-color)' }}
                                                         />
                                                     )}

@@ -1,4 +1,11 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 
 type Shortcut = { keys: string[]; label: string };
 type ShortcutGroup = { title: string; shortcuts: Shortcut[] };
@@ -78,40 +85,46 @@ type MailShortcutsDialogProps = {
 export function MailShortcutsDialog({ open, onOpenChange }: MailShortcutsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="lg">
+            {/* flex + max-h so the header stays put and the groups scroll when they don't fit the viewport. */}
+            <DialogContent size="lg" className="flex max-h-[85vh] flex-col">
                 <DialogHeader>
                     <DialogTitle>Keyboard shortcuts</DialogTitle>
                     <DialogDescription>Keyboard shortcuts to move around Mail without the mouse.</DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-6 sm:grid-cols-2">
-                    {SHORTCUT_GROUPS.map((group) => (
-                        <div key={group.title} className="flex flex-col gap-2">
-                            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                {group.title}
-                            </h3>
-                            <ul className="flex flex-col gap-2">
-                                {group.shortcuts.map((shortcut) => (
-                                    <li
-                                        key={shortcut.label}
-                                        className="flex items-center justify-between gap-4 text-sm text-foreground"
-                                    >
-                                        <span>{shortcut.label}</span>
-                                        <span className="flex gap-1">
-                                            {shortcut.keys.map((key) => (
-                                                <kbd
-                                                    key={key}
-                                                    className="min-w-6 rounded border bg-muted px-1.5 py-0.5 text-center font-mono text-xs text-muted-foreground"
-                                                >
-                                                    {key}
-                                                </kbd>
-                                            ))}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    ))}
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                    {/* Balanced CSS columns flow the groups top-to-bottom, evenly, without the ragged
+                        gaps a row-based grid leaves. break-inside-avoid keeps a group whole. */}
+                    <div className="columns-1 gap-8 sm:columns-2">
+                        {SHORTCUT_GROUPS.map((group) => (
+                            <div key={group.title} className="mb-6 flex break-inside-avoid flex-col gap-2">
+                                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {group.title}
+                                </h3>
+                                <ul className="flex flex-col gap-2">
+                                    {group.shortcuts.map((shortcut) => (
+                                        <li
+                                            key={shortcut.label}
+                                            className="flex items-center justify-between gap-4 text-sm text-foreground"
+                                        >
+                                            <span>{shortcut.label}</span>
+                                            <span className="flex shrink-0 gap-1">
+                                                {shortcut.keys.map((key) => (
+                                                    <kbd
+                                                        key={key}
+                                                        className="min-w-6 rounded border bg-muted px-1.5 py-0.5 text-center font-mono text-xs text-muted-foreground"
+                                                    >
+                                                        {key}
+                                                    </kbd>
+                                                ))}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
                 </div>
+                <DialogFooter showCloseButton />
             </DialogContent>
         </Dialog>
     );
