@@ -1,6 +1,6 @@
 /**
  * Phase attribution for mail cold sync: fs read vs MIME parse vs sqlite insert.
- * Companion to mail-bench.ts — see docs/PROPOSAL_MAIL_PERFORMANCE.md.
+ * Companion to mail-bench.ts — see docs/MAIL.md § Performance design.
  *
  * Run from the repo root (so @workspace/* resolves):
  *   N=10000 bun apps/api/scripts/mail-profile.ts

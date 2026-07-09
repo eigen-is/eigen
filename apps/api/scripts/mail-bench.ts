@@ -3,7 +3,7 @@
  *
  * Measures cold sync / warm sync / incremental sync / list query / single mutations
  * against a large maildir, WITHOUT touching the repo's data/ dir or the dev server.
- * Produced the measured table in docs/PROPOSAL_MAIL_PERFORMANCE.md.
+ * Produced the measured table in docs/MAIL.md § Performance design.
  *
  * Run from the repo root (so @workspace/* resolves):
  *   INBOX=50000 ARCHIVE=50000 INCREMENTAL=1000 bun apps/api/scripts/mail-bench.ts
