@@ -86,6 +86,7 @@ export class Mail {
                         title: `New mail from ${email.fromShort}`,
                         body: email.subject || '(no subject)',
                         tag: 'mail:new',
+                        coalesce: true,
                         details: {
                             mailId: email.id,
                             snippet: email.textShort ? email.textShort.slice(0, 120) : undefined,

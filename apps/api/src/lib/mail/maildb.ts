@@ -25,10 +25,10 @@ export default class MailDB {
         this.db = this.managedDb.db;
     }
 
-    addEmail(email: EmailSummary): boolean {
+    private toRecord(email: EmailSummary) {
         const date = email.date instanceof Date ? email.date : email.date ? new Date(email.date) : new Date();
 
-        const record = {
+        return {
             id: email.id,
             filename: email.filename,
             subject: email.subject?.toString() || '',
@@ -49,6 +49,10 @@ export default class MailDB {
             createdAt: new Date(),
             updatedAt: new Date(),
         };
+    }
+
+    addEmail(email: EmailSummary): boolean {
+        const record = this.toRecord(email);
 
         const existing = this.db.select().from(schema.emails).where(eq(schema.emails.id, record.id)).get();
         let inserted: boolean;
@@ -61,6 +65,27 @@ export default class MailDB {
             inserted = true;
         }
         return inserted;
+    }
+
+    // Bulk insert-only path for the sync's cold-index loop: the caller's diff map already proved
+    // every id is new, so this skips addEmail's per-row SELECT and commits the whole chunk in one
+    // transaction. Upsert (not a plain insert) on the id PK: a cross-mailbox id collision (e.g. a
+    // file whose message-id already lives in another mailbox's row, from a crash mid-move) would
+    // make a plain insert throw and roll back the entire chunk — and the next sync would retry the
+    // same chunk and roll back again, permanently stuck. Upsert re-homes the row instead, matching
+    // addEmail's own check-then-update semantics, while staying a single statement per row.
+    insertEmails(emails: EmailSummary[]): void {
+        if (emails.length === 0) return;
+        this.db.transaction((tx) => {
+            for (const email of emails) {
+                const record = this.toRecord(email);
+                const { id: _id, ...rest } = record;
+                tx.insert(schema.emails)
+                    .values(record)
+                    .onConflictDoUpdate({ target: schema.emails.id, set: rest })
+                    .run();
+            }
+        });
     }
 
     size() {
