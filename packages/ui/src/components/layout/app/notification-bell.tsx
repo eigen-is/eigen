@@ -35,7 +35,7 @@ function NotificationItem({ notification, previewOpts, onMarkRead, onDismiss }: 
     const handleOpen = async () => {
         if (!notification.read) onMarkRead(notification.id);
         const url = await resolveNotificationLink(notification);
-        if (url) window.open(url, '_blank', 'noopener');
+        if (url) window.location.assign(url);
     };
 
     return (
