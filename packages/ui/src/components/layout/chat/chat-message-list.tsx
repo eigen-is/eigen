@@ -270,31 +270,33 @@ export function ChatMessageList({
         }
     }, [messages.length, scrollToBottom]);
 
-    // Auto-scroll when a new message appears at the end
+    // Auto-scroll when a new message appears at the end. Near-bottom is tracked from scroll
+    // events (wasNearBottomRef): measuring here would include the just-rendered message, so a
+    // tall message would push the distance past the threshold and never scroll.
+    const wasNearBottomRef = useRef(true);
     useEffect(() => {
-        const lastId = messages[messages.length - 1]?.id ?? '';
+        const lastMessage = messages[messages.length - 1];
+        const lastId = lastMessage?.id ?? '';
         const prevLastId = lastMessageIdRef.current;
         lastMessageIdRef.current = lastId;
 
         if (!prevLastId || lastId === prevLastId) return;
 
-        const container = scrollRef.current;
-        if (!container) return;
-
-        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-        if (isNearBottom) {
+        if (lastMessage?.authorId === currentUserId || wasNearBottomRef.current) {
             scrollToBottom();
         }
-    }, [messages, scrollToBottom]);
+    }, [messages, currentUserId, scrollToBottom]);
 
     // Load more when scrolling near the top
     const onLoadMoreRef = useRef(onLoadMore);
     onLoadMoreRef.current = onLoadMore;
 
     const handleScroll = useCallback(() => {
-        if (!onLoadMoreRef.current || !hasOlderMessages || isFetchingOlderMessages) return;
         const container = scrollRef.current;
-        if (container && container.scrollTop < 200) {
+        if (!container) return;
+        wasNearBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+        if (!onLoadMoreRef.current || !hasOlderMessages || isFetchingOlderMessages) return;
+        if (container.scrollTop < 200) {
             onLoadMoreRef.current();
         }
     }, [hasOlderMessages, isFetchingOlderMessages]);
