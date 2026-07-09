@@ -1,6 +1,8 @@
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
+import { useAuth } from '@workspace/lib/auth';
 import { usePathInfos } from '@workspace/lib/drive';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
+import { useSearch } from '@workspace/lib/search';
 import { useSpaceSettings } from '@workspace/lib/space';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
@@ -98,31 +100,56 @@ function MailRoute() {
         });
     }, [attach, allSettled, navigate, filterType, filterId]);
 
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pendingDeleteEmails, setPendingDeleteEmails] = useState<Email[]>([]);
-    const { data: emails = [], isLoading: isEmailsLoading, error: emailsError } = useEmails(filterId);
+    const {
+        emails,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+        isLoading: isEmailsLoading,
+        error: emailsError,
+    } = useEmails(filterId);
     const { data: selectedEmail = null } = useEmail(mailId);
     const { data: mailboxes = [] } = useMailboxes();
     const { data: spaceSettings } = useSpaceSettings();
     const signatureHtml = spaceSettings?.email?.signatures?.[0]?.html;
 
+    // The search box hits the server FTS index scoped to the current mailbox instead of
+    // client-filtering the loaded window. filterId ('inbox'/'sent'/…) is passed verbatim — the
+    // BE canonicalises it (inbox -> ''); passing '' here would strip the filter and search all
+    // mailboxes. Capped at the search route's max (50); results replace the paginated list while
+    // searching.
+    const isSearching = searchQuery.trim().length > 0;
+    const { data: searchData, isFetching: isSearchFetching } = useSearch({
+        ownerId,
+        q: searchQuery,
+        sources: ['mail'],
+        mailbox: filterId,
+        limit: 50,
+        enabled: isSearching,
+    });
+    const listEmails = isSearching ? (searchData?.mail ?? []) : emails;
+    const isListLoading = isSearching ? isSearchFetching : isEmailsLoading;
+
     const actions = useMailActions();
 
     // Memoized so it keeps a stable identity across renders while a conversation is open —
     // otherwise the isRead remap yields a fresh array every render, re-running useMailList's
-    // filter+sort (costly at large mailbox sizes) and churning downstream effects.
+    // sort (costly at large mailbox sizes) and churning downstream effects.
     const displayEmails = useMemo(() => {
         const openId = selectedEmail?.id;
-        if (!openId || !emails.some((m) => m.id === openId)) return emails;
-        return emails.map((m) => (m.id === openId ? { ...m, isRead: true } : m));
-    }, [emails, selectedEmail?.id]);
+        if (!openId || !listEmails.some((m) => m.id === openId)) return listEmails;
+        return listEmails.map((m) => (m.id === openId ? { ...m, isRead: true } : m));
+    }, [listEmails, selectedEmail?.id]);
 
     // Ordered rows + selection + keyboard cursor live here (not in EmailList) so
     // useMailShortcuts can act on the same list the route renders.
     const { orderedEmails, selection, cursorIndex, setCursorIndex, setCursorById } = useMailList({
         emails: displayEmails,
-        searchQuery,
         activeId: mailId,
     });
 
@@ -293,8 +320,12 @@ function MailRoute() {
                             selection={selection}
                             cursorIndex={cursorIndex}
                             setCursorIndex={setCursorIndex}
-                            isLoading={isEmailsLoading}
+                            isLoading={isListLoading}
                             error={emailsError}
+                            // Paging only applies to the live mailbox; search returns a single capped set.
+                            hasMore={!isSearching && !!hasNextPage}
+                            isFetchingMore={isFetchingNextPage}
+                            onLoadMore={fetchNextPage}
                             onRowClick={actions.handleRowClick}
                             activeRowId={mailId}
                             mailboxes={mailboxes}

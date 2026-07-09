@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type UseMailListOptions = {
     emails: EmailSummary[];
-    searchQuery: string;
     activeId?: string;
 };
 
@@ -20,20 +19,13 @@ type UseMailListReturn = {
 // keyboard cursor. Owned by MailRoute so the list AND (Phase 2) useMailShortcuts
 // act on the same rows. Lifted out of EmailList; behaviour matches the shared
 // useKeyboardListNavigation it replaces for mail.
-export function useMailList({ emails, searchQuery, activeId }: UseMailListOptions): UseMailListReturn {
-    // Filter + sort lifted verbatim from EmailList — same case-insensitive
-    // subject/fromShort/textShort match, same date-desc sort.
+export function useMailList({ emails, activeId }: UseMailListOptions): UseMailListReturn {
+    // Date-desc sort over the loaded window / search results (hundreds of rows, not the whole
+    // mailbox). Search is now server-side (see the route); the client filter is gone. Stable sort
+    // keeps the server's id-desc tiebreak on equal dates, so it never corrupts page boundaries.
     const orderedEmails = useMemo(() => {
-        const queryLower = searchQuery.toLowerCase();
-        return [...emails]
-            .filter(
-                (email) =>
-                    email.subject.toLowerCase().includes(queryLower) ||
-                    email.fromShort.toLowerCase().includes(queryLower) ||
-                    email.textShort.toLowerCase().includes(queryLower),
-            )
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [emails, searchQuery]);
+        return [...emails].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [emails]);
 
     const selection = useListSelection({ items: orderedEmails, getId: (e) => e.id });
 

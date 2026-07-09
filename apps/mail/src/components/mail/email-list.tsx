@@ -43,6 +43,10 @@ type EmailListProps = {
     activeRowId?: string;
     isLoading?: boolean;
     error?: Error | null;
+    // Infinite-scroll paging: fetch the next page as the cursor/scroll nears the loaded end.
+    hasMore?: boolean;
+    isFetchingMore?: boolean;
+    onLoadMore?: () => void;
     onReply?: (emailId: string) => void;
     onReplyAll?: (emailId: string) => void;
     onForward?: (emailId: string) => void;
@@ -61,6 +65,9 @@ export function EmailList({
     setCursorIndex,
     isLoading,
     error,
+    hasMore,
+    isFetchingMore,
+    onLoadMore,
     activeRowId,
     onRowClick,
     onReply,
@@ -87,12 +94,22 @@ export function EmailList({
         overscan: 12,
         // No scrollMargin: the search toolbar lives outside this scroller, so rows start at offset 0.
     });
+    const virtualItems = virtualizer.getVirtualItems();
 
     // Keep the keyboard cursor in view. Replaces the shared hook's scrollToRow —
     // fires on cursor moves (arrows) and when an opened row syncs the cursor.
     useEffect(() => {
         if (cursorIndex >= 0) virtualizer.scrollToIndex(cursorIndex);
     }, [cursorIndex, virtualizer]);
+
+    // Load the next page once the last rendered row nears the loaded end — covers scroll AND
+    // j/k, since the keyboard cursor's scrollToIndex renders the end rows.
+    useEffect(() => {
+        const last = virtualItems[virtualItems.length - 1];
+        if (last && hasMore && !isFetchingMore && last.index >= orderedEmails.length - 1 - 6) {
+            onLoadMore?.();
+        }
+    }, [virtualItems, hasMore, isFetchingMore, orderedEmails.length, onLoadMore]);
 
     // Auto-focus the scroller shortly after mount so arrows work without a click —
     // reproduces use-keyboard-list-navigation.ts (54-61). Skip if focus already landed inside.
@@ -210,7 +227,7 @@ export function EmailList({
             <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} onKeyDown={handleKeyDown} ref={tableRef}>
                 {orderedEmails.length > 0 ? (
                     <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-                        {virtualizer.getVirtualItems().map((vi) => {
+                        {virtualItems.map((vi) => {
                             const email = orderedEmails[vi.index];
                             const index = vi.index;
                             const formattedDate = email.date ? formatDateTime(email.date) : '';

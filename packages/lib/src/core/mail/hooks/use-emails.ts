@@ -1,7 +1,15 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+    type InfiniteData,
+    type QueryClient,
+    useInfiniteQuery,
+    useMutation,
+    useQuery,
+    useQueryClient,
+} from '@tanstack/react-query';
 import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { Email, EmailSummary } from '@workspace/lib/types/mail';
+import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateMailboxes } from './use-mailboxes';
 
@@ -18,21 +26,42 @@ export const emailKeys = {
     detail: (ownerId: string, id: string) => [...emailKeys.details(ownerId), id] as const,
 };
 
+const MAIL_PAGE_SIZE = 200;
+
+// Newest-first paginated mailbox. Composite cursor (beforeDate=epoch MS, beforeId) matches the
+// server's date-desc/id-desc order. Returns a flat `emails` array alongside the paging controls;
+// the sole caller (the mail route) consumes the flat shape.
 export function useEmails(mailboxPath: string) {
     const { user } = useAuth();
     const ownerId = user?.id || '';
 
-    return useQuery({
+    const query = useInfiniteQuery({
         queryKey: emailKeys.list(ownerId, mailboxPath),
-        queryFn: async (): Promise<EmailSummary[]> => {
-            const response = await mailApi({ ownerId }).mailbox({ mailboxPath: mailboxPath.toLowerCase() }).get();
+        queryFn: async ({ pageParam }): Promise<EmailSummary[]> => {
+            const q: { limit: number; beforeDate?: number; beforeId?: string } = { limit: MAIL_PAGE_SIZE };
+            if (pageParam) {
+                q.beforeDate = pageParam.beforeDate;
+                q.beforeId = pageParam.beforeId;
+            }
+            const response = await mailApi({ ownerId })
+                .mailbox({ mailboxPath: mailboxPath.toLowerCase() })
+                .get({ query: q });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 1 * 60 * 1000,
+        initialPageParam: undefined as { beforeDate: number; beforeId: string } | undefined,
+        getNextPageParam: (lastPage) => {
+            if (lastPage.length < MAIL_PAGE_SIZE) return undefined;
+            const oldest = lastPage[lastPage.length - 1];
+            return { beforeDate: new Date(oldest.date).getTime(), beforeId: oldest.id };
+        },
+        staleTime: 60_000,
         retry: 1,
         enabled: !!ownerId,
     });
+
+    const emails = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
+    return { ...query, emails };
 }
 
 export function useEmail(messageId: string | undefined) {
@@ -94,7 +123,9 @@ export function useDeleteEmail() {
         },
         onMutate: async (email) => {
             await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
-            const snapshot = queryClient.getQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) });
+            const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({
+                queryKey: emailKeys.lists(ownerId),
+            });
             patchEmailInLists(queryClient, ownerId, email.id, 'remove');
             return { snapshot };
         },
@@ -132,7 +163,9 @@ export function useToggleReadEmail() {
         onMutate: async ({ email, isRead }) => {
             if (isRead === email.isRead) return;
             await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
-            const snapshot = queryClient.getQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) });
+            const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({
+                queryKey: emailKeys.lists(ownerId),
+            });
             patchEmailInLists(queryClient, ownerId, email.id, (e) => ({ ...e, isRead }));
             return { snapshot };
         },
@@ -166,7 +199,9 @@ export function useToggleFlaggedEmail() {
         onMutate: async ({ email, isFlagged }) => {
             if (isFlagged === email.isFlagged) return;
             await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
-            const snapshot = queryClient.getQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) });
+            const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({
+                queryKey: emailKeys.lists(ownerId),
+            });
             patchEmailInLists(queryClient, ownerId, email.id, (e) => ({ ...e, isFlagged }));
             return { snapshot };
         },
@@ -194,7 +229,9 @@ export function useMoveEmail() {
         },
         onMutate: async ({ email }) => {
             await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
-            const snapshot = queryClient.getQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) });
+            const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({
+                queryKey: emailKeys.lists(ownerId),
+            });
             patchEmailInLists(queryClient, ownerId, email.id, 'remove');
             return { snapshot };
         },
@@ -218,20 +255,27 @@ export function useOpenWriteEmailTo() {
 type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
 
 // Patch a row by id across every cached list (sidesteps the ''/'inbox'/case mailbox-key pitfalls).
+// Lists are infinite queries, so patch each loaded page and keep refs stable when unchanged.
 function patchEmailInLists(queryClient: QueryClient, ownerId: string, messageId: string, patch: EmailListPatch): void {
-    queryClient.setQueriesData<EmailSummary[]>({ queryKey: emailKeys.lists(ownerId) }, (list) => {
-        if (!list) return list;
-        if (patch === 'remove') {
-            const next = list.filter((e) => e.id !== messageId);
-            return next.length === list.length ? list : next; // keep ref stable if unchanged
-        }
+    queryClient.setQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) }, (data) => {
+        if (!data) return data;
         let changed = false;
-        const next = list.map((e) => {
-            if (e.id !== messageId) return e;
-            changed = true;
-            return patch(e);
+        const pages = data.pages.map((page) => {
+            if (patch === 'remove') {
+                const next = page.filter((e) => e.id !== messageId);
+                if (next.length !== page.length) changed = true;
+                return next;
+            }
+            let pageChanged = false;
+            const next = page.map((e) => {
+                if (e.id !== messageId) return e;
+                pageChanged = true;
+                changed = true;
+                return patch(e);
+            });
+            return pageChanged ? next : page;
         });
-        return changed ? next : list;
+        return changed ? { ...data, pages } : data;
     });
 }
 
