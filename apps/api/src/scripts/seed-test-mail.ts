@@ -57,7 +57,7 @@ const db = new Database(usersDbPath, { readonly: true });
 type UserRow = { id: string; email: string; name: string | null };
 const resolved = values.user
     ? (db.query('SELECT id, email, name FROM user WHERE id = ?').get(values.user) as UserRow | null)
-    : (db.query('SELECT id, email, name FROM user ORDER BY createdAt ASC LIMIT 1').get() as UserRow | null);
+    : (db.query('SELECT id, email, name FROM user ORDER BY created_at ASC LIMIT 1').get() as UserRow | null);
 db.close();
 if (!resolved) {
     console.error(values.user ? `No user with id ${values.user}` : 'No users found in users3.db');
@@ -128,7 +128,7 @@ const subjects = [
 let seed = 1234567;
 const rand = () => {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    return seed / 0x7fffffff;
+    return seed / 0x80000000; // 2^31 divisor keeps the range [0, 1) so pick() never indexes past the end
 };
 const pick = <T>(arr: readonly T[]) => arr[Math.floor(rand() * arr.length)];
 
