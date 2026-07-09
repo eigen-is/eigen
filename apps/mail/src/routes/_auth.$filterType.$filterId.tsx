@@ -316,6 +316,11 @@ function MailRoute() {
                 <Column id="list" width={listWidth} toolbar={listToolbar}>
                     <div className="flex flex-col border-r h-full overflow-hidden">
                         <EmailList
+                            // View identity: on a mailbox switch or entering/leaving search, EmailList
+                            // resets the virtualizer to the top. A drastic orderedEmails size change under a
+                            // scrolled position otherwise leaves the virtual window desynced from the scroll
+                            // offset (blank list until you nudge the scroll).
+                            resetKey={`${filterId}:${isSearching}`}
                             orderedEmails={orderedEmails}
                             selection={selection}
                             cursorIndex={cursorIndex}

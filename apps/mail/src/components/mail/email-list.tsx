@@ -43,6 +43,9 @@ type EmailListProps = {
     activeRowId?: string;
     isLoading?: boolean;
     error?: Error | null;
+    // Changes when the list's view identity changes (mailbox switch or entering/leaving search);
+    // EmailList snaps the virtualizer back to the top so its window can't stay desynced from a prior scroll.
+    resetKey?: string;
     // Infinite-scroll paging: fetch the next page as the cursor/scroll nears the loaded end.
     hasMore?: boolean;
     isFetchingMore?: boolean;
@@ -65,6 +68,7 @@ export function EmailList({
     setCursorIndex,
     isLoading,
     error,
+    resetKey,
     hasMore,
     isFetchingMore,
     onLoadMore,
@@ -101,6 +105,14 @@ export function EmailList({
     useEffect(() => {
         if (cursorIndex >= 0) virtualizer.scrollToIndex(cursorIndex);
     }, [cursorIndex, virtualizer]);
+
+    // Snap to the top when the view identity changes (mailbox switch or entering/leaving search). A
+    // large orderedEmails size change under a scrolled position otherwise leaves the virtual window
+    // desynced from the scroll offset — the list renders blank until a manual scroll. Declared after the
+    // cursor-scroll effect so it wins when both fire on the same view change.
+    useEffect(() => {
+        virtualizer.scrollToOffset(0);
+    }, [resetKey, virtualizer]);
 
     // Load the next page once the last rendered row nears the loaded end — covers scroll AND
     // j/k, since the keyboard cursor's scrollToIndex renders the end rows.
