@@ -114,12 +114,15 @@ export class MaildirStore implements MailStore {
         return this.getMailboxInfo(mailbox);
     }
 
-    async listMessages(mailbox: string): Promise<EmailSummary[]> {
+    async listMessages(
+        mailbox: string,
+        opts: { limit: number; before?: { date: Date; id: string } },
+    ): Promise<EmailSummary[]> {
         if (!(await this.mailboxDirExists(mailbox))) {
             throw new ApiError(404, `Mailbox '${mailbox}' not found`);
         }
         await this.syncMailbox(mailbox);
-        return this.db.getAllEmails(mailbox);
+        return this.db.listMessages(mailbox, opts);
     }
 
     // -- Message operations --

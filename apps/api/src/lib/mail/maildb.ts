@@ -1,5 +1,5 @@
 import type { EmailSummary } from '@workspace/lib/types/mail';
-import { and, count, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS, sanitizeFtsQuery } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -147,6 +147,30 @@ export default class MailDB {
 
     getAllEmails(mailbox: string) {
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
+    }
+
+    // Keyset pagination, newest-first. Composite (date, id) cursor because `date` has duplicate
+    // values in practice; `id` (TEXT PK) is the tiebreak. Drizzle serializes the Date param to the
+    // column's second unit, matching the stored value.
+    listMessages(mailbox: string, opts: { limit: number; before?: { date: Date; id: string } }): EmailSummary[] {
+        const conditions = [eq(schema.emails.mailbox, mailbox)];
+        if (opts.before) {
+            conditions.push(
+                or(
+                    lt(schema.emails.date, opts.before.date),
+                    and(eq(schema.emails.date, opts.before.date), lt(schema.emails.id, opts.before.id)),
+                )!,
+            );
+        }
+        const rows = this.db
+            .select()
+            .from(schema.emails)
+            .where(and(...conditions))
+            .orderBy(desc(schema.emails.date), desc(schema.emails.id))
+            .limit(opts.limit)
+            .all();
+        // Cap the list-view preview at the response seam — the FULL textShort stays in the DB for FTS5.
+        return rows.map((r) => (r.textShort.length > 200 ? { ...r, textShort: r.textShort.slice(0, 200) } : r));
     }
 
     searchMail(opts: MailSearchOptions): EmailSummary[] {

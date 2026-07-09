@@ -146,8 +146,16 @@ export class Mail {
         return uniqueId;
     }
 
-    async mailboxGet(mailbox: string): Promise<EmailSummary[]> {
-        return this.store.listMessages(canonicalMailbox(mailbox));
+    async mailboxGet(
+        mailbox: string,
+        opts?: { limit?: number; beforeDate?: number; beforeId?: string },
+    ): Promise<EmailSummary[]> {
+        const limit = opts?.limit ?? 200;
+        const before =
+            opts?.beforeDate != null && opts?.beforeId != null
+                ? { date: new Date(opts.beforeDate), id: opts.beforeId }
+                : undefined;
+        return this.store.listMessages(canonicalMailbox(mailbox), { limit, before });
     }
 
     // -- Message operations --

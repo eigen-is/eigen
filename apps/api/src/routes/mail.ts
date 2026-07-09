@@ -67,12 +67,19 @@ export const mailRouter = new Elysia({ name: 'mail' })
     )
     .get(
         '/mail/:ownerId/mailbox/:mailboxPath',
-        async ({ params, user }) => {
+        async ({ params, query, user }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return await (await getMailClient(user)).mailboxGet(params.mailboxPath);
+            return await (await getMailClient(user)).mailboxGet(params.mailboxPath, query);
         },
-        { auth: true },
+        {
+            auth: true,
+            query: t.Object({
+                limit: t.Optional(t.Number({ minimum: 1, maximum: 500 })),
+                beforeDate: t.Optional(t.Number()),
+                beforeId: t.Optional(t.String()),
+            }),
+        },
     )
     .post(
         '/mail/:ownerId/mailbox',

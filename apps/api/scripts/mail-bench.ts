@@ -202,12 +202,12 @@ console.log(`[list] getAllEmails('') median ${median(listTimes).toFixed(1)} ms, 
 console.log(
     `[list] JSON.stringify payload ${(payload / 1024 / 1024).toFixed(2)} MB  (${(payload / listRows.length).toFixed(0)} B/row)`,
 );
-// Full listMessages() (what the route ACTUALLY calls) = syncMailbox + getAllEmails
+// listMessages() (what the route ACTUALLY calls) = syncMailbox + one keyset page read
 const listMsgFull = await ms(async () => {
-    await store.listMessages('');
+    await store.listMessages('', { limit: 200 });
 });
-results['listMessages() full (route path)'] = `${listMsgFull.toFixed(0)} ms  (includes a no-op sync)`;
-console.log(`[list] listMessages('') full route path ${listMsgFull.toFixed(0)} ms (sync + read)\n`);
+results['listMessages() page (route path)'] = `${listMsgFull.toFixed(0)} ms  (includes a no-op sync)`;
+console.log(`[list] listMessages('') route path ${listMsgFull.toFixed(0)} ms (sync + page read)\n`);
 
 // 6) Single mutations at full DB size — median of 3 each
 const moveTimes: number[] = [];
