@@ -216,7 +216,9 @@ export function useMailShortcuts({
     useHotkey('/', () => focusSearch(), { enabled });
     // ? — open the help overlay. RawHotkey because '?' is Shift+/ (layout-dependent, excluded from
     // the lib's typed string union), so the matcher needs key '?' + shift.
-    useHotkey({ key: '?', shift: true }, () => openHelp(), { enabled });
+    // `?` toggles the help overlay — enabled even while it's open (unlike the rest of the map) so a
+    // second `?` can close it, not just Escape/overlay-click.
+    useHotkey({ key: '?', shift: true }, () => openHelp(), { enabled: shortcutsEnabled && !isComposing });
 
     // Destructive: e archive / ! spam / # delete. Priority open > selection > cursor.
     const runDestructive = (action: 'archive' | 'spam' | 'delete') => {

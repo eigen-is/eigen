@@ -17,11 +17,13 @@ import { useRef } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
-// Single-slot undo (Gmail-style): only the most recent reversible action is remembered.
-type Undoable =
+// Single-slot undo (Gmail-style): only the most recent reversible action is remembered. `done` is a
+// one-shot latch so the same action can't be reversed twice (e.g. `z` then clicking its still-visible toast).
+type Undoable = { done?: boolean } & (
     | { kind: 'move'; items: { emailId: string; from: string }[]; to: string }
     | { kind: 'read'; items: { emailId: string; prevIsRead: boolean }[] }
-    | { kind: 'flag'; items: { emailId: string; prevIsFlagged: boolean }[] };
+    | { kind: 'flag'; items: { emailId: string; prevIsFlagged: boolean }[] }
+);
 
 export function useMailActions() {
     const { filterType, filterId } = Route.useParams();
@@ -43,6 +45,8 @@ export function useMailActions() {
     // own no-op guard so a genuine reversal always fires. Reverses the passed snapshot, not the slot —
     // so an old toast undoes the action it was shown for even after later actions overwrote the slot.
     const reverse = async (action: Undoable) => {
+        if (action.done) return;
+        action.done = true;
         if (action.kind === 'move') {
             for (const item of action.items) {
                 const email = await getEmailById(item.emailId);
