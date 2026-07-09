@@ -316,11 +316,13 @@ function MailRoute() {
                 <Column id="list" width={listWidth} toolbar={listToolbar}>
                     <div className="flex flex-col border-r h-full overflow-hidden">
                         <EmailList
-                            // View identity: on a mailbox switch or entering/leaving search, EmailList
-                            // resets the virtualizer to the top. A drastic orderedEmails size change under a
+                            // View identity: on a mailbox switch OR any change to the search text,
+                            // EmailList resets the virtualizer to the top. Folding the query in (not just
+                            // isSearching) matters because refining one search into another keeps the same
+                            // mailbox and stays "searching" — a drastic result-set size change under a
                             // scrolled position otherwise leaves the virtual window desynced from the scroll
                             // offset (blank list until you nudge the scroll).
-                            resetKey={`${filterId}:${isSearching}`}
+                            resetKey={`${filterId}:${searchQuery.trim()}`}
                             orderedEmails={orderedEmails}
                             selection={selection}
                             cursorIndex={cursorIndex}
