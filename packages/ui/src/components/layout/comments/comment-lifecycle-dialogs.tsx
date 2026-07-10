@@ -1,4 +1,5 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CardDialog } from '../cards/card-dialog';
@@ -29,7 +30,8 @@ export function CommentLifecycleDialogs({
     noun,
     onCardDialogClose,
 }: CommentLifecycleDialogsProps) {
-    const { updateCard, resolveComment, openCard, openEntry, setOpenCardId } = lifecycle;
+    const { updateCard, resolveComment, assignComment, members, openCard, openEntry, setOpenCardId } = lifecycle;
+    const { user } = useAuth();
 
     return (
         <>
@@ -62,6 +64,9 @@ export function CommentLifecycleDialogs({
                 onUpdateCard={updateCard}
                 onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
                 onDelete={onDelete}
+                members={members}
+                currentUserEmail={user?.email}
+                onAssign={(chatName, email) => assignComment.mutate({ chatName, assignee: email })}
             />
         </>
     );

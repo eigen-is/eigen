@@ -1,8 +1,10 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, MessageSquare, MessageSquarePlus, Palette, RotateCcw, Trash2 } from 'lucide-react';
 import type { ElementType } from 'react';
 import { ColorSwatchRow } from '../notes/color-swatch-row';
+import { AssigneeMenuItems } from './assignee-menu-items';
 
 export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | undefined };
 
@@ -29,6 +31,9 @@ type CommentMenuItemsProps = {
     onResolve?: (chatName: string) => void;
     onReopen?: (chatName: string) => void;
     onDelete?: (cardId: string) => void;
+    members?: EffectiveMember[];
+    currentUserEmail?: string;
+    onAssign?: (chatName: string, email: string | null) => void;
 };
 
 export function CommentMenuItems({
@@ -41,6 +46,9 @@ export function CommentMenuItems({
     onResolve,
     onReopen,
     onDelete,
+    members,
+    currentUserEmail,
+    onAssign,
 }: CommentMenuItemsProps) {
     const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
     if (!item) {
@@ -71,6 +79,15 @@ export function CommentMenuItems({
                         />
                     </SubContent>
                 </Sub>
+            )}
+            {onAssign && members && currentUserEmail && entry && (
+                <AssigneeMenuItems
+                    primitives={{ Sub, SubTrigger, SubContent }}
+                    members={members}
+                    currentUserEmail={currentUserEmail}
+                    assignee={entry.assignee}
+                    onAssign={(email) => onAssign(entry.chatName, email)}
+                />
             )}
             {entry?.status === 'open' && onResolve && (
                 <Item onClick={() => onResolve(entry.chatName)}>
