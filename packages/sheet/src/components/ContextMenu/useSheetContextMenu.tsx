@@ -315,6 +315,9 @@ function CommentItems({ close }: { close: () => void }) {
         onCommentColor,
         onCommentResolve,
         onCommentReopen,
+        onCommentAssign,
+        commentMembers,
+        currentUserEmail,
         onDeleteComment,
     } = settings.hooks;
     const last = context.selections?.[context.selections.length - 1];
@@ -346,6 +349,9 @@ function CommentItems({ close }: { close: () => void }) {
             }
             onResolve={onCommentResolve}
             onReopen={onCommentReopen}
+            members={commentMembers}
+            currentUserEmail={currentUserEmail}
+            onAssign={onCommentAssign}
             onDelete={onDeleteComment && (() => onDeleteComment(row, col))}
         />
     );

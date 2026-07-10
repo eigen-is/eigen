@@ -1,5 +1,6 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { v4 as uuidv4 } from 'uuid';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
@@ -116,6 +117,9 @@ export type Hooks = {
     onCommentColor?: (row: number, column: number, color: string) => void;
     onCommentResolve?: (chatName: string) => void;
     onCommentReopen?: (chatName: string) => void;
+    onCommentAssign?: (chatName: string, email: string | null) => void;
+    commentMembers?: EffectiveMember[];
+    currentUserEmail?: string;
     getCommentInfo?: (row: number, column: number) => CommentInfo | null;
     onInsertImage?: () => void;
     resolveImageUrl?: (mediaName: string) => string | null;

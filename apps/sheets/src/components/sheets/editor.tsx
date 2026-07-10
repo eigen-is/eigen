@@ -305,6 +305,10 @@ function SheetEditorInner({
                                               resolveComment.mutate({ chatName, status: 'resolved' }),
                                           onCommentReopen: (chatName: string) =>
                                               resolveComment.mutate({ chatName, status: 'open' }),
+                                          onCommentAssign: (chatName, email) =>
+                                              assignComment.mutate({ chatName, assignee: email }),
+                                          commentMembers: members,
+                                          currentUserEmail: auth.user?.email,
                                       }
                                     : {}),
                                 getCommentInfo: (r: number, c: number) => {
