@@ -83,7 +83,7 @@ describe('Comment lifecycle via chat-create', () => {
         expect((await listComments()).find((r) => r.chatName === 'standalone.eigenchat')).toBeUndefined();
     });
 
-    test('post message → row updates messageCount, lastAuthorEmail, lastActivityAt, mentions', async () => {
+    test('post message → row updates messageCount, lastAuthorEmail, lastActivityAt', async () => {
         const chatName = 'inside-container.eigenchat';
 
         // Find the chat by name so we can post a message to it
@@ -104,7 +104,6 @@ describe('Comment lifecycle via chat-create', () => {
         expect(row.lastAuthorEmail).toBe(ctx.alice.user.email);
         expect(row.lastActivityAt).toBeTruthy();
         expect(row.createdBy).toBe(ctx.alice.user.email);
-        expect(row.mentions).toContain(ctx.bob.user.email);
     });
 
     test('resolve → status=resolved + resolvedBy set; re-open → status=open + resolvedBy null', async () => {

@@ -46,5 +46,4 @@ export type CommentEntry = {
     createdBy: string | null;
     assignee: string | null;
     title: string | null;
-    mentions: string[];
 };

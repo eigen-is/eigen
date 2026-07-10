@@ -264,8 +264,11 @@ close).
 Properties-panel overlay showing all comments for a document. The caller passes `cards`, `entries`,
 `activeCardIds`, and `anchorTexts` — the panel is pure projection.
 
-- **Tabs**: All / For you (filtered by `entries[].mentions[]` containing current user's email)
-- **Status filter**: Open (default) / Resolved / All (cards without an entry yet are shown as "open")
+- **Filter** (`CommentFilterButton`, title-row `ListFilter` popover): assignee (Anyone / Me / Unassigned /
+  member), color swatches, and status (Open default / Resolved / All). The host owns one
+  `useCommentFilter()` instance (shared with the View menu); the panel projects via
+  `matchesCommentFilter`. Active filters show a summary strip + "n hidden · Clear filters" footer.
+  Cards without an entry yet are treated as "open" and unassigned.
 
 ### CommentThread (`packages/ui/src/components/layout/comments/comment-thread.tsx`)
 

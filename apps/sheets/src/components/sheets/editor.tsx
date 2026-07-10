@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCommentLifecycle } from '@workspace/lib/comments';
+import { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import {
     isPendingMediaName,
@@ -100,6 +100,8 @@ function SheetEditorInner({
         unresolvedCount,
         setOpenCardId,
     } = lifecycle;
+    // Shared with the View menu in a later task.
+    const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const addCommentRef = useRef<(r: number, c: number) => void>(null);
@@ -335,6 +337,8 @@ function SheetEditorInner({
                         activeCardIds={activeComments.ids}
                         anchorTexts={activeComments.anchorTexts}
                         currentUserEmail={auth.user!.email}
+                        filter={commentFilter}
+                        members={members}
                         onClose={() => setCommentPanelOpen(false)}
                         onCommentClick={(cardId) => setOpenCardId(cardId)}
                         onCommentContextMenu={(e, card, entry) =>

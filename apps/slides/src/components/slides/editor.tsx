@@ -9,7 +9,7 @@ import {
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { useCommentLifecycle } from '@workspace/lib/comments';
+import { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -212,6 +212,8 @@ function SlideEditorInner({
         unresolvedCount,
         setOpenCardId,
     } = lifecycle;
+    // Shared with the View menu in a later task.
+    const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
@@ -834,6 +836,8 @@ function SlideEditorInner({
                                                 activeCardIds={activeComments.ids}
                                                 anchorTexts={activeComments.anchorTexts}
                                                 currentUserEmail={auth.user!.email}
+                                                filter={commentFilter}
+                                                members={members}
                                                 onClose={() => setCommentPanelOpen(false)}
                                                 onCommentClick={(cardId) => {
                                                     for (const obj of Object.values(deck.objects)) {

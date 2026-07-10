@@ -8,7 +8,7 @@ import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import { findCardIdByChatName, useCommentLifecycle } from '@workspace/lib/comments';
+import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
@@ -575,6 +575,8 @@ const TiptapEditor = ({
         initialChatName,
     });
     const { allComments, cards, createCard, assignComment, members, unresolvedCount, setOpenCardId } = lifecycle;
+    // Shared with the View menu in a later task.
+    const commentFilter = useCommentFilter();
     allCommentsRef.current = allComments;
     cardsRef.current = cards;
 
@@ -771,6 +773,8 @@ const TiptapEditor = ({
                                         activeCardIds={activeComments.ids}
                                         anchorTexts={activeComments.anchorTexts}
                                         currentUserEmail={auth.user!.email}
+                                        filter={commentFilter}
+                                        members={members}
                                         onClose={() => setCommentPanelOpen(false)}
                                         onCommentClick={(cardId) => {
                                             handleScrollToComment(cardId);

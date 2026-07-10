@@ -103,24 +103,7 @@ export class CommentIndex {
     }
 
     async list(): Promise<CommentEntry[]> {
-        const comments = await this.db
-            .select()
-            .from(commentSchema.comments)
-            .orderBy(commentSchema.comments.createdAt)
-            .all();
-        const mentions = await this.db.select().from(commentSchema.commentMentions).all();
-
-        const mentionsByChat = new Map<string, string[]>();
-        for (const m of mentions) {
-            const list = mentionsByChat.get(m.chatName);
-            if (list) list.push(m.email);
-            else mentionsByChat.set(m.chatName, [m.email]);
-        }
-
-        return comments.map((c) => ({
-            ...c,
-            mentions: mentionsByChat.get(c.chatName) ?? [],
-        }));
+        return this.db.select().from(commentSchema.comments).orderBy(commentSchema.comments.createdAt).all();
     }
 
     async searchComments(query: string): Promise<DocCommentMatch[]> {

@@ -21,7 +21,6 @@ function makeEntry(overrides: Partial<CommentEntry> = {}): CommentEntry {
         createdBy: null,
         assignee: null,
         title: null,
-        mentions: [],
         ...overrides,
     };
 }
