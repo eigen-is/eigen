@@ -9,7 +9,7 @@ import {
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -213,6 +213,20 @@ function SlideEditorInner({
         unresolvedCount,
         setOpenCardId,
     } = lifecycle;
+
+    // Opening a comment card also reveals its slide + selects the anchored object (panel + activity share this).
+    const openCommentCard = (cardId: string) => {
+        for (const obj of Object.values(deck.objects)) {
+            if (obj.commentCardIds?.includes(cardId)) {
+                setActiveSlideId(obj.slideId);
+                setSelectedObjectIds([obj.id]);
+                setEditingObjectId(null);
+                break;
+            }
+        }
+        setOpenCardId(cardId);
+    };
+
     // Shared with the View menu in a later task.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
@@ -848,23 +862,22 @@ function SlideEditorInner({
                                                 filter={commentFilter}
                                                 members={members}
                                                 onClose={() => setCommentPanelOpen(false)}
-                                                onCommentClick={(cardId) => {
-                                                    for (const obj of Object.values(deck.objects)) {
-                                                        if (obj.commentCardIds?.includes(cardId)) {
-                                                            setActiveSlideId(obj.slideId);
-                                                            setSelectedObjectIds([obj.id]);
-                                                            setEditingObjectId(null);
-                                                            break;
-                                                        }
-                                                    }
-                                                    setOpenCardId(cardId);
-                                                }}
+                                                onCommentClick={openCommentCard}
                                                 onCommentContextMenu={(e, card, entry) =>
                                                     commentContextMenu.handleContextMenu(e, { card, entry })
                                                 }
                                             />
                                         ) : activityPanelOpen ? (
-                                            <ActivityPanel path={path} onClose={() => setActivityPanelOpen(false)} />
+                                            <ActivityPanel
+                                                path={path}
+                                                onClose={() => setActivityPanelOpen(false)}
+                                                onOpenCard={({ cardId, chatName }) => {
+                                                    const id =
+                                                        cardId ??
+                                                        (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                                    if (id) openCommentCard(id);
+                                                }}
+                                            />
                                         ) : selectedObjects.length > 0 && canWrite ? (
                                             <SlidePropertiesPanel
                                                 objects={selectedObjects}

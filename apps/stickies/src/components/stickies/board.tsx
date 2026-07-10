@@ -443,7 +443,16 @@ export function StickiesBoard({
                                     />
                                 </div>
                                 {!isMobile && activityPanelOpen && (
-                                    <ActivityPanel path={path} onClose={() => setActivityPanelOpen(false)} />
+                                    <ActivityPanel
+                                        path={path}
+                                        onClose={() => setActivityPanelOpen(false)}
+                                        onOpenCard={({ cardId, chatName }) => {
+                                            const id =
+                                                cardId ??
+                                                (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                            if (id) setOpenCardId(id);
+                                        }}
+                                    />
                                 )}
                             </div>
                         </LayoutColumn>

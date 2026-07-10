@@ -8,12 +8,18 @@ import { useMemo } from 'react';
 import { ActivityRow } from '../activity-row';
 import { UserNameCard } from '../user-name-card';
 
+// A row's card/comment target, resolved by the host against its lifecycle `cards` map.
+type CardOpenRef = { cardId?: string; chatName?: string };
+
 type ActivityEventListProps = {
     path: DrivePath;
     events: FileEvent[];
+    // In-editor mode: rows referencing a card/comment open it in-doc; every other row is inert (no
+    // URL navigation). Absent (drive Recent Activity) keeps the resolveEventUrl deep-link behavior.
+    onOpenCard?: (ref: CardOpenRef) => void;
 };
 
-export function ActivityEventList({ path, events }: ActivityEventListProps) {
+export function ActivityEventList({ path, events, onOpenCard }: ActivityEventListProps) {
     const { user } = useAuth();
 
     // Resolve display names for the emails inside comment previews (mentions, emote targets).
@@ -38,7 +44,7 @@ export function ActivityEventList({ path, events }: ActivityEventListProps) {
                 // 'own' = the file's own events (panel title already names it); else name the item.
                 const ctx = !isFolder && event.pathId === path.id ? 'own' : 'container';
                 const lines = describeFileEvent(event, ctx, previewOpts);
-                const url = resolveEventUrl(event, path, ctx);
+                const onOpen = resolveRowOnOpen(event, path, ctx, onOpenCard);
 
                 return (
                     <ActivityRow
@@ -62,18 +68,51 @@ export function ActivityEventList({ path, events }: ActivityEventListProps) {
                         primary={lines.primary}
                         secondary={lines.secondary}
                         createdAt={event.createdAt}
-                        onOpen={
-                            url
-                                ? () => {
-                                      window.location.href = url;
-                                  }
-                                : undefined
-                        }
+                        onOpen={onOpen}
                     />
                 );
             })}
         </>
     );
+}
+
+// In-editor mode (onOpenCard set) opens card/comment rows in-doc and leaves every other row inert;
+// drive mode falls back to the resolveEventUrl deep-link + full navigation.
+function resolveRowOnOpen(
+    event: FileEvent,
+    path: DrivePath,
+    ctx: 'own' | 'container',
+    onOpenCard?: (ref: CardOpenRef) => void,
+): (() => void) | undefined {
+    if (onOpenCard) {
+        const ref = resolveEventCardRef(event);
+        return ref ? () => onOpenCard(ref) : undefined;
+    }
+    const url = resolveEventUrl(event, path, ctx);
+    return url
+        ? () => {
+              window.location.href = url;
+          }
+        : undefined;
+}
+
+// The card/comment a row references, or undefined for rows that don't open a card in the editor
+// (sticky-removed points at a card that no longer exists; comment rows need a chatName to resolve).
+function resolveEventCardRef(event: FileEvent): CardOpenRef | undefined {
+    const details = event.details;
+    if (event.eventType === 'sticky-added' || event.eventType === 'sticky-moved') {
+        return { cardId: details && 'cardId' in details ? details.cardId : undefined };
+    }
+    if (
+        event.eventType === 'commented' ||
+        event.eventType === 'assigned' ||
+        event.eventType === 'resolved' ||
+        event.eventType === 'reopened'
+    ) {
+        const chatName = details && 'chatName' in details ? details.chatName : undefined;
+        return chatName ? { chatName } : undefined;
+    }
+    return undefined;
 }
 
 // Row click target per Inventory B: deep-links for sticky/comment, share dialog for acl-changed, item open otherwise.
@@ -106,7 +145,13 @@ function resolveEventUrl(event: FileEvent, path: DrivePath, ctx: 'own' | 'contai
         return getDriveItemUrl(containerRef, { card: cardId });
     }
     if (event.eventType === 'sticky-removed') return itemUrl; // card is gone — board only
-    if (event.eventType === 'commented') {
+    // Comment lifecycle rows all carry chatName — deep-link to the comment, not just the doc.
+    if (
+        event.eventType === 'commented' ||
+        event.eventType === 'assigned' ||
+        event.eventType === 'resolved' ||
+        event.eventType === 'reopened'
+    ) {
         const chatName = details && 'chatName' in details ? details.chatName : undefined;
         return getDriveItemUrl(containerRef, { chat: chatName });
     }

@@ -8,9 +8,11 @@ import { ActivityEventList } from './activity-event-list';
 type ActivityPanelProps = {
     path: DrivePath;
     onClose: () => void;
+    // Opens the card/comment a row references in-doc; other rows stay inert (see ActivityEventList).
+    onOpenCard?: (ref: { cardId?: string; chatName?: string }) => void;
 };
 
-export function ActivityPanel({ path, onClose }: ActivityPanelProps) {
+export function ActivityPanel({ path, onClose, onOpenCard }: ActivityPanelProps) {
     const { data: events = [], isPending } = useFileHistory(path.ownerId, path.mountId, path.id, 50);
 
     return (
@@ -28,7 +30,7 @@ export function ActivityPanel({ path, onClose }: ActivityPanelProps) {
                 </div>
             ) : (
                 <div className="py-1">
-                    <ActivityEventList path={path} events={events} />
+                    <ActivityEventList path={path} events={events} onOpenCard={onOpenCard} />
                 </div>
             )}
         </PropertiesPanel>

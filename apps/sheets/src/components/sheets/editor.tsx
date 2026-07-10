@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import {
     isPendingMediaName,
@@ -364,7 +364,16 @@ function SheetEditorInner({
                         }
                     />
                 )}
-                {activityPanelOpen && <ActivityPanel path={path} onClose={() => setActivityPanelOpen(false)} />}
+                {activityPanelOpen && (
+                    <ActivityPanel
+                        path={path}
+                        onClose={() => setActivityPanelOpen(false)}
+                        onOpenCard={({ cardId, chatName }) => {
+                            const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                            if (id) setOpenCardId(id);
+                        }}
+                    />
+                )}
             </div>
 
             <CardFormDialog

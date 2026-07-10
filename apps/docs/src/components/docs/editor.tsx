@@ -797,7 +797,19 @@ const TiptapEditor = ({
                                         }}
                                     />
                                 ) : activePanel === 'activity' ? (
-                                    <ActivityPanel path={path} onClose={() => setActivityPanelOpen(false)} />
+                                    <ActivityPanel
+                                        path={path}
+                                        onClose={() => setActivityPanelOpen(false)}
+                                        onOpenCard={({ cardId, chatName }) => {
+                                            const id =
+                                                cardId ??
+                                                (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                            if (!id) return;
+                                            setCommentPanelOpen(true);
+                                            handleScrollToComment(id);
+                                            setOpenCardId(id);
+                                        }}
+                                    />
                                 ) : lastPanelRef.current === 'figure' ? (
                                     <FigurePropertiesPanel
                                         key={editor.state.selection.from}
