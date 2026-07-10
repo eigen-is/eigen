@@ -2,8 +2,8 @@
 
 > **TLDR**: Unified comment-card model across stickies / docs / slides / sheets. Each card is a
 > `{ id, title, description, color?, chatName? }` record stored in a Y.Map on the container's Y.Doc. The
-> server-side `comments.db` SQLite index holds derived metadata (status, lastAuthorEmail, messageCount,
-> mentions, createdAt, createdBy) plus a `recentText` tail + FTS index for in-document comment search.
+> server-side `comments.db` SQLite index holds derived metadata (status, assignee, lastAuthorEmail,
+> messageCount, createdAt, createdBy) plus a `recentText` tail + FTS index for in-document comment search.
 > Shared `<CardFormDialog>` and `<CardDialog>` in `packages/ui` render
 > create + view/edit flows; per-app anchors connect cards to host content.
 
@@ -16,7 +16,7 @@ comments / tasks Y.Map        chatName (PK), status, resolvedBy,     useCommentC
   → CommentCard {              resolvedAt, lastAuthorEmail,          useCreateCommentCard (atomic
        id, title, description, lastMessageSnippet, lastActivityAt,    chat-create + Y.Doc write +
        color?, chatName?,      messageCount, createdAt, createdBy,    caller-supplied anchor)
-       creator?, createdAt?    recentText (FTS), mentions[]          useUpdateCommentCard / useDelete-
+       creator?, createdAt?    recentText (FTS), assignee, title          useUpdateCommentCard / useDelete-
      }                                                                CommentCard
 ```
 
@@ -112,7 +112,10 @@ stamped migration is immutable — amend-in-place broke those databases until v5
 **`comments_fts`** (v3): external-content FTS5 over `recentText`, kept in sync by triggers; the
 UPDATE trigger is gated on `recentText` so status/activity/count writes don't churn the index.
 
-**`comment_mentions` table**: `chatName` + `email` (composite PK).
+**`comment_mentions` table**: `chatName` + `email` (composite PK). Write-only since 2026-07-10:
+`addMention` still records rows at post time, but mentions left the wire type (`CommentEntry`) and
+`list()` no longer joins them — the "For you" tab was the only reader. Kept for a possible
+cross-document mentions view later.
 
 There is no `color` column in the current schema — card color lives on the Y.Doc card. Databases
 created before 2026-05-17 may still carry an ignored legacy `color` column (nothing reads it).
@@ -148,7 +151,7 @@ the column was added.
 | `setTitle`       | Refresh the client-posted `title` cache (200-char cap applied by the callers)     |
 | `decrementCount` | `MAX(0, messageCount - 1)`                                                        |
 | `setRecentText`  | Replace the thread's ~8 KB `recentText` tail (FTS re-index via trigger)           |
-| `list`           | All comments with inline `mentions[]` (2 queries, grouped in memory)              |
+| `list`           | All comments (plain row spread; no mentions join since 2026-07-10)              |
 | `searchComments` | FTS5 body search → ranked `{ chatName, snippet }` matches (in-document search)    |
 
 Message-driven updates go through `ChatRoom.updateCommentIndex(fn)`, which opens the index, runs
@@ -171,7 +174,7 @@ notification (`getUserByEmail` guard, mirroring mentions).
 ## API routes (`apps/api/src/routes/collab.ts`)
 
 ```
-GET    /collab/:ownerId/:mountId/:pathId/comments                    List comments (with mentions[])
+GET    /collab/:ownerId/:mountId/:pathId/comments                    List comments (CommentEntry[])
 GET    /collab/:ownerId/:mountId/:pathId/comments/search?q=          FTS body search (in-document search)
 PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/status   Resolve or reopen ({ status, title? })
 PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/assignee Assign ({ assignee: email|null, title? });
@@ -189,7 +192,8 @@ y-websocket.
 |----------------------|----------------------------------------------------------------------|
 | `commentKeys`        | Query key factory: `all`, `container`, `list`                        |
 | `useComments`        | `GET .../comments` — returns `CommentEntry[]`                        |
-| `useResolveComment`  | `PATCH .../comments/:chatName/status`                                |
+| `useResolveComment`  | `PATCH .../comments/:chatName/status` (`{ chatName, status, title? }`) |
+| `useAssignComment`   | `PATCH .../comments/:chatName/assignee` (`{ chatName, assignee, title? }`) |
 | `invalidateComments` | Called by SSE handler to invalidate container keys                   |
 
 **Y.Doc card state** (`packages/lib/src/core/comments/`):
@@ -266,9 +270,27 @@ Properties-panel overlay showing all comments for a document. The caller passes 
 
 - **Filter** (`CommentFilterButton`, title-row `ListFilter` popover): assignee (Anyone / Me / Unassigned /
   member), color swatches, and status (Open default / Resolved / All). The host owns one
-  `useCommentFilter()` instance (shared with the View menu); the panel projects via
-  `matchesCommentFilter`. Active filters show a summary strip + "n hidden · Clear filters" footer.
-  Cards without an entry yet are treated as "open" and unassigned.
+  `useCommentFilter()` instance; the panel projects via `matchesCommentFilter`. Active filters show
+  a summary strip (status label always leads) + "n hidden · Clear filters" footer; the empty state
+  offers Clear filters. Cards without an entry yet are treated as "open" and unassigned. The old
+  All/For-you tabs + status Select are gone.
+
+### Comment filters (`packages/lib/src/core/comments/filter.ts` + filter UI)
+
+Session-only client state, never persisted. Model: `CommentFilter = { assignee: 'all' | 'me' |
+'unassigned' | { email }, colors: Set<string> | null, status: 'open' | 'resolved' | 'all' }` with
+`useCommentFilter(defaults?)` (state + `isActive` + `clear()`) and the pure, unit-tested
+`matchesCommentFilter(card, entry, filter, currentUserEmail)`.
+
+**Placement rule (Reinder, 2026-07-10): the filter control lives on the surface it filters.**
+Docs/slides/sheets filters narrow only the comments panel, so their only control is the panel's
+`CommentFilterButton` — there is deliberately NO toolbar View menu (a toolbar menu would mutate
+invisible state while the panel is closed). Stickies filters the board itself, so its toolbar
+Filter menu (the former mobile-only dropdown, now on all viewports) hosts the same three groups
+via `CommentFilterMenuItems` (a primitives-slot component like `CommentMenuItems`); the center
+color-dot row stays as the desktop quick affordance and shares the same filter instance. The
+pinned Anyone/Me/Unassigned block is shared between button and menu as
+`PinnedAssigneeFilterRows` (internal to `packages/ui/.../comments/`).
 
 ### CommentThread (`packages/ui/src/components/layout/comments/comment-thread.tsx`)
 
@@ -337,6 +359,9 @@ for apps that surface resolve/re-open at the dialog level (docs, slides, sheets)
   noun="sticky">` like its siblings; `useBoard` only manages columns/order, the provider, and the
   UndoManager.
 - Cards are anchored by column membership in `columnsMap.<col>.taskIds`.
+- Board-wide filtering: the board owns `useCommentFilter({ status: 'all' })` (resolved cards show
+  by default); `columnCards` filters via `matchesCommentFilter` against `entryByChatName`, and the
+  toolbar Filter menu + color-dot row drive the same instance (see the filter section above).
 - Delete is a board-level helper `deleteCardFromBoard(cardId)` that walks columns + removes the
   Y.Map entry in one `transact` (single undo step, no orphan column refs).
 
@@ -358,7 +383,7 @@ The Y.Doc is the source of truth for which cards are "active":
 | `apps/api/src/lib/drive/drive.ts`                                   | `seedCommentRow` helper called from `Drive.create` |
 | `apps/api/src/routes/collab.ts`                                     | Comment REST routes (list + search + status)  |
 | `packages/lib/src/core/chat/hooks/use-comments.ts`                  | Server-side metadata hooks + invalidation     |
-| `packages/lib/src/core/comments/`                                   | Y.Doc card hooks + helpers (+ unit tests)     |
+| `packages/lib/src/core/comments/`                                   | Y.Doc card hooks + helpers + filter model (+ unit tests) |
 | `packages/lib/src/types/comments.ts`                                | `CommentCard` type                            |
 | `packages/lib/src/types/chat.ts`                                    | `CommentEntry` type (server projection)       |
 | `packages/lib/src/docs/eigendoc/nodes/comment-mark.ts`              | TipTap mark schema (attr `cardId`)            |
