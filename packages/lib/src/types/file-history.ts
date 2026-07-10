@@ -187,7 +187,7 @@ export function describeFileEvent(
         case 'assigned': {
             const d = details && 'assignee' in details ? details : null;
             const who = d
-                ? d.assignee === opts?.viewerEmail
+                ? d.assignee === opts?.viewerEmail?.toLowerCase()
                     ? 'you'
                     : (opts?.resolveName?.(d.assignee) ?? d.assignee.split('@')[0])
                 : undefined;
