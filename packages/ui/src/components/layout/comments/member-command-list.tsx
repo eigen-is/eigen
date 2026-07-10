@@ -1,7 +1,8 @@
+import type { CommentAssigneeFilter } from '@workspace/lib/comments';
 import { usePublicUsers } from '@workspace/lib/public';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@workspace/ui/components/command';
-import { Check, CircleSlash } from 'lucide-react';
+import { Check, CircleSlash, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { MemberAvatar } from './member-avatar';
 
@@ -33,6 +34,38 @@ export function PinnedAssigneeRows({
                 <CircleSlash className="h-4 w-4 text-muted-foreground" />
                 <span className="flex-1 truncate text-left">Unassigned</span>
                 {selected === null && <Check className="h-4 w-4 shrink-0" />}
+            </button>
+        </div>
+    );
+}
+
+// Filter-semantics sibling of PinnedAssigneeRows (CommentAssigneeFilter values, not string | null),
+// shared by CommentFilterButton and CommentFilterMenuItems.
+export function PinnedAssigneeFilterRows({
+    assignee,
+    onSelect,
+    currentUserEmail,
+}: {
+    assignee: CommentAssigneeFilter;
+    onSelect: (a: CommentAssigneeFilter) => void;
+    currentUserEmail: string;
+}) {
+    return (
+        <div className="p-1">
+            <button type="button" className={memberRowClassName} onClick={() => onSelect('all')}>
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <span className="flex-1 truncate text-left">Anyone</span>
+                {assignee === 'all' && <Check className="h-4 w-4 shrink-0" />}
+            </button>
+            <button type="button" className={memberRowClassName} onClick={() => onSelect('me')}>
+                <MemberAvatar email={currentUserEmail} />
+                <span className="flex-1 truncate text-left">Me</span>
+                {assignee === 'me' && <Check className="h-4 w-4 shrink-0" />}
+            </button>
+            <button type="button" className={memberRowClassName} onClick={() => onSelect('unassigned')}>
+                <CircleSlash className="h-4 w-4 text-muted-foreground" />
+                <span className="flex-1 truncate text-left">Unassigned</span>
+                {assignee === 'unassigned' && <Check className="h-4 w-4 shrink-0" />}
             </button>
         </div>
     );

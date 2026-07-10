@@ -6,9 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/component
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
-import { Check, CircleSlash, ListFilter, Users } from 'lucide-react';
-import { MemberAvatar } from './member-avatar';
-import { MemberCommandList, memberRowClassName } from './member-command-list';
+import { Check, ListFilter } from 'lucide-react';
+import { MemberCommandList, PinnedAssigneeFilterRows } from './member-command-list';
 
 type CommentFilterButtonProps = {
     filter: ReturnType<typeof useCommentFilter>;
@@ -49,29 +48,17 @@ export function CommentFilterButton({ filter, members, currentUserEmail }: Comme
             <PopoverContent className="w-64 p-0" align="end">
                 <div className="border-b p-2">
                     <GroupLabel>Assigned to</GroupLabel>
-                    <button type="button" className={memberRowClassName} onClick={() => filter.setAssignee('all')}>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        <span className="flex-1 truncate text-left">Anyone</span>
-                        {assignee === 'all' && <Check className="h-4 w-4 shrink-0" />}
-                    </button>
-                    <button type="button" className={memberRowClassName} onClick={() => filter.setAssignee('me')}>
-                        <MemberAvatar email={currentUserEmail} />
-                        <span className="flex-1 truncate text-left">Me</span>
-                        {assignee === 'me' && <Check className="h-4 w-4 shrink-0" />}
-                    </button>
-                    <button
-                        type="button"
-                        className={memberRowClassName}
-                        onClick={() => filter.setAssignee('unassigned')}
-                    >
-                        <CircleSlash className="h-4 w-4 text-muted-foreground" />
-                        <span className="flex-1 truncate text-left">Unassigned</span>
-                        {assignee === 'unassigned' && <Check className="h-4 w-4 shrink-0" />}
-                    </button>
                     <MemberCommandList
                         members={members}
                         selectedEmail={memberSelected}
                         onSelect={(email) => filter.setAssignee({ email })}
+                        header={
+                            <PinnedAssigneeFilterRows
+                                assignee={assignee}
+                                onSelect={filter.setAssignee}
+                                currentUserEmail={currentUserEmail}
+                            />
+                        }
                     />
                 </div>
 

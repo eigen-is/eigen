@@ -1,10 +1,9 @@
 import type { useCommentFilter } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { Check, CircleDot, CircleSlash, FilterX, Palette, Users } from 'lucide-react';
+import { Check, CircleDot, FilterX, Palette, Users } from 'lucide-react';
 import type { CommentMenuPrimitives } from './comment-menu-items';
-import { MemberAvatar } from './member-avatar';
-import { MemberCommandList, memberRowClassName } from './member-command-list';
+import { MemberCommandList, PinnedAssigneeFilterRows } from './member-command-list';
 
 type CommentFilterMenuItemsProps = {
     primitives: CommentMenuPrimitives;
@@ -39,35 +38,11 @@ export function CommentFilterMenuItems({
                         selectedEmail={memberSelected}
                         onSelect={(email) => filter.setAssignee({ email })}
                         header={
-                            <div className="p-1">
-                                <button
-                                    type="button"
-                                    className={memberRowClassName}
-                                    onClick={() => filter.setAssignee('all')}
-                                >
-                                    <Users className="h-4 w-4 text-muted-foreground" />
-                                    <span className="flex-1 truncate text-left">Anyone</span>
-                                    {assignee === 'all' && <Check className="h-4 w-4 shrink-0" />}
-                                </button>
-                                <button
-                                    type="button"
-                                    className={memberRowClassName}
-                                    onClick={() => filter.setAssignee('me')}
-                                >
-                                    <MemberAvatar email={currentUserEmail} />
-                                    <span className="flex-1 truncate text-left">Me</span>
-                                    {assignee === 'me' && <Check className="h-4 w-4 shrink-0" />}
-                                </button>
-                                <button
-                                    type="button"
-                                    className={memberRowClassName}
-                                    onClick={() => filter.setAssignee('unassigned')}
-                                >
-                                    <CircleSlash className="h-4 w-4 text-muted-foreground" />
-                                    <span className="flex-1 truncate text-left">Unassigned</span>
-                                    {assignee === 'unassigned' && <Check className="h-4 w-4 shrink-0" />}
-                                </button>
-                            </div>
+                            <PinnedAssigneeFilterRows
+                                assignee={assignee}
+                                onSelect={filter.setAssignee}
+                                currentUserEmail={currentUserEmail}
+                            />
                         }
                     />
                 </SubContent>
