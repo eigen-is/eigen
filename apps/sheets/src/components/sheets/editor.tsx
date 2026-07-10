@@ -10,7 +10,7 @@ import {
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { CardFormDialog, CommentLifecycleDialogs, CommentPanel, LoadingState } from '@workspace/ui';
+import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel, LoadingState } from '@workspace/ui';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
@@ -70,6 +70,7 @@ function SheetEditorInner({
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const { resolveMediaUrl, startUpload } = useMediaResolver();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
@@ -199,13 +200,30 @@ function SheetEditorInner({
             <DocumentShareCluster
                 canWrite={canWrite}
                 onAccessDialogOpen={onAccessDialogOpen}
-                onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                onToggleCommentPanel={() => {
+                    setActivityPanelOpen(false);
+                    setCommentPanelOpen((v) => !v);
+                }}
                 commentPanelOpen={commentPanelOpen}
+                onToggleActivityPanel={() => {
+                    setCommentPanelOpen(false);
+                    setActivityPanelOpen((v) => !v);
+                }}
+                activityPanelOpen={activityPanelOpen}
                 unresolvedCommentCount={unresolvedCount}
                 watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
             />
         ),
-        [canWrite, onAccessDialogOpen, commentPanelOpen, unresolvedCount, path.ownerId, path.mountId, path.id],
+        [
+            canWrite,
+            onAccessDialogOpen,
+            commentPanelOpen,
+            activityPanelOpen,
+            unresolvedCount,
+            path.ownerId,
+            path.mountId,
+            path.id,
+        ],
     );
 
     if (!synced || !initialData) {
@@ -324,6 +342,7 @@ function SheetEditorInner({
                         }
                     />
                 )}
+                {activityPanelOpen && <ActivityPanel path={path} onClose={() => setActivityPanelOpen(false)} />}
             </div>
 
             <CardFormDialog
