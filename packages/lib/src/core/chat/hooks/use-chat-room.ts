@@ -178,6 +178,10 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
                         addLocalMessage(`inspect:${local.target}`);
                         return;
                     }
+                    case 'whoami': {
+                        if (user?.email) addLocalMessage(`inspect:${user.email}`);
+                        return;
+                    }
                     case 'reply': {
                         const target = findLastWhisperFrom();
                         if (!target) {
@@ -222,6 +226,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
             inviteToChat,
             addLocalMessage,
             findLastWhisperFrom,
+            user?.email,
         ],
     );
 

@@ -9,6 +9,7 @@ export const SLASH_COMMANDS = [
     '/inspect',
     '/look',
     '/finger',
+    '/whoami',
     '/me',
     '/invite',
     '/whisper',
@@ -24,6 +25,7 @@ export const COMMANDS_HELP = [
     { cmd: '/reply [Message]', desc: 'Reply to the last whisper' },
     { cmd: '/invite [User]', desc: 'Invite user to the room' },
     { cmd: '/inspect, /look, /finger [User]', desc: 'Inspect a user' },
+    { cmd: '/whoami', desc: 'Inspect yourself' },
     { cmd: '/me [action]', desc: 'Perform a custom emote' },
     ...[...EMOTE_COMMANDS]
         .sort((a, b) => a.key.localeCompare(b.key))
@@ -37,6 +39,7 @@ export const COMMANDS_HELP = [
 // (they can be sent immediately without arguments)
 const noSpaceCommands = new Set([
     '/help',
+    '/whoami',
     ...EMOTE_COMMANDS.filter((c) => !c.requiresTarget).flatMap((c) => [
         `/${c.key}`,
         ...(c.aliases ?? []).map((a) => `/${a}`),
@@ -49,6 +52,7 @@ export function commandNeedsSpace(command: string): boolean {
 
 export type LocalCommand =
     | { kind: 'help' }
+    | { kind: 'whoami' }
     | { kind: 'inspect'; target: string }
     | { kind: 'invite'; target: string }
     | { kind: 'reply'; content: string }
@@ -66,6 +70,7 @@ export function getLocalCommand(raw: string): LocalCommand {
     }
 
     if (validation.kind === 'help') return { kind: 'help' };
+    if (validation.kind === 'whoami') return { kind: 'whoami' };
 
     for (const cmd of ['/inspect ', '/look ', '/finger ']) {
         if (trimmed.startsWith(cmd)) {

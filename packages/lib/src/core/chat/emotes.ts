@@ -51,6 +51,7 @@ export const EMOTE_COMMANDS: EmoteCommandDef[] = [
     { key: 'guffaw', desc: 'Boisterous guffaw', canTarget: true },
     { key: 'happy', desc: 'Filled with happiness', canTarget: true },
     { key: 'hello', aliases: ['hi'], desc: 'Hearty hello', canTarget: true },
+    { key: 'hide', desc: 'Slowly back into the hedge', canTarget: true },
     { key: 'highfive', desc: 'High five', canTarget: true },
     { key: 'hug', desc: 'Hug', canTarget: true },
     { key: 'idea', desc: 'You have an idea!' },

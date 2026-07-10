@@ -4,7 +4,7 @@ import { validateEmailTarget } from './email';
 export type CommandValidationResult =
     | {
           valid: true;
-          kind: 'builtin-emote' | 'emote' | 'whisper' | 'reply' | 'invite' | 'help' | 'inspect';
+          kind: 'builtin-emote' | 'emote' | 'whisper' | 'reply' | 'invite' | 'help' | 'inspect' | 'whoami';
       }
     | { valid: false; error: string };
 
@@ -21,6 +21,12 @@ export function validateCommand(raw: string): CommandValidationResult {
 
     // Help
     if (cmdWord === 'help' && !rest) return { valid: true, kind: 'help' };
+
+    // Whoami: /whoami (no arguments)
+    if (cmdWord === 'whoami') {
+        if (rest) return { valid: false, error: '/whoami does not accept a target' };
+        return { valid: true, kind: 'whoami' };
+    }
 
     // Built-in emotes (with optional target)
     const emoteKey = resolveEmoteKey(cmdWord);

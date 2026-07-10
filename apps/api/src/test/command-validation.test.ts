@@ -51,6 +51,15 @@ describe('Command Validation', () => {
             expect(validateCommand('/inspect test@example.com')).toEqual({ valid: true, kind: 'inspect' });
             expect(validateCommand('/look user@domain.com')).toEqual({ valid: true, kind: 'inspect' });
         });
+
+        test('accepts whoami', () => {
+            expect(validateCommand('/whoami')).toEqual({ valid: true, kind: 'whoami' });
+        });
+
+        test('accepts hide emote', () => {
+            expect(validateCommand('/hide')).toEqual({ valid: true, kind: 'builtin-emote' });
+            expect(validateCommand('/hide test@example.com')).toEqual({ valid: true, kind: 'builtin-emote' });
+        });
     });
 
     describe('Invalid Commands', () => {
@@ -154,6 +163,13 @@ describe('Command Validation', () => {
             expect(validateCommand('/bow not-an-email')).toEqual({
                 valid: false,
                 error: "'not-an-email' is not a valid email address",
+            });
+        });
+
+        test('rejects whoami with a target', () => {
+            expect(validateCommand('/whoami test@example.com')).toEqual({
+                valid: false,
+                error: '/whoami does not accept a target',
             });
         });
 

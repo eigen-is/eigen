@@ -610,6 +610,13 @@ export const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedSecondPerson: '{name} surrenders before you. Such is the agony of defeat...',
         targetedThirdPerson: '{name} surrenders before {target}. Such is the agony of defeat...',
     },
+    hide: {
+        firstPerson: 'You slowly back away into the hedge.',
+        thirdPerson: '{name} slowly backs away into the hedge until only the hedge remains.',
+        targetedFirstPerson: 'You take one look at {target} and slowly back into the hedge.',
+        targetedSecondPerson: '{name} takes one look at you and slowly backs into the hedge.',
+        targetedThirdPerson: '{name} takes one look at {target} and slowly backs into the hedge.',
+    },
     trout: {
         targetedFirstPerson: 'You slap {target} around a bit with a large trout.',
         targetedSecondPerson: '{name} slaps you around a bit with a large trout.',
