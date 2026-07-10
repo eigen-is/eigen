@@ -1,5 +1,10 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { ChatMessage, CommentEntry, DrivePath } from '@workspace/lib/types';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { COMMENT_INDEX_DB_CONFIG } from '../lib/chat/comment-db-config';
+import { CommentIndex } from '../lib/chat/comment-index';
+import * as commentSchema from '../lib/chat/comment-schema';
 import {
     assertJson,
     authedRequest,
@@ -817,5 +822,67 @@ describe('Comment Index', () => {
             const commentsDb = contents.find((p: DrivePath) => p.name === 'comments.db');
             expect(commentsDb).toBeTruthy();
         });
+    });
+});
+
+// No /assign HTTP route yet (later task), so unit-test the method directly over an in-memory db.
+describe('CommentIndex.assign', () => {
+    function makeIndex(): CommentIndex {
+        const raw = new Database(':memory:');
+        for (const m of COMMENT_INDEX_DB_CONFIG.migrations) m.up(raw);
+        return new CommentIndex(drizzle(raw, { schema: commentSchema }));
+    }
+
+    test('assign sets the assignee email', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+
+        await index.assign('a.eigenchat', 'bob@test.eigen.is');
+
+        const entries = await index.list();
+        expect(entries).toHaveLength(1);
+        expect(entries[0]).toMatchObject({ chatName: 'a.eigenchat', assignee: 'bob@test.eigen.is' });
+    });
+
+    test('reassign overwrites the previous assignee', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+        await index.assign('a.eigenchat', 'bob@test.eigen.is');
+
+        await index.assign('a.eigenchat', 'charlie@test.eigen.is');
+
+        const [entry] = await index.list();
+        expect(entry).toMatchObject({ assignee: 'charlie@test.eigen.is' });
+    });
+
+    test('assign with null clears the assignee', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+        await index.assign('a.eigenchat', 'bob@test.eigen.is');
+
+        await index.assign('a.eigenchat', null);
+
+        const [entry] = await index.list();
+        expect(entry).toMatchObject({ assignee: null });
+    });
+
+    test('assigning an unknown chatName is a no-op (UPDATE matches nothing, no throw)', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+
+        await index.assign('ghost.eigenchat', 'bob@test.eigen.is');
+
+        const entries = await index.list();
+        expect(entries).toHaveLength(1);
+        expect(entries[0].chatName).toBe('a.eigenchat');
+    });
+
+    test('list() rows expose assignee (null when unset)', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+
+        const [entry] = await index.list();
+        expect(Object.keys(entry)).toContain('assignee');
+        expect(entry).toMatchObject({ assignee: null });
     });
 });

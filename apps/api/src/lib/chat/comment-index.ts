@@ -81,6 +81,13 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
+    async assign(chatName: string, email: string | null): Promise<void> {
+        await this.db
+            .update(commentSchema.comments)
+            .set({ assignee: email })
+            .where(eq(commentSchema.comments.chatName, chatName));
+    }
+
     async decrementCount(chatName: string): Promise<void> {
         await this.db
             .update(commentSchema.comments)

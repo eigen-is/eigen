@@ -3,7 +3,7 @@ import * as commentSchema from './comment-schema';
 
 export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
     name: 'comment-index',
-    currentVersion: 3,
+    currentVersion: 4,
     schema: commentSchema,
     migrations: [
         {
@@ -80,6 +80,13 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
                 -- Populate from the rows just backfilled. No-op on a fresh database.
                 INSERT INTO comments_fts(rowid, recentText) SELECT rowid, recentText FROM comments WHERE recentText IS NOT NULL;
             `),
+        },
+        {
+            // Comment assignment (server-authoritative, like resolve). Lowercased member
+            // email, NULL = unassigned. Assignee writes don't churn comments_fts — the
+            // AFTER UPDATE trigger above is gated on recentText.
+            version: 4,
+            up: (db) => db.exec(`ALTER TABLE comments ADD COLUMN assignee TEXT;`),
         },
     ],
 };
