@@ -3,7 +3,8 @@
 > **TLDR**: Unified comment-card model across stickies / docs / slides / sheets. Each card is a
 > `{ id, title, description, color?, chatName? }` record stored in a Y.Map on the container's Y.Doc. The
 > server-side `comments.db` SQLite index holds derived metadata (status, lastAuthorEmail, messageCount,
-> mentions, createdAt, createdBy). Shared `<CardFormDialog>` and `<CardDialog>` in `packages/ui` render
+> mentions, createdAt, createdBy) plus a `recentText` tail + FTS index for in-document comment search.
+> Shared `<CardFormDialog>` and `<CardDialog>` in `packages/ui` render
 > create + view/edit flows; per-app anchors connect cards to host content.
 
 ## Architecture
@@ -15,7 +16,7 @@ comments / tasks Y.Map        chatName (PK), status, resolvedBy,     useCommentC
   → CommentCard {              resolvedAt, lastAuthorEmail,          useCreateCommentCard (atomic
        id, title, description, lastMessageSnippet, lastActivityAt,    chat-create + Y.Doc write +
        color?, chatName?,      messageCount, createdAt, createdBy,    caller-supplied anchor)
-       creator?, createdAt?    mentions[]                            useUpdateCommentCard / useDelete-
+       creator?, createdAt?    recentText (FTS), mentions[]          useUpdateCommentCard / useDelete-
      }                                                                CommentCard
 ```
 
@@ -98,19 +99,26 @@ persist (enabling undo/redo + Y.Doc version revert), but it is hidden from the c
 
 ## Database schema
 
-**`comments` table** (`apps/api/src/lib/chat/comment-schema.ts`, v2 since 2026-05-17):
+**`comments` table** (`apps/api/src/lib/chat/comment-schema.ts`, v3 since 2026-07-06):
 `chatName` (PK), `status` (open|resolved), `resolvedBy`, `resolvedAt`, `lastAuthorEmail`,
-`lastMessageSnippet`, `lastActivityAt`, `messageCount`, `createdAt`, `createdBy`, `color` (unused
-by new code; kept for legacy data — a future v3 can drop it).
+`lastMessageSnippet`, `lastActivityAt`, `messageCount`, `createdAt`, `createdBy` (v2),
+`recentText` (v3 — newest ~8 KB of the thread's messages, recomputed on every comment write).
+
+**`comments_fts`** (v3): external-content FTS5 over `recentText`, kept in sync by triggers; the
+UPDATE trigger is gated on `recentText` so status/activity/count writes don't churn the index.
 
 **`comment_mentions` table**: `chatName` + `email` (composite PK).
+
+There is no `color` column in the current schema — card color lives on the Y.Doc card. Databases
+created before 2026-05-17 may still carry an ignored legacy `color` column (nothing reads it).
 
 ## Row seeding
 
 A `comments.db` row is created **at chat creation** when the new chat lands inside a container's
 `chat/` folder. `Drive.create` calls a private `seedCommentRow(...)` helper that resolves the
-container via `findContainerPath`, opens the index via `tryOpenCommentIndex` (returns `null` if
-the container has no index yet), and calls `ensureComment(chatName, { createdBy: user.email })`.
+container via `findContainerPath`, opens the index via `openCommentIndex` (every real container
+has a `comments.db` by construction — `CollabDocument.create` provisions it; standalone chats bail
+earlier at `findContainerPath`), and calls `ensureComment(chatName, { createdBy: user.email })`.
 
 The `ensureComment` upsert uses `INSERT ... ON CONFLICT DO UPDATE SET createdBy = COALESCE(createdBy,
 EXCLUDED.createdBy)` — a real value is never overwritten by null, making the call idempotent.
@@ -132,15 +140,21 @@ the column was added.
 | `resolve`        | Set `status='resolved'`, record `resolvedBy`/`resolvedAt`                         |
 | `reopen`         | Set `status='open'`, clear resolved fields                                        |
 | `decrementCount` | `MAX(0, messageCount - 1)`                                                        |
+| `setRecentText`  | Replace the thread's ~8 KB `recentText` tail (FTS re-index via trigger)           |
 | `list`           | All comments with inline `mentions[]` (2 queries, grouped in memory)              |
+| `searchComments` | FTS5 body search → ranked `{ chatName, snippet }` matches (in-document search)    |
 
-All updates go through `ChatRoom.updateCommentIndex(fn)`, which opens the index, runs the callback,
-and emits `CHAT_COMMENT_INDEX_UPDATED` SSE.
+Message-driven updates go through `ChatRoom.updateCommentIndex(fn)`, which opens the index, runs
+the callback, recomputes `recentText`, and emits `CHAT_COMMENT_INDEX_UPDATED` SSE (owner home
+broadcast + effective-member fan-out). The `/status` route and `seedCommentRow` write the index
+directly — without the SSE broadcast, so a resolve/reopen reaches other clients only on their next
+refetch, not live.
 
 ## API routes (`apps/api/src/routes/collab.ts`)
 
 ```
 GET    /collab/:ownerId/:mountId/:pathId/comments                    List comments (with mentions[])
+GET    /collab/:ownerId/:mountId/:pathId/comments/search?q=          FTS body search (in-document search)
 PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/status   Resolve or reopen
 ```
 
@@ -298,11 +312,11 @@ The Y.Doc is the source of truth for which cards are "active":
 
 | File                                                                | Purpose                                       |
 |---------------------------------------------------------------------|-----------------------------------------------|
-| `apps/api/src/lib/chat/comment-schema.ts`                           | Drizzle schema (v2)                           |
-| `apps/api/src/lib/chat/comment-db-config.ts`                        | DB config + v1/v2 migrations                  |
-| `apps/api/src/lib/chat/comment-index.ts`                            | CommentIndex + `openCommentIndex` + `tryOpenCommentIndex` |
+| `apps/api/src/lib/chat/comment-schema.ts`                           | Drizzle schema (v3)                           |
+| `apps/api/src/lib/chat/comment-db-config.ts`                        | DB config + v1–v3 migrations (v3: `recentText` + FTS) |
+| `apps/api/src/lib/chat/comment-index.ts`                            | CommentIndex + `openCommentIndex` + `getCommentIndex` |
 | `apps/api/src/lib/drive/drive.ts`                                   | `seedCommentRow` helper called from `Drive.create` |
-| `apps/api/src/routes/collab.ts`                                     | Comment REST routes (list + status)           |
+| `apps/api/src/routes/collab.ts`                                     | Comment REST routes (list + search + status)  |
 | `packages/lib/src/core/chat/hooks/use-comments.ts`                  | Server-side metadata hooks + invalidation     |
 | `packages/lib/src/core/comments/`                                   | Y.Doc card hooks + helpers (+ unit tests)     |
 | `packages/lib/src/types/comments.ts`                                | `CommentCard` type                            |
@@ -311,7 +325,7 @@ The Y.Doc is the source of truth for which cards are "active":
 | `packages/lib/src/slides/types.ts`                                  | `BaseObject.commentCardIds`                   |
 | `packages/lib/src/sheets/types.ts`                                  | `Cell.commentCardIds`                         |
 | `packages/ui/src/components/layout/cards/`                          | Shared CardFormDialog + CardDialog |
-| `packages/ui/src/components/layout/comments/`                       | CommentPanel + CommentThread + CommentMenuItems + CommentContextMenu + useCreatedByMeta |
+| `packages/ui/src/components/layout/comments/`                       | CommentPanel + CommentThread + CommentMenuItems + CommentContextMenu + CreatedByMeta |
 | `packages/ui/src/components/layout/notes/`                          | NoteCard + NoteCardDialog                     |
 | `apps/docs/src/components/docs/editor.tsx`                          | Docs editor integration                       |
 | `apps/docs/src/components/docs/extensions/comment-mark.ts`          | ProseMirror plugins (interaction + decorations) |
