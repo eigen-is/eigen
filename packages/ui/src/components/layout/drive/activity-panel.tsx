@@ -11,7 +11,7 @@ type ActivityPanelProps = {
 };
 
 export function ActivityPanel({ path, onClose }: ActivityPanelProps) {
-    const { data: events = [] } = useFileHistory(path.ownerId, path.mountId, path.id, 50);
+    const { data: events = [], isPending } = useFileHistory(path.ownerId, path.mountId, path.id, 50);
 
     return (
         <PropertiesPanel>
@@ -20,7 +20,8 @@ export function ActivityPanel({ path, onClose }: ActivityPanelProps) {
                 <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
             </div>
 
-            {events.length === 0 ? (
+            {/* isPending guard: no "No activity yet" flash while the first fetch is in flight. */}
+            {isPending ? null : events.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                     <Activity className="h-8 w-8 mb-2 opacity-40" />
                     <p className="text-xs">No activity yet</p>
