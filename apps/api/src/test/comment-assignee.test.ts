@@ -153,6 +153,26 @@ describe('Comment assignee', () => {
         expect(after).toBe(before);
     });
 
+    test('assigning an unregistered invitee succeeds and silently skips the notification', async () => {
+        const ghost = 'ghost-invitee@test.eigen.is';
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docId}/acl`, {
+            add: [{ id: ghost, read: true, write: false }],
+        });
+
+        const res = await patchAssignee(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            docId,
+            chatName,
+            ghost,
+        );
+        expect(res.status).toBe(200);
+
+        const row = findOrFail(await listComments(), (r: CommentEntry) => r.chatName === chatName);
+        expect(row.assignee).toBe(ghost);
+    });
+
     test('assigning on a chatName with no index row creates it (ensureComment)', async () => {
         // No chat was ever created under this name, so seedCommentRow never ran and there is no
         // comments.db row — the route's ensureComment must create it before assigning.
