@@ -1,5 +1,5 @@
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
-import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { Semaphore } from '../../utils/semaphore';
 import { getServerSettings } from '../config/server-settings';
 import { composeShareEmail } from '../core/mail-composers';
@@ -32,8 +32,6 @@ export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Prom
     }
     return ids;
 }
-
-export type EffectiveMember = { email: string; read: boolean; write: boolean };
 
 // Canonical ACL diff (lowercased entry ids, all entry types). History details and
 // propagation both derive from this — one source of truth for "who was added/removed".

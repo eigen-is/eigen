@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type * as Y from 'yjs';
-import { useComments, useResolveComment } from '../../chat';
+import { useAssignComment, useComments, useResolveComment } from '../../chat';
+import { useEffectiveMembers } from '../../drive';
 import { useCardIdFromChatName } from './use-card-id-from-chat-name';
 import { useCommentCards } from './use-comment-cards';
 import { useCreateCommentCard } from './use-create-comment-card';
@@ -53,6 +54,8 @@ export function useCommentLifecycle({
 
     const { data: allComments = [] } = useComments(ownerId, mountId, pathId);
     const resolveComment = useResolveComment(ownerId, mountId, pathId);
+    const assignComment = useAssignComment(ownerId, mountId, pathId);
+    const { data: members = [] } = useEffectiveMembers(ownerId, mountId, pathId);
     const cards = useCommentCards(doc, mapName);
     const createCard = useCreateCommentCard(ownerId, mountId, chatFolderId, mediaFolderId, doc, mapName);
     const updateCard = useUpdateCommentCard(doc, mapName);
@@ -65,6 +68,8 @@ export function useCommentLifecycle({
     return {
         allComments,
         resolveComment,
+        assignComment,
+        members,
         cards,
         createCard,
         updateCard,

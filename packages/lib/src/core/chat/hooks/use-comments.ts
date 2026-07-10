@@ -41,6 +41,23 @@ export function useResolveComment(ownerId: string, mountId: string, containerId:
     });
 }
 
+export function useAssignComment(ownerId: string, mountId: string, containerId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ chatName, assignee }: { chatName: string; assignee: string | null }) => {
+            const response = await collabApi({ ownerId })({ mountId })({ pathId: containerId })
+                .comments({ chatName })
+                .assignee.patch({ assignee });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: () => {
+            invalidateComments(queryClient, ownerId, mountId, containerId);
+        },
+        onError: onMutationError,
+    });
+}
+
 export function invalidateComments(
     queryClient: QueryClient,
     ownerId: string,

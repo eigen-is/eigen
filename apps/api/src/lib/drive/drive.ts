@@ -17,6 +17,7 @@ import {
     type DrivePath,
     type DrivePathDetails,
     type DriveVisibility,
+    type EffectiveMember,
     type EigenDocType,
     isContainerType,
 } from '@workspace/lib/types/drive';
@@ -58,7 +59,7 @@ import {
     mergeACLDelta,
     normalizeACL,
 } from './acl';
-import { diffACLEmails, type EffectiveMember, propagateSharedPathChange, resolveACLToEmails } from './acl-propagation';
+import { diffACLEmails, propagateSharedPathChange, resolveACLToEmails } from './acl-propagation';
 import { CollabRegistry } from './collab-registry';
 import { LockManager } from './lock-manager';
 import { getSharedDatabase } from './shared';

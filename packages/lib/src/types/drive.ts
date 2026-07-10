@@ -385,3 +385,5 @@ export type EditorSaveResult = {
     updatedAt?: Date;
     currentUpdatedAt?: Date;
 };
+
+export type EffectiveMember = { email: string; read: boolean; write: boolean };

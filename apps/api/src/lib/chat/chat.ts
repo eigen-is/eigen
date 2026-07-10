@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type DrivePath, type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { and, desc, eq, isNull, lt, ne } from 'drizzle-orm';
@@ -8,7 +8,6 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Drive } from '../drive';
-import type { EffectiveMember } from '../drive/acl-propagation';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
 import { getUserByEmail, type User } from '../user/';

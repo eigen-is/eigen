@@ -9,7 +9,7 @@ function parseDriveTag(
 ): { ownerId: string; mountId: string; pathId: string; chatName?: string } | null {
     const parts = tag.split(':');
     if (
-        !['share', 'mention', 'chat-message', 'comment-reply'].includes(parts[0]) ||
+        !['share', 'mention', 'chat-message', 'comment-reply', 'assigned'].includes(parts[0]) ||
         !parts[1] ||
         !parts[2] ||
         !parts[3]
@@ -82,6 +82,7 @@ export function isClickableNotification(type: string): boolean {
         'mention-comment',
         'chat-message',
         'comment-reply',
+        'assigned',
         'calendar-share',
         'calendar-unshare',
         'calendar-invite',
@@ -102,6 +103,7 @@ export async function resolveNotificationLink(
     switch (type) {
         case 'mention-comment':
         case 'comment-reply':
+        case 'assigned':
             return resolveDriveLink(tag, true);
 
         case 'share':
