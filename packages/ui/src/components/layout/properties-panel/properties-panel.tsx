@@ -10,7 +10,10 @@ type PropertiesPanelProps = {
 export function PropertiesPanel({ children, className }: PropertiesPanelProps) {
     return (
         <div className={cn('w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden', className)}>
-            <ScrollArea className="flex-1 h-full">{children}</ScrollArea>
+            {/* Radix wraps viewport children in display:table (min-width:100%), which sizes to content and defeats truncate in this fixed-width panel — force block. */}
+            <ScrollArea className="flex-1 h-full [&_[data-slot=scroll-area-viewport]>div]:!block">
+                {children}
+            </ScrollArea>
         </div>
     );
 }
