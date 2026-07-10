@@ -1,13 +1,16 @@
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
 import { Elysia, t } from 'elysia';
-import { getCommentIndex } from '../lib/chat/comment-index';
+import { getCommentIndex, openCommentIndex } from '../lib/chat/comment-index';
+import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type CollabDocument from '../lib/collab/collabDocument';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type Drive from '../lib/drive/drive';
 import type SharedDrive from '../lib/drive/sharedDrive';
-import type { User } from '../lib/user';
+import { sendToHome } from '../lib/home/home-relay';
+import { getUserByEmail, type User } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
 
@@ -98,10 +101,62 @@ export const collabRouter = new Elysia({
             } else {
                 await index.reopen(params.chatName);
             }
+            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId).catch(() => {});
             return { success: true };
         },
         {
             body: t.Object({ status: t.Union([t.Literal('resolved'), t.Literal('open')]) }),
+            auth: true,
+        },
+    )
+
+    .patch(
+        '/collab/:ownerId/:mountId/:pathId/comments/:chatName/assignee',
+        async ({ params, body, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
+                throw new ApiError(403, 'No write permission');
+            }
+            const assignee = body.assignee ? body.assignee.toLowerCase() : null;
+            if (assignee) {
+                const members = await drive.getEffectiveMembers(params.mountId, params.pathId);
+                if (!members.some((m) => m.email === assignee)) {
+                    throw new ApiError(400, 'Assignee is not a member of this document');
+                }
+            }
+            const path = await drive.getPath(params.mountId, params.pathId);
+            if (!path) throw new ApiError(404, 'Container not found');
+            const index = await openCommentIndex(drive, path);
+            // Unlike /status (update-only), ensure the row: legacy cards created before
+            // row-seeding have a chat but no index row yet.
+            await index.ensureComment(params.chatName);
+            await index.assign(params.chatName, assignee);
+
+            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId).catch(() => {});
+
+            if (assignee && assignee !== user.email.toLowerCase()) {
+                try {
+                    const assigneeUser = await getUserByEmail(assignee);
+                    if (assigneeUser) {
+                        await sendToHome(assigneeUser.id, {
+                            type: 'notification',
+                            notification: {
+                                type: 'assigned',
+                                actorEmail: user.email,
+                                title: `${user.name} assigned you a comment on "${stripEigenExtension(path.name)}"`,
+                                tag: `assigned:${params.ownerId}:${params.mountId}:${params.pathId}:${params.chatName}`,
+                                details: { pathType: path.type },
+                            },
+                        });
+                    }
+                } catch {
+                    // user or home may not exist (unregistered guests get no notification)
+                }
+            }
+            return { success: true };
+        },
+        {
+            body: t.Object({ assignee: t.Nullable(t.String()) }),
             auth: true,
         },
     )
