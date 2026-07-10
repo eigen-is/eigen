@@ -9,7 +9,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CardFormDialog, CommentLifecycleDialogs, LoadingState, NoteCard } from '@workspace/ui';
+import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, LoadingState, NoteCard } from '@workspace/ui';
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
 import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
@@ -140,6 +140,7 @@ export function StickiesBoard({
     const isMobile = useIsMobile();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
     const [colorFilter, setColorFilter] = useState<Set<string>>(new Set());
+    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
     const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
 
@@ -290,6 +291,8 @@ export function StickiesBoard({
                                     onAddColumn={() => setIsAddColumnDialogOpen(true)}
                                     colorFilter={colorFilter}
                                     onColorFilterChange={setColorFilter}
+                                    onToggleActivityPanel={() => setActivityPanelOpen((v) => !v)}
+                                    activityPanelOpen={activityPanelOpen}
                                 />
                             }
                         >
@@ -416,6 +419,9 @@ export function StickiesBoard({
                                         onCardDialogClose={onClearInitialChat}
                                     />
                                 </div>
+                                {!isMobile && activityPanelOpen && (
+                                    <ActivityPanel path={path} onClose={() => setActivityPanelOpen(false)} />
+                                )}
                             </div>
                         </LayoutColumn>
                     </DocSearchProvider>

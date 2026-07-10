@@ -28,6 +28,8 @@ type ToolbarProps = {
     path: DrivePath;
     colorFilter: Set<string>;
     onColorFilterChange: (filter: Set<string>) => void;
+    onToggleActivityPanel?: () => void;
+    activityPanelOpen?: boolean;
 };
 
 export function Toolbar({
@@ -38,6 +40,8 @@ export function Toolbar({
     path,
     colorFilter,
     onColorFilterChange,
+    onToggleActivityPanel,
+    activityPanelOpen,
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
     // ≤1200px the center dot row doesn't fit — the Filter menu replaces it (same state, two entry points).
@@ -157,6 +161,8 @@ export function Toolbar({
                     <DocumentShareCluster
                         canWrite={canWrite}
                         onAccessDialogOpen={onAccessDialogOpen}
+                        onToggleActivityPanel={onToggleActivityPanel}
+                        activityPanelOpen={activityPanelOpen}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                     />
                 </div>
