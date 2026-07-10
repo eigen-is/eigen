@@ -1,5 +1,6 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/lib/auth';
-import { useCreateChat } from '@workspace/lib/chat';
+import { invalidateComments, useCreateChat } from '@workspace/lib/chat';
 import { nanoid } from 'nanoid';
 import { useCallback, useRef } from 'react';
 import * as Y from 'yjs';
@@ -31,11 +32,13 @@ export function writeCardToDoc(doc: Y.Doc, mapName: string, card: CommentCard): 
 export function useCreateCommentCard(
     ownerId: string,
     mountId: string,
+    pathId: string,
     chatFolderId: string | null,
     mediaFolderId: string | null,
     doc: Y.Doc | null,
     mapName: 'comments' | 'tasks' = 'comments',
 ) {
+    const queryClient = useQueryClient();
     const createChat = useCreateChat(ownerId, mountId);
     const createChatRef = useRef(createChat);
     createChatRef.current = createChat;
@@ -74,8 +77,11 @@ export function useCreateCommentCard(
                 writeCardToDoc(doc, mapName, card);
                 anchorInTransact?.(card);
             });
+            // The chat create seeded a comments.db row server-side; without this refetch the new
+            // card's entry-gated menu items (Assign to, Resolve) stay hidden until staleTime.
+            invalidateComments(queryClient, ownerId, mountId, pathId);
             return card;
         },
-        [doc, chatFolderId, mapName, resolveAttachments],
+        [queryClient, ownerId, mountId, pathId, doc, chatFolderId, mapName, resolveAttachments],
     );
 }

@@ -57,7 +57,7 @@ export function useCommentLifecycle({
     const assignComment = useAssignComment(ownerId, mountId, pathId);
     const { data: members = [] } = useEffectiveMembers(ownerId, mountId, pathId);
     const cards = useCommentCards(doc, mapName);
-    const createCard = useCreateCommentCard(ownerId, mountId, chatFolderId, mediaFolderId, doc, mapName);
+    const createCard = useCreateCommentCard(ownerId, mountId, pathId, chatFolderId, mediaFolderId, doc, mapName);
     const updateCard = useUpdateCommentCard(doc, mapName);
 
     const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeCardIds);
