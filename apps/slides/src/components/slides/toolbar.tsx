@@ -29,6 +29,8 @@ type ToolbarProps = {
     onPresent: () => void;
     onToggleCommentPanel?: () => void;
     commentPanelOpen?: boolean;
+    onToggleActivityPanel?: () => void;
+    activityPanelOpen?: boolean;
     unresolvedCommentCount?: number;
 };
 
@@ -43,6 +45,8 @@ export function Toolbar({
     onPresent,
     onToggleCommentPanel,
     commentPanelOpen,
+    onToggleActivityPanel,
+    activityPanelOpen,
     unresolvedCommentCount,
 }: ToolbarProps) {
     const { exportDocument, isExporting } = useExportDocument();
@@ -111,6 +115,8 @@ export function Toolbar({
                             onAccessDialogOpen={onAccessDialogOpen}
                             onToggleCommentPanel={onToggleCommentPanel}
                             commentPanelOpen={commentPanelOpen}
+                            onToggleActivityPanel={onToggleActivityPanel}
+                            activityPanelOpen={activityPanelOpen}
                             unresolvedCommentCount={unresolvedCommentCount}
                             watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                         />

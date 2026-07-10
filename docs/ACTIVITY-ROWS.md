@@ -1,7 +1,8 @@
 # Activity Rows
 
-The topbar notification bell and the Drive *Recent activity* panel render the same row anatomy
-through one shared component and one shared phrasing layer. This doc is the reference for what
+The topbar notification bell, the Drive *Recent activity* panel, and the eigendoc editors'
+*Activity* side panel (`ActivityPanel`, toggled from `DocumentShareCluster`) render the same row
+anatomy through one shared component and one shared phrasing layer. This doc is the reference for what
 every row says and where it links. The notification pipeline itself (storage, coalescing, SSE,
 routes) is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
 

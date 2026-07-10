@@ -25,16 +25,16 @@ export function useRecordHistory(ownerId: string, mountId: string, pathId: strin
     });
 }
 
-// GET FILE HISTORY — last 5 events for a path (file: direct events; folder: descendant
-// events included). The limit is fixed because it isn't part of the queryKey: two
-// callers with different limits would collide in the cache.
-export function useFileHistory(ownerId: string, mountId: string, pathId: string) {
+// GET FILE HISTORY — file: direct events; folder: descendant events included.
+// limit is part of the queryKey: drive detail (default 5) and the editors'
+// activity panel (50) cache independently. Route caps limit at 100.
+export function useFileHistory(ownerId: string, mountId: string, pathId: string, limit = 5) {
     return useQuery<FileEvent[]>({
-        queryKey: driveKeys.fileHistory(ownerId, mountId, pathId),
+        queryKey: driveKeys.fileHistory(ownerId, mountId, pathId, limit),
         queryFn: async () => {
             const response = await driveApi({ ownerId })({ mountId })
                 .path({ pathId })
-                .history.get({ query: { limit: 5 } });
+                .history.get({ query: { limit } });
             if (response.error) throw new AppError(response);
             return response.data;
         },

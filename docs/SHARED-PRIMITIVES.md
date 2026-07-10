@@ -5,18 +5,19 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-802 primitives across 6 kinds. `packages/sheet` internals are excluded.
+810 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (108)
+## Components (110)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
 | `AccessDenied` | `@workspace/ui` | packages/ui/src/components/layout/app/access-denied.tsx |
+| `ActivityPanel` | `@workspace/ui` | packages/ui/src/components/layout/drive/activity-panel.tsx |
 | `ActivityRow` | `@workspace/ui` | packages/ui/src/components/layout/activity-row.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
@@ -37,6 +38,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Column` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `ColumnLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `CommentContextMenu` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-context-menu.tsx |
+| `CommentFilterMenuItems` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-filter-menu-items.tsx |
 | `CommentLifecycleDialogs` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-lifecycle-dialogs.tsx |
 | `CommentMenuItems` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-menu-items.tsx |
 | `CommentPanel` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-panel.tsx |
@@ -145,7 +147,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (206)
+## Hooks (207)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -223,6 +225,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `usePaletteSelectionActions` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection-actions.ts |
 | `useCardIdFromChatName` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-card-id-from-chat-name.ts |
 | `useCommentCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
+| `useCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `useCommentLifecycle` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-lifecycle.ts |
 | `useCreateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `useOpenCardById` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-open-card-by-id.ts |
@@ -356,7 +359,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (225)
+## Types (227)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -364,6 +367,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AuthUser` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `LocalCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
+| `CommentAssigneeFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
+| `CommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -586,7 +591,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (252)
+## Utilities & constants (255)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -703,7 +708,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `restoreYjsDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `parseQuery` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/parse-query.ts |
 | `applyCardPatch` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
+| `DEFAULT_COMMENT_FILTER` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `findCardIdByChatName` | `@workspace/lib/comments` | packages/lib/src/core/comments/find-card-id-by-chat-name.ts |
+| `isCommentFilterActive` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
+| `matchesCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |

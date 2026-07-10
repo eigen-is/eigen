@@ -75,6 +75,8 @@ type EditorToolbarProps = {
     path: DrivePath;
     onToggleCommentPanel?: () => void;
     commentPanelOpen?: boolean;
+    onToggleActivityPanel?: () => void;
+    activityPanelOpen?: boolean;
     unresolvedCommentCount?: number;
     onImageUpload?: (file: File) => void;
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
@@ -89,6 +91,8 @@ export const EditorToolbar = ({
     onAccessDialogOpen,
     onToggleCommentPanel,
     commentPanelOpen,
+    onToggleActivityPanel,
+    activityPanelOpen,
     unresolvedCommentCount,
     onImageUpload,
     onImagePickFromDrive,
@@ -668,6 +672,8 @@ export const EditorToolbar = ({
                         onAccessDialogOpen={onAccessDialogOpen}
                         onToggleCommentPanel={onToggleCommentPanel}
                         commentPanelOpen={commentPanelOpen}
+                        onToggleActivityPanel={onToggleActivityPanel}
+                        activityPanelOpen={activityPanelOpen}
                         unresolvedCommentCount={unresolvedCommentCount}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                     />

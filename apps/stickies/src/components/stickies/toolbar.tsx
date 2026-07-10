@@ -32,6 +32,8 @@ type ToolbarProps = {
     filter: ReturnType<typeof useCommentFilter>;
     members: EffectiveMember[];
     currentUserEmail: string;
+    onToggleActivityPanel?: () => void;
+    activityPanelOpen?: boolean;
 };
 
 export function Toolbar({
@@ -43,6 +45,8 @@ export function Toolbar({
     filter,
     members,
     currentUserEmail,
+    onToggleActivityPanel,
+    activityPanelOpen,
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
     // ≤1200px the center dot row doesn't fit — the Filter menu is the only entry point there.
@@ -139,6 +143,8 @@ export function Toolbar({
                     <DocumentShareCluster
                         canWrite={canWrite}
                         onAccessDialogOpen={onAccessDialogOpen}
+                        onToggleActivityPanel={onToggleActivityPanel}
+                        activityPanelOpen={activityPanelOpen}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                     />
                 </div>
