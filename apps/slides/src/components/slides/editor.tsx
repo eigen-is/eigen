@@ -667,7 +667,7 @@ function SlideEditorInner({
                 addCommentToObject(objId, card.id);
             });
             if (assignee !== undefined && card?.chatName) {
-                assignComment.mutate({ chatName: card.chatName, assignee });
+                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             setAddTargetObjId(null);
             setAddOpen(false);
@@ -808,14 +808,14 @@ function SlideEditorInner({
                                                 entries={allComments}
                                                 members={members}
                                                 currentUserEmail={auth.user?.email}
-                                                onCommentAssign={(chatName, email) =>
-                                                    assignComment.mutate({ chatName, assignee: email })
+                                                onCommentAssign={(chatName, email, title) =>
+                                                    assignComment.mutate({ chatName, assignee: email, title })
                                                 }
-                                                onCommentResolve={(chatName) =>
-                                                    resolveComment.mutate({ chatName, status: 'resolved' })
+                                                onCommentResolve={(chatName, title) =>
+                                                    resolveComment.mutate({ chatName, status: 'resolved', title })
                                                 }
-                                                onCommentReopen={(chatName) =>
-                                                    resolveComment.mutate({ chatName, status: 'open' })
+                                                onCommentReopen={(chatName, title) =>
+                                                    resolveComment.mutate({ chatName, status: 'open', title })
                                                 }
                                                 onCommentChangeColor={(cardId, color) => updateCard(cardId, { color })}
                                                 onCommentDelete={removeCommentFromObject}

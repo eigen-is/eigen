@@ -2,7 +2,7 @@ import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
 import { Elysia, t } from 'elysia';
-import { getCommentIndex, openCommentIndex } from '../lib/chat/comment-index';
+import { getCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type CollabDocument from '../lib/collab/collabDocument';
 import { ApiError } from '../lib/core/errors';
@@ -95,17 +95,15 @@ export const collabRouter = new Elysia({
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
-            const index = await getCommentIndex(drive, params.mountId, params.pathId);
-            if (body.status === 'resolved') {
-                await index.resolve(params.chatName, user.email);
-            } else {
-                await index.reopen(params.chatName);
-            }
+            await drive.setCommentStatus(params.mountId, params.pathId, params.chatName, body.status, user, body.title);
             broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId).catch(() => {});
             return { success: true };
         },
         {
-            body: t.Object({ status: t.Union([t.Literal('resolved'), t.Literal('open')]) }),
+            body: t.Object({
+                status: t.Union([t.Literal('resolved'), t.Literal('open')]),
+                title: t.Optional(t.String()),
+            }),
             auth: true,
         },
     )
@@ -124,20 +122,15 @@ export const collabRouter = new Elysia({
                     throw new ApiError(400, 'Assignee is not a member of this document');
                 }
             }
-            const path = await drive.getPath(params.mountId, params.pathId);
-            if (!path) throw new ApiError(404, 'Container not found');
-            const index = await openCommentIndex(drive, path);
-            // Unlike /status (update-only), ensure the row: legacy cards created before
-            // row-seeding have a chat but no index row yet.
-            await index.ensureComment(params.chatName);
-            await index.assign(params.chatName, assignee);
+            await drive.assignComment(params.mountId, params.pathId, params.chatName, assignee, user, body.title);
 
             broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId).catch(() => {});
 
             if (assignee && assignee !== user.email.toLowerCase()) {
                 try {
                     const assigneeUser = await getUserByEmail(assignee);
-                    if (assigneeUser) {
+                    const path = assigneeUser ? await drive.getPath(params.mountId, params.pathId) : null;
+                    if (assigneeUser && path) {
                         await sendToHome(assigneeUser.id, {
                             type: 'notification',
                             notification: {
@@ -156,7 +149,7 @@ export const collabRouter = new Elysia({
             return { success: true };
         },
         {
-            body: t.Object({ assignee: t.Nullable(t.String()) }),
+            body: t.Object({ assignee: t.Nullable(t.String()), title: t.Optional(t.String()) }),
             auth: true,
         },
     )

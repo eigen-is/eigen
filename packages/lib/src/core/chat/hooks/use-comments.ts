@@ -27,10 +27,18 @@ export function useComments(ownerId: string, mountId: string, containerId: strin
 export function useResolveComment(ownerId: string, mountId: string, containerId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ chatName, status }: { chatName: string; status: 'resolved' | 'open' }) => {
+        mutationFn: async ({
+            chatName,
+            status,
+            title,
+        }: {
+            chatName: string;
+            status: 'resolved' | 'open';
+            title?: string;
+        }) => {
             const response = await collabApi({ ownerId })({ mountId })({ pathId: containerId })
                 .comments({ chatName })
-                .status.patch({ status });
+                .status.patch({ status, title });
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -44,10 +52,18 @@ export function useResolveComment(ownerId: string, mountId: string, containerId:
 export function useAssignComment(ownerId: string, mountId: string, containerId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ chatName, assignee }: { chatName: string; assignee: string | null }) => {
+        mutationFn: async ({
+            chatName,
+            assignee,
+            title,
+        }: {
+            chatName: string;
+            assignee: string | null;
+            title?: string;
+        }) => {
             const response = await collabApi({ ownerId })({ mountId })({ pathId: containerId })
                 .comments({ chatName })
-                .assignee.patch({ assignee });
+                .assignee.patch({ assignee, title });
             if (response.error) throw new AppError(response);
             return response.data;
         },

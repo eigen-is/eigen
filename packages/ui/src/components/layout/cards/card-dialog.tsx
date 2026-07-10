@@ -34,8 +34,8 @@ type CardDialogProps = {
         color?: string;
         attachments?: ChatAttachment[];
     }) => void;
-    onResolve?: (chatName: string, next: 'open' | 'resolved') => void;
-    onAssign?: (chatName: string, assignee: string | null) => void;
+    onResolve?: (chatName: string, next: 'open' | 'resolved', title?: string) => void;
+    onAssign?: (chatName: string, assignee: string | null, title?: string) => void;
 };
 
 export function CardDialog({
@@ -64,7 +64,7 @@ export function CardDialog({
             ? {
                   actionIcon: entry.status === 'open' ? Check : RotateCcw,
                   actionTooltip: entry.status === 'open' ? 'Resolve' : 'Re-open',
-                  onAction: () => onResolve(entry.chatName, entry.status === 'open' ? 'resolved' : 'open'),
+                  onAction: () => onResolve(entry.chatName, entry.status === 'open' ? 'resolved' : 'open', card.title),
               }
             : {};
 
@@ -75,7 +75,7 @@ export function CardDialog({
         drafts?: CardAttachmentDraft[],
         assignee?: string | null,
     ) => {
-        if (assignee !== undefined && card.chatName) onAssign?.(card.chatName, assignee);
+        if (assignee !== undefined && card.chatName) onAssign?.(card.chatName, assignee, card.title);
         if (!onUpdate) return;
         if (drafts === undefined) {
             onUpdate(patch);
@@ -95,7 +95,7 @@ export function CardDialog({
             assigneeControl = (
                 <AssigneePicker
                     value={assignee}
-                    onChange={(email) => onAssign(chatName, email)}
+                    onChange={(email) => onAssign(chatName, email, card.title)}
                     members={members}
                     currentUserEmail={currentUserEmail}
                 >

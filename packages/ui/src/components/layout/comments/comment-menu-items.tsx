@@ -28,12 +28,12 @@ type CommentMenuItemsProps = {
     onAddComment?: () => void;
     onOpen?: (cardId: string) => void;
     onChangeColor?: (cardId: string, color: string) => void;
-    onResolve?: (chatName: string) => void;
-    onReopen?: (chatName: string) => void;
+    onResolve?: (chatName: string, title?: string) => void;
+    onReopen?: (chatName: string, title?: string) => void;
     onDelete?: (cardId: string) => void;
     members?: EffectiveMember[];
     currentUserEmail?: string;
-    onAssign?: (chatName: string, email: string | null) => void;
+    onAssign?: (chatName: string, email: string | null, title?: string) => void;
 };
 
 export function CommentMenuItems({
@@ -86,16 +86,16 @@ export function CommentMenuItems({
                     members={members}
                     currentUserEmail={currentUserEmail}
                     assignee={entry.assignee}
-                    onAssign={(email) => onAssign(entry.chatName, email)}
+                    onAssign={(email) => onAssign(entry.chatName, email, card.title)}
                 />
             )}
             {entry?.status === 'open' && onResolve && (
-                <Item onClick={() => onResolve(entry.chatName)}>
+                <Item onClick={() => onResolve(entry.chatName, card.title)}>
                     <Check className="h-4 w-4" /> Resolve {noun}
                 </Item>
             )}
             {entry?.status === 'resolved' && onReopen && (
-                <Item onClick={() => onReopen(entry.chatName)}>
+                <Item onClick={() => onReopen(entry.chatName, card.title)}>
                     <RotateCcw className="h-4 w-4" /> Reopen {noun}
                 </Item>
             )}

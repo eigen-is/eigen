@@ -35,7 +35,7 @@ import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ChatRoom } from '../chat';
-import { openCommentIndex } from '../chat/comment-index';
+import { getCommentIndex, openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
@@ -308,6 +308,59 @@ export default class Drive {
         }
         const chatRoom = new ChatRoom(this, this.home, path);
         return chatRoom.init();
+    }
+
+    // Assign is server-authoritative (comments.db), so the activity moment is recorded here,
+    // not in a Yjs client event. Only real assignments make a row — unassign stays silent
+    // (matches resolve). The assignee is excluded from the watcher fan-out: they already get
+    // the direct 'assigned' notification.
+    async assignComment(
+        mountId: string,
+        pathId: string,
+        chatName: string,
+        assignee: string | null,
+        user: User,
+        title?: string,
+    ): Promise<void> {
+        const path = await this.getPath(mountId, pathId);
+        if (!path) throw new ApiError(404, 'Container not found');
+        const index = await openCommentIndex(this, path);
+        // Legacy cards created before row-seeding have a chat but no index row yet.
+        await index.ensureComment(chatName);
+        await index.assign(chatName, assignee);
+        // Best-effort title cache (client-posted, like the sticky-* event card names).
+        const card = title?.slice(0, 200);
+        if (card) await index.setTitle(chatName, card);
+        if (assignee) {
+            await this.recordFileEvent(
+                mountId,
+                pathId,
+                user,
+                'assigned',
+                { assignee, card, chatName },
+                { excludeEmails: new Set([assignee]) },
+            );
+        }
+    }
+
+    async setCommentStatus(
+        mountId: string,
+        pathId: string,
+        chatName: string,
+        status: 'resolved' | 'open',
+        user: User,
+        title?: string,
+    ): Promise<void> {
+        const index = await getCommentIndex(this, mountId, pathId);
+        const card = title?.slice(0, 200);
+        if (card) await index.setTitle(chatName, card);
+        if (status === 'resolved') {
+            await index.resolve(chatName, user.email);
+            await this.recordFileEvent(mountId, pathId, user, 'resolved', { card, chatName });
+        } else {
+            await index.reopen(chatName);
+            await this.recordFileEvent(mountId, pathId, user, 'reopened', { card, chatName });
+        }
     }
 
     async uploadFiles(
@@ -951,8 +1004,9 @@ export default class Drive {
     }
 
     // Single record + fan-out seam for mutations on a live path. Called by the Drive
-    // mutations above, collab/collabDocument.ts ('edited'), chat/chat.ts ('commented'),
-    // and Drive.recordClientFileEvent below. Not route-callable — no SharedDrive wrapper.
+    // mutations above (incl. assignComment/setCommentStatus 'assigned'/'resolved'/'reopened'),
+    // collab/collabDocument.ts ('edited'), chat/chat.ts ('commented'), and
+    // Drive.recordClientFileEvent below. Not route-callable — no SharedDrive wrapper.
     // Mutations that rewrite the parent chain (trash/move/permanent-delete) or recurse
     // through mounts (copy) keep their own inline record + fan-out instead.
     async recordFileEvent<K extends FileEventType>(

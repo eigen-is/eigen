@@ -83,10 +83,15 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
         },
         {
             // Comment assignment (server-authoritative, like resolve). Lowercased member
-            // email, NULL = unassigned. Assignee writes don't churn comments_fts — the
-            // AFTER UPDATE trigger above is gated on recentText.
+            // email, NULL = unassigned. title = best-effort client-posted card-title cache
+            // (refreshed on assign/status) for activity-event labels. Neither write churns
+            // comments_fts — the AFTER UPDATE trigger above is gated on recentText.
             version: 4,
-            up: (db) => db.exec(`ALTER TABLE comments ADD COLUMN assignee TEXT;`),
+            up: (db) =>
+                db.exec(`
+                ALTER TABLE comments ADD COLUMN assignee TEXT;
+                ALTER TABLE comments ADD COLUMN title TEXT;
+            `),
         },
     ],
 };

@@ -8,11 +8,11 @@ type CommentContextMenuProps = {
     noun?: string;
     onOpen: (cardId: string) => void;
     onUpdateCard: (cardId: string, patch: { color: string }) => void;
-    onResolve: (chatName: string, status: 'open' | 'resolved') => void;
+    onResolve: (chatName: string, status: 'open' | 'resolved', title?: string) => void;
     onDelete: (cardId: string) => void;
     members?: EffectiveMember[];
     currentUserEmail?: string;
-    onAssign?: (chatName: string, email: string | null) => void;
+    onAssign?: (chatName: string, email: string | null, title?: string) => void;
 };
 
 export function CommentContextMenu({
@@ -45,8 +45,8 @@ export function CommentContextMenu({
                 item={contextMenu.item ?? null}
                 onOpen={close(onOpen)}
                 onChangeColor={close((cardId, color) => onUpdateCard(cardId, { color }))}
-                onResolve={close((chatName) => onResolve(chatName, 'resolved'))}
-                onReopen={close((chatName) => onResolve(chatName, 'open'))}
+                onResolve={close((chatName, title) => onResolve(chatName, 'resolved', title))}
+                onReopen={close((chatName, title) => onResolve(chatName, 'open', title))}
                 onDelete={close(onDelete)}
                 members={members}
                 currentUserEmail={currentUserEmail}

@@ -27,12 +27,14 @@ describe('comment-db v4 migration', () => {
 
         const cols = db.query<{ name: string }, []>('PRAGMA table_info(comments);').all();
         expect(cols.some((c) => c.name === 'assignee')).toBe(true);
+        expect(cols.some((c) => c.name === 'title')).toBe(true);
         const row = db
-            .query<{ assignee: string | null }, []>(
-                "SELECT assignee FROM comments WHERE chatName = 'legacy.eigenchat';",
+            .query<{ assignee: string | null; title: string | null }, []>(
+                "SELECT assignee, title FROM comments WHERE chatName = 'legacy.eigenchat';",
             )
             .get();
         expect(row?.assignee).toBeNull();
+        expect(row?.title).toBeNull();
     });
 
     test('assignee updates do not churn the FTS shadow (comments_au gate holds)', () => {
@@ -43,10 +45,11 @@ describe('comment-db v4 migration', () => {
         expect(ftsMatch(db, 'alpha')).toBe('t.eigenchat');
     });
 
-    test('fresh database ends at v4 with assignee present', () => {
+    test('fresh database ends at v4 with assignee and title present', () => {
         const db = new Database(':memory:');
         for (const m of COMMENT_INDEX_DB_CONFIG.migrations) m.up(db);
         const cols = db.query<{ name: string }, []>('PRAGMA table_info(comments);').all();
         expect(cols.some((c) => c.name === 'assignee')).toBe(true);
+        expect(cols.some((c) => c.name === 'title')).toBe(true);
     });
 });

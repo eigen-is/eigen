@@ -183,7 +183,7 @@ export function StickiesBoard({
                 taskIds.insert(0, [card.id]);
             });
             if (assignee !== undefined && card?.chatName) {
-                assignComment.mutate({ chatName: card.chatName, assignee });
+                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             recordHistory.mutate({
                 eventType: 'sticky-added',

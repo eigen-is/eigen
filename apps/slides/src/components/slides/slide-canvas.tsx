@@ -40,10 +40,10 @@ type SlideCanvasProps = {
     entries?: CommentEntry[];
     members?: EffectiveMember[];
     currentUserEmail?: string;
-    onCommentAssign?: (chatName: string, email: string | null) => void;
+    onCommentAssign?: (chatName: string, email: string | null, title?: string) => void;
 
-    onCommentResolve?: (chatName: string) => void;
-    onCommentReopen?: (chatName: string) => void;
+    onCommentResolve?: (chatName: string, title?: string) => void;
+    onCommentReopen?: (chatName: string, title?: string) => void;
     onCommentChangeColor?: (cardId: string, color: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
     onDuplicateObjects?: (placements: { id: string; x: number; y: number }[]) => void;

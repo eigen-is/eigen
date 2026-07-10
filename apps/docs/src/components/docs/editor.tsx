@@ -601,7 +601,7 @@ const TiptapEditor = ({
                 },
             );
             if (assignee !== undefined && card?.chatName) {
-                assignComment.mutate({ chatName: card.chatName, assignee });
+                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             setPendingMarkRange(null);
             setAddOpen(false);

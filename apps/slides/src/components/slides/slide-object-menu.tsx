@@ -41,12 +41,12 @@ type SlideObjectMenuProps = {
     onAddComment?: (objId: string) => void;
     onCommentClick?: (cardId: string) => void;
     onCommentChangeColor?: (cardId: string, color: string) => void;
-    onCommentResolve?: (chatName: string) => void;
-    onCommentReopen?: (chatName: string) => void;
+    onCommentResolve?: (chatName: string, title?: string) => void;
+    onCommentReopen?: (chatName: string, title?: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
     members?: EffectiveMember[];
     currentUserEmail?: string;
-    onCommentAssign?: (chatName: string, email: string | null) => void;
+    onCommentAssign?: (chatName: string, email: string | null, title?: string) => void;
 };
 
 export function SlideObjectMenu({
@@ -81,8 +81,8 @@ export function SlideObjectMenu({
     };
 
     // Assignee rows are plain buttons inside the sub-content, so they don't auto-close either.
-    const handleAssign = (chatName: string, email: string | null) => {
-        onCommentAssign?.(chatName, email);
+    const handleAssign = (chatName: string, email: string | null, title?: string) => {
+        onCommentAssign?.(chatName, email, title);
         contextMenu.close();
     };
 

@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { ChatMessage, CommentEntry, DrivePath } from '@workspace/lib/types';
+import type { FileEvent } from '@workspace/lib/types/file-history';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { COMMENT_INDEX_DB_CONFIG } from '../lib/chat/comment-db-config';
 import { CommentIndex } from '../lib/chat/comment-index';
@@ -216,6 +217,16 @@ describe('Comment Index', () => {
             );
         });
 
+        async function statusEvents(type: 'resolved' | 'reopened'): Promise<FileEvent[]> {
+            const events = await assertJson<FileEvent[]>(
+                await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/drive/${ctx.alice.user.id}/${mountId}/path/${docId}/history`,
+                ),
+            );
+            return events.filter((e) => e.eventType === type);
+        }
+
         test('resolve sets status and resolvedBy', async () => {
             const res = await collabPatch(
                 ctx.alice.user.sessionToken,
@@ -223,7 +234,7 @@ describe('Comment Index', () => {
                 mountId,
                 docId,
                 `comments/${chatName}/status`,
-                { status: 'resolved' },
+                { status: 'resolved', title: 'Fix header' },
             );
             expect(res.status).toBe(200);
 
@@ -233,6 +244,14 @@ describe('Comment Index', () => {
             expect(resolved.status).toBe('resolved');
             expect(resolved.resolvedBy).toBe(ctx.alice.user.email);
             expect(resolved.resolvedAt).toBeTruthy();
+            expect(resolved.title).toBe('Fix header');
+
+            const event = findOrFail(await statusEvents('resolved'), (e: FileEvent) => {
+                const d = e.details;
+                return !!d && 'chatName' in d && d.chatName === chatName;
+            });
+            const details = event.details && 'card' in event.details ? event.details : null;
+            expect(details?.card).toBe('Fix header');
         });
 
         test('reopen clears resolved state', async () => {
@@ -242,7 +261,7 @@ describe('Comment Index', () => {
                 mountId,
                 docId,
                 `comments/${chatName}/status`,
-                { status: 'open' },
+                { status: 'open', title: 'Fix header' },
             );
             expect(res.status).toBe(200);
 
@@ -252,6 +271,13 @@ describe('Comment Index', () => {
             expect(reopened.status).toBe('open');
             expect(reopened.resolvedBy).toBeNull();
             expect(reopened.resolvedAt).toBeNull();
+
+            const event = findOrFail(await statusEvents('reopened'), (e: FileEvent) => {
+                const d = e.details;
+                return !!d && 'chatName' in d && d.chatName === chatName;
+            });
+            const details = event.details && 'card' in event.details ? event.details : null;
+            expect(details?.card).toBe('Fix header');
         });
     });
 

@@ -351,7 +351,15 @@ function CommentItems({ close }: { close: () => void }) {
             onReopen={onCommentReopen}
             members={commentMembers}
             currentUserEmail={currentUserEmail}
-            onAssign={onCommentAssign}
+            onAssign={
+                onCommentAssign &&
+                ((chatName: string, email: string | null, title?: string) => {
+                    // The assignee rows are plain buttons, not menu items, so Radix
+                    // doesn't close the menu for them.
+                    close();
+                    onCommentAssign(chatName, email, title);
+                })
+            }
             onDelete={onDeleteComment && (() => onDeleteComment(row, col))}
         />
     );

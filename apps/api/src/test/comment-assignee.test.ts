@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CommentEntry, DrivePath } from '@workspace/lib/types';
+import type { FileEvent } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getHome } from '../lib/home';
 import { assertJson, authedRequest, driveGet, drivePost, drivePut, findOrFail, getTestContext } from './setup';
@@ -13,10 +14,11 @@ function patchAssignee(
     pathId: string,
     chatName: string,
     assignee: string | null,
+    title?: string,
 ) {
     return authedRequest(token, `/collab/${ownerId}/${mountId}/${pathId}/comments/${chatName}/assignee`, {
         method: 'PATCH',
-        body: JSON.stringify({ assignee }),
+        body: JSON.stringify(title === undefined ? { assignee } : { assignee, title }),
         headers: { 'Content-Type': 'application/json' },
     });
 }
@@ -39,6 +41,16 @@ describe('Comment assignee', () => {
                 `/collab/${ctx.alice.user.id}/${mountId}/${docId}/comments`,
             ),
         );
+    }
+
+    async function assignedEvents(): Promise<FileEvent[]> {
+        const events = await assertJson<FileEvent[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/path/${docId}/history`,
+            ),
+        );
+        return events.filter((e) => e.eventType === 'assigned');
     }
 
     beforeAll(async () => {
@@ -110,11 +122,25 @@ describe('Comment assignee', () => {
             docId,
             chatName,
             ctx.bob.user.email.toUpperCase(),
+            'Fix header',
         );
         expect(await assertJson<{ success: boolean }>(res)).toEqual({ success: true });
 
         const row = findOrFail(await listComments(), (r: CommentEntry) => r.chatName === chatName);
         expect(row.assignee).toBe(ctx.bob.user.email);
+        // Client-posted title is cached on the comment row.
+        expect(row.title).toBe('Fix header');
+    });
+
+    test('a real assignment records an "assigned" activity event with the card title', async () => {
+        const row = findOrFail(await assignedEvents(), (e: FileEvent) => {
+            const d = e.details;
+            return !!d && 'assignee' in d && d.chatName === chatName;
+        });
+        expect(row.actorEmail).toBe(ctx.alice.user.email);
+        const details = row.details && 'assignee' in row.details ? row.details : null;
+        expect(details?.assignee).toBe(ctx.bob.user.email);
+        expect(details?.card).toBe('Fix header');
     });
 
     test('assignment notifies the assignee', async () => {
@@ -142,6 +168,7 @@ describe('Comment assignee', () => {
     test('unassign clears and does not notify', async () => {
         const tag = `assigned:${ctx.alice.user.id}:${mountId}:${docId}:${chatName}`;
         const before = (await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === tag).length;
+        const eventsBefore = (await assignedEvents()).length;
 
         const res = await patchAssignee(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, chatName, null);
         expect(res.status).toBe(200);
@@ -151,6 +178,8 @@ describe('Comment assignee', () => {
 
         const after = (await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === tag).length;
         expect(after).toBe(before);
+        // Unassign stays silent in Recent Activity too — no new 'assigned' row.
+        expect((await assignedEvents()).length).toBe(eventsBefore);
     });
 
     test('assigning an unregistered invitee succeeds and silently skips the notification', async () => {

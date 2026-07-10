@@ -195,7 +195,7 @@ function SheetEditorInner({
                 workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, card.id]);
             });
             if (assignee !== undefined && card?.chatName) {
-                assignComment.mutate({ chatName: card.chatName, assignee });
+                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             setAddTargetCell(null);
             setAddOpen(false);
@@ -301,12 +301,12 @@ function SheetEditorInner({
                                               const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
                                               if (cardId) updateCard(cardId, { color });
                                           },
-                                          onCommentResolve: (chatName: string) =>
-                                              resolveComment.mutate({ chatName, status: 'resolved' }),
-                                          onCommentReopen: (chatName: string) =>
-                                              resolveComment.mutate({ chatName, status: 'open' }),
-                                          onCommentAssign: (chatName, email) =>
-                                              assignComment.mutate({ chatName, assignee: email }),
+                                          onCommentResolve: (chatName: string, title?: string) =>
+                                              resolveComment.mutate({ chatName, status: 'resolved', title }),
+                                          onCommentReopen: (chatName: string, title?: string) =>
+                                              resolveComment.mutate({ chatName, status: 'open', title }),
+                                          onCommentAssign: (chatName, email, title) =>
+                                              assignComment.mutate({ chatName, assignee: email, title }),
                                           commentMembers: members,
                                           currentUserEmail: auth.user?.email,
                                       }

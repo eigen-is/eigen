@@ -56,8 +56,8 @@ export function CommentLifecycleDialogs({
                 members={members}
                 currentUserEmail={user?.email}
                 onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
-                onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
-                onAssign={(chatName, assignee) => assignComment.mutate({ chatName, assignee })}
+                onResolve={(chatName, next, title) => resolveComment.mutate({ chatName, status: next, title })}
+                onAssign={(chatName, assignee, title) => assignComment.mutate({ chatName, assignee, title })}
             />
 
             <CommentContextMenu
@@ -65,11 +65,11 @@ export function CommentLifecycleDialogs({
                 noun={noun}
                 onOpen={setOpenCardId}
                 onUpdateCard={updateCard}
-                onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                onResolve={(chatName, status, title) => resolveComment.mutate({ chatName, status, title })}
                 onDelete={onDelete}
                 members={members}
                 currentUserEmail={user?.email}
-                onAssign={(chatName, email) => assignComment.mutate({ chatName, assignee: email })}
+                onAssign={(chatName, email, title) => assignComment.mutate({ chatName, assignee: email, title })}
             />
         </>
     );

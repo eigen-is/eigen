@@ -447,6 +447,33 @@ export default class SharedDrive {
         );
     }
 
+    // _user matches Drive's signature; SharedDrive derives the actor from this.user.
+    public async assignComment(
+        mountId: string,
+        pathId: string,
+        chatName: string,
+        assignee: string | null,
+        _user: User,
+        title?: string,
+    ): Promise<void> {
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.assignComment(mountId, pathId, chatName, assignee, this.user, title),
+        );
+    }
+
+    public async setCommentStatus(
+        mountId: string,
+        pathId: string,
+        chatName: string,
+        status: 'resolved' | 'open',
+        _user: User,
+        title?: string,
+    ): Promise<void> {
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.setCommentStatus(mountId, pathId, chatName, status, this.user, title),
+        );
+    }
+
     public async watchPath(mountId: string, pathId: string, _user: User): Promise<void> {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.watchPath(mountId, pathId, this.user));
     }
