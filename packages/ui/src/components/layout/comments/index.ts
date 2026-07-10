@@ -1,6 +1,7 @@
 export { AssigneeMenuItems } from './assignee-menu-items';
 export { AssigneePicker } from './assignee-picker';
 export { CommentContextMenu } from './comment-context-menu';
+export { CommentFilterMenuItems } from './comment-filter-menu-items';
 export { CommentLifecycleDialogs } from './comment-lifecycle-dialogs';
 export { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
 export { CommentPanel } from './comment-panel';
