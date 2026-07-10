@@ -1,17 +1,20 @@
 import { useYjsUndoState } from '@workspace/lib/collab';
+import type { useCommentFilter } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import { useMediaQuery } from '@workspace/lib/media';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { CenteredToolbar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
-    DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { CommentFilterMenuItems } from '@workspace/ui/components/layout/comments';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
@@ -26,8 +29,9 @@ type ToolbarProps = {
     onAccessDialogOpen: () => void;
     onAddColumn: () => void;
     path: DrivePath;
-    colorFilter: Set<string>;
-    onColorFilterChange: (filter: Set<string>) => void;
+    filter: ReturnType<typeof useCommentFilter>;
+    members: EffectiveMember[];
+    currentUserEmail: string;
 };
 
 export function Toolbar({
@@ -36,11 +40,12 @@ export function Toolbar({
     onAccessDialogOpen,
     onAddColumn,
     path,
-    colorFilter,
-    onColorFilterChange,
+    filter,
+    members,
+    currentUserEmail,
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
-    // ≤1200px the center dot row doesn't fit — the Filter menu replaces it (same state, two entry points).
+    // ≤1200px the center dot row doesn't fit — the Filter menu is the only entry point there.
     const isMobile = useMediaQuery('(max-width: 1200px)');
 
     return (
@@ -68,49 +73,31 @@ export function Toolbar({
                             </DropdownMenuContent>
                         </DropdownMenu>
                     )}
-                    {isMobile && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost">Filter</Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                                {EIGEN_STICKIES_COLORS[0].map((c) => (
-                                    <DropdownMenuCheckboxItem
-                                        key={c.value}
-                                        checked={colorFilter.has(c.value)}
-                                        onSelect={(e) => e.preventDefault()}
-                                        onCheckedChange={(checked) => {
-                                            const next = new Set(colorFilter);
-                                            if (checked) next.add(c.value);
-                                            else next.delete(c.value);
-                                            onColorFilterChange(next);
-                                        }}
-                                    >
-                                        <span
-                                            className="h-3 w-3 rounded-full border border-border/50"
-                                            style={{ backgroundColor: c.value }}
-                                        />
-                                        {c.label.replace(/-\d+$/, '')}
-                                    </DropdownMenuCheckboxItem>
-                                ))}
-                                {colorFilter.size > 0 && (
-                                    <>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => onColorFilterChange(new Set())}>
-                                            Show all
-                                        </DropdownMenuItem>
-                                    </>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost">Filter</Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                            <CommentFilterMenuItems
+                                primitives={{
+                                    Item: DropdownMenuItem,
+                                    Sub: DropdownMenuSub,
+                                    SubTrigger: DropdownMenuSubTrigger,
+                                    SubContent: DropdownMenuSubContent,
+                                }}
+                                filter={filter}
+                                members={members}
+                                currentUserEmail={currentUserEmail}
+                            />
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             }
             center={
                 isMobile ? null : (
                     <div className="flex items-center gap-1.5">
                         {EIGEN_STICKIES_COLORS[0].map((c) => {
-                            const active = colorFilter.has(c.value);
+                            const active = filter.filter.colors?.has(c.value) ?? false;
                             return (
                                 <Tooltip key={c.value}>
                                     <TooltipTrigger asChild>
@@ -120,12 +107,7 @@ export function Toolbar({
                                                 active && 'ring-2 ring-ring ring-offset-1',
                                             )}
                                             style={{ backgroundColor: c.value }}
-                                            onClick={() => {
-                                                const next = new Set(colorFilter);
-                                                if (active) next.delete(c.value);
-                                                else next.add(c.value);
-                                                onColorFilterChange(next);
-                                            }}
+                                            onClick={() => filter.toggleColor(c.value)}
                                         >
                                             {active && (
                                                 <Check
@@ -139,12 +121,12 @@ export function Toolbar({
                                 </Tooltip>
                             );
                         })}
-                        {colorFilter.size > 0 && (
+                        {filter.isActive && (
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-5 text-xs px-1.5"
-                                onClick={() => onColorFilterChange(new Set())}
+                                onClick={() => filter.clear()}
                             >
                                 Reset
                             </Button>

@@ -8,13 +8,13 @@ import type { BoardData } from '../types';
 type StickiesDocSearchArgs = {
     board: BoardData;
     cards: Record<string, CommentCard>;
-    // The board's color filter hides cards; scan only the visible ones so n/m matches what reveal can
+    // The board's filter hides cards; scan only the visible ones so n/m matches what reveal can
     // scroll to (a filtered-out card has no DOM anchor). Column titles always match — columns are never hidden.
-    colorFilter: Set<string>;
+    isCardVisible: (card: CommentCard) => boolean;
     boardScrollRef: RefObject<HTMLDivElement | null>;
 };
 
-export function useStickiesDocSearch({ board, cards, colorFilter, boardScrollRef }: StickiesDocSearchArgs): {
+export function useStickiesDocSearch({ board, cards, isCardVisible, boardScrollRef }: StickiesDocSearchArgs): {
     controller: DocSearchController;
     highlightedCardIds: ReadonlySet<string>;
     highlightedColumnIds: ReadonlySet<string>;
@@ -29,13 +29,10 @@ export function useStickiesDocSearch({ board, cards, colorFilter, boardScrollRef
     const revealNonce = useRef(0);
     const [revealTarget, setRevealTarget] = useState<{ id: string; nonce: number } | null>(null);
 
-    // useMemo keys on board/cards/colorFilter, so every local/remote change (or filter change)
+    // useMemo keys on board/cards/isCardVisible, so every local/remote change (or filter change)
     // republishes a new controller identity and the provider re-runs the search (contract rule 4).
     const controller = useMemo<DocSearchController>(() => {
-        const visibleCards =
-            colorFilter.size === 0
-                ? cards
-                : Object.fromEntries(Object.entries(cards).filter(([, c]) => colorFilter.has(c.color || '')));
+        const visibleCards = Object.fromEntries(Object.entries(cards).filter(([, c]) => isCardVisible(c)));
         return {
             search: (query, opts) => {
                 const regex = buildSearchRegex(query, opts);
@@ -53,7 +50,7 @@ export function useStickiesDocSearch({ board, cards, colorFilter, boardScrollRef
             },
             reveal: (matchId) => setRevealTarget({ id: matchId, nonce: ++revealNonce.current }),
         };
-    }, [board, cards, colorFilter]);
+    }, [board, cards, isCardVisible]);
 
     useEffect(() => {
         if (!revealTarget) return;

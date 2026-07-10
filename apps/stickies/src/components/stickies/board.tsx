@@ -2,7 +2,12 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useAuth } from '@workspace/lib/auth';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { findCardIdByChatName, useCommentLifecycle } from '@workspace/lib/comments';
+import {
+    findCardIdByChatName,
+    matchesCommentFilter,
+    useCommentFilter,
+    useCommentLifecycle,
+} from '@workspace/lib/comments';
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
@@ -142,7 +147,19 @@ export function StickiesBoard({
 
     const isMobile = useIsMobile();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
-    const [colorFilter, setColorFilter] = useState<Set<string>>(new Set());
+    // Board shows resolved cards by default (status:'all'); clear() returns to that.
+    const commentFilter = useCommentFilter({ status: 'all' });
+    const currentUserEmail = user?.email ?? '';
+    const isCardVisible = useCallback(
+        (card: CommentCard) =>
+            matchesCommentFilter(
+                card,
+                card.chatName ? entryByChatName.get(card.chatName) : undefined,
+                commentFilter.filter,
+                currentUserEmail,
+            ),
+        [entryByChatName, commentFilter.filter, currentUserEmail],
+    );
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
     const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
 
@@ -154,7 +171,7 @@ export function StickiesBoard({
     } = useStickiesDocSearch({
         board,
         cards,
-        colorFilter,
+        isCardVisible,
         boardScrollRef,
     });
 
@@ -216,21 +233,19 @@ export function StickiesBoard({
     );
 
     // Per-column card arrays with stable identity, so memoized columns only re-render
-    // when their own cards (or the color filter) actually change.
+    // when their own cards (or the filter) actually change.
     const prevColumnCardsRef = useRef<Record<string, CommentCard[]>>({});
     const columnCards = useMemo(() => {
         const next: Record<string, CommentCard[]> = {};
         for (const columnId of board.columnOrder) {
-            const fresh = board.columns[columnId].taskIds
-                .map((taskId) => cards[taskId])
-                .filter((card) => colorFilter.size === 0 || colorFilter.has(card.color || ''));
+            const fresh = board.columns[columnId].taskIds.map((taskId) => cards[taskId]).filter(isCardVisible);
             const prev = prevColumnCardsRef.current[columnId];
             next[columnId] =
                 prev && prev.length === fresh.length && fresh.every((card, i) => card === prev[i]) ? prev : fresh;
         }
         prevColumnCardsRef.current = next;
         return next;
-    }, [board, cards, colorFilter]);
+    }, [board, cards, isCardVisible]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -293,8 +308,9 @@ export function StickiesBoard({
                                     undoManager={undoManager}
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     onAddColumn={() => setIsAddColumnDialogOpen(true)}
-                                    colorFilter={colorFilter}
-                                    onColorFilterChange={setColorFilter}
+                                    filter={commentFilter}
+                                    members={members}
+                                    currentUserEmail={currentUserEmail}
                                 />
                             }
                         >
