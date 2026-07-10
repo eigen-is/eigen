@@ -3,7 +3,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@workspace/ui/components/av
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
 
-// Mirrors UserItem's avatar: useResolvedUser bakes the API_HOST/getPublicAvatarUrl helper into avatarSrc.
+// Not UserAvatar: member lists need an initial-letter fallback at 16px (UserAvatar renders an
+// empty circle for imageless users; adding a fallback there is an app-wide visual decision).
 export function MemberAvatar({ email, className }: { email: string; className?: string }) {
     const { displayName, avatarSrc } = useResolvedUser({ email });
     const label = displayName || email.split('@')[0];

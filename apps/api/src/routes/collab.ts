@@ -1,5 +1,5 @@
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
+import { type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
 import { Elysia, t } from 'elysia';
 import { getCommentIndex } from '../lib/chat/comment-index';
@@ -116,15 +116,17 @@ export const collabRouter = new Elysia({
                 throw new ApiError(403, 'No write permission');
             }
             const assignee = body.assignee ? body.assignee.toLowerCase() : null;
+            // Resolved once for validation, reused by the broadcast fan-out (it's a full ACL walk).
+            let members: EffectiveMember[] | undefined;
             if (assignee) {
-                const members = await drive.getEffectiveMembers(params.mountId, params.pathId);
+                members = await drive.getEffectiveMembers(params.mountId, params.pathId);
                 if (!members.some((m) => m.email === assignee)) {
                     throw new ApiError(400, 'Assignee is not a member of this document');
                 }
             }
             await drive.assignComment(params.mountId, params.pathId, params.chatName, assignee, user, body.title);
 
-            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId).catch(() => {});
+            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId, members).catch(() => {});
 
             if (assignee && assignee !== user.email.toLowerCase()) {
                 try {

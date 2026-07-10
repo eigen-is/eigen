@@ -14,7 +14,7 @@ export type CreateCommentCardInput = {
 };
 
 // Pure write — callers control the transaction boundary so card + anchor can land in one undo step.
-export function writeCardToDoc(doc: Y.Doc, mapName: string, card: CommentCard): CommentCard {
+export function writeCardToDoc(doc: Y.Doc, mapName: string, card: CommentCard): void {
     const map = doc.getMap<Y.Map<unknown>>(mapName);
     const y = new Y.Map<unknown>();
     y.set('id', card.id);
@@ -26,7 +26,6 @@ export function writeCardToDoc(doc: Y.Doc, mapName: string, card: CommentCard): 
     if (card.createdAt !== undefined) y.set('createdAt', card.createdAt);
     if (card.attachments?.length) y.set('attachments', card.attachments);
     map.set(card.id, y);
-    return card;
 }
 
 export function useCreateCommentCard(

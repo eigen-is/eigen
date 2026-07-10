@@ -1,18 +1,45 @@
 import { usePublicUsers } from '@workspace/lib/public';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@workspace/ui/components/command';
-import { Check } from 'lucide-react';
+import { Check, CircleSlash } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { MemberAvatar } from './member-avatar';
 
-// Shared by the pinned rows in AssigneePicker / AssigneeMenuItems (they live outside cmdk's list so
-// they never get filtered, hence they can't reuse CommandItem's data-[selected] styling).
-export const memberRowClassName =
+// Pinned rows live outside cmdk's list so they never get filtered, hence they can't reuse
+// CommandItem's data-[selected] styling.
+const memberRowClassName =
     'relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground';
+
+// The "me / Unassigned" header block shared by AssigneePicker and AssigneeMenuItems.
+export function PinnedAssigneeRows({
+    currentUserEmail,
+    selected,
+    onSelect,
+    meLabel,
+}: {
+    currentUserEmail: string;
+    selected: string | null;
+    onSelect: (email: string | null) => void;
+    meLabel: string;
+}) {
+    return (
+        <div className="p-1">
+            <button type="button" className={memberRowClassName} onClick={() => onSelect(currentUserEmail)}>
+                <MemberAvatar email={currentUserEmail} />
+                <span className="flex-1 truncate text-left">{meLabel}</span>
+                {selected === currentUserEmail && <Check className="h-4 w-4 shrink-0" />}
+            </button>
+            <button type="button" className={memberRowClassName} onClick={() => onSelect(null)}>
+                <CircleSlash className="h-4 w-4 text-muted-foreground" />
+                <span className="flex-1 truncate text-left">Unassigned</span>
+                {selected === null && <Check className="h-4 w-4 shrink-0" />}
+            </button>
+        </div>
+    );
+}
 
 type MemberCommandListProps = {
     members: EffectiveMember[];
-    currentUserEmail: string;
     selectedEmail: string | null;
     onSelect: (email: string) => void;
     header?: ReactNode;

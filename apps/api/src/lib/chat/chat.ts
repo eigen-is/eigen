@@ -16,7 +16,7 @@ import { type CommentIndex, openCommentIndex, RECENT_TEXT_CAP } from './comment-
 import { CHAT_ROOM_DB_CONFIG } from './db-config';
 import { extractMentionedEmails } from './mentions';
 import * as schema from './schema';
-import { buildChatEvent, buildCommentIndexUpdatedEvent } from './sse-events';
+import { buildChatEvent, buildCommentIndexUpdatedEvent, relayEventToMembers } from './sse-events';
 
 export class ChatRoom {
     private drive: Drive;
@@ -473,18 +473,7 @@ export class ChatRoom {
     // Pass pre-resolved members to avoid a redundant ACL walk when postMessage has already fetched them.
     private async notifySharedUsers(event: SSEvent, members?: EffectiveMember[]) {
         const resolved = members ?? (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id));
-        // Fan out the per-member lookup + relay concurrently rather than serially.
-        await Promise.all(
-            resolved.map(async (member) => {
-                try {
-                    const user = await getUserByEmail(member.email);
-                    if (!user) return;
-                    await sendToHome(user.id, { type: 'broadcast', event });
-                } catch {
-                    // user or home may not exist
-                }
-            }),
-        );
+        await relayEventToMembers(resolved, event);
     }
 
     private toMessage(row: typeof schema.messages.$inferSelect): ChatMessage {
