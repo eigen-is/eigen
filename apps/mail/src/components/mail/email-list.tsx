@@ -106,13 +106,25 @@ export function EmailList({
         if (cursorIndex >= 0) virtualizer.scrollToIndex(cursorIndex);
     }, [cursorIndex, virtualizer]);
 
-    // Snap to the top when the view identity changes (mailbox switch or entering/leaving search). A
-    // large orderedEmails size change under a scrolled position otherwise leaves the virtual window
-    // desynced from the scroll offset — the list renders blank until a manual scroll. Declared after the
-    // cursor-scroll effect so it wins when both fire on the same view change.
+    // Snap to the top when the view identity changes (mailbox switch or a change to the search query).
+    // Under a scrolled position a drastic orderedEmails size change otherwise leaves the virtual window
+    // desynced from the scroll offset (blank list until you nudge the scroll). The reset must land on
+    // the NEW rows, not during the fetch gap: search swaps the results in place (the scroller stays
+    // mounted), so firing scrollToOffset(0) while the list is momentarily empty doesn't stick once the
+    // incoming rows mount. So arm on the resetKey change and perform it on the first render that has
+    // rows — a plain scrollTop reset on the container the virtualizer then follows.
+    const lastResetKey = useRef(resetKey);
+    const pendingScrollReset = useRef(false);
+    if (lastResetKey.current !== resetKey) {
+        lastResetKey.current = resetKey;
+        pendingScrollReset.current = true;
+    }
     useEffect(() => {
-        virtualizer.scrollToOffset(0);
-    }, [resetKey, virtualizer]);
+        if (pendingScrollReset.current && orderedEmails.length > 0) {
+            pendingScrollReset.current = false;
+            tableRef.current?.scrollTo({ top: 0 });
+        }
+    }, [orderedEmails]);
 
     // Load the next page once the last rendered row nears the loaded end — covers scroll AND
     // j/k, since the keyboard cursor's scrollToIndex renders the end rows.
