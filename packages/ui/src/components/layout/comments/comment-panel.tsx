@@ -1,5 +1,4 @@
 import { matchesCommentFilter, type useCommentFilter } from '@workspace/lib/comments';
-import { useResolvedUser } from '@workspace/lib/public';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
@@ -10,6 +9,7 @@ import { NoteCard } from '../notes/note-card';
 import { PropertiesPanel } from '../properties-panel';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { CommentFilterButton } from './comment-filter-button';
+import { FilterSummary } from './comment-filter-summary';
 
 // Row component so each card gets its own useAttachmentMeta call (hooks can't run in the map).
 function PanelCard({
@@ -39,32 +39,6 @@ function PanelCard({
             onClick={onClick}
             onContextMenu={onContextMenu}
         />
-    );
-}
-
-const STATUS_LABELS = { open: 'Open', resolved: 'Resolved', all: 'All' } as const;
-
-// One-line human summary of the active filter, e.g. "Open · assigned to me".
-function FilterSummary({ filter, onClear }: { filter: ReturnType<typeof useCommentFilter>; onClear: () => void }) {
-    const { assignee, colors, status } = filter.filter;
-    const memberEmail = typeof assignee === 'object' ? assignee.email : '';
-    const { displayName } = useResolvedUser({ email: memberEmail });
-
-    // Status always leads ("Open · assigned to me") so the strip describes what the list
-    // shows, not just the deltas from the defaults.
-    const parts: string[] = [STATUS_LABELS[status]];
-    if (assignee === 'me') parts.push('assigned to me');
-    else if (assignee === 'unassigned') parts.push('unassigned');
-    else if (typeof assignee === 'object') parts.push(`assigned to ${displayName || memberEmail.split('@')[0]}`);
-    if (colors) parts.push(`${colors.size} color${colors.size === 1 ? '' : 's'}`);
-
-    return (
-        <div className="flex items-center justify-between gap-2 border-b bg-primary/5 px-3 py-1 text-[11px] text-primary">
-            <span className="truncate">{parts.join(' · ')}</span>
-            <button type="button" className="shrink-0 font-medium hover:underline" onClick={onClear}>
-                Clear
-            </button>
-        </div>
     );
 }
 

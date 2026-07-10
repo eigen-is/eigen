@@ -14,13 +14,14 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { CommentFilterMenuItems } from '@workspace/ui/components/layout/comments';
+import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/layout/comments';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, Plus, SquareKanban } from 'lucide-react';
+import { useState } from 'react';
 import type * as Y from 'yjs';
 
 type ToolbarProps = {
@@ -51,6 +52,8 @@ export function Toolbar({
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
     // ≤1200px the center dot row doesn't fit — the Filter menu is the only entry point there.
     const isMobile = useMediaQuery('(max-width: 1200px)');
+    // Controlled so assignee/status/clear picks can dismiss the menu; color toggles keep it open.
+    const [filterOpen, setFilterOpen] = useState(false);
 
     return (
         <CenteredToolbar
@@ -77,7 +80,7 @@ export function Toolbar({
                             </DropdownMenuContent>
                         </DropdownMenu>
                     )}
-                    <DropdownMenu>
+                    <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost">Filter</Button>
                         </DropdownMenuTrigger>
@@ -92,6 +95,7 @@ export function Toolbar({
                                 filter={filter}
                                 members={members}
                                 currentUserEmail={currentUserEmail}
+                                onClose={() => setFilterOpen(false)}
                             />
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -125,16 +129,7 @@ export function Toolbar({
                                 </Tooltip>
                             );
                         })}
-                        {filter.isActive && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-5 text-xs px-1.5"
-                                onClick={() => filter.clear()}
-                            >
-                                Reset
-                            </Button>
-                        )}
+                        {filter.isActive && <FilterSummary filter={filter} onClear={() => filter.clear()} inline />}
                     </div>
                 )
             }

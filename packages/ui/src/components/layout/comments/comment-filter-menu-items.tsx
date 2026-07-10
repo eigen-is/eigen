@@ -10,6 +10,8 @@ type CommentFilterMenuItemsProps = {
     filter: ReturnType<typeof useCommentFilter>;
     members: EffectiveMember[];
     currentUserEmail: string;
+    // Assignee rows are cmdk/buttons that don't trigger Radix's close; hosts pass this to dismiss.
+    onClose?: () => void;
 };
 
 const STATUS_LABELS = { open: 'Open', resolved: 'Resolved', all: 'All' } as const;
@@ -22,6 +24,7 @@ export function CommentFilterMenuItems({
     filter,
     members,
     currentUserEmail,
+    onClose,
 }: CommentFilterMenuItemsProps) {
     const { assignee, colors, status } = filter.filter;
     const memberSelected = typeof assignee === 'object' ? assignee.email : null;
@@ -36,11 +39,17 @@ export function CommentFilterMenuItems({
                     <MemberCommandList
                         members={members}
                         selectedEmail={memberSelected}
-                        onSelect={(email) => filter.setAssignee({ email })}
+                        onSelect={(email) => {
+                            filter.setAssignee({ email });
+                            onClose?.();
+                        }}
                         header={
                             <PinnedAssigneeFilterRows
                                 assignee={assignee}
-                                onSelect={filter.setAssignee}
+                                onSelect={(a) => {
+                                    filter.setAssignee(a);
+                                    onClose?.();
+                                }}
                                 currentUserEmail={currentUserEmail}
                             />
                         }
