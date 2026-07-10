@@ -3,7 +3,7 @@ import * as commentSchema from './comment-schema';
 
 export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
     name: 'comment-index',
-    currentVersion: 4,
+    currentVersion: 5,
     schema: commentSchema,
     migrations: [
         {
@@ -83,15 +83,17 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
         },
         {
             // Comment assignment (server-authoritative, like resolve). Lowercased member
-            // email, NULL = unassigned. title = best-effort client-posted card-title cache
-            // (refreshed on assign/status) for activity-event labels. Neither write churns
-            // comments_fts — the AFTER UPDATE trigger above is gated on recentText.
+            // email, NULL = unassigned. Doesn't churn comments_fts — the AFTER UPDATE
+            // trigger above is gated on recentText.
             version: 4,
-            up: (db) =>
-                db.exec(`
-                ALTER TABLE comments ADD COLUMN assignee TEXT;
-                ALTER TABLE comments ADD COLUMN title TEXT;
-            `),
+            up: (db) => db.exec(`ALTER TABLE comments ADD COLUMN assignee TEXT;`),
+        },
+        {
+            // Separate from v4: running dev servers stamped v4 as assignee-only mid-build,
+            // and a stamped migration can never be amended in place. title = best-effort
+            // client-posted card-title cache (refreshed on assign/status) for activity labels.
+            version: 5,
+            up: (db) => db.exec(`ALTER TABLE comments ADD COLUMN title TEXT;`),
         },
     ],
 };

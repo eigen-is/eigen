@@ -99,13 +99,15 @@ persist (enabling undo/redo + Y.Doc version revert), but it is hidden from the c
 
 ## Database schema
 
-**`comments` table** (`apps/api/src/lib/chat/comment-schema.ts`, v4 since 2026-07-10):
+**`comments` table** (`apps/api/src/lib/chat/comment-schema.ts`, v5 since 2026-07-10):
 `chatName` (PK), `status` (open|resolved), `resolvedBy`, `resolvedAt`, `lastAuthorEmail`,
 `lastMessageSnippet`, `lastActivityAt`, `messageCount`, `createdAt`, `createdBy` (v2),
 `recentText` (v3 — newest ~8 KB of the thread's messages, recomputed on every comment write),
 `assignee` (v4 — lowercased member email, NULL = unassigned; server-authoritative like resolve),
-`title` (v4 — best-effort client-posted card-title cache, refreshed on every assign/status PATCH;
+`title` (v5 — best-effort client-posted card-title cache, refreshed on every assign/status PATCH;
 can lag a rename until the next action — used for activity-event labels, not as a UI source).
+v4 and v5 are split deliberately: dev runtimes stamped v4 as assignee-only mid-build, and a
+stamped migration is immutable — amend-in-place broke those databases until v5 healed them.
 
 **`comments_fts`** (v3): external-content FTS5 over `recentText`, kept in sync by triggers; the
 UPDATE trigger is gated on `recentText` so status/activity/count writes don't churn the index.
@@ -347,8 +349,8 @@ The Y.Doc is the source of truth for which cards are "active":
 
 | File                                                                | Purpose                                       |
 |---------------------------------------------------------------------|-----------------------------------------------|
-| `apps/api/src/lib/chat/comment-schema.ts`                           | Drizzle schema (v4)                           |
-| `apps/api/src/lib/chat/comment-db-config.ts`                        | DB config + v1–v4 migrations (v3: `recentText` + FTS; v4: `assignee` + `title`) |
+| `apps/api/src/lib/chat/comment-schema.ts`                           | Drizzle schema (v5)                           |
+| `apps/api/src/lib/chat/comment-db-config.ts`                        | DB config + v1–v5 migrations (v3: `recentText` + FTS; v4: `assignee`; v5: `title`) |
 | `apps/api/src/lib/chat/comment-index.ts`                            | CommentIndex + `openCommentIndex` + `getCommentIndex` |
 | `apps/api/src/lib/drive/drive.ts`                                   | `seedCommentRow` helper called from `Drive.create` |
 | `apps/api/src/routes/collab.ts`                                     | Comment REST routes (list + search + status)  |
