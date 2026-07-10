@@ -21,7 +21,7 @@ import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CardFormDialog, CommentLifecycleDialogs, CommentPanel } from '@workspace/ui';
+import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
@@ -185,6 +185,7 @@ function SlideEditorInner({
 
     const auth = useAuth();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetObjId, setAddTargetObjId] = useState<string | null>(null);
@@ -675,7 +676,7 @@ function SlideEditorInner({
 
     // The properties/background/comment panel is a w-64 flex sibling on the right whenever there's an
     // active slide and the user can write (or comments are open) — inset the find bar clear of it.
-    const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || canWrite);
+    const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || activityPanelOpen || canWrite);
 
     if (!isSynced) return <LoadingState />;
 
@@ -741,8 +742,16 @@ function SlideEditorInner({
                                 onAddImage={() => setImagePickerOpen(true)}
                                 onAddSlide={() => addSlide()}
                                 onPresent={handlePresent}
-                                onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                                onToggleCommentPanel={() => {
+                                    setActivityPanelOpen(false);
+                                    setCommentPanelOpen((v) => !v);
+                                }}
                                 commentPanelOpen={commentPanelOpen}
+                                onToggleActivityPanel={() => {
+                                    setCommentPanelOpen(false);
+                                    setActivityPanelOpen((v) => !v);
+                                }}
+                                activityPanelOpen={activityPanelOpen}
                                 unresolvedCommentCount={unresolvedCount}
                             />
                         }
@@ -831,6 +840,8 @@ function SlideEditorInner({
                                                     commentContextMenu.handleContextMenu(e, { card, entry })
                                                 }
                                             />
+                                        ) : activityPanelOpen ? (
+                                            <ActivityPanel path={path} onClose={() => setActivityPanelOpen(false)} />
                                         ) : selectedObjects.length > 0 && canWrite ? (
                                             <SlidePropertiesPanel
                                                 objects={selectedObjects}
