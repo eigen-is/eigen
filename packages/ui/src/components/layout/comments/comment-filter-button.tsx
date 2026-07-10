@@ -52,6 +52,7 @@ export function CommentFilterButton({ filter, members, currentUserEmail }: Comme
                         members={members}
                         selectedEmail={memberSelected}
                         onSelect={(email) => filter.setAssignee({ email })}
+                        currentUserEmail={currentUserEmail}
                         header={
                             <PinnedAssigneeFilterRows
                                 assignee={assignee}

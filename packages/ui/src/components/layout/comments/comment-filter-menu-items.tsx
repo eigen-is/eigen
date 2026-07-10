@@ -43,6 +43,7 @@ export function CommentFilterMenuItems({
                             filter.setAssignee({ email });
                             onClose?.();
                         }}
+                        currentUserEmail={currentUserEmail}
                         header={
                             <PinnedAssigneeFilterRows
                                 assignee={assignee}

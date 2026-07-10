@@ -28,6 +28,7 @@ export function AssigneeMenuItems({
                     members={members}
                     selectedEmail={assignee}
                     onSelect={onAssign}
+                    currentUserEmail={currentUserEmail}
                     header={
                         <PinnedAssigneeRows
                             currentUserEmail={currentUserEmail}

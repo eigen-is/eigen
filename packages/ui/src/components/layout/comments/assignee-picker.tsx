@@ -35,6 +35,7 @@ export function AssigneePicker({
                     members={members}
                     selectedEmail={value}
                     onSelect={select}
+                    currentUserEmail={currentUserEmail}
                     header={
                         <PinnedAssigneeRows
                             currentUserEmail={currentUserEmail}

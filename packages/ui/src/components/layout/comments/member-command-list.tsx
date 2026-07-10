@@ -76,18 +76,28 @@ type MemberCommandListProps = {
     selectedEmail: string | null;
     onSelect: (email: string) => void;
     header?: ReactNode;
+    // The current user is pinned as a "Me" row in the header, so hide their named row here.
+    currentUserEmail?: string;
 };
 
-export function MemberCommandList({ members, selectedEmail, onSelect, header }: MemberCommandListProps) {
-    const users = usePublicUsers(members.map((m) => m.email));
-    const showSearch = members.length > 8;
+export function MemberCommandList({
+    members,
+    selectedEmail,
+    onSelect,
+    header,
+    currentUserEmail,
+}: MemberCommandListProps) {
+    const me = currentUserEmail?.toLowerCase();
+    const listed = me ? members.filter((m) => m.email !== me) : members;
+    const users = usePublicUsers(listed.map((m) => m.email));
+    const showSearch = listed.length > 8;
     return (
         <Command>
             {showSearch && <CommandInput placeholder="Find person…" />}
             {header}
             <CommandList className="max-h-56 overflow-y-auto">
                 <CommandEmpty>No people found.</CommandEmpty>
-                {members.map((m) => {
+                {listed.map((m) => {
                     const displayName = users[m.email]?.name || m.email.split('@')[0];
                     return (
                         <CommandItem
@@ -103,7 +113,7 @@ export function MemberCommandList({ members, selectedEmail, onSelect, header }: 
                 })}
             </CommandList>
             {showSearch && (
-                <div className="border-t px-2 py-1 text-[11px] text-muted-foreground">{members.length} people</div>
+                <div className="border-t px-2 py-1 text-[11px] text-muted-foreground">{listed.length} people</div>
             )}
         </Command>
     );
