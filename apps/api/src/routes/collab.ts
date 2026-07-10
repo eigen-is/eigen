@@ -14,6 +14,9 @@ import { getUserByEmail, type User } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
 
+// Elysia allocates a fresh ElysiaWS per WS event; only its stable `.raw` socket keeps one identity across open/message/close, so the Yjs origin matches the subscribed connection.
+const toRawWs = (ws: unknown) => (ws as { raw: ServerWebSocket<undefined> }).raw;
+
 type CollabWsData = {
     user?: User;
     params: { ownerId: string; mountId: string; pathId: string };
@@ -188,7 +191,7 @@ export const collabRouter = new Elysia({
                 }
 
                 const document = await drive.getCollabDocument(mountId, pathId);
-                const rawWs = ws as unknown as ServerWebSocket<undefined>;
+                const rawWs = toRawWs(ws);
                 document.subscribe(user, rawWs);
 
                 data.drive = drive;
@@ -218,7 +221,7 @@ export const collabRouter = new Elysia({
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
                 const { mountId, pathId } = data.params;
                 const canWrite = await drive.canWrite(mountId, pathId, user);
-                collabDocument.handleMessage(ws as unknown as ServerWebSocket<undefined>, update, canWrite);
+                collabDocument.handleMessage(toRawWs(ws), update, canWrite);
             } catch (err) {
                 console.error('Error processing collab message:', err);
             }
@@ -227,6 +230,6 @@ export const collabRouter = new Elysia({
         async close(ws) {
             const data = ws.data as unknown as CollabWsData;
             if (data.opened) await data.opened;
-            cleanupSession(data, ws as unknown as ServerWebSocket<undefined>);
+            cleanupSession(data, toRawWs(ws));
         },
     });
