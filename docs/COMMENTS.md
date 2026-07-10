@@ -99,10 +99,13 @@ persist (enabling undo/redo + Y.Doc version revert), but it is hidden from the c
 
 ## Database schema
 
-**`comments` table** (`apps/api/src/lib/chat/comment-schema.ts`, v3 since 2026-07-06):
+**`comments` table** (`apps/api/src/lib/chat/comment-schema.ts`, v4 since 2026-07-10):
 `chatName` (PK), `status` (open|resolved), `resolvedBy`, `resolvedAt`, `lastAuthorEmail`,
 `lastMessageSnippet`, `lastActivityAt`, `messageCount`, `createdAt`, `createdBy` (v2),
-`recentText` (v3 — newest ~8 KB of the thread's messages, recomputed on every comment write).
+`recentText` (v3 — newest ~8 KB of the thread's messages, recomputed on every comment write),
+`assignee` (v4 — lowercased member email, NULL = unassigned; server-authoritative like resolve),
+`title` (v4 — best-effort client-posted card-title cache, refreshed on every assign/status PATCH;
+can lag a rename until the next action — used for activity-event labels, not as a UI source).
 
 **`comments_fts`** (v3): external-content FTS5 over `recentText`, kept in sync by triggers; the
 UPDATE trigger is gated on `recentText` so status/activity/count writes don't churn the index.
@@ -139,6 +142,8 @@ the column was added.
 | `addMention`     | Insert mention row (dedup via composite PK)                                       |
 | `resolve`        | Set `status='resolved'`, record `resolvedBy`/`resolvedAt`                         |
 | `reopen`         | Set `status='open'`, clear resolved fields                                        |
+| `assign`         | Set/clear `assignee` (lowercased email or NULL)                                   |
+| `setTitle`       | Refresh the client-posted `title` cache (200-char cap applied by the callers)     |
 | `decrementCount` | `MAX(0, messageCount - 1)`                                                        |
 | `setRecentText`  | Replace the thread's ~8 KB `recentText` tail (FTS re-index via trigger)           |
 | `list`           | All comments with inline `mentions[]` (2 queries, grouped in memory)              |
@@ -146,16 +151,29 @@ the column was added.
 
 Message-driven updates go through `ChatRoom.updateCommentIndex(fn)`, which opens the index, runs
 the callback, recomputes `recentText`, and emits `CHAT_COMMENT_INDEX_UPDATED` SSE (owner home
-broadcast + effective-member fan-out). The `/status` route and `seedCommentRow` write the index
-directly — without the SSE broadcast, so a resolve/reopen reaches other clients only on their next
-refetch, not live.
+broadcast + effective-member fan-out). The REST mutations (`/status`, `/assignee`) go through the
+`Drive.setCommentStatus` / `Drive.assignComment` domain methods (write-gated `SharedDrive`
+wrappers), which mutate the index and record the file events; the routes then emit the same SSE
+via `broadcastCommentIndexUpdated` (`lib/chat/sse-events.ts` — owner home + member fan-out through
+`sendToHome`, which self-gates on `atHome()`), so resolve/assign reach other clients live.
+`seedCommentRow` writes the index directly with no broadcast (creation already emits drive SSE).
+
+**Activity + notifications**: `assignComment` records an `'assigned'` file event (details
+`{ assignee, card?, chatName? }` — `card` is the client-posted title, same trust model as the
+`sticky-*` events; the assignee is excluded from the watcher fan-out because the route already
+sends them a direct `'assigned'` notification, tag `assigned:owner:mount:path:chatName`, resolved
+client-side like `mention-comment`). `setCommentStatus` records `'resolved'`/`'reopened'` events.
+Unassign records nothing and notifies nobody; unregistered invitees can be assigned but get no
+notification (`getUserByEmail` guard, mirroring mentions).
 
 ## API routes (`apps/api/src/routes/collab.ts`)
 
 ```
 GET    /collab/:ownerId/:mountId/:pathId/comments                    List comments (with mentions[])
 GET    /collab/:ownerId/:mountId/:pathId/comments/search?q=          FTS body search (in-document search)
-PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/status   Resolve or reopen
+PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/status   Resolve or reopen ({ status, title? })
+PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/assignee Assign ({ assignee: email|null, title? });
+                                                                     403 without write, 400 non-member
 ```
 
 There is no longer a `PATCH .../color` route — color lives on the Y.Doc card and round-trips via
@@ -206,6 +224,23 @@ across all four apps. Renders items inside whichever menu family the host uses b
 `primitives` slot (`{ Item, Sub, SubTrigger, SubContent }` — either Radix `DropdownMenu*` or
 `ContextMenu*` works). The `noun` prop tunes labels (`"comment"` by default, stickies passes
 `"sticky"`).
+
+### Assignee UI (`packages/ui/src/components/layout/comments/`)
+
+One shared searchable people-list recipe backs every assignment surface: `MemberCommandList`
+(cmdk `Command`; search hidden ≤ 8 members, `max-h-56` scroll, "n people" footer; pinned rows
+render in a `header` slot outside the filtered list so typing never hides them), `MemberAvatar`
+(tiny tooltip avatar via `useResolvedUser`), `AssigneeChip` (avatar + resolved name). On top of
+those: `AssigneePicker` (Popover trigger = children; pinned **Assign to me** / **Unassigned**) used
+by `CardFormDialog` (staged, applied on Save — `onSave`'s third arg, `undefined` = untouched) and
+`CardDialog` (inline chip reassign, immediate PATCH); `AssigneeMenuItems` (an **Assign to**
+submenu, `SubContent p-0` combobox-in-menu pattern) embedded in `CommentMenuItems`, which gained
+optional `members`/`currentUserEmail`/`onAssign` props — the current assignee reads from
+`item.entry.assignee`, and the callbacks carry `card.title` so the server can cache it. Hosts pass
+everything from the `useCommentLifecycle` bundle (`assignComment`, `members`); sheets threads
+through `settings.hooks` (`onCommentAssign`, `commentMembers`, `currentUserEmail`). `NoteCard`
+renders a muted assignee `MemberAvatar` at the far right of its footer meta row (`assigneeEmail`
+prop, board + panel pass `entry?.assignee`).
 
 ### CommentContextMenu (`packages/ui/src/components/layout/comments/comment-context-menu.tsx`)
 
@@ -312,8 +347,8 @@ The Y.Doc is the source of truth for which cards are "active":
 
 | File                                                                | Purpose                                       |
 |---------------------------------------------------------------------|-----------------------------------------------|
-| `apps/api/src/lib/chat/comment-schema.ts`                           | Drizzle schema (v3)                           |
-| `apps/api/src/lib/chat/comment-db-config.ts`                        | DB config + v1–v3 migrations (v3: `recentText` + FTS) |
+| `apps/api/src/lib/chat/comment-schema.ts`                           | Drizzle schema (v4)                           |
+| `apps/api/src/lib/chat/comment-db-config.ts`                        | DB config + v1–v4 migrations (v3: `recentText` + FTS; v4: `assignee` + `title`) |
 | `apps/api/src/lib/chat/comment-index.ts`                            | CommentIndex + `openCommentIndex` + `getCommentIndex` |
 | `apps/api/src/lib/drive/drive.ts`                                   | `seedCommentRow` helper called from `Drive.create` |
 | `apps/api/src/routes/collab.ts`                                     | Comment REST routes (list + search + status)  |
