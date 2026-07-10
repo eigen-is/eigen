@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-796 primitives across 6 kinds. `packages/sheet` internals are excluded.
+802 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (104)
+## Components (108)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -21,6 +21,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
 | `AppSidebar` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
+| `AssigneeMenuItems` | `@workspace/ui` | packages/ui/src/components/layout/comments/assignee-menu-items.tsx |
+| `AssigneePicker` | `@workspace/ui` | packages/ui/src/components/layout/comments/assignee-picker.tsx |
 | `Bar` | `@workspace/ui` | packages/ui/src/components/layout/braket/bar.tsx |
 | `CardDialog` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-dialog.tsx |
 | `CardFormDialog` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-form-dialog.tsx |
@@ -78,6 +80,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LoadingScreen` | `@workspace/ui` | packages/ui/src/components/layout/pages/loading-screen.tsx |
 | `LoadingState` | `@workspace/ui` | packages/ui/src/components/layout/app/loading-state.tsx |
 | `LoginPage` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-page.tsx |
+| `MemberAvatar` | `@workspace/ui` | packages/ui/src/components/layout/comments/member-avatar.tsx |
+| `MemberCommandList` | `@workspace/ui` | packages/ui/src/components/layout/comments/member-command-list.tsx |
 | `NoteCard` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card.tsx |
 | `NoteCardDialog` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card-dialog.tsx |
 | `NotFound` | `@workspace/ui` | packages/ui/src/components/layout/app/not-found.tsx |
@@ -141,7 +145,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (205)
+## Hooks (206)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -191,6 +195,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useUpdateEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useUpdateSharedCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `useAssignComment` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-comments.ts |
 | `useAutoMarkChatRead` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
 | `useChatEditing` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-editing.ts |
 | `useChatRoom` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-room.ts |
@@ -351,7 +356,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (224)
+## Types (225)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -444,6 +449,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveViewPreferences` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveVisibility` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EditorSaveResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `EffectiveMember` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EigenClipboardData` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardImageItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
