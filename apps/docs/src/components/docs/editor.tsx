@@ -26,6 +26,7 @@ import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspac
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
+    ActivityPanel,
     CardFormDialog,
     Column,
     CommentLifecycleDialogs,
@@ -563,6 +564,7 @@ const TiptapEditor = ({
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
 
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const activeComments = useActiveComments(editor);
     const lifecycle = useCommentLifecycle({
         ownerId: path.ownerId,
@@ -657,8 +659,10 @@ const TiptapEditor = ({
 
     if (!editor) return null;
 
-    const activePanel = commentPanelOpen ? 'comments' : sidebarContext;
-    const showSidebar = isWide && (activePanel === 'comments' || (access.canWrite && activePanel !== 'document'));
+    const activePanel = commentPanelOpen ? 'comments' : activityPanelOpen ? 'activity' : sidebarContext;
+    const showSidebar =
+        isWide &&
+        (activePanel === 'comments' || activePanel === 'activity' || (access.canWrite && activePanel !== 'document'));
 
     const handleScrollToComment = (cardId: string) => {
         const positions = findCommentMarkPositions(editor.state.doc, cardId);
@@ -704,8 +708,16 @@ const TiptapEditor = ({
                             canUndo={canUndo}
                             canRedo={canRedo}
                             onAccessDialogOpen={onAccessDialogOpen}
-                            onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                            onToggleCommentPanel={() => {
+                                setActivityPanelOpen(false);
+                                setCommentPanelOpen((v) => !v);
+                            }}
                             commentPanelOpen={commentPanelOpen}
+                            onToggleActivityPanel={() => {
+                                setCommentPanelOpen(false);
+                                setActivityPanelOpen((v) => !v);
+                            }}
+                            activityPanelOpen={activityPanelOpen}
                             unresolvedCommentCount={unresolvedCount}
                             onImageUpload={mediaFolderId ? handleImageUpload : undefined}
                             onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
@@ -768,6 +780,8 @@ const TiptapEditor = ({
                                             commentContextMenu.handleContextMenu(e, { card, entry });
                                         }}
                                     />
+                                ) : activePanel === 'activity' ? (
+                                    <ActivityPanel path={path} onClose={() => setActivityPanelOpen(false)} />
                                 ) : lastPanelRef.current === 'figure' ? (
                                     <FigurePropertiesPanel
                                         key={editor.state.selection.from}
