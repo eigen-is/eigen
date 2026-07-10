@@ -115,6 +115,7 @@ export const Column = memo(function Column({
                                         card={card}
                                         replyCount={entry?.messageCount}
                                         resolved={entry?.status === 'resolved'}
+                                        assigneeEmail={entry?.assignee}
                                         canWrite={canWrite}
                                         highlighted={highlightedCardIds?.has(card.id)}
                                         onOpen={onCardOpen}

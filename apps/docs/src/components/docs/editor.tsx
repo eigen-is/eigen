@@ -574,7 +574,7 @@ const TiptapEditor = ({
         activeCardIds: activeComments.ids,
         initialChatName,
     });
-    const { allComments, cards, createCard, unresolvedCount, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, unresolvedCount, setOpenCardId } = lifecycle;
     allCommentsRef.current = allComments;
     cardsRef.current = cards;
 
@@ -585,16 +585,28 @@ const TiptapEditor = ({
         async (
             patch: { title?: string; description?: string; color?: string },
             attachments?: CardAttachmentDraft[],
+            assignee?: string | null,
         ) => {
             if (!editor || !pendingMarkRange) return;
             const range = pendingMarkRange;
-            await createCard({ title: pendingMarkRange.text.slice(0, 100), ...patch, attachments }, (card) => {
-                editor.chain().focus().setTextSelection({ from: range.from, to: range.to }).setComment(card.id).run();
-            });
+            const card = await createCard(
+                { title: pendingMarkRange.text.slice(0, 100), ...patch, attachments },
+                (card) => {
+                    editor
+                        .chain()
+                        .focus()
+                        .setTextSelection({ from: range.from, to: range.to })
+                        .setComment(card.id)
+                        .run();
+                },
+            );
+            if (assignee !== undefined && card?.chatName) {
+                assignComment.mutate({ chatName: card.chatName, assignee });
+            }
             setPendingMarkRange(null);
             setAddOpen(false);
         },
-        [editor, pendingMarkRange, createCard],
+        [editor, pendingMarkRange, createCard, assignComment],
     );
 
     // Sync resolved IDs + colors into the ProseMirror decoration plugin
@@ -793,6 +805,8 @@ const TiptapEditor = ({
                 initialTitle={pendingMarkRange ? pendingMarkRange.text.slice(0, 100) : ''}
                 onSave={handleSaveNew}
                 allowAttachments={!!mediaFolderId}
+                members={members}
+                currentUserEmail={auth.user?.email}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />

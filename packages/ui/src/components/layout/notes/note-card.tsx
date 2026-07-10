@@ -4,6 +4,7 @@ import { Check, Paperclip } from 'lucide-react';
 import type { HTMLAttributes } from 'react';
 import { Card, CardContent } from '../../card';
 import { Progress } from '../../progress';
+import { MemberAvatar } from '../comments/member-avatar';
 
 // TipTap's TaskItem always emits `data-checked="true|false"` on each task-list
 // <li>; anchoring on `<li` prevents matching unrelated data-checked attributes.
@@ -18,6 +19,7 @@ type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     replyCount?: number;
     coverThumbnailUrl?: string;
     attachmentCount?: number;
+    assigneeEmail?: string | null;
     ref?: React.Ref<HTMLDivElement>;
 };
 
@@ -29,6 +31,7 @@ export function NoteCard({
     replyCount,
     coverThumbnailUrl,
     attachmentCount,
+    assigneeEmail,
     onClick,
     onContextMenu,
     className,
@@ -96,7 +99,7 @@ export function NoteCard({
                         </span>
                     </div>
                 )}
-                {(!!replyCount || !!attachmentCount || resolved) && (
+                {(!!replyCount || !!attachmentCount || resolved || assigneeEmail) && (
                     <p className="text-xs mt-0.5 opacity-50 flex items-center gap-2">
                         {!!replyCount && (
                             <span>
@@ -109,6 +112,7 @@ export function NoteCard({
                             </span>
                         )}
                         {resolved && <Check className="h-3 w-3 ml-auto" />}
+                        {assigneeEmail && <MemberAvatar email={assigneeEmail} className={resolved ? '' : 'ml-auto'} />}
                     </p>
                 )}
             </CardContent>

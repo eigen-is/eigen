@@ -89,7 +89,17 @@ function SheetEditorInner({
         initialChatName,
         ready: synced,
     });
-    const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
+    const {
+        allComments,
+        resolveComment,
+        cards,
+        createCard,
+        updateCard,
+        assignComment,
+        members,
+        unresolvedCount,
+        setOpenCardId,
+    } = lifecycle;
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const addCommentRef = useRef<(r: number, c: number) => void>(null);
@@ -175,18 +185,22 @@ function SheetEditorInner({
         async (
             patch: { title?: string; description?: string; color?: string },
             attachments?: CardAttachmentDraft[],
+            assignee?: string | null,
         ) => {
             if (!addTargetCell || !workbookRef.current) return;
             const cell = addTargetCell;
-            await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
+            const card = await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
                 const fd = workbookRef.current?.getFlowdata();
                 const existing = fd?.[cell.r]?.[cell.c]?.commentCardIds ?? [];
                 workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, card.id]);
             });
+            if (assignee !== undefined && card?.chatName) {
+                assignComment.mutate({ chatName: card.chatName, assignee });
+            }
             setAddTargetCell(null);
             setAddOpen(false);
         },
-        [addTargetCell, addInitialTitle, createCard],
+        [addTargetCell, addInitialTitle, createCard, assignComment],
     );
 
     const leftItems = useMemo(
@@ -335,6 +349,8 @@ function SheetEditorInner({
                 initialTitle={addInitialTitle}
                 onSave={handleSaveNew}
                 allowAttachments={!!mediaFolderId}
+                members={members}
+                currentUserEmail={auth.user?.email}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />

@@ -49,4 +49,17 @@ describe('writeCardToDoc', () => {
         expect(doc.getMap('tasks').has('c3')).toBe(true);
         expect(doc.getMap('comments').has('c3')).toBe(false);
     });
+
+    // The create callback returns this same card so hosts can assign the staged assignee after create.
+    test('returns the written card', () => {
+        const doc = new Y.Doc();
+        const card = writeCardToDoc(doc, 'comments', {
+            id: 'c6',
+            title: 't',
+            description: 'd',
+            chatName: 'c6.eigenchat',
+        });
+        expect(card.id).toBe('c6');
+        expect(card.chatName).toBe('c6.eigenchat');
+    });
 });

@@ -35,6 +35,7 @@ function PanelCard({
             resolved={entry?.status === 'resolved'}
             coverThumbnailUrl={coverThumbnailUrl}
             attachmentCount={attachmentCount}
+            assigneeEmail={entry?.assignee}
             onClick={onClick}
             onContextMenu={onContextMenu}
         />

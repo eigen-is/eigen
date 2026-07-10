@@ -1,5 +1,6 @@
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
+import { useAuth } from '@workspace/lib/auth';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { findCardIdByChatName, useCommentLifecycle } from '@workspace/lib/comments';
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
@@ -40,6 +41,7 @@ function OverlayNoteCard({ card, entry, isMobile }: { card: CommentCard; entry?:
             resolved={entry?.status === 'resolved'}
             coverThumbnailUrl={coverThumbnailUrl}
             attachmentCount={attachmentCount}
+            assigneeEmail={entry?.assignee}
             className={isMobile ? 'w-full' : 'w-[254px]'}
         />
     );
@@ -82,6 +84,7 @@ export function StickiesBoard({
         yjsDoc,
         undoManager,
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
+    const { user } = useAuth();
 
     // Cards are anchored by column membership — every referenced taskId is an active card.
     const activeCardIds = useMemo(() => {
@@ -107,7 +110,7 @@ export function StickiesBoard({
         initialCardId,
         onCardNotFound: onClearInitialCard,
     });
-    const { allComments, cards, createCard, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, setOpenCardId } = lifecycle;
 
     // Palette IN COMMENTS capability. Plain object per render — usePaletteDocSearch stabilises via
     // ref + docKey, so the reveal closure always sees the current cards.
@@ -165,12 +168,11 @@ export function StickiesBoard({
         async (
             patch: { title?: string; description?: string; color?: string },
             attachments?: CardAttachmentDraft[],
+            assignee?: string | null,
         ) => {
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
-            let newCardId = '';
-            await createCard({ ...patch, attachments }, (card) => {
-                newCardId = card.id;
+            const card = await createCard({ ...patch, attachments }, (card) => {
                 const col = yjsDoc.getMap('columns').get(targetColumnId) as Y.Map<unknown> | undefined;
                 if (!col) return;
                 let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
@@ -180,19 +182,22 @@ export function StickiesBoard({
                 }
                 taskIds.insert(0, [card.id]);
             });
+            if (assignee !== undefined && card?.chatName) {
+                assignComment.mutate({ chatName: card.chatName, assignee });
+            }
             recordHistory.mutate({
                 eventType: 'sticky-added',
                 details: {
                     card: patch.title ?? '',
                     toColumn: board.columns[targetColumnId]?.title ?? '',
-                    cardId: newCardId,
+                    cardId: card?.id ?? '',
                 },
             });
             setScrollToTopOf((prev) => ({ columnId: targetColumnId, n: (prev?.n ?? 0) + 1 }));
             setAddTargetColumn(null);
             setAddOpen(false);
         },
-        [yjsDoc, addTargetColumn, createCard, recordHistory.mutate, board.columns],
+        [yjsDoc, addTargetColumn, createCard, assignComment, recordHistory.mutate, board.columns],
     );
 
     const handleAddCard = useCallback((columnId: string) => {
@@ -366,6 +371,8 @@ export function StickiesBoard({
                                         }}
                                         onSave={onSaveNew}
                                         allowAttachments={!!mediaFolderId}
+                                        members={members}
+                                        currentUserEmail={user?.email}
                                         dialogTitle="Add Sticky"
                                         submitLabel="Add Sticky"
                                     />

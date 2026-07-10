@@ -4,11 +4,14 @@ import { useMediaResolver } from '@workspace/lib/drive';
 import type { ChatAttachment, CommentEntry } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
+import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
+import { AssigneeChip } from '../comments/assignee-chip';
+import { AssigneePicker } from '../comments/assignee-picker';
 import { CommentThread } from '../comments/comment-thread';
 import { CreatedByMeta } from '../comments/created-by-meta';
 import { NoteCardDialog } from '../notes/note-card-dialog';
@@ -23,6 +26,8 @@ type CardDialogProps = {
     mountId: string;
     canWrite?: boolean;
     copyLinkUrl?: string;
+    members?: EffectiveMember[];
+    currentUserEmail?: string;
     onUpdate?: (patch: {
         title?: string;
         description?: string;
@@ -30,6 +35,7 @@ type CardDialogProps = {
         attachments?: ChatAttachment[];
     }) => void;
     onResolve?: (chatName: string, next: 'open' | 'resolved') => void;
+    onAssign?: (chatName: string, assignee: string | null) => void;
 };
 
 export function CardDialog({
@@ -41,8 +47,11 @@ export function CardDialog({
     mountId,
     canWrite = true,
     copyLinkUrl,
+    members,
+    currentUserEmail,
     onUpdate,
     onResolve,
+    onAssign,
 }: CardDialogProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const { mediaFolderId } = useMediaResolver();
@@ -64,7 +73,9 @@ export function CardDialog({
     const handleEditSave = async (
         patch: { title?: string; description?: string; color?: string },
         drafts?: CardAttachmentDraft[],
+        assignee?: string | null,
     ) => {
+        if (assignee !== undefined && card.chatName) onAssign?.(card.chatName, assignee);
         if (!onUpdate) return;
         if (drafts === undefined) {
             onUpdate(patch);
@@ -74,6 +85,53 @@ export function CardDialog({
         onUpdate({ ...patch, attachments });
     };
 
+    // The assignee sits in the dialog's meta row: an inline picker when reassignable, else an inert
+    // chip; a read-only card with no assignee shows nothing to avoid noise.
+    let assigneeControl: React.ReactNode = null;
+    if (card.chatName && entry) {
+        const assignee = entry.assignee;
+        if (canWrite && onAssign && members && currentUserEmail) {
+            const chatName = card.chatName;
+            assigneeControl = (
+                <AssigneePicker
+                    value={assignee}
+                    onChange={(email) => onAssign(chatName, email)}
+                    members={members}
+                    currentUserEmail={currentUserEmail}
+                >
+                    <button
+                        type="button"
+                        className="-my-0.5 inline-flex items-center gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
+                    >
+                        {assignee ? (
+                            <AssigneeChip email={assignee} />
+                        ) : (
+                            <span className="text-muted-foreground">Unassigned</span>
+                        )}
+                    </button>
+                </AssigneePicker>
+            );
+        } else if (assignee) {
+            assigneeControl = (
+                <span className="inline-flex items-center gap-1">
+                    <AssigneeChip email={assignee} />
+                </span>
+            );
+        }
+    }
+
+    const meta =
+        card.creator || assigneeControl ? (
+            <span className="flex items-center gap-2">
+                {card.creator && (
+                    <span className="min-w-0 truncate">
+                        <CreatedByMeta email={card.creator} createdAt={card.createdAt ?? 0} />
+                    </span>
+                )}
+                {assigneeControl && <span className="ml-auto shrink-0">{assigneeControl}</span>}
+            </span>
+        ) : undefined;
+
     return (
         <>
             <NoteCardDialog
@@ -81,7 +139,7 @@ export function CardDialog({
                 onOpenChange={onOpenChange}
                 title={card.title}
                 description={card.description}
-                meta={card.creator ? <CreatedByMeta email={card.creator} createdAt={card.createdAt ?? 0} /> : undefined}
+                meta={meta}
                 color={card.color}
                 canWrite={canWrite}
                 onEdit={onUpdate ? () => setIsSettingsOpen(true) : undefined}
@@ -129,6 +187,9 @@ export function CardDialog({
                     initialColor={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
                     allowAttachments={!!mediaFolderId}
                     initialAttachments={card.attachments}
+                    members={members}
+                    currentUserEmail={currentUserEmail}
+                    initialAssignee={entry?.assignee}
                     onSave={handleEditSave}
                     dialogTitle="Edit card"
                 />

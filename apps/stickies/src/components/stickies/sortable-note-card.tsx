@@ -10,6 +10,7 @@ type SortableNoteCardProps = {
     card: CommentCard;
     replyCount?: number;
     resolved?: boolean;
+    assigneeEmail?: string | null;
     canWrite?: boolean;
     highlighted?: boolean;
     onOpen?: (cardId: string) => void;
@@ -20,6 +21,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
     card,
     replyCount,
     resolved,
+    assigneeEmail,
     canWrite = true,
     highlighted,
     onOpen,
@@ -63,6 +65,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
             color={card.color}
             replyCount={replyCount}
             resolved={resolved}
+            assigneeEmail={assigneeEmail}
             coverThumbnailUrl={coverThumbnailUrl}
             attachmentCount={attachmentCount}
             onPointerDownCapture={(e: React.PointerEvent) => {

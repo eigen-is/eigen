@@ -1,6 +1,7 @@
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
+import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -13,6 +14,8 @@ import { useRef, useState } from 'react';
 import { useFileDropTarget } from '../../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../../hooks/use-file-paste-target';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
+import { AssigneeChip } from '../comments/assignee-chip';
+import { AssigneePicker } from '../comments/assignee-picker';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 
 type CardFormDialogProps = {
@@ -29,9 +32,15 @@ type CardFormDialogProps = {
     // drafts; the host resolves them (upload/copy) at save time. Cancel touches nothing.
     allowAttachments?: boolean;
     initialAttachments?: ChatAttachment[];
+    // Assignee staging renders only when both members and currentUserEmail are provided.
+    members?: EffectiveMember[];
+    currentUserEmail?: string;
+    initialAssignee?: string | null;
     onSave: (
         patch: { title?: string; description?: string; color?: string },
         attachments?: CardAttachmentDraft[],
+        // undefined = untouched; the host skips the assignment PATCH.
+        assignee?: string | null,
     ) => void | Promise<void>;
     dialogTitle?: string;
     placeholderTitle?: string;
@@ -39,7 +48,8 @@ type CardFormDialogProps = {
     submitLabel?: string;
 };
 
-type CardFormDialogContentProps = Required<Omit<CardFormDialogProps, 'open'>>;
+type CardFormDialogContentProps = Required<Omit<CardFormDialogProps, 'open' | 'members' | 'currentUserEmail'>> &
+    Pick<CardFormDialogProps, 'members' | 'currentUserEmail'>;
 
 function CardFormDialogContent({
     mode,
@@ -48,6 +58,9 @@ function CardFormDialogContent({
     initialColor,
     allowAttachments,
     initialAttachments,
+    members,
+    currentUserEmail,
+    initialAssignee,
     onOpenChange,
     onSave,
     dialogTitle,
@@ -58,6 +71,7 @@ function CardFormDialogContent({
     const [title, setTitle] = useState(initialTitle);
     const [description, setDescription] = useState(initialDescription);
     const [color, setColor] = useState(initialColor);
+    const [assignee, setAssignee] = useState<string | null>(initialAssignee);
     const [drafts, setDrafts] = useState<CardAttachmentDraft[]>(initialAttachments);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,6 +95,8 @@ function CardFormDialogContent({
         const draftsChanged =
             drafts.length !== initialAttachments.length || drafts.some((d, i) => d !== initialAttachments[i]);
         let attachments: CardAttachmentDraft[] | undefined;
+        // undefined = untouched assignee; the host skips the assignment PATCH.
+        let assigneeArg: string | null | undefined;
         if (mode === 'create') {
             // A new card must carry concrete values: a trimmed title and the
             // seeded color (which the user may never touch). The diff below would
@@ -89,15 +105,17 @@ function CardFormDialogContent({
             patch.description = description;
             patch.color = color;
             if (drafts.length > 0) attachments = drafts;
+            assigneeArg = assignee ?? undefined;
         } else {
             if (title !== initialTitle) patch.title = title;
             if (description !== canonicalInitialDescription.current) patch.description = description;
             if (color !== initialColor) patch.color = color;
             if (draftsChanged) attachments = drafts;
+            assigneeArg = assignee !== initialAssignee ? assignee : undefined;
         }
         setIsSubmitting(true);
         try {
-            await onSave(patch, attachments);
+            await onSave(patch, attachments, assigneeArg);
             onOpenChange(false);
         } finally {
             setIsSubmitting(false);
@@ -152,6 +170,28 @@ function CardFormDialogContent({
                         showReset={false}
                     />
                 </div>
+                {members && currentUserEmail && (
+                    <div className="grid gap-2">
+                        <Label>Assignee</Label>
+                        <AssigneePicker
+                            value={assignee}
+                            onChange={setAssignee}
+                            members={members}
+                            currentUserEmail={currentUserEmail}
+                        >
+                            <button
+                                type="button"
+                                className="flex w-fit items-center gap-1.5 rounded-md border border-input bg-transparent px-2 py-1.5 text-sm hover:bg-muted"
+                            >
+                                {assignee ? (
+                                    <AssigneeChip email={assignee} />
+                                ) : (
+                                    <span className="text-muted-foreground">Unassigned</span>
+                                )}
+                            </button>
+                        </AssigneePicker>
+                    </div>
+                )}
             </div>
             <DialogFooter>
                 {allowAttachments && (
@@ -194,6 +234,9 @@ export function CardFormDialog({
     initialColor = EIGEN_STICKIES_COLORS[0][1].value,
     allowAttachments = false,
     initialAttachments = [],
+    members,
+    currentUserEmail,
+    initialAssignee = null,
     onSave,
     dialogTitle = 'New card',
     placeholderTitle = 'Enter title',
@@ -211,6 +254,9 @@ export function CardFormDialog({
                         initialColor={initialColor}
                         allowAttachments={allowAttachments}
                         initialAttachments={initialAttachments}
+                        members={members}
+                        currentUserEmail={currentUserEmail}
+                        initialAssignee={initialAssignee}
                         onOpenChange={onOpenChange}
                         onSave={onSave}
                         dialogTitle={dialogTitle}

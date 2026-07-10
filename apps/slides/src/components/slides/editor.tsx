@@ -201,7 +201,17 @@ function SlideEditorInner({
         initialChatName,
         ready: isSynced,
     });
-    const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
+    const {
+        allComments,
+        resolveComment,
+        cards,
+        createCard,
+        updateCard,
+        assignComment,
+        members,
+        unresolvedCount,
+        setOpenCardId,
+    } = lifecycle;
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
@@ -649,16 +659,20 @@ function SlideEditorInner({
         async (
             patch: { title?: string; description?: string; color?: string },
             attachments?: CardAttachmentDraft[],
+            assignee?: string | null,
         ) => {
             if (!addTargetObjId) return;
             const objId = addTargetObjId;
-            await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
+            const card = await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
                 addCommentToObject(objId, card.id);
             });
+            if (assignee !== undefined && card?.chatName) {
+                assignComment.mutate({ chatName: card.chatName, assignee });
+            }
             setAddTargetObjId(null);
             setAddOpen(false);
         },
-        [addTargetObjId, addInitialTitle, createCard, addCommentToObject],
+        [addTargetObjId, addInitialTitle, createCard, assignComment, addCommentToObject],
     );
 
     const activeSlide = activeSlideId ? deck.slides[activeSlideId] : null;
@@ -792,6 +806,11 @@ function SlideEditorInner({
                                                 onCommentClick={setOpenCardId}
                                                 cards={cards}
                                                 entries={allComments}
+                                                members={members}
+                                                currentUserEmail={auth.user?.email}
+                                                onCommentAssign={(chatName, email) =>
+                                                    assignComment.mutate({ chatName, assignee: email })
+                                                }
                                                 onCommentResolve={(chatName) =>
                                                     resolveComment.mutate({ chatName, status: 'resolved' })
                                                 }
@@ -879,6 +898,8 @@ function SlideEditorInner({
                 initialTitle={addInitialTitle}
                 onSave={handleSaveNew}
                 allowAttachments={!!mediaFolderId}
+                members={members}
+                currentUserEmail={auth.user?.email}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />

@@ -53,8 +53,11 @@ export function CommentLifecycleDialogs({
                         ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
                         : undefined
                 }
+                members={members}
+                currentUserEmail={user?.email}
                 onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
                 onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
+                onAssign={(chatName, assignee) => assignComment.mutate({ chatName, assignee })}
             />
 
             <CommentContextMenu
