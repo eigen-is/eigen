@@ -50,8 +50,9 @@ function FilterSummary({ filter, onClear }: { filter: ReturnType<typeof useComme
     const memberEmail = typeof assignee === 'object' ? assignee.email : '';
     const { displayName } = useResolvedUser({ email: memberEmail });
 
-    const parts: string[] = [];
-    if (status !== 'open') parts.push(STATUS_LABELS[status]);
+    // Status always leads ("Open · assigned to me") so the strip describes what the list
+    // shows, not just the deltas from the defaults.
+    const parts: string[] = [STATUS_LABELS[status]];
     if (assignee === 'me') parts.push('assigned to me');
     else if (assignee === 'unassigned') parts.push('unassigned');
     else if (typeof assignee === 'object') parts.push(`assigned to ${displayName || memberEmail.split('@')[0]}`);
