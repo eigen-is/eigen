@@ -41,6 +41,9 @@ type NoteCardDialogProps = {
     // Rendered between the description and the meta/actions footer — card content,
     // above the separator, unlike `children` (the thread).
     attachments?: ReactNode;
+    // In-place edit: when set, replaces the description/attachments/meta rows with an
+    // editing form. The colored header and the thread `children` stay visible.
+    editForm?: ReactNode;
     children: ReactNode;
 };
 
@@ -59,6 +62,7 @@ export function NoteCardDialog({
     copyLinkUrl,
     onDescriptionChange,
     attachments,
+    editForm,
     children,
 }: NoteCardDialogProps) {
     const handleDescriptionClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -102,33 +106,44 @@ export function NoteCardDialog({
                         <DialogTitle className="flex-1">{title}</DialogTitle>
                     </DialogHeader>
 
-                    {description && (
-                        <div className="px-4 py-3 text-sm text-foreground">
-                            <div
-                                className="eigen-prose"
-                                onClick={handleDescriptionClick}
-                                dangerouslySetInnerHTML={{ __html: description }}
-                            />
-                        </div>
-                    )}
-
-                    {attachments && <div className={cn('px-4 pb-3', !description && 'pt-2')}>{attachments}</div>}
-
-                    {(meta || copyLinkUrl || (canWrite && onEdit) || onAction) && (
-                        <div
-                            className={cn('flex items-center gap-2 px-4 pb-2', !description && !attachments && 'pt-2')}
-                        >
-                            {meta && <p className="flex-1 text-xs text-muted-foreground">{meta}</p>}
-                            {copyLinkUrl && (
-                                <IconAction
-                                    icon={LinkIcon}
-                                    tooltip="Copy link"
-                                    onClick={() => copyToClipboard(copyLinkUrl, 'Link copied to clipboard')}
-                                />
+                    {editForm ? (
+                        <div className="px-4">{editForm}</div>
+                    ) : (
+                        <>
+                            {description && (
+                                <div className="px-4 py-3 text-sm text-foreground">
+                                    <div
+                                        className="eigen-prose"
+                                        onClick={handleDescriptionClick}
+                                        dangerouslySetInnerHTML={{ __html: description }}
+                                    />
+                                </div>
                             )}
-                            {canWrite && onEdit && <IconAction icon={Pencil} tooltip="Edit" onClick={onEdit} />}
-                            <IconAction icon={actionIcon} tooltip={actionTooltip} onClick={onAction} />
-                        </div>
+
+                            {attachments && (
+                                <div className={cn('px-4 pb-3', !description && 'pt-2')}>{attachments}</div>
+                            )}
+
+                            {(meta || copyLinkUrl || (canWrite && onEdit) || onAction) && (
+                                <div
+                                    className={cn(
+                                        'flex items-center gap-2 px-4 pb-2',
+                                        !description && !attachments && 'pt-2',
+                                    )}
+                                >
+                                    {meta && <p className="flex-1 text-xs text-muted-foreground">{meta}</p>}
+                                    {copyLinkUrl && (
+                                        <IconAction
+                                            icon={LinkIcon}
+                                            tooltip="Copy link"
+                                            onClick={() => copyToClipboard(copyLinkUrl, 'Link copied to clipboard')}
+                                        />
+                                    )}
+                                    {canWrite && onEdit && <IconAction icon={Pencil} tooltip="Edit" onClick={onEdit} />}
+                                    <IconAction icon={actionIcon} tooltip={actionTooltip} onClick={onAction} />
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
 

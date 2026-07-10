@@ -15,7 +15,7 @@ import { AssigneePicker } from '../comments/assignee-picker';
 import { CommentThread } from '../comments/comment-thread';
 import { CreatedByMeta } from '../comments/created-by-meta';
 import { NoteCardDialog } from '../notes/note-card-dialog';
-import { CardFormDialog } from './card-form-dialog';
+import { CardForm } from './card-form';
 
 type CardDialogProps = {
     open: boolean;
@@ -53,7 +53,7 @@ export function CardDialog({
     onResolve,
     onAssign,
 }: CardDialogProps) {
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
     const { mediaFolderId } = useMediaResolver();
     const resolveAttachments = useResolveCardAttachments(ownerId, mountId, mediaFolderId);
 
@@ -132,68 +132,75 @@ export function CardDialog({
             </span>
         ) : undefined;
 
-    return (
-        <>
-            <NoteCardDialog
-                open={open}
-                onOpenChange={onOpenChange}
-                title={card.title}
-                description={card.description}
-                meta={meta}
-                color={card.color}
-                canWrite={canWrite}
-                onEdit={onUpdate ? () => setIsSettingsOpen(true) : undefined}
-                copyLinkUrl={copyLinkUrl}
-                onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
-                attachments={
-                    card.attachments && card.attachments.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                            {card.attachments.map((attachment) =>
-                                isAttachmentReference(attachment) ? (
-                                    <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
-                                ) : mediaFolderId ? (
-                                    <AttachmentChip
-                                        key={`name-${attachment}`}
-                                        fileName={attachment}
-                                        ownerId={ownerId}
-                                        mountId={mountId}
-                                        mediaFolderId={mediaFolderId}
-                                        siblingFileNames={attachmentNames}
-                                    />
-                                ) : (
-                                    <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
-                                ),
-                            )}
-                        </div>
-                    ) : undefined
-                }
-                {...action}
-            >
-                {card.chatName ? (
-                    <CommentThread ownerId={ownerId} mountId={mountId} chatName={card.chatName} />
-                ) : (
-                    <div className="px-4 pb-4 text-sm text-muted-foreground">No chat available for this card.</div>
-                )}
-            </NoteCardDialog>
+    const canEdit = !!onUpdate && canWrite;
+    const editForm =
+        canEdit && isEditing ? (
+            <CardForm
+                key={card.id}
+                mode="edit"
+                initialTitle={card.title}
+                initialDescription={card.description}
+                initialColor={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
+                allowAttachments={!!mediaFolderId}
+                initialAttachments={card.attachments}
+                members={members}
+                currentUserEmail={currentUserEmail}
+                initialAssignee={entry?.assignee}
+                onSave={async (patch, drafts, assignee) => {
+                    await handleEditSave(patch, drafts, assignee);
+                    setIsEditing(false);
+                }}
+                onCancel={() => setIsEditing(false)}
+            />
+        ) : undefined;
 
-            {onUpdate && canWrite && (
-                <CardFormDialog
-                    key={card.id}
-                    open={isSettingsOpen}
-                    onOpenChange={setIsSettingsOpen}
-                    mode="edit"
-                    initialTitle={card.title}
-                    initialDescription={card.description}
-                    initialColor={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
-                    allowAttachments={!!mediaFolderId}
-                    initialAttachments={card.attachments}
-                    members={members}
-                    currentUserEmail={currentUserEmail}
-                    initialAssignee={entry?.assignee}
-                    onSave={handleEditSave}
-                    dialogTitle="Edit card"
-                />
+    const handleOpenChange = (next: boolean) => {
+        if (!next) setIsEditing(false);
+        onOpenChange(next);
+    };
+
+    return (
+        <NoteCardDialog
+            open={open}
+            onOpenChange={handleOpenChange}
+            title={card.title}
+            description={card.description}
+            meta={meta}
+            color={card.color}
+            canWrite={canWrite}
+            onEdit={canEdit ? () => setIsEditing(true) : undefined}
+            editForm={editForm}
+            copyLinkUrl={copyLinkUrl}
+            onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
+            attachments={
+                card.attachments && card.attachments.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                        {card.attachments.map((attachment) =>
+                            isAttachmentReference(attachment) ? (
+                                <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
+                            ) : mediaFolderId ? (
+                                <AttachmentChip
+                                    key={`name-${attachment}`}
+                                    fileName={attachment}
+                                    ownerId={ownerId}
+                                    mountId={mountId}
+                                    mediaFolderId={mediaFolderId}
+                                    siblingFileNames={attachmentNames}
+                                />
+                            ) : (
+                                <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
+                            ),
+                        )}
+                    </div>
+                ) : undefined
+            }
+            {...action}
+        >
+            {card.chatName ? (
+                <CommentThread ownerId={ownerId} mountId={mountId} chatName={card.chatName} />
+            ) : (
+                <div className="px-4 pb-4 text-sm text-muted-foreground">No chat available for this card.</div>
             )}
-        </>
+        </NoteCardDialog>
     );
 }
