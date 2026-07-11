@@ -46,7 +46,8 @@ lose") and the work the grant funds. Highest strategic value.
 | **Search: calendar events** ([proposal](PROPOSAL_SEARCH.md)) | Mail + drive search (names and body content) shipped; calendar is the last unsearchable domain. | S | Yes, low — additive FTS table, following the inline-FTS pattern mail.db uses | Last phase of the search proposal. |
 | **File History: email digests + in-doc panel** ([proposal](PROPOSAL_FILE_HISTORY.md)) | Phase 1 live (~65%): `FileHistory`, Recent Activity, Watch, Watched view. | M | Yes — email channel needs `notifications.db` v2 migration | Remaining: email/digest channel, in-doc history panel unified with version history, `history:changed` live SSE, and the deferred slide semantic events (S). |
 | **Copy-Paste Phase 0** ([proposal](PROPOSAL_COPY_PASTE.md)) | v1 clipboard live; the async path (`writeEigenClipboardAsync`) omits the custom MIME. | S | No (clipboard is transient) | Tiny fix to make Slides button-copy lossless. Full ECP v2 protocol is P3. |
-| **Help Center rework finish** | Partial — AppShell swap + sections landed; spec's `SupportSidebar` / search-removal didn't fully land. | S | No | The one genuinely-incomplete superpowers plan (`docs/superpowers/plans/2026-05-20-help-center-rework.md`). Article-content campaign runs separately per [SUPPORT-CONTENT-PLAN.md](SUPPORT-CONTENT-PLAN.md). |
+| **Help Center rework finish** | Partial — AppShell swap + sections landed; spec's `SupportSidebar` / search-removal didn't fully land (Pagefind was deliberately kept). Plan doc pruned in the 2026-07-11 superpowers cleanup. | S | No | Article-content campaign runs separately per [SUPPORT-CONTENT-PLAN.md](SUPPORT-CONTENT-PLAN.md). |
+| **Team-removal collab read-revocation** | Not started — the top recorded follow-up of the 2026-07-03 audit-fix branch (ledger: `docs/superpowers/audit-fixes/progress.md`, local-only). The branch made read-revocation coherent for `updateACL` + `movePath`; removing a member from a *team* still doesn't revoke their live collab read access on docs in other homes. | S–M | No | Cross-home, so it needs the relay — bundle with the P1 durable home-relay outbox rather than building a bespoke fan-out. |
 
 ## P3 — Defer
 
@@ -68,6 +69,8 @@ Large net-new builds or low value-per-effort today.
 | Item | Effort | Notes |
 |---|---|---|
 | rspamd sidecar + spam learn-loop ([proposal](PROPOSAL_RSPAMD.md)) | 1–2 d | The real fix for the spam/DMARC pain that the Stalwart proposal exists to solve. rspamd+Redis as a Postfix milter (edge scoring, SPF/DKIM/DMARC); `mailboxDeliver` routes flagged mail to Junk; the existing "Report Spam" button trains Bayes via `/learnspam`·`/learnham` in `messageMove`. Fail-open, no frozen-format impact. |
+| Audit-branch deferred minors (2026-07-03 ledger) | S | Recorded, not fixed, all verified still present 2026-07-11: (1) `TeamHome.updateMount` persists-before-push — a mid-push `addMount` init failure on a storage re-point leaves settings enabled with no live mount until eviction (rare, self-heals on reload; add catch-and-revert). (2) HTML (non-PDF) export keeps remote `url()` in inline CSS — client-side beacon; needs a CSS `url()` stripper. (3) O(N·depth) descendant re-walk on permanent delete of large trees (s3/local-key perf). (4) Large-numeric `@page` values in PDF export — weasyprint cost blow-up. |
+| Audit P3 duplication folding | S–M | Still open from the audit P3 list (verified 2026-07-11): the `use-drive.ts` copy-mutation quartet (4 near-identical call-sites), drive's 4 list handlers, and the per-app `_auth.tsx` variants (10+ copies). Mechanical, subagent-friendly sweep. |
 
 ## Focused audits (future-proofing reviews)
 
