@@ -1,4 +1,4 @@
-import { RowColError } from '../../engine';
+import { RowColError } from '../../engine/rowcol';
 import type { Context } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules/rowcol';
 import { getSheetIndex } from '../utils';

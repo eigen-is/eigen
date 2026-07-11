@@ -63,48 +63,6 @@ describe('engine/cell-resolver — getCell', () => {
     });
 });
 
-// ─── getRange ────────────────────────────────────────────────────────────────
-
-describe('engine/cell-resolver — getRange', () => {
-    const resolver = createArrayResolver(sheets);
-
-    test('returns 2D array for a valid range', () => {
-        const result = resolver.getRange('sheet1', 0, 0, 1, 1);
-        expect(result).toEqual([
-            [cellA, cellB],
-            [null, cellC],
-        ]);
-    });
-
-    test('single-cell range returns 1x1 array', () => {
-        expect(resolver.getRange('sheet1', 0, 0, 0, 0)).toEqual([[cellA]]);
-    });
-
-    test('includes null for empty cells in range', () => {
-        const result = resolver.getRange('sheet1', 0, 1, 1, 2);
-        expect(result).toEqual([
-            [cellB, null],
-            [cellC, null],
-        ]);
-    });
-
-    test('returns nulls for out-of-bounds range', () => {
-        const result = resolver.getRange('sheet1', 10, 10, 11, 11);
-        expect(result).toEqual([
-            [null, null],
-            [null, null],
-        ]);
-    });
-
-    test('returns nulls for unknown sheet', () => {
-        const result = resolver.getRange('unknown', 0, 0, 1, 1);
-        expect(result).toEqual([
-            [null, null],
-            [null, null],
-        ]);
-    });
-});
-
 // ─── getSheetIdByName ────────────────────────────────────────────────────────
 
 describe('engine/cell-resolver — getSheetIdByName', () => {

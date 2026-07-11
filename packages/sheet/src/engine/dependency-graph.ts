@@ -48,32 +48,3 @@ export function getCalculationOrder(
     formulaRunList.reverse();
     return formulaRunList;
 }
-
-// Returns true if the dependency graph contains a cycle.
-// Uses standard 3-color DFS: WHITE (unvisited) → GRAY (in stack) → BLACK (done).
-export function detectCycle(formulaCellInfoMap: FormulaCellInfoMap): boolean {
-    const WHITE = 0;
-    const GRAY = 1;
-    const BLACK = 2;
-    const color: Record<string, number> = {};
-
-    function dfs(key: string): boolean {
-        color[key] = GRAY;
-        const node = formulaCellInfoMap[key];
-        if (node != null) {
-            for (const parentKey of Object.keys(node.parents)) {
-                const parentColor = color[parentKey] ?? WHITE;
-                if (parentColor === GRAY) return true;
-                if (parentColor === WHITE && dfs(parentKey)) return true;
-            }
-        }
-        color[key] = BLACK;
-        return false;
-    }
-
-    for (const key of Object.keys(formulaCellInfoMap)) {
-        if ((color[key] ?? WHITE) === WHITE && dfs(key)) return true;
-    }
-
-    return false;
-}

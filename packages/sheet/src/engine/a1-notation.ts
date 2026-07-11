@@ -20,7 +20,6 @@ export type A1Range = {
 const simpleSheetName = '[A-Za-z0-9_\\u00C0-\\u02AF]+';
 const quotedSheetName = "'(?:(?!').|'')*'";
 const sheetNamePattern = `(?:(${simpleSheetName}|${quotedSheetName})!)`;
-const CELL_REF_REGEXP = new RegExp(`^${sheetNamePattern}?([$])?([A-Za-z]+)([$])?([0-9]+)$`);
 const RANGE_REGEXP = new RegExp(
     `^${sheetNamePattern}?([$])?([A-Za-z]+)([$])?([0-9]+)(?::([$])?([A-Za-z]+)([$])?([0-9]+))?$`,
 );
@@ -32,19 +31,6 @@ export function unquoteSheetName(raw: string): string {
 // Inverse of unquoteSheetName: single-quote wrap with embedded quotes doubled.
 export function quoteSheetName(name: string): string {
     return `'${name.replace(/'/g, "''")}'`;
-}
-
-export function parseA1(ref: string): CellRef | null {
-    const match = ref.match(CELL_REF_REGEXP);
-    if (!match) return null;
-
-    const [, , , col, , row] = match;
-    const colIndex = columnLabelToIndex(col);
-    const rowIndex = rowLabelToIndex(row);
-
-    if (colIndex < 0 || rowIndex < 0) return null;
-
-    return { col: colIndex, row: rowIndex };
 }
 
 export function parseA1Range(range: string): A1Range | null {

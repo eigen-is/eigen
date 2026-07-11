@@ -85,7 +85,7 @@ cleanup as its own decision: **wire it up** (Yjs awareness → `addPresences`; s
 job — preferred, since sheets is a collab editor) **or remove renderer + API pair together** so
 no half-feature lingers. Do not delete the pair as part of the dead-surface trim.
 
-**B2. Engine dead exports** — `detectCycle` (`engine/dependency-graph.ts:54`, exported from both
+**B2. Engine dead exports** ✅ done (all deleted incl. pinning tests) — `detectCycle` (`engine/dependency-graph.ts:54`, exported from both
 barrels, zero callers, and internally uses a color convention that contradicts its own file);
 `parseA1` (`engine/a1-notation.ts:37`; only `parseA1Range` is used); `CellResolver.getRange`
 (interface `engine/types.ts:88` + impl `cell-resolver.ts:19`, no caller);
@@ -93,7 +93,7 @@ barrels, zero callers, and internally uses a color convention that contradicts i
 (`engine/formula-engine.ts:161-280`, ~90 lines, production-dead — only a test pins them;
 production uses `engine.evaluate`). Delete or promote deliberately.
 
-**B3. Engine barrel over-exports** — of ~40 value exports on `@workspace/sheet/engine`, only ~14
+**B3. Engine barrel over-exports** ✅ done (trimmed to the consumed 14; internal imports repointed to modules) — of ~40 value exports on `@workspace/sheet/engine`, only ~14
 are consumed outside the package (`columnIndexToLabel, createArrayResolver, createDefaultSheets,
 evaluateConditionalFormat, FormulaEngine, functionCopy, iscelldata, parseA1Range, quoteSheetName,
 rowIndexToLabel, replaySheetsOps, toA1, unquoteSheetName, update`). Trim the rest

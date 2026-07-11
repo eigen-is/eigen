@@ -4,7 +4,6 @@ import type { DependencyIndex } from '../../engine/dependency-index';
 import { FormulaEngine, isFormula } from '../../engine/formula-engine';
 import type {
     CalcChainEntry,
-    Cell,
     CellMatrix,
     CellResolver,
     FormulaCellInfoMap,
@@ -66,18 +65,6 @@ export function createContextResolver(source: Context): CellResolver {
     return {
         getCell(sheetId: string, row: number, col: number) {
             return dataFor(sheetId)?.[row]?.[col] ?? null;
-        },
-        getRange(sheetId: string, startRow: number, startCol: number, endRow: number, endCol: number) {
-            const flowdata = dataFor(sheetId);
-            const result: (Cell | null)[][] = [];
-            for (let r = startRow; r <= endRow; r++) {
-                const rowData: (Cell | null)[] = [];
-                for (let c = startCol; c <= endCol; c++) {
-                    rowData.push(flowdata?.[r]?.[c] ?? null);
-                }
-                result.push(rowData);
-            }
-            return result;
         },
         getSheetIdByName(name: string) {
             return getSheetIdByName(source, name) ?? null;

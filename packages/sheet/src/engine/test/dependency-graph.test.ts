@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { detectCycle, getCalculationOrder } from '../dependency-graph';
+import { getCalculationOrder } from '../dependency-graph';
 import type { FormulaCellInfo, FormulaCellInfoMap } from '../types';
 
 // Helper to build a minimal FormulaCellInfo for test use
@@ -79,61 +79,5 @@ describe('engine/dependency-graph — getCalculationOrder', () => {
         const map: FormulaCellInfoMap = { r0c0isheet1: cell };
         const result = getCalculationOrder([cell, cell], map);
         expect(result).toHaveLength(1);
-    });
-});
-
-// ─── detectCycle ──────────────────────────────────────────────────────────────
-
-describe('engine/dependency-graph — detectCycle', () => {
-    test('empty map returns false', () => {
-        expect(detectCycle({})).toBe(false);
-    });
-
-    test('single node with no parents returns false', () => {
-        const map: FormulaCellInfoMap = { r0c0is1: makeCell('r0c0is1') };
-        expect(detectCycle(map)).toBe(false);
-    });
-
-    test('acyclic chain A→B→C returns false', () => {
-        const map: FormulaCellInfoMap = {
-            r0c0is1: makeCell('r0c0is1', { r1c0is1: 1 }),
-            r1c0is1: makeCell('r1c0is1', { r2c0is1: 1 }),
-            r2c0is1: makeCell('r2c0is1'),
-        };
-        expect(detectCycle(map)).toBe(false);
-    });
-
-    test('direct self-cycle returns true', () => {
-        const map: FormulaCellInfoMap = {
-            r0c0is1: makeCell('r0c0is1', { r0c0is1: 1 }),
-        };
-        expect(detectCycle(map)).toBe(true);
-    });
-
-    test('two-node cycle A→B→A returns true', () => {
-        const map: FormulaCellInfoMap = {
-            r0c0is1: makeCell('r0c0is1', { r1c0is1: 1 }),
-            r1c0is1: makeCell('r1c0is1', { r0c0is1: 1 }),
-        };
-        expect(detectCycle(map)).toBe(true);
-    });
-
-    test('indirect cycle A→B→C→A returns true', () => {
-        const map: FormulaCellInfoMap = {
-            r0c0is1: makeCell('r0c0is1', { r1c0is1: 1 }),
-            r1c0is1: makeCell('r1c0is1', { r2c0is1: 1 }),
-            r2c0is1: makeCell('r2c0is1', { r0c0is1: 1 }),
-        };
-        expect(detectCycle(map)).toBe(true);
-    });
-
-    test('disconnected acyclic graph with two components returns false', () => {
-        const map: FormulaCellInfoMap = {
-            r0c0is1: makeCell('r0c0is1', { r1c0is1: 1 }),
-            r1c0is1: makeCell('r1c0is1'),
-            r2c0is1: makeCell('r2c0is1', { r3c0is1: 1 }),
-            r3c0is1: makeCell('r3c0is1'),
-        };
-        expect(detectCycle(map)).toBe(false);
     });
 });

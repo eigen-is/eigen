@@ -6,8 +6,8 @@ import type {
     SingleRange,
 } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
-import type { CellFormatStyle, ComputeMap } from '../../engine';
-import { evaluateConditionalFormat } from '../../engine';
+import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
+import { evaluateConditionalFormat } from '../../engine/conditional-format';
 import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { ConditionRulesProps } from '../types';
