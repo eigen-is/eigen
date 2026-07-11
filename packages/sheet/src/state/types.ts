@@ -171,8 +171,7 @@ export type FilterEntry = {
 };
 
 // Alternate-format placeholder entry. The feature never landed; rowcol shifts
-// the cellrange but the array is otherwise empty (see state/modules/cell.ts
-// :1143 where consumers initialise an empty `checksAF: string[]`).
+// the cellrange but nothing ever reads the entries.
 export type AlternateFormatEntry = {
     cellrange: { row: [number, number]; column: [number, number] };
 };

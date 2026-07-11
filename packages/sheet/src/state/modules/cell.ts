@@ -599,7 +599,6 @@ export function mergeMoveMain(
     return [columnseleted, rowseleted, top, height, left, width];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function cancelFunctionrangeSelected(ctx: Context) {
     if (ctx.formulaCache.selectingRangeIndex === -1) {
         ctx.formulaRangeSelect = undefined;
@@ -1052,7 +1051,6 @@ const STYLE_KEYS = ['bl', 'it', 'ff', 'fs', 'fc', 'cl', 'un'] as const satisfies
 
 export function getFontStyleByCell(
     cell: (Cell & UnderlineHints) | null | undefined,
-    checksAF?: string[],
     checksCF?: CellFormatStyle | null,
     isCheck = true,
 ) {
@@ -1077,11 +1075,9 @@ export function getFontStyleByCell(
         if (key === 'fs' && valueNum !== 10) {
             style.fontSize = `${valueNum}pt`;
         }
-        if ((key === 'fc' && value !== '#000000') || (checksAF?.length ?? 0) > 0 || checksCF?.textColor) {
+        if ((key === 'fc' && value !== '#000000') || checksCF?.textColor) {
             if (checksCF?.textColor) {
                 style.color = checksCF.textColor;
-            } else if (checksAF && checksAF.length > 0) {
-                [style.color] = checksAF;
             } else {
                 style.color = String(value);
             }
@@ -1101,10 +1097,6 @@ export function getFontStyleByCell(
 export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number, cfCompute?: ComputeMap | null) {
     let style: Record<string, string> = {};
 
-    // Alternating colors
-    //   const af_compute = alternateformat.getComputeMap();
-    //   const checksAF = alternateformat.checksAF(r, c, af_compute);
-    const checksAF: string[] = [];
     // Conditional format
     const cf_compute = cfCompute ?? getComputeMap(ctx);
     const checksCF = checkCF(r, c, cf_compute);
@@ -1115,15 +1107,7 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
     const isInline = isInlineStringCell(cell);
     if ('bg' in cell) {
         const value = normalizedCellAttr(cell, 'bg');
-        if (checksCF?.cellColor) {
-            if (checksCF?.cellColor) {
-                style.background = `${checksCF.cellColor}`;
-            } else if (checksAF.length > 1) {
-                style.background = `${checksAF[1]}`;
-            } else {
-                style.background = `${value}`;
-            }
-        }
+        style.background = checksCF?.cellColor ? `${checksCF.cellColor}` : `${value}`;
     }
     if ('ht' in cell) {
         const value = normalizedCellAttr(cell, 'ht');
@@ -1143,7 +1127,7 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
         }
     }
     if (!isInline) {
-        style = Object.assign(style, getFontStyleByCell(cell, checksAF, checksCF));
+        style = Object.assign(style, getFontStyleByCell(cell, checksCF));
     }
 
     return style;

@@ -34,7 +34,7 @@ What remains is concentrated and legible:
 
 | # | What | Where | Evidence |
 |---|------|-------|----------|
-| A1 | Doubled guard makes a cell's own background unreachable in HTML export | `src/state/modules/cell.ts:1116-1127` | `if (checksCF?.cellColor) { if (checksCF?.cellColor) {…} else {… style.background = value }}` — inner `else` arms can never run, so `getStyleByCell` → `rangeValueToHtml` (copy-as-HTML) drops plain cell backgrounds. Hand-verified. |
+| A1 ✅ done | Doubled guard makes a cell's own background unreachable in HTML export | `src/state/modules/cell.ts:1116-1127` | `if (checksCF?.cellColor) { if (checksCF?.cellColor) {…} else {… style.background = value }}` — inner `else` arms can never run, so `getStyleByCell` → `rangeValueToHtml` (copy-as-HTML) drops plain cell backgrounds. Hand-verified. |
 | A2 | `escapeScriptTag` closing-tag replace missing `/g` | `src/state/utils/index.ts:80` | `.replace(/<script>/g, …).replace(/<\/script>/, …)` — only the first `</script>` is escaped; result feeds `innerHTML` in `InputBox.tsx:91` and `FxEditor/index.tsx:67`. Hand-verified. |
 | A3 | `toNumber` mis-parses scientific notation | `src/engine/parser/helper/number.ts:24` | `"1e3"` has no `.` → `parseInt("1e3")` → `1`. Use `Number(value)`. |
 
@@ -111,7 +111,7 @@ internal-only too.
 (`validation.ts:47`), `setConditionRules(_protection, _generalDialog)` (`conditionFormat.ts:54`),
 and the `_r/_c/_dynamicArray_compute` trio threaded through
 `isFunctionRange`/`checkSpecialFunctionRange` (`formula-exec.ts:46-204`); inert `checksAF`
-threading in `cell.ts:1053-1146` (hardcoded `[]`, guards can never fire).
+threading in `cell.ts:1053-1146` (hardcoded `[]`, guards can never fire) ✅ done.
 
 **B5. Dead locale sections** — `state/locale/en.ts` is 9,870 lines; 88.7% is `functionlist`
 (formula help data — legit, keep). But `print`, `websocket`, `alternatingColors`, `imageCtrl`,
@@ -124,7 +124,7 @@ threading in `cell.ts:1053-1146` (hardcoded `[]`, guards can never fire).
 `jfrefreshgrid` a thin wrapper whose comments describe removed behavior);
 `moveCells.ts`, `sort.ts:93-106`, `merge.ts:8-11`, `selection.ts:914-948` (35-line jQuery block),
 `toolbar.ts` (tooltip/isEditMode blocks). Also stale annotations: the eslint-disable above
-`cancelFunctionrangeSelected` (`cell.ts:602` — it *is* used) and the outdated `O(n²) concat`
+`cancelFunctionrangeSelected` (`cell.ts:602` — it *is* used; ✅ removed) and the outdated `O(n²) concat`
 comment in `formula-exec.ts:454`.
 
 **B7. Dead DOM placeholders** — `SheetOverlay/index.tsx:473-476,491,551,686-692`:
