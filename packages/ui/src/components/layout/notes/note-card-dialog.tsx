@@ -115,8 +115,10 @@ export function NoteCardDialog({
                     </div>
                 ) : (
                     <>
-                        {/* Header + content cap at ~60% so the thread below always keeps ≥40%. */}
-                        <div className="flex max-h-[60%] min-h-0 flex-col">
+                        {/* Header + content cap at 42vh (60% of the 70vh dialog cap) so the thread
+                            below always keeps ≥40%. A percentage max-h would never resolve here —
+                            the dialog's max-h-[70vh] height stays indefinite. */}
+                        <div className="flex max-h-[42vh] min-h-0 flex-col">
                             {header}
 
                             {description && (
