@@ -55,7 +55,7 @@ What remains is concentrated and legible:
 
 All grep-verified across `packages/` + `apps/` (excluding tests); spot-checks re-run by hand.
 
-**B1. Imperative Workbook API — ~35 of ~50 methods have zero callers** (`src/components/Workbook/api.ts:51-352`).
+**B1. Imperative Workbook API — ~35 of ~50 methods have zero callers** ✅ done (34 deleted incl. `batchCallApis`; presence pair kept per the exception) (`src/components/Workbook/api.ts:51-352`).
 Dead: `getCellValue, setCellValue, clearCell, autoFillCell, freeze, insertRowOrColumn,
 deleteRowOrColumn, hideRowOrColumn, showRowOrColumn, setRowHeight, setColumnWidth, getRowHeight,
 getColumnWidth, getSelection, getFlattenRange, getCellsByFlattenRange, getSelectionCoordinates,

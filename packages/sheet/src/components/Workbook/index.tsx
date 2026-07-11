@@ -666,16 +666,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // expose APIs
         useImperativeHandle(
             ref,
-            () =>
-                generateAPIs(
-                    context,
-                    setContextWithProduce,
-                    handleUndo,
-                    handleRedo,
-                    mergedSettings,
-                    cellInput.current,
-                    cellArea.current,
-                ),
+            () => generateAPIs(context, setContextWithProduce, handleUndo, handleRedo, mergedSettings),
             [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings],
         );
 
