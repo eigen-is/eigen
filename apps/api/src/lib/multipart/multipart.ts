@@ -30,9 +30,6 @@ export type MultipartEvent =
     | { type: 'end'; size: number };
 
 const MAX_HEADER_SIZE = 8 * 1024;
-// RFC 2046 caps a boundary at 70 chars. Enforced so the search needle stays short
-// and its skip table (keyed on needle length) can never wrap to a 0 skip → infinite loop.
-const MAX_BOUNDARY_LENGTH = 70;
 
 const StateStart = 0;
 const StateAfterBoundary = 1;
@@ -86,11 +83,6 @@ class MultipartParser {
     #partSize = 0;
 
     constructor(boundary: string, maxFileSize: number) {
-        if (boundary.length > MAX_BOUNDARY_LENGTH) {
-            throw new MultipartParseError(
-                `Multipart boundary exceeds the maximum length of ${MAX_BOUNDARY_LENGTH} characters`,
-            );
-        }
         this.#maxFileSize = maxFileSize;
         this.#openingBoundary = new TextEncoder().encode(`--${boundary}`);
         this.#findBoundary = createSearch(`\r\n--${boundary}`);

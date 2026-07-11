@@ -6,9 +6,10 @@ export type SearchFunction = (haystack: Uint8Array, start?: number) => number;
 export function createSearch(pattern: string): SearchFunction {
     const needle = new TextEncoder().encode(pattern);
     const needleEnd = needle.length - 1;
-    // Skip distances must fit in a byte; callers keep the needle short by capping the
-    // boundary length (see MAX_BOUNDARY_LENGTH), so a distance can never wrap to 0.
-    const skipTable = new Uint8Array(256).fill(needle.length);
+    // Uint32, not Uint8: for a needle of 256+ bytes a Uint8 fill would wrap to 0, making
+    // the default skip 0 so the search never advances (infinite loop). needle.length is
+    // bounded by the pattern string length, well under 2^32, so a Uint32 skip can't wrap.
+    const skipTable = new Uint32Array(256).fill(needle.length);
     for (let i = 0; i < needleEnd; ++i) {
         skipTable[needle[i]] = needleEnd - i;
     }

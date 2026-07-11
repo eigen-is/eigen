@@ -235,22 +235,24 @@ describe('multipart parser', () => {
         await expect(collect(request)).rejects.toBeInstanceOf(MultipartParseError);
     });
 
-    test('rejects an over-long boundary instead of degrading the search', async () => {
-        // A 252-char boundary makes the \r\n--boundary needle 256 bytes; an unclamped
-        // Uint8Array skip table would wrap to 0 and spin the body search loop forever.
-        // The body is validly framed with the evil boundary so the parser reaches the
-        // in-body search — an all-zero body would bail at the opening-boundary check first.
-        const evil = 'b'.repeat(252);
+    test('parses a message with a 252-char boundary without hanging', async () => {
+        // A 252-char boundary makes the \r\n--boundary needle 256 bytes. A Uint8Array skip
+        // table would wrap its default to 0 and spin the body search forever; the Uint32Array
+        // table keeps the skip intact so the search terminates and the part parses normally.
+        const long = 'b'.repeat(252);
         const message = enc.encode(
-            `--${evil}\r\nContent-Disposition: form-data; name="file"; filename="a.txt"\r\n\r\n` +
-                `${'x'.repeat(4096)}\r\n--${evil}--\r\n`,
+            `--${long}\r\nContent-Disposition: form-data; name="file"; filename="a.txt"\r\n\r\n` +
+                `${'x'.repeat(4096)}\r\n--${long}--\r\n`,
         );
         const request = new Request('http://localhost/upload', {
             method: 'POST',
-            headers: { 'content-type': `multipart/form-data; boundary=${evil}` },
+            headers: { 'content-type': `multipart/form-data; boundary=${long}` },
             body: message,
         });
-        await expect(collect(request)).rejects.toBeInstanceOf(MultipartParseError);
+        const events = await collect(request);
+        expect(events[0]).toMatchObject({ type: 'part', filename: 'a.txt' });
+        expect(events.at(-1)).toEqual({ type: 'end', size: 4096 });
+        expect(new TextDecoder().decode(bodyOf(events))).toBe('x'.repeat(4096));
     });
 
     test('rejects a multipart content type without a boundary', async () => {
