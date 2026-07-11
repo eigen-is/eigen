@@ -13,6 +13,7 @@ import {
     type Context,
     createDropCellRange,
     createFilterOptions,
+    en,
     fixColumnStyleOverflowInFreeze,
     fixRowStyleOverflowInFreeze,
     type GlobalCache,
@@ -24,7 +25,6 @@ import {
     handleCellAreaMouseDown,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
-    locale,
     onCellsMoveStart,
     selectAll,
     seletedHighlistByindex,
@@ -41,7 +41,7 @@ import { RowHeader } from './RowHeader';
 
 export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
-    const { info } = locale(context);
+    const { info } = en;
     const { showDialog } = useDialog();
     const { onContextMenu: cellAreaContextMenu, anchor: cellMenuAnchor } = useSheetContextMenu('cell');
     const containerRef = useRef<HTMLDivElement>(null);

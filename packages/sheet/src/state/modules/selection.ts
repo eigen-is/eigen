@@ -16,7 +16,7 @@ import {
     mergeMoveMain,
 } from './cell';
 import { setPendingCopy } from './clipboard';
-import { getComputeMap } from './conditionFormat';
+import { getComputeMap } from './condition-format';
 import { hasPartMC } from './validation';
 
 export const selectionCache = {

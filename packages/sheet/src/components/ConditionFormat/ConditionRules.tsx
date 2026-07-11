@@ -9,12 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { locale, setConditionRules } from '../../state';
+import { en, setConditionRules } from '../../state';
 
 export function ConditionRules({ type }: { type: string }) {
     const { context, setContext } = useContext(WorkbookContext);
     const { hideDialog } = useDialog();
-    const { conditionformat, button } = locale(context);
+    const { conditionformat, button } = en;
     const [colorRules, setColorRules] = useState<{
         textColor: string;
         cellColor: string;
@@ -43,7 +43,7 @@ export function ConditionRules({ type }: { type: string }) {
             });
             hideDialog();
         },
-        [colorRules, conditionformat, hideDialog, setContext],
+        [colorRules, hideDialog, setContext],
     );
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only initialization from `type` prop and rangeDialog state

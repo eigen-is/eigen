@@ -13,22 +13,17 @@ import {
 } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
+import { isFormula } from '../../engine/formula-engine';
+import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { Range, RangeOrWholeAxis, Selection, SheetConfig } from '../types';
 import { getSheetIndex, indexToColumnChar, rgbToHex } from '../utils';
-import { checkCF, getComputeMap } from './conditionFormat';
-import { getFailureText, validateCellData } from './dataVerification';
-import {
-    delFunctionGroup,
-    execFunctionGroup,
-    execfunction,
-    functionHTMLGenerate,
-    getcellrange,
-    iscelldata,
-    isFormula,
-} from './formula-ui';
-import { setFormulaCellInfo } from './formulaHelper';
+import { checkCF, getComputeMap } from './condition-format';
+import { getFailureText, validateCellData } from './data-verification';
+import { setFormulaCellInfo } from './formula-cache';
+import { functionHTMLGenerate } from './formula-editor';
+import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
 import {
     convertSpanToShareString,
     cssDomKeyForAttr,

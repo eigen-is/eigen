@@ -13,6 +13,7 @@ import { useAlert } from '../../hooks/useAlert';
 import {
     type Context,
     clearFilter,
+    en,
     FILTER_CONDITION_ITEMS,
     type FilterColor,
     type FilterConditionName,
@@ -22,7 +23,6 @@ import {
     getFilterColumnColors,
     getFilterColumnValues,
     getFilterConditionHiddenRows,
-    locale,
     orderbydatafiler,
     saveFilter,
 } from '../../state';
@@ -133,7 +133,7 @@ export const FilterMenu: React.FC = () => {
         endCol: null,
         col: null,
     };
-    const { filter } = locale(context);
+    const { filter } = en;
     const [data, setData] = useState<{
         dates: FilterDate[];
         dateRowMap: Record<string, number[]>;

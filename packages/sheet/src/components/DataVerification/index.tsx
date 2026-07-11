@@ -10,12 +10,12 @@ import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
     confirmMessage,
+    en,
     getDropdownList,
     getFlowdata,
     getRangeByTxt,
     getRangetxt,
     getSheetIndex,
-    locale,
     setCellValue,
 } from '../../state';
 import { RangeDialog } from './RangeDialog';
@@ -61,7 +61,7 @@ const VALIDITY_CONDITIONS = ['identificationNumber', 'phoneNumber'] as const;
 export function DataVerification() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog, showNonModalDialog, hideDialog } = useDialog();
-    const { dataVerification, toolbar, button, generalDialog } = locale(context);
+    const { dataVerification, toolbar, button, generalDialog } = en;
 
     // Enable mouse selection
     const dataSelectRange = useCallback(
@@ -143,7 +143,7 @@ export function DataVerification() {
             }
             hideDialog();
         },
-        [dataVerification, generalDialog, hideDialog, setContext, showDialog],
+        [hideDialog, setContext, showDialog],
     );
 
     // Initialize

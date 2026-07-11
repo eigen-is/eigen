@@ -3,11 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
 import type { Context } from '../context';
-import { locale } from '../locale';
+import { en } from '../locale/en';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
-import { setFormulaCellInfo } from './formulaHelper';
+import { setFormulaCellInfo } from './formula-cache';
 
 function storeSheetParam(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
@@ -190,7 +190,7 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
         editable.innerText = ctx.sheets[index].name;
         return;
     }
-    const { sheetconfig } = locale(ctx);
+    const { sheetconfig } = en;
     const oldtxt = editable.dataset.oldText || '';
     const txt = editable.innerText;
 

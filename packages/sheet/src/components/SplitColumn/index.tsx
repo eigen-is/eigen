@@ -6,11 +6,11 @@ import { Label } from '@workspace/ui/components/label';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { getDataArr, getFlowdata, getRegStr, locale, updateMoreCell } from '../../state';
+import { en, getDataArr, getFlowdata, getRegStr, updateMoreCell } from '../../state';
 
 export function SplitColumn() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { splitText, button } = locale(context);
+    const { splitText, button } = en;
     const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
     const [otherValue, setOtherValue] = useState('');
     const [tableData, setTableData] = useState<string[][]>([]);
@@ -56,7 +56,7 @@ export function SplitColumn() {
                 updateMoreCell(r, c, dataArr, ctx);
             });
         }
-    }, [context, hideDialog, setContext, showDialog, splitOperate, splitText.splitConfirmToExe]);
+    }, [context, hideDialog, setContext, showDialog, splitOperate]);
 
     useEffect(() => {
         setTableData(getDataArr(splitOperate, context));

@@ -12,9 +12,10 @@ import {
     rangeDrag,
 } from '../modules';
 import { mergeMoveMain } from '../modules/cell';
-import { onDropCellSelect, onDropCellSelectEnd } from '../modules/dropCell';
+import { onDropCellSelect, onDropCellSelectEnd } from '../modules/drop-cell';
 import { getFilterButtonAtPosition } from '../modules/filter';
-import { handleFormulaInput, rangeDragColumn, rangeDragRow } from '../modules/formula-ui';
+import { handleFormulaInput } from '../modules/formula-editor';
+import { rangeDragColumn, rangeDragRow } from '../modules/formula-range';
 import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
 import { onRangeSelectionModalMove, onRangeSelectionModalMoveEnd } from '../modules/hyperlink';
 import { colLocation, rowLocation } from '../modules/location';

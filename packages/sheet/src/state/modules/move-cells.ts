@@ -4,7 +4,7 @@ import { cfSplitRange } from '../../engine/conditional-format';
 import type { SingleRange } from '../../engine/types';
 
 import { type Context, getFlowdata } from '../context';
-import { locale } from '../locale';
+import { en } from '../locale/en';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getBorderInfoCompute } from './border';
@@ -201,7 +201,7 @@ export function onCellsMoveEnd(
     if (cfg.rowlen == null) {
         cfg.rowlen = {};
     }
-    const { drag: locale_drag } = locale(ctx);
+    const { drag: locale_drag } = en;
 
     // Selection contains partial cells
     if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {

@@ -1,11 +1,11 @@
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { type Context, getSheetIndex, locale } from '../../state';
+import { type Context, en, getSheetIndex } from '../../state';
 
 export function ChangeColor() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { sheetconfig } = locale(context);
+    const { sheetconfig } = en;
     const [selectColor, setSelectColor] = useState<string | undefined>(
         context.sheets[getSheetIndex(context, context.currentSheetId) as number].color,
     );

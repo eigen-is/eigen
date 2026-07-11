@@ -101,7 +101,7 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
 // direction. A leading `=` is stripped before processing; the returned text never
 // carries one. Pure — no Context, no DOM. Negative `step` is allowed and reverses
 // the direction. Used by:
-//   - state/modules/conditionFormat.ts (CF formula rules)
+//   - state/modules/condition-format.ts (CF formula rules)
 //   - state/events/paste.ts (formula paste with relative refs)
 //   - state/modules/sort.ts (sort moves formulas around)
 //   - apps/api/src/lib/export/sheets/html.ts (server-side CF rule evaluation)

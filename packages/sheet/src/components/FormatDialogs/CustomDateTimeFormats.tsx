@@ -14,7 +14,7 @@ import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { is_date } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { handleNumberFormat, locale } from '../../state';
+import { en, handleNumberFormat } from '../../state';
 import {
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
@@ -78,8 +78,8 @@ function TokenChip({
 }
 
 export function CustomDateTimeFormats() {
-    const { context, setContext, refs } = useContext(WorkbookContext);
-    const { button, format, dateFmtList } = locale(context);
+    const { setContext, refs } = useContext(WorkbookContext);
+    const { button, format, dateFmtList } = en;
     const { hideDialog } = useDialog();
 
     const anchor = useAnchorCell();

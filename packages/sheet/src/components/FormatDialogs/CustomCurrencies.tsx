@@ -7,12 +7,12 @@ import { useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { handleNumberFormat, locale } from '../../state';
+import { en, handleNumberFormat } from '../../state';
 import { buildCurrencyPattern, CURRENCY_VARIANTS, type CurrencyVariantId } from './format-pattern';
 
 export function CustomCurrencies() {
-    const { context, setContext, refs, settings } = useContext(WorkbookContext);
-    const { button, format, currencyDetail } = locale(context);
+    const { setContext, refs, settings } = useContext(WorkbookContext);
+    const { button, format, currencyDetail } = en;
     const { hideDialog } = useDialog();
 
     const [symbol, setSymbol] = useState(settings.currency);
@@ -39,7 +39,7 @@ export function CustomCurrencies() {
                         1000.12,
                     ),
                 })),
-        [currencyDetail],
+        [],
     );
 
     const needle = query.trim().toLowerCase();

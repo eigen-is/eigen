@@ -1,15 +1,15 @@
 import { every, isNil, isUndefined } from 'es-toolkit/compat';
 import type { Context } from '../context';
-import { locale } from '../locale';
+import { en } from '../locale/en';
 import { checkCellIsLocked } from '../modules';
 import type { Sheet } from '../types';
 
 export * from './patch';
 
-export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean, ctx: Context) {
+export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean, _ctx: Context) {
     let index = file.length;
 
-    const locale_pivotTable = locale(ctx).pivotTable;
+    const locale_pivotTable = en.pivotTable;
     const { title } = locale_pivotTable;
 
     for (let i = 0; i < file.length; i += 1) {

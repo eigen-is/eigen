@@ -3,12 +3,14 @@ import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
+import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { Rect } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getBorderInfoCompute } from './border';
-import * as formula from './formula-ui';
+import { createContextResolver } from './formula-cache';
+import { execFunctionGroup, execfunction } from './formula-exec';
 import { colLocation, rowLocation } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
@@ -2096,7 +2098,7 @@ export function updateDropCell(ctx: Context) {
 
     // Live resolver, hoisted: one per fill-drag instead of one snapshot per
     // filled formula cell.
-    const resolver = formula.createContextResolver(ctx);
+    const resolver = createContextResolver(ctx);
 
     const cfg = cloneDeep(ctx.config);
     if (cfg.borderInfo == null) {
@@ -2142,20 +2144,10 @@ export function updateDropCell(ctx: Context) {
                     const cell = applyData[j - apply_str_r];
 
                     if (cell?.f != null) {
-                        const f = `=${formula.functionCopy(cell.f, 'down', j - apply_str_r + 1)}`;
-                        const v = formula.execfunction(
-                            ctx,
-                            f,
-                            j,
-                            i,
-                            undefined,
-                            undefined,
-                            undefined,
-                            undefined,
-                            resolver,
-                        );
+                        const f = `=${functionCopy(cell.f, 'down', j - apply_str_r + 1)}`;
+                        const v = execfunction(ctx, f, j, i, undefined, undefined, undefined, undefined, resolver);
 
-                        formula.execFunctionGroup(ctx, j, i, v[1], undefined, d);
+                        execFunctionGroup(ctx, j, i, v[1], undefined, d);
 
                         [, cell.v, cell.f] = v;
 
@@ -2246,20 +2238,10 @@ export function updateDropCell(ctx: Context) {
                     const cell = applyData[apply_end_r - j];
 
                     if (cell?.f != null) {
-                        const f = `=${formula.functionCopy(cell.f, 'up', apply_end_r - j + 1)}`;
-                        const v = formula.execfunction(
-                            ctx,
-                            f,
-                            j,
-                            i,
-                            undefined,
-                            undefined,
-                            undefined,
-                            undefined,
-                            resolver,
-                        );
+                        const f = `=${functionCopy(cell.f, 'up', apply_end_r - j + 1)}`;
+                        const v = execfunction(ctx, f, j, i, undefined, undefined, undefined, undefined, resolver);
 
-                        formula.execFunctionGroup(ctx, j, i, v[1], undefined, d);
+                        execFunctionGroup(ctx, j, i, v[1], undefined, d);
 
                         [, cell.v, cell.f] = v;
 
@@ -2354,20 +2336,10 @@ export function updateDropCell(ctx: Context) {
                     const cell = applyData[j - apply_str_c];
 
                     if (cell?.f != null) {
-                        const f = `=${formula.functionCopy(cell.f, 'right', j - apply_str_c + 1)}`;
-                        const v = formula.execfunction(
-                            ctx,
-                            f,
-                            i,
-                            j,
-                            undefined,
-                            undefined,
-                            undefined,
-                            undefined,
-                            resolver,
-                        );
+                        const f = `=${functionCopy(cell.f, 'right', j - apply_str_c + 1)}`;
+                        const v = execfunction(ctx, f, i, j, undefined, undefined, undefined, undefined, resolver);
 
-                        formula.execFunctionGroup(ctx, i, j, v[1], undefined, d);
+                        execFunctionGroup(ctx, i, j, v[1], undefined, d);
 
                         [, cell.v, cell.f] = v;
 
@@ -2452,20 +2424,10 @@ export function updateDropCell(ctx: Context) {
                     const cell = applyData[apply_end_c - j];
 
                     if (cell?.f != null) {
-                        const f = `=${formula.functionCopy(cell.f, 'left', apply_end_c - j + 1)}`;
-                        const v = formula.execfunction(
-                            ctx,
-                            f,
-                            i,
-                            j,
-                            undefined,
-                            undefined,
-                            undefined,
-                            undefined,
-                            resolver,
-                        );
+                        const f = `=${functionCopy(cell.f, 'left', apply_end_c - j + 1)}`;
+                        const v = execfunction(ctx, f, i, j, undefined, undefined, undefined, undefined, resolver);
 
-                        formula.execFunctionGroup(ctx, i, j, v[1], undefined, d);
+                        execFunctionGroup(ctx, i, j, v[1], undefined, d);
 
                         [, cell.v, cell.f] = v;
 

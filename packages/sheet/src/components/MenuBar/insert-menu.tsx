@@ -9,22 +9,14 @@ import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
-import {
-    addSheet,
-    autoSelectionFormula,
-    getFlowdata,
-    handleLink,
-    handleSum,
-    locale,
-    tryInsertRowCol,
-} from '../../state';
-import { FormulaSearch } from '../FormulaSearch';
+import { addSheet, autoSelectionFormula, en, getFlowdata, handleLink, handleSum, tryInsertRowCol } from '../../state';
+import { InsertFunctionDialog } from '../InsertFunctionDialog';
 
 export function InsertMenu() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
     const { showDialog, hideDialog } = useDialog();
-    const { toolbar, formula } = locale(context);
+    const { toolbar, formula } = en;
 
     const selection = context.selections?.[0];
     const rowFocus = selection?.row_focus;
@@ -185,7 +177,7 @@ export function InsertMenu() {
                         {formula.min}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => showDialog(<FormulaSearch onCancel={hideDialog} />)}>
+                    <DropdownMenuItem onClick={() => showDialog(<InsertFunctionDialog onCancel={hideDialog} />)}>
                         {`${formula.find}...`}
                     </DropdownMenuItem>
                 </DropdownMenuSubContent>

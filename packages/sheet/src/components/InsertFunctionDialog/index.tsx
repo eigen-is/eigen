@@ -6,9 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { cancelNormalSelected, locale, setCaretPosition } from '../../state';
+import { cancelNormalSelected, en, setCaretPosition } from '../../state';
 
-export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void }) {
+export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => void }) {
     const {
         context,
         setContext,
@@ -17,7 +17,7 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
     const [selectedType, setSelectedType] = useState(0);
     const [selectedFuncIndex, setSelectedFuncIndex] = useState(0);
     const [searchText, setSearchText] = useState('');
-    const { formulaMore, functionlist, button } = locale(context);
+    const { formulaMore, functionlist, button } = en;
 
     const typeList = useMemo(
         () => [
@@ -38,7 +38,7 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
             { t: 14, n: formulaMore.Array },
             { t: -1, n: formulaMore.other },
         ],
-        [formulaMore],
+        [],
     );
 
     const filteredFunctionList = useMemo(() => {
@@ -48,7 +48,7 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
             return functionlist.filter((fn) => (isAlpha ? fn.n.includes(text) : fn.a.includes(text)));
         }
         return functionlist.filter((v) => v.t === selectedType);
-    }, [functionlist, selectedType, searchText]);
+    }, [selectedType, searchText]);
 
     const onConfirm = useCallback(() => {
         const last = context.selections?.[context.selections.length - 1];
@@ -87,16 +87,7 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
                 _onCancel();
             }
         });
-    }, [
-        cellInput,
-        context.selections,
-        filteredFunctionList,
-        globalCache,
-        selectedFuncIndex,
-        setContext,
-        _onCancel,
-        functionlist,
-    ]);
+    }, [cellInput, context.selections, filteredFunctionList, globalCache, selectedFuncIndex, setContext, _onCancel]);
 
     const onCancel = useCallback(() => {
         setContext((ctx) => {

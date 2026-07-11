@@ -122,7 +122,7 @@ export type BorderInfo = CellBorderInfo | RangeBorderInfo;
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
 // Per-cell data-validation rule, produced by the editor's state layer
-// (state/modules/dataVerification.ts) and consumed by the canvas painter
+// (state/modules/data-verification.ts) and consumed by the canvas painter
 // (red-triangle indicator + checkbox draw). Keyed by `${row}_${col}` on
 // `Sheet.dataVerification`.
 //
@@ -171,7 +171,7 @@ export type SheetConfig = {
 };
 
 // Conditional-format rule shape, produced by the editor's state layer
-// (state/modules/conditionFormat.ts) and consumed by the engine's
+// (state/modules/condition-format.ts) and consumed by the engine's
 // `evaluateConditionalFormat` (canvas painter + apps/api HTML export).
 export type ConditionalFormatConditionName =
     | 'greaterThan'

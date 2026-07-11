@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { type Context, getSheetIndex, indexToColumnChar, locale, sortSelection } from '../../state';
+import { type Context, en, getSheetIndex, indexToColumnChar, sortSelection } from '../../state';
 
 export function CustomSort() {
     const [rangeColChar, setRangeColChar] = useState<string[]>([]);
@@ -15,7 +15,7 @@ export function CustomSort() {
     const { context, setContext } = useContext(WorkbookContext);
     const [selectedValue, setSelectedValue] = useState<string>('0');
     const [isTitleChange, setIsTitleChange] = useState(false);
-    const { sort } = locale(context);
+    const { sort } = en;
     const { hideDialog } = useDialog();
 
     const col_start = context.selections![0].column[0];
@@ -45,7 +45,7 @@ export function CustomSort() {
             }
         }
         setRangeColChar(list);
-    }, [col_end, col_start, context.sheets, isTitleChange, row_start, sheetIndex, sort.columnOperation]);
+    }, [col_end, col_start, context.sheets, isTitleChange, row_start, sheetIndex]);
 
     return (
         <div className="flex flex-col gap-4">

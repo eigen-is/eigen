@@ -2,9 +2,11 @@ import type { Context } from '../context';
 import type { RangeOrWholeAxis, Rect } from '../types';
 import { seletedHighlistByindex } from '.';
 import { getRangetxt, mergeMoveMain } from './cell';
+import { colors } from './color';
 import { moveToEnd } from './cursor';
+import { formulaUIState, setFunctionHTMLIndex } from './formula-cache';
 import { israngeseleciton } from './formula-editor';
-import { colors, formulaUIState, getcellrange, setFunctionHTMLIndex } from './formula-ui';
+import { getcellrange } from './formula-exec';
 import { colLocation, mousePosition, rowLocation } from './location';
 
 function parseElement(eleString: string) {

@@ -2,11 +2,11 @@ import { cloneDeep, find, flatten, omit, reduce, size, union } from 'es-toolkit/
 import { genarate, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
-import { locale } from '../locale';
+import { en } from '../locale/en';
 import type { FilterCondition, FilterConditionName, Selection } from '../types';
 import { getSheetIndex, isAllowEdit, rgbToHex } from '../utils';
 import { normalizedAttr } from './cell';
-import { checkCF, getComputeMap } from './conditionFormat';
+import { checkCF, getComputeMap } from './condition-format';
 import { normalizeSelection } from './selection';
 import { sortDataRange } from './sort';
 import { isRealNull, isRealNum } from './validation';
@@ -93,7 +93,7 @@ export function orderbydatafiler(
     }
 
     if (hasMc) {
-        const { filter } = locale(ctx);
+        const { filter } = en;
         return filter.mergeError;
     }
 
@@ -300,7 +300,7 @@ function getFilterHiddenRows(ctx: Context, col: number, startCol: number) {
 // operand inputs the condition needs.
 export const FILTER_CONDITION_ITEMS: {
     name: FilterConditionName;
-    localeKey: keyof ReturnType<typeof locale>['filter'];
+    localeKey: keyof typeof en.filter;
     arity: 0 | 1 | 2;
 }[] = [
     { name: 'isEmpty', localeKey: 'conditionCellIsNull', arity: 0 },
@@ -482,7 +482,7 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
         };
 
     let cell: Cell | null;
-    const { filter } = locale(ctx);
+    const { filter } = en;
     for (let r = startRow + 1; r <= endRow; r += 1) {
         if (r in otherHiddenRows) {
             continue;

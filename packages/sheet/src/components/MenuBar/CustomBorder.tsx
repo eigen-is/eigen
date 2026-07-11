@@ -5,9 +5,8 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
-import { useContext, useState } from 'react';
-import { WorkbookContext } from '../../context';
-import { locale } from '../../state';
+import { useState } from 'react';
+import { en } from '../../state';
 
 const BORDER_STYLES = [
     { text: '1', value: 'Thin', strokeDasharray: '1,0', strokeWidth: '1' },
@@ -28,8 +27,7 @@ type Props = {
 };
 
 export function CustomBorder({ onPick }: Props) {
-    const { context } = useContext(WorkbookContext);
-    const { border } = locale(context);
+    const { border } = en;
     const [changeColor, setChangeColor] = useState('#000000');
     const [changeStyle, setChangeStyle] = useState('1');
 

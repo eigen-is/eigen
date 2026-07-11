@@ -1,4 +1,5 @@
 import { isNil } from 'es-toolkit/compat';
+import { iscelldata } from '../../engine/formula-utils';
 import {
     type Context,
     colLocationByIndex,
@@ -10,7 +11,6 @@ import {
     getRangeByTxt,
     getSheetIndex,
     isAllowEdit,
-    iscelldata,
     isdatetime,
     isRealNull,
     isRealNum,
@@ -22,7 +22,7 @@ import {
 import type { en } from '../locale/en';
 
 // Locale slices passed into confirmMessage from the React dialog — the parent
-// destructures `locale(context)` into these named groups.
+// destructures the `en` locale object into these named groups.
 type GeneralDialogLocale = typeof en.generalDialog;
 type DataVerificationLocale = typeof en.dataVerification;
 
@@ -470,7 +470,7 @@ export function cellFocus(ctx: Context, r: number, c: number, clickMode: boolean
 }
 
 // set the dropdown value
-export function setDropcownValue(ctx: Context, value: string, arr: string[]) {
+export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
     if (!ctx.selections) return;
     const d = getFlowdata(ctx);
     if (!d) return;

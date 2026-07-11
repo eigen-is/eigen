@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { getSheetIndex, indexToColumnChar, locale } from '../../state';
+import { en, getSheetIndex, indexToColumnChar } from '../../state';
 
 function formatRange(range: SingleRange): string {
     const c1 = indexToColumnChar(range.column[0]);
@@ -119,7 +119,7 @@ function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
 export function ManageRules() {
     const { context, setContext } = useContext(WorkbookContext);
     const { hideDialog } = useDialog();
-    const { button } = locale(context);
+    const { button } = en;
 
     const rules = useMemo(() => {
         const index = getSheetIndex(context, context.currentSheetId) as number;

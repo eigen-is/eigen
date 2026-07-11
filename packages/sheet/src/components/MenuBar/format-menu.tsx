@@ -16,6 +16,7 @@ import {
     applyDataBarPreset,
     CF_PRESETS,
     clearSheetRules,
+    en,
     getFlowdata,
     handleBold,
     handleBorder,
@@ -31,7 +32,6 @@ import {
     handleTextSize,
     handleUnderline,
     handleVerticalAlign,
-    locale,
     updateFormat,
 } from '../../state';
 import { ConditionRules } from '../ConditionFormat/ConditionRules';
@@ -43,11 +43,11 @@ import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 import { CustomBorder } from './CustomBorder';
 
 function NumberFormatSubmenu() {
-    const { context, setContext, refs, settings } = useContext(WorkbookContext);
+    const { setContext, refs, settings } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
-    const toolbarFormat = locale(context).format;
+    const toolbarFormat = en.format;
     const { currency } = settings;
-    const defaultFormat = locale(context).defaultFmt(currency);
+    const defaultFormat = en.defaultFmt(currency);
 
     const anchor = useAnchorCell();
     const activeFa = anchor?.ct?.fa ?? 'General';
@@ -97,8 +97,8 @@ function NumberFormatSubmenu() {
 }
 
 function TextSubmenu() {
-    const { context, setContext, refs } = useContext(WorkbookContext);
-    const { toolbar, fontarray } = locale(context);
+    const { setContext, refs } = useContext(WorkbookContext);
+    const { toolbar, fontarray } = en;
 
     return (
         <DropdownMenuSub>
@@ -181,8 +181,8 @@ function TextSubmenu() {
 }
 
 function AlignmentSubmenu() {
-    const { context, setContext, refs } = useContext(WorkbookContext);
-    const { align } = locale(context);
+    const { setContext, refs } = useContext(WorkbookContext);
+    const { align } = en;
 
     return (
         <DropdownMenuSub>
@@ -251,8 +251,8 @@ function AlignmentSubmenu() {
 }
 
 function RotationSubmenu() {
-    const { context, setContext, refs } = useContext(WorkbookContext);
-    const { toolbar, rotation } = locale(context);
+    const { setContext, refs } = useContext(WorkbookContext);
+    const { toolbar, rotation } = en;
 
     // Each preset writes Cell.rt directly: signed degrees in [-90, 90] or 'vertical'.
     // Positive = CCW / "up", negative = CW / "down". 0 clears rotation.
@@ -289,8 +289,8 @@ function RotationSubmenu() {
 }
 
 function WrappingSubmenu() {
-    const { context, setContext, refs } = useContext(WorkbookContext);
-    const { textWrap } = locale(context);
+    const { setContext, refs } = useContext(WorkbookContext);
+    const { textWrap } = en;
 
     return (
         <DropdownMenuSub>
@@ -382,8 +382,8 @@ function FillColorItem() {
 }
 
 function BordersSubmenu() {
-    const { context, setContext } = useContext(WorkbookContext);
-    const { border } = locale(context);
+    const { setContext } = useContext(WorkbookContext);
+    const { border } = en;
     const [customColor, setCustomColor] = useState('#000000');
     const [customStyle, setCustomStyle] = useState('1');
 
@@ -442,8 +442,8 @@ function BordersSubmenu() {
 }
 
 function MergeCellsSubmenu() {
-    const { context, setContext } = useContext(WorkbookContext);
-    const { merge } = locale(context);
+    const { setContext } = useContext(WorkbookContext);
+    const { merge } = en;
 
     const mergeItems = [
         { text: merge.mergeAll, value: 'merge-all' },
@@ -510,9 +510,9 @@ function ColorScaleSwatch({ presetKey }: { presetKey: string }) {
 }
 
 function ConditionalFormattingSubmenu() {
-    const { context, setContext } = useContext(WorkbookContext);
+    const { setContext } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
-    const { conditionformat } = locale(context);
+    const { conditionformat } = en;
 
     return (
         <DropdownMenuSub>

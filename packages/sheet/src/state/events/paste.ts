@@ -20,20 +20,15 @@ import {
 } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
+import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { type Context, getFlowdata } from '../context';
-import { locale } from '../locale';
+import { en } from '../locale/en';
 import { getBorderInfoCompute } from '../modules/border';
 import { getdatabyselection, getQKBorder } from '../modules/cell';
-import {
-    createContextResolver,
-    delFunctionGroup,
-    execFunctionGroup,
-    execfunction,
-    functionCopy,
-} from '../modules/formula-ui';
-import { setFormulaCellInfo } from '../modules/formulaHelper';
+import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
+import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
 import { normalizeSelection, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetParamALL } from '../modules/sheet';
@@ -1346,7 +1341,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             }
         }
 
-        const locale_fontjson = locale(ctx).fontjson;
+        const locale_fontjson = en.fontjson;
 
         if (ctx.hooks.beforePaste?.(ctx.selections, txtdata) === false) {
             return;

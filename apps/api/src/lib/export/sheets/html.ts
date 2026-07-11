@@ -102,7 +102,7 @@ export function renderSheetsHtml(sheets: Sheet[], mode: RenderMode = 'export'): 
 // Builds the `evaluateFormula` callback for a single sheet's CF formula rules. The
 // engine evaluates the rule's formula at each target cell with refs shifted by the
 // offset from the rule's anchor — same shape as the state-side wiring in
-// state/modules/conditionFormat.ts::getComputeMap.
+// state/modules/condition-format.ts::getComputeMap.
 function buildCfFormulaEvaluator(
     engine: FormulaEngine,
     resolver: CellResolver,

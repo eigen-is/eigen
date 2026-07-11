@@ -4,6 +4,7 @@ import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
+    en,
     escapeHTMLTag,
     escapeScriptTag,
     getCellValue,
@@ -13,7 +14,6 @@ import {
     isAllowEdit,
     isInlineStringCell,
     isShowHidenCR,
-    locale,
     moveHighlightCell,
     rangeHightlightselected,
     updateCell,
@@ -33,7 +33,7 @@ export function FxEditor() {
     const prevFirstSelection = usePrevious(firstSelection);
     const prevSheetId = usePrevious(context.currentSheetId);
     const recentText = useRef('');
-    const { info } = locale(context);
+    const { info } = en;
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes; prev-selection comparison avoids collaborative-update echo
     useEffect(() => {

@@ -4,14 +4,14 @@ import { Input } from '@workspace/ui/components/input';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { getRangetxt, locale } from '../../state';
+import { en, getRangetxt } from '../../state';
 import { ConditionRules } from '../ConditionFormat/ConditionRules';
 import { DataVerification } from '.';
 
 export function RangeDialog() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
-    const { dataVerification, button } = locale(context);
+    const { dataVerification, button } = en;
     const [rangeTxt2, setRangeTxt2] = useState<string>(context.rangeDialog?.rangeTxt ?? '');
 
     const close = useCallback(

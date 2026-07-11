@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 import { WorkbookContext } from '../../../context';
-import { locale } from '../../../state';
+import { en } from '../../../state';
 import { FormulaPopup } from '../FormulaPopup';
 
 type FormulaParam = {
@@ -25,7 +25,7 @@ type FormulaHintProps = {
 
 export function FormulaHint({ anchorRef, open }: FormulaHintProps) {
     const { context } = useContext(WorkbookContext);
-    const { formulaMore } = locale(context);
+    const { formulaMore } = en;
     const fn = context.functionHint
         ? (context.formulaCache.functionlistMap[context.functionHint] as FormulaFunctionEntry | undefined)
         : undefined;

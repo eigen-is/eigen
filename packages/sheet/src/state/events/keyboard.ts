@@ -4,7 +4,7 @@ import { hideCRCount } from '..';
 import { type Context, getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
 import { handleCut } from '../modules/clipboard';
-import { handleFormulaInput } from '../modules/formula-ui';
+import { handleFormulaInput } from '../modules/formula-editor';
 import { jfrefreshgrid } from '../modules/refresh';
 import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
 import { handleBold } from '../modules/toolbar';

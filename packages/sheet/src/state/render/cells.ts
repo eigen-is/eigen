@@ -3,8 +3,8 @@
 // modules/text.ts.
 
 import { normalizedAttr } from '../modules/cell';
-import { checkCF } from '../modules/conditionFormat';
-import { validateCellData } from '../modules/dataVerification';
+import { checkCF } from '../modules/condition-format';
+import { validateCellData } from '../modules/data-verification';
 import { getCellTextInfo, getMeasureText } from '../modules/text';
 import { cellOverflowRender, cellTextRender } from './cell-text';
 import { drawDataBar } from './data-bar';

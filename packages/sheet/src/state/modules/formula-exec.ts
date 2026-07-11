@@ -15,8 +15,7 @@ import { type Context, getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
 import { columnCharToIndex, getSheetIndex } from '../utils';
 import { setCellValue } from './cell';
-import { createContextResolver, snapshotContext } from './formula-cache';
-import { executeAffectedFormulas, setFormulaCellInfo } from './formulaHelper';
+import { createContextResolver, executeAffectedFormulas, setFormulaCellInfo, snapshotContext } from './formula-cache';
 import { error } from './validation';
 
 // Regex for cell label extraction

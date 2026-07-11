@@ -4,7 +4,7 @@
 
 import { isPlainObject } from 'es-toolkit/compat';
 import { normalizedAttr } from '../modules/cell';
-import { checkCF } from '../modules/conditionFormat';
+import { checkCF } from '../modules/condition-format';
 import type { CellTextInfo } from '../modules/text';
 import { getCellTextInfo, getFontSet } from '../modules/text';
 import { colEndX, colStartX, rowEndY, rowStartY } from './geometry';

@@ -8,12 +8,12 @@ import {
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import type { Context } from '../../state';
-import { handleFreeze, locale } from '../../state';
+import { en, handleFreeze } from '../../state';
 import { showSheet } from '../../state/api/sheet';
 
 export function ViewMenu() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { freezen } = locale(context);
+    const { freezen } = en;
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 

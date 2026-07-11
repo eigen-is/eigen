@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Context } from '../../index';
-import { applyColorScalePreset, applyDataBarPreset, CF_PRESETS, clearSheetRules } from '../modules/conditionFormat';
+import { applyColorScalePreset, applyDataBarPreset, CF_PRESETS, clearSheetRules } from '../modules/condition-format';
 import { contextFactory } from './factories/context';
 
 describe('CF_PRESETS', () => {

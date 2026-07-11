@@ -8,7 +8,7 @@ import {
 import { ChevronDown } from 'lucide-react';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
-import { getCellValue, getDropdownList, getFlowdata, getSheetIndex, setDropcownValue } from '../../state';
+import { getCellValue, getDropdownList, getFlowdata, getSheetIndex, setDropdownValue } from '../../state';
 
 export function DropDownList() {
     const { context, setContext } = useContext(WorkbookContext);
@@ -51,7 +51,7 @@ export function DropDownList() {
                 : [...cellInfo.selected, value]
             : [value];
         setContext((ctx) => {
-            setDropcownValue(ctx, value, next);
+            setDropdownValue(ctx, value, next);
         });
     };
 

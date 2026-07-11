@@ -29,7 +29,7 @@ import {
     cancelNormalSelected,
     deleteSheet,
     editSheetName,
-    locale,
+    en,
     type Sheet,
 } from '../../state';
 import { ChangeColor } from '../ChangeColor';
@@ -53,7 +53,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     const editable = useRef<HTMLSpanElement>(null);
     const [dragOver, setDragOver] = useState(false);
     const { showAlert, hideAlert } = useAlert();
-    const { info, sheetconfig } = locale(context);
+    const { info, sheetconfig } = en;
 
     useEffect(() => {
         setContext((draftCtx) => {
@@ -262,7 +262,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                 return null;
             });
         },
-        [context, settings.sheetTabContextMenu, sheet, sheetconfig, showAlert, hideAlert, setContext, moveSheet],
+        [context, settings.sheetTabContextMenu, sheet, showAlert, hideAlert, setContext, moveSheet],
     );
 
     const contextMenuItems: MenuItemComponents = {

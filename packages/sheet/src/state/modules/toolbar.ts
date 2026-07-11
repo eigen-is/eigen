@@ -8,15 +8,10 @@ import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
 import { colors } from './color';
-import {
-    createFormulaRangeSelect,
-    execFunctionGroup,
-    execfunction,
-    israngeseleciton,
-    rangeSetValue,
-    setCaretPosition,
-} from './formula-ui';
-import { setFormulaCellInfo } from './formulaHelper';
+import { setFormulaCellInfo } from './formula-cache';
+import { israngeseleciton } from './formula-editor';
+import { execFunctionGroup, execfunction } from './formula-exec';
+import { createFormulaRangeSelect, rangeSetValue, setCaretPosition } from './formula-range';
 import { showLinkCard } from './hyperlink';
 import {
     inlineStyleAffectAttribute,

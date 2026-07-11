@@ -183,17 +183,17 @@ border-clear 3×, `offsetMC` remap in all three paste handlers).
 
 ## D. Simplification / de-indirection
 
-- **D1. Kill the `locale()` shim** — `state/locale/index.ts:3-5` is
+- **D1. Kill the `locale()` shim** ✅ done (direct `en` imports; optionLabel folded into en.dataVerification.optionLabel) — `state/locale/index.ts:3-5` is
   `function locale(_ctx) { return en; }`; 47 call sites thread a context it ignores. Replace with
   direct imports of the `en` groups; delete the wrapper. Mechanical sweep, touches ~40 files.
   Also fold the inline English `optionLabel` map in `context.ts:242-262` into one home.
-- **D2. Consolidate the formula-\* module split** — six files by no clear axis. Minimum: fold
+- **D2. Consolidate the formula-\* module split** ✅ done (minimum version: formulaHelper folded into formula-cache, formula-ui barrel deleted) — six files by no clear axis. Minimum: fold
   `formulaHelper.ts` (whose functions mutate the cache class defined in `formula-cache.ts`, which
   imports them back) into `formula-cache.ts`; delete the 8-line `formula-ui.ts` barrel.
-- **D3. File-naming sweep** — `state/modules/` mixes camelCase (`conditionFormat`,
+- **D3. File-naming sweep** ✅ done (6 files → kebab-case) — `state/modules/` mixes camelCase (`conditionFormat`,
   `dataVerification`, `dropCell`, `formulaHelper`, `moveCells`, `searchReplace`, `splitColumn`)
   with the kebab-case used everywhere else in the repo. Rename to kebab.
-- **D4. `FormulaSearch` name collision** — the insert-function dialog
+- **D4. `FormulaSearch` name collision** ✅ done (dialog → InsertFunctionDialog; setDropdownValue typo fixed) — the insert-function dialog
   (`components/FormulaSearch/`) vs the inline autocomplete
   (`components/SheetOverlay/FormulaSearch/`). Rename the dialog (`InsertFunctionDialog`).
   Same theme: misspelled export `setDropcownValue` (`dataVerification.ts:473`).

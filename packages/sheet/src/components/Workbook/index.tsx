@@ -12,6 +12,7 @@ import {
     type Context,
     defaultContext,
     defaultSettings,
+    en,
     ensureSheetIndex,
     filterPatch,
     type GlobalCache,
@@ -22,7 +23,6 @@ import {
     initSheetIndex,
     insertRowCol,
     inverseRowColOptions,
-    locale,
     type Op,
     patchToOp,
     type Settings,
@@ -145,7 +145,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         const [context, setContext] = useState(defaultContext(refs));
-        const { info } = locale(context);
+        const { info } = en;
 
         // biome-ignore lint/correctness/useExhaustiveDependencies: deps spread from Object.values(props) — biome can't see through the spread
         const mergedSettings = useMemo(

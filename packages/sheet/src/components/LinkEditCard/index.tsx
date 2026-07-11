@@ -10,11 +10,11 @@ import type React from 'react';
 import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import {
+    en,
     getRangetxt,
     goToLink,
     isLinkValid,
     type LinkCardProps,
-    locale,
     normalizeSelection,
     onRangeSelectionModalMoveStart,
     removeHyperlink,
@@ -40,7 +40,7 @@ export function LinkEditCard({
     const [linkText, setLinkText] = useState<string>(originText);
     const [linkAddress, setLinkAddress] = useState<string>(originAddress);
     const [linkType, setLinkType] = useState<string>(originType);
-    const { insertLink, linkTypeList, button } = locale(context);
+    const { insertLink, linkTypeList, button } = en;
     const lastCell = useRef(normalizeSelection(context, [{ row: [r, r], column: [c, c] }]));
     const skipCellRangeSet = useRef(true);
     const isLinkAddressValid = isLinkValid(context, linkType, linkAddress);

@@ -9562,6 +9562,30 @@ export const en = {
         tooltipInfo6: 'The value entered is not a date type',
         tooltipInfo7: 'Date 2 cannot be less than date 1',
         textlengthInteger: 'Text length must be an integer greater than or equal to 0',
+        // Lowercase phrase fragments for the failureText/hintValue sentence builders in
+        // modules/data-verification.ts (distinct from the Title Case labels above, which
+        // are for the rule-type Select).
+        optionLabel: {
+            number: 'numeric',
+            number_integer: 'integer',
+            number_decimal: 'decimal',
+            between: 'between',
+            notBetween: 'not between',
+            equal: 'equal to',
+            notEqualTo: 'not equal to',
+            moreThanThe: 'greater',
+            lessThan: 'less than',
+            greaterOrEqualTo: 'greater or equal to',
+            lessThanOrEqualTo: 'less than or equal to',
+            include: 'include',
+            exclude: 'not include',
+            earlierThan: 'earlier than',
+            noEarlierThan: 'not earlier than',
+            laterThan: 'later than',
+            noLaterThan: 'not later than',
+            identificationNumber: 'identification number',
+            phoneNumber: 'phone number',
+        },
     },
     formula: {
         sum: 'Sum',

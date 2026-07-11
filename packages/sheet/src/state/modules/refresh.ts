@@ -1,8 +1,8 @@
 import type { CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { Selection } from '../types';
-import { execFunctionGroup } from './formula-ui';
-import { setFormulaCellInfo } from './formulaHelper';
+import { setFormulaCellInfo } from './formula-cache';
+import { execFunctionGroup } from './formula-exec';
 
 function runExecFunction(ctx: Context, range: Selection[], index: string, data: CellMatrix) {
     // An edit (e.g. delete) may have recorded exactly which cells it changed.

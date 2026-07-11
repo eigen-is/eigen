@@ -8,13 +8,13 @@ import type {
 import { isNil } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { evaluateConditionalFormat } from '../../engine/conditional-format';
+import { functionCopy } from '../../engine/formula-shift';
 import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { ConditionRulesProps } from '../types';
 import { getSheetIndex } from '../utils';
 import { getCellValue, getRangeByTxt } from './cell';
 import { createContextResolver } from './formula-cache';
-import { functionCopy } from './formula-ui';
 import { checkProtectionFormatCells } from './protection';
 
 const KNOWN_CONDITION_NAMES = [

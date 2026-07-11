@@ -9,14 +9,7 @@ import { Check, ChevronsLeft, ChevronsRight, LayoutGrid, Plus } from 'lucide-rea
 import type React from 'react';
 import { Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import {
-    addSheet,
-    calcSelectionInfo,
-    cancelActiveImgItem,
-    cancelNormalSelected,
-    locale,
-    updateCell,
-} from '../../state';
+import { addSheet, calcSelectionInfo, cancelActiveImgItem, cancelNormalSelected, en, updateCell } from '../../state';
 import { SheetItem } from './SheetItem';
 
 const iconButtonClass =
@@ -27,7 +20,7 @@ export const SheetTab: React.FC = () => {
     const tabContainerRef = useRef<HTMLDivElement>(null);
     const [isShowScrollBtn, setIsShowScrollBtn] = useState<boolean>(false);
     const [isShowBoundary, setIsShowBoundary] = useState<boolean>(true);
-    const { info, formula } = locale(context);
+    const { info, formula } = en;
 
     const [calInfo, setCalInfo] = useState<{
         numberC: number;
