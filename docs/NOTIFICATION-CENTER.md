@@ -147,6 +147,7 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 | Comment @mention       | `ChatRoom.postMessage()` (embedded chat) | `mention-comment`           | `mention:{ownerId}:{mountId}:{containerId}:{name}:{email}` |
 | Chat activity          | `ChatRoom.postMessage()` (regular msg)   | `chat-message`              | `chat-message:{ownerId}:{mountId}:{chatId}`         |
 | Comment activity       | `ChatRoom.postMessage()` (embedded chat) | `comment-reply`             | `comment-reply:{ownerId}:{mountId}:{containerId}:{name}` |
+| Comment assignment     | assignee PATCH route (`routes/collab.ts`) | `assigned`                 | `assigned:{ownerId}:{mountId}:{pathId}:{chatName}` — only on a real change to a registered non-self assignee |
 | Access request         | `POST .../request-access` route          | `access-request`            | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 | File event (watch)     | `FileHistory.notifyWatchers()` via relay | `file-event`                | `file-event:{ownerId}:{mountId}:{pathId}` — burst events (`created`/`uploaded`/`copied`) tag the parent folder; always sent with `coalesce: true`. See [AGENTS.md § File history + watch](../AGENTS.md) |
 
@@ -163,7 +164,7 @@ Notification list fetched lazily only when popover opens.
 
 Links are constructed client-side based on notification `type` and `tag`:
 
-- `share`, `mention-chat`, `mention-comment` → async: fetches `DrivePath` via API on click, routes to correct app
+- `share`, `mention-chat`, `mention-comment`, `comment-reply`, `assigned` → async: fetches `DrivePath` via API on click, routes to correct app
   using `getDocumentUrl()` (eigendoc → Docs, eigenchat → Chat, etc.) or falls back to Drive
 - `access-request` → async: fetches `DrivePath` to resolve parent folder, navigates to Drive at
   `/fs/{ownerId}/{mountId}/{parentId}?sharePathId={pathId}&shareEmail={email}`, auto-opening the share dialog
