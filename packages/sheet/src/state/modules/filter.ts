@@ -428,10 +428,6 @@ export function buildFilterConditionMatcher(condition: FilterCondition): (cell: 
     };
 }
 
-export function matchesFilterCondition(cell: Cell | null | undefined, condition: FilterCondition): boolean {
-    return buildFilterConditionMatcher(condition)(cell);
-}
-
 // Hidden-row set for a condition on one column: every visible row in the filter
 // range whose cell fails the condition. Rows hidden by other columns' filters
 // are skipped, mirroring the by-values flow (getFilterColumnValues only offers

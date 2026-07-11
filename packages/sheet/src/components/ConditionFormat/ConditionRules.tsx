@@ -14,7 +14,7 @@ import { locale, setConditionRules } from '../../state';
 export function ConditionRules({ type }: { type: string }) {
     const { context, setContext } = useContext(WorkbookContext);
     const { hideDialog } = useDialog();
-    const { conditionformat, button, protection, generalDialog } = locale(context);
+    const { conditionformat, button } = locale(context);
     const [colorRules, setColorRules] = useState<{
         textColor: string;
         cellColor: string;
@@ -26,7 +26,7 @@ export function ConditionRules({ type }: { type: string }) {
                 setContext((ctx) => {
                     ctx.conditionRules.textColor.color = colorRules.textColor;
                     ctx.conditionRules.cellColor.color = colorRules.cellColor;
-                    setConditionRules(ctx, protection, generalDialog, conditionformat, ctx.conditionRules);
+                    setConditionRules(ctx, conditionformat, ctx.conditionRules);
                 });
             }
             setContext((ctx) => {
@@ -43,7 +43,7 @@ export function ConditionRules({ type }: { type: string }) {
             });
             hideDialog();
         },
-        [colorRules, conditionformat, generalDialog, hideDialog, protection, setContext],
+        [colorRules, conditionformat, hideDialog, setContext],
     );
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only initialization from `type` prop and rangeDialog state

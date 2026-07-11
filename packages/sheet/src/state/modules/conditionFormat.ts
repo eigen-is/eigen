@@ -51,13 +51,7 @@ function toRuleValue(raw: unknown): string | number {
 }
 
 // Set condition rules
-export function setConditionRules(
-    ctx: Context,
-    _protection: unknown,
-    _generalDialog: unknown,
-    conditionformat: Record<string, string>,
-    rules: ConditionRulesProps,
-) {
+export function setConditionRules(ctx: Context, conditionformat: Record<string, string>, rules: ConditionRulesProps) {
     if (!checkProtectionFormatCells(ctx)) {
         return;
     }
@@ -210,10 +204,6 @@ let _cfCache: {
     data: CellMatrix;
     result: ComputeMap;
 } | null = null;
-
-export function invalidateCFCache() {
-    _cfCache = null;
-}
 
 export function getComputeMap(ctx: Context): ComputeMap | null {
     const index = getSheetIndex(ctx, ctx.currentSheetId);

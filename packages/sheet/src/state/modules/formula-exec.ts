@@ -46,10 +46,7 @@ function addToCellIndexList(ctx: Context, txt: string, infoObj: FormulaDependenc
 function checkSpecialFunctionRange(
     ctx: Context,
     function_str: string,
-    _r: number | null,
-    _c: number | null,
     id: string,
-    _dynamicArray_compute?: unknown,
     cellRangeFunction?: ((str: string) => void) | null,
 ): void {
     if (
@@ -196,10 +193,7 @@ export function getcellrange(
 export function isFunctionRange(
     ctx: Context,
     txt: string,
-    r: number | null,
-    c: number | null,
     id: string,
-    dynamicArray_compute: unknown,
     cellRangeFunction: ((str: string) => void) | null,
 ): string {
     if (txt.substring(0, 1) === '=') {
@@ -252,7 +246,7 @@ export function isFunctionRange(
             bracket.pop();
 
             if (bracket.length === 0) {
-                let functionS = isFunctionRange(ctx, str, r, c, id, dynamicArray_compute, cellRangeFunction);
+                let functionS = isFunctionRange(ctx, str, id, cellRangeFunction);
                 if (functionS.indexOf('#lucky#') > -1) {
                     functionS = `${functionS.replace(/#lucky#/g, '')})`;
                 }
@@ -298,7 +292,7 @@ export function isFunctionRange(
             }
         } else if (s === ',' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             if (bracket.length <= 1) {
-                let functionS = isFunctionRange(ctx, str, r, c, id, dynamicArray_compute, cellRangeFunction);
+                let functionS = isFunctionRange(ctx, str, id, cellRangeFunction);
                 if (functionS.indexOf('#lucky#') > -1) {
                     functionS = `${functionS.replace(/#lucky#/g, '')})`;
                 }
@@ -323,9 +317,7 @@ export function isFunctionRange(
             if (s + s_next in operatorjson) {
                 if (bracket.length === 0) {
                     if (str.trim().length > 0) {
-                        cal2.unshift(
-                            isFunctionRange(ctx, str.trim(), r, c, id, dynamicArray_compute, cellRangeFunction),
-                        );
+                        cal2.unshift(isFunctionRange(ctx, str.trim(), id, cellRangeFunction));
                     } else if (function_str.trim().length > 0) {
                         cal2.unshift(function_str.trim());
                     }
@@ -351,9 +343,7 @@ export function isFunctionRange(
             } else {
                 if (bracket.length === 0) {
                     if (str.trim().length > 0) {
-                        cal2.unshift(
-                            isFunctionRange(ctx, str.trim(), r, c, id, dynamicArray_compute, cellRangeFunction),
-                        );
+                        cal2.unshift(isFunctionRange(ctx, str.trim(), id, cellRangeFunction));
                     } else if (function_str.trim().length > 0) {
                         cal2.unshift(function_str.trim());
                     }
@@ -445,14 +435,12 @@ export function isFunctionRange(
 
         i += 1;
     }
-    checkSpecialFunctionRange(ctx, function_str, r, c, id, dynamicArray_compute, cellRangeFunction);
+    checkSpecialFunctionRange(ctx, function_str, id, cellRangeFunction);
     return function_str;
 }
 
 export function getAllFunctionGroup(ctx: Context): FormulaCell[] {
     const { sheets } = ctx;
-    // Push into one array; `ret.concat` per sheet copies the whole accumulator
-    // each time — O(formulas × sheets) on workbooks with many formulas.
     const ret: FormulaCell[] = [];
     for (let i = 0; i < sheets.length; i += 1) {
         const file = sheets[i];

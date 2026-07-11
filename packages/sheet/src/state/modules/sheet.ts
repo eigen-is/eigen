@@ -25,13 +25,7 @@ export function storeSheetParamALL(ctx: Context) {
     ctx.sheets[index].config = ctx.config;
 }
 
-export function changeSheet(
-    ctx: Context,
-    id: string,
-    _isPivotInitial?: boolean,
-    _isNewSheet?: boolean,
-    _isCopySheet?: boolean,
-) {
+export function changeSheet(ctx: Context, id: string) {
     if (id === ctx.currentSheetId) {
         return;
     }
@@ -98,7 +92,7 @@ export function addSheet(
     ctx.sheets.push(sheetconfig);
 
     if (!newSheetID) {
-        changeSheet(ctx, id, isPivotTable, true);
+        changeSheet(ctx, id);
     }
 
     if (ctx.hooks.afterAddSheet) {

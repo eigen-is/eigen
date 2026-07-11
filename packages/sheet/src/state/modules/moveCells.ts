@@ -205,7 +205,7 @@ export function onCellsMoveEnd(
     const { drag: locale_drag } = locale(ctx);
 
     // Selection contains partial cells
-    if (hasPartMC(ctx, cfg, last.row[0], last.row[1], last.column[0], last.column[1])) {
+    if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {
         // if (isEditMode()) {
         //   alert(locale_drag.noMerge);
         // } else {
@@ -252,7 +252,7 @@ export function onCellsMoveEnd(
     }
 
     // Replacement position contains partial cells
-    if (hasPartMC(ctx, cfg, row_s, row_e, col_s, col_e)) {
+    if (hasPartMC(ctx, row_s, row_e, col_s, col_e)) {
         // if (isEditMode()) {
         //   alert(locale_drag.noMerge);
         // } else {

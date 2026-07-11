@@ -30,7 +30,7 @@ export function handleCopy(ctx: Context): boolean {
             const c1 = selection[s].column[0];
             const c2 = selection[s].column[1];
 
-            has_PartMC = hasPartMC(ctx, ctx.config, r1, r2, c1, c2);
+            has_PartMC = hasPartMC(ctx, r1, r2, c1, c2);
 
             if (has_PartMC) {
                 break;

@@ -101,7 +101,7 @@ rowIndexToLabel, replaySheetsOps, toA1, unquoteSheetName, update`). Trim the res
 "barrel exports = public surface" rule. `getColorGradation` and `detectAbsolute` are
 internal-only too.
 
-**B4. State dead code** — `isdatatype` (`state/modules/validation.ts:30`, zero callers; the
+**B4. State dead code** ✅ done (all items) — `isdatatype` (`state/modules/validation.ts:30`, zero callers; the
 `.date` branch of `isdatatypemulti` is likewise never read); `invalidateCFCache`
 (`conditionFormat.ts:214`, orphaned — the cache self-invalidates on identity change);
 `chatatABC` (`state/utils/index.ts:165-218` — live body is byte-identical to
@@ -125,7 +125,7 @@ threading in `cell.ts:1053-1146` (hardcoded `[]`, guards can never fire) ✅ don
 `moveCells.ts`, `sort.ts:93-106`, `merge.ts:8-11`, `selection.ts:914-948` (35-line jQuery block),
 `toolbar.ts` (tooltip/isEditMode blocks). Also stale annotations: the eslint-disable above
 `cancelFunctionrangeSelected` (`cell.ts:602` — it *is* used; ✅ removed) and the outdated `O(n²) concat`
-comment in `formula-exec.ts:454`.
+comment in `formula-exec.ts:454` (✅ removed).
 
 **B7. Dead DOM placeholders** — `SheetOverlay/index.tsx:473-476,491,551,686-692`:
 `luckysheet-multipleRange-show`, `luckysheet-dynamicArray-hightShow`,

@@ -279,7 +279,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
         // Apply range is a single cell; automatically expand to the copy range size (if the expanded range partially overlaps a merged cell, show a warning)
         let has_PartMC = false;
         if (cfg.merge != null) {
-            has_PartMC = hasPartMC(ctx, cfg, minh, minh + copyh - 1, minc, minc + copyc - 1);
+            has_PartMC = hasPartMC(ctx, minh, minh + copyh - 1, minc, minc + copyc - 1);
         }
 
         if (has_PartMC) {
@@ -1729,7 +1729,7 @@ export function deleteSelectedCellText(ctx: Context): string {
             const c1 = selection[s].column[0];
             const c2 = selection[s].column[1];
 
-            if (hasPartMC(ctx, ctx.config, r1, r2, c1, c2)) {
+            if (hasPartMC(ctx, r1, r2, c1, c2)) {
                 has_PartMC = true;
                 break;
             }

@@ -979,7 +979,7 @@ export function handleFormatPainter(ctx: Context) {
     const c1 = ctx.selections[0].column[0];
     const c2 = ctx.selections[0].column[1];
 
-    has_PartMC = hasPartMC(ctx, ctx.config, r1, r2, c1, c2);
+    has_PartMC = hasPartMC(ctx, r1, r2, c1, c2);
 
     if (has_PartMC) {
         // *Show warning and abort next step
@@ -1186,7 +1186,7 @@ export function handleMerge(ctx: Context, type: string) {
             const c1 = ctx.selections[s].column[0];
             const c2 = ctx.selections[s].column[1];
 
-            has_PartMC = hasPartMC(ctx, ctx.config, r1, r2, c1, c2);
+            has_PartMC = hasPartMC(ctx, r1, r2, c1, c2);
 
             if (has_PartMC) {
                 break;

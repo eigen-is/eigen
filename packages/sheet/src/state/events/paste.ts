@@ -230,7 +230,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         // return with a warning if the apply range contains partially merged cells
         let has_PartMC = false;
         if (cfg.merge != null) {
-            has_PartMC = hasPartMC(ctx, cfg, minh, maxh, minc, maxc);
+            has_PartMC = hasPartMC(ctx, minh, maxh, minc, maxc);
         }
 
         if (has_PartMC) {
@@ -368,7 +368,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         // return with a warning if the apply range contains partially merged cells
         let has_PartMC = false;
         if (ctx.config.merge != null) {
-            has_PartMC = hasPartMC(ctx, ctx.config, curR, curR + rlen - 1, curC, curC + clen - 1);
+            has_PartMC = hasPartMC(ctx, curR, curR + rlen - 1, curC, curC + clen - 1);
         }
 
         if (has_PartMC) {
@@ -503,7 +503,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     // warn if the apply range contains partially merged cells
     let has_PartMC = false;
     if (cfg.merge != null) {
-        has_PartMC = hasPartMC(ctx, cfg, minh, maxh, minc, maxc);
+        has_PartMC = hasPartMC(ctx, minh, maxh, minc, maxc);
     }
 
     if (has_PartMC) {
@@ -1039,7 +1039,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     // warn if the apply range contains partially merged cells
     let has_PartMC = false;
     if (!isNil(cfg.merge)) {
-        has_PartMC = hasPartMC(ctx, cfg, minh, maxh, minc, maxc);
+        has_PartMC = hasPartMC(ctx, minh, maxh, minc, maxc);
     }
 
     if (has_PartMC) {

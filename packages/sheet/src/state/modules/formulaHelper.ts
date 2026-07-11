@@ -30,7 +30,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
 
     const formulaDependency: FormulaDependency[] = [];
     if (isOffsetFunc) {
-        isFunctionRange(ctx, calc_funcStr, null, null, formulaCell.id, null, (str_nb: string) => {
+        isFunctionRange(ctx, calc_funcStr, formulaCell.id, (str_nb: string) => {
             const range = getcellrange(ctx, str_nb.trim(), formulaCell.id, cellData);
             if (!isNil(range)) {
                 formulaDependency.push(range);
