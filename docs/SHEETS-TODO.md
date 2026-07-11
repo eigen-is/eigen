@@ -175,7 +175,7 @@ logic in the package, maintained in 3 copies. → one `walkFormulaRefs(txt, onRe
 
 **Smaller pairs:** `handleNumberIncrease/Decrease` (`toolbar.ts:753-910`, ~80% identical);
 the `type === 'c'` axis swap ~10× in `toolbar.ts`; `shiftStateOnlyFieldsForInsert/Delete`
-mirror forks (`rowcol.ts:41-539`); verbatim 27-line unmerge loop twice in `merge.ts:41-67,106-132`;
+mirror forks (`rowcol.ts:41-539`); verbatim 27-line unmerge loop twice in `merge.ts:41-67,106-132` (✅ extracted `unmergeRange`);
 identical magic-keycode gate in `InputBox.tsx:157-171` + `FxEditor/index.tsx:170-184` (deprecated
 `e.keyCode` magic numbers, extract `shouldTriggerFormulaInput(e)`); comment-triangle drawing
 duplicated in `render/cells.ts:89-98,238-247`; paste.ts internal repeats (cfSplitRange
