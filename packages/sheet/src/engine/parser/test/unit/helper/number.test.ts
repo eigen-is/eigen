@@ -11,6 +11,7 @@ describe('.toNumber()', () => {
         expect(toNumber('0.9')).toBe(0.9);
         expect(toNumber('0')).toBe(0);
         expect(toNumber('-10')).toBe(-10);
+        expect(toNumber('1e3')).toBe(1000);
         expect(toNumber(' -10 ')).toBe(-10);
         const result1 = toNumber('foo');
         expect(result1 === undefined || Number.isNaN(result1)).toBe(true);

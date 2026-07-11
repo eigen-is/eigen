@@ -36,7 +36,7 @@ What remains is concentrated and legible:
 |---|------|-------|----------|
 | A1 ✅ done | Doubled guard makes a cell's own background unreachable in HTML export | `src/state/modules/cell.ts:1116-1127` | `if (checksCF?.cellColor) { if (checksCF?.cellColor) {…} else {… style.background = value }}` — inner `else` arms can never run, so `getStyleByCell` → `rangeValueToHtml` (copy-as-HTML) drops plain cell backgrounds. Hand-verified. |
 | A2 ✅ done | `escapeScriptTag` closing-tag replace missing `/g` | `src/state/utils/index.ts:80` | `.replace(/<script>/g, …).replace(/<\/script>/, …)` — only the first `</script>` is escaped; result feeds `innerHTML` in `InputBox.tsx:91` and `FxEditor/index.tsx:67`. Hand-verified. |
-| A3 | `toNumber` mis-parses scientific notation | `src/engine/parser/helper/number.ts:24` | `"1e3"` has no `.` → `parseInt("1e3")` → `1`. Use `Number(value)`. |
+| A3 ✅ done (kept `""`→NaN so `""+1` stays #VALUE!) | `toNumber` mis-parses scientific notation | `src/engine/parser/helper/number.ts:24` | `"1e3"` has no `.` → `parseInt("1e3")` → `1`. Use `Number(value)`. |
 
 **Decide-first (behavior changes, not straight bugs):**
 
