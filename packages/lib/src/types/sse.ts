@@ -21,6 +21,8 @@ export const SSEventType = {
     DRIVE_ACL_UNSHARED: 'drive:acl-unshared',
     DRIVE_PATH_TRASHED: 'drive:path-trashed',
     DRIVE_PATH_RESTORED: 'drive:path-restored',
+    // Fires whenever a file event is recorded — invalidates open Activity panels' history queries.
+    DRIVE_FILE_HISTORY_UPDATED: 'drive:file-history-updated',
     // Chat events
     CHAT_MESSAGE_POSTED: 'chat:message-posted',
     CHAT_MESSAGE_EDITED: 'chat:message-edited',

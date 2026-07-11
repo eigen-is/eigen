@@ -649,16 +649,19 @@ slides/stickies), not just the drive detail sidebar. Four decisions were settled
 while shipping the drive-level feature, recorded here so the next round doesn't
 re-derive them:
 
-1. **Liveness rides SSE + the existing relay — no new channel.** Today the activity
-   panel is *not* live for the two event classes that matter in-app: collab
-   `'edited'` and the client-emitted `sticky-*` events record a row but broadcast
-   nothing (`sse-handlers.ts` only invalidates `fileHistory` on `drive:*` mutation
-   events). To make it live, broadcast a small `history:changed { ownerId, mountId,
-   pathId }` on the owner's home when those record, and **relay it to watchers the
-   same way ACL changes and notifications already do** (`sendToHome`). The owner's
-   own open panels update from `home.broadcast`; shared users update via the relay.
-   This is the established pattern — there is no need for a separate collab-WebSocket
-   activity channel.
+1. **Liveness rides SSE + the existing relay — no new channel.** *(SHIPPED.)*
+   `Drive.recordFileEvent` now broadcasts a `drive:file-history-updated` event to the
+   owner + effective-member homes via `sendToHome` (`broadcastFileHistoryUpdated` in
+   `drive/sse-events.ts`, mirroring `broadcastCommentIndexUpdated`), and
+   `sse-handlers.ts` invalidates `fileHistory` on it — so collab `'edited'`,
+   `sticky-*` and assigned/resolved/reopened rows now refresh open Activity panels
+   live, for the owner and everyone the item is shared with. The inline-record paths
+   (trash/move/copy) don't go through `recordFileEvent`, so each fires
+   `broadcastFileHistoryUpdated` itself after its record — `drive:*` (`Drive.emit`)
+   reaches only the owner home, so it can't refresh shared members on its own. Trash
+   captures the effective members *before* it strips the share, since the post-trash
+   chain no longer resolves them. This is the established relay pattern — no separate
+   collab-WebSocket activity channel was needed.
 2. **Unify with the version timeline — extend it, don't add a second one.**
    Eigendocs already have an in-app, per-doc timeline: the **Version History menu**
    (restorable snapshots) in the editor `FileMenu`. It shows *when* but not

@@ -1,7 +1,13 @@
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
+import { useAuth } from '@workspace/lib/auth';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { findCardIdByChatName, useCommentLifecycle } from '@workspace/lib/comments';
+import {
+    findCardIdByChatName,
+    matchesCommentFilter,
+    useCommentFilter,
+    useCommentLifecycle,
+} from '@workspace/lib/comments';
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
@@ -9,7 +15,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CardFormDialog, CommentLifecycleDialogs, LoadingState, NoteCard } from '@workspace/ui';
+import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, LoadingState, NoteCard } from '@workspace/ui';
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
 import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
@@ -40,6 +46,7 @@ function OverlayNoteCard({ card, entry, isMobile }: { card: CommentCard; entry?:
             resolved={entry?.status === 'resolved'}
             coverThumbnailUrl={coverThumbnailUrl}
             attachmentCount={attachmentCount}
+            assigneeEmail={entry?.assignee}
             className={isMobile ? 'w-full' : 'w-[254px]'}
         />
     );
@@ -82,6 +89,7 @@ export function StickiesBoard({
         yjsDoc,
         undoManager,
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
+    const { user } = useAuth();
 
     // Cards are anchored by column membership — every referenced taskId is an active card.
     const activeCardIds = useMemo(() => {
@@ -107,7 +115,7 @@ export function StickiesBoard({
         initialCardId,
         onCardNotFound: onClearInitialCard,
     });
-    const { allComments, cards, createCard, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, setOpenCardId } = lifecycle;
 
     // Palette IN COMMENTS capability. Plain object per render — usePaletteDocSearch stabilises via
     // ref + docKey, so the reveal closure always sees the current cards.
@@ -139,7 +147,20 @@ export function StickiesBoard({
 
     const isMobile = useIsMobile();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
-    const [colorFilter, setColorFilter] = useState<Set<string>>(new Set());
+    // Board shows resolved cards by default (status:'all'); clear() returns to that.
+    const commentFilter = useCommentFilter({ status: 'all' });
+    const currentUserEmail = user?.email ?? '';
+    const isCardVisible = useCallback(
+        (card: CommentCard) =>
+            matchesCommentFilter(
+                card,
+                card.chatName ? entryByChatName.get(card.chatName) : undefined,
+                commentFilter.filter,
+                currentUserEmail,
+            ),
+        [entryByChatName, commentFilter.filter, currentUserEmail],
+    );
+    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
     const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
 
@@ -151,7 +172,7 @@ export function StickiesBoard({
     } = useStickiesDocSearch({
         board,
         cards,
-        colorFilter,
+        isCardVisible,
         boardScrollRef,
     });
 
@@ -165,12 +186,11 @@ export function StickiesBoard({
         async (
             patch: { title?: string; description?: string; color?: string },
             attachments?: CardAttachmentDraft[],
+            assignee?: string | null,
         ) => {
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
-            let newCardId = '';
-            await createCard({ ...patch, attachments }, (card) => {
-                newCardId = card.id;
+            const card = await createCard({ ...patch, attachments }, (card) => {
                 const col = yjsDoc.getMap('columns').get(targetColumnId) as Y.Map<unknown> | undefined;
                 if (!col) return;
                 let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
@@ -180,19 +200,22 @@ export function StickiesBoard({
                 }
                 taskIds.insert(0, [card.id]);
             });
+            if (assignee !== undefined && card?.chatName) {
+                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
+            }
             recordHistory.mutate({
                 eventType: 'sticky-added',
                 details: {
                     card: patch.title ?? '',
                     toColumn: board.columns[targetColumnId]?.title ?? '',
-                    cardId: newCardId,
+                    cardId: card?.id ?? '',
                 },
             });
             setScrollToTopOf((prev) => ({ columnId: targetColumnId, n: (prev?.n ?? 0) + 1 }));
             setAddTargetColumn(null);
             setAddOpen(false);
         },
-        [yjsDoc, addTargetColumn, createCard, recordHistory.mutate, board.columns],
+        [yjsDoc, addTargetColumn, createCard, assignComment, recordHistory.mutate, board.columns],
     );
 
     const handleAddCard = useCallback((columnId: string) => {
@@ -211,21 +234,19 @@ export function StickiesBoard({
     );
 
     // Per-column card arrays with stable identity, so memoized columns only re-render
-    // when their own cards (or the color filter) actually change.
+    // when their own cards (or the filter) actually change.
     const prevColumnCardsRef = useRef<Record<string, CommentCard[]>>({});
     const columnCards = useMemo(() => {
         const next: Record<string, CommentCard[]> = {};
         for (const columnId of board.columnOrder) {
-            const fresh = board.columns[columnId].taskIds
-                .map((taskId) => cards[taskId])
-                .filter((card) => colorFilter.size === 0 || colorFilter.has(card.color || ''));
+            const fresh = board.columns[columnId].taskIds.map((taskId) => cards[taskId]).filter(isCardVisible);
             const prev = prevColumnCardsRef.current[columnId];
             next[columnId] =
                 prev && prev.length === fresh.length && fresh.every((card, i) => card === prev[i]) ? prev : fresh;
         }
         prevColumnCardsRef.current = next;
         return next;
-    }, [board, cards, colorFilter]);
+    }, [board, cards, isCardVisible]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -288,8 +309,15 @@ export function StickiesBoard({
                                     undoManager={undoManager}
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     onAddColumn={() => setIsAddColumnDialogOpen(true)}
-                                    colorFilter={colorFilter}
-                                    onColorFilterChange={setColorFilter}
+                                    filter={commentFilter}
+                                    members={members}
+                                    currentUserEmail={currentUserEmail}
+                                    // Only offer the toggle where the panel can render (!isMobile),
+                                    // else it's an enabled no-op. DocumentShareCluster hides it when absent.
+                                    onToggleActivityPanel={
+                                        !isMobile ? () => setActivityPanelOpen((v) => !v) : undefined
+                                    }
+                                    activityPanelOpen={activityPanelOpen}
                                 />
                             }
                         >
@@ -366,6 +394,8 @@ export function StickiesBoard({
                                         }}
                                         onSave={onSaveNew}
                                         allowAttachments={!!mediaFolderId}
+                                        members={members}
+                                        currentUserEmail={user?.email}
                                         dialogTitle="Add Sticky"
                                         submitLabel="Add Sticky"
                                     />
@@ -416,6 +446,18 @@ export function StickiesBoard({
                                         onCardDialogClose={onClearInitialChat}
                                     />
                                 </div>
+                                {!isMobile && activityPanelOpen && (
+                                    <ActivityPanel
+                                        path={path}
+                                        onClose={() => setActivityPanelOpen(false)}
+                                        onOpenCard={({ cardId, chatName }) => {
+                                            const id =
+                                                cardId ??
+                                                (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                            if (id) setOpenCardId(id);
+                                        }}
+                                    />
+                                )}
                             </div>
                         </LayoutColumn>
                     </DocSearchProvider>

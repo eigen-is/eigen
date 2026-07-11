@@ -2,8 +2,9 @@
 
 > **TLDR**: Unified comment-card model across stickies / docs / slides / sheets. Each card is a
 > `{ id, title, description, color?, chatName? }` record stored in a Y.Map on the container's Y.Doc. The
-> server-side `comments.db` SQLite index holds derived metadata (status, lastAuthorEmail, messageCount,
-> mentions, createdAt, createdBy). Shared `<CardFormDialog>` and `<CardDialog>` in `packages/ui` render
+> server-side `comments.db` SQLite index holds derived metadata (status, assignee, lastAuthorEmail,
+> messageCount, createdAt, createdBy) plus a `recentText` tail + FTS index for in-document comment search.
+> Shared `<CardFormDialog>` and `<CardDialog>` in `packages/ui` render
 > create + view/edit flows; per-app anchors connect cards to host content.
 
 ## Architecture
@@ -15,7 +16,7 @@ comments / tasks Y.Map        chatName (PK), status, resolvedBy,     useCommentC
   → CommentCard {              resolvedAt, lastAuthorEmail,          useCreateCommentCard (atomic
        id, title, description, lastMessageSnippet, lastActivityAt,    chat-create + Y.Doc write +
        color?, chatName?,      messageCount, createdAt, createdBy,    caller-supplied anchor)
-       creator?, createdAt?    mentions[]                            useUpdateCommentCard / useDelete-
+       creator?, createdAt?    recentText (FTS), assignee, title          useUpdateCommentCard / useDelete-
      }                                                                CommentCard
 ```
 
@@ -98,19 +99,34 @@ persist (enabling undo/redo + Y.Doc version revert), but it is hidden from the c
 
 ## Database schema
 
-**`comments` table** (`apps/api/src/lib/chat/comment-schema.ts`, v2 since 2026-05-17):
+**`comments` table** (`apps/api/src/lib/chat/comment-schema.ts`, v5 since 2026-07-10):
 `chatName` (PK), `status` (open|resolved), `resolvedBy`, `resolvedAt`, `lastAuthorEmail`,
-`lastMessageSnippet`, `lastActivityAt`, `messageCount`, `createdAt`, `createdBy`, `color` (unused
-by new code; kept for legacy data — a future v3 can drop it).
+`lastMessageSnippet`, `lastActivityAt`, `messageCount`, `createdAt`, `createdBy` (v2),
+`recentText` (v3 — newest ~8 KB of the thread's messages, recomputed on every comment write),
+`assignee` (v4 — lowercased member email, NULL = unassigned; server-authoritative like resolve),
+`title` (v5 — best-effort client-posted card-title cache, refreshed on every assign/status PATCH;
+can lag a rename until the next action — used for activity-event labels, not as a UI source).
+v4 and v5 are split deliberately: dev runtimes stamped v4 as assignee-only mid-build, and a
+stamped migration is immutable — amend-in-place broke those databases until v5 healed them.
 
-**`comment_mentions` table**: `chatName` + `email` (composite PK).
+**`comments_fts`** (v3): external-content FTS5 over `recentText`, kept in sync by triggers; the
+UPDATE trigger is gated on `recentText` so status/activity/count writes don't churn the index.
+
+**`comment_mentions` table**: `chatName` + `email` (composite PK). Write-only since 2026-07-10:
+`addMention` still records rows at post time, but mentions left the wire type (`CommentEntry`) and
+`list()` no longer joins them — the "For you" tab was the only reader. Kept for a possible
+cross-document mentions view later.
+
+There is no `color` column in the current schema — card color lives on the Y.Doc card. Databases
+created before 2026-05-17 may still carry an ignored legacy `color` column (nothing reads it).
 
 ## Row seeding
 
 A `comments.db` row is created **at chat creation** when the new chat lands inside a container's
 `chat/` folder. `Drive.create` calls a private `seedCommentRow(...)` helper that resolves the
-container via `findContainerPath`, opens the index via `tryOpenCommentIndex` (returns `null` if
-the container has no index yet), and calls `ensureComment(chatName, { createdBy: user.email })`.
+container via `findContainerPath`, opens the index via `openCommentIndex` (every real container
+has a `comments.db` by construction — `CollabDocument.create` provisions it; standalone chats bail
+earlier at `findContainerPath`), and calls `ensureComment(chatName, { createdBy: user.email })`.
 
 The `ensureComment` upsert uses `INSERT ... ON CONFLICT DO UPDATE SET createdBy = COALESCE(createdBy,
 EXCLUDED.createdBy)` — a real value is never overwritten by null, making the call idempotent.
@@ -131,18 +147,45 @@ the column was added.
 | `addMention`     | Insert mention row (dedup via composite PK)                                       |
 | `resolve`        | Set `status='resolved'`, record `resolvedBy`/`resolvedAt`                         |
 | `reopen`         | Set `status='open'`, clear resolved fields                                        |
+| `assign`         | Set/clear `assignee` (lowercased email or NULL)                                   |
+| `setTitle`       | Refresh the client-posted `title` cache (200-char cap applied by the callers)     |
 | `decrementCount` | `MAX(0, messageCount - 1)`                                                        |
-| `list`           | All comments with inline `mentions[]` (2 queries, grouped in memory)              |
+| `setRecentText`  | Replace the thread's ~8 KB `recentText` tail (FTS re-index via trigger)           |
+| `list`           | All comments (plain row spread; no mentions join since 2026-07-10)              |
+| `searchComments` | FTS5 body search → ranked `{ chatName, snippet }` matches (in-document search)    |
 
-All updates go through `ChatRoom.updateCommentIndex(fn)`, which opens the index, runs the callback,
-and emits `CHAT_COMMENT_INDEX_UPDATED` SSE.
+Message-driven updates go through `ChatRoom.updateCommentIndex(fn)`, which opens the index, runs
+the callback, recomputes `recentText`, and emits `CHAT_COMMENT_INDEX_UPDATED` SSE (owner home
+broadcast + effective-member fan-out). The REST mutations (`/status`, `/assignee`) go through the
+`Drive.setCommentStatus` / `Drive.assignComment` domain methods (write-gated `SharedDrive`
+wrappers), which first `assertCommentChatExists` (404 on an unknown thread — see API routes below),
+then mutate the index and record the file events; the routes then emit the same SSE
+via `broadcastCommentIndexUpdated` (`lib/chat/sse-events.ts` — owner home + member fan-out through
+`sendToHome`, which self-gates on `atHome()`), so resolve/assign reach other clients live.
+`seedCommentRow` writes the index directly with no broadcast (creation already emits drive SSE).
+
+**Activity + notifications**: `assignComment` records an `'assigned'` file event (details
+`{ assignee, card?, chatName? }` — `card` is the client-posted title, same trust model as the
+`sticky-*` events; the assignee is excluded from the watcher fan-out because the route already
+sends them a direct `'assigned'` notification, tag `assigned:owner:mount:path:chatName`, resolved
+client-side like `mention-comment`). `setCommentStatus` records `'resolved'`/`'reopened'` events.
+Unassign records nothing and notifies nobody; unregistered invitees can be assigned but get no
+notification (`getUserByEmail` guard, mirroring mentions).
 
 ## API routes (`apps/api/src/routes/collab.ts`)
 
 ```
-GET    /collab/:ownerId/:mountId/:pathId/comments                    List comments (with mentions[])
-PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/status   Resolve or reopen
+GET    /collab/:ownerId/:mountId/:pathId/comments                    List comments (CommentEntry[])
+GET    /collab/:ownerId/:mountId/:pathId/comments/search?q=          FTS body search (in-document search)
+PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/status   Resolve or reopen ({ status, title? }); 404 unknown chat
+PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/assignee Assign ({ assignee: email|null, title? });
+                                                                     403 without write, 400 non-member, 404 unknown chat
 ```
+
+Both PATCH writes reject an unknown `chatName` with **404 `Comment thread not found`**: `assertCommentChatExists`
+(`comment-index.ts`) requires the name to resolve to a real `.eigenchat` under the container's `chat/` folder
+before `ensureComment` runs, so a writer can never mint an index row (+ `assigned` event + dead-link
+notification) for a phantom name. Real legacy chats missing their row still heal — that check passes for them.
 
 There is no longer a `PATCH .../color` route — color lives on the Y.Doc card and round-trips via
 y-websocket.
@@ -155,7 +198,8 @@ y-websocket.
 |----------------------|----------------------------------------------------------------------|
 | `commentKeys`        | Query key factory: `all`, `container`, `list`                        |
 | `useComments`        | `GET .../comments` — returns `CommentEntry[]`                        |
-| `useResolveComment`  | `PATCH .../comments/:chatName/status`                                |
+| `useResolveComment`  | `PATCH .../comments/:chatName/status` (`{ chatName, status, title? }`) |
+| `useAssignComment`   | `PATCH .../comments/:chatName/assignee` (`{ chatName, assignee, title? }`) |
 | `invalidateComments` | Called by SSE handler to invalidate container keys                   |
 
 **Y.Doc card state** (`packages/lib/src/core/comments/`):
@@ -193,6 +237,23 @@ across all four apps. Renders items inside whichever menu family the host uses b
 `ContextMenu*` works). The `noun` prop tunes labels (`"comment"` by default, stickies passes
 `"sticky"`).
 
+### Assignee UI (`packages/ui/src/components/layout/comments/`)
+
+One shared searchable people-list recipe backs every assignment surface: `MemberCommandList`
+(cmdk `Command`; search hidden ≤ 8 members, `max-h-56` scroll, "n people" footer; pinned rows
+render in a `header` slot outside the filtered list so typing never hides them), `MemberAvatar`
+(tiny tooltip avatar via `useResolvedUser`), `AssigneeChip` (avatar + resolved name). On top of
+those: `AssigneePicker` (Popover trigger = children; pinned **Assign to me** / **Unassigned**) used
+by `CardFormDialog` (staged, applied on Save — `onSave`'s third arg, `undefined` = untouched) and
+`CardDialog` (inline chip reassign, immediate PATCH); `AssigneeMenuItems` (an **Assign to**
+submenu, `SubContent p-0` combobox-in-menu pattern) embedded in `CommentMenuItems`, which gained
+optional `members`/`currentUserEmail`/`onAssign` props — the current assignee reads from
+`item.entry.assignee`, and the callbacks carry `card.title` so the server can cache it. Hosts pass
+everything from the `useCommentLifecycle` bundle (`assignComment`, `members`); sheets threads
+through `settings.hooks` (`onCommentAssign`, `commentMembers`, `currentUserEmail`). `NoteCard`
+renders a muted assignee `MemberAvatar` at the far right of its footer meta row (`assigneeEmail`
+prop, board + panel pass `entry?.assignee`).
+
 ### CommentContextMenu (`packages/ui/src/components/layout/comments/comment-context-menu.tsx`)
 
 Convenience wrapper that pairs `<CommentMenuItems>` with the project's singleton
@@ -213,18 +274,49 @@ close).
 Properties-panel overlay showing all comments for a document. The caller passes `cards`, `entries`,
 `activeCardIds`, and `anchorTexts` — the panel is pure projection.
 
-- **Tabs**: All / For you (filtered by `entries[].mentions[]` containing current user's email)
-- **Status filter**: Open (default) / Resolved / All (cards without an entry yet are shown as "open")
+- **Filter** (`CommentFilterButton`, title-row `ListFilter` popover): assignee (Anyone / Me / Unassigned /
+  member), color swatches, and status (Open default / Resolved / All). The host owns one
+  `useCommentFilter()` instance; the panel projects via `matchesCommentFilter`. Active filters show
+  a summary strip (status label always leads) + "n hidden · Clear filters" footer; the empty state
+  offers Clear filters. Cards without an entry yet are treated as "open" and unassigned. The old
+  All/For-you tabs + status Select are gone.
+
+### Comment filters (`packages/lib/src/core/comments/filter.ts` + filter UI)
+
+Session-only client state, never persisted. Model: `CommentFilter = { assignee: 'all' | 'me' |
+'unassigned' | { email }, colors: Set<string> | null, status: 'open' | 'resolved' | 'all' }` with
+`useCommentFilter(defaults?)` (state + `isActive` + `clear()`) and the pure, unit-tested
+`matchesCommentFilter(card, entry, filter, currentUserEmail)`.
+
+**Placement rule (Reinder, 2026-07-10): the filter control lives on the surface it filters.**
+Docs/slides/sheets filters narrow only the comments panel, so their only control is the panel's
+`CommentFilterButton` — there is deliberately NO toolbar View menu (a toolbar menu would mutate
+invisible state while the panel is closed). Stickies filters the board itself, so its toolbar
+Filter menu (the former mobile-only dropdown, now on all viewports) hosts the same three groups
+via `CommentFilterMenuItems` (a primitives-slot component like `CommentMenuItems`); the center
+color-dot row stays as the desktop quick affordance and shares the same filter instance. The
+pinned Anyone/Me/Unassigned block is shared between button and menu as
+`PinnedAssigneeFilterRows` (internal to `packages/ui/.../comments/`). The one-line active-filter
+summary ("Open · assigned to me" + Clear) is the shared `FilterSummary` component — the panel
+renders it as a full-width strip, the stickies toolbar inline (`inline` prop) after the color
+dots. Member lists hide the current user's named row (the pinned Me row covers them). Menu close
+semantics: single-choice picks (assignee, status, Clear) dismiss the stickies Filter menu; color
+swatches keep it open for multi-toggle.
 
 ### CommentThread (`packages/ui/src/components/layout/comments/comment-thread.tsx`)
 
 Single comment thread: resolves `chatName` to `chatId` via `useMediaResolver`, renders
 `ChatMessageList` + `ChatMessageInput`. Embedded inside `<CardDialog>` when a card has a `chatName`.
 
-### CardFormDialog (`packages/ui/src/components/layout/cards/card-form-dialog.tsx`)
+### CardForm + CardFormDialog (`packages/ui/src/components/layout/cards/`)
 
-Shared create/edit form dialog selected by a `mode` prop (merges the former AddCardDialog +
-CardSettingsDialog). The host wires `mode="create"` to `useCreateCommentCard` — typically:
+`CardForm` is the shared create/edit form (title input, `LightEditor` description, attachment
+staging, one non-wrapping meta row: compact `ColorSwatchRow` left + `AssigneePicker` right),
+selected by a `mode` prop. It renders in two shells: `CardFormDialog` (a thin standard-Dialog
+wrapper — the create flow) and in-place inside `CardDialog` via `NoteCardDialog`'s `editForm`
+slot (the edit flow — no second dialog is ever stacked). Its field area scrolls with the
+Save/Cancel `DialogFooter` pinned, so short viewports get a scrollbar instead of overflow.
+The host wires `mode="create"` to `useCreateCommentCard` — typically:
 
 ```ts
 const handleSaveNew = async ({ title, description, color }) => {
@@ -245,9 +337,13 @@ client-side; the backend is only touched on Save.
 
 ### CardDialog (`packages/ui/src/components/layout/cards/card-dialog.tsx`)
 
-Shared view/edit dialog. Wraps `<NoteCardDialog>` with `<CommentThread>` inside; opens
-`<CardFormDialog mode="edit">` for inline edits via `onUpdate`. Optional `showResolveAction` + `onResolve`
-for apps that surface resolve/re-open at the dialog level (docs, slides, sheets).
+Shared view/edit dialog. Wraps `<NoteCardDialog>` with `<CommentThread>` inside. The pencil
+toggles **in-place edit**: `CardForm mode="edit"` replaces the body inside the same dialog
+(thread + reply composer hidden while editing; never a stacked dialog). View-mode height
+contract: everything above the thread caps at ~60% of the dialog (42vh of the 70vh dialog cap;
+the description scrolls internally) so the thread + reply input always keep the rest; the meta
+footer row has a stable height so assigning (Unassigned ↔ avatar chip) never shifts layout.
+Optional `onResolve`/`onAssign` for apps that surface resolve/assign at the dialog level.
 
 ## Per-app integration
 
@@ -283,6 +379,9 @@ for apps that surface resolve/re-open at the dialog level (docs, slides, sheets)
   noun="sticky">` like its siblings; `useBoard` only manages columns/order, the provider, and the
   UndoManager.
 - Cards are anchored by column membership in `columnsMap.<col>.taskIds`.
+- Board-wide filtering: the board owns `useCommentFilter({ status: 'all' })` (resolved cards show
+  by default); `columnCards` filters via `matchesCommentFilter` against `entryByChatName`, and the
+  toolbar Filter menu + color-dot row drive the same instance (see the filter section above).
 - Delete is a board-level helper `deleteCardFromBoard(cardId)` that walks columns + removes the
   Y.Map entry in one `transact` (single undo step, no orphan column refs).
 
@@ -298,20 +397,20 @@ The Y.Doc is the source of truth for which cards are "active":
 
 | File                                                                | Purpose                                       |
 |---------------------------------------------------------------------|-----------------------------------------------|
-| `apps/api/src/lib/chat/comment-schema.ts`                           | Drizzle schema (v2)                           |
-| `apps/api/src/lib/chat/comment-db-config.ts`                        | DB config + v1/v2 migrations                  |
-| `apps/api/src/lib/chat/comment-index.ts`                            | CommentIndex + `openCommentIndex` + `tryOpenCommentIndex` |
+| `apps/api/src/lib/chat/comment-schema.ts`                           | Drizzle schema (v5)                           |
+| `apps/api/src/lib/chat/comment-db-config.ts`                        | DB config + v1–v5 migrations (v3: `recentText` + FTS; v4: `assignee`; v5: `title`) |
+| `apps/api/src/lib/chat/comment-index.ts`                            | CommentIndex + `openCommentIndex` + `getCommentIndex` |
 | `apps/api/src/lib/drive/drive.ts`                                   | `seedCommentRow` helper called from `Drive.create` |
-| `apps/api/src/routes/collab.ts`                                     | Comment REST routes (list + status)           |
+| `apps/api/src/routes/collab.ts`                                     | Comment REST routes (list + search + status)  |
 | `packages/lib/src/core/chat/hooks/use-comments.ts`                  | Server-side metadata hooks + invalidation     |
-| `packages/lib/src/core/comments/`                                   | Y.Doc card hooks + helpers (+ unit tests)     |
+| `packages/lib/src/core/comments/`                                   | Y.Doc card hooks + helpers + filter model (+ unit tests) |
 | `packages/lib/src/types/comments.ts`                                | `CommentCard` type                            |
 | `packages/lib/src/types/chat.ts`                                    | `CommentEntry` type (server projection)       |
 | `packages/lib/src/docs/eigendoc/nodes/comment-mark.ts`              | TipTap mark schema (attr `cardId`)            |
 | `packages/lib/src/slides/types.ts`                                  | `BaseObject.commentCardIds`                   |
 | `packages/lib/src/sheets/types.ts`                                  | `Cell.commentCardIds`                         |
 | `packages/ui/src/components/layout/cards/`                          | Shared CardFormDialog + CardDialog |
-| `packages/ui/src/components/layout/comments/`                       | CommentPanel + CommentThread + CommentMenuItems + CommentContextMenu + useCreatedByMeta |
+| `packages/ui/src/components/layout/comments/`                       | CommentPanel + CommentThread + CommentMenuItems + CommentContextMenu + CreatedByMeta |
 | `packages/ui/src/components/layout/notes/`                          | NoteCard + NoteCardDialog                     |
 | `apps/docs/src/components/docs/editor.tsx`                          | Docs editor integration                       |
 | `apps/docs/src/components/docs/extensions/comment-mark.ts`          | ProseMirror plugins (interaction + decorations) |

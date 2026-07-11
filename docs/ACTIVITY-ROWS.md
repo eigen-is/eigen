@@ -1,7 +1,8 @@
 # Activity Rows
 
-The topbar notification bell and the Drive *Recent activity* panel render the same row anatomy
-through one shared component and one shared phrasing layer. This doc is the reference for what
+The topbar notification bell, the Drive *Recent activity* panel, and the eigendoc editors'
+*Activity* side panel (`ActivityPanel`, toggled from `DocumentShareCluster`) render the same row
+anatomy through one shared component and one shared phrasing layer. This doc is the reference for what
 every row says and where it links. The notification pipeline itself (storage, coalescing, SSE,
 routes) is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
 
@@ -95,6 +96,11 @@ limitation — resolving would cost a fetch per row).
 | `sticky-added` | `added a card to <Col>` | `added a card to "<board>"` | card title | `in <Col>` (container) | board `?card=<cardId>` |
 | `sticky-moved` | `moved a card` | `moved a card in "<board>"` | `card → col` | — | board `?card=<cardId>` |
 | `sticky-removed` | `removed a card` | `removed a card from "<board>"` | card title | — | board (card is gone — no `?card=`) |
+| `assigned` | `assigned a comment` | `assigned a comment in "<name>"` | card title, else `to <assignee>` | `to <assignee>` (with card) | doc `?chat=<chatName>` |
+| `resolved` | `resolved a comment` | `resolved a comment in "<name>"` | card title | — | doc `?chat=<chatName>` |
+| `reopened` | `reopened a comment` | `reopened a comment in "<name>"` | card title | — | doc `?chat=<chatName>` |
+
+`<assignee>` renders as `you` for the viewer, else the resolved display name (email local-part fallback).
 
 ## Data
 

@@ -44,5 +44,6 @@ export type CommentEntry = {
     messageCount: number;
     createdAt: Date;
     createdBy: string | null;
-    mentions: string[];
+    assignee: string | null;
+    title: string | null;
 };

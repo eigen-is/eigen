@@ -13,6 +13,7 @@ export type NotificationType =
     | 'mention-comment'
     | 'chat-message'
     | 'comment-reply'
+    | 'assigned'
     | 'access-request'
     | 'file-event';
 
@@ -24,6 +25,7 @@ export type NotificationDetailsMap = {
     unshare: { pathType?: DrivePathType };
     'mention-comment': { pathType?: DrivePathType };
     'comment-reply': { pathType?: DrivePathType };
+    assigned: { pathType?: DrivePathType };
     'access-request': { message?: string; pathType?: DrivePathType };
     'file-event': { secondary?: string; cardId?: string; chatName?: string; pathType?: DrivePathType };
 };

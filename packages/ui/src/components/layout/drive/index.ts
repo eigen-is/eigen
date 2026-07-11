@@ -1,3 +1,4 @@
+export * from './activity-panel';
 export * from './drive-access-list';
 export * from './drive-browser';
 export * from './drive-create-eigendoc';

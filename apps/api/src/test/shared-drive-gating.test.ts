@@ -259,6 +259,16 @@ describe('SharedDrive gating enumeration', () => {
             call: (sd) =>
                 sd.recordClientFileEvent(mountId, docId, charlie, 'sticky-added', { card: 'x', toColumn: 'y' }),
         },
+        assignComment: {
+            gate: 'denies',
+            reason: 'write-gated',
+            call: (sd) => sd.assignComment(mountId, docId, 'x.eigenchat', charlie.email, charlie),
+        },
+        setCommentStatus: {
+            gate: 'denies',
+            reason: 'write-gated',
+            call: (sd) => sd.setCommentStatus(mountId, docId, 'x.eigenchat', 'resolved', charlie),
+        },
         updatePathDetails: {
             gate: 'denies',
             reason: 'write-gated',

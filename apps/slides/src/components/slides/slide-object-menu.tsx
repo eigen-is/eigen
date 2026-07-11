@@ -1,5 +1,6 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import type { EffectiveMember } from '@workspace/lib/types/drive';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -40,9 +41,12 @@ type SlideObjectMenuProps = {
     onAddComment?: (objId: string) => void;
     onCommentClick?: (cardId: string) => void;
     onCommentChangeColor?: (cardId: string, color: string) => void;
-    onCommentResolve?: (chatName: string) => void;
-    onCommentReopen?: (chatName: string) => void;
+    onCommentResolve?: (chatName: string, title?: string) => void;
+    onCommentReopen?: (chatName: string, title?: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
+    members?: EffectiveMember[];
+    currentUserEmail?: string;
+    onCommentAssign?: (chatName: string, email: string | null, title?: string) => void;
 };
 
 export function SlideObjectMenu({
@@ -61,6 +65,9 @@ export function SlideObjectMenu({
     onCommentResolve,
     onCommentReopen,
     onCommentDelete,
+    members,
+    currentUserEmail,
+    onCommentAssign,
 }: SlideObjectMenuProps) {
     const obj = contextMenu.item;
     const commentItems = obj ? getCommentItems(obj, cards, entries) : [];
@@ -70,6 +77,12 @@ export function SlideObjectMenu({
     // Color swatches are plain buttons, not menu items, so they don't auto-close the menu.
     const handleChangeColor = (cardId: string, color: string) => {
         onCommentChangeColor?.(cardId, color);
+        contextMenu.close();
+    };
+
+    // Assignee rows are plain buttons inside the sub-content, so they don't auto-close either.
+    const handleAssign = (chatName: string, email: string | null, title?: string) => {
+        onCommentAssign?.(chatName, email, title);
         contextMenu.close();
     };
 
@@ -114,6 +127,9 @@ export function SlideObjectMenu({
                                 onResolve={onCommentResolve}
                                 onReopen={onCommentReopen}
                                 onDelete={onCommentDelete ? (cardId) => onCommentDelete(obj.id, cardId) : undefined}
+                                members={members}
+                                currentUserEmail={currentUserEmail}
+                                onAssign={onCommentAssign ? handleAssign : undefined}
                             />
                         </>
                     )}

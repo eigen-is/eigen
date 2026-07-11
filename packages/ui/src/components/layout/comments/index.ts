@@ -1,6 +1,12 @@
+export { AssigneeMenuItems } from './assignee-menu-items';
+export { AssigneePicker } from './assignee-picker';
 export { CommentContextMenu } from './comment-context-menu';
+export { CommentFilterMenuItems } from './comment-filter-menu-items';
+export { FilterSummary } from './comment-filter-summary';
 export { CommentLifecycleDialogs } from './comment-lifecycle-dialogs';
 export { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
 export { CommentPanel } from './comment-panel';
 export { CommentThread } from './comment-thread';
 export { CreatedByMeta } from './created-by-meta';
+export { MemberAvatar } from './member-avatar';
+export { MemberCommandList } from './member-command-list';

@@ -9,7 +9,7 @@ import {
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { useCommentLifecycle } from '@workspace/lib/comments';
+import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -21,7 +21,7 @@ import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CardFormDialog, CommentLifecycleDialogs, CommentPanel } from '@workspace/ui';
+import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
@@ -185,6 +185,7 @@ function SlideEditorInner({
 
     const auth = useAuth();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetObjId, setAddTargetObjId] = useState<string | null>(null);
@@ -201,7 +202,33 @@ function SlideEditorInner({
         initialChatName,
         ready: isSynced,
     });
-    const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
+    const {
+        allComments,
+        resolveComment,
+        cards,
+        createCard,
+        updateCard,
+        assignComment,
+        members,
+        unresolvedCount,
+        setOpenCardId,
+    } = lifecycle;
+
+    // Opening a comment card also reveals its slide + selects the anchored object (panel + activity share this).
+    const openCommentCard = (cardId: string) => {
+        for (const obj of Object.values(deck.objects)) {
+            if (obj.commentCardIds?.includes(cardId)) {
+                setActiveSlideId(obj.slideId);
+                setSelectedObjectIds([obj.id]);
+                setEditingObjectId(null);
+                break;
+            }
+        }
+        setOpenCardId(cardId);
+    };
+
+    // Host-owned so the filter survives panel close/reopen.
+    const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
@@ -649,16 +676,20 @@ function SlideEditorInner({
         async (
             patch: { title?: string; description?: string; color?: string },
             attachments?: CardAttachmentDraft[],
+            assignee?: string | null,
         ) => {
             if (!addTargetObjId) return;
             const objId = addTargetObjId;
-            await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
+            const card = await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
                 addCommentToObject(objId, card.id);
             });
+            if (assignee !== undefined && card?.chatName) {
+                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
+            }
             setAddTargetObjId(null);
             setAddOpen(false);
         },
-        [addTargetObjId, addInitialTitle, createCard, addCommentToObject],
+        [addTargetObjId, addInitialTitle, createCard, assignComment, addCommentToObject],
     );
 
     const activeSlide = activeSlideId ? deck.slides[activeSlideId] : null;
@@ -675,7 +706,7 @@ function SlideEditorInner({
 
     // The properties/background/comment panel is a w-64 flex sibling on the right whenever there's an
     // active slide and the user can write (or comments are open) — inset the find bar clear of it.
-    const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || canWrite);
+    const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || activityPanelOpen || canWrite);
 
     if (!isSynced) return <LoadingState />;
 
@@ -741,8 +772,22 @@ function SlideEditorInner({
                                 onAddImage={() => setImagePickerOpen(true)}
                                 onAddSlide={() => addSlide()}
                                 onPresent={handlePresent}
-                                onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                                onToggleCommentPanel={() => {
+                                    setActivityPanelOpen(false);
+                                    setCommentPanelOpen((v) => !v);
+                                }}
                                 commentPanelOpen={commentPanelOpen}
+                                // Only offer the toggle where the panel can render (!isMobile), else
+                                // it's an enabled no-op. DocumentShareCluster hides it when absent.
+                                onToggleActivityPanel={
+                                    !isMobile
+                                        ? () => {
+                                              setCommentPanelOpen(false);
+                                              setActivityPanelOpen((v) => !v);
+                                          }
+                                        : undefined
+                                }
+                                activityPanelOpen={activityPanelOpen}
                                 unresolvedCommentCount={unresolvedCount}
                             />
                         }
@@ -792,11 +837,16 @@ function SlideEditorInner({
                                                 onCommentClick={setOpenCardId}
                                                 cards={cards}
                                                 entries={allComments}
-                                                onCommentResolve={(chatName) =>
-                                                    resolveComment.mutate({ chatName, status: 'resolved' })
+                                                members={members}
+                                                currentUserEmail={auth.user?.email}
+                                                onCommentAssign={(chatName, email, title) =>
+                                                    assignComment.mutate({ chatName, assignee: email, title })
                                                 }
-                                                onCommentReopen={(chatName) =>
-                                                    resolveComment.mutate({ chatName, status: 'open' })
+                                                onCommentResolve={(chatName, title) =>
+                                                    resolveComment.mutate({ chatName, status: 'resolved', title })
+                                                }
+                                                onCommentReopen={(chatName, title) =>
+                                                    resolveComment.mutate({ chatName, status: 'open', title })
                                                 }
                                                 onCommentChangeColor={(cardId, color) => updateCard(cardId, { color })}
                                                 onCommentDelete={removeCommentFromObject}
@@ -815,21 +865,24 @@ function SlideEditorInner({
                                                 activeCardIds={activeComments.ids}
                                                 anchorTexts={activeComments.anchorTexts}
                                                 currentUserEmail={auth.user!.email}
+                                                filter={commentFilter}
+                                                members={members}
                                                 onClose={() => setCommentPanelOpen(false)}
-                                                onCommentClick={(cardId) => {
-                                                    for (const obj of Object.values(deck.objects)) {
-                                                        if (obj.commentCardIds?.includes(cardId)) {
-                                                            setActiveSlideId(obj.slideId);
-                                                            setSelectedObjectIds([obj.id]);
-                                                            setEditingObjectId(null);
-                                                            break;
-                                                        }
-                                                    }
-                                                    setOpenCardId(cardId);
-                                                }}
+                                                onCommentClick={openCommentCard}
                                                 onCommentContextMenu={(e, card, entry) =>
                                                     commentContextMenu.handleContextMenu(e, { card, entry })
                                                 }
+                                            />
+                                        ) : activityPanelOpen ? (
+                                            <ActivityPanel
+                                                path={path}
+                                                onClose={() => setActivityPanelOpen(false)}
+                                                onOpenCard={({ cardId, chatName }) => {
+                                                    const id =
+                                                        cardId ??
+                                                        (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                                    if (id) openCommentCard(id);
+                                                }}
                                             />
                                         ) : selectedObjects.length > 0 && canWrite ? (
                                             <SlidePropertiesPanel
@@ -879,6 +932,8 @@ function SlideEditorInner({
                 initialTitle={addInitialTitle}
                 onSave={handleSaveNew}
                 allowAttachments={!!mediaFolderId}
+                members={members}
+                currentUserEmail={auth.user?.email}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />

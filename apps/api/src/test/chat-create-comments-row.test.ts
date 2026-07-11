@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { FileEvent } from '@workspace/lib/types/file-history';
 import {
     assertJson,
     authedRequest,
@@ -83,7 +84,7 @@ describe('Comment lifecycle via chat-create', () => {
         expect((await listComments()).find((r) => r.chatName === 'standalone.eigenchat')).toBeUndefined();
     });
 
-    test('post message → row updates messageCount, lastAuthorEmail, lastActivityAt, mentions', async () => {
+    test('post message → row updates messageCount, lastAuthorEmail, lastActivityAt', async () => {
         const chatName = 'inside-container.eigenchat';
 
         // Find the chat by name so we can post a message to it
@@ -104,7 +105,6 @@ describe('Comment lifecycle via chat-create', () => {
         expect(row.lastAuthorEmail).toBe(ctx.alice.user.email);
         expect(row.lastActivityAt).toBeTruthy();
         expect(row.createdBy).toBe(ctx.alice.user.email);
-        expect(row.mentions).toContain(ctx.bob.user.email);
     });
 
     test('resolve → status=resolved + resolvedBy set; re-open → status=open + resolvedBy null', async () => {
@@ -155,5 +155,38 @@ describe('Comment lifecycle via chat-create', () => {
         const row = (await listComments()).find((r) => r.chatName === 'by-bob.eigenchat');
         expect(row).toBeDefined();
         expect(row!.createdBy).toBe(ctx.bob.user.email);
+    });
+
+    test('status PATCH on a nonexistent chatName → 404, no history event', async () => {
+        // No .eigenchat under this name → the status write must 404, not record a phantom
+        // 'resolved'/'reopened' event against a name that identifies no thread.
+        const ghostName = 'ghost-status.eigenchat';
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/collab/${ctx.alice.user.id}/${mountId}/${docId}/comments/${ghostName}/status`,
+            {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'resolved' }),
+            },
+        );
+        expect(res.status).toBe(404);
+
+        const events = await assertJson<FileEvent[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/path/${docId}/history`,
+            ),
+        );
+        const ghostEvent = events.some((e: FileEvent) => {
+            const d = e.details;
+            return (
+                (e.eventType === 'resolved' || e.eventType === 'reopened') &&
+                !!d &&
+                'chatName' in d &&
+                d.chatName === ghostName
+            );
+        });
+        expect(ghostEvent).toBe(false);
     });
 });

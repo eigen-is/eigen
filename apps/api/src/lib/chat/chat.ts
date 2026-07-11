@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type DrivePath, type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { and, desc, eq, isNull, lt, ne } from 'drizzle-orm';
@@ -8,9 +8,8 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Drive } from '../drive';
-import type { EffectiveMember } from '../drive/acl-propagation';
 import type { Home } from '../home';
-import { sendToHome } from '../home/home-relay';
+import { relayEventToMembers, sendToHome } from '../home/home-relay';
 import { getUserByEmail, type User } from '../user/';
 import { formatEmoteForViewer, parseCommand } from './commands';
 import { type CommentIndex, openCommentIndex, RECENT_TEXT_CAP } from './comment-index';
@@ -142,6 +141,10 @@ export class ChatRoom {
         });
         this.home.broadcast(event);
 
+        // Resolved once here and reused by the comment-index relay and the notification fan-out
+        // below — each getEffectiveMembers is a full ACL/team walk (mirrors edit/deleteMessage).
+        const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
+
         // Update comment index if this chat is embedded in a container document
         if (this.containerPath && type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
@@ -150,14 +153,13 @@ export class ChatRoom {
                 for (const email of extractMentionedEmails(content)) {
                     await index.addMention(this.path.name, email);
                 }
-            });
+            }, members);
         }
 
         // Notifications: mentions + activity. This guard also gates the cross-home
         // SSE relay (notifySharedUsers) — harmless today since 'system' messages aren't
         // postable via any route; revisit if that changes so the relay still fires for them.
         if (type !== 'system') {
-            const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
             this.notifySharedUsers(event, members); // fire-and-forget, members already resolved
 
             const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
@@ -473,19 +475,14 @@ export class ChatRoom {
     // ACL from parent folders, team membership, and container document ACL.
     // Pass pre-resolved members to avoid a redundant ACL walk when postMessage has already fetched them.
     private async notifySharedUsers(event: SSEvent, members?: EffectiveMember[]) {
-        const resolved = members ?? (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id));
-        // Fan out the per-member lookup + relay concurrently rather than serially.
-        await Promise.all(
-            resolved.map(async (member) => {
-                try {
-                    const user = await getUserByEmail(member.email);
-                    if (!user) return;
-                    await sendToHome(user.id, { type: 'broadcast', event });
-                } catch {
-                    // user or home may not exist
-                }
-            }),
-        );
+        // Non-rejecting: every caller fires this without awaiting, so a relay/lookup failure must
+        // never surface as an unhandled rejection or break the mutation that triggered it.
+        try {
+            const resolved = members ?? (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id));
+            await relayEventToMembers(resolved, event);
+        } catch (error) {
+            console.error('Failed to relay event to members:', error);
+        }
     }
 
     private toMessage(row: typeof schema.messages.$inferSelect): ChatMessage {

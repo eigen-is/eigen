@@ -1,5 +1,6 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/lib/auth';
-import { useCreateChat } from '@workspace/lib/chat';
+import { invalidateComments, useCreateChat } from '@workspace/lib/chat';
 import { nanoid } from 'nanoid';
 import { useCallback, useRef } from 'react';
 import * as Y from 'yjs';
@@ -31,11 +32,13 @@ export function writeCardToDoc(doc: Y.Doc, mapName: string, card: CommentCard): 
 export function useCreateCommentCard(
     ownerId: string,
     mountId: string,
+    pathId: string,
     chatFolderId: string | null,
     mediaFolderId: string | null,
     doc: Y.Doc | null,
     mapName: 'comments' | 'tasks' = 'comments',
 ) {
+    const queryClient = useQueryClient();
     const createChat = useCreateChat(ownerId, mountId);
     const createChatRef = useRef(createChat);
     createChatRef.current = createChat;
@@ -48,8 +51,11 @@ export function useCreateCommentCard(
     // one Yjs transaction = one undo step. The callback must be synchronous (no awaits, no
     // setTimeout) — anything outside the synchronous frame escapes the transaction.
     return useCallback(
-        async (input: CreateCommentCardInput = {}, anchorInTransact?: (card: CommentCard) => void): Promise<void> => {
-            if (!doc || !chatFolderId) return;
+        async (
+            input: CreateCommentCardInput = {},
+            anchorInTransact?: (card: CommentCard) => void,
+        ): Promise<CommentCard | undefined> => {
+            if (!doc || !chatFolderId) return undefined;
 
             // Resolve first: a failed upload aborts the whole create (no half-attached card).
             const attachments = input.attachments?.length ? await resolveAttachments(input.attachments) : undefined;
@@ -71,7 +77,11 @@ export function useCreateCommentCard(
                 writeCardToDoc(doc, mapName, card);
                 anchorInTransact?.(card);
             });
+            // The chat create seeded a comments.db row server-side; without this refetch the new
+            // card's entry-gated menu items (Assign to, Resolve) stay hidden until staleTime.
+            invalidateComments(queryClient, ownerId, mountId, pathId);
+            return card;
         },
-        [doc, chatFolderId, mapName, resolveAttachments],
+        [queryClient, ownerId, mountId, pathId, doc, chatFolderId, mapName, resolveAttachments],
     );
 }

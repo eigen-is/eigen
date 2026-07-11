@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCommentLifecycle } from '@workspace/lib/comments';
+import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import {
     isPendingMediaName,
@@ -10,7 +10,7 @@ import {
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { CardFormDialog, CommentLifecycleDialogs, CommentPanel, LoadingState } from '@workspace/ui';
+import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel, LoadingState } from '@workspace/ui';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
@@ -70,6 +70,7 @@ function SheetEditorInner({
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const { resolveMediaUrl, startUpload } = useMediaResolver();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
@@ -89,7 +90,19 @@ function SheetEditorInner({
         initialChatName,
         ready: synced,
     });
-    const { allComments, resolveComment, cards, createCard, updateCard, unresolvedCount, setOpenCardId } = lifecycle;
+    const {
+        allComments,
+        resolveComment,
+        cards,
+        createCard,
+        updateCard,
+        assignComment,
+        members,
+        unresolvedCount,
+        setOpenCardId,
+    } = lifecycle;
+    // Host-owned so the filter survives panel close/reopen.
+    const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const addCommentRef = useRef<(r: number, c: number) => void>(null);
@@ -175,18 +188,22 @@ function SheetEditorInner({
         async (
             patch: { title?: string; description?: string; color?: string },
             attachments?: CardAttachmentDraft[],
+            assignee?: string | null,
         ) => {
             if (!addTargetCell || !workbookRef.current) return;
             const cell = addTargetCell;
-            await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
+            const card = await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
                 const fd = workbookRef.current?.getFlowdata();
                 const existing = fd?.[cell.r]?.[cell.c]?.commentCardIds ?? [];
                 workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, card.id]);
             });
+            if (assignee !== undefined && card?.chatName) {
+                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
+            }
             setAddTargetCell(null);
             setAddOpen(false);
         },
-        [addTargetCell, addInitialTitle, createCard],
+        [addTargetCell, addInitialTitle, createCard, assignComment],
     );
 
     const leftItems = useMemo(
@@ -199,13 +216,30 @@ function SheetEditorInner({
             <DocumentShareCluster
                 canWrite={canWrite}
                 onAccessDialogOpen={onAccessDialogOpen}
-                onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                onToggleCommentPanel={() => {
+                    setActivityPanelOpen(false);
+                    setCommentPanelOpen((v) => !v);
+                }}
                 commentPanelOpen={commentPanelOpen}
+                onToggleActivityPanel={() => {
+                    setCommentPanelOpen(false);
+                    setActivityPanelOpen((v) => !v);
+                }}
+                activityPanelOpen={activityPanelOpen}
                 unresolvedCommentCount={unresolvedCount}
                 watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
             />
         ),
-        [canWrite, onAccessDialogOpen, commentPanelOpen, unresolvedCount, path.ownerId, path.mountId, path.id],
+        [
+            canWrite,
+            onAccessDialogOpen,
+            commentPanelOpen,
+            activityPanelOpen,
+            unresolvedCount,
+            path.ownerId,
+            path.mountId,
+            path.id,
+        ],
     );
 
     if (!synced || !initialData) {
@@ -287,10 +321,14 @@ function SheetEditorInner({
                                               const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
                                               if (cardId) updateCard(cardId, { color });
                                           },
-                                          onCommentResolve: (chatName: string) =>
-                                              resolveComment.mutate({ chatName, status: 'resolved' }),
-                                          onCommentReopen: (chatName: string) =>
-                                              resolveComment.mutate({ chatName, status: 'open' }),
+                                          onCommentResolve: (chatName: string, title?: string) =>
+                                              resolveComment.mutate({ chatName, status: 'resolved', title }),
+                                          onCommentReopen: (chatName: string, title?: string) =>
+                                              resolveComment.mutate({ chatName, status: 'open', title }),
+                                          onCommentAssign: (chatName, email, title) =>
+                                              assignComment.mutate({ chatName, assignee: email, title }),
+                                          commentMembers: members,
+                                          currentUserEmail: auth.user?.email,
                                       }
                                     : {}),
                                 getCommentInfo: (r: number, c: number) => {
@@ -317,11 +355,23 @@ function SheetEditorInner({
                         activeCardIds={activeComments.ids}
                         anchorTexts={activeComments.anchorTexts}
                         currentUserEmail={auth.user!.email}
+                        filter={commentFilter}
+                        members={members}
                         onClose={() => setCommentPanelOpen(false)}
                         onCommentClick={(cardId) => setOpenCardId(cardId)}
                         onCommentContextMenu={(e, card, entry) =>
                             commentContextMenu.handleContextMenu(e, { card, entry })
                         }
+                    />
+                )}
+                {activityPanelOpen && (
+                    <ActivityPanel
+                        path={path}
+                        onClose={() => setActivityPanelOpen(false)}
+                        onOpenCard={({ cardId, chatName }) => {
+                            const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                            if (id) setOpenCardId(id);
+                        }}
                     />
                 )}
             </div>
@@ -335,6 +385,8 @@ function SheetEditorInner({
                 initialTitle={addInitialTitle}
                 onSave={handleSaveNew}
                 allowAttachments={!!mediaFolderId}
+                members={members}
+                currentUserEmail={auth.user?.email}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />

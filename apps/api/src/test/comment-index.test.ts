@@ -1,5 +1,11 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { ChatMessage, CommentEntry, DrivePath } from '@workspace/lib/types';
+import type { FileEvent } from '@workspace/lib/types/file-history';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { COMMENT_INDEX_DB_CONFIG } from '../lib/chat/comment-db-config';
+import { CommentIndex } from '../lib/chat/comment-index';
+import * as commentSchema from '../lib/chat/comment-schema';
 import {
     assertJson,
     authedRequest,
@@ -119,74 +125,6 @@ describe('Comment Index', () => {
         });
     });
 
-    describe('mention tracking', () => {
-        beforeAll(async () => {
-            const chat = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${chatFolderId}/create/chat`,
-                { fileName: 'mention-test' },
-            );
-
-            // Post a message mentioning Bob
-            await chatPost<ChatMessage>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `${chat.id}/messages`,
-                {
-                    content: `Hey ${BOB_EMAIL} check this out`,
-                },
-            );
-        });
-
-        test('comment list includes mentions array with mentioned emails', async () => {
-            const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'comments');
-            const comments = await assertJson<CommentEntry[]>(res);
-            const mentionComment = findOrFail(comments, (c: CommentEntry) => c.chatName === 'mention-test.eigenchat');
-            expect(mentionComment.mentions).toContain(BOB_EMAIL);
-        });
-
-        test('non-mention comments have empty mentions array', async () => {
-            const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'comments');
-            const comments = await assertJson<CommentEntry[]>(res);
-            const firstComment = findOrFail(comments, (c: CommentEntry) => c.chatName === 'discussion-1.eigenchat');
-            expect(firstComment.mentions).toEqual([]);
-        });
-
-        test('duplicate mention in second message does not create duplicate entry', async () => {
-            const chatFolder = findOrFail(
-                await driveGet<DrivePath[]>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `folder/${docId}`),
-                (p: DrivePath) => p.name === 'chat',
-            );
-            const chats = await driveGet<DrivePath[]>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${chatFolder.id}`,
-            );
-            const mentionChat = findOrFail(chats, (c: DrivePath) => c.name === 'mention-test.eigenchat');
-
-            // Post another message mentioning Bob again
-            await chatPost<ChatMessage>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `${mentionChat.id}/messages`,
-                {
-                    content: `${BOB_EMAIL} please see above`,
-                },
-            );
-
-            const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'comments');
-            const comments = await assertJson<CommentEntry[]>(res);
-            const mentionComment = findOrFail(comments, (c: CommentEntry) => c.chatName === 'mention-test.eigenchat');
-            // Still just one mention of Bob, not two
-            expect(mentionComment.mentions.filter((e: string) => e === BOB_EMAIL)).toHaveLength(1);
-        });
-    });
-
     describe('resolve and reopen', () => {
         let chatName: string;
 
@@ -211,6 +149,16 @@ describe('Comment Index', () => {
             );
         });
 
+        async function statusEvents(type: 'resolved' | 'reopened'): Promise<FileEvent[]> {
+            const events = await assertJson<FileEvent[]>(
+                await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/drive/${ctx.alice.user.id}/${mountId}/path/${docId}/history`,
+                ),
+            );
+            return events.filter((e) => e.eventType === type);
+        }
+
         test('resolve sets status and resolvedBy', async () => {
             const res = await collabPatch(
                 ctx.alice.user.sessionToken,
@@ -218,7 +166,7 @@ describe('Comment Index', () => {
                 mountId,
                 docId,
                 `comments/${chatName}/status`,
-                { status: 'resolved' },
+                { status: 'resolved', title: 'Fix header' },
             );
             expect(res.status).toBe(200);
 
@@ -228,6 +176,14 @@ describe('Comment Index', () => {
             expect(resolved.status).toBe('resolved');
             expect(resolved.resolvedBy).toBe(ctx.alice.user.email);
             expect(resolved.resolvedAt).toBeTruthy();
+            expect(resolved.title).toBe('Fix header');
+
+            const event = findOrFail(await statusEvents('resolved'), (e: FileEvent) => {
+                const d = e.details;
+                return !!d && 'chatName' in d && d.chatName === chatName;
+            });
+            const details = event.details && 'card' in event.details ? event.details : null;
+            expect(details?.card).toBe('Fix header');
         });
 
         test('reopen clears resolved state', async () => {
@@ -237,7 +193,7 @@ describe('Comment Index', () => {
                 mountId,
                 docId,
                 `comments/${chatName}/status`,
-                { status: 'open' },
+                { status: 'open', title: 'Fix header' },
             );
             expect(res.status).toBe(200);
 
@@ -247,6 +203,13 @@ describe('Comment Index', () => {
             expect(reopened.status).toBe('open');
             expect(reopened.resolvedBy).toBeNull();
             expect(reopened.resolvedAt).toBeNull();
+
+            const event = findOrFail(await statusEvents('reopened'), (e: FileEvent) => {
+                const d = e.details;
+                return !!d && 'chatName' in d && d.chatName === chatName;
+            });
+            const details = event.details && 'card' in event.details ? event.details : null;
+            expect(details?.card).toBe('Fix header');
         });
     });
 
@@ -676,127 +639,6 @@ describe('Comment Index', () => {
         });
     });
 
-    describe('multiple mentions in one message', () => {
-        let mentionDocId: string;
-
-        beforeAll(async () => {
-            const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
-            const doc = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${root.id}/create/doc`,
-                { fileName: 'multi-mention-doc' },
-            );
-            mentionDocId = doc.id;
-
-            // Share with Bob and Charlie
-            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${mentionDocId}/acl`, {
-                add: [
-                    { id: BOB_EMAIL, read: true, write: true },
-                    { id: 'charlie@test.eigen.is', read: true, write: true },
-                ],
-            });
-
-            const contents = await driveGet<DrivePath[]>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${mentionDocId}`,
-            );
-            const chatFolder = findOrFail(contents, (p: DrivePath) => p.name === 'chat');
-
-            const chat = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${chatFolder.id}/create/chat`,
-                { fileName: 'multi-mention' },
-            );
-
-            // Mention both Bob and Charlie in one message
-            await chatPost<ChatMessage>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `${chat.id}/messages`,
-                {
-                    content: `Hey ${BOB_EMAIL} and charlie@test.eigen.is please review`,
-                },
-            );
-        });
-
-        test('mentions array contains both emails', async () => {
-            const res = await collabGet(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                mentionDocId,
-                'comments',
-            );
-            const comments = await assertJson<CommentEntry[]>(res);
-            const comment = findOrFail(comments, (c: CommentEntry) => c.chatName === 'multi-mention.eigenchat');
-            expect(comment.mentions).toContain(BOB_EMAIL);
-            expect(comment.mentions).toContain('charlie@test.eigen.is');
-            expect(comment.mentions).toHaveLength(2);
-        });
-    });
-
-    describe('email case insensitivity in mentions', () => {
-        let caseDocId: string;
-
-        beforeAll(async () => {
-            const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
-            const doc = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${root.id}/create/doc`,
-                { fileName: 'case-mention-doc' },
-            );
-            caseDocId = doc.id;
-
-            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${caseDocId}/acl`, {
-                add: [{ id: BOB_EMAIL, read: true, write: true }],
-            });
-
-            const contents = await driveGet<DrivePath[]>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${caseDocId}`,
-            );
-            const chatFolder = findOrFail(contents, (p: DrivePath) => p.name === 'chat');
-
-            const chat = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${chatFolder.id}/create/chat`,
-                { fileName: 'case-mention' },
-            );
-
-            // Mention Bob with uppercase email
-            await chatPost<ChatMessage>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `${chat.id}/messages`,
-                {
-                    content: 'Hey BOB@TEST.EIGEN.IS check this',
-                },
-            );
-        });
-
-        test('mention is stored lowercase', async () => {
-            const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, caseDocId, 'comments');
-            const comments = await assertJson<CommentEntry[]>(res);
-            const comment = findOrFail(comments, (c: CommentEntry) => c.chatName === 'case-mention.eigenchat');
-            // Stored as lowercase despite uppercase input
-            expect(comment.mentions).toContain(BOB_EMAIL);
-        });
-    });
-
     describe('comments.db created with collab document', () => {
         test('new doc has comments.db in folder contents', async () => {
             const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
@@ -817,5 +659,67 @@ describe('Comment Index', () => {
             const commentsDb = contents.find((p: DrivePath) => p.name === 'comments.db');
             expect(commentsDb).toBeTruthy();
         });
+    });
+});
+
+// Unit-level coverage of CommentIndex.assign semantics over an in-memory db (route round-trip is in comment-assignee.test.ts).
+describe('CommentIndex.assign', () => {
+    function makeIndex(): CommentIndex {
+        const raw = new Database(':memory:');
+        for (const m of COMMENT_INDEX_DB_CONFIG.migrations) m.up(raw);
+        return new CommentIndex(drizzle(raw, { schema: commentSchema }));
+    }
+
+    test('assign sets the assignee email', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+
+        await index.assign('a.eigenchat', 'bob@test.eigen.is');
+
+        const entries = await index.list();
+        expect(entries).toHaveLength(1);
+        expect(entries[0]).toMatchObject({ chatName: 'a.eigenchat', assignee: 'bob@test.eigen.is' });
+    });
+
+    test('reassign overwrites the previous assignee', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+        await index.assign('a.eigenchat', 'bob@test.eigen.is');
+
+        await index.assign('a.eigenchat', 'charlie@test.eigen.is');
+
+        const [entry] = await index.list();
+        expect(entry).toMatchObject({ assignee: 'charlie@test.eigen.is' });
+    });
+
+    test('assign with null clears the assignee', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+        await index.assign('a.eigenchat', 'bob@test.eigen.is');
+
+        await index.assign('a.eigenchat', null);
+
+        const [entry] = await index.list();
+        expect(entry).toMatchObject({ assignee: null });
+    });
+
+    test('assigning an unknown chatName is a no-op (UPDATE matches nothing, no throw)', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+
+        await index.assign('ghost.eigenchat', 'bob@test.eigen.is');
+
+        const entries = await index.list();
+        expect(entries).toHaveLength(1);
+        expect(entries[0].chatName).toBe('a.eigenchat');
+    });
+
+    test('list() rows expose assignee (null when unset)', async () => {
+        const index = makeIndex();
+        await index.ensureComment('a.eigenchat');
+
+        const [entry] = await index.list();
+        expect(Object.keys(entry)).toContain('assignee');
+        expect(entry).toMatchObject({ assignee: null });
     });
 });

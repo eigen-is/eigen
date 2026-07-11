@@ -14,6 +14,10 @@ export type FileEventDetailsMap = {
     'sticky-added': { card: string; toColumn: string; cardId?: string };
     'sticky-moved': { card: string; toColumn: string; cardId?: string };
     'sticky-removed': { card: string; cardId?: string };
+    // card = the client-posted card title, matching the sticky-* naming.
+    assigned: { assignee: string; card?: string; chatName?: string };
+    resolved: { card?: string; chatName?: string };
+    reopened: { card?: string; chatName?: string };
 };
 
 export type FileEventType = 'created' | 'edited' | 'trashed' | 'restored' | 'deleted' | keyof FileEventDetailsMap;
@@ -87,6 +91,9 @@ const FILE_EVENT_PHRASES: Record<FileEventType, string> = {
     'sticky-added': 'added a card',
     'sticky-moved': 'moved a card',
     'sticky-removed': 'removed a card',
+    assigned: 'assigned a comment',
+    resolved: 'resolved a comment',
+    reopened: 'reopened a comment',
 };
 
 // Persisted rows can hold an eventType outside today's union — older builds, or the
@@ -175,6 +182,29 @@ export function describeFileEvent(
             return {
                 action: container ? `removed a card from "${name}"` : 'removed a card',
                 primary: d?.card,
+            };
+        }
+        case 'assigned': {
+            const d = details && 'assignee' in details ? details : null;
+            const who = d
+                ? d.assignee === opts?.viewerEmail?.toLowerCase()
+                    ? 'you'
+                    : (opts?.resolveName?.(d.assignee) ?? d.assignee.split('@')[0])
+                : undefined;
+            return {
+                action: container ? `assigned a comment in "${name}"` : 'assigned a comment',
+                primary: d?.card ?? (who ? `to ${who}` : undefined),
+                secondary: d?.card && who ? `to ${who}` : undefined,
+            };
+        }
+        case 'resolved':
+        case 'reopened': {
+            const d = details && 'chatName' in details ? details : null;
+            return {
+                action: container
+                    ? `${FILE_EVENT_PHRASES[event.eventType]} in "${name}"`
+                    : FILE_EVENT_PHRASES[event.eventType],
+                primary: d && 'card' in d ? d.card : undefined,
             };
         }
         default:

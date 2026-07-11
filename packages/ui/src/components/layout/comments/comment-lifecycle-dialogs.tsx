@@ -1,4 +1,5 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CardDialog } from '../cards/card-dialog';
@@ -29,7 +30,8 @@ export function CommentLifecycleDialogs({
     noun,
     onCardDialogClose,
 }: CommentLifecycleDialogsProps) {
-    const { updateCard, resolveComment, openCard, openEntry, setOpenCardId } = lifecycle;
+    const { updateCard, resolveComment, assignComment, members, openCard, openEntry, setOpenCardId } = lifecycle;
+    const { user } = useAuth();
 
     return (
         <>
@@ -51,8 +53,11 @@ export function CommentLifecycleDialogs({
                         ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
                         : undefined
                 }
+                members={members}
+                currentUserEmail={user?.email}
                 onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
-                onResolve={(chatName, next) => resolveComment.mutate({ chatName, status: next })}
+                onResolve={(chatName, next, title) => resolveComment.mutate({ chatName, status: next, title })}
+                onAssign={(chatName, assignee, title) => assignComment.mutate({ chatName, assignee, title })}
             />
 
             <CommentContextMenu
@@ -60,8 +65,11 @@ export function CommentLifecycleDialogs({
                 noun={noun}
                 onOpen={setOpenCardId}
                 onUpdateCard={updateCard}
-                onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                onResolve={(chatName, status, title) => resolveComment.mutate({ chatName, status, title })}
                 onDelete={onDelete}
+                members={members}
+                currentUserEmail={user?.email}
+                onAssign={(chatName, email, title) => assignComment.mutate({ chatName, assignee: email, title })}
             />
         </>
     );

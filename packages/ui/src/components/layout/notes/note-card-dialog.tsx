@@ -41,6 +41,9 @@ type NoteCardDialogProps = {
     // Rendered between the description and the meta/actions footer — card content,
     // above the separator, unlike `children` (the thread).
     attachments?: ReactNode;
+    // In-place edit: when set, replaces the description/attachments/meta rows with an
+    // editing form. The colored header and the thread `children` stay visible.
+    editForm?: ReactNode;
     children: ReactNode;
 };
 
@@ -59,6 +62,7 @@ export function NoteCardDialog({
     copyLinkUrl,
     onDescriptionChange,
     attachments,
+    editForm,
     children,
 }: NoteCardDialogProps) {
     const handleDescriptionClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -74,67 +78,93 @@ export function NoteCardDialog({
         onDescriptionChange(e.currentTarget.innerHTML);
     };
 
+    const header = (
+        <DialogHeader
+            className={cn(
+                'flex flex-row items-center gap-2 px-4 pt-4 pb-2 rounded-t-lg',
+                color &&
+                    // Inset shadow, not a border: the color bar must not shift the title.
+                    // Dark mode matches the mail list row / NoteCard: 2px inset stripe +
+                    // a 14% color-mix wash over --background (see --note-soft below).
+                    'bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]',
+            )}
+            style={
+                color
+                    ? ({
+                          '--note-bg': lightenColor(color, 0.5),
+                          '--note-fg': isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff',
+                          '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
+                          '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
+                      } as React.CSSProperties)
+                    : undefined
+            }
+        >
+            <DialogTitle className="flex-1">{title}</DialogTitle>
+        </DialogHeader>
+    );
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="md" className="max-h-[70vh] flex flex-col p-0 gap-0">
-                <div>
-                    <DialogHeader
-                        className={cn(
-                            'flex flex-row items-center gap-2 px-4 pt-4 pb-2 rounded-t-lg',
-                            color &&
-                                // Inset shadow, not a border: the color bar must not shift the title.
-                                // Dark mode matches the mail list row / NoteCard: 2px inset stripe +
-                                // a 14% color-mix wash over --background (see --note-soft below).
-                                'bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]',
-                        )}
-                        style={
-                            color
-                                ? ({
-                                      '--note-bg': lightenColor(color, 0.5),
-                                      '--note-fg': isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff',
-                                      '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
-                                      '--note-soft':
-                                          'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
-                                  } as React.CSSProperties)
-                                : undefined
-                        }
-                    >
-                        <DialogTitle className="flex-1">{title}</DialogTitle>
-                    </DialogHeader>
+                {editForm ? (
+                    // Edit mode: form only under the header, thread hidden. The form fills the
+                    // remaining height and scrolls internally on short viewports.
+                    <div className="flex min-h-0 flex-1 flex-col">
+                        {header}
+                        {/* px-6/pb-6 restores the standard DialogContent padding this p-0 shell strips. */}
+                        <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">{editForm}</div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Header + content cap at 42vh (60% of the 70vh dialog cap) so the thread
+                            below always keeps ≥40%. A percentage max-h would never resolve here —
+                            the dialog's max-h-[70vh] height stays indefinite. shrink-0 keeps a short
+                            body at full height when the thread is long (max-h alone does the cap). */}
+                        <div className="flex max-h-[42vh] min-h-0 shrink-0 flex-col">
+                            {header}
 
-                    {description && (
-                        <div className="px-4 py-3 text-sm text-foreground">
-                            <div
-                                className="eigen-prose"
-                                onClick={handleDescriptionClick}
-                                dangerouslySetInnerHTML={{ __html: description }}
-                            />
-                        </div>
-                    )}
-
-                    {attachments && <div className={cn('px-4 pb-3', !description && 'pt-2')}>{attachments}</div>}
-
-                    {(meta || copyLinkUrl || (canWrite && onEdit) || onAction) && (
-                        <div
-                            className={cn('flex items-center gap-2 px-4 pb-2', !description && !attachments && 'pt-2')}
-                        >
-                            {meta && <p className="flex-1 text-xs text-muted-foreground">{meta}</p>}
-                            {copyLinkUrl && (
-                                <IconAction
-                                    icon={LinkIcon}
-                                    tooltip="Copy link"
-                                    onClick={() => copyToClipboard(copyLinkUrl, 'Link copied to clipboard')}
-                                />
+                            {description && (
+                                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm text-foreground">
+                                    <div
+                                        className="eigen-prose"
+                                        onClick={handleDescriptionClick}
+                                        dangerouslySetInnerHTML={{ __html: description }}
+                                    />
+                                </div>
                             )}
-                            {canWrite && onEdit && <IconAction icon={Pencil} tooltip="Edit" onClick={onEdit} />}
-                            <IconAction icon={actionIcon} tooltip={actionTooltip} onClick={onAction} />
+
+                            {attachments && (
+                                <div className={cn('shrink-0 px-4 pb-3', !description && 'pt-2')}>{attachments}</div>
+                            )}
+
+                            {(meta || copyLinkUrl || (canWrite && onEdit) || onAction) && (
+                                // min-h-8 keeps the row height identical whether the assignee shows
+                                // "Unassigned" text or an avatar chip, so assigning never shifts the dialog.
+                                <div
+                                    className={cn(
+                                        'flex min-h-8 shrink-0 items-center gap-2 px-4 pt-1 pb-2',
+                                        !description && !attachments && 'pt-2',
+                                    )}
+                                >
+                                    {meta && <p className="flex-1 text-xs text-muted-foreground">{meta}</p>}
+                                    {copyLinkUrl && (
+                                        <IconAction
+                                            icon={LinkIcon}
+                                            tooltip="Copy link"
+                                            onClick={() => copyToClipboard(copyLinkUrl, 'Link copied to clipboard')}
+                                        />
+                                    )}
+                                    {canWrite && onEdit && <IconAction icon={Pencil} tooltip="Edit" onClick={onEdit} />}
+                                    <IconAction icon={actionIcon} tooltip={actionTooltip} onClick={onAction} />
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
 
-                <Separator />
+                        <Separator />
 
-                {children}
+                        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+                    </>
+                )}
             </DialogContent>
         </Dialog>
     );

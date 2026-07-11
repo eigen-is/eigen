@@ -48,8 +48,8 @@ export const driveKeys = {
     trash: (ownerId: string) => [...driveKeys.owner(ownerId), 'trash'] as const,
     trashList: (ownerId: string, mountId: string) => [...driveKeys.trash(ownerId), mountId] as const,
     history: (ownerId: string) => [...driveKeys.owner(ownerId), 'history'] as const,
-    fileHistory: (ownerId: string, mountId: string, pathId: string) =>
-        [...driveKeys.history(ownerId), mountId, pathId] as const,
+    fileHistory: (ownerId: string, mountId: string, pathId: string, limit: number) =>
+        [...driveKeys.history(ownerId), mountId, pathId, limit] as const,
     watches: (ownerId: string) => [...driveKeys.owner(ownerId), 'watches'] as const,
     pathWatched: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.watches(ownerId), mountId, pathId] as const,
@@ -877,4 +877,10 @@ export function invalidateAclUpdated(
 
 export function invalidateTrash(queryClient: QueryClient, ownerId: string, mountId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.trashList(ownerId, mountId) });
+}
+
+// Owner-broad prefix invalidation: an ancestor ACL change alters effective membership for every
+// descendant, so per-path invalidation is insufficient — drop the whole effective-members family.
+export function invalidateEffectiveMembers(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: [...driveKeys.owner(ownerId), 'effective-members'] });
 }

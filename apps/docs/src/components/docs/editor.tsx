@@ -8,7 +8,7 @@ import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import { findCardIdByChatName, useCommentLifecycle } from '@workspace/lib/comments';
+import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
@@ -26,6 +26,7 @@ import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspac
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
+    ActivityPanel,
     CardFormDialog,
     Column,
     CommentLifecycleDialogs,
@@ -270,6 +271,7 @@ const TiptapEditor = ({
     }, []);
 
     const handleCommentClick = useCallback((cardId: string) => {
+        setActivityPanelOpen(false);
         setOpenCardId(cardId);
         setCommentPanelOpen(true);
     }, []);
@@ -563,6 +565,7 @@ const TiptapEditor = ({
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
 
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const activeComments = useActiveComments(editor);
     const lifecycle = useCommentLifecycle({
         ownerId: path.ownerId,
@@ -574,7 +577,9 @@ const TiptapEditor = ({
         activeCardIds: activeComments.ids,
         initialChatName,
     });
-    const { allComments, cards, createCard, unresolvedCount, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, unresolvedCount, setOpenCardId } = lifecycle;
+    // Host-owned so the filter survives panel close/reopen.
+    const commentFilter = useCommentFilter();
     allCommentsRef.current = allComments;
     cardsRef.current = cards;
 
@@ -585,16 +590,28 @@ const TiptapEditor = ({
         async (
             patch: { title?: string; description?: string; color?: string },
             attachments?: CardAttachmentDraft[],
+            assignee?: string | null,
         ) => {
             if (!editor || !pendingMarkRange) return;
             const range = pendingMarkRange;
-            await createCard({ title: pendingMarkRange.text.slice(0, 100), ...patch, attachments }, (card) => {
-                editor.chain().focus().setTextSelection({ from: range.from, to: range.to }).setComment(card.id).run();
-            });
+            const card = await createCard(
+                { title: pendingMarkRange.text.slice(0, 100), ...patch, attachments },
+                (card) => {
+                    editor
+                        .chain()
+                        .focus()
+                        .setTextSelection({ from: range.from, to: range.to })
+                        .setComment(card.id)
+                        .run();
+                },
+            );
+            if (assignee !== undefined && card?.chatName) {
+                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
+            }
             setPendingMarkRange(null);
             setAddOpen(false);
         },
-        [editor, pendingMarkRange, createCard],
+        [editor, pendingMarkRange, createCard, assignComment],
     );
 
     // Sync resolved IDs + colors into the ProseMirror decoration plugin
@@ -657,8 +674,10 @@ const TiptapEditor = ({
 
     if (!editor) return null;
 
-    const activePanel = commentPanelOpen ? 'comments' : sidebarContext;
-    const showSidebar = isWide && (activePanel === 'comments' || (access.canWrite && activePanel !== 'document'));
+    const activePanel = commentPanelOpen ? 'comments' : activityPanelOpen ? 'activity' : sidebarContext;
+    const showSidebar =
+        isWide &&
+        (activePanel === 'comments' || activePanel === 'activity' || (access.canWrite && activePanel !== 'document'));
 
     const handleScrollToComment = (cardId: string) => {
         const positions = findCommentMarkPositions(editor.state.doc, cardId);
@@ -675,6 +694,7 @@ const TiptapEditor = ({
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
+            setActivityPanelOpen(false);
             setCommentPanelOpen(true);
             handleScrollToComment(cardId);
             setOpenCardId(cardId);
@@ -704,8 +724,22 @@ const TiptapEditor = ({
                             canUndo={canUndo}
                             canRedo={canRedo}
                             onAccessDialogOpen={onAccessDialogOpen}
-                            onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                            onToggleCommentPanel={() => {
+                                setActivityPanelOpen(false);
+                                setCommentPanelOpen((v) => !v);
+                            }}
                             commentPanelOpen={commentPanelOpen}
+                            // Only offer the toggle where the panel can actually render (isWide),
+                            // else the button is an enabled no-op. DocumentShareCluster hides it when absent.
+                            onToggleActivityPanel={
+                                isWide
+                                    ? () => {
+                                          setCommentPanelOpen(false);
+                                          setActivityPanelOpen((v) => !v);
+                                      }
+                                    : undefined
+                            }
+                            activityPanelOpen={activityPanelOpen}
                             unresolvedCommentCount={unresolvedCount}
                             onImageUpload={mediaFolderId ? handleImageUpload : undefined}
                             onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
@@ -759,6 +793,8 @@ const TiptapEditor = ({
                                         activeCardIds={activeComments.ids}
                                         anchorTexts={activeComments.anchorTexts}
                                         currentUserEmail={auth.user!.email}
+                                        filter={commentFilter}
+                                        members={members}
                                         onClose={() => setCommentPanelOpen(false)}
                                         onCommentClick={(cardId) => {
                                             handleScrollToComment(cardId);
@@ -766,6 +802,21 @@ const TiptapEditor = ({
                                         }}
                                         onCommentContextMenu={(e, card, entry) => {
                                             commentContextMenu.handleContextMenu(e, { card, entry });
+                                        }}
+                                    />
+                                ) : activePanel === 'activity' ? (
+                                    <ActivityPanel
+                                        path={path}
+                                        onClose={() => setActivityPanelOpen(false)}
+                                        onOpenCard={({ cardId, chatName }) => {
+                                            const id =
+                                                cardId ??
+                                                (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                            if (!id) return;
+                                            setActivityPanelOpen(false);
+                                            setCommentPanelOpen(true);
+                                            handleScrollToComment(id);
+                                            setOpenCardId(id);
                                         }}
                                     />
                                 ) : lastPanelRef.current === 'figure' ? (
@@ -793,6 +844,8 @@ const TiptapEditor = ({
                 initialTitle={pendingMarkRange ? pendingMarkRange.text.slice(0, 100) : ''}
                 onSave={handleSaveNew}
                 allowAttachments={!!mediaFolderId}
+                members={members}
+                currentUserEmail={auth.user?.email}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
             />

@@ -1,15 +1,21 @@
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
+import { type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
 import { Elysia, t } from 'elysia';
 import { getCommentIndex } from '../lib/chat/comment-index';
+import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type CollabDocument from '../lib/collab/collabDocument';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type Drive from '../lib/drive/drive';
 import type SharedDrive from '../lib/drive/sharedDrive';
-import type { User } from '../lib/user';
+import { sendToHome } from '../lib/home/home-relay';
+import { getUserByEmail, type User } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
+
+// Elysia allocates a fresh ElysiaWS per WS event; only its stable `.raw` socket keeps one identity across open/message/close, so the Yjs origin matches the subscribed connection.
+const toRawWs = (ws: unknown) => (ws as { raw: ServerWebSocket<undefined> }).raw;
 
 type CollabWsData = {
     user?: User;
@@ -92,16 +98,70 @@ export const collabRouter = new Elysia({
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
-            const index = await getCommentIndex(drive, params.mountId, params.pathId);
-            if (body.status === 'resolved') {
-                await index.resolve(params.chatName, user.email);
-            } else {
-                await index.reopen(params.chatName);
+            await drive.setCommentStatus(params.mountId, params.pathId, params.chatName, body.status, user, body.title);
+            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId).catch(() => {});
+            return { success: true };
+        },
+        {
+            body: t.Object({
+                status: t.Union([t.Literal('resolved'), t.Literal('open')]),
+                title: t.Optional(t.String()),
+            }),
+            auth: true,
+        },
+    )
+
+    .patch(
+        '/collab/:ownerId/:mountId/:pathId/comments/:chatName/assignee',
+        async ({ params, body, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
+                throw new ApiError(403, 'No write permission');
+            }
+            const assignee = body.assignee ? body.assignee.toLowerCase() : null;
+            // Resolved once for validation, reused by the broadcast fan-out (it's a full ACL walk).
+            let members: EffectiveMember[] | undefined;
+            if (assignee) {
+                members = await drive.getEffectiveMembers(params.mountId, params.pathId);
+                if (!members.some((m) => m.email === assignee)) {
+                    throw new ApiError(400, 'Assignee is not a member of this document');
+                }
+            }
+            const changed = await drive.assignComment(
+                params.mountId,
+                params.pathId,
+                params.chatName,
+                assignee,
+                user,
+                body.title,
+            );
+
+            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId, members).catch(() => {});
+
+            if (changed && assignee && assignee !== user.email.toLowerCase()) {
+                try {
+                    const assigneeUser = await getUserByEmail(assignee);
+                    const path = assigneeUser ? await drive.getPath(params.mountId, params.pathId) : null;
+                    if (assigneeUser && path) {
+                        await sendToHome(assigneeUser.id, {
+                            type: 'notification',
+                            notification: {
+                                type: 'assigned',
+                                actorEmail: user.email,
+                                title: `${user.name} assigned you a comment on "${stripEigenExtension(path.name)}"`,
+                                tag: `assigned:${params.ownerId}:${params.mountId}:${params.pathId}:${params.chatName}`,
+                                details: { pathType: path.type },
+                            },
+                        });
+                    }
+                } catch {
+                    // user or home may not exist (unregistered guests get no notification)
+                }
             }
             return { success: true };
         },
         {
-            body: t.Object({ status: t.Union([t.Literal('resolved'), t.Literal('open')]) }),
+            body: t.Object({ assignee: t.Nullable(t.String()), title: t.Optional(t.String()) }),
             auth: true,
         },
     )
@@ -138,7 +198,7 @@ export const collabRouter = new Elysia({
                 }
 
                 const document = await drive.getCollabDocument(mountId, pathId);
-                const rawWs = ws as unknown as ServerWebSocket<undefined>;
+                const rawWs = toRawWs(ws);
                 document.subscribe(user, rawWs);
 
                 data.drive = drive;
@@ -168,7 +228,7 @@ export const collabRouter = new Elysia({
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
                 const { mountId, pathId } = data.params;
                 const canWrite = await drive.canWrite(mountId, pathId, user);
-                collabDocument.handleMessage(ws as unknown as ServerWebSocket<undefined>, update, canWrite);
+                collabDocument.handleMessage(toRawWs(ws), update, canWrite);
             } catch (err) {
                 console.error('Error processing collab message:', err);
             }
@@ -177,6 +237,6 @@ export const collabRouter = new Elysia({
         async close(ws) {
             const data = ws.data as unknown as CollabWsData;
             if (data.opened) await data.opened;
-            cleanupSession(data, ws as unknown as ServerWebSocket<undefined>);
+            cleanupSession(data, toRawWs(ws));
         },
     });

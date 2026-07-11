@@ -1,15 +1,15 @@
+import { matchesCommentFilter, type useCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { MessageSquareOff, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../select';
-import { Tabs, TabsList, TabsTrigger } from '../../tabs';
+import { useMemo } from 'react';
 import { useAttachmentMeta } from '../attachment/use-attachment-meta';
 import { NoteCard } from '../notes/note-card';
 import { PropertiesPanel } from '../properties-panel';
 import { TooltipButton } from '../toolbar/tooltip-button';
-
-type StatusFilter = 'open' | 'resolved' | 'all';
+import { CommentFilterButton } from './comment-filter-button';
+import { FilterSummary } from './comment-filter-summary';
 
 // Row component so each card gets its own useAttachmentMeta call (hooks can't run in the map).
 function PanelCard({
@@ -35,6 +35,7 @@ function PanelCard({
             resolved={entry?.status === 'resolved'}
             coverThumbnailUrl={coverThumbnailUrl}
             attachmentCount={attachmentCount}
+            assigneeEmail={entry?.assignee}
             onClick={onClick}
             onContextMenu={onContextMenu}
         />
@@ -47,6 +48,8 @@ type CommentPanelProps = {
     activeCardIds: Set<string>;
     anchorTexts: Map<string, string>;
     currentUserEmail: string;
+    filter: ReturnType<typeof useCommentFilter>;
+    members: EffectiveMember[];
     onClose: () => void;
     onCommentClick?: (cardId: string) => void;
     onCommentContextMenu?: (e: React.MouseEvent, card: CommentCard, entry: CommentEntry | undefined) => void;
@@ -58,80 +61,79 @@ export function CommentPanel({
     activeCardIds,
     anchorTexts,
     currentUserEmail,
+    filter,
+    members,
     onClose,
     onCommentClick,
     onCommentContextMenu,
 }: CommentPanelProps) {
-    const [tab, setTab] = useState<'all' | 'mine'>('all');
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
-
-    const visible = useMemo(() => {
+    const { active, visible } = useMemo(() => {
         const byChatName = new Map(entries.map((e) => [e.chatName, e]));
-        const out: { card: CommentCard; entry: CommentEntry | undefined }[] = [];
+        const all: { card: CommentCard; entry: CommentEntry | undefined }[] = [];
+        const shown: { card: CommentCard; entry: CommentEntry | undefined }[] = [];
         for (const cardId of activeCardIds) {
             const card = cards[cardId];
             if (!card) continue;
             const entry = card.chatName ? byChatName.get(card.chatName) : undefined;
-            // Treat missing entry as "open" so freshly-created cards show up before SSE round-trip.
-            const status = entry?.status ?? 'open';
-            if (statusFilter !== 'all' && status !== statusFilter) continue;
-            if (tab === 'mine' && !entry?.mentions.includes(currentUserEmail)) continue;
-            out.push({ card, entry });
+            all.push({ card, entry });
+            if (matchesCommentFilter(card, entry, filter.filter, currentUserEmail)) shown.push({ card, entry });
         }
-        return out;
-    }, [cards, entries, activeCardIds, statusFilter, tab, currentUserEmail]);
+        return { active: all.length, visible: shown };
+    }, [cards, entries, activeCardIds, filter.filter, currentUserEmail]);
+
+    const hidden = active - visible.length;
 
     return (
         <PropertiesPanel>
-            <div className="px-3 py-2 border-b flex items-center justify-between">
+            <div className="flex items-center justify-between border-b px-3 py-2">
                 <span className="text-sm font-medium">Comments</span>
-                <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
+                <div className="flex items-center gap-1">
+                    <CommentFilterButton filter={filter} members={members} currentUserEmail={currentUserEmail} />
+                    <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
+                </div>
             </div>
 
-            <div className="px-3 py-2 border-b flex items-center gap-2">
-                <Tabs value={tab} onValueChange={(v) => setTab(v as 'all' | 'mine')} className="flex-1">
-                    <TabsList className="w-full">
-                        <TabsTrigger value="all" className="flex-1 text-xs">
-                            All
-                        </TabsTrigger>
-                        <TabsTrigger value="mine" className="flex-1 text-xs">
-                            For you
-                        </TabsTrigger>
-                    </TabsList>
-                </Tabs>
-
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-                    <SelectTrigger className="h-8 text-xs w-28 gap-1">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="resolved">Resolved</SelectItem>
-                        <SelectItem value="all">All</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
+            {filter.isActive && <FilterSummary filter={filter} onClear={filter.clear} />}
 
             {visible.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <MessageSquareOff className="h-8 w-8 mb-2 opacity-40" />
+                    <MessageSquareOff className="mb-2 h-8 w-8 opacity-40" />
                     <p className="text-xs">No comments</p>
+                    {filter.isActive && (
+                        <button
+                            type="button"
+                            className="mt-2 text-xs text-primary hover:underline"
+                            onClick={filter.clear}
+                        >
+                            Clear filters
+                        </button>
+                    )}
                 </div>
             ) : (
-                <div className="p-2 space-y-2">
-                    {visible.map(({ card, entry }) => (
-                        <PanelCard
-                            key={card.id}
-                            card={card}
-                            entry={entry}
-                            title={anchorTexts.get(card.id) || card.title || 'Comment'}
-                            onClick={() => onCommentClick?.(card.id)}
-                            onContextMenu={
-                                onCommentContextMenu ? (e) => onCommentContextMenu(e, card, entry) : undefined
-                            }
-                        />
-                    ))}
-                </div>
+                <>
+                    <div className="space-y-2 p-2">
+                        {visible.map(({ card, entry }) => (
+                            <PanelCard
+                                key={card.id}
+                                card={card}
+                                entry={entry}
+                                title={anchorTexts.get(card.id) || card.title || 'Comment'}
+                                onClick={() => onCommentClick?.(card.id)}
+                                onContextMenu={
+                                    onCommentContextMenu ? (e) => onCommentContextMenu(e, card, entry) : undefined
+                                }
+                            />
+                        ))}
+                    </div>
+                    {hidden > 0 && (
+                        <div className="px-3 pb-3 text-center text-[11px] text-muted-foreground">
+                            {hidden} hidden ·{' '}
+                            <button type="button" className="text-primary hover:underline" onClick={filter.clear}>
+                                Clear filters
+                            </button>
+                        </div>
+                    )}
+                </>
             )}
         </PropertiesPanel>
     );

@@ -14,6 +14,10 @@ export const comments = sqliteTable('comments', {
     createdBy: text('createdBy'),
     // Newest-first ~8 KB tail of the thread's messages — the body comment search (v3) indexes.
     recentText: text('recentText'),
+    // v4: lowercased member email, NULL = unassigned.
+    assignee: text('assignee'),
+    // v5: best-effort client-posted cache, refreshed on assign/status.
+    title: text('title'),
 });
 
 export const commentMentions = sqliteTable(

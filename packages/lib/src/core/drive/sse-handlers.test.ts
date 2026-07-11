@@ -44,6 +44,20 @@ describe('handleDriveSSEvent — DRIVE_ACL_UPDATED', () => {
         // The share dialog in mime-filtered views reads its ACL from the listing row —
         // the mime prefix must be invalidated or the dialog reopens stale.
         expect(hasKey(invalidated, driveKeys.mimeTypes(OWNER))).toBe(true);
+        // Assignment pickers read effective members — a new/removed collaborator must reach them now,
+        // not after the 5-min staleTime. Owner-broad prefix (ancestor ACL affects descendants).
+        expect(hasKey(invalidated, [...driveKeys.owner(OWNER), 'effective-members'])).toBe(true);
+    });
+});
+
+describe('handleDriveSSEvent — DRIVE_ACL_SHARED / DRIVE_ACL_UNSHARED', () => {
+    test('invalidates the effective-members family so assignment pickers pick up the ACL change live', () => {
+        for (const type of [SSEventType.DRIVE_ACL_SHARED, SSEventType.DRIVE_ACL_UNSHARED] as const) {
+            const { queryClient, invalidated } = trackingClient();
+            const handled = handleDriveSSEvent(driveEvent(type), queryClient);
+            expect(handled).toBe(true);
+            expect(hasKey(invalidated, [...driveKeys.owner(OWNER), 'effective-members'])).toBe(true);
+        }
     });
 });
 
@@ -67,5 +81,16 @@ describe('handleDriveSSEvent — DRIVE_FILE_UPLOADED (overwrite)', () => {
 
         expect(hasKey(invalidated, driveKeys.folder(OWNER, MOUNT, PARENT))).toBe(true);
         expect(hasKey(invalidated, driveKeys.path(OWNER, MOUNT, PATH))).toBe(false);
+    });
+});
+
+describe('handleDriveSSEvent — DRIVE_FILE_HISTORY_UPDATED', () => {
+    test('invalidates the owner-broad file-history queries so open Activity panels refresh live', () => {
+        const { queryClient, invalidated } = trackingClient();
+
+        const handled = handleDriveSSEvent(driveEvent(SSEventType.DRIVE_FILE_HISTORY_UPDATED), queryClient);
+
+        expect(handled).toBe(true);
+        expect(hasKey(invalidated, driveKeys.history(OWNER))).toBe(true);
     });
 });

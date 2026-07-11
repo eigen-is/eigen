@@ -238,6 +238,7 @@ publish 1-item selections).
 | `PropertiesPanel` | `properties-panel/properties-panel.tsx` | Right-side panel container |
 | `PropertySection` | `properties-panel/properties-panel.tsx` | Section with title         |
 | `PropertyRow`     | `properties-panel/properties-panel.tsx` | Row with label + content   |
+| `ActivityPanel`   | `drive/activity-panel.tsx`              | File activity side panel (eigendoc editors) |
 
 ### Branding & Auth
 

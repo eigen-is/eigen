@@ -1,5 +1,5 @@
 import { restoreYjsDoc } from '@workspace/lib/core/collab/yjs-utils';
-import { type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_STICKIES, type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
 import { desc, lt, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -243,6 +243,9 @@ export default class CollabDocument {
     }
 
     private recordEditThrottled(user: User) {
+        // Stickies activity is fully covered by specific sticky-*/comment events; a generic
+        // 'edited' row would double-report every drag.
+        if (this.path.type === DRIVE_TYPE_STICKIES) return;
         const now = Date.now();
         if (now - (this.lastEditRecordedAt.get(user.id) ?? 0) < EDIT_RECORD_THROTTLE_MS) return;
         this.lastEditRecordedAt.set(user.id, now);
