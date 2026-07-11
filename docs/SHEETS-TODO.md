@@ -219,13 +219,13 @@ border-clear 3×, `offsetMC` remap in all three paste handlers).
 
 ## E. Robustness gaps
 
-- **E1. `state/events/` has ZERO tests** while being the package's most dangerous layer:
+- **E1.** ✅ characterization tests added (state/test/events/paste.test.ts, 20 cases: text/formula/cut/merge/CF/border/up-left paste; HTML-table branch documented as headless-untestable, no DOM in bun test) — **`state/events/` has ZERO tests** while being the package's most dangerous layer:
   `paste.ts` is 1,804 lines with 49 non-null assertions (the densest in the package, e.g. the
   quadruple-stacked `x[c]!.mc!` chain at `:277-280`), mixing HTML-table parsing, style mapping,
   formula ref-adjust, and cross-sheet cut. `components/` has 1 test in 44 files. By contrast
   engine/parser and state/modules are well covered. Priority: characterization tests for
   `pasteHandler`/`handlePaste` round-trips before touching C-cluster refactors that paste depends on.
-- **E2. `cfSplitRange` — 495 untested lines feeding cut/paste/move of conditional formats**
+- **E2.** ✅ characterization tests added (engine/test/cf-split-range.test.ts, all 16 branches ×3 types; no offset typos found; the derive-from-restPart refactor remains open) — **`cfSplitRange` — 495 untested lines feeding cut/paste/move of conditional formats**
   (`engine/conditional-format.ts:465`): 16 geometric cases, ~45 hand-written range literals; an
   offset typo silently mis-shifts CF ranges. Add characterization tests first; then derive
   `operatePart`/`allPart` from `restPart` instead of triplicating literals.
