@@ -199,7 +199,7 @@ border-clear 3×, `offsetMC` remap in all three paste handlers).
   Same theme: misspelled export `setDropcownValue` (`dataVerification.ts:473`).
 - **D5. es-toolkit migration is half-done** — all 54 imports use `es-toolkit/compat` (the
   lodash-shaped shim), zero use the core API. Fine functionally; finish or drop the ambition.
-- **D6. Chinese-locale vestiges (product decision)** — `sort.ts:32` collates with `'zh'` (wrong
+- **D6. Chinese-locale vestiges (product decision)** — ✅ collation fixed (`'zh'`→`'en'` at sort.ts:32); CJK cell special-case + ID/phone validators remain phase-6 decisions — `sort.ts:32` collates with `'zh'` (wrong
   for accented Latin; violates the explicit-`'en'` rule) and `:134` special-cases CJK cells;
   `dataVerification.ts:112-147,313` validate *Chinese* ID-card/phone formats and are reachable
   from the DataVerification dialog (`validity` type). Fix the collation; decide whether

@@ -29,7 +29,7 @@ export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[]
             return x1Value - y1Value;
         }
         if (!isRealNum(x1) && !isRealNum(y1)) {
-            return String(x1).localeCompare(String(y1), 'zh');
+            return String(x1).localeCompare(String(y1), 'en');
         }
         if (!isRealNum(x1)) {
             return 1;
