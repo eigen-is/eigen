@@ -111,7 +111,8 @@ export function NoteCardDialog({
                     // remaining height and scrolls internally on short viewports.
                     <div className="flex min-h-0 flex-1 flex-col">
                         {header}
-                        <div className="flex min-h-0 flex-1 flex-col px-4">{editForm}</div>
+                        {/* px-6/pb-6 restores the standard DialogContent padding this p-0 shell strips. */}
+                        <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">{editForm}</div>
                     </div>
                 ) : (
                     <>
