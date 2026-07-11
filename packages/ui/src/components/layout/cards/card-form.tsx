@@ -160,8 +160,11 @@ export function CardForm({
                     items={drafts}
                     onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
                 />
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
+                {/* min-w-0: as a grid item this row's min-content width would otherwise widen the
+                    whole track past the dialog (clipping every field's right edge); the assignee
+                    side shrinks/truncates instead. */}
+                <div className="flex min-w-0 items-center justify-between gap-4">
+                    <div className="flex shrink-0 items-center gap-2">
                         <Label>Color</Label>
                         <ColorSwatchRow currentColor={color} onChangeColor={setColor} />
                     </div>
