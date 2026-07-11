@@ -3,11 +3,7 @@ import { useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { type Context, getSheetIndex, locale } from '../../state';
 
-type ChangeColorProps = {
-    triggerParentUpdate: (state: boolean) => void;
-};
-
-export function ChangeColor({ triggerParentUpdate: _triggerParentUpdate }: ChangeColorProps) {
+export function ChangeColor() {
     const { context, setContext } = useContext(WorkbookContext);
     const { sheetconfig } = locale(context);
     const [selectColor, setSelectColor] = useState<string | undefined>(

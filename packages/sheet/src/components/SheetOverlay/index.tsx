@@ -470,11 +470,6 @@ export const SheetOverlay: React.FC = () => {
                                 />
                             );
                         })}
-                    <div className="luckysheet-row-count-show luckysheet-count-show" id="luckysheet-row-count-show" />
-                    <div
-                        className="luckysheet-column-count-show luckysheet-count-show"
-                        id="luckysheet-column-count-show"
-                    />
                     <div
                         className="fortune-change-size-line"
                         hidden={
@@ -554,7 +549,6 @@ export const SheetOverlay: React.FC = () => {
                             })}
                         </div>
                     )}
-                    <div id="luckysheet-chart-rangeShow" />
                     <div className="fortune-cell-selected-extend" />
                     <div
                         className="fortune-cell-selected-move"
@@ -683,16 +677,11 @@ export const SheetOverlay: React.FC = () => {
                         })}
                     {context.linkCard?.sheetId === context.currentSheetId && <LinkEditCard {...context.linkCard} />}
                     <InputBox />
-                    <div id="luckysheet-multipleRange-show" />
-                    <div id="luckysheet-dynamicArray-hightShow" />
                     <ImgBoxs />
                     <DropDownList />
                     <div id="luckysheet-dataVerification-showHintBox" className="luckysheet-mousedown-cancel" />
-                    <div className="luckysheet-cell-copy" />
-                    <div className="luckysheet-grdblkflowpush" />
                     <div id="luckysheet-cell-flow_0" className="luckysheet-cell-flow luckysheetsheetchange">
                         <div className="luckysheet-cell-flow-clip">
-                            <div className="luckysheet-grdblkpush" />
                             <div id="luckysheetcoltable_0" className="luckysheet-cell-flow-col">
                                 <div
                                     id="luckysheet-sheettable_0"

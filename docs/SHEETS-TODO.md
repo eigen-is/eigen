@@ -127,7 +127,7 @@ threading in `cell.ts:1053-1146` (hardcoded `[]`, guards can never fire) ✅ don
 `cancelFunctionrangeSelected` (`cell.ts:602` — it *is* used; ✅ removed) and the outdated `O(n²) concat`
 comment in `formula-exec.ts:454` (✅ removed).
 
-**B7. Dead DOM placeholders** — `SheetOverlay/index.tsx:473-476,491,551,686-692`:
+**B7. Dead DOM placeholders** ✅ done — `SheetOverlay/index.tsx:473-476,491,551,686-692`:
 `luckysheet-multipleRange-show`, `luckysheet-dynamicArray-hightShow`,
 `luckysheet-chart-rangeShow`, `luckysheet-row/column-count-show`, `luckysheet-cell-copy`,
 `luckysheet-grdblkflowpush/grdblkpush` — never queried, no CSS. (Keep the
