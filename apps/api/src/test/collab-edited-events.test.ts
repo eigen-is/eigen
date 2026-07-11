@@ -78,8 +78,10 @@ describe('Collab edited file-events', () => {
     let mountId: string;
     let token: string;
     let docId: string;
+    let stickiesId: string;
     let port: number;
     let ws: WebSocket;
+    let stickiesWs: WebSocket;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -96,16 +98,25 @@ describe('Collab edited file-events', () => {
         });
         docId = doc.id;
 
+        const board = await drivePost(token, ownerId, mountId, `folder/${root.id}/create/stickies`, {
+            fileName: 'Edited Events Board',
+        });
+        stickiesId = board.id;
+
         const server = ctx.app.listen(0);
         const listenPort = server.server?.port;
         expect(listenPort).toBeDefined();
         port = listenPort!;
         ws = await openCollabWs(port, ownerId, mountId, docId, token);
+        stickiesWs = await openCollabWs(port, ownerId, mountId, stickiesId, token);
     });
 
     afterAll(() => {
         try {
             ws?.close();
+        } catch {}
+        try {
+            stickiesWs?.close();
         } catch {}
         ctx.app.stop();
     });
@@ -126,6 +137,16 @@ describe('Collab edited file-events', () => {
 
         const rows = await editedRows(token, ownerId, mountId, docId);
         expect(rows).toHaveLength(1);
+    });
+
+    test('a real Yjs update on a stickies board records NO edited row (its activity is fully specific)', async () => {
+        sendBytes(stickiesWs, syncUpdateMessage('board-edit'));
+        // Same WS mechanism as the eigendoc above, but a stickies board must NOT get a
+        // generic 'edited' row. Settle, then assert none landed.
+        await new Promise((r) => setTimeout(r, 500));
+
+        const rows = await editedRows(token, ownerId, mountId, stickiesId);
+        expect(rows).toHaveLength(0);
     });
 
     test('a clean disconnect drops the connection and leaves history intact', async () => {
