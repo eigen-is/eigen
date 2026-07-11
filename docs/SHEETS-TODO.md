@@ -113,7 +113,7 @@ and the `_r/_c/_dynamicArray_compute` trio threaded through
 `isFunctionRange`/`checkSpecialFunctionRange` (`formula-exec.ts:46-204`); inert `checksAF`
 threading in `cell.ts:1053-1146` (hardcoded `[]`, guards can never fire) ✅ done.
 
-**B5. Dead locale sections** — `state/locale/en.ts` is 9,870 lines; 88.7% is `functionlist`
+**B5. Dead locale sections** ✅ done (8 sections deleted; pivotTable shrunk to `.title`) — `state/locale/en.ts` is 9,870 lines; 88.7% is `functionlist`
 (formula help data — legit, keep). But `print`, `websocket`, `alternatingColors`, `imageCtrl`,
 `imageText`, `cellFormat`, `punctuation`, `dropCell` (~250 lines) have zero references, and
 `pivotTable` (57 lines) is used only for `.title` (`state/utils/index.ts:13`).
