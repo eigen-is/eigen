@@ -102,7 +102,10 @@ closed), the sheets engine (dev-frozen format, own fidelity program), versioning
 ## On hold (decision needed)
 
 - **Demo mode** — spec approved (`docs/superpowers/specs/2026-06-10-demo-mode-design.md`),
-  implementation on hold. ~1.5–2 weeks. It is both the public launch's headline asset and the
+  implementation on hold. A simplified counter-proposal
+  ([PROPOSAL_DEMO_MODE.md](PROPOSAL_DEMO_MODE.md), 2026-07-11) drops the account pool for a
+  shared-account + hourly host-level wipe-and-reseed design, cutting the estimate to ~3–5 days;
+  decision between the two designs is open. It is both the public launch's headline asset and the
   grant's "public demo instance" deliverable, so it moves up sharply once a launch or the grant
   push is the active goal. Start on explicit go.
 
