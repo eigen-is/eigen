@@ -127,11 +127,18 @@ export const collabRouter = new Elysia({
                     throw new ApiError(400, 'Assignee is not a member of this document');
                 }
             }
-            await drive.assignComment(params.mountId, params.pathId, params.chatName, assignee, user, body.title);
+            const changed = await drive.assignComment(
+                params.mountId,
+                params.pathId,
+                params.chatName,
+                assignee,
+                user,
+                body.title,
+            );
 
             broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId, members).catch(() => {});
 
-            if (assignee && assignee !== user.email.toLowerCase()) {
+            if (changed && assignee && assignee !== user.email.toLowerCase()) {
                 try {
                     const assigneeUser = await getUserByEmail(assignee);
                     const path = assigneeUser ? await drive.getPath(params.mountId, params.pathId) : null;

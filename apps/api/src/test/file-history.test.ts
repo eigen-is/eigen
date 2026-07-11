@@ -590,6 +590,38 @@ describe('Drive history recording', () => {
         expect(aliceSse.events.some(isHistoryEvent)).toBe(true);
         expect(bobSse.events.some(isHistoryEvent)).toBe(true);
     });
+
+    test('moving an item broadcasts drive:file-history-updated to owner + destination members', async () => {
+        // Move records history inline (no recordFileEvent) — it must still fan the broadcast out.
+        const src = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'MoveBroadcastSrc',
+        });
+        const dest = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}`, {
+            folderName: 'MoveBroadcastDest',
+        });
+        // Share the destination with bob so he is an effective member of the moved item's new chain.
+        await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${dest.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+        const file = new File(['content'], 'movebroadcast.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(aliceToken, aliceOwnerId, aliceMountId, src.id, file);
+
+        const aliceSse = collectSSE(aliceOwnerId);
+        const bobSse = collectSSE(ctx.bob.user.id);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${uploaded.id}/move`, {
+            targetParentId: dest.id,
+        });
+
+        const isHistoryEvent = (e: SSEvent): boolean => e.type === SSEventType.DRIVE_FILE_HISTORY_UPDATED;
+        await waitFor(() => aliceSse.events.some(isHistoryEvent) && bobSse.events.some(isHistoryEvent));
+
+        aliceSse.stop();
+        bobSse.stop();
+        expect(aliceSse.events.some(isHistoryEvent)).toBe(true);
+        expect(bobSse.events.some(isHistoryEvent)).toBe(true);
+    });
 });
 
 // The file-event notification now carries the whole event: title = action line, body = primary

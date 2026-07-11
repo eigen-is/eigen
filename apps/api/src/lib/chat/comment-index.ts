@@ -102,6 +102,10 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
+    async get(chatName: string): Promise<CommentEntry | undefined> {
+        return this.db.select().from(commentSchema.comments).where(eq(commentSchema.comments.chatName, chatName)).get();
+    }
+
     async list(): Promise<CommentEntry[]> {
         return this.db.select().from(commentSchema.comments).orderBy(commentSchema.comments.createdAt).all();
     }

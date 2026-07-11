@@ -271,6 +271,7 @@ const TiptapEditor = ({
     }, []);
 
     const handleCommentClick = useCallback((cardId: string) => {
+        setActivityPanelOpen(false);
         setOpenCardId(cardId);
         setCommentPanelOpen(true);
     }, []);
@@ -693,6 +694,7 @@ const TiptapEditor = ({
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
+            setActivityPanelOpen(false);
             setCommentPanelOpen(true);
             handleScrollToComment(cardId);
             setOpenCardId(cardId);
@@ -727,10 +729,16 @@ const TiptapEditor = ({
                                 setCommentPanelOpen((v) => !v);
                             }}
                             commentPanelOpen={commentPanelOpen}
-                            onToggleActivityPanel={() => {
-                                setCommentPanelOpen(false);
-                                setActivityPanelOpen((v) => !v);
-                            }}
+                            // Only offer the toggle where the panel can actually render (isWide),
+                            // else the button is an enabled no-op. DocumentShareCluster hides it when absent.
+                            onToggleActivityPanel={
+                                isWide
+                                    ? () => {
+                                          setCommentPanelOpen(false);
+                                          setActivityPanelOpen((v) => !v);
+                                      }
+                                    : undefined
+                            }
                             activityPanelOpen={activityPanelOpen}
                             unresolvedCommentCount={unresolvedCount}
                             onImageUpload={mediaFolderId ? handleImageUpload : undefined}

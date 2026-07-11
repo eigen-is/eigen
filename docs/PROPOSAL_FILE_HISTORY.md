@@ -655,9 +655,13 @@ re-derive them:
    `drive/sse-events.ts`, mirroring `broadcastCommentIndexUpdated`), and
    `sse-handlers.ts` invalidates `fileHistory` on it — so collab `'edited'`,
    `sticky-*` and assigned/resolved/reopened rows now refresh open Activity panels
-   live, for the owner and everyone the item is shared with (trash/move/copy keep
-   their own inline record + `drive:*` broadcast). This is the established relay
-   pattern — no separate collab-WebSocket activity channel was needed.
+   live, for the owner and everyone the item is shared with. The inline-record paths
+   (trash/move/copy) don't go through `recordFileEvent`, so each fires
+   `broadcastFileHistoryUpdated` itself after its record — `drive:*` (`Drive.emit`)
+   reaches only the owner home, so it can't refresh shared members on its own. Trash
+   captures the effective members *before* it strips the share, since the post-trash
+   chain no longer resolves them. This is the established relay pattern — no separate
+   collab-WebSocket activity channel was needed.
 2. **Unify with the version timeline — extend it, don't add a second one.**
    Eigendocs already have an in-app, per-doc timeline: the **Version History menu**
    (restorable snapshots) in the editor `FileMenu`. It shows *when* but not

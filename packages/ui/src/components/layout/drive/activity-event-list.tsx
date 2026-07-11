@@ -1,5 +1,5 @@
 import { getDriveAppUrl, getDriveItemUrl } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
+import { useAuth } from '@workspace/lib/auth';
 import { usePublicUsers } from '@workspace/lib/public';
 import type { DriveItemRef, DrivePath } from '@workspace/lib/types/drive';
 import { describeFileEvent, type FileEvent } from '@workspace/lib/types/file-history';

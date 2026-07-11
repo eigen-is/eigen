@@ -455,7 +455,7 @@ export default class SharedDrive {
         assignee: string | null,
         _user: User,
         title?: string,
-    ): Promise<void> {
+    ): Promise<boolean> {
         return this.withWritePermission(mountId, pathId, () =>
             this.sharedDrive.assignComment(mountId, pathId, chatName, assignee, this.user, title),
         );

@@ -151,6 +151,30 @@ describe('Comment assignee', () => {
         expect(notification.actorEmail).toBe(ctx.alice.user.email);
     });
 
+    test('re-assigning the already-selected member is a no-op: no new event, no new notification', async () => {
+        // bob is still the assignee from the earlier test — re-selecting him must not re-record.
+        const tag = `assigned:${ctx.alice.user.id}:${mountId}:${docId}:${chatName}`;
+        const eventsBefore = (await assignedEvents()).length;
+        expect(eventsBefore).toBe(1);
+        const notifsBefore = (await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === tag).length;
+
+        const res = await patchAssignee(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            docId,
+            chatName,
+            ctx.bob.user.email,
+        );
+        expect(res.status).toBe(200);
+
+        // Exactly ONE 'assigned' row still — file history has no dedupe window on this path.
+        expect((await assignedEvents()).length).toBe(1);
+        expect((await notificationsFor(ctx.bob.user.id)).filter((n) => n.tag === tag).length).toBe(notifsBefore);
+        const row = findOrFail(await listComments(), (r: CommentEntry) => r.chatName === chatName);
+        expect(row.assignee).toBe(ctx.bob.user.email);
+    });
+
     test('self-assign does not notify', async () => {
         const res = await patchAssignee(
             ctx.alice.user.sessionToken,

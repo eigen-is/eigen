@@ -314,6 +314,8 @@ export default class Drive {
     // not in a Yjs client event. Only real assignments make a row — unassign stays silent
     // (matches resolve). The assignee is excluded from the watcher fan-out: they already get
     // the direct 'assigned' notification.
+    // Returns whether the assignee changed — re-selecting the current member is a no-op (no new row,
+    // no re-notify); the route gates its notification on the result.
     async assignComment(
         mountId: string,
         pathId: string,
@@ -321,14 +323,18 @@ export default class Drive {
         assignee: string | null,
         user: User,
         title?: string,
-    ): Promise<void> {
+    ): Promise<boolean> {
         const index = await getCommentIndex(this, mountId, pathId);
         // Legacy cards created before row-seeding have a chat but no index row yet.
         await index.ensureComment(chatName);
-        await index.assign(chatName, assignee);
-        // Best-effort title cache (client-posted, like the sticky-* event card names).
+        const current = await index.get(chatName);
+        const changed = (current?.assignee ?? null) !== assignee;
+        // Best-effort title cache (client-posted, like the sticky-* event card names) — refreshed
+        // even on a no-op re-assign, since the title may have changed in the same edit.
         const card = title?.slice(0, 200);
         if (card) await index.setTitle(chatName, card);
+        if (!changed) return false;
+        await index.assign(chatName, assignee);
         if (assignee) {
             await this.recordFileEvent(
                 mountId,
@@ -339,6 +345,7 @@ export default class Drive {
                 { excludeEmails: new Set([assignee]) },
             );
         }
+        return true;
     }
 
     async setCommentStatus(
@@ -541,6 +548,11 @@ export default class Drive {
                 details: { oldParentId, newParentId: targetParentId },
                 verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(pathId))],
             });
+            // Live-refresh open Activity panels for the owner + members of the new location — the
+            // inline record path skips recordFileEvent, and Drive.emit is owner-home only.
+            this.getEffectiveMembers(mountId, pathId)
+                .then((members) => broadcastFileHistoryUpdated(this.owner.id, movedPath, members))
+                .catch(() => {});
         }
         // Re-parenting OUT of a shared subtree revokes read for users who had it only via
         // the old ancestor chain, exactly like an ACL change, so enforce it the same way
@@ -610,6 +622,11 @@ export default class Drive {
                 burst: true,
                 verifyAncestors: await mount.getBreadcrumb(copied.id),
             });
+            // Live-refresh open Activity panels for the owner + members of the destination — the
+            // inline record path skips recordFileEvent, and Drive.emit is owner-home only.
+            this.getEffectiveMembers(mountId, copied.id)
+                .then((members) => broadcastFileHistoryUpdated(this.owner.id, copied, members))
+                .catch(() => {});
         }
         return copied;
     }

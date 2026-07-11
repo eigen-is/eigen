@@ -777,10 +777,16 @@ function SlideEditorInner({
                                     setCommentPanelOpen((v) => !v);
                                 }}
                                 commentPanelOpen={commentPanelOpen}
-                                onToggleActivityPanel={() => {
-                                    setCommentPanelOpen(false);
-                                    setActivityPanelOpen((v) => !v);
-                                }}
+                                // Only offer the toggle where the panel can render (!isMobile), else
+                                // it's an enabled no-op. DocumentShareCluster hides it when absent.
+                                onToggleActivityPanel={
+                                    !isMobile
+                                        ? () => {
+                                              setCommentPanelOpen(false);
+                                              setActivityPanelOpen((v) => !v);
+                                          }
+                                        : undefined
+                                }
                                 activityPanelOpen={activityPanelOpen}
                                 unresolvedCommentCount={unresolvedCount}
                             />

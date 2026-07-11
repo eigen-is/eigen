@@ -75,7 +75,9 @@ export function CardDialog({
         drafts?: CardAttachmentDraft[],
         assignee?: string | null,
     ) => {
-        if (assignee !== undefined && card.chatName) onAssign?.(card.chatName, assignee, card.title);
+        // Same Save may rename the card — use the new title so the activity event + title cache
+        // don't record the stale pre-edit name.
+        if (assignee !== undefined && card.chatName) onAssign?.(card.chatName, assignee, patch.title ?? card.title);
         if (!onUpdate) return;
         if (drafts === undefined) {
             onUpdate(patch);

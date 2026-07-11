@@ -878,3 +878,9 @@ export function invalidateAclUpdated(
 export function invalidateTrash(queryClient: QueryClient, ownerId: string, mountId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.trashList(ownerId, mountId) });
 }
+
+// Owner-broad prefix invalidation: an ancestor ACL change alters effective membership for every
+// descendant, so per-path invalidation is insufficient — drop the whole effective-members family.
+export function invalidateEffectiveMembers(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: [...driveKeys.owner(ownerId), 'effective-members'] });
+}

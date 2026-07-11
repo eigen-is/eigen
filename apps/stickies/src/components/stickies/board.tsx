@@ -312,7 +312,11 @@ export function StickiesBoard({
                                     filter={commentFilter}
                                     members={members}
                                     currentUserEmail={currentUserEmail}
-                                    onToggleActivityPanel={() => setActivityPanelOpen((v) => !v)}
+                                    // Only offer the toggle where the panel can render (!isMobile),
+                                    // else it's an enabled no-op. DocumentShareCluster hides it when absent.
+                                    onToggleActivityPanel={
+                                        !isMobile ? () => setActivityPanelOpen((v) => !v) : undefined
+                                    }
                                     activityPanelOpen={activityPanelOpen}
                                 />
                             }

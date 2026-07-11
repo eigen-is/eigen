@@ -4,6 +4,7 @@ import type { Mount } from '../mount';
 import type { User } from '../user';
 import { propagateSharedPathChange } from './acl-propagation';
 import type Drive from './drive';
+import { broadcastFileHistoryUpdated } from './sse-events';
 
 // Trash lifecycle bodies. Drive's deletePath/restorePath/permanentlyDelete keep their
 // liveness + permission checks and delegate here (the versioning/restore.ts pattern).
@@ -13,6 +14,11 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     // post-trash breadcrumb would lose the old folder's ACL and silently skip
     // exactly the folder-watchers this event is for.
     const preTrashChain = user ? await mount.getBreadcrumb(item.id) : [];
+
+    // Effective members of the OLD location — captured before trashPath re-parents the item to
+    // root and strips its share, so the post-record history broadcast still reaches everyone who
+    // could see it (getEffectiveMembers walks the current chain, which is gone after the trash).
+    const members = user ? await drive.getEffectiveMembers(mount.id, item.id) : [];
 
     // Close collab docs BEFORE setting trashedAt (they use listFolderAll internally)
     if (isContainerType(item.type)) {
@@ -43,6 +49,9 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
             chainRootIds: [item.parentId],
             verifyAncestors: preTrashChain,
         });
+        // Live-refresh open Activity panels for the owner + the pre-trash members (drive.emit is
+        // owner-home only). Fire-and-forget, mirroring recordFileEvent.
+        broadcastFileHistoryUpdated(item.ownerId, item, members).catch(() => {});
     }
 }
 
