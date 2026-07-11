@@ -139,7 +139,7 @@ comment in `formula-exec.ts:454` (✅ removed).
 Ranked by size × risk. These are the classic luckysheet row-vs-col / direction copy-paste; each
 is one extraction away from collapsing.
 
-**C1. `border.ts getBorderInfoComputeRange` — one ~1,290-line function** (`state/modules/border.ts:43-1330`).
+**C1. `border.ts getBorderInfoComputeRange` — one ~1,290-line function** ✅ done (711 lines, setSide/propagateToNeighbour/NEIGHBOUR table; 60k-case differential + pixel gate identical; pre-existing border-slash `borderRange[0]` bug preserved, noted for a behavior pass) (`state/modules/border.ts:43-1330`).
 Eleven `borderType` branches each re-implement the same motif: init `borderInfoCompute[key]`,
 write `{color, style}`, propagate to the merge-aware neighbour on the opposite side; the
 neighbour block is pasted 12+ times. → `setSide(map, r, c, side)` + `propagateToNeighbour(...)`;
