@@ -577,7 +577,7 @@ const TiptapEditor = ({
         initialChatName,
     });
     const { allComments, cards, createCard, assignComment, members, unresolvedCount, setOpenCardId } = lifecycle;
-    // Shared with the View menu in a later task.
+    // Host-owned so the filter survives panel close/reopen.
     const commentFilter = useCommentFilter();
     allCommentsRef.current = allComments;
     cardsRef.current = cards;
@@ -805,6 +805,7 @@ const TiptapEditor = ({
                                                 cardId ??
                                                 (chatName ? findCardIdByChatName(cards, chatName) : undefined);
                                             if (!id) return;
+                                            setActivityPanelOpen(false);
                                             setCommentPanelOpen(true);
                                             handleScrollToComment(id);
                                             setOpenCardId(id);

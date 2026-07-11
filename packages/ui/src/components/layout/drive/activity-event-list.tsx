@@ -22,12 +22,15 @@ type ActivityEventListProps = {
 export function ActivityEventList({ path, events, onOpenCard }: ActivityEventListProps) {
     const { user } = useAuth();
 
-    // Resolve display names for the emails inside comment previews (mentions, emote targets).
+    // Resolve display names for emails inside comment previews (mentions, emote targets) and the
+    // 'assigned' target, so both render a name rather than the email local part.
     const emails = useMemo(() => {
         const set = new Set<string>();
-        for (const e of events)
+        for (const e of events) {
             if (e.eventType === 'commented' && e.details && 'preview' in e.details)
                 for (const m of e.details.preview.match(EMAIL_FIND_REGEX) ?? []) set.add(m);
+            if (e.eventType === 'assigned' && e.details && 'assignee' in e.details) set.add(e.details.assignee);
+        }
         return [...set];
     }, [events]);
     const publicUsers = usePublicUsers(emails);

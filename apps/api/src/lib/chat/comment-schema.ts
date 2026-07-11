@@ -16,7 +16,7 @@ export const comments = sqliteTable('comments', {
     recentText: text('recentText'),
     // v4: lowercased member email, NULL = unassigned.
     assignee: text('assignee'),
-    // v4: best-effort client-posted cache, refreshed on assign/status.
+    // v5: best-effort client-posted cache, refreshed on assign/status.
     title: text('title'),
 });
 

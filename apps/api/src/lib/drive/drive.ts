@@ -322,9 +322,7 @@ export default class Drive {
         user: User,
         title?: string,
     ): Promise<void> {
-        const path = await this.getPath(mountId, pathId);
-        if (!path) throw new ApiError(404, 'Container not found');
-        const index = await openCommentIndex(this, path);
+        const index = await getCommentIndex(this, mountId, pathId);
         // Legacy cards created before row-seeding have a chat but no index row yet.
         await index.ensureComment(chatName);
         await index.assign(chatName, assignee);

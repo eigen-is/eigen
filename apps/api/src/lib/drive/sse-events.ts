@@ -1,8 +1,7 @@
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { sendToHome } from '../home/home-relay';
-import { getUserByEmail } from '../user/';
+import { relayEventToMembers, sendToHome } from '../home/home-relay';
 
 export function buildDriveEvent(
     type: SSEventDrive['type'],
@@ -28,13 +27,6 @@ export async function broadcastFileHistoryUpdated(
     const event = buildDriveEvent(SSEventType.DRIVE_FILE_HISTORY_UPDATED, path);
     await Promise.all([
         sendToHome(ownerId, { type: 'broadcast', event }).catch(() => {}),
-        ...members.map(async (member) => {
-            try {
-                const user = await getUserByEmail(member.email);
-                if (user) await sendToHome(user.id, { type: 'broadcast', event });
-            } catch {
-                // user or home may not exist
-            }
-        }),
+        relayEventToMembers(members, event),
     ]);
 }

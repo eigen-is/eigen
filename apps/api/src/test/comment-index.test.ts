@@ -662,7 +662,7 @@ describe('Comment Index', () => {
     });
 });
 
-// No /assign HTTP route yet (later task), so unit-test the method directly over an in-memory db.
+// Unit-level coverage of CommentIndex.assign semantics over an in-memory db (route round-trip is in comment-assignee.test.ts).
 describe('CommentIndex.assign', () => {
     function makeIndex(): CommentIndex {
         const raw = new Database(':memory:');

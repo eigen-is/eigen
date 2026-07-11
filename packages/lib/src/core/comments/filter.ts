@@ -12,6 +12,12 @@ export type CommentFilter = {
 
 export const DEFAULT_COMMENT_FILTER: CommentFilter = { assignee: 'all', colors: null, status: 'open' };
 
+export const COMMENT_STATUS_LABELS: Record<CommentFilter['status'], string> = {
+    open: 'Open',
+    resolved: 'Resolved',
+    all: 'All',
+};
+
 function sameAssignee(a: CommentAssigneeFilter, b: CommentAssigneeFilter): boolean {
     if (typeof a === 'string' || typeof b === 'string') return a === b;
     return a.email === b.email;

@@ -227,7 +227,7 @@ function SlideEditorInner({
         setOpenCardId(cardId);
     };
 
-    // Shared with the View menu in a later task.
+    // Host-owned so the filter survives panel close/reopen.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 

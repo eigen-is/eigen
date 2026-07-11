@@ -1,7 +1,5 @@
-import type { useCommentFilter } from '@workspace/lib/comments';
+import { COMMENT_STATUS_LABELS, type useCommentFilter } from '@workspace/lib/comments';
 import { useResolvedUser } from '@workspace/lib/public';
-
-const STATUS_LABELS = { open: 'Open', resolved: 'Resolved', all: 'All' } as const;
 
 type FilterSummaryProps = {
     filter: ReturnType<typeof useCommentFilter>;
@@ -18,7 +16,7 @@ export function FilterSummary({ filter, onClear, inline = false }: FilterSummary
 
     // Status always leads ("Open · assigned to me") so the strip describes what the list
     // shows, not just the deltas from the defaults.
-    const parts: string[] = [STATUS_LABELS[status]];
+    const parts: string[] = [COMMENT_STATUS_LABELS[status]];
     if (assignee === 'me') parts.push('assigned to me');
     else if (assignee === 'unassigned') parts.push('unassigned');
     else if (typeof assignee === 'object') parts.push(`assigned to ${displayName || memberEmail.split('@')[0]}`);

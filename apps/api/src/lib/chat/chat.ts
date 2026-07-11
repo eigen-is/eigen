@@ -9,14 +9,14 @@ import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
-import { sendToHome } from '../home/home-relay';
+import { relayEventToMembers, sendToHome } from '../home/home-relay';
 import { getUserByEmail, type User } from '../user/';
 import { formatEmoteForViewer, parseCommand } from './commands';
 import { type CommentIndex, openCommentIndex, RECENT_TEXT_CAP } from './comment-index';
 import { CHAT_ROOM_DB_CONFIG } from './db-config';
 import { extractMentionedEmails } from './mentions';
 import * as schema from './schema';
-import { buildChatEvent, buildCommentIndexUpdatedEvent, relayEventToMembers } from './sse-events';
+import { buildChatEvent, buildCommentIndexUpdatedEvent } from './sse-events';
 
 export class ChatRoom {
     private drive: Drive;

@@ -1,4 +1,4 @@
-import type { useCommentFilter } from '@workspace/lib/comments';
+import { COMMENT_STATUS_LABELS, type useCommentFilter } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, CircleDot, FilterX, Palette, Users } from 'lucide-react';
@@ -13,8 +13,6 @@ type CommentFilterMenuItemsProps = {
     // Assignee rows are cmdk/buttons that don't trigger Radix's close; hosts pass this to dismiss.
     onClose?: () => void;
 };
-
-const STATUS_LABELS = { open: 'Open', resolved: 'Resolved', all: 'All' } as const;
 
 // The three comment-filter groups (assignee / color / status) as submenus, rendered through the
 // primitives slot so the same body serves any Radix menu family. Mirrors CommentFilterButton's
@@ -92,7 +90,7 @@ export function CommentFilterMenuItems({
                 <SubContent>
                     {(['open', 'resolved', 'all'] as const).map((s) => (
                         <Item key={s} onClick={() => filter.setStatus(s)}>
-                            <span className="flex-1">{STATUS_LABELS[s]}</span>
+                            <span className="flex-1">{COMMENT_STATUS_LABELS[s]}</span>
                             {status === s && <Check className="h-4 w-4 ml-2 shrink-0" />}
                         </Item>
                     ))}

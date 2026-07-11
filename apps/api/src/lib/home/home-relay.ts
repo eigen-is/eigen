@@ -17,7 +17,7 @@ import type {
     CalendarItem,
     CalendarShare,
 } from '@workspace/lib/types/calendar';
-import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type {
@@ -28,7 +28,7 @@ import type {
 } from '../calendar/types';
 import { getAvatarsDir } from '../config/paths';
 import type { User } from '../user';
-import { updateUser } from '../user/';
+import { getUserByEmail, updateUser } from '../user/';
 import { atHome, getHome, getTeamHome } from './get-home';
 
 export type HomeMessage =
@@ -115,6 +115,22 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
             home.notifications?.persist(message.notification);
             break;
     }
+}
+
+// Single effective-member fan-out for the chat + drive broadcasters, so the null-guard/try-catch
+// behavior can't drift. sendToHome self-gates 'broadcast' on atHome().
+export async function relayEventToMembers(members: EffectiveMember[], event: SSEvent): Promise<void> {
+    await Promise.all(
+        members.map(async (member) => {
+            try {
+                const user = await getUserByEmail(member.email);
+                if (!user) return;
+                await sendToHome(user.id, { type: 'broadcast', event });
+            } catch {
+                // user or home may not exist
+            }
+        }),
+    );
 }
 
 export async function pullSharedPaths(ownerUserId: string, user: User): Promise<DrivePath[]> {
