@@ -41,6 +41,10 @@ The bones are good. The list below is about hardening a strong system, not rescu
 ### 1. [verified] 2FA is bypassed by the primary-password fallback on all protocol logins
 `apps/api/src/lib/auth/protocol-auth.ts:43-49`
 
+> **✅ FIXED — Unit 1** (`fix/api-audit-2026-07`). Hard-gate: `verifyProtocolAuth` throws 401 before the
+> primary-password fallback when `user.twoFactorEnabled` (app password stays the intended protocol path).
+> Red-first test proves a 2FA user is rejected on primary password but still accepted with an app password.
+
 ```ts
 // 2. Fall back to primary password (only works when 2FA is not enabled)
 try {
@@ -58,12 +62,23 @@ The comment's premise is **false**. I traced better-auth 1.5.6 (`apps/api/node_m
 ### 2. Protocol Basic-auth is unthrottled → online brute force
 `apps/api/src/lib/auth/protocol-auth.ts:32-49`, config at `apps/api/src/lib/auth/auth.ts:99-103,132-134`
 
+> **✅ FIXED — Unit 1** (`fix/api-audit-2026-07`). New `lib/auth/protocol-rate-limit.ts` (mirrors
+> `otp-rate-limit.ts`): counts FAILURES only, keyed by email + edge IP, and CLEARS the email bucket on
+> success so legit CalDAV/WebDAV/IMAP clients that re-auth every poll are never locked out. The IP bucket
+> ages out via the window (not cleared on success) so a credentialed attacker can't spray-and-reset it.
+> Secondary timing-oracle deferred (out of scope for this unit).
+
 The `/sign-in/email` custom rate rule (`auth.ts:100`) only covers better-auth's *HTTP* middleware, which keys on the inbound request/IP. `verifyProtocolAuth` calls `auth.api.signInEmail(...)` / `verifyApiKey(...)` **directly** (no HTTP request → middleware never runs), and the apiKey plugin is `rateLimit: { enabled: false }` (`auth.ts:133`). WebDAV/CalDAV expose `authenticateBasic` on the **public** surface with 20+ call sites, so both app-password and primary-password guesses are unlimited.
 
 **Direction:** wrap `verifyProtocolAuth` in a per-identifier/IP limiter (reuse the `otp-rate-limit.ts` shape), or confirm the global Elysia `elysia-rate-limit` actually covers `/webdav/*` and `/dav/*` (it keys on `clientIpKey`, so it *may* — verify, because these are the pre-auth abuse surface). Secondary: the function returns fast for an unknown email but does argon2 work for a known one — a user-enumeration timing oracle.
 
 ### 3. Waitlist invite-token claim races → one invite can mint multiple accounts
 `apps/api/src/lib/waitlist/waitlist.ts:132-148` **[verified logic]**
+
+> **✅ FIXED — Unit 1** (`fix/api-audit-2026-07`). `claimInviteToken` keys off the token-guarded UPDATE's
+> matched-row count via `.returning({ id }).all()` → `claimed.length === 1` (drizzle's bun-sqlite `.run()`
+> is typed `void`, so `.changes` doesn't typecheck); re-select removed. Red-first `Promise.all` race test
+> asserts exactly one of two concurrent claims wins.
 
 `claimInviteToken` clears the token with an UPDATE, then **re-selects the row** and returns `updated.status === 'registered' && updated.inviteToken === null`. The re-select verifies the *row's* state, not that *this caller* did the clearing. Two concurrent `registerFromInvite` calls with the same token (each creating a distinct `username@domain`, so no email-unique collision upstream) can both pass `validateInviteToken`, both run the UPDATE (the second matches 0 rows), and both re-select `registered/null` → **both return `true`**. Sequential reuse is correctly blocked; only the concurrent window is open.
 

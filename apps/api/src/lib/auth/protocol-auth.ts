@@ -1,7 +1,8 @@
-import { requireNonGuest } from '../core/access';
+import { clientIpKey, requireNonGuest } from '../core/access';
 import { ApiError } from '../core/errors';
 import { getUserByEmail, type User } from '../user';
 import { auth } from './auth';
+import { checkProtocolAuthLimit, clearProtocolAuthFailures, recordProtocolAuthFailure } from './protocol-rate-limit';
 
 // HTTP Basic auth shared by CalDAV and WebDAV routers. Browsers/clients send
 // `Authorization: Basic base64(email:password)`; we hand the credentials to
@@ -26,25 +27,45 @@ export async function authenticateBasic(request: Request): Promise<User> {
     const email = decoded.slice(0, colonIndex);
     const password = decoded.slice(colonIndex + 1);
 
-    return verifyProtocolAuth(email, password);
+    // X-Real-IP is Caddy-set and non-spoofable on the edge /dav + /webdav routes.
+    return verifyProtocolAuth(email, password, clientIpKey(request, null));
 }
 
-export async function verifyProtocolAuth(email: string, password: string): Promise<User> {
+// `ip` is omitted by the IMAP path (routes/internal.ts → one internal Dovecot source IP): keying
+// on it would let a shared bridge IP self-lock, so that path relies on the email bucket alone.
+export async function verifyProtocolAuth(email: string, password: string, ip?: string): Promise<User> {
+    checkProtocolAuthLimit(email, ip);
+
     const user = await getUserByEmail(email);
-    if (!user) throw new ApiError(401, 'Unauthorized');
+    if (!user) {
+        recordProtocolAuthFailure(email, ip);
+        throw new ApiError(401, 'Unauthorized');
+    }
     requireNonGuest(user);
 
     // 1. Try app password (API key)
     const keyResult = await auth.api.verifyApiKey({ body: { key: password } });
     if (keyResult.valid && keyResult.key?.referenceId === user.id) {
+        clearProtocolAuthFailures(email);
         return user;
     }
 
-    // 2. Fall back to primary password (only works when 2FA is not enabled)
-    try {
-        await auth.api.signInEmail({ body: { email, password } });
-        return user;
-    } catch {
+    // 2. Hard-gate 2FA users off the primary-password fallback. better-auth's /sign-in/email
+    // after-hook RESOLVES with `{ twoFactorRedirect: true }` (HTTP 200, not a throw) for a
+    // 2FA-enabled account, so the fallback below would fall through to `return user` and bypass
+    // 2FA. App passwords (step 1) are the intended protocol path for these accounts.
+    if (user.twoFactorEnabled) {
+        recordProtocolAuthFailure(email, ip);
         throw new ApiError(401, 'Unauthorized');
     }
+
+    // 3. Fall back to primary password.
+    try {
+        await auth.api.signInEmail({ body: { email, password } });
+    } catch {
+        recordProtocolAuthFailure(email, ip);
+        throw new ApiError(401, 'Unauthorized');
+    }
+    clearProtocolAuthFailures(email);
+    return user;
 }
