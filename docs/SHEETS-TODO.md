@@ -35,7 +35,7 @@ What remains is concentrated and legible:
 | # | What | Where | Evidence |
 |---|------|-------|----------|
 | A1 ✅ done | Doubled guard makes a cell's own background unreachable in HTML export | `src/state/modules/cell.ts:1116-1127` | `if (checksCF?.cellColor) { if (checksCF?.cellColor) {…} else {… style.background = value }}` — inner `else` arms can never run, so `getStyleByCell` → `rangeValueToHtml` (copy-as-HTML) drops plain cell backgrounds. Hand-verified. |
-| A2 | `escapeScriptTag` closing-tag replace missing `/g` | `src/state/utils/index.ts:80` | `.replace(/<script>/g, …).replace(/<\/script>/, …)` — only the first `</script>` is escaped; result feeds `innerHTML` in `InputBox.tsx:91` and `FxEditor/index.tsx:67`. Hand-verified. |
+| A2 ✅ done | `escapeScriptTag` closing-tag replace missing `/g` | `src/state/utils/index.ts:80` | `.replace(/<script>/g, …).replace(/<\/script>/, …)` — only the first `</script>` is escaped; result feeds `innerHTML` in `InputBox.tsx:91` and `FxEditor/index.tsx:67`. Hand-verified. |
 | A3 | `toNumber` mis-parses scientific notation | `src/engine/parser/helper/number.ts:24` | `"1e3"` has no `.` → `parseInt("1e3")` → `1`. Use `Number(value)`. |
 
 **Decide-first (behavior changes, not straight bugs):**
@@ -105,7 +105,7 @@ internal-only too.
 `.date` branch of `isdatatypemulti` is likewise never read); `invalidateCFCache`
 (`conditionFormat.ts:214`, orphaned — the cache self-invalidates on identity change);
 `chatatABC` (`state/utils/index.ts:165-218` — live body is byte-identical to
-`indexToColumnChar:45-53`, plus 38 commented lines; repoint `searchReplace.ts:53`);
+`indexToColumnChar:45-53`, plus 38 commented lines; repoint `searchReplace.ts:53`) ✅ done;
 `matchesFilterCondition` (`filter.ts:431`, test-only wrapper); dead params
 `changeSheet(_isPivotInitial, _isNewSheet, _isCopySheet)` (`sheet.ts:31`), `hasPartMC(_cfg)`
 (`validation.ts:47`), `setConditionRules(_protection, _generalDialog)` (`conditionFormat.ts:54`),

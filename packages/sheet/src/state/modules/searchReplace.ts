@@ -4,7 +4,7 @@ import { sortBy } from 'es-toolkit/compat';
 import { valueShowEs } from '../../engine/format';
 import { type Context, getFlowdata, updateContextWithSheetData } from '../context';
 import type { SearchHighlight, SearchResult } from '../types';
-import { chatatABC, getSheetIndex } from '../utils';
+import { getSheetIndex, indexToColumnChar } from '../utils';
 import { setCellValue as setCellValueInternal } from './cell';
 import { delFunctionGroup, execFunctionGroup, groupValuesRefresh } from './formula-exec';
 import { checkCellIsLocked } from './protection';
@@ -50,7 +50,7 @@ export function collectMatches(ctx: Context, query: string, opts: DocSearchOptio
                     c,
                     sheetId,
                     sheetName: sheet.name ?? '',
-                    cellPosition: `${chatatABC(c)}${r + 1}`,
+                    cellPosition: `${indexToColumnChar(c)}${r + 1}`,
                     value,
                 });
             }
