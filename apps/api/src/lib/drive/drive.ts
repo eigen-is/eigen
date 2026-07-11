@@ -35,7 +35,7 @@ import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ChatRoom } from '../chat';
-import { getCommentIndex, openCommentIndex } from '../chat/comment-index';
+import { assertCommentChatExists, getCommentIndex, openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
@@ -324,6 +324,8 @@ export default class Drive {
         user: User,
         title?: string,
     ): Promise<boolean> {
+        // 404 an unknown thread before ensureComment (which heals real legacy chats only).
+        await assertCommentChatExists(this, mountId, pathId, chatName);
         const index = await getCommentIndex(this, mountId, pathId);
         // Legacy cards created before row-seeding have a chat but no index row yet.
         await index.ensureComment(chatName);
@@ -356,6 +358,8 @@ export default class Drive {
         user: User,
         title?: string,
     ): Promise<void> {
+        // 404 an unknown thread: a status write must not record an event for a nonexistent chatName.
+        await assertCommentChatExists(this, mountId, pathId, chatName);
         const index = await getCommentIndex(this, mountId, pathId);
         const card = title?.slice(0, 200);
         if (card) await index.setTitle(chatName, card);

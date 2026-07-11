@@ -158,7 +158,8 @@ Message-driven updates go through `ChatRoom.updateCommentIndex(fn)`, which opens
 the callback, recomputes `recentText`, and emits `CHAT_COMMENT_INDEX_UPDATED` SSE (owner home
 broadcast + effective-member fan-out). The REST mutations (`/status`, `/assignee`) go through the
 `Drive.setCommentStatus` / `Drive.assignComment` domain methods (write-gated `SharedDrive`
-wrappers), which mutate the index and record the file events; the routes then emit the same SSE
+wrappers), which first `assertCommentChatExists` (404 on an unknown thread — see API routes below),
+then mutate the index and record the file events; the routes then emit the same SSE
 via `broadcastCommentIndexUpdated` (`lib/chat/sse-events.ts` — owner home + member fan-out through
 `sendToHome`, which self-gates on `atHome()`), so resolve/assign reach other clients live.
 `seedCommentRow` writes the index directly with no broadcast (creation already emits drive SSE).
@@ -176,10 +177,15 @@ notification (`getUserByEmail` guard, mirroring mentions).
 ```
 GET    /collab/:ownerId/:mountId/:pathId/comments                    List comments (CommentEntry[])
 GET    /collab/:ownerId/:mountId/:pathId/comments/search?q=          FTS body search (in-document search)
-PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/status   Resolve or reopen ({ status, title? })
+PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/status   Resolve or reopen ({ status, title? }); 404 unknown chat
 PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/assignee Assign ({ assignee: email|null, title? });
-                                                                     403 without write, 400 non-member
+                                                                     403 without write, 400 non-member, 404 unknown chat
 ```
+
+Both PATCH writes reject an unknown `chatName` with **404 `Comment thread not found`**: `assertCommentChatExists`
+(`comment-index.ts`) requires the name to resolve to a real `.eigenchat` under the container's `chat/` folder
+before `ensureComment` runs, so a writer can never mint an index row (+ `assigned` event + dead-link
+notification) for a phantom name. Real legacy chats missing their row still heal — that check passes for them.
 
 There is no longer a `PATCH .../color` route — color lives on the Y.Doc card and round-trips via
 y-websocket.

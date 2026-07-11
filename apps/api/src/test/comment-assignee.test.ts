@@ -2,6 +2,9 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CommentEntry, DrivePath } from '@workspace/lib/types';
 import type { FileEvent } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
+import { eq } from 'drizzle-orm';
+import { COMMENT_INDEX_DB_CONFIG } from '../lib/chat/comment-db-config';
+import * as commentSchema from '../lib/chat/comment-schema';
 import { getHome } from '../lib/home';
 import { assertJson, authedRequest, driveGet, drivePost, drivePut, findOrFail, getTestContext } from './setup';
 
@@ -32,6 +35,7 @@ describe('Comment assignee', () => {
     let ctx: TestCtx;
     let mountId: string;
     let docId: string;
+    let chatFolderId: string;
     const chatName = 'assign-flow.eigenchat';
 
     async function listComments(): Promise<CommentEntry[]> {
@@ -74,7 +78,7 @@ describe('Comment assignee', () => {
             mountId,
             `folder/${docId}`,
         );
-        const chatFolderId = findOrFail(children, (c: DrivePath) => c.name === 'chat').id;
+        chatFolderId = findOrFail(children, (c: DrivePath) => c.name === 'chat').id;
         await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -226,21 +230,59 @@ describe('Comment assignee', () => {
         expect(row.assignee).toBe(ghost);
     });
 
-    test('assigning on a chatName with no index row creates it (ensureComment)', async () => {
-        // No chat was ever created under this name, so seedCommentRow never ran and there is no
-        // comments.db row — the route's ensureComment must create it before assigning.
-        const legacyName = 'legacy-no-row.eigenchat';
+    test('assigning on a REAL chat whose index row was deleted heals it (ensureComment)', async () => {
+        // Legacy case: a real .eigenchat thread predating row-seeding. Create it (seeding gives it a
+        // row), delete the row directly, then assign — ensureComment must re-create it, not 404.
+        await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${chatFolderId}/create/chat`,
+            { fileName: 'heal-flow' },
+        );
+        const healName = 'heal-flow.eigenchat';
+
+        const home = await getHome(ctx.alice.user.id);
+        const commentsDb = await home.drive.getChildByName(mountId, docId, 'comments.db');
+        const managed = await home.drive.openDatabase(mountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id);
+        await managed.db.delete(commentSchema.comments).where(eq(commentSchema.comments.chatName, healName));
+        expect((await listComments()).some((r) => r.chatName === healName)).toBe(false);
+
         const res = await patchAssignee(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             mountId,
             docId,
-            legacyName,
+            healName,
             ctx.bob.user.email,
         );
         expect(res.status).toBe(200);
 
-        const row = findOrFail(await listComments(), (r: CommentEntry) => r.chatName === legacyName);
+        const row = findOrFail(await listComments(), (r: CommentEntry) => r.chatName === healName);
         expect(row.assignee).toBe(ctx.bob.user.email);
+    });
+
+    test('assigning on a nonexistent chatName → 404, no row, no event, no notification', async () => {
+        // No .eigenchat exists under this name, so it can't be healed — the write must 404 rather
+        // than mint a phantom row + immutable 'assigned' event + dead-link notification.
+        const ghostName = 'ghost-thread.eigenchat';
+        const res = await patchAssignee(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            docId,
+            ghostName,
+            ctx.bob.user.email,
+        );
+        expect(res.status).toBe(404);
+
+        expect((await listComments()).some((r) => r.chatName === ghostName)).toBe(false);
+        const ghostEvent = (await assignedEvents()).some((e: FileEvent) => {
+            const d = e.details;
+            return !!d && 'assignee' in d && d.chatName === ghostName;
+        });
+        expect(ghostEvent).toBe(false);
+        const tag = `assigned:${ctx.alice.user.id}:${mountId}:${docId}:${ghostName}`;
+        expect((await notificationsFor(ctx.bob.user.id)).some((n) => n.tag === tag)).toBe(false);
     });
 });

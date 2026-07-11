@@ -1,6 +1,7 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DocCommentMatch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import { eq, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sanitizeFtsQuery } from '../core';
@@ -162,4 +163,18 @@ export async function getCommentIndex(
     const path = await drive.getPath(mountId, pathId);
     if (!path) throw new ApiError(404, 'Container not found');
     return openCommentIndex(drive, path);
+}
+
+// Reject an unknown chatName before ensureComment: it may heal a REAL legacy thread missing its
+// index row, but must never mint a row (+ 'assigned' event + dead-link notification) for a phantom
+// name. Chats live at <container>/chat/<chatName>; require a real .eigenchat there.
+export async function assertCommentChatExists(
+    drive: Drive | SharedDrive,
+    mountId: string,
+    containerId: string,
+    chatName: string,
+): Promise<void> {
+    const chatFolder = await drive.getChildByName(mountId, containerId, 'chat');
+    const chat = chatFolder ? await drive.getChildByName(mountId, chatFolder.id, chatName) : null;
+    if (chat?.mimeType !== DRIVE_MIME_CHAT) throw new ApiError(404, 'Comment thread not found');
 }
