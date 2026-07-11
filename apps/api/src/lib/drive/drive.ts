@@ -65,7 +65,7 @@ import { LockManager } from './lock-manager';
 import { getSharedDatabase } from './shared';
 import { listSharedWithMe, listSharedWithMeByMimeType, receiveSharedPathChange } from './shared-with-me';
 import type * as sharedSchema from './sharedschema';
-import { buildDriveEvent } from './sse-events';
+import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp, writeTempWithHash } from './streaming';
 import { deletePath, permanentlyDelete, restorePath } from './trash';
 import { finalizeUpload, regenerateThumbnailAsync } from './upload';
@@ -1033,6 +1033,11 @@ export default class Drive {
             details,
             verifyAncestors: () => mount.getBreadcrumb(pathId),
         });
+        // Live-refresh open Activity panels for the owner + everyone the item is shared with.
+        // Fire-and-forget: recording must never fail or slow because of the broadcast.
+        this.getEffectiveMembers(mountId, pathId)
+            .then((members) => broadcastFileHistoryUpdated(this.owner.id, path, members))
+            .catch(() => {});
     }
 
     async recordClientFileEvent(

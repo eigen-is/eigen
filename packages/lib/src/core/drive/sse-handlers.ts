@@ -94,6 +94,10 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
             invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
+        case SSEventType.DRIVE_FILE_HISTORY_UPDATED:
+            invalidateFileHistory(queryClient, path.ownerId);
+            return true;
+
         default:
             return false;
     }

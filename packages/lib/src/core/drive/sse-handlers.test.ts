@@ -69,3 +69,14 @@ describe('handleDriveSSEvent — DRIVE_FILE_UPLOADED (overwrite)', () => {
         expect(hasKey(invalidated, driveKeys.path(OWNER, MOUNT, PATH))).toBe(false);
     });
 });
+
+describe('handleDriveSSEvent — DRIVE_FILE_HISTORY_UPDATED', () => {
+    test('invalidates the owner-broad file-history queries so open Activity panels refresh live', () => {
+        const { queryClient, invalidated } = trackingClient();
+
+        const handled = handleDriveSSEvent(driveEvent(SSEventType.DRIVE_FILE_HISTORY_UPDATED), queryClient);
+
+        expect(handled).toBe(true);
+        expect(hasKey(invalidated, driveKeys.history(OWNER))).toBe(true);
+    });
+});
