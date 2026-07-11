@@ -78,40 +78,49 @@ export function NoteCardDialog({
         onDescriptionChange(e.currentTarget.innerHTML);
     };
 
+    const header = (
+        <DialogHeader
+            className={cn(
+                'flex flex-row items-center gap-2 px-4 pt-4 pb-2 rounded-t-lg',
+                color &&
+                    // Inset shadow, not a border: the color bar must not shift the title.
+                    // Dark mode matches the mail list row / NoteCard: 2px inset stripe +
+                    // a 14% color-mix wash over --background (see --note-soft below).
+                    'bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]',
+            )}
+            style={
+                color
+                    ? ({
+                          '--note-bg': lightenColor(color, 0.5),
+                          '--note-fg': isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff',
+                          '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
+                          '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
+                      } as React.CSSProperties)
+                    : undefined
+            }
+        >
+            <DialogTitle className="flex-1">{title}</DialogTitle>
+        </DialogHeader>
+    );
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="md" className="max-h-[70vh] flex flex-col p-0 gap-0">
-                <div>
-                    <DialogHeader
-                        className={cn(
-                            'flex flex-row items-center gap-2 px-4 pt-4 pb-2 rounded-t-lg',
-                            color &&
-                                // Inset shadow, not a border: the color bar must not shift the title.
-                                // Dark mode matches the mail list row / NoteCard: 2px inset stripe +
-                                // a 14% color-mix wash over --background (see --note-soft below).
-                                'bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]',
-                        )}
-                        style={
-                            color
-                                ? ({
-                                      '--note-bg': lightenColor(color, 0.5),
-                                      '--note-fg': isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff',
-                                      '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
-                                      '--note-soft':
-                                          'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
-                                  } as React.CSSProperties)
-                                : undefined
-                        }
-                    >
-                        <DialogTitle className="flex-1">{title}</DialogTitle>
-                    </DialogHeader>
+                {editForm ? (
+                    // Edit mode: form only under the header, thread hidden. The form fills the
+                    // remaining height and scrolls internally on short viewports.
+                    <div className="flex min-h-0 flex-1 flex-col">
+                        {header}
+                        <div className="flex min-h-0 flex-1 flex-col px-4">{editForm}</div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Header + content cap at ~60% so the thread below always keeps ≥40%. */}
+                        <div className="flex max-h-[60%] min-h-0 flex-col">
+                            {header}
 
-                    {editForm ? (
-                        <div className="px-4">{editForm}</div>
-                    ) : (
-                        <>
                             {description && (
-                                <div className="px-4 py-3 text-sm text-foreground">
+                                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm text-foreground">
                                     <div
                                         className="eigen-prose"
                                         onClick={handleDescriptionClick}
@@ -121,13 +130,15 @@ export function NoteCardDialog({
                             )}
 
                             {attachments && (
-                                <div className={cn('px-4 pb-3', !description && 'pt-2')}>{attachments}</div>
+                                <div className={cn('shrink-0 px-4 pb-3', !description && 'pt-2')}>{attachments}</div>
                             )}
 
                             {(meta || copyLinkUrl || (canWrite && onEdit) || onAction) && (
+                                // min-h-8 keeps the row height identical whether the assignee shows
+                                // "Unassigned" text or an avatar chip, so assigning never shifts the dialog.
                                 <div
                                     className={cn(
-                                        'flex items-center gap-2 px-4 pb-2',
+                                        'flex min-h-8 shrink-0 items-center gap-2 px-4 pb-2',
                                         !description && !attachments && 'pt-2',
                                     )}
                                 >
@@ -143,13 +154,13 @@ export function NoteCardDialog({
                                     <IconAction icon={actionIcon} tooltip={actionTooltip} onClick={onAction} />
                                 </div>
                             )}
-                        </>
-                    )}
-                </div>
+                        </div>
 
-                <Separator />
+                        <Separator />
 
-                {children}
+                        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+                    </>
+                )}
             </DialogContent>
         </Dialog>
     );

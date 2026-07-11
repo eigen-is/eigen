@@ -197,7 +197,7 @@ export function CardDialog({
             {...action}
         >
             {card.chatName ? (
-                <CommentThread ownerId={ownerId} mountId={mountId} chatName={card.chatName} />
+                <CommentThread ownerId={ownerId} mountId={mountId} chatName={card.chatName} className="h-full" />
             ) : (
                 <div className="px-4 pb-4 text-sm text-muted-foreground">No chat available for this card.</div>
             )}

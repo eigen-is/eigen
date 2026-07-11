@@ -120,13 +120,14 @@ export function CardForm({
     };
 
     return (
-        <form onSubmit={handleSubmit} onPaste={onPaste} {...targetProps}>
+        <form onSubmit={handleSubmit} onPaste={onPaste} className="flex min-h-0 flex-1 flex-col" {...targetProps}>
             {dialogTitle && (
                 <DialogHeader>
                     <DialogTitle>{dialogTitle}</DialogTitle>
                 </DialogHeader>
             )}
-            <div className="grid gap-4 py-4">
+            {/* Fields scroll so the footer stays pinned on short viewports. */}
+            <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto py-4">
                 <div className="grid gap-2">
                     <Label htmlFor="card-title">Title</Label>
                     <Input
@@ -151,7 +152,7 @@ export function CardForm({
                             taskList
                             placeholder={placeholderDescription}
                             containerClassName="relative flex flex-col"
-                            className="min-h-[200px]"
+                            className="min-h-[120px]"
                         />
                     </div>
                 </div>
@@ -159,13 +160,13 @@ export function CardForm({
                     items={drafts}
                     onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
                 />
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                         <Label>Color</Label>
                         <ColorSwatchRow currentColor={color} onChangeColor={setColor} />
                     </div>
                     {members && currentUserEmail && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                             <Label>Assignee</Label>
                             <AssigneePicker
                                 value={assignee}
@@ -175,7 +176,7 @@ export function CardForm({
                             >
                                 <button
                                     type="button"
-                                    className="flex w-fit items-center gap-1.5 rounded-md border border-input bg-transparent px-2 py-1.5 text-sm hover:bg-muted"
+                                    className="flex w-fit min-w-0 max-w-48 items-center gap-1.5 rounded-md border border-input bg-transparent px-2 py-1.5 text-sm hover:bg-muted"
                                 >
                                     {assignee ? (
                                         <AssigneeChip email={assignee} />

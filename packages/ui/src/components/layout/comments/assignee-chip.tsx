@@ -7,7 +7,7 @@ export function AssigneeChip({ email }: { email: string }) {
     return (
         <>
             <MemberAvatar email={email} />
-            <span className="truncate">{displayName || email.split('@')[0]}</span>
+            <span className="min-w-0 truncate">{displayName || email.split('@')[0]}</span>
         </>
     );
 }
