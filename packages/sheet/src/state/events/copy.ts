@@ -5,11 +5,6 @@ import { copy, selectIsOverlap } from '../modules/selection';
 import { hasPartMC } from '../modules/validation';
 
 export function handleCopy(ctx: Context): boolean {
-    // if (imageCtrl.currentImgId != null) {
-    //   imageCtrl.copyImgItem(event);
-    //   return;
-    // }
-
     // // if format-painter is active during copy, cancel it
     if (ctx.formatPainterOn) {
         cancelPaintModel(ctx);
@@ -38,11 +33,6 @@ export function handleCopy(ctx: Context): boolean {
         }
 
         if (has_PartMC) {
-            // if (isEditMode()) {
-            //   alert(locale_drag.noMerge);
-            // } else {
-            //   tooltip.info(locale_drag.noMerge, "");
-            // }
             return false;
         }
     }
@@ -78,11 +68,6 @@ export function handleCopy(ctx: Context): boolean {
         }
 
         if (hasCF) {
-            // if (isEditMode()) {
-            //   alert(locale_drag.noMulti);
-            // } else {
-            //   tooltip.info(locale_drag.noMulti, "");
-            // }
             return false;
         }
     }
@@ -106,11 +91,6 @@ export function handleCopy(ctx: Context): boolean {
         }
 
         if ((!isSameRow && !isSameCol) || selectIsOverlap(ctx)) {
-            // if (isEditMode()) {
-            //   alert(locale_drag.noMulti);
-            // } else {
-            //   tooltip.info(locale_drag.noMulti, "");
-            // }
             return false;
         }
     }

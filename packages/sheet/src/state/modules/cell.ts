@@ -632,14 +632,6 @@ export function updateCell(
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    // if (!isNil(rangetosheet) && rangetosheet !== ctx.currentSheetId) {
-    //   sheetmanage.changeSheetExec(rangetosheet);
-    // }
-
-    // if (!checkProtectionLocked(r, c, ctx.currentSheetId)) {
-    //   return;
-    // }
-
     // Data validation: block input when the entered data is invalid
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const { dataVerification } = ctx.sheets[index];

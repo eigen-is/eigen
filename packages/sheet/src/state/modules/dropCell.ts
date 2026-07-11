@@ -1,7 +1,7 @@
 import type { CellBorderInfo } from '@workspace/lib/sheets';
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine';
+import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
@@ -2082,12 +2082,6 @@ function getApplyData(
 }
 
 export function updateDropCell(ctx: Context) {
-    // if (
-    //   !checkProtectionLockedRangeList([_this.applyRange], ctx.currentSheetId)
-    // ) {
-    //   return;
-    // }
-
     const d = getFlowdata(ctx);
     const allowEdit = isAllowEdit(ctx);
     if (allowEdit === false || d == null) {
@@ -2580,28 +2574,12 @@ export function updateDropCell(ctx: Context) {
     }
 
     // refresh the grid
-    // const allParam = {
-    //   cfg,
-    //   cdformat,
-    //   dataVerification,
-    // };
     jfrefreshgrid(ctx, d, ctx.selections);
-
-    // selectHightlightShow();
 }
 
 export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
     ctx.cellSelectExtending = false;
     hideDropCellSelection(container);
-
-    // if (
-    //   !checkProtectionLockedRangeList(
-    //     ctx.selections,
-    //     ctx.currentSheetId
-    //   )
-    // ) {
-    //   return;
-    // }
 
     const { scrollLeft, scrollTop } = ctx;
     const rect = container.getBoundingClientRect();
@@ -2609,11 +2587,9 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
 
     const row_location = rowLocation(y, ctx.visibledatarow);
-    // const row = row_location[1];
     const row_pre = row_location[0];
     const row_index = row_location[2];
     const col_location = colLocation(x, ctx.visibledatacolumn);
-    // const col = col_location[1];
     const col_pre = col_location[0];
     const col_index = col_location[2];
 
@@ -2667,12 +2643,6 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
                     dropCellCache.direction = 'up';
 
                     row_s -= last.row[0] - row_index;
-
-                    // check if pivot table range is affected
-                    // if (pivotTable.isPivotRange(row_s, col_e)) {
-                    //   tooltip.info(locale_drag.affectPivot, "");
-                    //   return;
-                    // }
                 } else {
                     // dragging downward
                     dropCellCache.applyRange = {
@@ -2682,12 +2652,6 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
                     dropCellCache.direction = 'down';
 
                     row_e += row_index - last.row[1];
-
-                    // check if pivot table range is affected
-                    // if (pivotTable.isPivotRange(row_e, col_e)) {
-                    //   tooltip.info(locale_drag.affectPivot, "");
-                    //   return;
-                    // }
                 }
             } else {
                 return;
@@ -2703,12 +2667,6 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
                     dropCellCache.direction = 'left';
 
                     col_s -= last.column[0] - col_index;
-
-                    // check if pivot table range is affected
-                    // if (pivotTable.isPivotRange(row_e, col_s)) {
-                    //   tooltip.info(locale_drag.affectPivot, "");
-                    //   return;
-                    // }
                 } else {
                     // dragging rightward
                     dropCellCache.applyRange = {
@@ -2718,12 +2676,6 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
                     dropCellCache.direction = 'right';
 
                     col_e += col_index - last.column[1];
-
-                    // check if pivot table range is affected
-                    // if (pivotTable.isPivotRange(row_e, col_e)) {
-                    //   tooltip.info(locale_drag.affectPivot, "");
-                    //   return;
-                    // }
                 }
             } else {
                 return;
@@ -2758,12 +2710,6 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
             }
 
             if (HasMC) {
-                // if (isEditMode()) {
-                //   alert(locale_drag.noMerge);
-                // } else {
-                //   tooltip.info(locale_drag.noMerge, "");
-                // }
-
                 return;
             }
 
@@ -2779,12 +2725,6 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
             }
 
             if (HasMC) {
-                // if (isEditMode()) {
-                //   alert(locale_drag.noMerge);
-                // } else {
-                //   tooltip.info(locale_drag.noMerge, "");
-                // }
-
                 return;
             }
         }
@@ -2800,16 +2740,10 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
         ]);
 
         updateDropCell(ctx);
-        // createIcon();
 
         const selectedMoveEle = container.querySelector('.fortune-cell-selected-move');
         if (selectedMoveEle) {
             (selectedMoveEle as HTMLDivElement).style.display = 'none';
         }
-
-        // clearTimeout(ctx.countfuncTimeout);
-        // ctx.countfuncTimeout = setTimeout(() => {
-        // countfunc();
-        // }, 500);
     }
 }

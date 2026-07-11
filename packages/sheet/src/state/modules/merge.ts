@@ -23,7 +23,6 @@ function unmergeRange(d: CellMatrix, merge: Record<string, MergeCell>, r1: numbe
 
                     fv[`${mc_r}_${mc_c}`] = cloneDeep(cell) || {};
                 } else {
-                    // let cell_clone = fv[mc_r + "_" + mc_c];
                     const cell_clone = cloneDeep(fv[`${mc_r}_${mc_c}`]);
 
                     delete cell_clone.v;
@@ -39,10 +38,6 @@ function unmergeRange(d: CellMatrix, merge: Record<string, MergeCell>, r1: numbe
 }
 
 export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: string) {
-    // if (!checkIsAllowEdit()) {
-    //   tooltip.info("", locale().pivotTable.errorNotAllowEdit);
-    //   return;
-    // }
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return;
 
@@ -55,9 +50,6 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
 
     const d = sheet.data!;
 
-    // if (!checkProtectionNotEnable(ctx.currentSheetId)) {
-    //   return;
-    // }
     if (type === 'merge-cancel') {
         for (let i = 0; i < ranges.length; i += 1) {
             const range = ranges[i];

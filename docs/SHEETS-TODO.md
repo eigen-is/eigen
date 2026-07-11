@@ -118,7 +118,7 @@ threading in `cell.ts:1053-1146` (hardcoded `[]`, guards can never fire) ✅ don
 `imageText`, `cellFormat`, `punctuation`, `dropCell` (~250 lines) have zero references, and
 `pivotTable` (57 lines) is used only for `.title` (`state/utils/index.ts:13`).
 
-**B6. Commented-out inherited code, ~470 lines package-wide** — `state/events/` alone carries
+**B6. Commented-out inherited code, ~470 lines package-wide** ✅ done (package-wide sweep; two WHY-comments in rowcol.ts intentionally kept) — `state/events/` alone carries
 ~310 (every `paste.ts` handler is prefixed with dead `isEditMode()/tooltip.info` blocks, e.g.
 `:197-204`, `:375-382`; `copy.ts:41-46,81-86,109-114`); `refresh.ts:52-79` (leaving
 `jfrefreshgrid` a thin wrapper whose comments describe removed behavior);

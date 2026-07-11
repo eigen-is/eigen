@@ -139,8 +139,6 @@ export function setRowHeight(
     if (ctx.currentSheetId === sheet.id) {
         ctx.config = cfg;
     }
-
-    // server.saveParam("cg", file.id, cfg.rowlen, { k: "rowlen" });
 }
 
 export function setColumnWidth(
@@ -178,8 +176,6 @@ export function setColumnWidth(
     if (ctx.currentSheetId === sheet.id) {
         ctx.config = cfg;
     }
-
-    // server.saveParam("cg", file.id, cfg.columnlen, { k: "columnlen" });
 }
 
 export function getRowHeight(ctx: Context, rows: number[], options: CommonOptions = {}) {

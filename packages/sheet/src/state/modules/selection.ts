@@ -1,7 +1,7 @@
 import type { BorderSide, CellBorderInfo, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber, kebabCase, map } from 'es-toolkit/compat';
 import { format } from 'numfmt';
-import { cfSplitRange } from '../../engine';
+import { cfSplitRange } from '../../engine/conditional-format';
 import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
 import type { CalcChainEntry, Cell, Freezen, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
@@ -241,9 +241,6 @@ export function selectTitlesRange(map: Record<string, number>) {
 }
 
 export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyState']) {
-    // if (!checkProtectionLockedRangeList(ctx.selections, ctx.currentSheetId)) {
-    //   return;
-    // }
     const cfg = ctx.config;
     if (cfg.merge == null) {
         cfg.merge = {};
@@ -252,7 +249,6 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     if (!copyRange) return;
     // Copy range
     const copyHasMC = copyRange.HasMC;
-    // let copyRowlChange = copyRange["RowlChange"];
     const copySheetIndex = copyRange.dataSheetId;
 
     const c_r1 = copyRange.copyRange[0].row[0];
@@ -283,12 +279,6 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
         }
 
         if (has_PartMC) {
-            // if (isEditMode()) {
-            //   alert("Cannot make partial changes to merged cells");
-            // }
-            // else {
-            //   tooltip.info('<i class="fa fa-exclamation-triangle"></i>Tip', "Cannot make partial changes to merged cells");
-            // }
             return;
         }
 
@@ -299,7 +289,6 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     const timesH = Math.ceil((maxh - minh + 1) / copyh); // Number of row copy groups
     const timesC = Math.ceil((maxc - minc + 1) / copyc); // Number of column copy groups
 
-    // let d = editor.deepCopyFlowData(ctx.flowdata); // fetch data
     const flowdata = getFlowdata(ctx); // fetch data
     if (flowdata == null) return;
     const cellMaxLength = flowdata[0].length;
@@ -547,7 +536,6 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
 export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number) {
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return [null, null];
-    // const r1 = 0;
     const r2 = flowData.length - 1;
     let str = null;
     if (rIndex > 0) {
@@ -599,7 +587,6 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
     if (isNil(flowData)) {
         return [null, null];
     }
-    // const c1 = 0;
     const c2 = flowData[0].length - 1;
     let str = null;
     if (cIndex > 0) {
@@ -778,8 +765,6 @@ export function moveHighlightCell(
         last.moveXY = { x: moveX, y: moveY };
 
         normalizeSelection(ctx, ctx.selections);
-        // TODO pivotTable.pivotclick(row_index, col_index);
-        // TODO formula.fucntionboxshow(row_index, col_index);
         scrollToHighlightCell(ctx, row_index, col_index);
     } else if (type === 'rangeOfFormula') {
         const last = ctx.formulaCache.func_selectedrange;
@@ -904,51 +889,7 @@ export function moveHighlightCell(
             column_focus: col_index,
             moveXY: { x: moveX, y: moveY },
         };
-
-        // formula.rangeSetValue({
-        //   row: [row_index, row_index_ed],
-        //   column: [col_index, col_index_ed],
-        // });
     }
-
-    /*
-    const scrollLeft = $("#luckysheet-cell-main").scrollLeft();
-    const scrollTop = $("#luckysheet-cell-main").scrollTop();
-    const winH = $("#luckysheet-cell-main").height();
-    const winW = $("#luckysheet-cell-main").width();
-
-    let sleft = 0;
-    let stop = 0;
-    if (col - scrollLeft - winW + 20 > 0) {
-      sleft = col - winW + 20;
-      if (isScroll) {
-        $("#luckysheet-scrollbar-x").scrollLeft(sleft);
-      }
-    } else if (col_pre - scrollLeft - 20 < 0) {
-      sleft = col_pre - 20;
-      if (isScroll) {
-        $("#luckysheet-scrollbar-x").scrollLeft(sleft);
-      }
-    }
-
-    if (row - scrollTop - winH + 20 > 0) {
-      stop = row - winH + 20;
-      if (isScroll) {
-        $("#luckysheet-scrollbar-y").scrollTop(stop);
-      }
-    } else if (row_pre - scrollTop - 20 < 0) {
-      stop = row_pre - 20;
-      if (isScroll) {
-        $("#luckysheet-scrollbar-y").scrollTop(stop);
-      }
-    }
-
-    clearTimeout(ctx.countfuncTimeout);
-    countfunc();
-    */
-
-    // Notify the server of cell move
-    // server.saveParam("mv", ctx.currentSheetId, ctx.selections);
 }
 
 // shift + arrow key: adjust the selection range
@@ -1396,9 +1337,6 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
     const cfCompute = getComputeMap(ctx);
 
     let colgroup = '';
-
-    // rowIndexArr = rowIndexArr.sort();
-    // colIndexArr = colIndexArr.sort();
 
     for (let i = 0; i < rowIndexArr.length; i += 1) {
         const r = rowIndexArr[i];

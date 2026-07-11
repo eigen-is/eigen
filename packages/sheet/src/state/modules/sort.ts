@@ -90,28 +90,15 @@ export function sortDataRange(
 }
 
 export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0) {
-    // if (!checkProtectionAuthorityNormal(ctx.currentSheetIndex, "sort")) {
-    //   return;
-    // }
     if (ctx.allowEdit === false) return;
     if (ctx.selections == null) return;
     if (ctx.selections.length > 1) {
-        // if (isEditMode()) {
-        //   alert("Cannot perform this action on a multi-selection. Please select a single range and try again.");
-        // } else {
-        //   tooltip.info(
-        //     "Cannot perform this action on a multi-selection. Please select a single range and try again.",
-        //     ""
-        //   );
-        // }
-
         return;
     }
 
     if (isAsc == null) {
         isAsc = true;
     }
-    // const d = editor.deepCopyFlowData(Store.flowdata);
     const flowdata = getFlowdata(ctx);
     const d = flowdata;
     if (d == null) return;
@@ -167,12 +154,6 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0
     }
 
     if (hasMc) {
-        // if (isEditMode()) {
-        //   alert("The selection contains merged cells. Cannot perform this action!");
-        // } else {
-        //   tooltip.info("The selection contains merged cells. Cannot perform this action!", "");
-        // }
-
         return;
     }
 

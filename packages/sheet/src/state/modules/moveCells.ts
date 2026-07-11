@@ -1,6 +1,6 @@
 import type { BorderInfo, CellBorderInfo, RangeBorderInfo } from '@workspace/lib/sheets';
 import { cloneDeep, set } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine';
+import { cfSplitRange } from '../../engine/conditional-format';
 import type { SingleRange } from '../../engine/types';
 
 import { type Context, getFlowdata } from '../context';
@@ -34,7 +34,6 @@ export function onCellsMoveStart(
     scrollEl: HTMLDivElement,
     container: HTMLDivElement,
 ) {
-    // if (isEditMode() || ctx.allowEdit === false) {
     const allowEdit = isAllowEdit(ctx);
     if (allowEdit === false) {
         // Selection drag is disabled in this mode
@@ -206,30 +205,13 @@ export function onCellsMoveEnd(
 
     // Selection contains partial cells
     if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {
-        // if (isEditMode()) {
-        //   alert(locale_drag.noMerge);
-        // } else {
-        // drag.info(
-        //   '<i class="fa fa-exclamation-triangle"></i>',
         throw new Error(locale_drag.noMerge);
-        // );
-        // }
-        // return;
     }
 
     let row_s = last.row[0] - row_index_original + row_index;
     let row_e = last.row[1] - row_index_original + row_index;
     let col_s = last.column[0] - col_index_original + col_index;
     let col_e = last.column[1] - col_index_original + col_index;
-
-    // if (
-    //   !checkProtectionLockedRangeList(
-    //     [{ row: [row_s, row_e], column: [col_s, col_e] }],
-    //     ctx.currentSheetIndex
-    //   )
-    // ) {
-    //   return;
-    // }
 
     if (row_s < 0 || y < 0) {
         row_s = 0;
@@ -253,15 +235,7 @@ export function onCellsMoveEnd(
 
     // Replacement position contains partial cells
     if (hasPartMC(ctx, row_s, row_e, col_s, col_e)) {
-        // if (isEditMode()) {
-        //   alert(locale_drag.noMerge);
-        // } else {
-        // tooltip.info(
-        //   '<i class="fa fa-exclamation-triangle"></i>',
         throw new Error(locale_drag.noMerge);
-        // );
-        // }
-        // return;
     }
 
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
@@ -274,13 +248,8 @@ export function onCellsMoveEnd(
         }
     > = {};
     // Delete data from original position
-    // const RowlChange = null;
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     for (let r = last.row[0]; r <= last.row[1]; r += 1) {
-        // if (r in cfg.rowlen) {
-        //   RowlChange = true;
-        // }
-
         for (let c = last.column[0]; c <= last.column[1]; c += 1) {
             const cellData = d[r][c];
 

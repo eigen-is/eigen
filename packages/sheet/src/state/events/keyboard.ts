@@ -443,7 +443,7 @@ export function handleGlobalKeyDown(
         e.preventDefault();
     } else if (kstr === 'F4' && ctx.editingCellPosition.length > 0) {
         // F4 should cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1).
-        // Tracked as feature work in docs/TODO-SHEETS.md; for now just suppress
+        // Tracked as feature work in docs/SHEETS-TODO.md; for now just suppress
         // the browser default so the address-bar dropdown doesn't open mid-edit.
         e.preventDefault();
     } else if (kstr === 'Escape' && ctx.editingCellPosition.length > 0) {

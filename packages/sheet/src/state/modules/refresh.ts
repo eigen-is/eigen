@@ -47,34 +47,8 @@ export function jfrefreshgrid(
         if (range == null) return;
     }
 
-    // clearTimeout(refreshCanvasTimeOut);
-
-    // Update data range
-    // for (let s = 0; s < range.length; s += 1) {
-    //   const r1 = range[s].row[0];
-    //   const c1 = range[s].column[0];
-
-    //   if (server.allowUpdate) {
-    //     // Collaborative editing mode
-    //     server.historyParam(ctx.flowdata, ctx.currentSheetIndex, range[s]);
-    //   }
-    //   // Refresh charts
-    //   if (typeof ctx.chartparam.jfrefreshchartall === "function") {
-    //     ctx.chartparam.jfrefreshchartall(
-    //       ctx.flowdata,
-    //       range[s].row[0],
-    //       range[s].row[1],
-    //       range[s].column[0],
-    //       range[s].column[1]
-    //     );
-    //   }
-    // }
-
     // Trigger linked updates when cell data changes
     if (isRunExecFunction) {
         runExecFunction(ctx, range, ctx.currentSheetId, data);
     }
-
-    /* Sync selection */
-    // selectHightlightShow();
 }
