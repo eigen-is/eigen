@@ -118,8 +118,9 @@ export function NoteCardDialog({
                     <>
                         {/* Header + content cap at 42vh (60% of the 70vh dialog cap) so the thread
                             below always keeps ≥40%. A percentage max-h would never resolve here —
-                            the dialog's max-h-[70vh] height stays indefinite. */}
-                        <div className="flex max-h-[42vh] min-h-0 flex-col">
+                            the dialog's max-h-[70vh] height stays indefinite. shrink-0 keeps a short
+                            body at full height when the thread is long (max-h alone does the cap). */}
+                        <div className="flex max-h-[42vh] min-h-0 shrink-0 flex-col">
                             {header}
 
                             {description && (
@@ -141,7 +142,7 @@ export function NoteCardDialog({
                                 // "Unassigned" text or an avatar chip, so assigning never shifts the dialog.
                                 <div
                                     className={cn(
-                                        'flex min-h-8 shrink-0 items-center gap-2 px-4 pb-2',
+                                        'flex min-h-8 shrink-0 items-center gap-2 px-4 pt-1 pb-2',
                                         !description && !attachments && 'pt-2',
                                     )}
                                 >

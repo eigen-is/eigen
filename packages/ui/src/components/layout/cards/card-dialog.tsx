@@ -103,7 +103,8 @@ export function CardDialog({
                 >
                     <button
                         type="button"
-                        className="-my-0.5 inline-flex items-center gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
+                        // items-baseline (avatar self-centres) aligns the name with the Created-by baseline.
+                        className="-my-0.5 inline-flex items-baseline gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
                     >
                         {assignee ? (
                             <AssigneeChip email={assignee} />
@@ -115,7 +116,7 @@ export function CardDialog({
             );
         } else if (assignee) {
             assigneeControl = (
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-baseline gap-1">
                     <AssigneeChip email={assignee} />
                 </span>
             );
