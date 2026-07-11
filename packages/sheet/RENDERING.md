@@ -22,12 +22,10 @@
           <ImgBoxs>                             ImgBoxs/index.tsx
           <LinkEditCard>                        LinkEditCard/index.tsx
           <DropDownList>                        DataVerification/DropdownList.tsx
+          cell right-click menu anchor          ContextMenu/useSheetContextMenu.tsx (shared ContextMenuAnchor; column/row anchors live in the headers)
       <SheetTab>                                SheetTab/index.tsx         (React)
-        <SheetItem> per sheet                   SheetTab/SheetItem.tsx
-      <ContextMenu>                             ContextMenu/index.tsx      (React + shadcn DropdownMenu)
+        <SheetItem> per sheet                   SheetTab/SheetItem.tsx     (shadcn ContextMenu + DropdownMenu)
       <FilterMenu>                              ContextMenu/FilterMenu.tsx
-      <SheetTabContextMenu>                     ContextMenu/SheetTab.tsx
-      backdrop div (z-1003)
 ```
 
 ## Rendering Technologies
@@ -147,8 +145,8 @@ Small divs positioned over filtered column header cells:
 
 **File**: `ImgBoxs/index.tsx`
 
-- Active image: `z-index: 300`, with resize handles (8-point) and control buttons (Crop, Restore, Delete)
-- Inactive images: `z-index: 200`, just `<img>` in a bordered div
+- Active image: `z-index: 20`, an 8-point resize-handle frame with a `selection-handle` outline
+- Inactive images: `z-index: 19`, an `<img>` in an `overflow-hidden` div
 - ID: `luckysheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`)
 
 ### 8. Comments
@@ -174,19 +172,24 @@ Positioned absolutely near the active cell. Class: `.fortune-link-modify-modal` 
 
 **File**: `DataVerification/DropdownList.tsx`
 
-- Simple list of values with checkmarks
-- `z-index: 10000` (highest in the app)
-- Absolutely positioned at the validated cell
-- Uses shadcn-style Tailwind classes (`bg-background`, `hover:bg-accent`)
+- A portaled shadcn `DropdownMenu` — checkbox items for multi-select validations, plain items otherwise
+- Relies on shadcn's default `z-index: 50` (Radix portal), not a bespoke high z-index
+- Anchored to a hidden trigger div positioned at the validated cell
 
 ### 11. Context Menus (React + shadcn)
 
-**Files**: `ContextMenu/index.tsx`, `ContextMenu/FilterMenu.tsx`, `ContextMenu/SheetTab.tsx`
+**Files**: `ContextMenu/useSheetContextMenu.tsx`, `ContextMenu/FilterMenu.tsx`, `SheetTab/SheetItem.tsx`
 
-- Cell right-click menu: uses shadcn `DropdownMenu` with standard menu items
-- Filter menu: custom rendering with select/deselect checkboxes, color filter submenu
-- Sheet tab menu: rename, delete, hide, show, color options
-- Backdrop div at `z-index: 1003` captures outside clicks
+- Cell / row-header / column-header right-click menus: `useSheetContextMenu(area)` builds each
+  menu from shadcn `DropdownMenu` items on the shared `@workspace/ui` singleton context menu
+  (`useContextMenu` + `ContextMenuAnchor`, anchored at the cursor). The cell anchor renders in
+  `SheetOverlay`, the row/column anchors in their headers
+- Filter menu (`FilterMenu.tsx`): the remaining bespoke panel — select/deselect checkboxes,
+  color filter submenu; mounted by `Workbook`
+- Sheet tab menu (`SheetItem.tsx`): rename, delete, hide, show, color options — the same items
+  rendered through a shadcn `ContextMenu` (tab right-click) and a `DropdownMenu` (chevron on
+  the active tab)
+- Outside clicks are dismissed by the shadcn/Radix portals — there is no separate backdrop div
 
 ### 12. MenuBar (React + shadcn)
 
@@ -199,7 +202,9 @@ Pure React UI — no overlays. Google-Sheets-style menu bar (Edit / View / Inser
 - shadcn `Popover` for `CustomBorder` (border style picker)
 - Tailwind styling
 - `luckysheet-mousedown-cancel` must be on any `DropdownMenuSubContent` rendered inside
-  `cellArea` (see [`docs/TODO-SHEETS.md` § Floating UI inside `cellArea`](../../docs/TODO-SHEETS.md#floating-ui-inside-cellarea))
+  `cellArea`. Radix portals the submenu out of the DOM, but React synthetic events still
+  bubble across the portal — without the class, `cellArea`'s mousedown guard misses the
+  menu items and selection jumps to the cell underneath the popup.
 
 ### 13. Sheet Tabs (React)
 
@@ -236,7 +241,7 @@ are children of `cellArea`, so they scroll *natively* (compositor speed) while t
 repaints on rAF — during a fast / ProMotion scroll they can drift ~1 frame from the grid. The
 headers do NOT drift (they transform from the bus, locked to the redraw). Locking the body
 overlays the same way is a tracked follow-up — see
-[`docs/TODO-SHEETS.md`](../../docs/TODO-SHEETS.md).
+[`docs/SHEETS-TODO.md`](../../docs/SHEETS-TODO.md).
 
 ## Z-Index Stack
 
@@ -251,10 +256,9 @@ overlays the same way is a tracked follow-up — see
 | 16 | Move / extend indicators | SheetOverlay |
 | 18 | Copy selection borders (dashed) | SheetOverlay |
 | 19 | Cell editor (InputBox) | SheetOverlay/InputBox |
-| 200 | Images (inactive) | ImgBoxs |
-| 300 | Active image (with resize handles) | ImgBoxs |
-| 1003 | Context menu backdrop | Workbook |
-| 10000 | Data verification dropdown | DataVerification/DropdownList |
+| 19 | Images (inactive) | ImgBoxs |
+| 20 | Active image (with resize handles) | ImgBoxs |
+| 50 | Data verification dropdown (portaled shadcn) | DataVerification/DropdownList |
 
 ## Key Performance Patterns
 

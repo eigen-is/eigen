@@ -242,7 +242,7 @@ border-clear 3×, `offsetMC` remap in all three paste handlers).
   (`document.querySelector(...).focus()`). They silently no-op if markup changes. Known
   RENDERING.md leak; migrate when touching the drag previews.
 
-## F. Documentation drift
+## F. Documentation drift ✅ done except the CSS migration itself (last item stays open — phase-6 decision)
 
 - `README.md:20` and `keyboard.ts:446` reference **`docs/TODO-SHEETS.md`, which does not exist**
   (no git history either; note the reversed name). Repoint both to this file
