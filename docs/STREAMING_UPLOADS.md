@@ -5,11 +5,10 @@
 ## TLDR
 
 File uploads previously buffered entire files in memory ~3x (Elysia File + ArrayBuffer + Buffer copy). Now all file
-uploads (single and multi-file) go through a single endpoint using `@mjackson/multipart-parser`. Each file is
-written to a mount temp file, hashed incrementally, then moved to storage — but only the write side streams: the
-parser buffers each part fully in memory before yielding it, so memory is ~1x file size per concurrent upload (see
-Memory Profile). The old buffered endpoint and the separate multi-file endpoint (`/files/:pathId`) have been
-removed.
+uploads (single and multi-file) go through a single endpoint using our own streaming multipart parser
+(`apps/api/src/lib/multipart/`). Each file streams from the network to a mount temp file in constant memory —
+body bytes are hashed and written chunk-by-chunk as they arrive on the wire — then moved to storage. The old
+buffered endpoint and the separate multi-file endpoint (`/files/:pathId`) have been removed.
 
 ## Architecture
 
@@ -26,8 +25,8 @@ Frontend: FormData.append('file', file) for each file → XHR POST (progress tra
 Route: parse: 'none' → getUploadMaxSize() → drive.uploadFiles(mountId, parentId, request, maxSize)
     ↓
 Drive.uploadFiles():
-  → streamFilesToTemp(mount, request, maxSize) — parses each file (fully buffered by the parser,
-    see Memory Profile), writes it to mount tmp/, hashes incrementally
+  → streamFilesToTemp(mount, request, maxSize) — consumes parser events, streaming each file's
+    body chunks into mount tmp/ with an incremental sha256 as they arrive
   → for each result: finalizeUpload() (lib/drive/upload.ts):
     → deduplicate filename against siblings
     → mount.createFileFromTemp() — move temp→storage, insert DB row
@@ -39,7 +38,8 @@ Drive.uploadFiles():
 
 | File | Role |
 |------|------|
-| `apps/api/src/lib/drive/streaming.ts` | `streamFilesToTemp()` — multipart parsing + temp file writing |
+| `apps/api/src/lib/multipart/` | Streaming multipart parser — yields `part`/`chunk`/`end` events |
+| `apps/api/src/lib/drive/streaming.ts` | `streamFilesToTemp()` — consumes parser events, writes temp files |
 | `apps/api/src/lib/drive/drive.ts` | `uploadFiles()` — parent + permission checks, per-batch watcher fan-out |
 | `apps/api/src/lib/drive/upload.ts` | `finalizeUpload()` — dedupe → `createFileFromTemp` → SSE/history + thumbnail kick |
 | `apps/api/src/lib/drive/sharedDrive.ts` | `uploadFiles()` — delegates to underlying `Drive` after ACL write permission check |
@@ -49,19 +49,17 @@ Drive.uploadFiles():
 
 ### Size Enforcement
 
-Per-file size limit is enforced by `@mjackson/multipart-parser`'s `maxFileSize` option during parsing. The limit is
+Per-file size limit is enforced by the parser's `maxFileSize` option during parsing: the request is aborted the
+moment a part's body exceeds the limit, mid-stream, before further bytes are read. The limit is
 `min(serverMaxUploadSize, remainingMountQuota)`, computed in `getUploadMaxSize()` before streaming starts. If the mount
 is already full, the request is rejected immediately (507) without reading the body.
 
 ### Memory Profile
 
-`@mjackson/multipart-parser` (0.10.1) yields a part only after accumulating its entire body in memory
-(`MultipartPart.content` is a buffered `Uint8Array[]`). The write side is streaming (temp write + incremental
-hash), so the old ~3x copies are genuinely gone, but each concurrent upload still holds ~1x its file size in RAM.
-
-This makes `maxUploadSizeMB` (default 35 MB) effectively a memory knob: an admin raising it to 2 GB converts every
-concurrent upload into a 2 GB RSS spike. If large uploads become a goal, swap to a parser that exposes part bodies
-as streams — `writeTempWithHash` is already stream-shaped, so only `streamFilesToTemp` changes.
+Constant, independent of file size. The parser yields body bytes as events while the part is still arriving; the
+only bytes ever held back are a potential partial boundary at a network chunk's tail (at most a few dozen bytes).
+Each in-flight upload holds one 256 KB `FileSink` write buffer. `maxUploadSizeMB` (default 35 MB) is purely a
+policy knob, not a memory knob.
 
 ### Crash Recovery
 
@@ -83,11 +81,14 @@ partial uploads behind.
 - `getMaxBatchUploadSize()` — no longer needed (one limit for all uploads)
 - `getDriveFilesUploadUrl()` — frontend no longer branches on file count
 
-## Dependency
+## Parser
 
-`@mjackson/multipart-parser` (v0.10.1) — web-standard multipart parser. Zero transitive dependencies (just
-`@mjackson/headers`). Works on Bun. The parser reads the request body stream but yields each `MultipartPart` only
-after buffering its entire body as `content: Uint8Array[]` chunks — see Memory Profile.
+`apps/api/src/lib/multipart/` — our own streaming parser, derived from `@mjackson/multipart-parser` (MIT) but
+reshaped to yield flat `part` (parsed headers) / `chunk` (body bytes) / `end` (total size) events instead of
+buffering whole parts. Upstream buffers deliberately (its earlier per-part `body` stream deadlocked with its sync
+generator design); the event shape sidesteps that. Zero dependencies; supports exactly our use case:
+browser/fetch-generated `multipart/form-data` read from a web `ReadableStream` on Bun. Mail draft attachments
+(`MailDomain.uploadDraftAttachment`) use the same parser.
 
 ## Out of Scope
 

@@ -71,8 +71,9 @@ Large net-new builds or low value-per-effort today.
 
 ## Focused audits (future-proofing reviews)
 
-Deep single-subsystem reviews in the style of [AUDIT_STORAGE.md](AUDIT_STORAGE.md) (2026-07-05:
-storage/mount/drive — base judged solid; its 11 fixes shipped 2026-07-06). The 2026-07-01
+Deep single-subsystem reviews in the style of AUDIT_STORAGE.md (2026-07-05:
+storage/mount/drive — base judged solid; its 11 fixes shipped 2026-07-06; doc removed
+after everything shipped, see git history). The 2026-07-01
 god-file audits (mount, drive, mail, calendar) are closed and pruned. Sequencing principle:
 **audit a layer right before a proposal builds on it** — findings are cheapest to fix then, and
 the auditor's context transfers straight into the implementation.

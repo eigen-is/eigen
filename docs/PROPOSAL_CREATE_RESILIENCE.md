@@ -1,7 +1,7 @@
 # Create/open resilience under degraded storage
 
 > **Status — Proposal, written 2026-07-05, not started.** Re-verified against main 2026-07-06,
-> after the storage-audit fixes ([AUDIT_STORAGE.md](AUDIT_STORAGE.md) items 1–11) landed: nothing
+> after the storage-audit fixes (AUDIT_STORAGE.md items 1–11; doc removed after everything shipped, see git history) landed: nothing
 > in this design has shipped, and the traces below still hold — the metadata.db v7 unique
 > active-name index and `provisionManagedDbs`' inner rollback are in main as described, and the
 > audit's `ManagedDatabase` failed-open cleanup/handle release only closes fd leaks (the
