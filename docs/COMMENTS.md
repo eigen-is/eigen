@@ -290,17 +290,27 @@ Filter menu (the former mobile-only dropdown, now on all viewports) hosts the sa
 via `CommentFilterMenuItems` (a primitives-slot component like `CommentMenuItems`); the center
 color-dot row stays as the desktop quick affordance and shares the same filter instance. The
 pinned Anyone/Me/Unassigned block is shared between button and menu as
-`PinnedAssigneeFilterRows` (internal to `packages/ui/.../comments/`).
+`PinnedAssigneeFilterRows` (internal to `packages/ui/.../comments/`). The one-line active-filter
+summary ("Open · assigned to me" + Clear) is the shared `FilterSummary` component — the panel
+renders it as a full-width strip, the stickies toolbar inline (`inline` prop) after the color
+dots. Member lists hide the current user's named row (the pinned Me row covers them). Menu close
+semantics: single-choice picks (assignee, status, Clear) dismiss the stickies Filter menu; color
+swatches keep it open for multi-toggle.
 
 ### CommentThread (`packages/ui/src/components/layout/comments/comment-thread.tsx`)
 
 Single comment thread: resolves `chatName` to `chatId` via `useMediaResolver`, renders
 `ChatMessageList` + `ChatMessageInput`. Embedded inside `<CardDialog>` when a card has a `chatName`.
 
-### CardFormDialog (`packages/ui/src/components/layout/cards/card-form-dialog.tsx`)
+### CardForm + CardFormDialog (`packages/ui/src/components/layout/cards/`)
 
-Shared create/edit form dialog selected by a `mode` prop (merges the former AddCardDialog +
-CardSettingsDialog). The host wires `mode="create"` to `useCreateCommentCard` — typically:
+`CardForm` is the shared create/edit form (title input, `LightEditor` description, attachment
+staging, one non-wrapping meta row: compact `ColorSwatchRow` left + `AssigneePicker` right),
+selected by a `mode` prop. It renders in two shells: `CardFormDialog` (a thin standard-Dialog
+wrapper — the create flow) and in-place inside `CardDialog` via `NoteCardDialog`'s `editForm`
+slot (the edit flow — no second dialog is ever stacked). Its field area scrolls with the
+Save/Cancel `DialogFooter` pinned, so short viewports get a scrollbar instead of overflow.
+The host wires `mode="create"` to `useCreateCommentCard` — typically:
 
 ```ts
 const handleSaveNew = async ({ title, description, color }) => {
@@ -321,9 +331,13 @@ client-side; the backend is only touched on Save.
 
 ### CardDialog (`packages/ui/src/components/layout/cards/card-dialog.tsx`)
 
-Shared view/edit dialog. Wraps `<NoteCardDialog>` with `<CommentThread>` inside; opens
-`<CardFormDialog mode="edit">` for inline edits via `onUpdate`. Optional `showResolveAction` + `onResolve`
-for apps that surface resolve/re-open at the dialog level (docs, slides, sheets).
+Shared view/edit dialog. Wraps `<NoteCardDialog>` with `<CommentThread>` inside. The pencil
+toggles **in-place edit**: `CardForm mode="edit"` replaces the body inside the same dialog
+(thread + reply composer hidden while editing; never a stacked dialog). View-mode height
+contract: everything above the thread caps at ~60% of the dialog (42vh of the 70vh dialog cap;
+the description scrolls internally) so the thread + reply input always keep the rest; the meta
+footer row has a stable height so assigning (Unassigned ↔ avatar chip) never shifts layout.
+Optional `onResolve`/`onAssign` for apps that surface resolve/assign at the dialog level.
 
 ## Per-app integration
 
