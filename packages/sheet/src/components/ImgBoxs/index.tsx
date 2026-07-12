@@ -34,7 +34,8 @@ function ActiveImage({ img }: { img: Image }) {
     return (
         <div
             id="luckysheet-modal-dialog-activeImage"
-            className="absolute"
+            // pointer-events-auto: the pane-region wrapper is pointer-events none
+            className="absolute pointer-events-auto"
             style={{
                 zIndex: 20,
                 width: w,
@@ -100,7 +101,7 @@ function InactiveImage({ img }: { img: Image }) {
             return (
                 <div
                     id={img.id}
-                    className="absolute overflow-hidden"
+                    className="absolute overflow-hidden pointer-events-auto"
                     style={{
                         width: w,
                         height: h,
@@ -119,7 +120,8 @@ function InactiveImage({ img }: { img: Image }) {
     return (
         <div
             id={img.id}
-            className="absolute overflow-hidden"
+            // pointer-events-auto: the pane-region wrapper is pointer-events none
+            className="absolute overflow-hidden pointer-events-auto"
             style={{
                 width: w,
                 height: h,
@@ -149,7 +151,6 @@ export function ImgBoxs() {
                 if (img.id === context.activeImg) return null;
                 return <InactiveImage key={img.id} img={img} />;
             })}
-            <div className="cell-date-picker" />
         </div>
     );
 }

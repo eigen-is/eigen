@@ -230,7 +230,8 @@ or touch handler.
   `globalCache.notifyScrollListeners()`. Scroll state lives in `globalCache` (NOT React
   context) to avoid re-rendering every consumer on each tick.
 - Bus subscribers: the rAF-coalesced canvas redraw (`Sheet`), the header `transform`
-  updates (`ColumnHeader` / `RowHeader`), and the body-overlay layer `transform` (`SheetOverlay`).
+  updates (`ColumnHeader` / `RowHeader`), and one `transform` per body-overlay pane region
+  (`OverlayRegion`).
 - Programmatic scroll (back-to-top, sheet-switch restore, selection auto-follow, freeze reset)
   writes `cellArea.scrollLeft/scrollTop`; the native `scroll` event then re-syncs the bus.
 - `overscroll-behavior: none` disables the macOS rubber-band bounce (the rAF canvas can't
@@ -241,28 +242,44 @@ or touch handler.
 **Body overlay layer**: the body overlays (selection box, cell editor, presence, fill handle,
 formula-range visuals, search highlights, images, link/validation cards) do NOT scroll
 natively. They live in a `position: sticky` layer (`.fortune-cell-overlay-layer`) that is the
-first child of `cellArea` — a 0×0 anchor pinned to the scrollport origin at compositor speed,
-holding a `position: absolute; inset: 0` content div (`overlayLayerRef`) that translates
-`translate(-scrollLeft, -scrollTop)` from the bus. This is the same mechanism as the headers,
-so the overlays stay locked to the rAF canvas redraw and can no longer drift a frame during a
-fast / ProMotion scroll. The layer box is 0×0 with overflowing content, so it never covers the
-grid — empty-grid clicks fall through to `cellArea`, and every moved child keeps its pure
-content-coordinate styles (the sticky+translate reproduces the old native-scroll geometry
-exactly). The `luckysheet-cell-flow` spacer (which defines the scroll range and holds the
-bottom add-row control, pinned via `left: scrollLeft`) and the cell context-menu anchor stay
-direct children of `cellArea`.
+first child of `cellArea` — a 0×0 anchor pinned to the scrollport origin at compositor speed —
+holding up to four **pane region viewports** (`OverlayRegion`) that mirror how the canvas
+draws frozen panes: main, frozen-rows band, frozen-cols band, corner. Each region is a
+`position: absolute` div at its fixed viewport rect with `overflow: hidden`; rects derive from
+the freeze config (`computeOverlayRegions` in `state/modules/freeze.ts`) and change only when
+the freeze config or row/col metrics change. Inside each region a content div restores the
+content-coordinate origin and translates from the scroll bus on its free axes only — main
+`(-sx, -sy)`, rows band `(-sx, ·)`, cols band `(·, -sy)`, corner pinned — the header transform
+mechanism generalized per pane, locked to the rAF canvas redraw (no drift, no per-scroll React
+work).
 
-Two consequences of the layer being an atomic stacking context: it carries `z-index: 1` so its
-children paint (and hit-test) above the later full-size cell-flow spacer sibling — in the old
-flat DOM each child's own z-index (8–30) did that individually — and the not-editing InputBox
-(`z-index: -1`, which used to sink below the canvas) is hidden with `opacity: 0` +
-`pointer-events: none` instead, keeping the cell input focusable at the cell position without
-painting over the grid or swallowing focus-cell clicks.
+- **Passive rectangles** (selection boxes, focus box, formula-range selects/highlights, search
+  highlights, presence, copy/move/extend indicators — `OverlayVisuals`) render into every
+  region in pure content coordinates; each region's clip shows exactly its portion, so they
+  clip below frozen panes in lockstep with the canvas. This replaces the old per-element
+  `fix*StyleOverflowInFreeze` clamps for body overlays (computed at React render, one frame
+  stale during pure scrolling); the headers still clamp. Imperatively positioned previews
+  (move/extend, formula range select) are written per copy via `querySelectorAll`.
+- **Stateful singletons** are never duplicated: the cell editor (InputBox) and the validation
+  dropdown trigger render into the single region containing their anchor cell, clipped —
+  editing a frozen cell keeps the editor pinned under the pane, and an editor whose cell
+  scrolls under a band clips at the boundary, like Excel. Popup chrome (validation hint box,
+  LinkEditCard) pins with its anchor's pane but never clips; the pane-spanning resize/freeze
+  drag lines live in an unclipped wrapper on the main transform. With no freeze configured
+  there is exactly one unclipped main region.
+- The `luckysheet-cell-flow` spacer (which defines the scroll range and holds the bottom
+  add-row control, pinned via `left: scrollLeft`) and the cell context-menu anchor stay direct
+  children of `cellArea`.
 
-**Known limitation**: the moved overlays still clamp (not clip) below frozen panes via
-`fix*StyleOverflowInFreeze`, computed at React render from the scroll mirror, so during a pure
-scroll the clamp is a frame stale. True per-pane region clipping is a tracked follow-up — see
-[`docs/SHEETS-TODO.md`](../../docs/SHEETS-TODO.md) group 5.
+Hit-testing: the layer carries `z-index: 1` so its content sits above the later full-size
+cell-flow spacer sibling (each region's translated content div is an atomic stacking context,
+so the children's z-indexes 8–30 order them only among themselves). The region divs are
+`pointer-events: none`; interactive overlay elements re-enable themselves with
+`pointer-events: auto` (selection handles, images, open editor, drag lines, validation
+trigger/hint, link card) and everything else falls through to `cellArea`. The not-editing
+InputBox (`z-index: -1`, which used to sink below the canvas) is hidden with `opacity: 0` +
+`pointer-events: none`, keeping the cell input focusable at the cell position without painting
+over the grid or swallowing focus-cell clicks.
 
 ## Z-Index Stack
 
@@ -282,8 +299,10 @@ scroll the clamp is a frame stale. True per-pane region clipping is a tracked fo
 | 50 | Data verification dropdown (portaled shadcn) | DataVerification/DropdownList |
 
 The SheetOverlay / InputBox / ImgBoxs values live inside `.fortune-cell-overlay-layer`
-(`z-index: 1`, an atomic stacking context — see § Scrolling), so they order those elements
-only among themselves; the layer as a whole sits above the canvas and the cell-flow spacer.
+(`z-index: 1`) in per-pane region viewports whose translated content divs are atomic stacking
+contexts (see § Scrolling), so they order those elements only among themselves within a pane;
+across panes the region clip rects are disjoint. The layer as a whole sits above the canvas
+and the cell-flow spacer.
 
 ## Key Performance Patterns
 

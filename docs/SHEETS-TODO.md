@@ -45,10 +45,11 @@ fix/sheet-decided-fixes.)
 
 ## 5. Rendering
 
-- [ ] the body overlays must CLIP below frozen panes — the headers already do this correctly,
-      so reuse (and share) that logic
 - [ ] `SheetOverlay/index.css`: 795 lines, ~46 hardcoded hex colors vs 21 theme-token uses —
       migrate to theme tokens (prerequisite for dark mode)
+- [ ] header (row/col) freeze clamps still recompute from `ctx.scroll*` at render time — a
+      pure-scroll tick can leave a stale header highlight clamp until the next recipe; migrate
+      the headers to the body-overlay region model (`computeOverlayRegions`) for symmetry
 
 ## 6. Code debt (opportunistic — fix when touching the area)
 

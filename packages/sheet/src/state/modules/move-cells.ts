@@ -63,13 +63,17 @@ export function onCellsMoveStart(
 
     ctx.cellSelectMoveIndex = [row_index, col_index];
 
-    const ele = document.getElementById('fortune-cell-selected-move');
-    if (ele == null) return;
-    ele.style.left = `${col_pre}px`;
-    ele.style.top = `${row_pre}px`;
-    ele.style.width = `${col - col_pre - 1}px`;
-    ele.style.height = `${row - row_pre - 1}px`;
-    ele.style.display = 'block';
+    // The move preview renders once per overlay pane region; write every copy —
+    // each region's clip shows exactly its portion.
+    const eles = container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move');
+    if (eles.length === 0) return;
+    for (const ele of eles) {
+        ele.style.left = `${col_pre}px`;
+        ele.style.top = `${row_pre}px`;
+        ele.style.width = `${col - col_pre - 1}px`;
+        ele.style.height = `${row - row_pre - 1}px`;
+        ele.style.display = 'block';
+    }
 
     e.stopPropagation();
 }
@@ -136,13 +140,13 @@ export function onCellsMove(
     row_pre = row_s - 1 === -1 ? 0 : ctx.visibledatarow[row_s - 1];
     row = ctx.visibledatarow[row_e];
 
-    const ele = document.getElementById('fortune-cell-selected-move');
-    if (ele == null) return;
-    ele.style.left = `${col_pre}px`;
-    ele.style.top = `${row_pre}px`;
-    ele.style.width = `${col - col_pre - 2}px`;
-    ele.style.height = `${row - row_pre - 2}px`;
-    ele.style.display = 'block';
+    for (const ele of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move')) {
+        ele.style.left = `${col_pre}px`;
+        ele.style.top = `${row_pre}px`;
+        ele.style.width = `${col - col_pre - 2}px`;
+        ele.style.height = `${row - row_pre - 2}px`;
+        ele.style.display = 'block';
+    }
 }
 
 export function onCellsMoveEnd(
@@ -155,8 +159,9 @@ export function onCellsMoveEnd(
     // Change selection box position and replace target cells
     if (!ctx.cellSelectMoving) return;
     ctx.cellSelectMoving = false;
-    const ele = document.getElementById('fortune-cell-selected-move');
-    if (ele != null) ele.style.display = 'none';
+    for (const ele of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move')) {
+        ele.style.display = 'none';
+    }
     if (globalCache.dragCellStartPos != null) {
         globalCache.dragCellStartPos = undefined;
         return;

@@ -37,12 +37,14 @@
     display: none;
 }
 
-/* Body overlay layer: a 0×0 sticky anchor pinned to the scrollport origin. Its
-   content div (transform: translate from the scroll bus) holds the selection box,
-   cell editor, presence, fill handle, images, etc. so they track the scroll bus in
-   lockstep with the rAF canvas redraw instead of scrolling natively (which drifts a
-   frame). The box is 0×0 with overflow visible, so it never covers the grid —
-   empty-grid clicks fall through to .fortune-cell-area. */
+/* Body overlay layer: a 0×0 sticky anchor pinned to the scrollport origin. It
+   holds the pane-region viewports (OverlayRegion) whose translated content divs
+   carry the selection box, cell editor, presence, fill handle, images, etc., so
+   they track the scroll bus in lockstep with the rAF canvas redraw instead of
+   scrolling natively (which drifts a frame) and clip below frozen panes. The
+   anchor is 0×0 with overflow visible and the regions are pointer-events none,
+   so the grid is never covered — empty-grid clicks fall through to
+   .fortune-cell-area. */
 .fortune-cell-overlay-layer {
     position: sticky;
     top: 0;
@@ -50,13 +52,26 @@
     width: 0;
     height: 0;
     overflow: visible;
-    /* The translated content div is an atomic stacking context, so the children's
-       z-indexes (8-30) can no longer individually lift them above the later
-       full-size cell-flow spacer sibling (z auto) — without this the spacer
+    /* Each region's translated content div is an atomic stacking context, so the
+       children's z-indexes (8-30) can no longer individually lift them above the
+       later full-size cell-flow spacer sibling (z auto) — without this the spacer
        shadows every interactive overlay (fill handle, editor, images) from
        hit-testing. z 1 lifts the whole layer above it; the children's relative
        order inside is unchanged. */
     z-index: 1;
+}
+
+/* The pane-region wrappers are pointer-events none (full-size hit rects that
+   must not shadow the grid); interactive overlay elements that relied on the
+   default value re-enable themselves here. */
+.fortune-cell-selected-move,
+.fortune-change-size-line,
+.fortune-freeze-drag-line,
+#luckysheet-dataVerification-dropdown-btn,
+#luckysheet-dataVerification-showHintBox,
+.fortune-formula-functionrange-highlight .fortune-copy,
+.fortune-formula-functionrange-highlight .luckysheet-highlight {
+    pointer-events: auto;
 }
 
 .fortune-row-body {

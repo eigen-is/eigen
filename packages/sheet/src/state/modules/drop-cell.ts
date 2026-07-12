@@ -377,9 +377,10 @@ function judgeDate(data: (Cell | null | undefined)[]) {
     return [isSameDay, isSameMonth, isEqualDiffDays, isEqualDiffMonths, isEqualDiffYears];
 }
 
+// The extend preview renders once per overlay pane region; write every copy —
+// each region's clip shows exactly its portion.
 export function showDropCellSelection({ width, height, top, left }: Rect, container: HTMLDivElement) {
-    const selectedExtend = container.querySelector('.fortune-cell-selected-extend') as HTMLDivElement;
-    if (selectedExtend) {
+    for (const selectedExtend of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-extend')) {
         selectedExtend.style.left = toPx(left);
         selectedExtend.style.width = toPx(width);
         selectedExtend.style.top = toPx(top);
@@ -389,8 +390,7 @@ export function showDropCellSelection({ width, height, top, left }: Rect, contai
 }
 
 export function hideDropCellSelection(container: HTMLDivElement) {
-    const selectedExtend = container.querySelector('.fortune-cell-selected-extend') as HTMLDivElement;
-    if (selectedExtend) {
+    for (const selectedExtend of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-extend')) {
         selectedExtend.style.display = 'none';
     }
 }
@@ -2236,9 +2236,8 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
 
         updateDropCell(ctx);
 
-        const selectedMoveEle = container.querySelector('.fortune-cell-selected-move');
-        if (selectedMoveEle) {
-            (selectedMoveEle as HTMLDivElement).style.display = 'none';
+        for (const selectedMoveEle of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move')) {
+            selectedMoveEle.style.display = 'none';
         }
     }
 }

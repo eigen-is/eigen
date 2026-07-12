@@ -22,8 +22,9 @@ import {
     saveHyperlink,
 } from '../../state';
 
+// pointer-events-auto: the overlay pane-region wrapper is pointer-events none
 const modalBase =
-    'absolute overflow-hidden bg-popover z-30 rounded-md border border-border shadow-md px-5 pt-1.5 pb-2.5';
+    'absolute overflow-hidden bg-popover z-30 rounded-md border border-border shadow-md px-5 pt-1.5 pb-2.5 pointer-events-auto';
 
 export function LinkEditCard({
     r,

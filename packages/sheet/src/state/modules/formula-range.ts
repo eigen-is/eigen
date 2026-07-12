@@ -167,13 +167,15 @@ export function onFormulaRangeDragEnd(ctx: Context) {
     ctx.formulaCache.selectingRangeIndex = -1;
 }
 
+// The formula range select renders once per overlay pane region; write every
+// copy — each region's clip shows exactly its portion.
 function setRangeSelect(container: HTMLDivElement, left: number, top: number, height: number, width: number) {
-    const rangeElement = container.querySelector('.fortune-formula-functionrange-select') as HTMLDivElement;
-    if (rangeElement == null) return;
-    rangeElement.style.left = `${left}px`;
-    rangeElement.style.top = `${top}px`;
-    rangeElement.style.height = `${height}px`;
-    rangeElement.style.width = `${width}px`;
+    for (const rangeElement of container.querySelectorAll<HTMLDivElement>('.fortune-formula-functionrange-select')) {
+        rangeElement.style.left = `${left}px`;
+        rangeElement.style.top = `${top}px`;
+        rangeElement.style.height = `${height}px`;
+        rangeElement.style.width = `${width}px`;
+    }
 }
 
 export function rangeDrag(
