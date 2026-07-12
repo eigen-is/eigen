@@ -577,7 +577,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const drive = await getSharedDrive(params.ownerId, user);
             return drive.getFileHistory(params.mountId, params.pathId, { limit: query.limit });
         },
-        { auth: true, query: t.Object({ limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })) }) },
+        { auth: true, query: t.Object({ limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })) }) },
     )
     // Client-emitted history events. The typebox union is the allowlist: only event
     // types with a real client emitter are postable; everything else is server-only.

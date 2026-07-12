@@ -20,7 +20,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
         {
             query: t.Object({
                 before: t.Optional(t.String()),
-                limit: t.Optional(t.Number({ minimum: 1, maximum: 200 })),
+                limit: t.Optional(t.Integer({ minimum: 1, maximum: 200 })),
             }),
             auth: true,
         },

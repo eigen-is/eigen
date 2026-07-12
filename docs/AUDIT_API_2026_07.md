@@ -248,7 +248,10 @@ The outer `if` already proved `line[0]` is CR or LF. The inner test means to det
 
 > **✅ FIXED — Unit 2**. `limit: t.Optional(t.Number({ minimum: 1, maximum: 200 }))`, manual
 > parseInt/clamp dropped (absent → 50 preserved). The Eden `limit` type flip required a one-line
-> FE fix in `packages/lib/src/core/chat/hooks/use-chat.ts` (mirrors `use-emails.ts`).
+> FE fix in `packages/lib/src/core/chat/hooks/use-chat.ts` (mirrors `use-emails.ts`). The follow-up
+> `t.Integer` sweep then closed the float gap across the chat/mail/notification/drive-history/search
+> `limit` params — `t.Number` accepted `?limit=1.5`, which then 500'd on the SQL `LIMIT` (bun:sqlite
+> datatype mismatch); `t.Integer` rejects it with 422.
 
 `limit: t.Optional(t.String())` → `parseInt("abc")` = `NaN` → `Math.min(Math.max(1, NaN), 200)` = `NaN` → `LIMIT NaN` (SQLite treats a NaN bind as no-limit → unbounded fetch, or 500). Siblings `mail.ts`/`notification.ts` correctly use `t.Numeric()`/`t.Number({minimum,maximum})`.
 

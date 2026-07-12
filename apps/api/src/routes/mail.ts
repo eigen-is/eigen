@@ -75,8 +75,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
         {
             auth: true,
             query: t.Object({
-                limit: t.Optional(t.Number({ minimum: 1, maximum: 500 })),
-                beforeDate: t.Optional(t.Number()),
+                limit: t.Optional(t.Integer({ minimum: 1, maximum: 500 })),
+                beforeDate: t.Optional(t.Integer()),
                 beforeId: t.Optional(t.String()),
             }),
         },
@@ -185,7 +185,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             body: t.Object({
                 mail: MailDraftSchema,
                 tempAttachmentIds: t.Optional(t.Array(t.String())),
-                keepAttachmentIndexes: t.Optional(t.Array(t.Number())),
+                keepAttachmentIndexes: t.Optional(t.Array(t.Integer())),
                 forceFullSave: t.Optional(t.Boolean()),
             }),
         },
@@ -271,7 +271,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         {
             auth: true,
             body: t.Object({
-                indexes: t.Array(t.Number()),
+                indexes: t.Array(t.Integer()),
                 targetOwnerId: t.String(),
                 targetMountId: t.String(),
                 targetParentId: t.String(),
@@ -294,7 +294,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             params: t.Object({
                 ownerId: t.String(),
                 id: t.String(),
-                index: t.Numeric(),
+                index: t.Integer(),
                 fileName: t.String(),
             }),
         },

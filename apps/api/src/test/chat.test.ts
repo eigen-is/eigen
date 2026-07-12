@@ -252,6 +252,14 @@ describe('Chat', () => {
             expect(res.status).toBe(422);
         });
 
+        test('fractional limit is rejected with 422', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages?limit=1.5`,
+            );
+            expect(res.status).toBe(422);
+        });
+
         test('valid numeric limit still works', async () => {
             const msgs = await chatGet<ChatMessage[]>(
                 ctx.alice.user.sessionToken,
