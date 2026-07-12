@@ -12,6 +12,7 @@
 // never assert on internal call sequences.
 
 import { describe, expect, it } from 'bun:test';
+import type { CellBorderInfo } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../context';
@@ -276,7 +277,8 @@ describe('HTML-table paste — merges, borders, row height', () => {
         const side = { style: 1, color: '#0000ff' };
         const entry = (r: number, c: number) =>
             ctx.sheets[0].config!.borderInfo!.find(
-                (e) => e.rangeType === 'cell' && e.value.row_index === r && e.value.col_index === c,
+                (e): e is CellBorderInfo =>
+                    e.rangeType === 'cell' && e.value.row_index === r && e.value.col_index === c,
             );
         expect(entry(3, 2)?.value.t).toEqual(side);
         expect(entry(3, 2)?.value.l).toEqual(side);
