@@ -1,5 +1,6 @@
 import { type Attendee, type EventData, IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
+import { utcToLocal } from '../calendar/recurrence';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../calendar/recurrence-limits';
 import { normalizeTimezone } from '../calendar/timezone';
 
@@ -16,6 +17,10 @@ export type ParsedEvent = {
     status: 'confirmed' | 'tentative' | 'cancelled';
     sequence: number;
     recurrenceDate: string | null;
+    // Absolute instant of a UTC-Z RECURRENCE-ID, preserved only when the wall-clock key had to be
+    // derived from a series tz. An inbound iMIP single-VEVENT has no master here to supply that tz, so
+    // the caller re-keys against the linked event's stored timezone (audit #8). Null otherwise.
+    recurrenceInstant: Date | null;
     data: EventData | null;
 };
 
@@ -30,12 +35,49 @@ function parseImipMethod(raw: unknown): ImipMethod | undefined {
     return IMIP_METHODS.includes(upper as ImipMethod) ? (upper as ImipMethod) : undefined;
 }
 
+// The wall-clock day a RECURRENCE-ID / EXDATE keys to. Occurrence expansion and keying work in
+// wall-clock space (occurrenceDateToString, expandRecurrence), so an exception must be stored under
+// the same wall-clock date to attach to the right instance. `tz` is the timezone the series is
+// expanded in (the master VEVENT's DTSTART tz), used only for the UTC-Z form.
+function icalTimeToRecurrenceKey(t: ICAL.Time, tz: string | null): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const raw = () => `${t.year}-${pad(t.month)}-${pad(t.day)}`;
+    // Floating (no/unresolvable TZID) or DATE-only value: the literal components ARE the key. toJSDate()
+    // would reinterpret a floating time through the server's local zone and shift the date.
+    if (t.isDate || t.zone === ICAL.Timezone.localTimezone) return raw();
+    // Resolvable NON-UTC zone (a TZID with a VTIMEZONE): RFC 5545 requires RECURRENCE-ID to be in the
+    // master DTSTART's tz, so the value's own wall components ARE the canonical occurrence key — use
+    // them directly. Converting the instant through a different tz would mis-key a cross-tz moved
+    // occurrence (the exception's own DTSTART may be in another zone).
+    if (t.zone !== ICAL.Timezone.utcTimezone) return raw();
+    // UTC-Z form: the instant is exact, but for a timed series that crosses midnight UTC its UTC day is
+    // off by one. Convert to the SERIES timezone wall date. This is the shape Exchange-lineage clients —
+    // and Eigen's own tz-null exceptions — emit, where the exception VEVENT itself carries no usable tz.
+    const instant = t.toJSDate();
+    if (tz) {
+        const { year, month, day } = utcToLocal(instant, tz);
+        return `${year}-${pad(month)}-${pad(day)}`;
+    }
+    return `${instant.getUTCFullYear()}-${pad(instant.getUTCMonth() + 1)}-${pad(instant.getUTCDate())}`;
+}
+
 export function parseIcs(icsText: string): IcsParseResult {
     const jcal = ICAL.parse(icsText);
     const comp = new ICAL.Component(jcal);
     const method = parseImipMethod(comp.getFirstPropertyValue('method'));
 
     const vevents = comp.getAllSubcomponents('vevent');
+
+    // The timezone the recurring series is expanded in — the master VEVENT's DTSTART tz (the VEVENT
+    // without a RECURRENCE-ID). A UTC-Z RECURRENCE-ID / EXDATE (Exchange clients; Eigen's own tz-null
+    // exceptions) keys to a wall-clock date in THIS tz, not the exception's own (absent) tz (audit #8).
+    let seriesTz: string | null = null;
+    for (const vevent of vevents) {
+        if (vevent.getFirstProperty('recurrence-id')) continue;
+        const dtstartTz = vevent.getFirstProperty('dtstart')?.getParameter('tzid') || null;
+        seriesTz = normalizeTimezone(Array.isArray(dtstartTz) ? dtstartTz[0] : dtstartTz);
+        break;
+    }
 
     const results: ParsedEvent[] = [];
 
@@ -96,11 +138,14 @@ export function parseIcs(icsText: string): IcsParseResult {
 
         const recurrenceId = vevent.getFirstProperty('recurrence-id');
         let recurrenceDate: string | null = null;
+        let recurrenceInstant: Date | null = null;
         if (recurrenceId) {
             const rid = recurrenceId.getFirstValue() as ICAL.Time | string | null;
             if (rid instanceof ICAL.Time) {
-                const d = rid.toJSDate();
-                recurrenceDate = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+                recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTz ?? tzid);
+                if (!rid.isDate && rid.zone === ICAL.Timezone.utcTimezone) {
+                    recurrenceInstant = rid.toJSDate();
+                }
             }
         }
 
@@ -186,6 +231,7 @@ export function parseIcs(icsText: string): IcsParseResult {
             status,
             sequence,
             recurrenceDate,
+            recurrenceInstant,
             data,
         });
 
@@ -198,8 +244,7 @@ export function parseIcs(icsText: string): IcsParseResult {
                 const values = exdateProp.getValues() as ICAL.Time[];
                 for (const exVal of values) {
                     const isDateOnly = exVal.isDate;
-                    const pad = (n: number) => String(n).padStart(2, '0');
-                    const exDateStr = `${exVal.year}-${pad(exVal.month)}-${pad(exVal.day)}`;
+                    const exDateStr = icalTimeToRecurrenceKey(exVal, tzid);
 
                     let exStartTime: Date;
                     let exEndTime: Date;
@@ -224,6 +269,7 @@ export function parseIcs(icsText: string): IcsParseResult {
                         status: 'cancelled',
                         sequence,
                         recurrenceDate: exDateStr,
+                        recurrenceInstant: null,
                         data: null,
                     });
                 }

@@ -1,8 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
 import { parseIcs } from '../lib/caldav/ical-parse';
 import { eventsToIcs, serializeEventForImip } from '../lib/caldav/ical-serialize';
-import { composeCancelEmail, composeInviteEmail, composeRsvpReply, composeUpdateEmail } from '../lib/calendar/imip';
+import {
+    composeCancelEmail,
+    composeInviteEmail,
+    composeRsvpReply,
+    composeUpdateEmail,
+    processInboundImip,
+} from '../lib/calendar/imip';
 import { getHome } from '../lib/home/get-home';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
@@ -1105,5 +1112,291 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         const target = findOrFail(events, (e) => e.uid === uid);
         expect(target.title).toBe('Team Sync (rescheduled)');
         expect(target.sequence).toBe(1);
+    });
+});
+
+// Audit #A / #B: an external organizer editing or cancelling ONE occurrence of a recurring meeting
+// sends a lone VEVENT with a RECURRENCE-ID. Pre-fix, REQUEST fed it to receiveInvitationUpdate (which
+// nulled the master's rrule and moved its start) and CANCEL fed it to removeInvitation (which dropped
+// the whole event) — either way the attendee lost the entire series the first time the organizer
+// touched a single instance.
+describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    const ORG = 'external.series.organizer@example.com';
+
+    const VTIMEZONE_NY = [
+        'BEGIN:VTIMEZONE',
+        'TZID:America/New_York',
+        'BEGIN:DAYLIGHT',
+        'TZOFFSETFROM:-0500',
+        'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+        'DTSTART:20070311T020000',
+        'TZNAME:EDT',
+        'TZOFFSETTO:-0400',
+        'END:DAYLIGHT',
+        'BEGIN:STANDARD',
+        'TZOFFSETFROM:-0400',
+        'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+        'DTSTART:20071104T020000',
+        'TZNAME:EST',
+        'TZOFFSETTO:-0500',
+        'END:STANDARD',
+        'END:VTIMEZONE',
+    ].join('\r\n');
+
+    const withMethod = (method: string, ...vevents: string[]) =>
+        [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            `METHOD:${method}`,
+            VTIMEZONE_NY,
+            ...vevents,
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+    const icsMail = (ics: string, method: string): { attachments: Attachment[]; from: AddressObject } => ({
+        attachments: [
+            {
+                type: 'attachment',
+                content: ics,
+                contentType: `text/calendar; method=${method}`,
+                contentDisposition: 'attachment',
+                headers: new Map(),
+                headerLines: [],
+                checksum: '',
+                size: ics.length,
+                related: false,
+            } as unknown as Attachment,
+        ],
+        from: { value: [{ address: ORG, name: 'Ext Org' }], html: '', text: '' },
+    });
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('#A a single-occurrence REQUEST keeps the attendee series recurring', async () => {
+        const UID = 'audit-imip-move@ext';
+        const home = await getHome(ctx.alice.user.id);
+
+        const fullRequest = withMethod(
+            'REQUEST',
+            [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Weekly External',
+                'DTSTART;TZID=America/New_York:20260401T100000',
+                'DTEND;TZID=America/New_York:20260401T110000',
+                'RRULE:FREQ=WEEKLY;COUNT=8',
+                'SEQUENCE:0',
+                `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n'),
+        );
+        processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+
+        const before = home.calendar.getEventsByUid(UID);
+        expect(before).toHaveLength(1);
+        expect(before[0].rrule).toContain('WEEKLY');
+
+        const exceptionOnly = withMethod(
+            'REQUEST',
+            [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Weekly External',
+                'RECURRENCE-ID;TZID=America/New_York:20260408T100000',
+                'DTSTART;TZID=America/New_York:20260408T110000',
+                'DTEND;TZID=America/New_York:20260408T120000',
+                'SEQUENCE:1',
+                `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+                'DTSTAMP:20260102T000000Z',
+                'END:VEVENT',
+            ].join('\r\n'),
+        );
+        processInboundImip(home, icsMail(exceptionOnly, 'REQUEST'));
+
+        const after = home.calendar.getEventsByUid(UID);
+        const master = after.find((e) => !e.parentEventId);
+        expect(master).toBeDefined();
+        expect(master!.rrule).toContain('WEEKLY'); // pre-fix: null — series collapsed
+        expect(new Date(master!.startTime).toISOString()).toBe('2026-04-01T14:00:00.000Z'); // pre-fix: moved to Apr 8
+
+        // The move landed as an exception on the intended (wall-clock) occurrence.
+        const exception = after.find((e) => e.parentEventId);
+        expect(exception).toBeDefined();
+        expect(exception!.recurrenceDate).toBe('2026-04-08');
+    });
+
+    test('#B a single-occurrence CANCEL keeps the attendee series', async () => {
+        const UID = 'audit-imip-cancel@ext';
+        const home = await getHome(ctx.alice.user.id);
+
+        const fullRequest = withMethod(
+            'REQUEST',
+            [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Weekly Cancelable',
+                'DTSTART;TZID=America/New_York:20260401T130000',
+                'DTEND;TZID=America/New_York:20260401T140000',
+                'RRULE:FREQ=WEEKLY;COUNT=8',
+                'SEQUENCE:0',
+                `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n'),
+        );
+        processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        expect(home.calendar.getEventsByUid(UID)).toHaveLength(1);
+
+        const cancelOne = withMethod(
+            'CANCEL',
+            [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Weekly Cancelable',
+                'RECURRENCE-ID;TZID=America/New_York:20260408T130000',
+                'DTSTART;TZID=America/New_York:20260408T130000',
+                'DTEND;TZID=America/New_York:20260408T140000',
+                'STATUS:CANCELLED',
+                'SEQUENCE:1',
+                `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                'DTSTAMP:20260102T000000Z',
+                'END:VEVENT',
+            ].join('\r\n'),
+        );
+        processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
+
+        const after = home.calendar.getEventsByUid(UID);
+        const master = after.find((e) => !e.parentEventId && e.rrule);
+        expect(master).toBeDefined(); // pre-fix: whole series deleted
+        expect(master!.rrule).toContain('WEEKLY');
+        // The cancellation landed as a cancelled exception on the intended occurrence.
+        const cancelled = after.find((e) => e.parentEventId && e.status === 'cancelled');
+        expect(cancelled).toBeDefined();
+        expect(cancelled!.recurrenceDate).toBe('2026-04-08');
+    });
+
+    // Audit #8 (iMIP variant): an Exchange-lineage organizer sends the RECURRENCE-ID in UTC-Z form with
+    // no VTIMEZONE. The lone exception VEVENT carries no usable tz, so the key must come from the linked
+    // series' stored timezone — otherwise a cross-midnight-UTC occurrence keys on the UTC date and the
+    // move attaches to the wrong instance.
+    test('#8 a UTC-Z RECURRENCE-ID keys on the linked series timezone', async () => {
+        const UID = 'audit8-imip-z@ext';
+        const home = await getHome(ctx.alice.user.id);
+
+        // Evening NY series: 21:00 EDT = 01:00Z next day, so an occurrence's UTC date is the day after
+        // its wall-clock date.
+        const fullRequest = withMethod(
+            'REQUEST',
+            [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Evening External',
+                'DTSTART;TZID=America/New_York:20260401T210000',
+                'DTEND;TZID=America/New_York:20260401T220000',
+                'RRULE:FREQ=WEEKLY;COUNT=8',
+                'SEQUENCE:0',
+                `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n'),
+        );
+        processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        expect(home.calendar.getEventsByUid(UID)).toHaveLength(1);
+
+        // Apr 8 21:00 NY = Apr 9 01:00Z. No VTIMEZONE, no TZID: only the linked tz supplies the wall date.
+        const exceptionOnly = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Exchange//EN',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            `UID:${UID}`,
+            'SUMMARY:Moved Evening',
+            'RECURRENCE-ID:20260409T010000Z',
+            'DTSTART:20260409T020000Z',
+            'DTEND:20260409T030000Z',
+            'SEQUENCE:1',
+            `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+            'DTSTAMP:20260102T000000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        processInboundImip(home, icsMail(exceptionOnly, 'REQUEST'));
+
+        const after = home.calendar.getEventsByUid(UID);
+        expect(after.find((e) => !e.parentEventId)!.rrule).toContain('WEEKLY');
+        const exception = after.find((e) => e.parentEventId);
+        expect(exception).toBeDefined();
+        // Keyed on the linked series tz (America/New_York) wall date, not the UTC date of the Z instant.
+        expect(exception!.recurrenceDate).toBe('2026-04-08'); // pre-fix: '2026-04-09' (UTC date)
+    });
+
+    // Finding 2: receiveInvitationException mirrors receiveInvitationUpdate's RFC 5546 replay guard —
+    // a stale/replayed occurrence REQUEST must not overwrite a newer exception.
+    test('a replayed single-occurrence REQUEST with a stale SEQUENCE does not overwrite a newer exception', async () => {
+        const UID = 'audit-imip-replay@ext';
+        const home = await getHome(ctx.alice.user.id);
+
+        const fullRequest = withMethod(
+            'REQUEST',
+            [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Weekly Replay',
+                'DTSTART;TZID=America/New_York:20260401T100000',
+                'DTEND;TZID=America/New_York:20260401T110000',
+                'RRULE:FREQ=WEEKLY;COUNT=8',
+                'SEQUENCE:0',
+                `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n'),
+        );
+        processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+
+        const excReq = (summary: string, start: string, end: string, seq: number) =>
+            withMethod(
+                'REQUEST',
+                [
+                    'BEGIN:VEVENT',
+                    `UID:${UID}`,
+                    `SUMMARY:${summary}`,
+                    'RECURRENCE-ID;TZID=America/New_York:20260408T100000',
+                    `DTSTART;TZID=America/New_York:${start}`,
+                    `DTEND;TZID=America/New_York:${end}`,
+                    `SEQUENCE:${seq}`,
+                    `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                    `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+                    'DTSTAMP:20260102T000000Z',
+                    'END:VEVENT',
+                ].join('\r\n'),
+            );
+
+        // Newer move (SEQUENCE 5): the occurrence is rescheduled to 15:00 (19:00Z).
+        processInboundImip(home, icsMail(excReq('Moved to 3pm', '20260408T150000', '20260408T160000', 5), 'REQUEST'));
+        // Stale replay (SEQUENCE 3) carrying a different time must be ignored.
+        processInboundImip(
+            home,
+            icsMail(excReq('Stale move to 9am', '20260408T090000', '20260408T100000', 3), 'REQUEST'),
+        );
+
+        const exception = home.calendar
+            .getEventsByUid(UID)
+            .find((e) => e.parentEventId && e.recurrenceDate === '2026-04-08');
+        expect(exception).toBeDefined();
+        expect(exception!.title).toBe('Moved to 3pm'); // pre-fix: 'Stale move to 9am' (replay clobbered it)
+        expect(exception!.sequence).toBe(5); // pre-fix: 3
+        expect(new Date(exception!.startTime).toISOString()).toBe('2026-04-08T19:00:00.000Z');
     });
 });

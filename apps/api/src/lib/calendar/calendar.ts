@@ -32,7 +32,7 @@ import {
     dbEventToCalendarEventRow,
     dbRowToSharedCalendar,
 } from './mappers';
-import { computeOccurrenceTimes, constrainRRule, expandRecurrence } from './recurrence';
+import { computeOccurrenceTimes, constrainRRule, expandRecurrence, utcToLocal } from './recurrence';
 import { clampRangeEnd, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
@@ -41,6 +41,7 @@ import { normalizeTimezone } from './timezone';
 import type {
     CalendarEventRow,
     CreateEventArgs,
+    InvitationExceptionPayload,
     InvitationUpdatePayload,
     ReceiveInvitationPayload,
     UpdateEventArgs,
@@ -301,6 +302,38 @@ export class Calendar {
             .map(dbEventToCalendarEventRow);
     }
 
+    // All rows (master + exceptions) of one UID in a calendar. Calendar-scoped, uses idx_events_uid_calendar
+    // — avoids loading the whole collection to serve a single .ics.
+    public getRawEventsByUid(calendarId: string, uid: string): CalendarEventRow[] {
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.uid, uid)))
+            .all()
+            .map(dbEventToCalendarEventRow);
+    }
+
+    // All rows of the given UIDs in a calendar (multiget grouping). Calendar-scoped via idx_events_uid_calendar.
+    public getRawEventsByUids(calendarId: string, uids: string[]): CalendarEventRow[] {
+        if (!uids.length) return [];
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(and(eq(schema.events.calendarId, calendarId), inArray(schema.events.uid, uids)))
+            .all()
+            .map(dbEventToCalendarEventRow);
+    }
+
+    // A recurring master's exception rows. Uses idx_events_parent.
+    public getExceptionsForParent(parentEventId: string): CalendarEventRow[] {
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(eq(schema.events.parentEventId, parentEventId))
+            .all()
+            .map(dbEventToCalendarEventRow);
+    }
+
     public getRawEventsInRange(calendarId: string, from: Date, to: Date): CalendarEventRow[] {
         // Clamp the window span (see recurrence-limits) so an over-wide CalDAV time-range can't make
         // rrule materialise a giant occurrence set and block the event loop.
@@ -504,7 +537,11 @@ export class Calendar {
         const cal = this.getCalendarById(existing.calendarId);
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
 
-        if (user && updated.data?.attendees?.length) {
+        // Only the organizer fans out invitations. An attendee editing their linked copy (guarded to
+        // reminders/color above) must NOT bump SEQUENCE or send iMIP — doing so spoofs the attendee as
+        // organizer AND outruns the organizer's SEQUENCE, so the RFC 5546 replay guard later drops the
+        // organizer's real updates (audit #9). Mirror the attendee discriminator at the top of updateEvent.
+        if (user && !existing.data?.organizer && updated.data?.attendees?.length) {
             this.incrementSequence(id);
             const withSequence = this.getEventById(id)!;
             propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(
@@ -1023,6 +1060,121 @@ export class Calendar {
         });
     }
 
+    // Inbound iMIP: an external organizer moved ONE occurrence of a recurring invite (a lone VEVENT
+    // with a RECURRENCE-ID). Land it as an exception on the linked series — feeding it to
+    // receiveInvitationUpdate would rewrite the master and collapse the whole series (audit #A).
+    public receiveInvitationException(
+        orgEventId: string,
+        orgUserId: string,
+        payload: InvitationExceptionPayload,
+    ): void {
+        const linked = this.findLinkedEvent(orgEventId, orgUserId);
+        if (!linked) return;
+
+        const recurrenceDate = this.recurrenceKeyForLinked(
+            payload.recurrenceDate,
+            payload.recurrenceInstant,
+            linked.timezone,
+        );
+        const timezone = payload.timezone ?? linked.timezone ?? null;
+        const existing = this.getException(linked.id, recurrenceDate);
+        const data: EventData = {
+            ...linked.data,
+            attendees: payload.attendees ?? existing?.data?.attendees ?? linked.data?.attendees,
+        };
+
+        if (existing) {
+            // RFC 5546 §3.2.2.1: ignore a REQUEST whose SEQUENCE isn't newer than the stored exception.
+            // A stale or reordered occurrence move must not overwrite a newer one, and an equal-SEQUENCE
+            // re-send is non-significant (a real change bumps SEQUENCE) so it must not churn etag/ctag.
+            if (payload.sequence <= existing.sequence) return;
+
+            // Write the row directly (not updateEvent): the exception carries data.organizer, which
+            // would trip updateEvent's attendee guard and silently drop the organizer's change.
+            const etag = computeEtag({
+                title: payload.title,
+                description: payload.description,
+                location: payload.location,
+                startTime: payload.startTime,
+                endTime: payload.endTime,
+                allDay: payload.allDay,
+                rrule: null,
+                timezone,
+                status: payload.status,
+                data,
+            });
+            this.db
+                .update(schema.events)
+                .set({
+                    title: payload.title,
+                    description: payload.description,
+                    location: payload.location,
+                    startTime: payload.startTime,
+                    endTime: payload.endTime,
+                    allDay: payload.allDay,
+                    timezone,
+                    status: payload.status,
+                    sequence: payload.sequence,
+                    etag,
+                    data,
+                    updatedAt: sql`unixepoch()`,
+                })
+                .where(eq(schema.events.id, existing.id))
+                .run();
+            this.incrementCtag(linked.calendarId);
+            this.touchEvent(linked.id);
+            this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
+        } else {
+            // createEvent touches the master, bumps the ctag and broadcasts on its own.
+            this.createEvent(linked.calendarId, {
+                title: payload.title,
+                description: payload.description,
+                location: payload.location,
+                startTime: payload.startTime,
+                endTime: payload.endTime,
+                allDay: payload.allDay,
+                timezone,
+                parentEventId: linked.id,
+                recurrenceDate,
+                status: payload.status,
+                sequence: payload.sequence,
+                data,
+                createByUserId: linked.createByUserId,
+                uid: linked.uid,
+            });
+        }
+    }
+
+    // Re-key an inbound iMIP RECURRENCE-ID against the linked series' timezone. The payload is a single
+    // VEVENT with no master, so the parser can't know the series tz; a UTC-Z RECURRENCE-ID (Exchange
+    // clients, Eigen's own tz-null exceptions) would otherwise key on the UTC date and attach the
+    // exception to the wrong occurrence (audit #8). `recurrenceInstant` is set only for that Z-form case.
+    private recurrenceKeyForLinked(
+        recurrenceDate: string,
+        recurrenceInstant: Date | null | undefined,
+        tz: string | null,
+    ): string {
+        if (!recurrenceInstant || !tz) return recurrenceDate;
+        const { year, month, day } = utcToLocal(recurrenceInstant, tz);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${year}-${pad(month)}-${pad(day)}`;
+    }
+
+    // Inbound iMIP: an external organizer cancelled ONE occurrence of a recurring invite. Cancel just
+    // that instance — removeInvitation would delete the attendee's entire linked series (audit #B).
+    public cancelInvitationOccurrence(
+        orgEventId: string,
+        orgUserId: string,
+        recurrenceDate: string,
+        recurrenceInstant?: Date | null,
+    ): void {
+        const linked = this.findLinkedEvent(orgEventId, orgUserId);
+        if (!linked) return;
+        const key = this.recurrenceKeyForLinked(recurrenceDate, recurrenceInstant, linked.timezone);
+        this.removeOccurrence(linked.id, key);
+        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
+    }
+
     public removeInvitation(orgEventId: string, orgUserId: string): void {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
@@ -1104,6 +1256,7 @@ export class Calendar {
                 endTime: existing.endTime,
                 allDay: existing.allDay,
                 rrule: existing.rrule,
+                timezone: existing.timezone,
                 status: newStatus,
                 data: updatedData,
             });
@@ -1133,6 +1286,7 @@ export class Calendar {
                 startTime,
                 endTime,
                 allDay: parent.allDay,
+                timezone: parent.timezone,
                 parentEventId: eventId,
                 recurrenceDate,
                 data: { ...parent.data, attendees },
@@ -1166,6 +1320,7 @@ export class Calendar {
                 startTime,
                 endTime,
                 allDay: parent.allDay,
+                timezone: parent.timezone,
                 parentEventId: eventId,
                 recurrenceDate,
                 status: 'cancelled',
@@ -1264,6 +1419,7 @@ export class Calendar {
             endTime: event.endTime,
             allDay: event.allDay,
             rrule: truncated,
+            timezone: event.timezone,
             status: event.status,
             data: event.data,
         });

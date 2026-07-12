@@ -78,10 +78,12 @@ function handleCalendarMultiget(
     const events = calendar.getEventsByUris(calendarId, uris);
     const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
 
-    // Build a uid→all-events map for grouping exceptions with their master
-    const allEvents = calendar.getRawEvents(calendarId);
+    // Build a uid→all-events map for grouping exceptions with their master — only for the UIDs the
+    // client actually asked for, not the whole collection.
+    const requestedUids = [...new Set(events.map((e) => e.uid))];
+    const relatedEvents = calendar.getRawEventsByUids(calendarId, requestedUids);
     const eventsByUid = new Map<string, CalendarEventRow[]>();
-    for (const e of allEvents) {
+    for (const e of relatedEvents) {
         const group = eventsByUid.get(e.uid) ?? [];
         eventsByUid.set(e.uid, group);
         group.push(e);

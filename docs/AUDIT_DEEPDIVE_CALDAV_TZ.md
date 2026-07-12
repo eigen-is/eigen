@@ -33,6 +33,12 @@ off the wall-clock date, so edits/cancellations attach to the wrong occurrence o
 
 ## #8 — RECURRENCE-ID keyed by UTC date vs wall-clock EXDATE/expansion — **REAL (P1-adjacent)**
 
+> **✅ FIXED — Unit 4** (`fix/api-audit-2026-07`), with the rule refined once more in review: TZID-form
+> rids key on their OWN wall components (RFC 5545 canonical — also fixes the cross-tz-moved-occurrence
+> corner); UTC-Z converts the instant to the SERIES tz (master DTSTART tz on PUT, `linked.timezone` on
+> iMIP); floating/DATE stay raw (deliberate — converting would hit the #G floating hazard). EXDATE
+> conforms (its tz IS the series tz). Z-form red tests added on both paths.
+
 **Where:** `caldav/ical-parse.ts` RECURRENCE-ID derives its date from `rid.toJSDate()` + `getUTC*`
 (~:99-104). EXDATE in the same file uses wall-clock components `exVal.year/month/day` (~:200-203).
 Occurrence keying: `calendar/recurrence.ts` `occurrenceDateToString` (~:130), operating in wall-clock space.
@@ -62,6 +68,9 @@ a VTIMEZONE), convert the instant to the **event's timezone** wall date (use the
 ---
 
 ## #9 — attendee editing a linked event runs the organizer fan-out — **REAL, worse than audit (P1)**
+
+> **✅ FIXED — Unit 4**. Fan-out gated on `existing.data?.organizer`; the red test pins all three
+> assertions below, including the kill-shot (organizer's next update still lands).
 
 **Where:** attendee guard `calendar/calendar.ts` (~:414-421) correctly localizes an attendee's edit to
 reminders/color. But the organizer block (~:507-515) still runs `incrementSequence(id)` +
@@ -94,6 +103,11 @@ no spoofed iMIP, organizer's next update still lands); also `calendar-fanout-eta
 
 ## NEW #A — inbound iMIP single-occurrence REQUEST destroys the attendee's whole series — **P1 (not in audit)**
 
+> **✅ FIXED — Unit 4**. Single-occurrence REQUEST routes to new `Calendar.receiveInvitationException`
+> (exception create/update on the linked event, keyed per the #8 rule, with the RFC 5546 sequence
+> replay guard mirrored from `receiveInvitationUpdate`). Master-VEVENT REQUEST unchanged. Product
+> note: occurrence-level changes broadcast SSE but persist no tray notification (open product call).
+
 **Where:** `calendar/imip.ts` `processInboundImip` REQUEST branch.
 
 **Symptom / failure scenario:** an external organizer (Google/Outlook) moves **one** occurrence of a
@@ -117,6 +131,9 @@ linked event (times from the parsed VEVENT, keyed per the #8 fix) instead of cal
 ---
 
 ## NEW #B — inbound iMIP single-occurrence CANCEL deletes the whole series — **P1 (not in audit)**
+
+> **✅ FIXED — Unit 4**. Single-occurrence CANCEL routes to `cancelInvitationOccurrence` (cancelled
+> exception via the existing `removeOccurrence` seam). Master-VEVENT CANCEL still deletes the series.
 
 **Where:** `calendar/imip.ts` `processInboundImip` CANCEL branch — `parsed.recurrenceDate` is ignored and
 `removeInvitation(uid, …)` drops the entire linked event.
@@ -193,6 +210,9 @@ CalDAV involvement.
 ---
 
 ## #24 — computeEtag omits timezone — **CONFIRMED (P3)**
+
+> **✅ FIXED — Unit 4**. `timezone` in the etag basis at both sites; exception rows get the parent's
+> tz on create and heal on re-PUT (`syncExceptionEvents` update branch, explicit PUT tz wins).
 
 **Where:** `calendar/calendar.ts` `rsvpForOccurrence` (~:1099-1109) and `removeThisAndFuture` (~:1259-1269)
 omit `timezone` from the etag basis, while create/update include it. Etag helper: `calendar/mappers.ts`.

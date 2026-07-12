@@ -132,6 +132,10 @@ Each loads the **whole** calendar via `getRawEvents(calendarId)` to select one u
 
 **Direction:** add calendar-scoped helpers (`getRawEventsByUid(calendarId, uid)`, `getExceptionsForParent(parentId)`, uid-set `inArray` for multiget). Note `getEventsByUid` exists but is **not** calendar-scoped — don't just reuse it.
 
+> **✅ FIXED — Unit 4** (`fix/api-audit-2026-07`). Calendar-scoped `getRawEventsByUid`,
+> `getRawEventsByUids` (multiget), and `getExceptionsForParent` added next to `getRawEvents` and
+> wired at all three CalDAV sites; non-scoped `getEventsByUid` untouched.
+
 ### 8. RECURRENCE-ID stored as UTC date while EXDATE/expansion key on wall-clock date
 `apps/api/src/lib/caldav/ical-parse.ts:99-104` vs EXDATE at `:200-203`; keying in `calendar/recurrence.ts:130` **[verified: the two code paths differ]**
 
@@ -139,12 +143,23 @@ RECURRENCE-ID derives its date from `rid.toJSDate()` **UTC** fields; EXDATE (sam
 
 **Direction:** derive `recurrenceDate` from the `ICAL.Time` components (`rid.year/rid.month/rid.day`), matching EXDATE.
 
+> **✅ FIXED — Unit 4** (with the deep-dive's refined rule — the direction above missed UTC-Z forms).
+> `icalTimeToRecurrenceKey` keys all four RECURRENCE-ID/EXDATE forms on the series wall-clock date:
+> TZID form uses the rid's own components (RFC 5545 canonical), UTC-Z converts the instant to the
+> SERIES timezone (master DTSTART tz on PUT; `linked.timezone` on iMIP via `recurrenceInstant`),
+> floating/DATE stay raw. Z-form red tests added on both the CalDAV and iMIP paths.
+
 ### 9. Attendee editing a linked event still runs the organizer invitation fan-out
 `apps/api/src/lib/calendar/calendar.ts:414-421` (attendee guard) and `:507-515` (fan-out) **[verified: both run]**
 
 The `:414` guard establishes "this home is an attendee" (linked copy has `data.organizer`) and restricts input to reminders/color. But the `:507` organizer block still fires: `incrementSequence(id)` + `propagateInvitation(...)`. For external/guest attendees that sends a `composeUpdateEmail` iMIP "Updated invitation" with `organizer = {this attendee}` — the attendee spoofed as organizer — and bumps SEQUENCE on every local reminder/color toggle. (Internal attendees no-op via `findLinkedEvent`; the external-mail + sequence-bump side effects are real.)
 
 **Direction:** gate the `:507` propagate/`incrementSequence` block on the organizer case — skip when `existing.data?.organizer` is set (mirror the `:414` discriminator).
+
+> **✅ FIXED — Unit 4**. Fan-out gated on `!existing.data?.organizer`: an attendee's reminder/color
+> toggle no longer bumps SEQUENCE or sends spoofed iMIP. The red test pins the deep-dive's kill-shot —
+> the organizer's next real update still reaches the attendee (no more silent replay-guard drop).
+> Organizer fan-out unchanged.
 
 ### 10. Chat `readChatContent` materializes up to 100 000 rows to honor a 100 KB cap
 `apps/api/src/lib/document/chat.ts:24-32` **[verified]**
@@ -281,7 +296,7 @@ Timers are never `.unref()`d, and `setInterval(run, ms)` re-invokes regardless o
 ### 24. Small correctness/hygiene nits
 - **`buildRecentText` unbounded** (`chat.ts:458-472`): `select().all()` then break at 8 KB — add `.limit(N)` so SQL does the bounding (same shape as #10). — **✅ FIXED — Unit 3**: `.limit(RECENT_TEXT_CAP)` + `ne(content, '')` so SQL bounds the fetch and empty rows can't crowd the window.
 - **`getTeamMembers` swallows all errors → `[]`** (`team.ts:14-26`): a real DB failure silently becomes "no members," masking ACL breakage. Drop the try/catch (CODE-STANDARDS "unnecessary error handling").
-- **`computeEtag` omits `timezone`** at `rsvpForOccurrence` (`calendar.ts:1099`) and `removeThisAndFuture` (`:1259`) while create/update include it → same event hashes differently across paths → spurious CalDAV re-sync. Include `timezone` consistently.
+- **`computeEtag` omits `timezone`** at `rsvpForOccurrence` (`calendar.ts:1099`) and `removeThisAndFuture` (`:1259`) while create/update include it → same event hashes differently across paths → spurious CalDAV re-sync. Include `timezone` consistently. — **✅ FIXED — Unit 4**: `timezone` in the etag basis at both sites; exception rows now get the parent's timezone on create and heal on re-PUT.
 - **Mail attachment `:index` unvalidated** (`mail.ts:282,289`): `Number("abc")` → `NaN`; benign today (`?? null`) but add `params: t.Object({ index: t.Numeric() })`. — **✅ FIXED — Unit 2**: `params` schema added, manual `Number()` dropped.
 - **SMTP `tls: { rejectUnauthorized: false }`** (`mailer.ts:44`): accepts any cert on the SMTP hop. Likely intentional for an internal relay — make it env-opt-out or add a WHY comment.
 - **`my-teams` swallows relay-pull failures silently** (`home.ts:39-42`): `.catch(() => [])` renders a team with zero mounts/calendars with no log. Add `console.error`.
