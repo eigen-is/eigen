@@ -8,8 +8,6 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
 
 Bugs:
 
-- [ ] border-slash applies `borderRange[0]` to every selected range — use `borderRange[j]`
-      (`state/modules/border.ts`, NOTE in code)
 - [ ] `functionStrChange`'s unary-minus predecessor scan skips a char (reads `i-2`; preserved as
       `skipPrevChar` in `engine/formula-shift.ts`) — unify both walkers on read-`i-1`, drop the flag
 - [ ] drag-fill number-format handling is direction-asymmetric: only `down` keeps an existing

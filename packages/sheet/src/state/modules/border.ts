@@ -187,8 +187,8 @@ export function getBorderInfoComputeRange(
                 }
 
                 if (borderType === 'border-slash') {
-                    const bd_r = borderRange[0].row_focus;
-                    const bd_c = borderRange[0].column_focus;
+                    const bd_r = borderRange[j].row_focus;
+                    const bd_c = borderRange[j].column_focus;
                     if (bd_r == null || bd_c == null) continue;
                     if (cfg.rowhidden?.[bd_r] != null) continue;
                     if (bd_c < dataset_col_st || bd_c > dataset_col_ed) continue;
