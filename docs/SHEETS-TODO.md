@@ -29,8 +29,6 @@ Decided behavior changes (Excel/Google parity):
       already does (`engine/conditional-format.ts` greaterThan/lessThan and peers)
 - [ ] formula `=` / `<>` become coercing and case-insensitive (`"A"="a"` → TRUE, `1="1"` → TRUE)
       per Excel (`engine/parser/evaluate-by-operator/operator/equal.ts` + notEqual)
-- [ ] remove the CJK special-case in sort (`state/modules/sort.ts` ~:134) — plain `'en'`
-      `localeCompare` for all text
 
 ## 2. Presence (decided: wire it up)
 

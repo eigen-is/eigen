@@ -118,11 +118,6 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0
             if (cell.mc != null || isRealNull(cell.v)) {
                 continue;
             }
-            if (str == null && /[\u4e00-\u9fa5]+/g.test(`${cell.v}`)) {
-                str = r + 1;
-                edr = r + 1;
-                continue;
-            }
 
             if (str == null) {
                 str = r;
