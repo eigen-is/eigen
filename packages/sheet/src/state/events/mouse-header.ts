@@ -13,6 +13,7 @@ import { cancelFunctionrangeSelected, mergeMoveMain, updateCell } from '../modul
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
 import { checkProtectionAllSelected } from '../modules/protection';
 import type { GlobalCache } from '../types';
+import { extendSelectionGeometry } from './mouse-drag';
 import { fixPositionOnFrozenCells } from './mouse-resize';
 
 export function handleRowHeaderMouseDown(
@@ -102,29 +103,18 @@ export function handleRowHeaderMouseDown(
                     last.row_focus == null
                 )
                     return;
-                if (last.top > row_pre) {
-                    top = row_pre;
-                    height = last.top + last.height - row_pre;
-
-                    if (last.row[1] > last.row_focus) {
-                        last.row[1] = last.row_focus;
-                    }
-
-                    rowseleted = [row_index, last.row[1]];
-                } else if (last.top === row_pre) {
-                    top = row_pre;
-                    height = last.top + last.height - row_pre;
-                    rowseleted = [row_index, last.row[0]];
-                } else {
-                    top = last.top;
-                    height = row - last.top - 1;
-
-                    if (last.row[0] < last.row_focus) {
-                        last.row[0] = last.row_focus;
-                    }
-
-                    rowseleted = [last.row[0], row_index];
-                }
+                const rowGeom = extendSelectionGeometry(
+                    last.top,
+                    last.height,
+                    last.row,
+                    last.row_focus,
+                    row_pre,
+                    row,
+                    row_index,
+                );
+                top = rowGeom.start;
+                height = rowGeom.span;
+                rowseleted = rowGeom.selected;
 
                 changeparam = mergeMoveMain(
                     ctx,
@@ -267,29 +257,18 @@ export function handleRowHeaderMouseDown(
             let _top = 0;
             let _height = 0;
             let _rowseleted = [];
-            if (last.top > row_pre) {
-                _top = row_pre;
-                _height = last.top + last.height - row_pre;
-
-                if (last.row[1] > last.row_focus) {
-                    last.row[1] = last.row_focus;
-                }
-
-                _rowseleted = [row_index, last.row[1]];
-            } else if (last.top === row_pre) {
-                _top = row_pre;
-                _height = last.top + last.height - row_pre;
-                _rowseleted = [row_index, last.row[0]];
-            } else {
-                _top = last.top;
-                _height = row - last.top - 1;
-
-                if (last.row[0] < last.row_focus) {
-                    last.row[0] = last.row_focus;
-                }
-
-                _rowseleted = [last.row[0], row_index];
-            }
+            const rowGeom = extendSelectionGeometry(
+                last.top,
+                last.height,
+                last.row,
+                last.row_focus,
+                row_pre,
+                row,
+                row_index,
+            );
+            _top = rowGeom.start;
+            _height = rowGeom.span;
+            _rowseleted = rowGeom.selected;
 
             last.row = _rowseleted;
 
@@ -429,29 +408,18 @@ export function handleColumnHeaderMouseDown(
                     last.column_focus == null
                 )
                     return;
-                if (last.left > col_pre) {
-                    left = col_pre;
-                    width = last.left + last.width - col_pre;
-
-                    if (last.column[1] > last.column_focus) {
-                        last.column[1] = last.column_focus;
-                    }
-
-                    columnseleted = [col_index, last.column[1]];
-                } else if (last.left === col_pre) {
-                    left = col_pre;
-                    width = last.left + last.width - col_pre;
-                    columnseleted = [col_index, last.column[0]];
-                } else {
-                    left = last.left;
-                    width = col - last.left - 1;
-
-                    if (last.column[0] < last.column_focus) {
-                        last.column[0] = last.column_focus;
-                    }
-
-                    columnseleted = [last.column[0], col_index];
-                }
+                const colGeom = extendSelectionGeometry(
+                    last.left,
+                    last.width,
+                    last.column,
+                    last.column_focus,
+                    col_pre,
+                    col,
+                    col_index,
+                );
+                left = colGeom.start;
+                width = colGeom.span;
+                columnseleted = colGeom.selected;
 
                 changeparam = mergeMoveMain(
                     ctx,
@@ -593,29 +561,18 @@ export function handleColumnHeaderMouseDown(
                 return;
             }
 
-            if (last.left > col_pre) {
-                _left = col_pre;
-                _width = last.left + last.width - col_pre;
-
-                if (last.column[1] > last.column_focus) {
-                    last.column[1] = last.column_focus;
-                }
-
-                _columnseleted = [col_index, last.column[1]];
-            } else if (last.left === col_pre) {
-                _left = col_pre;
-                _width = last.left + last.width - col_pre;
-                _columnseleted = [col_index, last.column[0]];
-            } else {
-                _left = last.left;
-                _width = col - last.left - 1;
-
-                if (last.column[0] < last.column_focus) {
-                    last.column[0] = last.column_focus;
-                }
-
-                _columnseleted = [last.column[0], col_index];
-            }
+            const colGeom = extendSelectionGeometry(
+                last.left,
+                last.width,
+                last.column,
+                last.column_focus,
+                col_pre,
+                col,
+                col_index,
+            );
+            _left = colGeom.start;
+            _width = colGeom.span;
+            _columnseleted = colGeom.selected;
 
             last.column = _columnseleted;
 

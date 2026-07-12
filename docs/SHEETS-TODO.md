@@ -145,7 +145,7 @@ write `{color, style}`, propagate to the merge-aware neighbour on the opposite s
 neighbour block is pasted 12+ times. → `setSide(map, r, c, side)` + `propagateToNeighbour(...)`;
 each branch becomes a short loop. Biggest single win in the package.
 
-**C2. Selection-extension geometry pasted ~7×** across the mouse layer:
+**C2. Selection-extension geometry pasted ~7×** ✅ done (9 of 10 axis-blocks → extendSelectionGeometry in mouse-drag.ts; mouse-cell formula-shift column block stays inline — lazy null guards with early returns can't extract byte-identically; 16.7M-case differential + interaction pixel probes identical; formula-range.ts holds a clamp-FREE sibling motif — do not "unify" it later) across the mouse layer:
 `mouse-cell.ts:178-243,369-409`, `mouse-drag.ts:79-128`, `mouse-header.ts:105-141,270-292,432-468,596-618`.
 The `if (last.top > row_pre) {…} else if (===) {…} else {…}` row block + its column twin
 (~40 lines/copy) computing `top/height/rowseleted/left/width/columnseleted`. A selection bugfix

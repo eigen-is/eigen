@@ -26,6 +26,37 @@ import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
 import { fixPositionOnFrozenCells } from './mouse-resize';
 
+// Shift-click / drag selection extension along a single axis (row or column).
+// The classic luckysheet motif, previously pasted across the mouse layer
+// (mouse-cell / mouse-drag / mouse-header): given the anchor selection's start
+// (`pos`) and span, plus the newly hit cell's near edge (`pre`), far edge (`end`)
+// and index, it returns the extended axis start/span and the new [start, end]
+// index pair. It clamps the anchor's index `range` toward its `focus` in place —
+// the same side effect the inlined copies had on `last.row` / `last.column`.
+export function extendSelectionGeometry(
+    pos: number,
+    span: number,
+    range: number[],
+    focus: number,
+    pre: number,
+    end: number,
+    index: number,
+): { start: number; span: number; selected: number[] } {
+    if (pos > pre) {
+        if (range[1] > focus) {
+            range[1] = focus;
+        }
+        return { start: pre, span: pos + span - pre, selected: [index, range[1]] };
+    }
+    if (pos === pre) {
+        return { start: pre, span: pos + span - pre, selected: [index, range[0]] };
+    }
+    if (range[0] < focus) {
+        range[0] = focus;
+    }
+    return { start: pos, span: end - pos - 1, selected: [range[0], index] };
+}
+
 // ---------------------------------------------------------------------------
 // mouseRender sub-functions (private)
 // ---------------------------------------------------------------------------
@@ -74,59 +105,23 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
         return;
     }
 
-    let top = 0;
-    let height = 0;
-    let rowseleted = [];
-    if (last.top > row_pre) {
-        top = row_pre;
-        height = last.top + last.height - row_pre;
+    const rowGeom = extendSelectionGeometry(last.top, last.height, last.row, last.row_focus, row_pre, row, row_index);
+    let top = rowGeom.start;
+    let height = rowGeom.span;
+    let rowseleted = rowGeom.selected;
 
-        if (last.row[1] > last.row_focus) {
-            last.row[1] = last.row_focus;
-        }
-
-        rowseleted = [row_index, last.row[1]];
-    } else if (last.top === row_pre) {
-        top = row_pre;
-        height = last.top + last.height - row_pre;
-        rowseleted = [row_index, last.row[0]];
-    } else {
-        top = last.top;
-        height = row - last.top - 1;
-
-        if (last.row[0] < last.row_focus) {
-            last.row[0] = last.row_focus;
-        }
-
-        rowseleted = [last.row[0], row_index];
-    }
-
-    let left = 0;
-    let width = 0;
-    let columnseleted = [];
-    if (last.left > col_pre) {
-        left = col_pre;
-        width = last.left + last.width - col_pre;
-
-        if (last.column[1] > last.column_focus) {
-            last.column[1] = last.column_focus;
-        }
-
-        columnseleted = [col_index, last.column[1]];
-    } else if (last.left === col_pre) {
-        left = col_pre;
-        width = last.left + last.width - col_pre;
-        columnseleted = [col_index, last.column[0]];
-    } else {
-        left = last.left;
-        width = col - last.left - 1;
-
-        if (last.column[0] < last.column_focus) {
-            last.column[0] = last.column_focus;
-        }
-
-        columnseleted = [last.column[0], col_index];
-    }
+    const colGeom = extendSelectionGeometry(
+        last.left,
+        last.width,
+        last.column,
+        last.column_focus,
+        col_pre,
+        col,
+        col_index,
+    );
+    let left = colGeom.start;
+    let width = colGeom.span;
+    let columnseleted = colGeom.selected;
 
     const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
     if (changeparam != null) {
