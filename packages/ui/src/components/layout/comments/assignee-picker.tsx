@@ -26,7 +26,9 @@ export function AssigneePicker({
         setOpen(false);
     };
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        // modal: inside the card dialog, the Dialog's scroll lock would otherwise swallow
+        // wheel events over the portalled member list.
+        <Popover open={open} onOpenChange={setOpen} modal>
             <PopoverTrigger asChild disabled={disabled}>
                 {children}
             </PopoverTrigger>
