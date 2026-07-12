@@ -74,7 +74,7 @@ export type SingleRange = { row: number[]; column: number[] };
 export type Range = SingleRange[];
 
 export type BorderSide = { style: number; color: string };
-// Editor producers (selection.ts, paste.ts, dropCell.ts) write `l: null` (and
+// Editor producers (selection.ts, paste.ts, drop-cell.ts) write `l: null` (and
 // peers) to mean "cleared" so the entry survives JSON / Yjs serialization with
 // the slot explicitly absent; readers narrow via `!isNil(value.l)`. Treating
 // null and undefined identically keeps both representations in the type.

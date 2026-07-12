@@ -102,12 +102,12 @@ evaluation (resolver reads from Yjs snapshot).
 
 ```
 engine/
-├── formula-engine.ts       # FormulaEngine class (evaluate, recalculateAll, getDependencies)
+├── formula-engine.ts       # FormulaEngine class (evaluate)
 ├── formula-utils.ts        # Pure utilities (iscelldata, checkBracketNum, calPostfixExpression)
 ├── formula-shift.ts        # functionCopy + functionStrChange (formula relative-ref shifters)
 ├── rowcol.ts               # applySheetsInsertRowCol / applySheetsDeleteRowCol (pure row/col data shifts)
 ├── replay-ops.ts           # replaySheetsOps (snapshot + ops → Sheet[]; shared by BE + FE initial-load)
-├── dependency-graph.ts     # Topological sort + cycle detection
+├── dependency-graph.ts     # Topological sort (getCalculationOrder)
 ├── cell-resolver.ts        # CellResolver interface + createArrayResolver
 ├── format.ts               # Format type inference (uses numfmt for rendering)
 ├── conditional-format.ts   # Pure CF evaluator (evaluateConditionalFormat, cfSplitRange, getColorGradation)
@@ -120,9 +120,6 @@ engine/
 
 **Key capabilities:**
 - `evaluate(formula, sheetId, row, col, resolver)` — single formula evaluation
-- `recalculateAll(resolver)` — batch recalculation of all formulas in dependency order (server-side)
-- `getDependencies(formula, sheetId)` — extract cell references from a formula
-- `format(value, pattern)` — numfmt-backed number/date formatting
 - `replaySheetsOps(sheets, opBatches)` — pure snapshot + ops → `Sheet[]`. Handles `add`/`remove`/`replace`
   patches via `opToPatchOnSheets`, `addSheet`/`deleteSheet` inline, and `insertRowCol`/`deleteRowCol` via
   the typed shape-adapter + `applySheetsInsertRowCol`/`applySheetsDeleteRowCol`. Used by the BE document
@@ -140,16 +137,18 @@ engine/
   state wrapper in `state/modules/rowcol.ts` after the engine call.
 
 **Architecture boundary:** Context-coupled orchestration functions (`execFunctionGroup`, `groupValuesRefresh`,
-etc.) live in `state/modules/formula-exec.ts`. The `formula-ui.ts` barrel re-exports from both, so UI consumers
-don't see the split.
+etc.) live in `state/modules/formula-exec.ts`; UI consumers import the engine modules and `formula-exec.ts`
+directly.
 
 ### Remaining Work — Server-side recalc
 
 The engine is extracted and the BE replay path is wired (`apps/api/src/lib/document/sheets.ts` calls
 `replaySheetsOps`), so cell positions and formula text are correct. But `readSheetsContent()` still returns
 the last-saved `cell.v` from the post-replay snapshot — values aren't recomputed. To get fresh values,
-build a `CellResolver` over the replayed `Sheet[]` and call `engine.recalculateAll(resolver)` before mapping
-to `SheetContent`. Consumers (export, search indexing, scripting) pick this up transparently.
+build a `CellResolver` over the replayed `Sheet[]` and batch-evaluate the formulas in dependency order
+(`getCalculationOrder` in `engine/dependency-graph.ts` + `engine.evaluate` per cell — the old
+`recalculateAll` wrapper was deleted as dead code and is a three-line reintroduction) before mapping to
+`SheetContent`. Consumers (export, search indexing, scripting) pick this up transparently.
 
 ## Headless Conditional Formatting
 
@@ -175,7 +174,7 @@ any context.
 
 The callback shifts the rule's formula by `(targetRow - anchorRow, targetCol - anchorCol)` via the
 shared `functionCopy` ref shifter (in `engine/formula-shift.ts`), then evaluates against a
-`CellResolver`. Both state (`state/modules/conditionFormat.ts::getComputeMap`) and the server-side
+`CellResolver`. Both state (`state/modules/condition-format.ts::getComputeMap`) and the server-side
 HTML/PDF export use this same shape — see § HTML/PDF export below.
 
 ### HTML/PDF export
@@ -209,7 +208,8 @@ DOM-free subset that satisfies stricter compiler options (`verbatimModuleSyntax`
   via the upstream fortune-sheet fork); `@formulajs/formulajs` covers ~200 functions, not Excel's full ~400.
 - **Volatile functions** (`RAND`, `NOW`, `TODAY`) return new values on each server evaluation — correct
   behavior, but differs from the cached snapshot.
-- **Circular references** are detected by `detectCycle()` in `engine/dependency-graph.ts`.
+- **Circular references**: `getCalculationOrder` (`engine/dependency-graph.ts`) never errors on a
+  cycle — its visited-set breaks the walk, so cyclic cells evaluate in visit order.
 - **INDIRECT/OFFSET/INDEX** produce dynamic references the dependency graph can't analyze statically;
   `isFunctionRange()` handles these specially — preserve that logic when touching the graph.
 

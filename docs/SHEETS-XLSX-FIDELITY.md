@@ -86,7 +86,7 @@ None — the program is complete. The last item closed 2026-06-12:
 - Engine `top10` CF evaluation uses `indexOf` over the sorted slice per cell (O(n²) on large
   ranges); pre-existing, now reachable from import. A `Set` lookup would fix it.
 - CF formula-evaluator wiring is duplicated (8 lines) between
-  `state/modules/conditionFormat.ts` and the HTML export's `buildCfFormulaEvaluator` — extract a
+  `state/modules/condition-format.ts` and the HTML export's `buildCfFormulaEvaluator` — extract a
   shared helper if a third consumer appears.
 - Imported hyperlink cells keep Excel's font styling; dialog-authored links hardcode
   `rgb(0,0,255)` + underline (saveHyperlink). Divergence is intentional — forcing the dialog
