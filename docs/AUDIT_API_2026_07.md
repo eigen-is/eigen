@@ -292,6 +292,25 @@ Net: the Bun-native story is already strong. Don't chase #4 — the risk/reward 
 
 ## Honest assessment & where I'd spend more time
 
+> **✅ ALL FOUR DEEP-DIVES DONE (2026-07-12).** Each item below got a dedicated verification pass (two
+> independent passes for the first three, which converged). Full findings, code pointers, failure
+> scenarios, validated fix directions, and red regression tests are in:
+> - **`docs/AUDIT_DEEPDIVE_COLLAB_YJS.md`** (item 1) — audited Yjs core is SOUND, but a NEW **P1** was
+>   proven: *chat restore racing a message post wipes the chat*. #5 already fixed @08bda417 (128 MB) and
+>   confirmed correct; its "tip of the iceberg" framing was noise.
+> - **`docs/AUDIT_DEEPDIVE_UPLOAD_QUEUE.md`** (item 2) — the accepted-risk orphaned PUT is REAL and worse:
+>   **permanent silent data regression** + deleted-object zombie resurrection. In-process orphan-tracking fix.
+> - **`docs/AUDIT_DEEPDIVE_CALDAV_TZ.md`** (item 3) — #8/#9/#24 all real (#9 worse: silent organizer-update
+>   drop), **plus 4 new bugs incl. 2 P1s**: inbound iMIP single-occurrence REQUEST/CANCEL destroy the whole
+>   series. Feeds Unit 4.
+> - **`docs/AUDIT_DEEPDIVE_MAILPARSER.md`** (item 4) — #14 real (hostile-input only), #11 real DoS **but the
+>   suggested `maxHtmlLengthToParse` fix is a footgun** (rejects the parse); parser robust under fuzzing.
+>   Feeds Unit 5.
+>
+> Executable red tests preserved in `docs/superpowers/api-audit-deepdive-tests/` (gitignored, survives
+> worktree cleanup). Meta: the "more lurking" instinct paid off — the two most severe bugs (iMIP series
+> destruction) weren't in this report at all.
+
 **What I'm confident about:** the 2FA bypass (#1) is real and verified against the installed
 better-auth source — that's the one thing I'd fix today. The dead deps (#15), swagger (#4), and the
 WS payload gap (#5) are cheap certainties.
