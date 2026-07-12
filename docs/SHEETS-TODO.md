@@ -151,7 +151,7 @@ The `if (last.top > row_pre) {…} else if (===) {…} else {…}` row block + i
 (~40 lines/copy) computing `top/height/rowseleted/left/width/columnseleted`. A selection bugfix
 currently needs 7 edits. → one `extendSelectionGeometry(...)` helper.
 
-**C3. `dropCell.ts` direction and date-fill clones** (`state/modules/dropCell.ts`).
+**C3. `dropCell.ts` direction and date-fill clones** ✅ done (−441 lines; axis/sign-parameterized updateDropCell loop + rollToWeekday/fillWeekdaySeries/fillStepSeries/fillChnWeekType; 86k-case differential + pixel gates identical; down-only ##0.00 quirk and shape-A/B guard asymmetry preserved) (`state/modules/drop-cell.ts`).
 `updateDropCell:2136-2554` — four ~100-line `down/up/right/left` branches differing only in index
 arithmetic; the number-format block appears 4×, the border push 8×. `getDataByType:933-1618`
 (685 lines) — weekday roll-back inlined 6×, month/year forecast loop repeated per type,
