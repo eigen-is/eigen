@@ -27,7 +27,10 @@ function CommentThreadInner({
 
     return (
         // Overflow stays visible so the input's @-mention suggest can extend above the thread.
-        <div className={cn('flex flex-col h-[50vh]', className)}>
+        // min-h-0 keeps the sizing side effect overflow-hidden used to provide: without it this
+        // flex item refuses to shrink below its content, so the list never scrolls and the input
+        // gets pushed below the dialog.
+        <div className={cn('flex flex-col h-[50vh] min-h-0', className)}>
             <ChatMessageList
                 messages={chat.messages}
                 isLoading={chat.isLoading}
