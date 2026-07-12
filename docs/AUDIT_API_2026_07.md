@@ -120,6 +120,11 @@ The collab comment says *"WebSocket server options (perMessageDeflate, maxPayloa
 
 **Direction:** batch — one `select().from(contactsToLabels)` (optionally `inArray(contactId, ids)`), group into `Map<contactId, labelId[]>`, then map rows. The `(contactId, labelId)` PK already supports the grouped scan.
 
+> **✅ FIXED — Unit 3** (`fix/api-audit-2026-07`). `getContacts` loads labels once (one `contactsToLabels`
+> scan grouped into a `Map`); `dbRowToContact` takes the label list as a parameter. `getContactById`
+> keeps its single per-contact query. New labels round-trip regression test — the grouping path was
+> previously unexercised.
+
 ### 7. CalDAV "load entire calendar, filter in JS" on poll-heavy endpoints
 `apps/api/src/lib/caldav/caldav-router.ts:94`, `report.ts:82`, `resource.ts:141`
 
@@ -154,6 +159,10 @@ The byte cap is applied by a JS loop that runs *after* `.all()`, so the `LIMIT` 
 
 **Direction:** use `.iterator()` and break at the byte cap so materialization stops early, or `.limit(a few hundred)`.
 
+> **✅ FIXED — Unit 3**. Chunked keyset walk (LIMIT 512 + `createdAt` cursor, same semantics as
+> `getMessages`) stops fetching at the byte cap; the "rows = bytes" comment corrected. Accepted edge:
+> a same-timestamp page boundary can skip rows only past 512 messages sharing one `createdAt`.
+
 ### 11. Uncapped `htmlToText` on untrusted mail HTML (guard exists, never set)
 `apps/api/src/lib/mail/mail-parser/mail-parser.ts:963-978` (guard), caller `apps/api/src/lib/mail/mail-parse.ts:18` (`simpleParser(bytes, {})`)
 
@@ -174,6 +183,11 @@ The parser caps HTML→text conversion only when `options.maxHtmlLengthToParse` 
 `postMessage` is awaited by the route, so the sender's HTTP response blocks on N sequential `getUserByEmail` + `sendToHome` (mentions) and M sequential activity sends. Latency grows linearly with participant/mention count.
 
 **Direction:** collect the sends and `Promise.all` (each already has its own try/catch), or fire-and-forget the fan-out after the row commits. (`drive/history.ts:notifyWatchers` already does the concurrent-fan-out pattern correctly — mirror it.)
+
+> **✅ FIXED — Unit 3**. Mention + activity fan-outs now run as awaited `Promise.all` (per-send
+> try/catch kept, mirroring `notifyWatchers`); `mentionedEmailSet`/`activityNotifiedEmails` are still
+> fully populated before the sends and before `coveredEmails` is built, and delivery still completes
+> before the route returns.
 
 ### 14. `checkBoundary` CRLF test uses `||` where it needs `&&`
 `apps/api/src/lib/mail/mail-split/message-splitter.ts:267-273`
@@ -265,7 +279,7 @@ Timers are never `.unref()`d, and `setInterval(run, ms)` re-invokes regardless o
 **Direction:** move the `writeTempWithHash` inside the `try`.
 
 ### 24. Small correctness/hygiene nits
-- **`buildRecentText` unbounded** (`chat.ts:458-472`): `select().all()` then break at 8 KB — add `.limit(N)` so SQL does the bounding (same shape as #10).
+- **`buildRecentText` unbounded** (`chat.ts:458-472`): `select().all()` then break at 8 KB — add `.limit(N)` so SQL does the bounding (same shape as #10). — **✅ FIXED — Unit 3**: `.limit(RECENT_TEXT_CAP)` + `ne(content, '')` so SQL bounds the fetch and empty rows can't crowd the window.
 - **`getTeamMembers` swallows all errors → `[]`** (`team.ts:14-26`): a real DB failure silently becomes "no members," masking ACL breakage. Drop the try/catch (CODE-STANDARDS "unnecessary error handling").
 - **`computeEtag` omits `timezone`** at `rsvpForOccurrence` (`calendar.ts:1099`) and `removeThisAndFuture` (`:1259`) while create/update include it → same event hashes differently across paths → spurious CalDAV re-sync. Include `timezone` consistently.
 - **Mail attachment `:index` unvalidated** (`mail.ts:282,289`): `Number("abc")` → `NaN`; benign today (`?? null`) but add `params: t.Object({ index: t.Numeric() })`. — **✅ FIXED — Unit 2**: `params` schema added, manual `Number()` dropped.

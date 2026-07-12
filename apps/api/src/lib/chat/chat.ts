@@ -43,11 +43,20 @@ export class ChatRoom {
     async init(): Promise<ChatRoom> {
         let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
         if (!dataDbPath) {
-            await ChatRoom.create(this.drive, this.path.mountId, this.path.id);
-            dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
-            if (!dataDbPath) {
-                throw new ApiError(500, `Failed to create data.db in ${this.path.name}`);
-            }
+            // Provision the missing data.db under the container lock and re-check under it. A
+            // concurrent version restore (replaceContainerDataDb) holds this same lock while it
+            // deletes and recreates data.db, and Drive.getChat builds a fresh ChatRoom per request.
+            // Without the lock a post landing in the delete→recreate window would provision a second
+            // empty data.db, the restore's createFileFromTemp would then 4xx on the duplicate name,
+            // and the chat would be left on the empty db with its earlier messages gone.
+            dataDbPath = await this.drive.withPathLock(this.path.mountId, this.path.id, async () => {
+                const existing = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
+                if (existing) return existing;
+                await ChatRoom.create(this.drive, this.path.mountId, this.path.id);
+                const created = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
+                if (!created) throw new ApiError(500, `Failed to create data.db in ${this.path.name}`);
+                return created;
+            });
         }
 
         // openDatabase (potentially cold S3 GET) and findContainerPath
@@ -167,7 +176,10 @@ export class ChatRoom {
             const body = content.length > 100 ? `${content.slice(0, 100)}...` : content;
             const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
 
-            // Mention notifications (non-whisper only)
+            // Mention notifications (non-whisper only). Populate the set synchronously first — the
+            // activity loop below filters on it — then fan out the sends concurrently (mirrors
+            // notifyWatchers): each getUserByEmail + sendToHome is an independent auth-db/home
+            // round-trip, isolated so one failure never rejects the batch or delays the sender.
             const mentionedEmailSet = new Set<string>();
             if (type !== 'whisper') {
                 const mentionTitle = `${author.name} mentioned you in "${displayName}"`;
@@ -175,32 +187,36 @@ export class ChatRoom {
                     if (email === authorEmail.toLowerCase()) continue;
                     if (!memberEmails.has(email)) continue;
                     mentionedEmailSet.add(email);
-                    try {
-                        const mentionedUser = await getUserByEmail(email);
-                        if (!mentionedUser) continue;
-                        await sendToHome(mentionedUser.id, {
-                            type: 'notification',
-                            notification: this.containerPath
-                                ? {
-                                      type: 'mention-comment',
-                                      actorEmail: authorEmail,
-                                      title: mentionTitle,
-                                      body,
-                                      tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}:${email}`,
-                                      details: { pathType: this.containerPath.type },
-                                  }
-                                : {
-                                      type: 'mention-chat',
-                                      actorEmail: authorEmail,
-                                      title: mentionTitle,
-                                      body,
-                                      tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
-                                  },
-                        });
-                    } catch {
-                        // user or home may not exist
-                    }
                 }
+                await Promise.all(
+                    [...mentionedEmailSet].map(async (email) => {
+                        try {
+                            const mentionedUser = await getUserByEmail(email);
+                            if (!mentionedUser) return;
+                            await sendToHome(mentionedUser.id, {
+                                type: 'notification',
+                                notification: this.containerPath
+                                    ? {
+                                          type: 'mention-comment',
+                                          actorEmail: authorEmail,
+                                          title: mentionTitle,
+                                          body,
+                                          tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}:${email}`,
+                                          details: { pathType: this.containerPath.type },
+                                      }
+                                    : {
+                                          type: 'mention-chat',
+                                          actorEmail: authorEmail,
+                                          title: mentionTitle,
+                                          body,
+                                          tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
+                                      },
+                            });
+                        } catch {
+                            // user or home may not exist
+                        }
+                    }),
+                );
             }
 
             // Activity notifications: whispers → recipient only, messages/emotes → previous participants + owner
@@ -252,12 +268,16 @@ export class ChatRoom {
                 participants.set(this.home.user.email.toLowerCase(), this.home.user.id);
                 participants.delete(authorEmail.toLowerCase());
 
+                // Pick recipients synchronously (populates activityNotifiedEmails for coveredEmails
+                // below), then fan out the sends concurrently — notifyActivity already isolates failures.
+                const recipientIds: string[] = [];
                 for (const [email, userId] of participants) {
                     if (mentionedEmailSet.has(email)) continue;
                     if (!memberEmails.has(email)) continue;
                     activityNotifiedEmails.add(email);
-                    await notifyActivity(userId);
+                    recipientIds.push(userId);
                 }
+                await Promise.all(recipientIds.map((userId) => notifyActivity(userId)));
             }
 
             // File history: 'commented' on the container (or the standalone chat itself).
@@ -459,12 +479,20 @@ export class ChatRoom {
         const rows = await this.db
             .select({ content: schema.messages.content })
             .from(schema.messages)
-            .where(and(isNull(schema.messages.deletedAt), ne(schema.messages.type, 'whisper')))
+            .where(
+                and(
+                    isNull(schema.messages.deletedAt),
+                    ne(schema.messages.type, 'whisper'),
+                    ne(schema.messages.content, ''),
+                ),
+            )
             .orderBy(desc(schema.messages.createdAt))
+            // Empty messages are filtered out above, so every row adds at least one char and
+            // RECENT_TEXT_CAP rows always fill the byte cap — bound the fetch instead of scanning the thread.
+            .limit(RECENT_TEXT_CAP)
             .all();
         let text = '';
         for (const row of rows) {
-            if (!row.content) continue;
             text = text ? `${text}\n${row.content}` : row.content;
             if (text.length >= RECENT_TEXT_CAP) break;
         }

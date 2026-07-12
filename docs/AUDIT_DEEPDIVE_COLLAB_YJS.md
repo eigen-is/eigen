@@ -51,6 +51,12 @@ were wrong**. The real wipe is in the chat byte-overwrite restore path, below.
 
 ## NEW P1 — chat restore racing a message post wipes the chat (not in audit)
 
+> **✅ FIXED — Unit 3** (`fix/api-audit-2026-07`). `ChatRoom.init` takes the container path lock (thin
+> `Drive.withPathLock` delegation) around the missing-data.db branch, re-checking existence under the
+> lock; T7 committed as `apps/api/src/test/collab-restore-race.test.ts` (trimmed to the chat-restore
+> net). Belt-and-braces retry in `replaceContainerDataDb` deliberately omitted — after the lock fix no
+> unlocked `data.db` creator remains.
+
 **Where:** `versioning/snapshot.ts` `replaceContainerDataDb` (~:145) holds the container path lock while
 doing close → `deletePath(data.db)` → `createFileFromTemp('data.db', …)`. But `chat/chat.ts` `ChatRoom.init`
 (~:44-49) auto-creates a missing `data.db` **without taking the container lock**, and `Drive.getChat` builds a

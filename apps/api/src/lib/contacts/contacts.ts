@@ -244,14 +244,7 @@ export class Contacts {
         this.emitLabel(SSEventType.LABEL_DELETED, id);
     }
 
-    private dbRowToContact(row: typeof schema.contacts.$inferSelect): Contact {
-        const labelIds = this.db
-            .select({ labelId: schema.contactsToLabels.labelId })
-            .from(schema.contactsToLabels)
-            .where(eq(schema.contactsToLabels.contactId, row.id))
-            .all()
-            .map((rel) => rel.labelId);
-
+    private dbRowToContact(row: typeof schema.contacts.$inferSelect, labels: string[]): Contact {
         const data = row.data ?? {};
 
         return {
@@ -260,18 +253,39 @@ export class Contacts {
             lastName: row.lastName.trim(),
             eigenId: row.eigenId,
             ...(data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>),
-            labels: labelIds,
+            labels,
         };
     }
 
     public async getContactById(id: string): Promise<Contact | null> {
         const row = await this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
-        return row ? this.dbRowToContact(row) : null;
+        if (!row) return null;
+        const labels = this.db
+            .select({ labelId: schema.contactsToLabels.labelId })
+            .from(schema.contactsToLabels)
+            .where(eq(schema.contactsToLabels.contactId, row.id))
+            .all()
+            .map((rel) => rel.labelId);
+        return this.dbRowToContact(row, labels);
     }
 
     public async getContacts(): Promise<Contact[]> {
         const rows = await this.db.select().from(schema.contacts).all();
-        return rows.map((row) => this.dbRowToContact(row));
+
+        // Load every contact→label link in one scan of the (contactId, labelId) PK, grouped by
+        // contact — a single query instead of the per-row SELECT this used to run (1+N).
+        const labelsByContact = new Map<string, string[]>();
+        const relations = this.db
+            .select({ contactId: schema.contactsToLabels.contactId, labelId: schema.contactsToLabels.labelId })
+            .from(schema.contactsToLabels)
+            .all();
+        for (const rel of relations) {
+            const list = labelsByContact.get(rel.contactId);
+            if (list) list.push(rel.labelId);
+            else labelsByContact.set(rel.contactId, [rel.labelId]);
+        }
+
+        return rows.map((row) => this.dbRowToContact(row, labelsByContact.get(row.id) ?? []));
     }
 
     public async uploadAvatar(file: File) {
