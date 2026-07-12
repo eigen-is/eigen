@@ -16,6 +16,10 @@ Bugs:
       `ct` and applies the `##0.00` mask, which emits garbage like `"2.5.00"` — make all four
       directions consistent (keep `ct`, fix the mask) (`state/modules/drop-cell.ts`, `isDown`)
 - [ ] name box shows `A1:NaN` on initial sheet load, before any selection
+- [ ] link hover card renders bigger than toolbar chrome: no font size set, so "Open link"
+      inherits the 16px document default, and its icons are hardcoded 18px — toolbar convention
+      is `text-sm` (14px) + `size-4` (16px) icons (`components/LinkEditCard/index.tsx` read-only
+      toolbar; cf. MenuBar `triggerClass` and the `packages/ui` Button base)
 - [ ] imported lowercase `mm` date patterns show "Minute" chips in the custom date/time dialog
       (tokenizer follows Google's `M` month / `m` minute); switching a variant on a mislabeled
       chip writes minutes where months were
