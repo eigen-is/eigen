@@ -651,6 +651,17 @@ export const SheetOverlay: React.FC = () => {
                             const width = col - col_pre - 1;
                             const height = row - row_pre - 1;
 
+                            // A peer can publish a cursor before this client's visibledata* maps
+                            // exist (cold render) or beyond the loaded extent — skip to avoid NaN geometry.
+                            if (
+                                !Number.isFinite(width) ||
+                                !Number.isFinite(height) ||
+                                !Number.isFinite(col_pre) ||
+                                !Number.isFinite(row_pre)
+                            ) {
+                                return null;
+                            }
+
                             return (
                                 <div
                                     key={presence?.userId || index}

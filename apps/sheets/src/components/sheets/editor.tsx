@@ -68,7 +68,7 @@ function SheetEditorInner({
     );
 
     const auth = useAuth();
-    const publishSelection = usePresence(provider, workbookRef, auth.user, synced);
+    const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const { resolveMediaUrl, startUpload } = useMediaResolver();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);

@@ -4,11 +4,6 @@ import { type PeerPresence, presencesFromPeers, type WorkbookInstance } from '@w
 import { useCallback, useEffect, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 
-type PresenceAwarenessState = {
-    user?: { name: string; color: string; userId: string };
-    selection?: { sheetId: string; r: number; c: number };
-};
-
 export type PublishSelection = (sheetId: string, r: number, c: number) => void;
 
 // Wires Yjs awareness into the workbook's presence API: publishes the local user
@@ -20,6 +15,7 @@ export function usePresence(
     workbookRef: React.RefObject<WorkbookInstance | null>,
     user: AuthUser | null,
     synced: boolean,
+    snapshotVersion: number,
 ): PublishSelection {
     const lastSelectionRef = useRef<string>('');
 
@@ -42,7 +38,7 @@ export function usePresence(
             const states = awareness.getStates();
             const peers: PeerPresence[] = [];
             for (const clientId of clientIds) {
-                const state = states.get(clientId) as PresenceAwarenessState | undefined;
+                const state = states.get(clientId) as PeerPresence | undefined;
                 if (!state) continue;
                 if (state.user) identities.set(clientId, { username: state.user.name, userId: state.user.userId });
                 peers.push({ user: state.user, selection: state.selection });
@@ -66,6 +62,10 @@ export function usePresence(
         const onChange = ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }) => {
             apply([...added, ...updated]);
             remove(removed);
+            // A removed clientId can share a Presence key (userId ?? username) with a still-live
+            // client — the same user's other tab, or a crash/rejoin under a new clientId. remove()
+            // just deleted that shared row, so re-feed the remaining live states to restore it.
+            if (removed.length > 0) apply([...awareness.getStates().keys()]);
         };
 
         // Capture peers already connected before this listener attached.
@@ -75,7 +75,10 @@ export function usePresence(
         return () => {
             awareness.off('change', onChange);
         };
-    }, [provider, workbookRef, user, synced]);
+        // snapshotVersion is a dep because a peer snapshot flush remounts the Workbook (the editor
+        // keys it by snapshotVersion), wiping context.presences — re-running re-publishes the local
+        // user field and re-applies the live awareness states into the fresh workbook instance.
+    }, [provider, workbookRef, user, synced, snapshotVersion]);
 
     return useCallback(
         (sheetId: string, r: number, c: number) => {
