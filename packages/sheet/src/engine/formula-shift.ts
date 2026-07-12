@@ -122,14 +122,14 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
 // carries single-quote / `{}` array / `""`-escape state this walker has no notion of —
 // so it is deliberately NOT built on this helper.
 //
-// `skipPrevChar` selects how the predecessor char used for unary-minus classification is
-// located: functionCopy scans read-then-decrement (starts at the char before the operator);
-// functionStrChange's historical scan decrements-then-reads (skips that char, starts one
-// earlier). The two disagree whenever the chars at i-1/i-2 straddle the unary-trigger set
-// (after an opening paren, comma or `&` — e.g. `CONCAT(-3:A10)`), where the
-// `-` is read as unary by one and binary by the other — and the flag preserves each caller
-// bug-for-bug rather than silently normalizing the divergence.
-function walkFormulaRefs(txt: string, onRef: (ref: string) => string, skipPrevChar: boolean): string {
+// A leading `-` is classified as a unary sign (glued to the following number literal) rather
+// than a binary operator when the nearest non-space char before it is one of the unary-trigger
+// chars (opening paren, comma, another operator) or the start of the segment. That predecessor
+// is found by reading i-1 first, then scanning back over spaces — the char immediately before
+// the `-`. (functionStrChange historically decremented before reading, skipping i-1 and starting
+// at i-2; that misclassified e.g. the `-` in `CONCAT(-1:3)` as binary and shifted the trailing
+// range. Both consumers now share this single read-i-1 scan.)
+function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     let stripped = txt;
     if (stripped.startsWith('=')) stripped = stripped.slice(1);
 
@@ -146,7 +146,7 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string, skipPrevCh
             result += str.length > 0 ? `${str}(` : '(';
             str = '';
         } else if (s === ')' && dquote === 0) {
-            result += `${walkFormulaRefs(str, onRef, skipPrevChar)})`;
+            result += `${walkFormulaRefs(str, onRef)})`;
             str = '';
         } else if (s === '"') {
             if (dquote > 0) {
@@ -158,11 +158,11 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string, skipPrevCh
                 str += '"';
             }
         } else if (s === ',' && dquote === 0) {
-            result += `${walkFormulaRefs(str, onRef, skipPrevChar)},`;
+            result += `${walkFormulaRefs(str, onRef)},`;
             str = '';
         } else if (s === '&' && dquote === 0) {
             if (str.length > 0) {
-                result += `${walkFormulaRefs(str, onRef, skipPrevChar)}&`;
+                result += `${walkFormulaRefs(str, onRef)}&`;
                 str = '';
             } else {
                 result += '&';
@@ -172,21 +172,15 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string, skipPrevCh
             let p = i - 1;
             let sPre: string | null = null;
             if (p >= 0) {
-                if (skipPrevChar) {
-                    do {
-                        sPre = chars[(p -= 1)];
-                    } while (p >= 0 && sPre === ' ');
-                } else {
-                    do {
-                        sPre = chars[p];
-                        p -= 1;
-                    } while (p >= 0 && sPre === ' ');
-                }
+                do {
+                    sPre = chars[p];
+                    p -= 1;
+                } while (p >= 0 && sPre === ' ');
             }
 
             if (s + sNext in operatorjson) {
                 if (str.length > 0) {
-                    result += walkFormulaRefs(str, onRef, skipPrevChar) + s + sNext;
+                    result += walkFormulaRefs(str, onRef) + s + sNext;
                     str = '';
                 } else {
                     result += s + sNext;
@@ -199,7 +193,7 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string, skipPrevCh
             ) {
                 str += s;
             } else if (str.length > 0) {
-                result += walkFormulaRefs(str, onRef, skipPrevChar) + s;
+                result += walkFormulaRefs(str, onRef) + s;
                 str = '';
             } else {
                 result += s;
@@ -229,7 +223,7 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string, skipPrevCh
 //   - apps/api/src/lib/export/sheets/html.ts (server-side CF rule evaluation)
 export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step = 1): string {
     const orient = mode[0] as 'd' | 'u' | 'l' | 'r';
-    return walkFormulaRefs(txt, (ref) => shiftRef(orient, ref, step), false);
+    return walkFormulaRefs(txt, (ref) => shiftRef(orient, ref, step));
 }
 
 // Shifts formula-text refs in response to an insert ('add') or delete ('del') row/col
@@ -248,7 +242,7 @@ export function functionStrChange(
     if (!txt) {
         return '';
     }
-    return walkFormulaRefs(txt, (ref) => functionStrChange_range(ref, type, rc, orient, stindex, step), true);
+    return walkFormulaRefs(txt, (ref) => functionStrChange_range(ref, type, rc, orient, stindex, step));
 }
 
 // Shifts a single cell or range ref string in response to an insert/delete row/col op.

@@ -8,8 +8,6 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
 
 Bugs:
 
-- [ ] `functionStrChange`'s unary-minus predecessor scan skips a char (reads `i-2`; preserved as
-      `skipPrevChar` in `engine/formula-shift.ts`) — unify both walkers on read-`i-1`, drop the flag
 - [ ] name box shows `A1:NaN` on initial sheet load, before any selection
 - [ ] imported lowercase `mm` date patterns show "Minute" chips in the custom date/time dialog
       (tokenizer follows Google's `M` month / `m` minute); switching a variant on a mislabeled

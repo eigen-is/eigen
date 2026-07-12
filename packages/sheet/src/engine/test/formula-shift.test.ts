@@ -249,3 +249,20 @@ describe('functionStrChange — formulas', () => {
         expect(functionStrChange('SUM(1:3)', 'add', 'col', 'lefttop', 0, 1)).toBe('SUM(1:3)');
     });
 });
+
+describe('functionStrChange — unary-minus predecessor scan', () => {
+    // A `-` immediately after `(` is a unary sign, so `-1:3` / `-3:A10` are glued literals,
+    // not recognizable refs, and must pass through unshifted — exactly what functionCopy does.
+    // Both walkers now locate the unary predecessor by reading i-1 (the `(`); the former
+    // decrement-then-read scan skipped it, read the function-name char, misclassified `-` as
+    // binary and shifted the trailing range (`CONCAT(-1:3)` → `CONCAT(-2:4)`).
+    test('treats `-` after `(` as a unary sign and leaves the glued token unshifted', () => {
+        expect(functionStrChange('CONCAT(-1:3)', 'add', 'row', 'lefttop', 0, 1)).toBe('CONCAT(-1:3)');
+        expect(functionStrChange('CONCAT(-3:A10)', 'add', 'row', 'lefttop', 0, 1)).toBe('CONCAT(-3:A10)');
+    });
+
+    test('functionCopy output is unchanged on the same input (already reads i-1)', () => {
+        expect(functionCopy('CONCAT(-1:3)', 'down', 1)).toBe('CONCAT(-1:3)');
+        expect(functionCopy('CONCAT(-3:A10)', 'down', 1)).toBe('CONCAT(-3:A10)');
+    });
+});
