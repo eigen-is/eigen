@@ -22,7 +22,9 @@ services:
       NODE_ENV: development
       EIGEN_DATA_ROOT: /app/data
       DOMAIN: localhost
-      MAIL_DOMAIN: localhost
+      # Email suffix is decoupled from the localhost web host — honor MAIL_DOMAIN from .env
+      # (e.g. a ./data set up with a real org domain), default localhost for a fresh stack.
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-localhost}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       COOKIE_DOMAIN: localhost

@@ -10,7 +10,7 @@ coverage
 *.md
 !README.md
 node_modules
-data/*.db
-data/*.db-shm
-data/*.db-wal
+# Runtime data is bind-mounted at ./data:/app/data — never bake it into the image
+# (data/home alone is >1GB and would ship to the daemon on every build).
+data/
 apps/api/data
