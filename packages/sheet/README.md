@@ -17,8 +17,8 @@ remains actively maintained at the time of writing.
 The fork was vendored into this monorepo on 2026-03-10 (commit
 `84a57a06`), at which point the external `@fortune-sheet/core` dependency
 was removed and the code became internal. The package is now treated as
-**owned code** — see [`docs/SHEETS-TODO.md`](../../docs/SHEETS-TODO.md)
-for the audit findings and cleanup roadmap.
+**owned code** — remaining work is tracked in
+[`docs/SHEETS-TODO.md`](../../docs/SHEETS-TODO.md).
 
 ## What changed since the fork
 

@@ -1,8 +1,7 @@
 # Verifying changes in the running app
 
 How to prove a change works in the real product, not just in tests. This recipe was developed
-over the sheets xlsx-fidelity program (see [SHEETS-XLSX-FIDELITY.md](SHEETS-XLSX-FIDELITY.md)
-§ Working method) and is the standard for browser verification. It is written for an agent
+over the sheets xlsx-fidelity program and is the standard for browser verification. It is written for an agent
 driving the app headless, but the conventions (test users, upload/convert API) apply to manual
 verification too.
 

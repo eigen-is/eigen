@@ -610,7 +610,7 @@ function toCfRule(rule: ConditionalFormatRule, priority: number): XlsxCfWriteRul
         // instead: Excel shifts the relative anchor per target cell while the absolute
         // range refs stay pinned, so the expression counts the target cell's value across
         // all of the rule's ranges. Semantically exact in Excel; our importer re-imports
-        // it as a formula rule (accepted drift, SHEETS-XLSX-FIDELITY backlog).
+        // it as a formula rule (accepted drift, docs/SHEETS.md).
         const compare = rule.conditionValue[0] === '0' ? '>1' : rule.conditionValue[0] === '1' ? '=1' : null;
         if (compare == null) return null; // the engine evaluator ignores other values too
         const anchor = toA1(rule.cellrange[0].row[0], rule.cellrange[0].column[0]);
@@ -618,8 +618,7 @@ function toCfRule(rule: ConditionalFormatRule, priority: number): XlsxCfWriteRul
         return { type: 'expression', priority, formulae: [countifs.join('+') + compare], style };
     }
 
-    // occurrenceDate: editor-only, no xlsx equivalent — recorded in the
-    // SHEETS-XLSX-FIDELITY backlog.
+    // occurrenceDate: editor-only, no xlsx equivalent — accepted drift (docs/SHEETS.md).
     return null;
 }
 

@@ -107,8 +107,8 @@ bun run check          # lint + typecheck + test
 
 ## Working Method (multi-step changes)
 
-The standard way to run feature work, proven over the sheets xlsx-fidelity program (cycles 0–8;
-worked example in [SHEETS-XLSX-FIDELITY.md](docs/SHEETS-XLSX-FIDELITY.md) § Working method).
+The standard way to run feature work, proven over the sheets xlsx-fidelity program (cycles 0–8)
+and the 2026-07 sheet-package cleanup program.
 Scale it to the job: a one-line fix needs none of this, a feature needs most of it, a program
 of changes needs all of it.
 

@@ -1131,7 +1131,7 @@ describe('Sheets xlsx import/convert', () => {
         // exceljs round-trips a {text, hyperlink: '#…'} cell as an external rel with
         // the verbatim #-prefixed target. Excel-AUTHORED internal links (a location
         // attr without a rel) are dropped by exceljs's reconcile and never surface
-        // on the cell — recorded in docs/SHEETS-XLSX-FIDELITY.md.
+        // on the cell — recorded in docs/SHEETS.md § accepted xlsx round-trip drifts.
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Sheet1');
         workbook.addWorksheet('Sheet2');

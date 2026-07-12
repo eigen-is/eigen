@@ -194,8 +194,32 @@ the sheet aren't recomputed; only the CF rule's own formula is evaluated against
 Webpage hyperlinks render as `target="_blank" rel="noopener noreferrer"` anchors, scheme-gated
 through the same `resolveWebLink` (`@workspace/lib/sheets/web-link`) the editor's link navigation
 uses; internal (`sheet`/`cellrange`) links stay plain text. Native xlsx export lives in
-`export/sheets/xlsx.ts` — coverage and encoding decisions in [EXPORT.md](EXPORT.md#sheets-export)
-and the cycle-8 row of [SHEETS-XLSX-FIDELITY.md](SHEETS-XLSX-FIDELITY.md).
+`export/sheets/xlsx.ts` — coverage and encoding decisions in [EXPORT.md](EXPORT.md#sheets-export).
+
+### Accepted xlsx round-trip drifts (decisions, pinned in tests where applicable)
+
+Recorded by the xlsx-fidelity program (cycles 0–8, 2026-06; full history in git —
+`docs/SHEETS-XLSX-FIDELITY.md` before its 2026-07-12 removal). These are deliberate, not bugs:
+
+- Hyperlinks: `sheet` links re-import as `cellrange` anchored at `'Name'!A1`; `cellrange` range
+  tails reduce to their top-left cell (exceljs's internal-link pattern needs a single trailing
+  cell ref); bare refs gain the own sheet's quoted prefix; a webpage URL containing exactly one
+  `!` with a cell-shaped tail is misdetected as internal by exceljs's pattern.
+- Imported hyperlink cells keep Excel's font styling while dialog-authored links hardcode
+  blue + underline — forcing the dialog style at import would clobber theme-styled link cells.
+- An Excel link to ANOTHER workbook carrying a sheet anchor (`r:id → other.xlsx` +
+  `location="Sheet1!A1"`) imports as an internal cellrange link (the location attr wins over
+  the rel; disambiguating needs the rel target compared against the location — edge-case wash).
+- `duplicateValue` CF exports as the COUNTIF expression recipe and re-imports as a `formula`
+  rule (rule-type drift, rendering identical); `occurrenceDate` CF (editor-only) is not exported.
+- `encodeCfOperand` quotes exotic numeric literals (`1e5`, `+5`) as text — the faithful inverse
+  of the importer's `parseCfLiteral`; the engine compares with JS coercion, so rendering is
+  unaffected either way.
+- Export denormalizes CF — one `<conditionalFormatting>` element per engine rule — while exceljs
+  re-merges per-cell DV back to a handful of sqrefs; exported files stay smaller than their
+  sources (size note only).
+- The DV exporter always writes `allowBlank: true` (Excel's UI default).
+- Excel comments/notes are not imported (decided 2026-06-10) — Eigen has its own comment cards.
 
 The engine is exposed as a `@workspace/sheet/engine` subpath export. Server-side
 consumers (`apps/api`) import only from this subpath, which restricts type-checking to the pure
