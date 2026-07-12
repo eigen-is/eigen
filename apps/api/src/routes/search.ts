@@ -54,7 +54,7 @@ export const searchRouter = new Elysia({ name: 'search' })
                 mailbox: t.Optional(t.String()),
                 from: t.Optional(t.String({ maxLength: 256 })),
                 to: t.Optional(t.String({ maxLength: 256 })),
-                limit: t.Optional(t.Number({ minimum: 1, maximum: 50 })),
+                limit: t.Optional(t.Integer({ minimum: 1, maximum: 50 })),
             }),
         },
     );

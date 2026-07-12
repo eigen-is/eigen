@@ -44,6 +44,10 @@ export async function pruneOldVersions(previewsDir: string, pathId: string, keep
     );
 }
 
+// In-flight generations keyed by cache filename, so a folder grid of N tiles for one just-added
+// image triggers a single generate() instead of N (mirrors inFlightText below).
+const inFlightImage = new Map<string, Promise<ImagePreview | null>>();
+
 // Read-through cache for a binary preview artifact (screen-res webp / raw svg).
 async function getOrCacheImage(
     previewsDir: string,
@@ -54,15 +58,29 @@ async function getOrCacheImage(
 ): Promise<ImagePreview | null> {
     const cacheFile = path.join(previewsDir, cacheName);
     if (fs.existsSync(cacheFile)) {
-        return { type: 'image', data: Buffer.from(await Bun.file(cacheFile).arrayBuffer()), contentType };
+        try {
+            return { type: 'image', data: Buffer.from(await Bun.file(cacheFile).arrayBuffer()), contentType };
+        } catch {
+            // File pruned by pruneOldVersions between exists-check and read — regenerate below.
+        }
     }
 
-    const data = await generate();
-    if (!data) return null;
+    const existing = inFlightImage.get(cacheName);
+    if (existing) return existing;
 
-    await Bun.write(cacheFile, data);
-    pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
-    return { type: 'image', data, contentType };
+    const task = (async (): Promise<ImagePreview | null> => {
+        const data = await generate();
+        if (!data) return null;
+        await Bun.write(cacheFile, data);
+        pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
+        return { type: 'image', data, contentType };
+    })();
+    inFlightImage.set(cacheName, task);
+    try {
+        return await task;
+    } finally {
+        inFlightImage.delete(cacheName);
+    }
 }
 
 // A served text preview plus whether it's the current version. `stale` previews are the

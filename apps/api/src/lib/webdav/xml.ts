@@ -1,16 +1,11 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { computeEtag } from '../core/http';
+import { escapeXml } from '../shared/xml';
+
+// Re-exported so this module's importers keep getting escapeXml from './xml'.
+export { escapeXml };
 
 const XML_HEADER = '<?xml version="1.0" encoding="utf-8"?>';
-
-export function escapeXml(s: string): string {
-    return s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-}
 
 export function multistatus(responses: string[]): string {
     return `${XML_HEADER}\n<D:multistatus xmlns:D="DAV:">\n${responses.join('\n')}\n</D:multistatus>`;

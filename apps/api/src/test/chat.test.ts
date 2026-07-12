@@ -222,6 +222,55 @@ describe('Chat', () => {
         });
     });
 
+    describe('Message limit query param', () => {
+        let chatId: string;
+
+        beforeAll(async () => {
+            const chat = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/create/chat`,
+                { fileName: 'Limit Test Chat' },
+            );
+            chatId = chat.id;
+
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: 'Hello, world!' },
+            );
+        });
+
+        test('non-numeric limit is rejected with 422', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages?limit=abc`,
+            );
+            expect(res.status).toBe(422);
+        });
+
+        test('fractional limit is rejected with 422', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages?limit=1.5`,
+            );
+            expect(res.status).toBe(422);
+        });
+
+        test('valid numeric limit still works', async () => {
+            const msgs = await chatGet<ChatMessage[]>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages?limit=1`,
+            );
+            expect(msgs.length).toBe(1);
+        });
+    });
+
     describe('Whisper Visibility', () => {
         let chatId: string;
 

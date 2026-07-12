@@ -1,6 +1,7 @@
 import { teamOwnerId } from '@workspace/lib/types';
 import { Elysia } from 'elysia';
 import { requireSelf } from '../lib/core/access';
+import { ApiError } from '../lib/core/errors';
 import { getHome } from '../lib/home';
 import { pullCalendars, pullTeamMounts } from '../lib/home/home-relay';
 import { getTeam, getTeamMembers } from '../lib/team';
@@ -36,10 +37,19 @@ export const homeRouter = new Elysia({ name: 'home' })
                     const [team, members, mounts, calendars] = await Promise.all([
                         getTeam(teamId),
                         getTeamMembers(teamId),
-                        pullTeamMounts(teamOwner).catch(() => []),
+                        pullTeamMounts(teamOwner).catch((err) => {
+                            console.error(`[my-teams] Failed to pull mounts for ${teamId}:`, err);
+                            return [];
+                        }),
                         pullCalendars(teamOwner)
                             .then((cals) => cals.map((c) => ({ id: c.id, name: c.name, color: c.color })))
-                            .catch(() => []),
+                            .catch((err) => {
+                                // 404 = team calendar disabled (the default) — expected, not a failure
+                                if (!(err instanceof ApiError && err.status === 404)) {
+                                    console.error(`[my-teams] Failed to pull calendars for ${teamId}:`, err);
+                                }
+                                return [];
+                            }),
                     ]);
 
                     return {

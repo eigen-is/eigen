@@ -149,10 +149,11 @@ export async function replaceContainerDataDb(mount: Mount, containerId: string, 
         // re-running restore self-heals instead of 404-ing forever. The fallback
         // mime matches provisionManagedDbs.
         const dataDb = await mount.getChildByName(containerId, 'data.db');
-        // Stage + hash the replacement (streamed) before the delete, so a failed source read leaves data.db intact.
         const tempId = randomUUID();
-        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Bun.file(sourcePath));
         try {
+            // Stage + hash the replacement (streamed) before the delete, so a failed source read leaves
+            // data.db intact. Inside the try so a write/hash fault still runs cleanupTemp on the partial.
+            const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Bun.file(sourcePath));
             if (dataDb) {
                 await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
                 await mount.deletePath(dataDb.id);

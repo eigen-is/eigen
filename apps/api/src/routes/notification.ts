@@ -18,7 +18,7 @@ export const notificationRouter = new Elysia({ name: 'notification' })
         {
             auth: true,
             query: t.Object({
-                limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+                limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
                 before: t.Optional(t.String()),
             }),
         },

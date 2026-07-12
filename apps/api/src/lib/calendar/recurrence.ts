@@ -29,7 +29,7 @@ function getIntlFormatter(tz: string): Intl.DateTimeFormat {
     return fmt;
 }
 
-function utcToLocal(date: Date, tz: string): LocalComponents {
+export function utcToLocal(date: Date, tz: string): LocalComponents {
     const fmt = getIntlFormatter(tz);
     const parts = fmt.formatToParts(date);
     const get = (type: Intl.DateTimeFormatPartTypes) => parseInt(parts.find((p) => p.type === type)!.value, 10);

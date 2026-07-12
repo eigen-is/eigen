@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
@@ -474,6 +474,110 @@ describe('Calendar Invites', () => {
             bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
             const constrained = bobEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Constrain');
             expect(constrained.length).toBe(1);
+        });
+    });
+
+    // Audit #9: an attendee editing a local-only field (reminder) on their linked copy must NOT run the
+    // organizer fan-out. Pre-fix it bumped the linked copy's SEQUENCE and sent an iMIP "Updated
+    // invitation" to external co-attendees with the attendee spoofed as ORGANIZER — and because the
+    // bumped SEQUENCE then outran the organizer's, the organizer's next real update was dropped by the
+    // RFC 5546 replay guard (silent data-desync).
+    describe('#9 attendee edit does not fan out', () => {
+        let bobCalId: string;
+        let linkedId: string;
+
+        async function rangeFor(token: string, ownerId: string) {
+            const from = Math.floor(Date.now() / 1000) - 86400;
+            const to = Math.floor(Date.now() / 1000) + 86400 * 60;
+            return assertJson<CalendarEventOccurrence[]>(
+                await authedRequest(token, `/calendar/${ownerId}/event-range/${from}/${to}`),
+            );
+        }
+
+        async function untilBob(predicate: (e: CalendarEventOccurrence) => boolean) {
+            for (let i = 0; i < 60; i++) {
+                const found = (await rangeFor(ctx.bob.user.sessionToken, ctx.bob.user.id)).find(predicate);
+                if (found) return found;
+                await new Promise((r) => setTimeout(r, 50));
+            }
+            return undefined;
+        }
+
+        beforeAll(async () => {
+            bobCalId = findOrFail(
+                await assertJson<CalendarItem[]>(
+                    await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`),
+                ),
+                (c) => c.isDefault,
+            ).id;
+        });
+
+        test('setup: Alice invites Bob (internal) + Carol (external)', async () => {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Fanout Meeting',
+                        startTime: new Date(Date.now() + 86400_000 * 30),
+                        endTime: new Date(Date.now() + 86400_000 * 30 + 3600_000),
+                        allDay: false,
+                        data: {
+                            attendees: [
+                                { email: ctx.bob.user.email, status: 'pending', role: 'required' },
+                                { email: 'carol.external@example.org', status: 'pending', role: 'required' },
+                            ],
+                        },
+                    }),
+                },
+            );
+            const linked = await untilBob((e) => e.title === 'Fanout Meeting');
+            expect(linked).toBeDefined();
+            linkedId = linked!.id;
+            expect(linked!.sequence).toBe(0);
+        });
+
+        test('Bob toggling a reminder does not bump SEQUENCE or send a spoofed iMIP update', async () => {
+            const mailer = await import('../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear();
+
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${bobCalId}/events/${linkedId}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: { reminders: [{ type: 'notification', minutes: 10 }] } }),
+                },
+            );
+            const updated = await assertJson<CalendarEvent>(res);
+            await new Promise((r) => setTimeout(r, 300)); // let any fire-and-forget fan-out run
+
+            expect(updated.sequence).toBe(0); // pre-fix: 1
+            const updateMails = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Fanout Meeting');
+            expect(updateMails).toHaveLength(0); // pre-fix: an iMIP update to Carol, ORGANIZER=Bob
+            spy.mockRestore();
+        });
+
+        test("kill shot: the organizer's next real update still reaches Bob", async () => {
+            const orig = findOrFail(
+                await rangeFor(ctx.alice.user.sessionToken, ctx.alice.user.id),
+                (e) => e.title === 'Fanout Meeting',
+            );
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${orig.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Fanout Meeting V2' }),
+                },
+            );
+            const renamed = await untilBob((e) => e.id === linkedId && e.title === 'Fanout Meeting V2');
+            expect(renamed).toBeDefined(); // pre-fix: dropped by the replay guard (Bob's SEQUENCE had outrun the organizer's)
         });
     });
 });

@@ -138,7 +138,7 @@ function syncExceptionEvents(
     const exceptionParsed = events.filter((e) => e.recurrenceDate);
     if (!exceptionParsed.length) return;
 
-    const existingExceptions = calendar.getRawEvents(calendarId).filter((e) => e.parentEventId === masterEvent.id);
+    const existingExceptions = calendar.getExceptionsForParent(masterEvent.id);
 
     const existingByRecurrenceDate = new Map<string, CalendarEventRow>();
     for (const exc of existingExceptions) {
@@ -158,6 +158,9 @@ function syncExceptionEvents(
                 allDay: exc.allDay,
                 description: exc.description,
                 location: exc.location,
+                // Heal legacy tz-null exception rows on re-PUT: without this the update path leaves an
+                // already-stored exception at timezone:null, so it never converges (audit #24).
+                timezone: exc.timezone ?? masterEvent.timezone,
                 status: exc.status,
                 data: exc.data,
             });
@@ -169,6 +172,9 @@ function syncExceptionEvents(
                 allDay: exc.allDay,
                 description: exc.description,
                 location: exc.location,
+                // Inherit the master's timezone so the exception serializes in TZID (not Z) form and
+                // its etag hashes consistently with the create/update paths (audit #24).
+                timezone: exc.timezone ?? masterEvent.timezone,
                 status: exc.status,
                 data: exc.data,
                 parentEventId: masterEvent.id,

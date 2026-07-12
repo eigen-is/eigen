@@ -98,11 +98,15 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
         case 'calendar:rsvp':
             if (!home.hasCalendar) break;
             if (message.recurrenceDate) {
+                // Organizer-side reception of an attendee RSVP: PARTSTAT only, never resurrect an
+                // occurrence the organizer deleted (same rule as the iMIP REPLY path).
                 home.calendar.rsvpForOccurrence(
                     message.eventId,
                     message.attendeeEmail,
                     message.status,
                     message.recurrenceDate,
+                    null,
+                    false,
                 );
             } else {
                 home.calendar.updateAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
@@ -136,6 +140,11 @@ export async function relayEventToMembers(members: EffectiveMember[], event: SSE
 export async function pullSharedPaths(ownerUserId: string, user: User): Promise<DrivePath[]> {
     const home = await getHome(ownerUserId);
     return home.drive.getSharedWith(user);
+}
+
+export async function pullDrivePath(ownerUserId: string, mountId: string, pathId: string): Promise<DrivePath | null> {
+    const home = await getHome(ownerUserId);
+    return home.drive.getPath(mountId, pathId);
 }
 
 export async function pullCalendarShares(

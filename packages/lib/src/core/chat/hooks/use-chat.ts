@@ -33,7 +33,7 @@ export function useMessages(ownerId: string, mountId: string, chatId: string | u
         queryKey: chatKeys.messages(ownerId, mountId, chatId || ''),
         queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
             if (!chatId) return [] as ChatMessage[];
-            const query: { before?: string; limit?: string } = { limit: String(MESSAGE_PAGE_SIZE) };
+            const query: { before?: string; limit?: number } = { limit: MESSAGE_PAGE_SIZE };
             if (pageParam) query.before = pageParam;
             const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.get({ query });
             if (response.error) throw new AppError(response);

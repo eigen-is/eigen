@@ -75,8 +75,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
         {
             auth: true,
             query: t.Object({
-                limit: t.Optional(t.Number({ minimum: 1, maximum: 500 })),
-                beforeDate: t.Optional(t.Number()),
+                limit: t.Optional(t.Integer({ minimum: 1, maximum: 500 })),
+                beforeDate: t.Optional(t.Integer()),
                 beforeId: t.Optional(t.String()),
             }),
         },
@@ -185,7 +185,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             body: t.Object({
                 mail: MailDraftSchema,
                 tempAttachmentIds: t.Optional(t.Array(t.String())),
-                keepAttachmentIndexes: t.Optional(t.Array(t.Number())),
+                keepAttachmentIndexes: t.Optional(t.Array(t.Integer())),
                 forceFullSave: t.Optional(t.Boolean()),
             }),
         },
@@ -271,7 +271,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         {
             auth: true,
             body: t.Object({
-                indexes: t.Array(t.Number()),
+                indexes: t.Array(t.Integer()),
                 targetOwnerId: t.String(),
                 targetMountId: t.String(),
                 targetParentId: t.String(),
@@ -286,8 +286,16 @@ export const mailRouter = new Elysia({ name: 'mail' })
             setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = 'application/octet-stream';
             set.headers['Content-Disposition'] = contentDisposition('attachment', params.fileName);
-            const attachment = await (await getMailClient(user)).messageGetAttachment(params.id, Number(params.index));
+            const attachment = await (await getMailClient(user)).messageGetAttachment(params.id, params.index);
             return attachment?.content ?? null;
         },
-        { auth: true },
+        {
+            auth: true,
+            params: t.Object({
+                ownerId: t.String(),
+                id: t.String(),
+                index: t.Integer(),
+                fileName: t.String(),
+            }),
+        },
     );
