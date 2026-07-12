@@ -18,8 +18,6 @@ Bugs:
       (tokenizer follows Google's `M` month / `m` minute); switching a variant on a mislabeled
       chip writes minutes where months were
 - [ ] `top10` CF evaluation is O(n²) (`indexOf` over the sorted slice per cell) — use a `Set`
-- [ ] silent `catch {}` in `checkSpecialFunctionRange` (`state/modules/formula-exec.ts`) —
-      justify with a comment or narrow the handling
 - [ ] `cfSplitRange` silently returns `[]` for an unknown `type` (a caller typo would drop all
       CF ranges) — throw instead (`engine/conditional-format.ts`; behavior pinned in tests)
 

@@ -61,17 +61,20 @@ function checkSpecialFunctionRange(
                 }
             }
         }
-        try {
-            ctx.calculateSheetId = id;
-            const str = function_str.split(',')[function_str.split(',').length - 1].split("'")[1].split("'")[0];
+        ctx.calculateSheetId = id;
 
-            const str_nb = str.trim();
-            if (iscelldata(str_nb)) {
-                if (typeof cellRangeFunction === 'function') {
-                    cellRangeFunction(str_nb);
-                }
+        // The special-reference form always ends in a quoted range argument; if
+        // the last comma-segment carries no quoted part there is nothing to scan.
+        const commaParts = function_str.split(',');
+        const quoted = commaParts[commaParts.length - 1].split("'");
+        if (quoted.length < 2) return;
+
+        const str_nb = quoted[1].trim();
+        if (iscelldata(str_nb)) {
+            if (typeof cellRangeFunction === 'function') {
+                cellRangeFunction(str_nb);
             }
-        } catch {}
+        }
     }
 }
 
