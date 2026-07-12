@@ -91,7 +91,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const event = home.calendar.getEventByUri(calendarId, resourceUri);
         if (!event) return new Response('Not Found', { status: 404 });
 
-        const allEvents = home.calendar.getRawEvents(calendarId).filter((e) => e.uid === event.uid);
+        const allEvents = home.calendar.getRawEventsByUid(calendarId, event.uid);
         return handleGet(event, allEvents);
     })
 

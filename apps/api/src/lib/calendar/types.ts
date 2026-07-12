@@ -35,6 +35,25 @@ export type InvitationUpdatePayload = {
     attendees?: Attendee[];
 };
 
+// A single moved/cancelled occurrence of an externally-organized recurring invite (inbound iMIP
+// REQUEST/CANCEL carrying a RECURRENCE-ID). Attaches as an exception on the linked series.
+export type InvitationExceptionPayload = {
+    recurrenceDate: string;
+    // Absolute instant of a UTC-Z RECURRENCE-ID (else undefined). Lets the receiver re-key against the
+    // linked series' timezone when the ICS carried no usable tz (audit #8).
+    recurrenceInstant?: Date | null;
+    title: string;
+    description: string | null;
+    location: string | null;
+    startTime: Date;
+    endTime: Date;
+    allDay: boolean;
+    timezone: string | null;
+    status: CalendarEvent['status'];
+    sequence: number;
+    attendees?: Attendee[];
+};
+
 // Server-side input shapes for Calendar.createEvent / updateEvent. Distinct from the shared
 // `CreateEventInput` / `UpdateEventInput` (FE wire shape — see packages/lib/src/types/calendar.ts)
 // because they (a) take calendarId as a separate positional arg and (b) carry internal CalDAV

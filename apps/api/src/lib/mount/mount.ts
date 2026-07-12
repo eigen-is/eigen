@@ -588,7 +588,7 @@ export class Mount {
         return this.createFile(parentId, name, mimeType, 0, undefined);
     }
 
-    // internal — used by mount/*.ts + versioning/snapshot.ts
+    // internal — used by mount/*.ts + versioning/snapshot.ts + Drive.withPathLock (ChatRoom.init)
     async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);

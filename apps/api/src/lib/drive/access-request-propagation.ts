@@ -3,25 +3,26 @@ import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
 import { composeAccessRequestEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
-import type { Home } from '../home';
-import { sendToHome } from '../home/home-relay';
+import { pullDrivePath, sendToHome } from '../home/home-relay';
+import { getUserById } from '../user';
 
 export async function propagateAccessRequest(
-    home: Home,
+    ownerId: string,
     mountId: string,
     pathId: string,
     requester: { name: string; email: string },
     message: string | null,
 ): Promise<void> {
-    const path = await home.drive.getPath(mountId, pathId);
+    // The owner's Home is foreign to the caller, so its reads/writes go through the relay seam.
+    const path = await pullDrivePath(ownerId, mountId, pathId);
     if (!path || path.trashedAt) return;
 
     const requesterName = requester.name || requester.email;
-    await sendToHome(home.user.id, {
+    await sendToHome(ownerId, {
         type: 'notification',
         notification: {
             type: 'access-request',
-            tag: `access-request:${home.user.id}:${mountId}:${pathId}:${requester.email}`,
+            tag: `access-request:${ownerId}:${mountId}:${pathId}:${requester.email}`,
             title: `${requesterName} requested access`,
             body: stripEigenExtension(path.name),
             actorEmail: requester.email,
@@ -29,10 +30,12 @@ export async function propagateAccessRequest(
         },
     });
 
-    if (parseOwnerId(home.user.id).type === 'user' && getServerSettings().notifications.email.ownerOnAccessRequest) {
+    if (parseOwnerId(ownerId).type === 'user' && getServerSettings().notifications.email.ownerOnAccessRequest) {
+        const owner = await getUserById(ownerId);
+        if (!owner) return;
         const mail = composeAccessRequestEmail(
             path,
-            { name: home.user.name, email: home.user.email },
+            { name: owner.name, email: owner.email },
             { name: requesterName, email: requester.email },
             message,
         );

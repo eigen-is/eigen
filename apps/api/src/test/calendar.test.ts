@@ -7,6 +7,8 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import type { Notification } from '@workspace/lib/types/notification';
+import { computeEtag } from '../lib/calendar/mappers';
+import { getHome } from '../lib/home';
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 describe('Calendar', () => {
@@ -1967,5 +1969,141 @@ describe('Calendar invite email to Eigen user', () => {
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === testCtx.bob.user.email));
         expect(calls.length).toBe(0);
         spy.mockRestore();
+    });
+});
+
+// Audit #24: computeEtag must include `timezone` on every path. rsvpForOccurrence and
+// removeThisAndFuture omitted it while create/update include it, so a byte-identical event hashed
+// differently across paths → spurious CalDAV re-sync. The invariant: the stored etag equals the etag
+// recomputed with the row's timezone (and differs from the etag that drops it).
+describe('Calendar etag timezone consistency (audit #24)', () => {
+    const NY = 'America/New_York';
+    let testCtx: Awaited<ReturnType<typeof getTestContext>>;
+    let aliceCalId: string;
+    let bobCalId: string;
+    let linkedId: string;
+
+    async function getBobRange(fromIso: string, toIso: string) {
+        const from = Math.floor(new Date(fromIso).getTime() / 1000);
+        const to = Math.floor(new Date(toIso).getTime() / 1000);
+        const res = await authedRequest(
+            testCtx.bob.user.sessionToken,
+            `/calendar/${testCtx.bob.user.id}/event-range/${from}/${to}`,
+        );
+        return assertJson<CalendarEventOccurrence[]>(res);
+    }
+
+    beforeAll(async () => {
+        testCtx = await getTestContext();
+        aliceCalId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(testCtx.alice.user.sessionToken, `/calendar/${testCtx.alice.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+        bobCalId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(testCtx.bob.user.sessionToken, `/calendar/${testCtx.bob.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+
+        await authedRequest(
+            testCtx.alice.user.sessionToken,
+            `/calendar/${testCtx.alice.user.id}/calendars/${aliceCalId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Etag Series',
+                    startTime: '2026-03-02T04:00:00.000Z', // Mar 1 23:00 EST
+                    endTime: '2026-03-02T04:50:00.000Z',
+                    allDay: false,
+                    rrule: 'FREQ=DAILY;COUNT=5',
+                    timezone: NY,
+                    data: { attendees: [{ email: testCtx.bob.user.email, status: 'pending', role: 'required' }] },
+                }),
+            },
+        );
+
+        // Poll for the propagated linked copy.
+        for (let i = 0; i < 40; i++) {
+            const linked = (await getBobRange('2026-03-01', '2026-03-08')).find((e) => e.title === 'Etag Series');
+            if (linked) {
+                linkedId = linked.id;
+                expect(linked.timezone).toBe(NY);
+                break;
+            }
+            await new Promise((r) => setTimeout(r, 50));
+        }
+        expect(linkedId).toBeDefined();
+    });
+
+    test('rsvpForOccurrence stores an etag that includes the timezone', async () => {
+        const rsvp = (status: string) =>
+            authedRequest(
+                testCtx.bob.user.sessionToken,
+                `/calendar/${testCtx.bob.user.id}/calendars/${bobCalId}/events/${linkedId}/rsvp`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status, scope: 'this', recurrenceDate: '2026-03-03' }),
+                },
+            );
+        await assertJson(await rsvp('accepted')); // creates the exception
+        await assertJson(await rsvp('tentative')); // updates it via the etag-omitting branch
+
+        const home = await getHome(testCtx.bob.user.id);
+        const exc = home.calendar.getRawEvents(bobCalId).find((e) => e.parentEventId === linkedId);
+        expect(exc).toBeDefined();
+        expect(exc!.timezone).toBe(NY); // exception now inherits the parent's timezone
+        const base = {
+            title: exc!.title,
+            description: exc!.description,
+            location: exc!.location,
+            startTime: exc!.startTime,
+            endTime: exc!.endTime,
+            allDay: exc!.allDay,
+            rrule: exc!.rrule,
+            status: exc!.status,
+            data: exc!.data,
+        };
+        expect(exc!.etag).toBe(computeEtag({ ...base, timezone: exc!.timezone })); // pre-fix: equalled the no-tz etag
+        expect(exc!.etag).not.toBe(computeEtag(base));
+    });
+
+    test('removeThisAndFuture stores an etag that includes the timezone', async () => {
+        await assertJson(
+            await authedRequest(
+                testCtx.bob.user.sessionToken,
+                `/calendar/${testCtx.bob.user.id}/calendars/${bobCalId}/events/${linkedId}/rsvp`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'declined',
+                        scope: 'this-and-following',
+                        remove: true,
+                        recurrenceDate: '2026-03-04',
+                    }),
+                },
+            ),
+        );
+        const home = await getHome(testCtx.bob.user.id);
+        const row = home.calendar.getRawEvents(bobCalId).find((e) => e.id === linkedId);
+        expect(row).toBeDefined();
+        expect(row!.timezone).toBe(NY);
+        const base = {
+            title: row!.title,
+            description: row!.description,
+            location: row!.location,
+            startTime: row!.startTime,
+            endTime: row!.endTime,
+            allDay: row!.allDay,
+            rrule: row!.rrule,
+            status: row!.status,
+            data: row!.data,
+        };
+        expect(row!.etag).toBe(computeEtag({ ...base, timezone: row!.timezone })); // pre-fix: equalled the no-tz etag
     });
 });

@@ -6,6 +6,11 @@ import { isExiftoolExtension } from '@workspace/lib/constants';
 
 const execFileAsync = promisify(execFile);
 
+// execFile kills the child natively on timeout (SIGKILL, so a wedged exiftool can't linger).
+// The preview worker's 30s terminate() reaps the worker, not its OS child — without this a
+// hostile file could orphan an exiftool process per open. Matches the video subproc timeout.
+const EXIFTOOL_TIMEOUT_MS = 20_000;
+
 export function isExiftoolCandidate(mimeType: string, fileName: string): boolean {
     if (mimeType.startsWith('image/')) return true;
     return isExiftoolExtension(fileName);
@@ -18,7 +23,10 @@ async function getExiftoolPath(): Promise<string> {
 
     // Try system exiftool first, fall back to vendored
     try {
-        const { stdout } = await execFileAsync('exiftool', ['-ver']);
+        const { stdout } = await execFileAsync('exiftool', ['-ver'], {
+            timeout: EXIFTOOL_TIMEOUT_MS,
+            killSignal: 'SIGKILL',
+        });
         if (stdout.trim()) {
             cachedExiftoolPath = 'exiftool';
             return cachedExiftoolPath;
@@ -43,6 +51,8 @@ export async function extractEmbeddedPreview(filePath: string, tmpDir: string, p
                 const { stdout } = await execFileAsync(bin, ['-b', tag, filePath], {
                     encoding: 'buffer',
                     maxBuffer: 20 * 1024 * 1024,
+                    timeout: EXIFTOOL_TIMEOUT_MS,
+                    killSignal: 'SIGKILL',
                 });
                 if (stdout && stdout.length > 0) {
                     fs.writeFileSync(extractPath, stdout);

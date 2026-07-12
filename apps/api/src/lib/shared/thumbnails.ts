@@ -2,9 +2,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
+import { Semaphore } from '../../utils/semaphore';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { isVideoCandidate } from '../preview/video-preview';
 import type { StorageFile } from '../storage';
+
+// Each generateImagePreview spawns a Worker that loads sharp; export/media.ts fans out
+// Promise.all over every media file. Cap concurrent workers so a large export can't spawn N
+// sharp-loading workers at once and exhaust memory.
+const imageWorkerSemaphore = new Semaphore(4);
 
 type ImageSource = StorageFile | Buffer | string;
 
@@ -57,48 +63,51 @@ export async function generateImagePreview(
         fs.mkdirSync(tmpDir, { recursive: true });
     }
 
-    return new Promise((resolve) => {
-        const worker = new Worker(new URL('./thumbnail-worker', import.meta.url).href);
+    return imageWorkerSemaphore.run(
+        () =>
+            new Promise<ImageResult | null>((resolve) => {
+                const worker = new Worker(new URL('./thumbnail-worker', import.meta.url).href);
 
-        const cleanup = () => {
-            clearTimeout(timeout);
-            worker.terminate();
-        };
+                const cleanup = () => {
+                    clearTimeout(timeout);
+                    worker.terminate();
+                };
 
-        const timeout = setTimeout(() => {
-            console.error(`[thumbnail-worker] Timeout for ${pathId}`);
-            cleanup();
-            resolve(null);
-        }, 30_000);
+                const timeout = setTimeout(() => {
+                    console.error(`[thumbnail-worker] Timeout for ${pathId}`);
+                    cleanup();
+                    resolve(null);
+                }, 30_000);
 
-        worker.onmessage = (event: MessageEvent) => {
-            cleanup();
-            if (!event.data.ok) {
-                resolve(null);
-                return;
-            }
-            resolve({
-                data: Buffer.from(event.data.data),
-                width: event.data.width,
-                height: event.data.height,
-                ...(event.data.duration !== undefined && { duration: event.data.duration }),
-            });
-        };
+                worker.onmessage = (event: MessageEvent) => {
+                    cleanup();
+                    if (!event.data.ok) {
+                        resolve(null);
+                        return;
+                    }
+                    resolve({
+                        data: Buffer.from(event.data.data),
+                        width: event.data.width,
+                        height: event.data.height,
+                        ...(event.data.duration !== undefined && { duration: event.data.duration }),
+                    });
+                };
 
-        worker.onerror = (err) => {
-            console.error(`[thumbnail-worker] Error for ${pathId}:`, err);
-            cleanup();
-            resolve(null);
-        };
+                worker.onerror = (err) => {
+                    console.error(`[thumbnail-worker] Error for ${pathId}:`, err);
+                    cleanup();
+                    resolve(null);
+                };
 
-        const message = { source: resolvedSource, mimeType, fileName, tmpDir, pathId, options: opts };
+                const message = { source: resolvedSource, mimeType, fileName, tmpDir, pathId, options: opts };
 
-        if (resolvedSource instanceof ArrayBuffer) {
-            worker.postMessage(message, [resolvedSource]);
-        } else {
-            worker.postMessage(message);
-        }
-    });
+                if (resolvedSource instanceof ArrayBuffer) {
+                    worker.postMessage(message, [resolvedSource]);
+                } else {
+                    worker.postMessage(message);
+                }
+            }),
+    );
 }
 
 function getThumbnailPath(thumbsDir: string, pathId: string): string {

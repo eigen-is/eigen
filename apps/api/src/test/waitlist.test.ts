@@ -385,6 +385,27 @@ describe('Waitlist', () => {
         });
     });
 
+    // -- Concurrent invite claim (one invite must never mint more than one account) --
+
+    test('concurrent claims of the same invite token succeed exactly once', async () => {
+        const { submitWaitlist, listWaitlist, acceptWaitlistEntry, claimInviteToken } = await import(
+            '../lib/waitlist/waitlist'
+        );
+
+        const email = 'race-claim@example.com';
+        await submitWaitlist(email, '');
+        const entry = (await listWaitlist()).find((e) => e.email === email);
+        expect(entry).toBeDefined();
+        const accepted = await acceptWaitlistEntry(entry!.id);
+        const token = accepted!.inviteToken!;
+
+        // Two registrations racing the same token: only the caller whose UPDATE actually cleared
+        // the token may claim it. Before the affected-row-count fix, both re-selected the cleared
+        // row and both returned true.
+        const results = await Promise.all([claimInviteToken(token), claimInviteToken(token)]);
+        expect(results.filter(Boolean).length).toBe(1);
+    });
+
     test('welcomeMail encodes non-ASCII names in headers per RFC 2047', async () => {
         // nodemailer's MailComposer should wrap non-ASCII in `=?UTF-8?...?=` encoded-words
         // for headers (To, Subject, etc). Hand-rolled RFC822 used to skip this and the raw

@@ -5,6 +5,7 @@ import Elysia from 'elysia';
 import { rateLimit } from 'elysia-rate-limit';
 import { trustedOrigins } from './lib/auth/auth';
 import { caldavRouter } from './lib/caldav/caldav-router';
+import { isProduction } from './lib/config/env';
 import { clientIpKey } from './lib/core/access';
 import { ApiError } from './lib/core/errors';
 import { webdavRouter } from './lib/webdav/webdav-router';
@@ -50,10 +51,14 @@ export const app = new Elysia({
     // Yjs sync frames (the ~48MB sheets snapshot) on the wire.
     websocket: {
         perMessageDeflate: true,
+        // Bun's 16MB default is measured on the decoded frame — below the ~48MB
+        // worst-case sheets snapshot sync, which would close the socket with code 1009.
+        maxPayloadLength: 128 * 1024 * 1024,
     },
 })
-    .use(serverTiming())
-    .use(swagger())
+    // swagger() publishes the full OpenAPI schema + try-it-out UI, serverTiming() leaks
+    // phase timings in response headers — both are dev-only surface.
+    .use((app) => (isProduction() ? app : app.use(serverTiming()).use(swagger())))
     // Handle CalDAV/WebDAV OPTIONS before CORS intercepts them — DAV clients need capability headers
     .onRequest(({ request }) => {
         if (request.method !== 'OPTIONS') return;

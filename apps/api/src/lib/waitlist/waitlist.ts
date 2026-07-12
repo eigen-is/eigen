@@ -130,21 +130,22 @@ export async function validateInviteToken(token: string) {
 }
 
 export async function claimInviteToken(token: string): Promise<boolean> {
-    // Validate first, then atomically clear the token.
-    // The UNIQUE constraint on inviteToken + setting it to null prevents races:
-    // if two requests validate concurrently, only one finds a non-null token to clear.
     const entry = await validateInviteToken(token);
     if (!entry) return false;
 
     const d = await db();
-    await d
+    // The token-guarded UPDATE is the atomic claim: whether THIS caller cleared the token is how
+    // many rows it matched, not the row's post-state. Under a concurrent race both callers validate
+    // the still-open row, but only the one whose WHERE matched the non-null token gets a RETURNING
+    // row back; the loser matches 0 rows. Re-selecting the row would show `registered/null` to both.
+    const claimed = d
         .update(schema.waitlist)
         .set({ status: 'registered', inviteToken: null, registeredAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(schema.waitlist.id, entry.id), eq(schema.waitlist.inviteToken, token)));
+        .where(and(eq(schema.waitlist.id, entry.id), eq(schema.waitlist.inviteToken, token)))
+        .returning({ id: schema.waitlist.id })
+        .all();
 
-    // Verify the update actually matched (token wasn't already claimed)
-    const updated = await d.select().from(schema.waitlist).where(eq(schema.waitlist.id, entry.id)).get();
-    return updated?.status === 'registered' && updated?.inviteToken === null;
+    return claimed.length === 1;
 }
 
 export async function setRegisteredUser(email: string, userId: string) {

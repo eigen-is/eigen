@@ -1,4 +1,3 @@
-import { MaxFileSizeExceededError, parseMultipartRequest } from '@mjackson/multipart-parser';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type {
     AddressObject,
@@ -16,6 +15,7 @@ import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { renderAttachmentPills } from '../core/mail-template';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
+import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 import type { StorageFile } from '../storage';
 import { simpleParser } from './mail-parser';
 import type { MailSearchOptions, MailStore } from './mail-store';
@@ -474,19 +474,20 @@ export class Mail {
 
     async uploadDraftAttachment(request: Request, maxSize: number): Promise<DraftAttachmentUpload> {
         try {
-            for await (const part of parseMultipartRequest(request, { maxFileSize: maxSize })) {
-                if (!part.isFile || !part.filename) continue;
+            const events = parseMultipartRequest(request, { maxFileSize: maxSize });
+            for await (const event of events) {
+                if (event.type !== 'part' || !event.filename) continue;
                 return await this.store.persistDraftTemp(
                     async (writer) => {
-                        let size = 0;
-                        for (const chunk of part.content) {
-                            writer.write(chunk);
-                            size += chunk.length;
+                        // Advances the same generator: drains this part's body, then stops.
+                        for await (const next of events) {
+                            if (next.type === 'chunk') writer.write(next.data);
+                            else if (next.type === 'end') return next.size;
                         }
-                        return size;
+                        return 0; // unreachable: the parser emits 'end' or throws
                     },
-                    part.filename,
-                    part.mediaType || 'application/octet-stream',
+                    event.filename,
+                    event.mediaType || 'application/octet-stream',
                 );
             }
         } catch (e) {

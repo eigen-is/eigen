@@ -1144,6 +1144,13 @@ export default class Drive {
         return mount.getChildByName(parentId, name);
     }
 
+    // Called by: ChatRoom.init — serializes the lazy data.db auto-create against a concurrent
+    // version restore (replaceContainerDataDb holds this same per-mount container lock). Not
+    // route-callable.
+    async withPathLock<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
+        return this.getMount(mountId).withPathLock(pathId, fn);
+    }
+
     // Called by: collab/collabDocument lifecycle (touches mtime on edit). Not route-callable.
     async touchUpdatedAt(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);

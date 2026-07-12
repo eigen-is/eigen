@@ -1,4 +1,5 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
+import { escapeXml } from '../shared/xml';
 
 export const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
@@ -67,13 +68,4 @@ export function principalProps(userId: string): string[] {
         `<C:calendar-home-set><D:href>/dav/calendars/${userId}/</D:href></C:calendar-home-set>`,
         `<D:principal-URL><D:href>/dav/principals/${userId}/</D:href></D:principal-URL>`,
     ];
-}
-
-export function escapeXml(s: string): string {
-    return s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
 }

@@ -521,4 +521,52 @@ describe.skipIf(isWindows)('Mail', () => {
             expect(res.status).toBe(404);
         });
     });
+
+    describe('Attachment download', () => {
+        let messageId: string;
+
+        beforeAll(async () => {
+            const file = new File(['attachment-bytes'], 'download-me.txt', { type: 'text/plain' });
+            const form = new FormData();
+            form.append('file', file);
+            const uploadRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/draft/attachment`,
+                { method: 'POST', body: form },
+            );
+            const upload = await assertJson<{ tempId: string }>(uploadRes);
+
+            const draftRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/draft`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mail: { subject: 'Attachment download test', text: 'body' },
+                        tempAttachmentIds: [upload.tempId],
+                    }),
+                },
+            );
+            const draft = await assertJson<EmailSummary>(draftRes);
+            messageId = draft.id;
+        });
+
+        test('garbage :index is rejected with 422', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/abc/download-me.txt`,
+            );
+            expect(res.status).toBe(422);
+        });
+
+        test('valid :index still serves the attachment', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/0/download-me.txt`,
+            );
+            expect(res.status).toBe(200);
+            expect(await res.text()).toBe('attachment-bytes');
+        });
+    });
 });

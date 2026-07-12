@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
-import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
+import { getHome } from '../lib/home';
+import { app, assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 describe('Calendar Timezone', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -633,6 +634,247 @@ describe('Calendar Timezone', () => {
                 expect(d.getUTCHours()).toBe(22);
                 expect(d.getUTCMinutes()).toBe(30);
             }
+        });
+    });
+
+    // Audit #8: a RECURRENCE-ID / EXDATE is keyed by the event's wall-clock date, not the UTC date of
+    // the instant. For a timed series whose occurrences cross midnight UTC (23:00 America/New_York =
+    // next-day 04:00Z), the pre-fix parser stored the UTC date, so exceptions attached to the wrong
+    // occurrence: the cancellation killed a neighbour and the modification duplicated.
+    describe('#8 RECURRENCE-ID keyed on wall-clock date (CalDAV PUT)', () => {
+        const basicAuth = (email: string, password = 'testpassword123') => `Basic ${btoa(`${email}:${password}`)}`;
+        const VTIMEZONE_NY = [
+            'BEGIN:VTIMEZONE',
+            'TZID:America/New_York',
+            'BEGIN:DAYLIGHT',
+            'TZOFFSETFROM:-0500',
+            'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+            'DTSTART:20070311T020000',
+            'TZNAME:EDT',
+            'TZOFFSETTO:-0400',
+            'END:DAYLIGHT',
+            'BEGIN:STANDARD',
+            'TZOFFSETFROM:-0400',
+            'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+            'DTSTART:20071104T020000',
+            'TZNAME:EST',
+            'TZOFFSETTO:-0500',
+            'END:STANDARD',
+            'END:VTIMEZONE',
+        ].join('\r\n');
+        const vcal = (...vevents: string[]) =>
+            [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Test//Test//EN',
+                VTIMEZONE_NY,
+                ...vevents,
+                'END:VCALENDAR',
+            ].join('\r\n');
+        const sec = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
+        const davPut = (email: string, ownerId: string, calId: string, uri: string, body: string) =>
+            app.handle(
+                new Request(`http://localhost/dav/calendars/${ownerId}/${calId}/${uri}`, {
+                    method: 'PUT',
+                    headers: { Authorization: basicAuth(email), 'Content-Type': 'text/calendar' },
+                    body,
+                }),
+            );
+
+        test('cross-midnight-UTC exceptions store the wall-clock date and attach to the intended occurrence', async () => {
+            const UID = 'audit8-daily@test';
+            const master = (extra: string[] = []) =>
+                [
+                    'BEGIN:VEVENT',
+                    `UID:${UID}`,
+                    'SUMMARY:Late Standup',
+                    'DTSTART;TZID=America/New_York:20260112T230000',
+                    'DTEND;TZID=America/New_York:20260112T235000',
+                    'RRULE:FREQ=DAILY;COUNT=10',
+                    ...extra,
+                    'DTSTAMP:20260101T000000Z',
+                    'END:VEVENT',
+                ].join('\r\n');
+
+            const put1 = await davPut(
+                ctx.alice.user.email,
+                ctx.alice.user.id,
+                aliceCalendarId,
+                `${UID}.ics`,
+                vcal(master()),
+            );
+            expect([201, 204]).toContain(put1.status);
+
+            const cancelledExc = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'RECURRENCE-ID;TZID=America/New_York:20260116T230000',
+                'DTSTART;TZID=America/New_York:20260116T230000',
+                'DTEND;TZID=America/New_York:20260116T235000',
+                'SUMMARY:Late Standup',
+                'STATUS:CANCELLED',
+                'SEQUENCE:1',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+            const modifiedExc = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'RECURRENCE-ID;TZID=America/New_York:20260115T230000',
+                'DTSTART;TZID=America/New_York:20260115T230000',
+                'DTEND;TZID=America/New_York:20260115T235000',
+                'SUMMARY:Moved occurrence',
+                'SEQUENCE:1',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+
+            const put2 = await davPut(
+                ctx.alice.user.email,
+                ctx.alice.user.id,
+                aliceCalendarId,
+                `${UID}.ics`,
+                vcal(master(['EXDATE;TZID=America/New_York:20260114T230000']), cancelledExc, modifiedExc),
+            );
+            expect(put2.status).toBe(204);
+
+            // The exceptions are stored under the wall-clock date, not the UTC date of the instant.
+            const home = await getHome(ctx.alice.user.id);
+            const stored = home.calendar.getRawEvents(aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
+            const modified = findOrFail(stored, (e) => e.title === 'Moved occurrence');
+            const cancelledDates = stored.filter((e) => e.status === 'cancelled').map((e) => e.recurrenceDate);
+            expect(modified.recurrenceDate).toBe('2026-01-15'); // pre-fix: '2026-01-16' (UTC date)
+            expect(cancelledDates).toContain('2026-01-16'); // explicit RECURRENCE-ID cancel; pre-fix: '2026-01-17'
+            expect(cancelledDates).toContain('2026-01-14'); // EXDATE cancel (already wall-clock keyed)
+
+            const occ = (
+                await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, sec('2026-01-12'), sec('2026-01-24'))
+            ).filter((e) => e.uid === UID);
+            const at = (iso: string) => occ.filter((e) => new Date(e.startTime).toISOString() === iso);
+
+            // EXDATE cancels wall-clock Jan 14 (instant Jan 15 04:00Z).
+            expect(at('2026-01-15T04:00:00.000Z')).toHaveLength(0);
+            // Cancellation of wall-clock Jan 16 (instant Jan 17 04:00Z).
+            expect(at('2026-01-17T04:00:00.000Z')).toHaveLength(0);
+            // Modification of wall-clock Jan 15 (instant Jan 16 04:00Z): exactly one, retitled.
+            const jan15 = at('2026-01-16T04:00:00.000Z');
+            expect(jan15).toHaveLength(1);
+            expect(jan15[0].title).toBe('Moved occurrence');
+            // Neighbour (wall-clock Jan 17, instant Jan 18 04:00Z) untouched — no collateral mis-key.
+            const jan17 = at('2026-01-18T04:00:00.000Z');
+            expect(jan17).toHaveLength(1);
+            expect(jan17[0].title).toBe('Late Standup');
+        });
+
+        test('DST fall-back week keeps the wall-clock key stable across the offset change', async () => {
+            const UID = 'audit8-dst@test';
+            const master = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Fall Standup',
+                'DTSTART;TZID=America/New_York:20261030T230000',
+                'DTEND;TZID=America/New_York:20261030T235000',
+                'RRULE:FREQ=DAILY;COUNT=8',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+            // Nov 2 falls after the Nov 1 fall-back (EST, -05): 23:00 local = Nov 3 04:00Z, UTC date +1.
+            const movedExc = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'RECURRENCE-ID;TZID=America/New_York:20261102T230000',
+                'DTSTART;TZID=America/New_York:20261102T230000',
+                'DTEND;TZID=America/New_York:20261102T235000',
+                'SUMMARY:DST Moved',
+                'SEQUENCE:1',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+
+            const put = await davPut(
+                ctx.alice.user.email,
+                ctx.alice.user.id,
+                aliceCalendarId,
+                `${UID}.ics`,
+                vcal(master, movedExc),
+            );
+            expect([201, 204]).toContain(put.status);
+
+            const home = await getHome(ctx.alice.user.id);
+            const exc = findOrFail(
+                home.calendar.getRawEvents(aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId),
+                (e) => e.title === 'DST Moved',
+            );
+            expect(exc.recurrenceDate).toBe('2026-11-02'); // pre-fix: '2026-11-03' (UTC date, offset had shifted)
+
+            const occ = (
+                await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, sec('2026-10-30'), sec('2026-11-08'))
+            ).filter((e) => e.uid === UID);
+            const moved = occ.filter((e) => e.title === 'DST Moved');
+            expect(moved).toHaveLength(1);
+            // Substituted onto wall-clock Nov 2 (instant Nov 3 04:00Z), not the UTC-date neighbour.
+            expect(new Date(moved[0].startTime).toISOString()).toBe('2026-11-03T04:00:00.000Z');
+        });
+
+        test('an all-Z exception VEVENT under a TZID master keys on the series wall-clock date', async () => {
+            const UID = 'audit8-allz@test';
+            const master = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Evening Sync',
+                'DTSTART;TZID=America/New_York:20260115T230000',
+                'DTEND;TZID=America/New_York:20260115T235000',
+                'RRULE:FREQ=WEEKLY;COUNT=6',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+
+            const put1 = await davPut(
+                ctx.alice.user.email,
+                ctx.alice.user.id,
+                aliceCalendarId,
+                `${UID}.ics`,
+                vcal(master),
+            );
+            expect([201, 204]).toContain(put1.status);
+
+            // Exactly the shape Eigen's own serializer emits for a tz-null exception row: DTSTART and
+            // RECURRENCE-ID both in UTC-Z form, under a TZID master. Jan 22 23:00 NY (EST) = Jan 23
+            // 04:00Z, so the instant's UTC date is the day AFTER the wall-clock occurrence date.
+            const allZExc = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'RECURRENCE-ID:20260123T040000Z',
+                'DTSTART:20260123T040000Z',
+                'DTEND:20260123T045000Z',
+                'SUMMARY:Moved via Z-form',
+                'SEQUENCE:1',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+
+            const put2 = await davPut(
+                ctx.alice.user.email,
+                ctx.alice.user.id,
+                aliceCalendarId,
+                `${UID}.ics`,
+                vcal(master, allZExc),
+            );
+            expect(put2.status).toBe(204);
+
+            const home = await getHome(ctx.alice.user.id);
+            const stored = home.calendar.getRawEvents(aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
+            const moved = findOrFail(stored, (e) => e.title === 'Moved via Z-form');
+            // Keyed on the SERIES (master TZID) wall-clock date, not the UTC date of the Z-form instant.
+            expect(moved.recurrenceDate).toBe('2026-01-22'); // pre-fix: '2026-01-23' (UTC date)
+
+            // It attaches to the intended occurrence — exactly one instance, retitled, no duplicate.
+            const occ = (
+                await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, sec('2026-01-15'), sec('2026-01-30'))
+            ).filter((e) => e.uid === UID);
+            const atMoved = occ.filter((e) => new Date(e.startTime).toISOString() === '2026-01-23T04:00:00.000Z');
+            expect(atMoved).toHaveLength(1);
+            expect(atMoved[0].title).toBe('Moved via Z-form');
         });
     });
 });

@@ -1,9 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { v4 as uuidv4 } from 'uuid';
 import { getServerSettings } from '../config/server-settings';
 import { DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
 import type { ManagedDatabase } from '../core/';
@@ -72,7 +72,7 @@ export class Contacts {
         if (existingLabels.length === 0) {
             for (const label of DEFAULT_LABELS) {
                 await this.db.insert(schema.labels).values({
-                    id: uuidv4(),
+                    id: randomUUID(),
                     name: label.name,
                     color: label.color,
                 });
@@ -133,7 +133,7 @@ export class Contacts {
     }
 
     public async addContact(contact: Omit<Contact, 'id'>) {
-        const contactId = uuidv4();
+        const contactId = randomUUID();
         const { data, contactData, labels } = extractContactData(contact);
 
         await this.db.insert(schema.contacts).values({
@@ -204,7 +204,7 @@ export class Contacts {
     }
 
     public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
-        const labelId = uuidv4();
+        const labelId = randomUUID();
 
         await this.db.insert(schema.labels).values({
             id: labelId,
@@ -244,14 +244,7 @@ export class Contacts {
         this.emitLabel(SSEventType.LABEL_DELETED, id);
     }
 
-    private dbRowToContact(row: typeof schema.contacts.$inferSelect): Contact {
-        const labelIds = this.db
-            .select({ labelId: schema.contactsToLabels.labelId })
-            .from(schema.contactsToLabels)
-            .where(eq(schema.contactsToLabels.contactId, row.id))
-            .all()
-            .map((rel) => rel.labelId);
-
+    private dbRowToContact(row: typeof schema.contacts.$inferSelect, labels: string[]): Contact {
         const data = row.data ?? {};
 
         return {
@@ -260,18 +253,39 @@ export class Contacts {
             lastName: row.lastName.trim(),
             eigenId: row.eigenId,
             ...(data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>),
-            labels: labelIds,
+            labels,
         };
     }
 
     public async getContactById(id: string): Promise<Contact | null> {
         const row = await this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
-        return row ? this.dbRowToContact(row) : null;
+        if (!row) return null;
+        const labels = this.db
+            .select({ labelId: schema.contactsToLabels.labelId })
+            .from(schema.contactsToLabels)
+            .where(eq(schema.contactsToLabels.contactId, row.id))
+            .all()
+            .map((rel) => rel.labelId);
+        return this.dbRowToContact(row, labels);
     }
 
     public async getContacts(): Promise<Contact[]> {
         const rows = await this.db.select().from(schema.contacts).all();
-        return rows.map((row) => this.dbRowToContact(row));
+
+        // Load every contact→label link in one scan of the (contactId, labelId) PK, grouped by
+        // contact — a single query instead of the per-row SELECT this used to run (1+N).
+        const labelsByContact = new Map<string, string[]>();
+        const relations = this.db
+            .select({ contactId: schema.contactsToLabels.contactId, labelId: schema.contactsToLabels.labelId })
+            .from(schema.contactsToLabels)
+            .all();
+        for (const rel of relations) {
+            const list = labelsByContact.get(rel.contactId);
+            if (list) list.push(rel.labelId);
+            else labelsByContact.set(rel.contactId, [rel.labelId]);
+        }
+
+        return rows.map((row) => this.dbRowToContact(row, labelsByContact.get(row.id) ?? []));
     }
 
     public async uploadAvatar(file: File) {
@@ -288,7 +302,7 @@ export class Contacts {
             throw new ApiError(400, 'Failed to generate avatar thumbnail');
         }
 
-        const fileName = `${uuidv4()}.webp`;
+        const fileName = `${randomUUID()}.webp`;
         await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, result.data);
 
         return `contacts/${this.home.user.id}/avatar/${fileName}`;

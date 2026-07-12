@@ -176,6 +176,40 @@ describe('Contacts', () => {
         });
     });
 
+    describe('Contact labels round-trip', () => {
+        // Exercises the batched label grouping in getContacts: a contact with labels must come back
+        // with them both from the list (one grouped query) and by id (per-contact query).
+        test('list and by-id return an assigned label', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const labelRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Round Trip', color: '#123456' }),
+            });
+            const roundTripLabelId = (await labelRes.text()).replace(/^"|"$/g, '');
+
+            const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'Labeled',
+                    lastName: 'Person',
+                    email: ['labeled@test.eigen.is'],
+                    phone: [],
+                    labels: [roundTripLabelId],
+                }),
+            });
+            const roundTripContactId = (await createRes.text()).replace(/^"|"$/g, '');
+
+            const listRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`);
+            const all = await assertJson<Contact[]>(listRes);
+            expect(findOrFail(all, (c) => c.id === roundTripContactId).labels).toEqual([roundTripLabelId]);
+
+            const byIdRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${roundTripContactId}`);
+            expect((await assertJson<Contact>(byIdRes)).labels).toEqual([roundTripLabelId]);
+        });
+    });
+
     describe('Cross-user isolation', () => {
         test('Bob contacts are separate from Alice', async () => {
             const aliceRes = await authedRequest(
