@@ -11,7 +11,6 @@ import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
-import { getHome } from '../lib/home';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
@@ -545,11 +544,10 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/path/:pathId/request-access',
         async ({ params, user, body }) => {
             // Skips the SharedDrive facade by design: the caller has NO permission yet — that is
-            // the point of the request. propagateAccessRequest only notifies the owner; it never
-            // reads or returns path data to the requester.
-            const home = await getHome(params.ownerId); // ownerId-routed: request targets this home
+            // the point of the request. propagateAccessRequest only notifies the owner (via the
+            // home relay); it never reads or returns path data to the requester.
             await propagateAccessRequest(
-                home,
+                params.ownerId,
                 params.mountId,
                 params.pathId,
                 { name: user.name, email: user.email },

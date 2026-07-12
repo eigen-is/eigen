@@ -3,7 +3,6 @@ import libmime from 'libmime';
 
 type FlowedDecoderConfig = {
     Iconv?: unknown;
-    encoding?: string;
     delSp?: boolean;
 };
 
@@ -41,12 +40,7 @@ class FlowedDecoder extends Transform {
 
     _flush(callback: TransformCallback): void {
         if (this.chunklen) {
-            let currentBody = Buffer.concat(this.chunks, this.chunklen);
-
-            if (this.config.encoding === 'base64') {
-                currentBody = Buffer.from(currentBody.toString('binary'), 'base64');
-            }
-
+            const currentBody = Buffer.concat(this.chunks, this.chunklen);
             const content = this.libmime.decodeFlowed(currentBody.toString('binary'), this.config.delSp);
             this.push(Buffer.from(content, 'binary'));
         }

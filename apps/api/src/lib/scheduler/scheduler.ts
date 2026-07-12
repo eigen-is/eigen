@@ -10,13 +10,25 @@ const timers: Timer[] = [];
 
 // Runs fn immediately, then every intervalMs. fn can return anything (sync or
 // Promise) — the return value is discarded and rejections are caught + logged so
-// one bad sweep never breaks the schedule.
+// one bad sweep never breaks the schedule. A slow async fn is never re-entered:
+// a tick that fires while the previous sweep is still running is skipped.
 export function scheduleInterval(name: string, intervalMs: number, fn: () => unknown): void {
-    const run = () => {
-        Promise.resolve(fn()).catch((error) => console.error(`[scheduler] ${name} failed:`, error));
+    let running = false;
+    const run = async () => {
+        if (running) return;
+        running = true;
+        try {
+            await fn();
+        } catch (error) {
+            console.error(`[scheduler] ${name} failed:`, error);
+        } finally {
+            running = false;
+        }
     };
     run();
-    timers.push(setInterval(run, intervalMs));
+    const timer = setInterval(run, intervalMs);
+    timer.unref(); // periodic work must never hold the process open at shutdown
+    timers.push(timer);
 }
 
 export function stopAllSchedules(): void {

@@ -186,35 +186,6 @@ class MimeNode {
         }
     }
 
-    getHeaders(): Buffer {
-        if (!this.headers) {
-            this.parseHeaders();
-        }
-        return (this.headers as Headers).build();
-    }
-
-    setContentType(contentType?: string): void {
-        if (!this.headers) {
-            this.parseHeaders();
-        }
-
-        contentType = (contentType || '').toLowerCase().trim();
-        if (contentType) {
-            this._parsedContentType.value = contentType;
-        }
-
-        const ctParams = this._parsedContentType.params;
-        if (!this.flowed && ctParams['format']) {
-            delete ctParams['format'];
-        }
-
-        if (!this.delSp && ctParams['delsp']) {
-            delete ctParams['delsp'];
-        }
-
-        (this.headers as Headers).update('Content-Type', this.libmime.buildHeaderValue(this._parsedContentType));
-    }
-
     getDecoder(): Transform | PassThrough {
         if (!this.headers) {
             this.parseHeaders();
@@ -225,29 +196,6 @@ class MimeNode {
                 return new libbase64.Decoder();
             case 'quoted-printable':
                 return new libqp.Decoder();
-            default:
-                return new PassThrough();
-        }
-    }
-
-    getEncoder(encoding?: string): Transform | PassThrough {
-        if (!this.headers) {
-            this.parseHeaders();
-        }
-
-        encoding = (encoding || '').toString().toLowerCase().trim();
-
-        if (encoding && encoding !== this.encoding) {
-            (this.headers as Headers).update('Content-Transfer-Encoding', encoding);
-        } else {
-            encoding = this.encoding;
-        }
-
-        switch (encoding) {
-            case 'base64':
-                return new libbase64.Encoder();
-            case 'quoted-printable':
-                return new libqp.Encoder();
             default:
                 return new PassThrough();
         }

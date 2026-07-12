@@ -29,6 +29,9 @@
 
 ## #14 — `checkBoundary` `||` where it needs `&&` — **REAL, hostile-input-only (P2)**
 
+> **✅ FIXED — Unit 5** (`fix/api-audit-2026-07`). The `&&` fix landed red-first; the differential
+> test's load-bearing cases live on in `apps/api/src/test/mail-parser.test.ts` against the real module.
+
 **Where:** `mail-split/message-splitter.ts` `checkBoundary` (~:267-289). The inner test (~:271) is
 `if (line.length >= 2 && (line[0] === 0x0d || line[1] === 0x0a))`. It should be
 `line[0] === 0x0d && line[1] === 0x0a` (a real 2-byte CRLF). The outer `if` already proved `line[0]` is CR or
@@ -82,6 +85,10 @@ test('BUG: \\n\\r separator (bare CR before boundary) drops the attachment on bu
 
 ## #11 — uncapped `htmlToText` on untrusted HTML — **REAL DoS lever (P2); the audit's suggested fix is a footgun**
 
+> **✅ FIXED — Unit 5** via fix direction (a): `htmlToText` input truncated at 2 MB, parse never
+> rejected. The knob stays unwired. Residual on record: `DOMPurify.sanitize` still uncapped —
+> belongs to the deferred worker-thread move, which also covers #12.
+
 **Where:** `mail-parser/mail-parser.ts` caps HTML→text only when `options.maxHtmlLengthToParse` is truthy
 (~:963-966); the sole caller `mail-parse.ts:18` passes `simpleParser(bytes, {})` → cap disabled. Structure is
 capped (`MAX_HEAD_SIZE = 1 MB`, `MAX_CHILD_NODES = 1000`) but content size is not. `parseEml` runs on the
@@ -123,6 +130,9 @@ summary path) if a real large-mailbox profile justifies it — otherwise leave i
 ---
 
 ## #24 — dead rewrite-path code in the mailsplit fork — **CONFIRMED zero callers (P3)**
+
+> **✅ FIXED — Unit 5**. Encode/re-emit half deleted with fresh per-symbol grep evidence; the live
+> decode half untouched. Vestige left: `Headers.changed`/`mbox`/`http` written-but-unread fields.
 
 Repo-wide grep confirms the encode/re-emit half is dead while the decode/read half is live. Outbound EML
 generation lives independently in `mailfile.ts` (no `mail-split` imports).

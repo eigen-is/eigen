@@ -138,6 +138,11 @@ export async function pullSharedPaths(ownerUserId: string, user: User): Promise<
     return home.drive.getSharedWith(user);
 }
 
+export async function pullDrivePath(ownerUserId: string, mountId: string, pathId: string): Promise<DrivePath | null> {
+    const home = await getHome(ownerUserId);
+    return home.drive.getPath(mountId, pathId);
+}
+
 export async function pullCalendarShares(
     ownerUserId: string,
     email: string,

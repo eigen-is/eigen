@@ -268,7 +268,9 @@ class MessageSplitter extends Transform {
         let startpos = 0;
         if (line.length >= 1 && (line[0] === 0x0d || line[0] === 0x0a)) {
             startpos++;
-            if (line.length >= 2 && (line[0] === 0x0d || line[1] === 0x0a)) {
+            // Skip a 2-byte prefix only for a real CRLF. A lone leading CR is a 1-byte prefix:
+            // over-advancing here fails the `--` guard below and misses a valid boundary.
+            if (line.length >= 2 && line[0] === 0x0d && line[1] === 0x0a) {
                 startpos++;
             }
         }

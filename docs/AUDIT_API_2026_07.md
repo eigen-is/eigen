@@ -185,6 +185,12 @@ The parser caps HTML→text conversion only when `options.maxHtmlLengthToParse` 
 
 **Direction:** pass `maxHtmlLengthToParse`; consider a raw-eml size cap before parse.
 
+> **✅ FIXED — Unit 5** (with the deep-dive's corrected direction — the suggestion above is a footgun:
+> `maxHtmlLengthToParse` rejects the WHOLE parse, making large legit mail unreadable). The
+> `htmlToText` input is truncated at a 2 MB cap before conversion; the email stays readable and the
+> event-loop cost is bounded. Residual: `DOMPurify.sanitize` in `mail-parse.ts` still runs uncapped —
+> covered by the deferred worker-thread move (MAIL.md), not half-closed here.
+
 ### 12. Every attachment fully decoded + buffered even for summary-only parses
 `apps/api/src/lib/mail/mail-parser/simple-parser.ts:82-97`, entry `mail-parse.ts:12`
 
@@ -220,6 +226,10 @@ The outer `if` already proved `line[0]` is CR or LF. The inner test means to det
 
 **Direction:** change `||` to `&&`; add a splitter test with bare-CR / mixed-EOL boundary lines.
 
+> **✅ FIXED — Unit 5**. The one-character `&&` fix, red-first from the deep-dive's differential
+> test: unit-level `"\r--boundary\r\n"` recognition plus the end-to-end `\n\r`-separator case
+> (attachment intact, no raw MIME leaking into visible text).
+
 ---
 
 ## P3 — nits, smells, dead code
@@ -251,12 +261,18 @@ The one authenticated route that calls `getHome(params.ownerId)` for an owner th
 
 **Direction:** add a `pull*`-style relay read (mirroring `pullCalendarById`) for the owner-side path lookup.
 
+> **✅ FIXED — Unit 5**. `pullDrivePath` added to `home-relay.ts` (mirrors `pullCalendarById`);
+> `access-request-propagation.ts` reads through it — the last off-seam `getHome` read is gone.
+
 ### 18. exiftool spawned without a timeout — orphaned child on a crafted file
 `apps/api/src/lib/preview/exiftool-preview.ts:43-46` (and the `:21` `-ver` probe) **[verified]**
 
 The **only** child-process spawn in the preview stack without a timeout+kill. weasyprint (`weasyprint.ts:36`), ffmpeg/ffprobe (`video-thumbnail.ts:31`) all wrap `setTimeout → kill`; exiftool does not. It runs in the thumbnail worker, whose 30s outer timeout only calls `worker.terminate()` — that ends the JS thread but does **not** reap the OS child, so a hostile file that hangs exiftool leaves an orphaned process. Repeated uploads pile up orphans — the weasyprint-EPIPE-incident shape.
 
 **Direction:** pass `{ timeout: N, killSignal: 'SIGKILL' }` to `execFileAsync` (execFile natively kills the child on timeout).
+
+> **✅ FIXED — Unit 5**. Both sites (`-ver` probe + tag extraction) now pass
+> `{ timeout: 20_000, killSignal: 'SIGKILL' }`, matching the video-thumbnail sibling's 20s.
 
 ### 19. No worker pool / concurrency cap on preview generation
 `apps/api/src/lib/shared/thumbnails.ts:60-101`, unbounded fan-out at `export/media.ts:7-14`
@@ -265,12 +281,21 @@ The **only** child-process spawn in the preview stack without a timeout+kill. we
 
 **Direction:** a small worker pool or shared concurrency limiter around `generateImagePreview`. `apps/api/src/utils/semaphore.ts` already exists.
 
+> **✅ FIXED — Unit 5**. Module-level `new Semaphore(4)` in `thumbnails.ts` wraps worker spawn+wait;
+> `export/media.ts`'s fan-out queues through it. Noted residual: the source download still happens
+> before the permit, so queued items buffer their bytes — deliberate (holding permits during network
+> I/O would be worse); on record for later if export memory ever matters.
+
 ### 20. `getOrCacheImage` lacks the in-flight dedup + TOCTOU guard its text sibling has
 `apps/api/src/lib/preview/preview-cache.ts:48-66`
 
 `getOrCacheText` dedupes concurrent regenerations (`inFlightText`) and try/catches cache reads; `getOrCacheImage` does neither. A folder grid of N tiles for one just-edited raster fires N concurrent `generate()`; and `existsSync(cacheFile)` → `Bun.file(cacheFile).arrayBuffer()` (`:56-57`) is a TOCTOU — a newer version's `pruneOldVersions` can unlink between the two → uncaught 500 during a version transition.
 
 **Direction:** mirror the text path's dedup map + try/catch.
+
+> **✅ FIXED — Unit 5**. `inFlightImage` map (result-promise, keyed like `inFlightText`, creator
+> cleans up in `finally` so a rejection can't poison later requests) + try/catch fall-through to
+> regenerate when the cache file vanishes between exists-check and read.
 
 ### 21. Duplicated WebDAV/CalDAV XML envelope + byte-identical `escapeXml`
 `apps/api/src/lib/caldav/xml-builder.ts:7-21,72-79` and `apps/api/src/lib/webdav/xml.ts:6-33`
@@ -279,6 +304,11 @@ Both hand-roll `escapeXml` (identical five-`.replace` chain) and the `multistatu
 
 **Direction:** hoist the shared envelope + `escapeXml` into one module both import.
 
+> **✅ FIXED — Unit 5** (scoped down honestly). `escapeXml` hoisted to `lib/shared/xml.ts`; the
+> envelope builders turned out NOT byte-identical (join separators, namespace decls, propstat
+> variants all differ), so they stay local per the brief's "do not rewrite either protocol's
+> output" — verified independently in review. Protocol suites byte-for-byte green.
+
 ### 22. Scheduler primitive has no `unref()` and no overlap guard
 `apps/api/src/lib/scheduler/scheduler.ts:14-20`
 
@@ -286,12 +316,18 @@ Timers are never `.unref()`d, and `setInterval(run, ms)` re-invokes regardless o
 
 **Direction:** `.unref()` the interval; guard `run` with an `isRunning` skip-if-still-running flag.
 
+> **✅ FIXED — Unit 5**. Interval `.unref()`d + skip-if-still-running guard; `scheduleInterval`
+> signature and `jobs.ts` registrations unchanged.
+
 ### 23. Temp-file leak in `replaceContainerDataDb` on early failure
 `apps/api/src/lib/versioning/snapshot.ts:153-172`
 
 `writeTempWithHash(mount.getTempPath(tempId), Bun.file(sourcePath))` (`:154`) runs *before* the `try { … } finally { cleanupTemp(tempId) }`. If that write/hash throws (bad source read), the partial temp is never cleaned. (Restore's own temp handling in `restore.ts:25-39` is correct.)
 
 **Direction:** move the `writeTempWithHash` inside the `try`.
+
+> **✅ FIXED — Unit 5**. `writeTempWithHash` moved inside the `try`; the existing
+> `finally { cleanupTemp(tempId) }` now covers a failed write/hash.
 
 ### 24. Small correctness/hygiene nits
 - **`buildRecentText` unbounded** (`chat.ts:458-472`): `select().all()` then break at 8 KB — add `.limit(N)` so SQL does the bounding (same shape as #10). — **✅ FIXED — Unit 3**: `.limit(RECENT_TEXT_CAP)` + `ne(content, '')` so SQL bounds the fetch and empty rows can't crowd the window.
@@ -301,7 +337,7 @@ Timers are never `.unref()`d, and `setInterval(run, ms)` re-invokes regardless o
 - **SMTP `tls: { rejectUnauthorized: false }`** (`mailer.ts:44`): accepts any cert on the SMTP hop. Likely intentional for an internal relay — make it env-opt-out or add a WHY comment.
 - **`my-teams` swallows relay-pull failures silently** (`home.ts:39-42`): `.catch(() => [])` renders a team with zero mounts/calendars with no log. Add `console.error`.
 - **UUID source drift**: `chat.ts`/`mount.ts`/`maildir-store.ts` use `node:crypto randomUUID`; `calendar.ts`/`contacts.ts` use the `uuid` npm package's `v4`. `crypto.randomUUID` is a Bun global — unify on it and drop the `uuid` dep.
-- **Dead rewrite-path code in the mailsplit fork**: `mail-split/mime-node.ts:189,196,233` + `headers.ts:70,87,119,147` + `flowed-decoder.ts:46-48` (base64 branch) — the encode/re-emit half, zero callers repo-wide (EML generation lives in `mailfile.ts`). ~80 lines of untested surface; delete.
+- **Dead rewrite-path code in the mailsplit fork**: `mail-split/mime-node.ts:189,196,233` + `headers.ts:70,87,119,147` + `flowed-decoder.ts:46-48` (base64 branch) — the encode/re-emit half, zero callers repo-wide (EML generation lives in `mailfile.ts`). ~80 lines of untested surface; delete. — **✅ FIXED — Unit 5**: deleted with per-symbol grep evidence; three written-but-unread `Headers` fields (`changed`/`mbox`/`http`) left as vestige (removing them means reworking live `_parseHeaders` — follow-up noted).
 
 ---
 

@@ -15,6 +15,12 @@ import FlowedDecoder from '../mail-split/flowed-decoder';
 import Splitter from '../mail-split/message-splitter';
 import StreamHash from './stream-hash';
 
+// htmlToText runs synchronously at ~70-90 ms/MB on the shared event loop, on every message
+// open and every cold-index/sync pass — a multi-MB HTML body is a DoS lever. Bound its input
+// so the work is capped; the rendered html body stays whole (email readable), only the derived
+// plaintext is cut off past the cap.
+const MAX_HTML_TEXT_LENGTH = 2 * 1024 * 1024;
+
 const linkify = new LinkifyIt();
 
 linkify
@@ -969,7 +975,7 @@ class MailParser extends Transform {
                             failedToParseHtml = true;
                         } else {
                             try {
-                                text.push(htmlToText(node.textContent));
+                                text.push(htmlToText(node.textContent.slice(0, MAX_HTML_TEXT_LENGTH)));
                             } catch (_err) {
                                 this.emit('error', new Error('Failed to parse HTML'));
                                 text.push('Invalid HTML content');
