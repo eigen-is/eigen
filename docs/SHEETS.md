@@ -167,7 +167,12 @@ order via `getCalculationOrder`; evaluate through the shared `FormulaEngine`, re
 (`NOW`/`TODAY`/`RAND`/`RANDBETWEEN` keep their cached value, matching Excel/Sheets "read a closed file"
 semantics — a passive export stays deterministic); and write back `v` plus a pragmatic `m`
 (`update(ct.fa, v)` when the cell carries a format mask, error sentinels as `v = m = '#…'` with
-`ct.t = 'e'`, `String(v)` otherwise). Every cell is guarded, so one poisoned formula never aborts the pass.
+`ct.t = 'e'`, `String(v)` otherwise). An engine error never overwrites a non-error cached value: a
+function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) evaluates to `#NAME?`, so rather than
+destroy Excel's correct cached result at import the cached `v`/`m` is kept and the
+`execFunctionGlobalData` seed is skipped, so downstream cells read the cached value through the resolver
+(same freeze-is-safe direction as volatiles); only a cell with no cached value gets the error sentinel.
+Every cell is guarded, so one poisoned formula never aborts the pass.
 
 Two earlier notes here were wrong and are corrected: the deleted `recalculateAll` was **not** a
 "three-line reintroduction" — it was ~100 lines plus a `getDependencies` extractor (~35) and

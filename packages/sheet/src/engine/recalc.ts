@@ -28,10 +28,12 @@ import type { EvaluationResult, FormulaCellInfoMap, FormulaDependency } from './
 // A formula that reads the wall clock / RNG. Frozen during server recalc so
 // passive exports/search stay deterministic (neither Excel nor Sheets recompute
 // a closed-file read — audit Q5/DP7b). Detected on the formula text with a
-// word boundary + call paren, so `MYRAND(` and a `"NOW()"` string arg both miss
-// on the boundary/quote respectively (freezing is the safe direction: it keeps
-// the last cached value rather than recomputing). RANDBETWEEN precedes RAND so
-// the longer name wins.
+// word boundary + call paren: `MYRAND(` misses (no `\b` between the two word
+// chars `Y` and `R`), while a literal `"NOW()"` string arg still MATCHES — `\b`
+// fires at the quote→`N` transition — so such a formula is frozen too. That
+// over-match is harmless: freezing is the safe direction, keeping the last
+// cached value rather than recomputing. RANDBETWEEN precedes RAND so the longer
+// name wins.
 const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
 
 function isVolatileFormula(formula: string): boolean {
@@ -603,6 +605,19 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
     cell.m = result.value == null ? '' : String(result.value);
 }
 
+// True when a cell already holds a usable computed value — a non-nil `v` that is
+// neither a `'#…'` error string nor flagged `ct.t === 'e'`. An engine error must
+// not overwrite such a value during recalc (see the evaluate loop).
+function hasNonErrorCachedValue(cell: Cell): boolean {
+    if (cell.v == null || cell.ct?.t === 'e') {
+        return false;
+    }
+    if (typeof cell.v === 'string' && cell.v.startsWith('#')) {
+        return false;
+    }
+    return true;
+}
+
 // ── Formula-cell discovery + read-path gate ────────────────────────────────────
 
 // A doc needs server recalc when a sheet carries formula cells but no populated
@@ -743,13 +758,22 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
         if (isVolatileFormula(info.calc_funcStr)) continue;
         try {
             const result = engine.evaluate(info.calc_funcStr, info.id, info.r, info.c, resolver);
-            engine.state.execFunctionGlobalData[`${info.r}_${info.c}_${info.id}`] = { v: result.value };
             const idx = indexById.get(info.id);
             if (idx == null) continue;
             const rowArr = working[idx].data[info.r];
             if (!rowArr) continue;
             const existing = rowArr[info.c];
             if (existing == null) continue;
+            // An engine error must never overwrite a good cached value: functions
+            // this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) evaluate to
+            // #NAME?, which would otherwise destroy Excel's correct cached result
+            // at import. When the cell already carries a non-error cached value,
+            // keep it AND skip the execFunctionGlobalData seed so downstream
+            // formulas read that cached value through the resolver — not the error
+            // (same freeze-is-safe direction as volatiles). Cells with no cached
+            // value still get the error sentinel (better than a silent blank).
+            if (result.type === 'error' && hasNonErrorCachedValue(existing)) continue;
+            engine.state.execFunctionGlobalData[`${info.r}_${info.c}_${info.id}`] = { v: result.value };
             // Clone before writing: the materialized matrix may reference the
             // input snapshot's (frozen) cell objects.
             const cell: Cell = { ...existing };

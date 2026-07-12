@@ -126,6 +126,19 @@ describe('engine/formula-reference-cycle — no-op cases return null', () => {
         expect(cycle('=A1+123', 5)).toBeNull();
     });
 
+    test('caret inside a function name that parses as a ref', () => {
+        // LOG10 / ATAN2 / IMLOG2 all satisfy iscelldata, but a token immediately
+        // followed by '(' is a function call, not a reference — never cycle it.
+        expect(cycle('=LOG10(8)', 3)).toBeNull();
+        expect(cycle('=ATAN2(1,1)', 3)).toBeNull();
+        expect(cycle('=IMLOG2(2)', 4)).toBeNull();
+    });
+
+    test('a real ref argument to such a function still cycles', () => {
+        // "=LOG10(A1)": A1 at [7,9); the function name is skipped, the arg is not.
+        expect(cycle('=LOG10(A1)', 8)!.text).toBe('=LOG10($A$1)');
+    });
+
     test('text that is not a formula', () => {
         expect(cycle('A1', 1)).toBeNull();
         expect(cycle('hello', 3)).toBeNull();

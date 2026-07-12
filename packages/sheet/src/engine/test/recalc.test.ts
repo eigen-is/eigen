@@ -88,6 +88,45 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][1]?.v).toBe(43999);
     });
 
+    test('engine error does not clobber a non-error cached value', () => {
+        // Functions this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) return
+        // #NAME?. At import, Excel's correct cached value must survive — same
+        // freeze-is-safe rationale as volatiles.
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=TEXTJOIN(",",1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } })]]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][0]?.v).toBe(7);
+        expect(out[0].data![0][0]?.m).toBe('7');
+        expect(out[0].data![0][0]?.ct?.t).not.toBe('e');
+    });
+
+    test('downstream formula reads the cached value, not the engine error', () => {
+        // B1 is an unsupported function with a cached 7; =B1+1 must see 7 → 8,
+        // proving the #NAME? never entered the eval cache (execFunctionGlobalData).
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [
+                    null,
+                    formula('=TEXTJOIN(",",1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } }),
+                    formula('=B1+1'),
+                ],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe(7);
+        expect(out[0].data![0][2]?.v).toBe(8);
+    });
+
+    test('engine error with no cached value still writes the #NAME? sentinel', () => {
+        // Pin the generator-case behavior: an unsupported function that was never
+        // computed (no cached v) lands the error sentinel — better than a silent blank.
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=TEXTJOIN(",",1,2)')]])];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][0]?.v).toBe('#NAME?');
+        expect(out[0].data![0][0]?.ct?.t).toBe('e');
+    });
+
     test('m derivation — fa mask, error sentinel, plain number', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [

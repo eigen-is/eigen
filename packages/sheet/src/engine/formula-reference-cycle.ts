@@ -108,6 +108,9 @@ function findRefSpans(text: string): RefSpan[] {
 function findRefAtCaret(text: string, caretStart: number, caretEnd: number): RefSpan | null {
     const collapsed = caretStart === caretEnd;
     for (const span of findRefSpans(text)) {
+        // A span immediately followed by '(' is a function call, not a reference
+        // (LOG10, ATAN2, IMLOG2 all satisfy iscelldata as A1-style refs) — skip it.
+        if (text[span.end] === '(') continue;
         // A collapsed caret cycles the ref it sits inside or is immediately adjacent
         // to (touching either edge). A selection needs a real overlap so a caret that
         // merely clips the operator before a ref doesn't grab the wrong one.

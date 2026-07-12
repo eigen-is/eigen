@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useContext, useEffect, useRef } from 'react';
+import { useContext, useLayoutEffect, useRef } from 'react';
 import { WorkbookContext } from '../../context';
 import type { OverlayRegionSpec } from '../../state';
 
@@ -19,7 +19,9 @@ export function OverlayRegion({ left, top, width, height, clip, fixedLeft, fixed
     const { refs } = useContext(WorkbookContext);
     const contentRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
+    // useLayoutEffect (not useEffect): apply the scroll transform before paint so a
+    // region mounting / re-propping at non-zero scroll never flashes one untransformed frame.
+    useLayoutEffect(() => {
         const applyOffset = () => {
             if (contentRef.current) {
                 const x = fixedLeft ?? refs.globalCache.scrollLeft;
