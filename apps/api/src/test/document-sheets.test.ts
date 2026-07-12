@@ -431,6 +431,83 @@ describe('document/sheets — patch op replay', () => {
         expect(result[0].data![1][0]?.v).toBe('a');
     });
 
+    test('gate ON: formula cells without a calcChain get engine-computed v/m on read', async () => {
+        // Simulates an xlsx-imported-never-opened doc: celldata carries formula
+        // text with no cached value and no calcChain. readSheetsContent must run
+        // server recalc and return computed v + m.
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'recalc-gate-on' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets: Sheet[] = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                config: {},
+                celldata: [
+                    { r: 0, c: 0, v: { v: 5, m: '5', ct: { fa: 'General', t: 'n' } } },
+                    { r: 0, c: 1, v: { f: '=A1+1' } },
+                    { r: 0, c: 2, v: { f: '=A1/4', ct: { fa: '0.00', t: 'n' } } },
+                ],
+            },
+        ];
+        writeSheetsToYjs(collab.doc, sheets);
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
+
+        expect(result[0].data![0][1]?.v).toBe(6);
+        expect(result[0].data![0][1]?.m).toBe('6');
+        // fa-masked formula cell derives m via the cell's format mask
+        expect(result[0].data![0][2]?.v).toBe(1.25);
+        expect(result[0].data![0][2]?.m).toBe('1.25');
+    });
+
+    test('gate OFF: a doc carrying a calcChain keeps its stored values (no recompute)', async () => {
+        // Editor-flushed / import-recalced docs carry calcChain. Even a
+        // deliberately-wrong cached value must survive untouched — the gate must
+        // not recompute.
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'recalc-gate-off' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                config: {},
+                celldata: [
+                    { r: 0, c: 0, v: { v: 5, m: '5', ct: { fa: 'General', t: 'n' } } },
+                    { r: 0, c: 1, v: { f: '=A1+1', v: 999, m: '999', ct: { fa: 'General', t: 'n' } } },
+                ],
+                calcChain: [{ r: 0, c: 1, id: 'sheet-1' }],
+            },
+        ] as unknown as Sheet[];
+        writeSheetsToYjs(collab.doc, sheets);
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
+
+        const b1 = result[0].celldata?.find((e) => e.r === 0 && e.c === 1);
+        expect(b1?.v?.v).toBe(999);
+    });
+
     test('reads doc with snapshot + orphan patch op (sheet id not in array) → op dropped', async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,

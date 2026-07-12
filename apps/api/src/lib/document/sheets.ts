@@ -1,6 +1,6 @@
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
+import { createDefaultSheets, recalcSheets, replaySheetsOps, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
@@ -22,7 +22,21 @@ export async function readSheetsContent(mount: Mount, drivePath: DrivePath): Pro
     // (they reference 'sheet-1'), so replay must start from the same base — an
     // empty base silently drops every edit. A doc with neither stays [].
     const sheets = snapshot ? (JSON.parse(snapshot) as Sheet[]) : opBatches.length > 0 ? createDefaultSheets() : [];
-    return replaySheetsOps(sheets, opBatches);
+    const replayed = replaySheetsOps(sheets, opBatches);
+
+    // Server-side recalc for docs the client never computed for us — xlsx
+    // imports never opened in an editor, or crash/race divergence. Gated on the
+    // needs-recompute signal (formula cells but no calcChain), so live-edited
+    // docs (which already persist fresh v/m as ops) pay nothing. Any recalc
+    // failure falls back to the replayed stale-but-valid sheets — an export must
+    // never 500 because recalc hiccuped. See docs/SHEETS.md § Server-side recalc.
+    if (!sheetsNeedRecalc(replayed)) return replayed;
+    try {
+        return recalcSheets(replayed);
+    } catch (e) {
+        console.warn('[sheets] server recalc failed, serving replayed values:', e);
+        return replayed;
+    }
 }
 
 export function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[]): void {

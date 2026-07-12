@@ -140,15 +140,41 @@ engine/
 etc.) live in `state/modules/formula-exec.ts`; UI consumers import the engine modules and `formula-exec.ts`
 directly.
 
-### Remaining Work — Server-side recalc
+### Server-side recalc
 
-The engine is extracted and the BE replay path is wired (`apps/api/src/lib/document/sheets.ts` calls
-`replaySheetsOps`), so cell positions and formula text are correct. But `readSheetsContent()` still returns
-the last-saved `cell.v` from the post-replay snapshot — values aren't recomputed. To get fresh values,
-build a `CellResolver` over the replayed `Sheet[]` and batch-evaluate the formulas in dependency order
-(`getCalculationOrder` in `engine/dependency-graph.ts` + `engine.evaluate` per cell — the old
-`recalculateAll` wrapper was deleted as dead code and is a three-line reintroduction) before mapping to
-`SheetContent`. Consumers (export, search indexing, scripting) pick this up transparently.
+`readSheetsContent()` recomputes formula cells through our own engine before returning, so exports,
+preview, and the search index serve engine-verified `v`/`m` rather than whatever value was last cached
+in the snapshot. The recompute is a single pure engine function, `recalcSheets(Sheet[]) → Sheet[]`
+(`engine/recalc.ts`, barrel-exported), and it runs **gated** — only where staleness can actually exist.
+
+Why gated, not on every read: a doc edited live in a browser is already fresh. The client's dependent
+recompute runs inside the op-emitting `produce`, so recomputed `v` **and** `m` persist as Yjs ops and
+replay server-side (`replaySheetsOps`). The genuinely stale population is narrow — xlsx-imported docs
+never opened in an editor, and crash/race divergence between formula text and cached value.
+`recalcSheets` therefore fires only when `sheetsNeedRecalc` sees a sheet with `f` cells but no populated
+`calcChain` (editor-flushed snapshots carry the chain; imported ones don't), and any recalc failure
+falls back to the replayed stale-but-valid `Sheet[]` — an export must never 500 because recalc
+hiccuped. The xlsx importer (`import/import-document.ts`) also runs `recalcSheets` once at import, so the
+persisted snapshot carries computed values (and a `calcChain`) and the read gate never fires for it.
+
+What the function does, in order: materialize each sheet's dense `data` from `celldata` (a resolver over
+null `data` would recompute everything to blanks); discover formula cells by scanning `data` for `f`
+(never trusting `calcChain`); build the dependency graph by porting the state layer's
+`setFormulaCellInfo`/`getcellrange`/`isFunctionRange` into the engine (the engine has zero state imports,
+so the logic is duplicated rather than shared — the INDIRECT/OFFSET/INDEX special-casing is preserved);
+order via `getCalculationOrder`; evaluate through the shared `FormulaEngine`, results flowing through
+`execFunctionGlobalData` so a downstream cell reads its upstream result; **freeze volatiles**
+(`NOW`/`TODAY`/`RAND`/`RANDBETWEEN` keep their cached value, matching Excel/Sheets "read a closed file"
+semantics — a passive export stays deterministic); and write back `v` plus a pragmatic `m`
+(`update(ct.fa, v)` when the cell carries a format mask, error sentinels as `v = m = '#…'` with
+`ct.t = 'e'`, `String(v)` otherwise). Every cell is guarded, so one poisoned formula never aborts the pass.
+
+Two earlier notes here were wrong and are corrected: the deleted `recalculateAll` was **not** a
+"three-line reintroduction" — it was ~100 lines plus a `getDependencies` extractor (~35) and
+`resetState` (~8), and it never wrote values back into cells. And it built its graph by iterating each
+sheet's `calculationChain`, so a faithful revive would have **silently no-op'd on exactly the
+imported-never-opened docs that are the main target** (they carry no chain). `recalcSheets` scans for
+`f` cells instead.
 
 ## Headless Conditional Formatting
 
@@ -188,8 +214,10 @@ user-configured `format` colors.
 Formula-based CF rules are wired too: `renderSheetsHtml` builds a single `FormulaEngine` plus a
 `createArrayResolver` over all loaded sheets (so cross-sheet refs like `=Sheet2!A1>10` resolve),
 threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produces the
-`evaluateFormula` callback. Cell values come from the saved snapshot's `cell.v` — formulas inside
-the sheet aren't recomputed; only the CF rule's own formula is evaluated against existing values.
+`evaluateFormula` callback. This CF pass reads `cell.v` — it doesn't recompute the sheet's own
+formulas, only the CF rule's formula against existing values. The cell values it reads are already
+engine-fresh, though: `readSheetsContent` runs the gated `recalcSheets` (see § Server-side recalc)
+before the sheets reach any exporter.
 
 Webpage hyperlinks render as `target="_blank" rel="noopener noreferrer"` anchors, scheme-gated
 through the same `resolveWebLink` (`@workspace/lib/sheets/web-link`) the editor's link navigation

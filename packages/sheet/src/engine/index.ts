@@ -25,10 +25,12 @@ export { evaluateConditionalFormat } from './conditional-format';
 // CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
 // are surfaced through `./types` re-exports below.
 export { createDefaultSheets } from './defaults';
+export { getCalculationOrder } from './dependency-graph';
 export { update } from './format';
 export { FormulaEngine } from './formula-engine';
 export { type FormulaShiftMode, functionCopy } from './formula-shift';
 export { iscelldata } from './formula-utils';
+export { recalcSheets, sheetsNeedRecalc } from './recalc';
 export { replaySheetsOps } from './replay-ops';
 export type { DeleteRowColOp, InsertRowColOp, RowColErrorCode } from './rowcol';
 export type {

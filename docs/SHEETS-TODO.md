@@ -43,12 +43,6 @@ fix/sheet-decided-fixes.)
       (`engine/formula-utils.ts`); F4-cycling a whole-row ref sticks after one step
       (pinned in `formula-reference-cycle.test.ts`)
 
-## 4. Tests + gated refactors
-
-- [ ] server-side recalc: batch-evaluate replayed formulas (`getCalculationOrder` +
-      `engine.evaluate`; seam described in `docs/SHEETS.md` § Remaining Work) so exports and the
-      search index serve fresh values instead of last-saved `cell.v`
-
 ## 5. Rendering
 
 - [ ] lock the body overlays (selection box, cell editor, presence, fill handle) to the scroll
