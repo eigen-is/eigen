@@ -158,7 +158,7 @@ arithmetic; the number-format block appears 4×, the border push 8×. `getDataBy
 `chnWeek2/chnWeek3` producers identical. → axis/sign-parameterized inner writer + `rollToWeekday`.
 ~500 lines collapse.
 
-**C4. `selection.ts` target-duplication** — `moveHighlightCell:650-952` and
+**C4. `selection.ts` target-duplication** ✅ done except moveHighlightRange (its two arms are NOT clones — three real divergences, documented in a NOTE in the code; do not unify). moveHighlightCell walk unified (indexFromMove param), border histogram → dominantBorderSideCss, freeze twins → one axis helper; 284k differential + pixel gates identical — `moveHighlightCell:650-952` and
 `moveHighlightRange:955-1326` each duplicate their entire body per target
 (`rangeOfSelect` vs `rangeOfFormula`), incl. a ~350-line merge-walk clone. Also:
 `rangeValueToHtml:1496-1578` repeats the border-side histogram 4×, and
