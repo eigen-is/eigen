@@ -12,10 +12,13 @@ import { ApiError } from '../core/errors';
 // toward its own cap. The per-IP bucket is only aged out by the window, never cleared on success
 // (see clearProtocolAuthFailures) — otherwise an attacker holding one valid account could spray
 // guesses across many emails, then authenticate once to wipe the per-IP counter and repeat.
-// Because the per-email cap is checked before any credential work, a wholly-broken client that
-// never succeeds can, worst case, 429 an account's other clients until its window ages out — the
-// accepted fail2ban tradeoff for a pre-verification guard. State is process-local — fine while
-// Eigen runs as a single API process; swap to a DB-backed store behind these signatures if we shard.
+// verifyProtocolAuth checks a valid app password BEFORE consulting this limiter, so a valid
+// credential is never refused by a saturated bucket; the cap only gates the expensive scrypt
+// primary-password path. The residual: a non-2FA account whose clients auth by primary password
+// only (no app password) can, worst case, have that path 429'd by a targeted flood until the window
+// ages out — the accepted fail2ban tradeoff, and app-password clients are immune. State is process-
+// local — fine while Eigen runs as a single API process; swap to a DB-backed store behind these
+// signatures if we shard.
 
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILURES_PER_EMAIL = 10;

@@ -208,5 +208,24 @@ describe('Protocol Auth', () => {
                 'Too many failed',
             );
         });
+
+        test('a valid app password is accepted even when the email failure bucket is saturated', async () => {
+            const email = ctx.alice.user.email;
+            const created = await auth.api.createApiKey({
+                body: { name: 'saturation-app-password' },
+                headers: { cookie: `better-auth.session_token=${ctx.alice.user.sessionToken}` },
+            });
+            const appPassword = created!.key!;
+
+            // Saturate the email bucket: the primary-password path is now refused with 429.
+            for (let i = 0; i < 10; i++) {
+                await expect(verifyProtocolAuth(email, 'wrongpassword')).rejects.toThrow('Unauthorized');
+            }
+            await expect(verifyProtocolAuth(email, 'wrongpassword')).rejects.toThrow('Too many failed');
+
+            // The app password is checked before the limiter, so a valid credential still gets through.
+            const u = await verifyProtocolAuth(email, appPassword);
+            expect(u.id).toBe(ctx.alice.user.id);
+        });
     });
 });

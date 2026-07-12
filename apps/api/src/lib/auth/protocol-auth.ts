@@ -34,20 +34,27 @@ export async function authenticateBasic(request: Request): Promise<User> {
 // `ip` is omitted by the IMAP path (routes/internal.ts → one internal Dovecot source IP): keying
 // on it would let a shared bridge IP self-lock, so that path relies on the email bucket alone.
 export async function verifyProtocolAuth(email: string, password: string, ip?: string): Promise<User> {
+    const user = await getUserByEmail(email);
+
+    // 1. App password (API key) — checked BEFORE the failure limiter. A valid app password is the
+    // intended protocol credential (and the only one a 2FA user can use), so it must never be refused
+    // because the email's failure bucket is saturated by a stale sibling client or a targeted flood.
+    // Verifying it is a cheap SHA-256 lookup; only the expensive scrypt password path below is gated.
+    if (user) {
+        requireNonGuest(user);
+        const keyResult = await auth.api.verifyApiKey({ body: { key: password } });
+        if (keyResult.valid && keyResult.key?.referenceId === user.id) {
+            clearProtocolAuthFailures(email);
+            return user;
+        }
+    }
+
+    // Everything past here is a guess against the primary password (or an unknown email) — gate it.
     checkProtocolAuthLimit(email, ip);
 
-    const user = await getUserByEmail(email);
     if (!user) {
         recordProtocolAuthFailure(email, ip);
         throw new ApiError(401, 'Unauthorized');
-    }
-    requireNonGuest(user);
-
-    // 1. Try app password (API key)
-    const keyResult = await auth.api.verifyApiKey({ body: { key: password } });
-    if (keyResult.valid && keyResult.key?.referenceId === user.id) {
-        clearProtocolAuthFailures(email);
-        return user;
     }
 
     // 2. Hard-gate 2FA users off the primary-password fallback. better-auth's /sign-in/email
