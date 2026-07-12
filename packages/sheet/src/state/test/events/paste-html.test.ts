@@ -251,6 +251,41 @@ describe('HTML-table paste — merges, borders, row height', () => {
         });
     });
 
+    it('keys merges and borders correctly at a non-origin anchor (absolute vs relative coordinates)', () => {
+        // cfg.merge/mc use absolute coordinates while the borderInfo lookup is
+        // relative (`${h - minh}_${c - minc}`); at anchor (0,0) the two coincide,
+        // so only a shifted anchor can catch a refactor that mixes them up.
+        const ctx = makeCtx();
+        ctx.selections = single(3, 2);
+        pasteHtml(
+            ctx,
+            '<table><tr><td rowspan=2 colspan=2 style="border:1px solid #0000ff">M</td><td>b</td></tr><tr><td>c</td></tr></table>',
+        );
+
+        const d = ctx.sheets[0].data!;
+        expect(d[3][2]?.v).toBe('M');
+        expect(d[3][2]?.mc).toEqual({ r: 3, c: 2, rs: 2, cs: 2 });
+        expect(d[3][3]?.mc).toEqual({ r: 3, c: 2 });
+        expect(d[4][2]?.mc).toEqual({ r: 3, c: 2 });
+        expect(d[4][3]?.mc).toEqual({ r: 3, c: 2 });
+        expect(d[3][4]?.v).toBe('b');
+        expect(d[4][4]?.v).toBe('c');
+        expect(ctx.sheets[0].config!.merge).toEqual({ '3_2': { r: 3, c: 2, rs: 2, cs: 2 } });
+
+        // outer edges of the merged 2x2 block, at absolute row/col indices
+        const side = { style: 1, color: '#0000ff' };
+        const entry = (r: number, c: number) =>
+            ctx.sheets[0].config!.borderInfo!.find(
+                (e) => e.rangeType === 'cell' && e.value.row_index === r && e.value.col_index === c,
+            );
+        expect(entry(3, 2)?.value.t).toEqual(side);
+        expect(entry(3, 2)?.value.l).toEqual(side);
+        expect(entry(3, 2)?.value.b).toBeUndefined();
+        expect(entry(4, 3)?.value.b).toEqual(side);
+        expect(entry(4, 3)?.value.r).toEqual(side);
+        expect(entry(4, 3)?.value.t).toBeUndefined();
+    });
+
     it('writes a tr height attribute into cfg.rowlen at the target row', () => {
         const ctx = makeCtx();
         ctx.selections = single(2, 1);

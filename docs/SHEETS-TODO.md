@@ -37,6 +37,8 @@ fix/sheet-decided-fixes.)
       (`nameReg = /^[^\t].*/gm`); space-indented clipboards (both committed fixtures!) parse to an
       empty style map, so class-based styling may be dead for real Excel-for-Mac paste — confirm
       real clipboard indentation, then fix the parser or drop the dead path
+- [ ] HTML paste: a `<tr>` without a `height` attribute writes `rowlen[targetR] = null`
+      (`paste.ts` `targetRowHeight as number`), potentially nulling pasted-row heights
 
 ## 4. Tests + gated refactors
 
