@@ -26,7 +26,8 @@ function CommentThreadInner({
     const inputRef = useRef<ChatMessageInputHandle>(null);
 
     return (
-        <div className={cn('flex flex-col h-[50vh] overflow-hidden', className)}>
+        // Overflow stays visible so the input's @-mention suggest can extend above the thread.
+        <div className={cn('flex flex-col h-[50vh]', className)}>
             <ChatMessageList
                 messages={chat.messages}
                 isLoading={chat.isLoading}
