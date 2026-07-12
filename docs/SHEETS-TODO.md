@@ -39,6 +39,9 @@ fix/sheet-decided-fixes.)
       real clipboard indentation, then fix the parser or drop the dead path
 - [ ] HTML paste: a `<tr>` without a `height` attribute writes `rowlen[targetR] = null`
       (`paste.ts` `targetRowHeight as number`), potentially nulling pasted-row heights
+- [ ] `iscelldata` rejects absolute whole-row ranges (`$1:$3`) — stray `s` in `reg_cellRange`
+      (`engine/formula-utils.ts`); F4-cycling a whole-row ref sticks after one step
+      (pinned in `formula-reference-cycle.test.ts`)
 
 ## 4. Tests + gated refactors
 
@@ -55,8 +58,6 @@ fix/sheet-decided-fixes.)
       so reuse (and share) that logic
 - [ ] `SheetOverlay/index.css`: 795 lines, ~46 hardcoded hex colors vs 21 theme-token uses —
       migrate to theme tokens (prerequisite for dark mode)
-- [ ] F4 in cell editing should cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1);
-      currently only the browser default is suppressed (`state/events/keyboard.ts`)
 
 ## 6. Code debt (opportunistic — fix when touching the area)
 

@@ -25,6 +25,7 @@ import {
 import { ContentEditable } from './ContentEditable';
 import { FormulaHint } from './FormulaHint';
 import { FormulaSearch } from './FormulaSearch';
+import { cycleReferenceInEditor } from './reference-cycle';
 
 export const InputBox: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
@@ -137,14 +138,19 @@ export const InputBox: React.FC = () => {
                     moveHighlightCell(draftCtx, 'down', 0, 'rangeOfSelect');
                 });
                 e.preventDefault();
+            } else if (e.key === 'F4' && context.editingCellPosition.length > 0) {
+                // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1); keep the
+                // browser default suppressed even when the caret isn't on a reference.
+                e.preventDefault();
+                cycleReferenceInEditor(inputRef.current!, refs.fxInput.current, setContext);
             } else if (
                 context.editingCellPosition.length > 0 &&
-                (e.key === 'Tab' || e.key === 'F4' || e.key === 'ArrowUp' || e.key === 'ArrowDown')
+                (e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown')
             ) {
                 e.preventDefault();
             }
         },
-        [context.editingCellPosition.length, formulaAutocomplete.handleKeyDown, setContext],
+        [context.editingCellPosition.length, formulaAutocomplete.handleKeyDown, refs.fxInput, setContext],
     );
 
     const onChange = useCallback(
