@@ -165,7 +165,7 @@ arithmetic; the number-format block appears 4×, the border push 8×. `getDataBy
 `fixRow/ColumnStyleOverflowInFreeze:1823-1938` are exact axis twins. → operate on a common
 `{row, column, focus}` accessor.
 
-**C5. The formula tokenizer exists in triplicate** — `engine/formula-shift.ts:108`
+**C5.** ✅ done for the two engine walkers (one walkFormulaRefs; the real i-1/i-2 sPre divergence parameterized bug-for-bug as skipPrevChar; 25.6M differential comparisons identical). CORRECTION: the state walker `isFunctionRange` is NOT a third copy — it's a shunting-yard compiler with quote/brace state the shifters lack; left untouched with a NOTE. shiftRef/functionStrChange_range likewise not merged (different row conventions + single-cell fallbacks; NOTEs in code). — **The formula tokenizer exists in triplicate** — `engine/formula-shift.ts:108`
 (`functionCopy`), `:198` (`functionStrChange`), and `state/modules/formula-exec.ts:209` all
 hand-roll the same char-walker (paren/quote/comma/operator state machine; the operator branch is
 verbatim at `formula-shift.ts:158` and `:277`). Likewise `shiftRef:21` and
