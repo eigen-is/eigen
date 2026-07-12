@@ -418,9 +418,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const sheet = draftCtx.sheets?.[sheetIdx];
                     if (!sheet) return;
 
-                    let { data } = sheet;
-                    if (!data || data.length === 0) {
-                        data = api.initSheetData(draftCtx, sheetIdx, sheet);
+                    if (!sheet.data || sheet.data.length === 0) {
+                        api.initSheetData(draftCtx, sheetIdx, sheet);
                     }
 
                     if (
@@ -430,23 +429,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     ) {
                         draftCtx.selections = sheet.selections;
                     }
-                    if (draftCtx.selections?.length === 0) {
-                        if (data?.[0]?.[0]?.mc && data?.[0]?.[0]?.mc?.rs != null && data?.[0]?.[0]?.mc?.cs != null) {
-                            draftCtx.selections = [
-                                {
-                                    row: [0, data[0][0].mc.rs - 1],
-                                    column: [0, data[0][0].mc.cs - 1],
-                                },
-                            ];
-                        } else {
-                            draftCtx.selections = [
-                                {
-                                    row: [0, 0],
-                                    column: [0, 0],
-                                },
-                            ];
-                        }
-                    }
+                    // A fresh sheet with no persisted selection is seeded once by the
+                    // SheetOverlay mount effect (api.setSelection) — the single canonical seed.
 
                     draftCtx.config = sheet.config ?? {};
                     draftCtx.insertedImgs = sheet.images;

@@ -8,7 +8,6 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
 
 Bugs:
 
-- [ ] name box shows `A1:NaN` on initial sheet load, before any selection
 - [ ] imported lowercase `mm` date patterns show "Minute" chips in the custom date/time dialog
       (tokenizer follows Google's `M` month / `m` minute); switching a variant on a mislabeled
       chip writes minutes where months were

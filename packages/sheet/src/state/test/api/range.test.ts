@@ -115,6 +115,14 @@ describe('sheet/core/api/range', () => {
         }
     });
 
+    test('setSelection backfills a single-element range end (name box reads A1, not A1:NaN)', async () => {
+        const ctx = getContext();
+        // The initial-load seed passes a single-element range `[0]`; the normalizer
+        // must backfill the missing end so the range text is "A1", never "A1:NaN".
+        setSelection(ctx, [{ row: [0], column: [0] }], {});
+        expect(getSelectionCoordinates(ctx)).toEqual(['A1']);
+    });
+
     test('setCellValuesByRange', async () => {
         const ctx = getContext();
         const expectedData = [

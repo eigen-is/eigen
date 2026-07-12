@@ -153,9 +153,11 @@ export function normalizeSelection(ctx: Context, selection: SheetType['selection
 
     for (let i = 0; i < selection.length; i += 1) {
         const r1 = selection[i].row[0];
-        const r2 = selection[i].row[1];
+        // `row`/`column` are typed `number[]`, so callers may pass a single-cell
+        // `[n]`; backfill the missing end so it normalizes to a `[n, n]` range.
+        const r2 = selection[i].row[1] ?? r1;
         const c1 = selection[i].column[0];
-        const c2 = selection[i].column[1];
+        const c2 = selection[i].column[1] ?? c1;
 
         let rf: number | undefined;
         let cf: number | undefined;

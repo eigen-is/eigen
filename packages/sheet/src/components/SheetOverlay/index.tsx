@@ -247,7 +247,7 @@ export const SheetOverlay: React.FC = () => {
 
             // Only reset selection if there's no existing selection
             if (!currentSheet.selections?.length) {
-                api.setSelection(draftCtx, [{ row: [0], column: [0] }], {});
+                api.setSelection(draftCtx, [{ row: [0, 0], column: [0, 0] }], {});
             }
         });
     }, [setContext]);
