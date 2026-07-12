@@ -91,6 +91,9 @@ The `/sign-in/email` custom rate rule (`auth.ts:100`) only covers better-auth's 
 ### 4. [verified] Swagger + Server-Timing mounted unconditionally in production
 `apps/api/src/app.ts:55-56`
 
+> **✅ FIXED — Unit 2** (`fix/api-audit-2026-07`). Both plugins now mount via a functional plugin
+> gated on `!isProduction()` — `/swagger` 404s and Server-Timing headers are absent in production.
+
 ```ts
 .use(serverTiming())
 .use(swagger())
@@ -102,6 +105,9 @@ No `isProduction()` guard (the helper exists at `lib/config/env.ts` and is used 
 
 ### 5. WebSocket `maxPayloadLength` is never set — large-doc sync frames can be dropped
 `apps/api/src/app.ts:45-53`, comment at `apps/api/src/routes/collab.ts:44` **[verified: unset]**
+
+> **✅ FIXED — Unit 2**. Root `websocket` config now sets `maxPayloadLength: 128 * 1024 * 1024`
+> alongside `perMessageDeflate`, covering the documented ~48 MB sheet-snapshot worst case.
 
 The collab comment says *"WebSocket server options (perMessageDeflate, maxPayloadLength) can't live here — Elysia only honors `websocket` config on the root app instance, so it's set in app.ts."* But `app.ts` sets **only** `perMessageDeflate: true` — `maxPayloadLength` was never actually added. Bun's default is **16 MB**. The blob-codec comment notes sheet snapshots reach **~48 MB** uncompressed, and Yjs `syncStep`/`writeUpdate` sends whole-state frames; Bun measures the *decoded* message against `maxPayloadLength`, so a large sheet's initial sync frame can exceed 16 MB and the socket closes with 1009.
 
@@ -190,12 +196,20 @@ The outer `if` already proved `line[0]` is CR or LF. The inner test means to det
 ## P3 — nits, smells, dead code
 
 ### 15. [verified] Three dead / misplaced dependencies in `apps/api/package.json`
+
+> **✅ FIXED — Unit 2**. `docx` and `@libsql/client` removed, `drizzle-kit` moved to
+> devDependencies, lockfile synced (residual `@libsql/client` lockfile entries are an inert
+> optional-peer resolution of drizzle-orm).
 - **`docx` (^9.6.1)** — 0 imports anywhere; docx export uses `@turbodocx/html-to-docx`. Remove.
 - **`@libsql/client` (^0.17.2)** — 0 imports; the app uses `bun:sqlite` throughout. Remove.
 - **`drizzle-kit`** — 0 imports in `src`; only the `drizzle.config.ts` CLI uses it. Move to `devDependencies`.
 
 ### 16. Chat `?limit` can become `NaN` and escape the [1,200] clamp
 `apps/api/src/routes/chat.ts:18,22-25` **[verified]**
+
+> **✅ FIXED — Unit 2**. `limit: t.Optional(t.Number({ minimum: 1, maximum: 200 }))`, manual
+> parseInt/clamp dropped (absent → 50 preserved). The Eden `limit` type flip required a one-line
+> FE fix in `packages/lib/src/core/chat/hooks/use-chat.ts` (mirrors `use-emails.ts`).
 
 `limit: t.Optional(t.String())` → `parseInt("abc")` = `NaN` → `Math.min(Math.max(1, NaN), 200)` = `NaN` → `LIMIT NaN` (SQLite treats a NaN bind as no-limit → unbounded fetch, or 500). Siblings `mail.ts`/`notification.ts` correctly use `t.Numeric()`/`t.Number({minimum,maximum})`.
 
@@ -254,7 +268,7 @@ Timers are never `.unref()`d, and `setInterval(run, ms)` re-invokes regardless o
 - **`buildRecentText` unbounded** (`chat.ts:458-472`): `select().all()` then break at 8 KB — add `.limit(N)` so SQL does the bounding (same shape as #10).
 - **`getTeamMembers` swallows all errors → `[]`** (`team.ts:14-26`): a real DB failure silently becomes "no members," masking ACL breakage. Drop the try/catch (CODE-STANDARDS "unnecessary error handling").
 - **`computeEtag` omits `timezone`** at `rsvpForOccurrence` (`calendar.ts:1099`) and `removeThisAndFuture` (`:1259`) while create/update include it → same event hashes differently across paths → spurious CalDAV re-sync. Include `timezone` consistently.
-- **Mail attachment `:index` unvalidated** (`mail.ts:282,289`): `Number("abc")` → `NaN`; benign today (`?? null`) but add `params: t.Object({ index: t.Numeric() })`.
+- **Mail attachment `:index` unvalidated** (`mail.ts:282,289`): `Number("abc")` → `NaN`; benign today (`?? null`) but add `params: t.Object({ index: t.Numeric() })`. — **✅ FIXED — Unit 2**: `params` schema added, manual `Number()` dropped.
 - **SMTP `tls: { rejectUnauthorized: false }`** (`mailer.ts:44`): accepts any cert on the SMTP hop. Likely intentional for an internal relay — make it env-opt-out or add a WHY comment.
 - **`my-teams` swallows relay-pull failures silently** (`home.ts:39-42`): `.catch(() => [])` renders a team with zero mounts/calendars with no log. Add `console.error`.
 - **UUID source drift**: `chat.ts`/`mount.ts`/`maildir-store.ts` use `node:crypto randomUUID`; `calendar.ts`/`contacts.ts` use the `uuid` npm package's `v4`. `crypto.randomUUID` is a Bun global — unify on it and drop the `uuid` dep.

@@ -15,13 +15,12 @@ export const chatRouter = new Elysia({ name: 'chat' })
         async ({ params, query, user }): Promise<ChatMessage[]> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const chat = await drive.getChat(params.mountId, params.chatId);
-            const limit = Math.min(Math.max(1, query.limit ? parseInt(query.limit, 10) : 50), 200);
-            return await chat.getMessagesForUser(user.id, user.email, limit, query.before || undefined);
+            return await chat.getMessagesForUser(user.id, user.email, query.limit ?? 50, query.before || undefined);
         },
         {
             query: t.Object({
                 before: t.Optional(t.String()),
-                limit: t.Optional(t.String()),
+                limit: t.Optional(t.Number({ minimum: 1, maximum: 200 })),
             }),
             auth: true,
         },

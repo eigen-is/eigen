@@ -286,8 +286,16 @@ export const mailRouter = new Elysia({ name: 'mail' })
             setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = 'application/octet-stream';
             set.headers['Content-Disposition'] = contentDisposition('attachment', params.fileName);
-            const attachment = await (await getMailClient(user)).messageGetAttachment(params.id, Number(params.index));
+            const attachment = await (await getMailClient(user)).messageGetAttachment(params.id, params.index);
             return attachment?.content ?? null;
         },
-        { auth: true },
+        {
+            auth: true,
+            params: t.Object({
+                ownerId: t.String(),
+                id: t.String(),
+                index: t.Numeric(),
+                fileName: t.String(),
+            }),
+        },
     );
