@@ -1,9 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { v4 as uuidv4 } from 'uuid';
 import { getServerSettings } from '../config/server-settings';
 import { DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
 import type { ManagedDatabase } from '../core/';
@@ -72,7 +72,7 @@ export class Contacts {
         if (existingLabels.length === 0) {
             for (const label of DEFAULT_LABELS) {
                 await this.db.insert(schema.labels).values({
-                    id: uuidv4(),
+                    id: randomUUID(),
                     name: label.name,
                     color: label.color,
                 });
@@ -133,7 +133,7 @@ export class Contacts {
     }
 
     public async addContact(contact: Omit<Contact, 'id'>) {
-        const contactId = uuidv4();
+        const contactId = randomUUID();
         const { data, contactData, labels } = extractContactData(contact);
 
         await this.db.insert(schema.contacts).values({
@@ -204,7 +204,7 @@ export class Contacts {
     }
 
     public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
-        const labelId = uuidv4();
+        const labelId = randomUUID();
 
         await this.db.insert(schema.labels).values({
             id: labelId,
@@ -302,7 +302,7 @@ export class Contacts {
             throw new ApiError(400, 'Failed to generate avatar thumbnail');
         }
 
-        const fileName = `${uuidv4()}.webp`;
+        const fileName = `${randomUUID()}.webp`;
         await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, result.data);
 
         return `contacts/${this.home.user.id}/avatar/${fileName}`;

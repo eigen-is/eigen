@@ -1,5 +1,7 @@
 // Import from the calendar-utils module directly (NOT the @workspace/lib/calendar barrel,
 // which re-exports React-query hooks) so the API stays free of React in its module graph.
+
+import { randomUUID } from 'node:crypto';
 import { occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type {
@@ -16,7 +18,6 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { and, count, eq, gt, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RRule } from 'rrule';
-import { v4 as uuidv4 } from 'uuid';
 import { ApiError, PATHS } from '../core';
 import type { ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
@@ -69,7 +70,7 @@ export class Calendar {
             this.db
                 .insert(schema.calendars)
                 .values({
-                    id: uuidv4(),
+                    id: randomUUID(),
                     name: this.home.user.name || 'Personal',
                     color: EIGEN_ACCENT_COLORS_SHUFFLED[0].value,
                     isDefault: true,
@@ -93,7 +94,7 @@ export class Calendar {
     }
 
     public createCalendar(input: { name: string; color: string }): CalendarItem {
-        const id = uuidv4();
+        const id = randomUUID();
         this.db
             .insert(schema.calendars)
             .values({
@@ -165,14 +166,14 @@ export class Calendar {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
-        const id = uuidv4();
+        const id = randomUUID();
         // Exceptions must share the parent's UID (CalDAV groups events by UID)
         let uid = input.uid || '';
         if (!uid && input.parentEventId) {
             const parent = this.getEventById(input.parentEventId);
             if (parent) uid = parent.uid;
         }
-        if (!uid) uid = uuidv4();
+        if (!uid) uid = randomUUID();
         const rruleStr = input.rrule ?? null;
         if (rruleStr) {
             try {
@@ -743,7 +744,7 @@ export class Calendar {
         this.db
             .insert(schema.sharedCalendars)
             .values({
-                id: uuidv4(),
+                id: randomUUID(),
                 ownerUserId,
                 calendarId,
                 calendarName,
@@ -942,7 +943,7 @@ export class Calendar {
         const defaultCal = this.getCalendars().find((c) => c.isDefault);
         if (!defaultCal) throw new ApiError(500, 'No default calendar');
 
-        const id = uuidv4();
+        const id = randomUUID();
         const etag = computeEtag({
             title: payload.title,
             description: payload.description,

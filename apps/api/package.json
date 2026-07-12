@@ -28,7 +28,6 @@
     "@tiptap/static-renderer": "^3.21.0",
     "@tiptap/y-tiptap": "^3.0.2",
     "@types/nodemailer": "^6.4.23",
-    "@types/uuid": "^11.0.0",
     "@workspace/sheet": "workspace:*",
     "@workspace/ui": "workspace:*",
     "better-auth": "^1.5.6",
@@ -60,7 +59,6 @@
     "rrule": "^2.8.1",
     "sharp": "^0.34.5",
     "tlds": "^1.261.0",
-    "uuid": "^13.0.0",
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.30"
   },
