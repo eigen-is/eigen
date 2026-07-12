@@ -9,15 +9,13 @@
 // + DOM). When ctx.copyState is set it routes to the internal copy/cut handlers;
 // otherwise a plain string goes to the plain-text / formula-string handlers.
 //
-// GAP (documented, not mocked): the HTML-table paste branch lives inside
-// handlePaste and builds a real DOM (document.createElement('div').innerHTML +
-// querySelectorAll + td.style/innerText + CSSOM). Bun's runtime has no DOM and no
-// jsdom/happy-dom is installed, so that branch cannot be exercised headless without
-// mocking half a browser. That leaves the non-exported pasteHandler CellMatrix
-// branch (paste.ts ~163-289, where the parsed HTML matrix + borderInfo land in the
-// grid — an independent copy of the offsetMC/merge remap logic) NOT covered here:
-// the tests below exercise pasteHandlerOfCopyPaste / pasteHandlerOfCutPaste and
-// the pasteHandler plain-string branch only.
+// The HTML-table paste branch inside handlePaste (real DOM: createElement('div')
+// .innerHTML + querySelectorAll + td.style/innerText + CSSOM) and the non-exported
+// pasteHandler CellMatrix arm it feeds (paste.ts ~157-283, an independent copy of
+// the offsetMC/merge remap) are now covered headless in ./paste-html.test.ts, which
+// installs a happy-dom document at module scope. This file stays DOM-free and pins
+// the other paste routes: pasteHandlerOfCopyPaste / pasteHandlerOfCutPaste and the
+// pasteHandler plain-string branch, entered via handlePasteByClick.
 
 import { describe, expect, it } from 'bun:test';
 import type { Cell } from '../../../engine/types';

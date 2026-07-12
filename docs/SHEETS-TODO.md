@@ -30,12 +30,16 @@ fix/sheet-decided-fixes.)
 - [ ] filter-menu date condition input is a plain text field — needs a date picker
 - [ ] by-values checkboxes stay visible (and ignored) while a condition is active on a column —
       resolve in the Google-parity filter-menu redesign (accordion makes the active mode explicit)
+- [ ] HTML paste: inline `text-decoration:underline` on a td is never read into `cell.un` — only
+      the `<style>` class block is consulted, so WPS/Excel inline underline is silently dropped
+      (characterized in `paste-html.test.ts`)
+- [ ] HTML paste: the `<style>` class-block parser assumes TAB-indented property lines
+      (`nameReg = /^[^\t].*/gm`); space-indented clipboards (both committed fixtures!) parse to an
+      empty style map, so class-based styling may be dead for real Excel-for-Mac paste — confirm
+      real clipboard indentation, then fix the parser or drop the dead path
 
 ## 4. Tests + gated refactors
 
-- [ ] HTML-table paste branch (`pasteHandler`'s CellMatrix arm in `state/events/paste.ts` — the
-      third copy of the offsetMC/merge remap) has zero test coverage; it is DOM-bound and bun
-      test has no DOM. Add a browser probe or DOM-capable test BEFORE any refactor touches it
 - [ ] `cfSplitRange`: derive `operatePart`/`allPart` from `restPart` instead of triplicating
       ~45 range literals (characterization tests are in place)
 - [ ] `evaluateConditionalFormat` (~380 lines) repeats the same per-cell scan 6+ times across
