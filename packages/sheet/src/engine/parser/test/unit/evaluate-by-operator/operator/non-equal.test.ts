@@ -9,8 +9,11 @@ describe('not equal operator', () => {
     test('should correctly process values', () => {
         expect(func(2, 8.8)).toBe(true);
         expect(func('2', 8.8)).toBe(true);
-        expect(func(1, '1')).toBe(true);
-        expect(func(void 0, null)).toBe(true);
+        // `=` is coercing/case-insensitive (Excel parity), so `<>` is its negation.
+        expect(func(1, '1')).toBe(false);
+        expect(func('A', 'a')).toBe(false);
+        expect(func('abc', 1)).toBe(true);
+        expect(func(void 0, null)).toBe(false);
         expect(func(0, null)).toBe(true);
         expect(func(0, void 0)).toBe(true);
 

@@ -14,8 +14,6 @@ Bugs:
 
 Decided behavior changes (Excel/Google parity):
 
-- [ ] formula `=` / `<>` become coercing and case-insensitive (`"A"="a"` → TRUE, `1="1"` → TRUE)
-      per Excel (`engine/parser/evaluate-by-operator/operator/equal.ts` + notEqual)
 
 ## 2. Presence (decided: wire it up)
 
