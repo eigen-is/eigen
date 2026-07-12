@@ -258,18 +258,41 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
                     externalOwnerId(organizerEmail),
                     parsed.recurrenceDate,
                     parsed.recurrenceInstant,
+                    parsed.sequence,
                 );
             } else {
                 calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
             }
         } else if (method === 'REPLY') {
-            // Find the organizer's own event (not a linked copy) by UID
-            const ownerEvent = calendar.getEventsByUid(parsed.uid).find((e) => !e.data?.organizer);
+            // Find the organizer's own MASTER (not a linked copy) by UID. Exceptions share the uid and
+            // also lack data.organizer, so a REPLY must never bind to an exception row directly.
+            const ownerEvent = calendar.getEventsByUid(parsed.uid).find((e) => !e.data?.organizer && !e.parentEventId);
             if (ownerEvent && parsed.data?.attendees) {
                 for (const attendee of parsed.data.attendees) {
                     // A REPLY may only set the PARTSTAT of the attendee who actually sent it.
                     if (!sentBy(attendee.email)) continue;
-                    calendar.updateAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
+                    if (parsed.recurrenceDate) {
+                        // An attendee replying to ONE occurrence: land the PARTSTAT on that instance's
+                        // exception — updateAttendeeStatus would mark them for the whole series.
+                        // rsvpForOccurrence self-guards on membership (exception-aware: someone can be
+                        // invited to a single occurrence only) and, with restoreCancelled=false, never
+                        // resurrects an occurrence the organizer deleted.
+                        calendar.rsvpForOccurrence(
+                            ownerEvent.id,
+                            attendee.email,
+                            attendee.status,
+                            parsed.recurrenceDate,
+                            parsed.recurrenceInstant,
+                            false,
+                        );
+                    } else {
+                        // Skip uninvited senders so a forged REPLY can't churn rows on the master.
+                        const invited = ownerEvent.data?.attendees?.some(
+                            (a) => a.email.toLowerCase() === attendee.email.toLowerCase(),
+                        );
+                        if (!invited) continue;
+                        calendar.updateAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
+                    }
                 }
             }
         }

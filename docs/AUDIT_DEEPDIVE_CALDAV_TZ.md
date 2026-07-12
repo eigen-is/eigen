@@ -134,6 +134,12 @@ linked event (times from the parsed VEVENT, keyed per the #8 fix) instead of cal
 
 > **✅ FIXED — Unit 4**. Single-occurrence CANCEL routes to `cancelInvitationOccurrence` (cancelled
 > exception via the existing `removeOccurrence` seam). Master-VEVENT CANCEL still deletes the series.
+> **Final review follow-up:** the CANCEL path now carries the same RFC 5546 SEQUENCE replay guard as
+> `receiveInvitationException` — a strictly-older redelivered CANCEL is dropped (it used to re-cancel a
+> re-instated occurrence, and the kept newer sequence then blocked the organizer's re-sent REQUEST), and
+> the cancelled exception records the CANCEL's SEQUENCE so a stale REQUEST can't resurrect it. Strictly
+> `<`, not `<=`: clients may cancel without bumping SEQUENCE. Tests: `ical-imip.test.ts` › "replayed
+> stale single-occurrence CANCEL" / "equal SEQUENCE still cancels" / "stale ... REQUEST does not resurrect".
 
 **Where:** `calendar/imip.ts` `processInboundImip` CANCEL branch — `parsed.recurrenceDate` is ignored and
 `removeInvitation(uid, …)` drops the entire linked event.
@@ -146,6 +152,31 @@ linked event (times from the parsed VEVENT, keyed per the #8 fix) instead of cal
 linked event, not `removeInvitation`. Only a master-VEVENT CANCEL should delete the series.
 
 **Test:** `audit-caldav-tz-verify.test.ts` › "hunt: iMIP single-occurrence CANCEL".
+
+---
+
+## NEW #H — inbound iMIP occurrence REPLY applies PARTSTAT to the whole series — **P2 (found in final review)**
+
+> **✅ FIXED — final review**. A REPLY carrying a `RECURRENCE-ID` routes to `rsvpForOccurrence`
+> (re-keyed against the series tz like the REQUEST/CANCEL paths), landing the sender's PARTSTAT on
+> that instance's exception. `rsvpForOccurrence` gained two organizer-side safeguards: a membership
+> bail (exception-aware — an occurrence-only invitee exists on the exception's attendee list, not the
+> master's — so uninvited senders can't materialise rows while single-instance guests still land) and
+> `restoreCancelled=false` for iMIP + relay callers, so a REPLY only moves PARTSTAT and never
+> resurrects an occurrence the organizer deleted (the attendee-side default still un-cancels their own
+> linked copy on re-accept). The REPLY branch also binds to the series MASTER only (exceptions share
+> the uid and also lack `data.organizer`). Tests: `ical-imip.test.ts` › "REPLY with a RECURRENCE-ID
+> scopes", "organizer-deleted occurrence does not resurrect", "occurrence-only invitee", "uninvited
+> occurrence REPLY".
+
+**Where:** `calendar/imip.ts` `processInboundImip` REPLY branch.
+
+**Symptom / failure scenario:** an external attendee declines **one** occurrence of a recurring event an
+Eigen user organized — the parser extracts `RECURRENCE-ID` method-agnostically, but the handler called
+`updateAttendeeStatus` on the master, marking the attendee declined for the **entire series**.
+
+**Verdict:** the #A/#B bug class on the REPLY leg; siblings were fixed in Unit 4, this one surfaced in the
+final whole-branch review.
 
 ---
 

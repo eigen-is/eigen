@@ -1072,7 +1072,7 @@ export class Calendar {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
 
-        const recurrenceDate = this.recurrenceKeyForLinked(
+        const recurrenceDate = this.recurrenceKeyForSeries(
             payload.recurrenceDate,
             payload.recurrenceInstant,
             linked.timezone,
@@ -1146,11 +1146,11 @@ export class Calendar {
         }
     }
 
-    // Re-key an inbound iMIP RECURRENCE-ID against the linked series' timezone. The payload is a single
+    // Re-key an inbound iMIP RECURRENCE-ID against the stored series' timezone. The payload is a single
     // VEVENT with no master, so the parser can't know the series tz; a UTC-Z RECURRENCE-ID (Exchange
     // clients, Eigen's own tz-null exceptions) would otherwise key on the UTC date and attach the
     // exception to the wrong occurrence (audit #8). `recurrenceInstant` is set only for that Z-form case.
-    private recurrenceKeyForLinked(
+    private recurrenceKeyForSeries(
         recurrenceDate: string,
         recurrenceInstant: Date | null | undefined,
         tz: string | null,
@@ -1167,12 +1167,18 @@ export class Calendar {
         orgEventId: string,
         orgUserId: string,
         recurrenceDate: string,
-        recurrenceInstant?: Date | null,
+        recurrenceInstant: Date | null | undefined,
+        sequence: number,
     ): void {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
-        const key = this.recurrenceKeyForLinked(recurrenceDate, recurrenceInstant, linked.timezone);
-        this.removeOccurrence(linked.id, key);
+        const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
+        // RFC 5546 replay guard, mirroring receiveInvitationException: a stale redelivered CANCEL must
+        // not re-cancel an occurrence a newer REQUEST re-instated. Strictly `<` (not `<=`) — clients
+        // may cancel without bumping SEQUENCE, and re-cancelling a cancelled row is idempotent.
+        const existing = this.getException(linked.id, key);
+        if (existing && sequence < existing.sequence) return;
+        this.removeOccurrence(linked.id, key, sequence);
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
     }
 
@@ -1236,19 +1242,36 @@ export class Calendar {
             .filter((e) => e.data?.attendees?.some((a) => a.email.toLowerCase() === email.toLowerCase()));
     }
 
-    public rsvpForOccurrence(eventId: string, email: string, status: Attendee['status'], recurrenceDate: string): void {
+    // `restoreCancelled` distinguishes the two sides of an occurrence RSVP: an attendee re-accepting
+    // their own removed occurrence un-cancels their linked copy (default), while organizer-side
+    // receivers (iMIP REPLY, relay RSVP) may only move PARTSTAT — never resurrect an occurrence the
+    // organizer deleted (RFC 5546).
+    public rsvpForOccurrence(
+        eventId: string,
+        email: string,
+        status: Attendee['status'],
+        recurrenceDate: string,
+        recurrenceInstant?: Date | null,
+        restoreCancelled = true,
+    ): void {
         const parent = this.getEventById(eventId);
         if (!parent) throw new ApiError(404, 'Event not found');
 
-        const existing = this.getException(eventId, recurrenceDate);
+        const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, parent.timezone);
+        const existing = this.getException(eventId, key);
 
         if (existing) {
             const data: EventData = existing.data ?? parent.data ?? {};
-            const attendees = (data.attendees || parent.data?.attendees || []).map((a) =>
+            // Only recorded invitees may leave a PARTSTAT — inbound iMIP routes occurrence REPLYs here,
+            // and an uninvited sender must not mutate rows. Exception-aware: someone can be invited to
+            // a single occurrence only, in which case they exist on the exception but not the master.
+            const invitees = data.attendees || parent.data?.attendees || [];
+            if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return;
+            const attendees = invitees.map((a) =>
                 a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
             );
             const updatedData: EventData = { ...data, attendees };
-            const newStatus = existing.status === 'cancelled' ? 'confirmed' : existing.status;
+            const newStatus = restoreCancelled && existing.status === 'cancelled' ? 'confirmed' : existing.status;
             const etag = computeEtag({
                 title: existing.title,
                 description: existing.description,
@@ -1275,10 +1298,12 @@ export class Calendar {
 
             this.incrementCtag(parent.calendarId);
         } else {
-            const attendees = (parent.data?.attendees || []).map((a) =>
+            const invitees = parent.data?.attendees || [];
+            if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return;
+            const attendees = invitees.map((a) =>
                 a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
             );
-            const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
+            const { startTime, endTime } = computeOccurrenceTimes(parent, key);
 
             this.createEvent(parent.calendarId, {
                 title: parent.title,
@@ -1289,7 +1314,7 @@ export class Calendar {
                 allDay: parent.allDay,
                 timezone: parent.timezone,
                 parentEventId: eventId,
-                recurrenceDate,
+                recurrenceDate: key,
                 data: { ...parent.data, attendees },
                 createByUserId: parent.createByUserId,
                 uid: parent.uid,
@@ -1297,7 +1322,9 @@ export class Calendar {
         }
     }
 
-    private removeOccurrence(eventId: string, recurrenceDate: string): void {
+    // `sequence` is set on the iMIP CANCEL path so the exception records the CANCEL's SEQUENCE and
+    // the replay guards can reject stale REQUEST/CANCEL redeliveries against it.
+    private removeOccurrence(eventId: string, recurrenceDate: string, sequence?: number): void {
         const parent = this.getEventById(eventId);
         if (!parent) throw new ApiError(404, 'Event not found');
 
@@ -1308,6 +1335,7 @@ export class Calendar {
                 .update(schema.events)
                 .set({
                     status: 'cancelled',
+                    ...(sequence !== undefined && { sequence }),
                     updatedAt: sql`unixepoch()`,
                 })
                 .where(eq(schema.events.id, existing.id))
@@ -1325,6 +1353,7 @@ export class Calendar {
                 parentEventId: eventId,
                 recurrenceDate,
                 status: 'cancelled',
+                sequence,
                 uid: parent.uid,
             });
         }

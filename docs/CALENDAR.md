@@ -251,8 +251,8 @@ iMIP enables calendar invitations between Eigen users and external parties via e
 
 - **Mail delivery hook**: `apps/api/src/lib/mail/mail.ts` — after `mailboxDeliver`, checks for `text/calendar` attachments (fire-and-forget with `.catch()`). If found, calls `processInboundImip(home, parsedMail)`.
 - **`METHOD:REQUEST`**: creates a linked event in the recipient's calendar via `calendar.receiveInvitation()`. If a linked event with the same `uid` already exists, updates it via `calendar.receiveInvitationUpdate()`. A single-occurrence REQUEST (one carrying a `RECURRENCE-ID`) instead attaches/updates an exception on the linked series via `calendar.receiveInvitationException()`, so a rescheduled instance doesn't collapse the whole series.
-- **`METHOD:CANCEL`**: removes the linked event via `calendar.removeInvitation()`. A single-occurrence CANCEL (carrying a `RECURRENCE-ID`) instead cancels just that instance via `calendar.cancelInvitationOccurrence()`.
-- **`METHOD:REPLY`**: updates attendee status on the organizer's event via `calendar.updateAttendeeStatus()`.
+- **`METHOD:CANCEL`**: removes the linked event via `calendar.removeInvitation()`. A single-occurrence CANCEL (carrying a `RECURRENCE-ID`) instead cancels just that instance via `calendar.cancelInvitationOccurrence()`, which applies the same RFC 5546 SEQUENCE replay guard as the REQUEST path (strictly-older CANCELs are dropped; the cancelled exception records the CANCEL's SEQUENCE).
+- **`METHOD:REPLY`**: updates attendee status on the organizer's event via `calendar.updateAttendeeStatus()`. A single-occurrence REPLY (carrying a `RECURRENCE-ID`) instead lands the sender's PARTSTAT on that instance's exception via `calendar.rsvpForOccurrence()`, so declining one occurrence doesn't mark the whole series. Only invited attendees are processed (exception-aware: an occurrence-only invitee lives on the exception's attendee list), and a REPLY never resurrects an occurrence the organizer deleted — it moves PARTSTAT only.
 
 ### `external_` prefix convention
 
