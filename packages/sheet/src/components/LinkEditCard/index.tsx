@@ -84,7 +84,7 @@ export function LinkEditCard({
     const renderToolbarButton = useCallback(
         (Icon: LucideIcon, onClick: () => void) => (
             <button type="button" className="p-1.5 cursor-pointer hover:bg-accent" onClick={onClick}>
-                <Icon width={18} height={18} aria-hidden="true" />
+                <Icon className="size-4" aria-hidden="true" />
             </button>
         ),
         [],
@@ -121,7 +121,7 @@ export function LinkEditCard({
         return (
             <div
                 {...containerEvent}
-                className={cn(modalBase, 'flex flex-row items-center py-0.5 pl-4 pr-2')}
+                className={cn(modalBase, 'flex flex-row items-center py-0.5 pl-4 pr-2 text-sm')}
                 style={{ left: position.cellLeft + 20, top: position.cellBottom }}
             >
                 <button
