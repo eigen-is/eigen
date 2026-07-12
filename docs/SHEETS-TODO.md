@@ -45,10 +45,7 @@ fix/sheet-decided-fixes.)
 
 ## 5. Rendering
 
-- [ ] lock the body overlays (selection box, cell editor, presence, fill handle) to the scroll
-      bus like the headers — they scroll natively and drift ~1 frame from the canvas during
-      fast/ProMotion scrolls (`RENDERING.md` § Scrolling)
-- [ ] the same overlays must CLIP below frozen panes — the headers already do this correctly,
+- [ ] the body overlays must CLIP below frozen panes — the headers already do this correctly,
       so reuse (and share) that logic
 - [ ] `SheetOverlay/index.css`: 795 lines, ~46 hardcoded hex colors vs 21 theme-token uses —
       migrate to theme tokens (prerequisite for dark mode)

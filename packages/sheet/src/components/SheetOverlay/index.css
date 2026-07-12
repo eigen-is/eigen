@@ -37,6 +37,28 @@
     display: none;
 }
 
+/* Body overlay layer: a 0×0 sticky anchor pinned to the scrollport origin. Its
+   content div (transform: translate from the scroll bus) holds the selection box,
+   cell editor, presence, fill handle, images, etc. so they track the scroll bus in
+   lockstep with the rAF canvas redraw instead of scrolling natively (which drifts a
+   frame). The box is 0×0 with overflow visible, so it never covers the grid —
+   empty-grid clicks fall through to .fortune-cell-area. */
+.fortune-cell-overlay-layer {
+    position: sticky;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    overflow: visible;
+    /* The translated content div is an atomic stacking context, so the children's
+       z-indexes (8-30) can no longer individually lift them above the later
+       full-size cell-flow spacer sibling (z auto) — without this the spacer
+       shadows every interactive overlay (fill handle, editor, images) from
+       hit-testing. z 1 lifts the whole layer above it; the children's relative
+       order inside is unchanged. */
+    z-index: 1;
+}
+
 .fortune-row-body {
     display: flex;
     flex-direction: row;

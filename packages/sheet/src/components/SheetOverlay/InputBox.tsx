@@ -218,6 +218,16 @@ export const InputBox: React.FC = () => {
                           left: firstSelection.left,
                           top: firstSelection.top,
                           zIndex: context.editingCellPosition.length === 0 ? -1 : 19,
+                          // z:-1 no longer hides the box: inside the overlay layer's
+                          // transformed content div (a stacking context) it can't sink
+                          // below the canvas. opacity 0 hides it while keeping the cell
+                          // input focusable at the cell position (display/visibility
+                          // would break focus; off-screen focus auto-scrolls the grid),
+                          // and pointer-events none keeps it unhittable like the old
+                          // behind-the-canvas box (opacity 0 alone still hit-tests, and
+                          // the box's stopPropagation would swallow focus-cell clicks).
+                          opacity: context.editingCellPosition.length === 0 ? 0 : 1,
+                          pointerEvents: context.editingCellPosition.length === 0 ? 'none' : undefined,
                           display: 'block',
                       }
                     : { left: -10000, top: -10000, display: 'block' }

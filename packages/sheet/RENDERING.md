@@ -111,7 +111,9 @@ Positioned with `left_move` / `top_move` / `width_move` / `height_move` from the
 
 When you double-click or type into a cell, InputBox appears:
 - A ContentEditable div positioned at the cell's location
-- `z-index: 19` when editing, `-1` when hidden
+- `z-index: 19` when editing; when not editing it is hidden via `opacity: 0` +
+  `pointer-events: none` (it must stay focusable at the cell position — keyboard input
+  flows through it after every cell click)
 - Renders `FormulaSearch` dropdown (typed candidate list) and `FormulaHint` card
   (post-commit signature/argument help). Both wrap `SheetOverlay/FormulaPopup`,
   which uses Radix `Popover` with a virtual anchor at the input's bounding rect
@@ -227,8 +229,8 @@ or touch handler.
 - `cellArea`'s `onScroll` writes `globalCache.scrollLeft` / `globalCache.scrollTop` and calls
   `globalCache.notifyScrollListeners()`. Scroll state lives in `globalCache` (NOT React
   context) to avoid re-rendering every consumer on each tick.
-- Bus subscribers: the rAF-coalesced canvas redraw (`Sheet`) and the header `transform`
-  updates (`ColumnHeader` / `RowHeader`).
+- Bus subscribers: the rAF-coalesced canvas redraw (`Sheet`), the header `transform`
+  updates (`ColumnHeader` / `RowHeader`), and the body-overlay layer `transform` (`SheetOverlay`).
 - Programmatic scroll (back-to-top, sheet-switch restore, selection auto-follow, freeze reset)
   writes `cellArea.scrollLeft/scrollTop`; the native `scroll` event then re-syncs the bus.
 - `overscroll-behavior: none` disables the macOS rubber-band bounce (the rAF canvas can't
@@ -236,12 +238,31 @@ or touch handler.
 - Mouse hit-testing reads `ctx.scrollLeft/scrollTop`, which `setContextWithProduce` lazily
   syncs from `globalCache` at the top of every recipe.
 
-**Known limitation**: the body overlays (selection box, cell editor, presence, fill handle)
-are children of `cellArea`, so they scroll *natively* (compositor speed) while the canvas
-repaints on rAF — during a fast / ProMotion scroll they can drift ~1 frame from the grid. The
-headers do NOT drift (they transform from the bus, locked to the redraw). Locking the body
-overlays the same way is a tracked follow-up — see
-[`docs/SHEETS-TODO.md`](../../docs/SHEETS-TODO.md).
+**Body overlay layer**: the body overlays (selection box, cell editor, presence, fill handle,
+formula-range visuals, search highlights, images, link/validation cards) do NOT scroll
+natively. They live in a `position: sticky` layer (`.fortune-cell-overlay-layer`) that is the
+first child of `cellArea` — a 0×0 anchor pinned to the scrollport origin at compositor speed,
+holding a `position: absolute; inset: 0` content div (`overlayLayerRef`) that translates
+`translate(-scrollLeft, -scrollTop)` from the bus. This is the same mechanism as the headers,
+so the overlays stay locked to the rAF canvas redraw and can no longer drift a frame during a
+fast / ProMotion scroll. The layer box is 0×0 with overflowing content, so it never covers the
+grid — empty-grid clicks fall through to `cellArea`, and every moved child keeps its pure
+content-coordinate styles (the sticky+translate reproduces the old native-scroll geometry
+exactly). The `luckysheet-cell-flow` spacer (which defines the scroll range and holds the
+bottom add-row control, pinned via `left: scrollLeft`) and the cell context-menu anchor stay
+direct children of `cellArea`.
+
+Two consequences of the layer being an atomic stacking context: it carries `z-index: 1` so its
+children paint (and hit-test) above the later full-size cell-flow spacer sibling — in the old
+flat DOM each child's own z-index (8–30) did that individually — and the not-editing InputBox
+(`z-index: -1`, which used to sink below the canvas) is hidden with `opacity: 0` +
+`pointer-events: none` instead, keeping the cell input focusable at the cell position without
+painting over the grid or swallowing focus-cell clicks.
+
+**Known limitation**: the moved overlays still clamp (not clip) below frozen panes via
+`fix*StyleOverflowInFreeze`, computed at React render from the scroll mirror, so during a pure
+scroll the clamp is a frame stale. True per-pane region clipping is a tracked follow-up — see
+[`docs/SHEETS-TODO.md`](../../docs/SHEETS-TODO.md) group 5.
 
 ## Z-Index Stack
 
@@ -259,6 +280,10 @@ overlays the same way is a tracked follow-up — see
 | 19 | Images (inactive) | ImgBoxs |
 | 20 | Active image (with resize handles) | ImgBoxs |
 | 50 | Data verification dropdown (portaled shadcn) | DataVerification/DropdownList |
+
+The SheetOverlay / InputBox / ImgBoxs values live inside `.fortune-cell-overlay-layer`
+(`z-index: 1`, an atomic stacking context — see § Scrolling), so they order those elements
+only among themselves; the layer as a whole sits above the canvas and the cell-flow spacer.
 
 ## Key Performance Patterns
 
