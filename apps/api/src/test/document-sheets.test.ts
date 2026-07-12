@@ -1,8 +1,11 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { sheetsNeedRecalc } from '@workspace/sheet/engine';
+import ExcelJS from 'exceljs';
 import { readSheetsContent, writeSheetsToYjs } from '../lib/document/sheets';
 import { getHome } from '../lib/home/get-home';
+import { importIntoDocument } from '../lib/import/import-document';
 import { driveGet, drivePost, getTestContext } from './setup';
 
 describe('document/sheets', () => {
@@ -506,6 +509,56 @@ describe('document/sheets — patch op replay', () => {
 
         const b1 = result[0].celldata?.find((e) => e.r === 0 && e.c === 1);
         expect(b1?.v?.v).toBe(999);
+    });
+
+    test('xlsx import e2e: formula-only cells get engine-computed v/m persisted; volatile stays empty', async () => {
+        // Generator-blank case: exceljs writes formula-only cells (no cached
+        // result) when `result` is omitted. Driven through the real import seam
+        // (importIntoDocument — the same call routes/drive.ts's /import makes),
+        // so this covers xlsxToSheets → recalcSheets → writeSheetsToYjs end to end.
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Sheet1');
+        worksheet.getCell('A1').value = 10;
+        worksheet.getCell('A2').value = 32;
+        worksheet.getCell('B1').value = { formula: 'A1+A2' };
+        worksheet.getCell('B2').value = { formula: 'SUM(A1:A2)*2' };
+        worksheet.getCell('C1').value = { formula: 'NOW()' };
+        const buffer = Buffer.from(new Uint8Array(await workbook.xlsx.writeBuffer()));
+
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'recalc-import-e2e' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        await importIntoDocument(home.drive, mount, path, buffer);
+
+        const result = await readSheetsContent(mount, path);
+
+        const cellAt = (r: number, c: number) => result[0].celldata?.find((e) => e.r === r && e.c === c)?.v;
+        expect(cellAt(0, 1)?.f).toBe('=A1+A2');
+        expect(cellAt(0, 1)?.v).toBe(42);
+        expect(cellAt(0, 1)?.m).toBe('42');
+        expect(cellAt(1, 1)?.f).toBe('=SUM(A1:A2)*2');
+        expect(cellAt(1, 1)?.v).toBe(84);
+        expect(cellAt(1, 1)?.m).toBe('84');
+
+        // The import-time recalc stamped a calcChain, so the read gate sees the
+        // doc as computed and won't recompute on every read.
+        expect(sheetsNeedRecalc(result)).toBe(false);
+        const calcChain = (result[0] as Sheet & { calcChain?: { r: number; c: number; id: string }[] }).calcChain;
+        expect(calcChain?.length).toBe(3);
+
+        // Volatile freeze, pinned: the xlsx carried no cached NOW() result, so
+        // there is nothing to freeze — the cell keeps its formula but stays
+        // without v/m until a client editor computes and flushes it.
+        expect(cellAt(0, 2)?.f).toBe('=NOW()');
+        expect(cellAt(0, 2)?.v).toBeUndefined();
+        expect(cellAt(0, 2)?.m).toBeUndefined();
     });
 
     test('reads doc with snapshot + orphan patch op (sheet id not in array) → op dropped', async () => {
