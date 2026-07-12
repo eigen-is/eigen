@@ -1,16 +1,10 @@
 # Sheets — TODO
 
 Single source of truth for all remaining sheets work (`packages/sheet`, `apps/sheets`, xlsx
-import/export). Group 2 is decided and ready to execute; the rest is open backlog.
+import/export). Everything below is open backlog.
 Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two agree.
-(Group 1 — small bugs + decided behavior changes — executed 2026-07-12 on
+(Groups 1-2 — small bugs, decided behavior changes, presence — executed 2026-07-12 on
 fix/sheet-decided-fixes.)
-
-## 2. Presence (decided: wire it up)
-
-- [ ] Feed Yjs awareness into `WorkbookInstance.addPresences`/`removePresences` —
-      `SheetOverlay` already fully renders collaborator cursors from `context.presences`;
-      nothing ever feeds it. Small, well-defined job; delivers live cursors in shared sheets.
 
 ## 3. xlsx round-trip fidelity backlog
 

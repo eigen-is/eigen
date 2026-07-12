@@ -492,3 +492,35 @@
         display: none;
     }
 }
+
+/* Collaborator presence label (shared: docs Tiptap caret + sheets overlay).
+   Rendered from @workspace/ui presence-label; keep the two selectors here so both
+   editors read the same chip visual. */
+.collaboration-cursor__caret {
+    position: relative;
+    border-left: 2px solid;
+    border-right: none;
+    margin-left: -1px;
+    margin-right: -1px;
+    pointer-events: none;
+    word-break: normal;
+}
+
+.collaboration-cursor__label {
+    position: absolute;
+    top: -1.4em;
+    left: -1px;
+    font-size: 12px;
+    font-weight: 600;
+    font-style: normal;
+    text-decoration: none;
+    text-transform: none;
+    letter-spacing: normal;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 3px 3px 3px 0;
+    color: white;
+    white-space: nowrap;
+    user-select: none;
+    pointer-events: none;
+}

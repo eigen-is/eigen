@@ -5,6 +5,7 @@ export * from './components/layout/app';
 export * from './components/layout/braket';
 export * from './components/layout/cards';
 export * from './components/layout/chat';
+export * from './components/layout/collab';
 export * from './components/layout/comments';
 export * from './components/layout/confirm-dialog';
 export * from './components/layout/contacts';

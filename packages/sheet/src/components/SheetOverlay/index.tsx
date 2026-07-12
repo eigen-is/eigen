@@ -1,7 +1,7 @@
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
+import { PresenceLabel } from '@workspace/ui/components/layout/collab';
 import type React from 'react';
-import type { CSSProperties } from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './index.css';
 import { debounce } from 'es-toolkit/compat';
@@ -650,11 +650,6 @@ export const SheetOverlay: React.FC = () => {
                             const col = context.visibledatacolumn[c];
                             const width = col - col_pre - 1;
                             const height = row - row_pre - 1;
-                            const usernameStyle: CSSProperties = {
-                                maxWidth: width + 1,
-                                backgroundColor: color,
-                            };
-                            usernameStyle[r === 0 ? 'top' : 'bottom'] = height;
 
                             return (
                                 <div
@@ -669,9 +664,7 @@ export const SheetOverlay: React.FC = () => {
                                         borderWidth: 1,
                                     }}
                                 >
-                                    <div className="fortune-presence-username" style={usernameStyle}>
-                                        {presence.username}
-                                    </div>
+                                    <PresenceLabel color={color} name={presence.username} />
                                 </div>
                             );
                         })}
