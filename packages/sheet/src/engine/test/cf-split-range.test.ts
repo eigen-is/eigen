@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { CfSplitRangeType } from '../conditional-format';
 import { cfSplitRange } from '../conditional-format';
 import type { SingleRange } from '../types';
 
@@ -26,7 +27,7 @@ const OPERATE: SingleRange = { row: [2, 5], column: [2, 5] };
 // Only [0] of each axis matters; ends are padding. offset_r = 10, offset_c = 20.
 const DEST: SingleRange = { row: [12, 15], column: [22, 25] };
 
-function split(cf: SingleRange, type: string): SingleRange[] {
+function split(cf: SingleRange, type: CfSplitRangeType): SingleRange[] {
     return cfSplitRange(cf, OPERATE, DEST, type);
 }
 
@@ -279,10 +280,12 @@ describe('engine/cfSplitRange — no overlap (disjoint)', () => {
 });
 
 describe('engine/cfSplitRange — unrecognised type', () => {
-    test('a type outside all/rest/operate yields an empty result (initial accumulator)', () => {
+    test('a type outside all/rest/operate throws (a caller typo must not silently drop CF ranges)', () => {
         const cf: SingleRange = { row: [2, 5], column: [2, 5] };
-        // NOTE: pins current behavior — the function never validates `type`; an
-        // unknown value silently returns [] (the initial `range`) for every branch.
-        expect(split(cf, 'nonsense')).toEqual([]);
+        // The param is compile-time narrowed to the three valid parts; untyped
+        // state-layer callers can still pass a bad string, so the runtime guard
+        // must throw rather than silently return [].
+        const badType: string = 'nonsense';
+        expect(() => split(cf, badType as CfSplitRangeType)).toThrow();
     });
 });

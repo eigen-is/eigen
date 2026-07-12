@@ -256,6 +256,11 @@ export function evaluateConditionalFormat(
                     conditionName === 'notEqual' ||
                     conditionName === 'textContains'
                 ) {
+                    // Coerce the threshold once — form input arrives as string. Ordering rules
+                    // (greater/less) only match numeric cells; equal/notEqual compare numerically
+                    // when both sides are numeric, else fall back to exact string comparison.
+                    // Matches Excel/Google, mirroring the `between` branch below.
+                    const threshold = Number(conditionValue0);
                     // iterate over apply range and evaluate
                     for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
                         for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
@@ -269,17 +274,23 @@ export function evaluateConditionalFormat(
                             }
                             let matches = false;
                             if (conditionName === 'greaterThan') {
-                                matches = cell.v > conditionValue0;
+                                matches = typeof cell.v === 'number' && cell.v > threshold;
                             } else if (conditionName === 'greaterThanOrEqual') {
-                                matches = cell.v >= conditionValue0;
+                                matches = typeof cell.v === 'number' && cell.v >= threshold;
                             } else if (conditionName === 'lessThan') {
-                                matches = cell.v < conditionValue0;
+                                matches = typeof cell.v === 'number' && cell.v < threshold;
                             } else if (conditionName === 'lessThanOrEqual') {
-                                matches = cell.v <= conditionValue0;
+                                matches = typeof cell.v === 'number' && cell.v <= threshold;
                             } else if (conditionName === 'equal') {
-                                matches = cell.v.toString() === conditionValue0;
+                                matches =
+                                    typeof cell.v === 'number' && !Number.isNaN(threshold)
+                                        ? cell.v === threshold
+                                        : cell.v.toString() === conditionValue0;
                             } else if (conditionName === 'notEqual') {
-                                matches = cell.v.toString() !== conditionValue0;
+                                matches =
+                                    typeof cell.v === 'number' && !Number.isNaN(threshold)
+                                        ? cell.v !== threshold
+                                        : cell.v.toString() !== conditionValue0;
                             } else if (conditionName === 'textContains') {
                                 matches = cell.v.toString().indexOf(String(conditionValue0)) !== -1;
                             }
@@ -400,7 +411,7 @@ export function evaluateConditionalFormat(
 
                         // form input arrives as string; coerce once for arithmetic / slice
                         const n = Number(conditionValue0);
-                        let cArr: number[] | undefined;
+                        let cArr: number[] = [];
                         if (conditionName === 'top10') {
                             cArr = dArr.slice(0, n); // top n items
                         } else if (conditionName === 'top10_percent') {
@@ -410,6 +421,8 @@ export function evaluateConditionalFormat(
                         } else if (conditionName === 'last10_percent') {
                             cArr = dArr.slice(dArr.length - Math.floor((n * dArr.length) / 100), dArr.length); // bottom n% items
                         }
+                        // Membership set — O(1) per-cell lookup instead of indexOf's O(n) scan.
+                        const cSet = new Set(cArr);
                         // iterate over apply range and evaluate
                         for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
                             for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
@@ -418,7 +431,7 @@ export function evaluateConditionalFormat(
                                 }
 
                                 const cellVal = Number(cellValueAt(data, r, c));
-                                if (!isNil(cArr) && cArr.indexOf(cellVal) !== -1) {
+                                if (cSet.has(cellVal)) {
                                     applyCellStyle(computeMap, r, c, { textColor, cellColor });
                                 }
                             }
@@ -462,12 +475,22 @@ export function evaluateConditionalFormat(
     return computeMap;
 }
 
+// Which slice of the split cfSplitRange returns: the parts that stay put, the
+// part that moves with the operate range, or both.
+export type CfSplitRangeType = 'allPart' | 'restPart' | 'operatePart';
+
 export function cfSplitRange(
     range1: SingleRange,
     range2: SingleRange,
     range3: SingleRange,
-    type: string,
+    type: CfSplitRangeType,
 ): SingleRange[] {
+    if (type !== 'allPart' && type !== 'restPart' && type !== 'operatePart') {
+        // Callers are compile-time narrowed, but state-layer code passes untyped
+        // values; a typo must fail loudly rather than silently drop every CF range.
+        throw new Error(`cfSplitRange: unknown type "${type}"`);
+    }
+
     let range: SingleRange[] = [];
 
     const offset_r = range3.row[0] - range2.row[0];

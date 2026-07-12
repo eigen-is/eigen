@@ -11,14 +11,9 @@ Bugs:
 - [ ] imported lowercase `mm` date patterns show "Minute" chips in the custom date/time dialog
       (tokenizer follows Google's `M` month / `m` minute); switching a variant on a mislabeled
       chip writes minutes where months were
-- [ ] `top10` CF evaluation is O(n²) (`indexOf` over the sorted slice per cell) — use a `Set`
-- [ ] `cfSplitRange` silently returns `[]` for an unknown `type` (a caller typo would drop all
-      CF ranges) — throw instead (`engine/conditional-format.ts`; behavior pinned in tests)
 
 Decided behavior changes (Excel/Google parity):
 
-- [ ] CF comparison rules must coerce thresholds with `Number()` like the `between` branch
-      already does (`engine/conditional-format.ts` greaterThan/lessThan and peers)
 - [ ] formula `=` / `<>` become coercing and case-insensitive (`"A"="a"` → TRUE, `1="1"` → TRUE)
       per Excel (`engine/parser/evaluate-by-operator/operator/equal.ts` + notEqual)
 
