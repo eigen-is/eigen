@@ -37,6 +37,9 @@ export type OutboundMail = {
 
 export function createTransport(): Mail {
     if (process.env['SMTP_HOST']) {
+        // This hop stays inside the docker network (SMTP_HOST defaults to the bundled postfix)
+        // or reaches a host-local relay — self-signed/no cert, so verification is off by design.
+        // Postfix owns TLS toward the internet.
         return nodemailer.createTransport({
             host: process.env['SMTP_HOST'],
             port: Number(process.env['SMTP_PORT'] || 25),
