@@ -1,16 +1,10 @@
 # Sheets — TODO
 
 Single source of truth for all remaining sheets work (`packages/sheet`, `apps/sheets`, xlsx
-import/export). Groups 1–2 are decided and ready to execute; the rest is open backlog.
+import/export). Group 2 is decided and ready to execute; the rest is open backlog.
 Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two agree.
-
-## 1. Small bugs + decided behavior changes (do first, one branch)
-
-Bugs:
-
-
-Decided behavior changes (Excel/Google parity):
-
+(Group 1 — small bugs + decided behavior changes — executed 2026-07-12 on
+fix/sheet-decided-fixes.)
 
 ## 2. Presence (decided: wire it up)
 
@@ -91,6 +85,14 @@ Decided behavior changes (Excel/Google parity):
       mutation inside a `setContext` recipe (`DataVerification/DropdownList.tsx`), inline style
       object in `context/modal.tsx`, `insertMenu` repeating `autoSelectionFormula` 4×,
       `.substr()` ×4 in `cell.ts`
+- [ ] operator-family seam: `=`/`<>` are coercing + case-insensitive (2026-07-12), but `<` `>`
+      `<=` `>=` still raw-JS coerce — blank `A1>=0` is TRUE while `A1=0` is FALSE, and `"A"<"a"`
+      is TRUE alongside `"A"="a"` TRUE. Decide + implement Excel-parity ordering semantics
+      (`engine/parser/evaluate-by-operator/operator/{greater,less}-than*.ts`)
+- [ ] `normalizeMonthMinuteTokens` (xlsx import) diverges from numfmt's classifier on three
+      pathological formats (`;` consumed by a `_x` skip, `_\x` 3-char skip/fill, `B1`/`B2`
+      calendar markers). Rendering is provably unaffected (numfmt classifies case-insensitively);
+      worst case is a mislabeled dialog chip — align the port if exactness ever matters
 
 ## 7. App / architecture
 
