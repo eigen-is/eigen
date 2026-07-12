@@ -45,10 +45,14 @@ fix/sheet-decided-fixes.)
 
 ## 5. Rendering
 
-- [ ] sheet dark mode: `SheetOverlay/index.css` colors now all flow through theme tokens or
-      `--sheet-*` custom properties (verbatim light values) — the dark pass is `.dark` overrides
-      for the 15 `--sheet-*` props (suggested mappings in the migration table, session notes
-      2026-07-12) plus the canvas-drawn colors (gridlines, cell text) which live in `state/canvas.ts`
+- [ ] sheet dark mode (decided 2026-07-12): the sheet canvas stays WHITE in dark mode, same as
+      the docs canvas — the workbook surface does not re-theme, only the surrounding chrome.
+      `SheetOverlay/index.css` colors now all flow through theme tokens or `--sheet-*` custom
+      properties (verbatim light values); the surface-coupled ones must stay constant, so pin
+      them (and audit the `var(--background)`/`var(--popover)` callsites, which WOULD flip with
+      the theme — those need surface-scoped values instead). Make the stays-white convention
+      consistent with docs and define it once in the global css (same mechanism as the docs
+      canvas) rather than per-app
 - [ ] header (row/col) freeze clamps still recompute from `ctx.scroll*` at render time — a
       pure-scroll tick can leave a stale header highlight clamp until the next recipe; migrate
       the headers to the body-overlay region model (`computeOverlayRegions`) for symmetry
