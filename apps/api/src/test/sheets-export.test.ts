@@ -734,23 +734,18 @@ describe('Sheets xlsx export — data validation', () => {
         expect(rt[0].dataVerification).toBeUndefined();
     });
 
-    test('skips checkbox and validity rules while keeping cell values', async () => {
+    test('skips checkbox rules while keeping cell values', async () => {
         const sheets: Sheet[] = [
             {
                 name: 'DV',
-                celldata: [
-                    { r: 0, c: 0, v: { v: 'done' } },
-                    { r: 1, c: 0, v: { v: '06-12345678' } },
-                ],
+                celldata: [{ r: 0, c: 0, v: { v: 'done' } }],
                 dataVerification: {
                     '0_0': dvRule({ type: 'checkbox', type2: '', value1: 'selected', checked: true }),
-                    '1_0': dvRule({ type: 'validity', type2: 'phoneNumber', value1: '' }),
                 },
             },
         ];
         const ws = getSheet(await exportAndReload(sheets), 'DV');
         expect(ws.getCell('A1').dataValidation).toBeUndefined();
-        expect(ws.getCell('A2').dataValidation).toBeUndefined();
         expect(ws.getCell('A1').value).toBe('done');
 
         const rt = await roundTrip(sheets);

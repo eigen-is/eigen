@@ -29,7 +29,6 @@ const VERIFICATION_TYPES = [
     'text_content',
     'text_length',
     'date',
-    'validity',
 ] as const;
 
 const NUMBER_CONDITIONS = [
@@ -55,8 +54,6 @@ const DATE_CONDITIONS = [
 ] as const;
 
 const TEXT_CONTENT_CONDITIONS = ['include', 'exclude', 'equal'] as const;
-
-const VALIDITY_CONDITIONS = ['identificationNumber', 'phoneNumber'] as const;
 
 export function DataVerification() {
     const { context, setContext } = useContext(WorkbookContext);
@@ -273,8 +270,6 @@ export function DataVerification() {
                                     ctx.dataVerification!.dataRegulation!.type2 = 'between';
                                 } else if (value === 'text_content') {
                                     ctx.dataVerification!.dataRegulation!.type2 = 'include';
-                                } else if (value === 'validity') {
-                                    ctx.dataVerification!.dataRegulation!.type2 = 'identificationNumber';
                                 }
                                 ctx.dataVerification!.dataRegulation!.value1 = '';
                                 ctx.dataVerification!.dataRegulation!.value2 = '';
@@ -540,30 +535,6 @@ export function DataVerification() {
                                 />
                             )}
                         </div>
-                    )}
-
-                    {context.dataVerification?.dataRegulation?.type === 'validity' && (
-                        <Select
-                            value={context.dataVerification.dataRegulation.type2}
-                            onValueChange={(value) => {
-                                setContext((ctx) => {
-                                    ctx.dataVerification!.dataRegulation!.type2 = value;
-                                    ctx.dataVerification!.dataRegulation!.value1 = '';
-                                    ctx.dataVerification!.dataRegulation!.value2 = '';
-                                });
-                            }}
-                        >
-                            <SelectTrigger size="sm" className="w-full">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {VALIDITY_CONDITIONS.map((v) => (
-                                    <SelectItem value={v} key={v}>
-                                        {dataVerification[v]}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
                     )}
                 </div>
 

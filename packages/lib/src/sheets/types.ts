@@ -139,11 +139,10 @@ export type MergeCell = { r: number; c: number; rs: number; cs: number };
 // `onValueChange(value: string)` and threading a union through the dialog
 // requires runtime narrowing at every callback. Known values today:
 // type  ∈ dropdown | checkbox | number | number_integer | number_decimal |
-//         text_content | text_length | date | validity
+//         text_content | text_length | date
 // type2 ∈ between | notBetween | equal | notEqualTo | moreThanThe | lessThan |
 //         greaterOrEqualTo | lessThanOrEqualTo | include | exclude |
-//         earlierThan | noEarlierThan | laterThan | noLaterThan |
-//         identificationNumber | phoneNumber | true | ''
+//         earlierThan | noEarlierThan | laterThan | noLaterThan | true | ''
 export type DataVerificationRule = {
     type: string;
     type2: string;

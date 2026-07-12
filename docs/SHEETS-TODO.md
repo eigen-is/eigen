@@ -33,8 +33,6 @@ Decided behavior changes (Excel/Google parity):
       per Excel (`engine/parser/evaluate-by-operator/operator/equal.ts` + notEqual)
 - [ ] `moveCells` raises a raw `throw Error(drag.noMerge)` out of an immer reducer for an
       expected user action — use `ctx.warnDialog` like its siblings (`state/modules/move-cells.ts`)
-- [ ] delete the Chinese ID-card/phone validators (`state/modules/data-verification.ts`
-      `identificationNumber`/`phone` + their DataVerification dialog entries)
 - [ ] remove the CJK special-case in sort (`state/modules/sort.ts` ~:134) — plain `'en'`
       `localeCompare` for all text
 
