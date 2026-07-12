@@ -45,8 +45,10 @@ fix/sheet-decided-fixes.)
 
 ## 5. Rendering
 
-- [ ] `SheetOverlay/index.css`: 795 lines, ~46 hardcoded hex colors vs 21 theme-token uses —
-      migrate to theme tokens (prerequisite for dark mode)
+- [ ] sheet dark mode: `SheetOverlay/index.css` colors now all flow through theme tokens or
+      `--sheet-*` custom properties (verbatim light values) — the dark pass is `.dark` overrides
+      for the 15 `--sheet-*` props (suggested mappings in the migration table, session notes
+      2026-07-12) plus the canvas-drawn colors (gridlines, cell text) which live in `state/canvas.ts`
 - [ ] header (row/col) freeze clamps still recompute from `ctx.scroll*` at render time — a
       pure-scroll tick can leave a stale header highlight clamp until the next recipe; migrate
       the headers to the body-overlay region model (`computeOverlayRegions`) for symmetry
