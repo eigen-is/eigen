@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { update } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import * as Y from 'yjs';
@@ -9,7 +10,7 @@ import * as collabSchema from '../lib/collab/schema';
 import { loadYjsState } from '../lib/collab/yjs-loader';
 import { ApiError } from '../lib/core';
 import { getHome } from '../lib/home/get-home';
-import { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
+import { normalizeMonthMinuteTokens, xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { assertJson, authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -287,9 +288,11 @@ describe('Sheets xlsx import/convert', () => {
         const sheets = await convertWorkbook(workbook, 'dates.xlsx');
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
 
-        // Serial value and raw format string are preserved; only the cached display was wrong.
+        // Serial value is preserved; the stored format is canonicalised to the Google
+        // month/minute convention at import — `m` after a day token is a MONTH, so it
+        // uppercases to `M` (numfmt renders both identically, see normalizeMonthMinuteTokens).
         expect(byCoord.get('0:0')?.v).toBe(45366);
-        expect(byCoord.get('0:0')?.ct).toEqual({ fa: 'd"-"m', t: 'd' });
+        expect(byCoord.get('0:0')?.ct).toEqual({ fa: 'd"-"M', t: 'd' });
 
         expect(byCoord.get('0:0')?.m).toBe('15-3');
         expect(byCoord.get('1:0')?.m).toBe('15-Mar');
@@ -1331,5 +1334,69 @@ describe('xlsxToSheets resource guards', () => {
         }
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(413);
+    });
+});
+
+describe('normalizeMonthMinuteTokens (Excel m/M → Google month/minute convention)', () => {
+    test('a month run adjacent to day/year uppercases (the headline bug)', () => {
+        expect(normalizeMonthMinuteTokens('dd/mm/yyyy')).toBe('dd/MM/yyyy');
+        expect(normalizeMonthMinuteTokens('m/d/yyyy')).toBe('M/d/yyyy');
+        expect(normalizeMonthMinuteTokens('mm/yyyy')).toBe('MM/yyyy');
+    });
+
+    test('a minute run adjacent to hours or seconds lowercases; hour/second case stays untouched', () => {
+        expect(normalizeMonthMinuteTokens('hh:mm:ss')).toBe('hh:mm:ss');
+        // Mirror bug: uppercase MM in a time position must become lowercase minutes.
+        expect(normalizeMonthMinuteTokens('HH:MM:SS')).toBe('HH:mm:SS');
+        // A following seconds token resolves the deferred month back to a minute.
+        expect(normalizeMonthMinuteTokens('mm:ss')).toBe('mm:ss');
+    });
+
+    test('month and minute in the same string are classified independently', () => {
+        expect(normalizeMonthMinuteTokens('yyyy-mm-dd hh:mm')).toBe('yyyy-MM-dd hh:mm');
+        expect(normalizeMonthMinuteTokens('yyyy-mm-dd hh:mm:ss')).toBe('yyyy-MM-dd hh:mm:ss');
+    });
+
+    test('month-name runs (mmm/mmmm/mmmmm) uppercase to the Google month tokens', () => {
+        expect(normalizeMonthMinuteTokens('d-mmm-yyyy')).toBe('d-MMM-yyyy');
+        expect(normalizeMonthMinuteTokens('d"-"mmm')).toBe('d"-"MMM');
+        expect(normalizeMonthMinuteTokens('mmmm')).toBe('MMMM');
+        expect(normalizeMonthMinuteTokens('mmmmm')).toBe('MMMMM');
+    });
+
+    test('elapsed-minute bracket form is always minute (lowercased); other brackets are untouched', () => {
+        expect(normalizeMonthMinuteTokens('[mm]:ss')).toBe('[mm]:ss');
+        expect(normalizeMonthMinuteTokens('[MM]:ss')).toBe('[mm]:ss');
+        // Elapsed hours before a minute run: mm follows [h] → minute.
+        expect(normalizeMonthMinuteTokens('[h]:mm:ss')).toBe('[h]:mm:ss');
+        // A colour bracket carries an M but is not a token — leave it alone.
+        expect(normalizeMonthMinuteTokens('[Red]mm/yyyy')).toBe('[Red]MM/yyyy');
+    });
+
+    test('quoted literals, escapes and AM/PM markers are never treated as month/minute tokens', () => {
+        expect(normalizeMonthMinuteTokens('"mm" mm/yyyy')).toBe('"mm" MM/yyyy');
+        expect(normalizeMonthMinuteTokens('h:mm AM/PM')).toBe('h:mm AM/PM');
+        expect(normalizeMonthMinuteTokens('h:mm am/pm')).toBe('h:mm am/pm');
+        // Escaped m stays a literal; the real token still uppercases.
+        expect(normalizeMonthMinuteTokens('\\m mm/yyyy')).toBe('\\m MM/yyyy');
+    });
+
+    test('each section of a multi-section format is classified on its own', () => {
+        expect(normalizeMonthMinuteTokens('dd/mm/yyyy;hh:mm:ss')).toBe('dd/MM/yyyy;hh:mm:ss');
+        expect(normalizeMonthMinuteTokens('mm/dd/yyyy;@')).toBe('MM/dd/yyyy;@');
+    });
+
+    test('non-date formats are returned unchanged', () => {
+        expect(normalizeMonthMinuteTokens('#,##0.00')).toBe('#,##0.00');
+        expect(normalizeMonthMinuteTokens('0.00E+00')).toBe('0.00E+00');
+        expect(normalizeMonthMinuteTokens('"€"#,##0.00')).toBe('"€"#,##0.00');
+    });
+
+    test('re-casing never changes what numfmt renders (the renderer is case-invariant)', () => {
+        // Tue 2024-03-15 13:30:45 as an Excel serial.
+        const serial = 45366.56302083333;
+        for (const fmt of ['dd/mm/yyyy', 'HH:MM:SS', 'yyyy-mm-dd hh:mm', 'd"-"mmm', '[MM]:ss', 'mm:ss']) {
+            expect(update(normalizeMonthMinuteTokens(fmt), serial)).toBe(update(fmt, serial));
+        }
     });
 });

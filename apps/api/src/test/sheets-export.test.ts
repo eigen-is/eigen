@@ -161,7 +161,10 @@ describe('Sheets xlsx export', () => {
         const byCoord = new Map((rt[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.ct).toEqual({ fa: '[$€]#,##0.00', t: 'n' });
         expect(byCoord.get('1:0')?.ct).toEqual({ fa: '0.00%', t: 'n' });
-        expect(byCoord.get('2:0')?.ct).toEqual({ fa: 'm/d/yyyy', t: 'd' });
+        // Number/currency masks round-trip byte-for-byte; a date mask's month token is
+        // canonicalised to the Google convention on re-import (`m` → `M`), which numfmt
+        // renders identically (see normalizeMonthMinuteTokens in from-xlsx).
+        expect(byCoord.get('2:0')?.ct).toEqual({ fa: 'M/d/yyyy', t: 'd' });
         expect(byCoord.get('2:0')?.v).toBe(45366);
     });
 });
