@@ -10,9 +10,6 @@ Bugs:
 
 - [ ] `functionStrChange`'s unary-minus predecessor scan skips a char (reads `i-2`; preserved as
       `skipPrevChar` in `engine/formula-shift.ts`) — unify both walkers on read-`i-1`, drop the flag
-- [ ] drag-fill number-format handling is direction-asymmetric: only `down` keeps an existing
-      `ct` and applies the `##0.00` mask, which emits garbage like `"2.5.00"` — make all four
-      directions consistent (keep `ct`, fix the mask) (`state/modules/drop-cell.ts`, `isDown`)
 - [ ] name box shows `A1:NaN` on initial sheet load, before any selection
 - [ ] imported lowercase `mm` date patterns show "Minute" chips in the custom date/time dialog
       (tokenizer follows Google's `M` month / `m` minute); switching a variant on a mislabeled

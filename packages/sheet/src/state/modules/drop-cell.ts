@@ -1925,12 +1925,10 @@ export function updateDropCell(ctx: Context) {
     const apply_end_c = applyRange.column[1];
 
     // The four drag directions differ only in axis (rows for down/up, columns
-    // for right/left) and sign (up/left iterate the applied range in reverse).
-    // `isDown` preserves the one asymmetry the luckysheet original carried: only
-    // the 'down' branch honours a `##0.00` source format and keeps an existing ct.
+    // for right/left) and sign (up/left iterate the applied range in reverse);
+    // number-format handling is identical across all four.
     const axisIsRow = direction === 'down' || direction === 'up';
     const reverse = direction === 'up' || direction === 'left';
-    const isDown = direction === 'down';
 
     const asLen = axisIsRow ? apply_end_r - apply_str_r + 1 : apply_end_c - apply_str_c + 1;
     const outerStart = axisIsRow ? apply_str_c : apply_str_r;
@@ -1981,12 +1979,15 @@ export function updateDropCell(ctx: Context) {
                             cell.m = (cell.v as number).toExponential(len).toString();
                         } else {
                             const rounded = Math.round((cell.v as number) * 1000000000) / 1000000000;
-                            const mask =
-                                isDown && cell.ct?.fa === '##0.00' ? genarate(`${rounded}.00`) : genarate(rounded);
-                            cell.m = mask[0].toString();
+                            // Keep an existing number format (Excel/Google parity):
+                            // render through its mask rather than auto-detecting one.
+                            cell.m =
+                                cell.ct?.fa != null && cell.ct.fa !== 'General'
+                                    ? update(cell.ct.fa, rounded)
+                                    : genarate(rounded)[0].toString();
                         }
 
-                        cell.ct = isDown ? cell.ct || { fa: 'General', t: 'n' } : { fa: 'General', t: 'n' };
+                        cell.ct = cell.ct || { fa: 'General', t: 'n' };
                     } else {
                         const mask = genarate(cell.v);
                         cell.m = mask[0].toString();
