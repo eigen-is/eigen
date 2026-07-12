@@ -5,7 +5,7 @@
 > lever (whose audit-suggested fix is a footgun), and some dead code.
 >
 > **Branch:** `fix/api-audit-2026-07` (HEAD `08bda417`).
-> **Original audit:** `docs/AUDIT_API_2026_07.md` (findings #14, #11, #12, #24; "spend more time" item #4).
+> **Original audit:** the 2026-07-11 `apps/api` audit (report removed after all findings shipped — see git history), findings #14, #11, #12, #24; "spend more time" item #4.
 > **Also:** `docs/MAIL.md`.
 > **Sibling deep-dives:** `AUDIT_DEEPDIVE_CALDAV_TZ.md`, `AUDIT_DEEPDIVE_UPLOAD_QUEUE.md`, `AUDIT_DEEPDIVE_COLLAB_YJS.md`.
 

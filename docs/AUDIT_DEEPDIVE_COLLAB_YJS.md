@@ -5,7 +5,7 @@
 > Yjs core the audit feared is sound; the real data-loss bug is one layer up, in the chat restore path.**
 >
 > **Branch:** `fix/api-audit-2026-07` (HEAD `08bda417`).
-> **Original audit:** `docs/AUDIT_API_2026_07.md` ("spend more time" item #1; finding #5).
+> **Original audit:** the 2026-07-11 `apps/api` audit (report removed after all findings shipped — see git history), "spend more time" item #1; finding #5.
 > **Sibling deep-dives:** `AUDIT_DEEPDIVE_CALDAV_TZ.md`, `AUDIT_DEEPDIVE_UPLOAD_QUEUE.md`, `AUDIT_DEEPDIVE_MAILPARSER.md`.
 
 ## How to resume this cold

@@ -5,7 +5,7 @@
 > sweep ("needs dedicated concurrency testing, not a drive-by") — this is that testing.
 >
 > **Branch:** `fix/api-audit-2026-07` (HEAD `08bda417`).
-> **Original audit:** `docs/AUDIT_API_2026_07.md` (P1 finding #2 documents the *mechanism* as an accepted
+> **Original audit:** the 2026-07-11 `apps/api` audit (report removed after all findings shipped — see git history), P1 finding #2, which documents the *mechanism* as an accepted
 > risk; "spend more time" item #2). **Also:** `docs/SYNC.md`.
 > **Sibling deep-dives:** `AUDIT_DEEPDIVE_CALDAV_TZ.md`, `AUDIT_DEEPDIVE_COLLAB_YJS.md`, `AUDIT_DEEPDIVE_MAILPARSER.md`.
 

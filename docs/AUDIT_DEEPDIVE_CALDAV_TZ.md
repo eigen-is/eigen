@@ -5,7 +5,7 @@
 > below are test-proven unless marked *(reading only)*.
 >
 > **Branch:** `fix/api-audit-2026-07` (HEAD `08bda417`, Units 1–2 landed).
-> **Original audit:** `docs/AUDIT_API_2026_07.md` (findings #8, #9, #24; "spend more time" item #3).
+> **Original audit:** the 2026-07-11 `apps/api` audit (report removed after all findings shipped — see git history), findings #8, #9, #24; "spend more time" item #3.
 > **Sibling deep-dives:** `AUDIT_DEEPDIVE_UPLOAD_QUEUE.md`, `AUDIT_DEEPDIVE_COLLAB_YJS.md`, `AUDIT_DEEPDIVE_MAILPARSER.md`.
 
 ## How to resume this cold
