@@ -6,7 +6,7 @@ import type { Sheet } from '../types';
 
 export * from './patch';
 
-export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean, _ctx: Context) {
+export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean) {
     let index = file.length;
 
     const locale_pivotTable = en.pivotTable;

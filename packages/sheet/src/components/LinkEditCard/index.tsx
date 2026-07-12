@@ -43,7 +43,7 @@ export function LinkEditCard({
     const { insertLink, linkTypeList, button } = en;
     const lastCell = useRef(normalizeSelection(context, [{ row: [r, r], column: [c, c] }]));
     const skipCellRangeSet = useRef(true);
-    const isLinkAddressValid = isLinkValid(context, linkType, linkAddress);
+    const isLinkAddressValid = isLinkValid(linkType, linkAddress);
     const invalidBorder = linkAddress && !isLinkAddressValid.isValid && 'border-destructive';
 
     const tooltip = <div className="h-[17px] my-[3px] text-xs text-destructive">{isLinkAddressValid.tooltip}</div>;

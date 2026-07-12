@@ -851,13 +851,15 @@ function rollToWeekday(base: dayjs.ConfigType, n: number, unit: dayjs.Manipulate
     return moved.format('YYYY-MM-DD');
 }
 
-// "Fill by weekdays" series: the step is derived once (from the first element,
-// expressed in days) and every produced date is rolled back off the weekend.
-function fillWeekdaySeries(
+// Date-fill series: the step is derived once per cycle (from the first element,
+// expressed in days); rollWeekend additionally rolls produced dates back off
+// the weekend ("fill by weekdays" vs the plain month/year branches).
+function fillDateSeries(
     data: (Cell | null | undefined)[],
     len: number,
     stepAmount: number,
     stepUnit: dayjs.ManipulateType,
+    rollWeekend: boolean,
 ) {
     const applyData: Cell[] = [];
     let step: number;
@@ -873,39 +875,9 @@ function fillWeekdaySeries(
                     .diff(dayjs(d.m), 'days');
             }
 
-            const date = rollToWeekday(d.m, step!, 'days');
-            d.m = date;
-            d.v = genarate(date)[2];
-            applyData.push(d);
-        }
-    }
-
-    return applyData;
-}
-
-// Plain calendar series (no weekend roll-back): the step is derived once from
-// the first element and applied in days. Shared by the month/year fill branches.
-function fillStepSeries(
-    data: (Cell | null | undefined)[],
-    len: number,
-    stepAmount: number,
-    stepUnit: dayjs.ManipulateType,
-) {
-    const applyData: Cell[] = [];
-    let step: number;
-
-    for (let i = 1; i <= len; i += 1) {
-        const index = (i - 1) % data.length;
-        const d = cloneDeep(data[index]);
-        if (d != null) {
-            const num = Math.ceil(i / data.length);
-            if (index === 0) {
-                step = dayjs(d.m)
-                    .add(stepAmount * num, stepUnit)
-                    .diff(dayjs(d.m), 'days');
-            }
-
-            const date = dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
+            const date = rollWeekend
+                ? rollToWeekday(d.m, step!, 'days')
+                : dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
             d.m = date;
             d.v = genarate(date)[2];
             applyData.push(d);
@@ -1249,18 +1221,18 @@ function getDataByType(
                 if (Math.abs(dayjs(data[1]?.m).diff(dayjs(data[0]?.m))) > 7) {
                     // day diff > 7 days — use 1 month as step (if that day is a weekend, roll back to nearest weekday)
                     if (direction === 'down' || direction === 'right') {
-                        applyData = fillWeekdaySeries(data, len, 1, 'months');
+                        applyData = fillDateSeries(data, len, 1, 'months', true);
                     } else {
                         data.reverse();
-                        applyData = fillWeekdaySeries(data, len, -1, 'months');
+                        applyData = fillDateSeries(data, len, -1, 'months', true);
                     }
                 } else {
                     // day diff <= 7 days — use 7 days as step (if that day is a weekend, roll back to nearest weekday)
                     if (direction === 'down' || direction === 'right') {
-                        applyData = fillWeekdaySeries(data, len, 7, 'days');
+                        applyData = fillDateSeries(data, len, 7, 'days', true);
                     } else {
                         data.reverse();
-                        applyData = fillWeekdaySeries(data, len, -7, 'days');
+                        applyData = fillDateSeries(data, len, -7, 'days', true);
                     }
                 }
             }
@@ -1290,18 +1262,18 @@ function getDataByType(
                 if (Math.abs(dayjs(data[1]?.m).diff(dayjs(data[0]?.m))) > 7) {
                     // day diff > 7 days — use 1 month as step (if that day is a weekend, roll back to nearest weekday)
                     if (direction === 'down' || direction === 'right') {
-                        applyData = fillWeekdaySeries(data, len, 1, 'months');
+                        applyData = fillDateSeries(data, len, 1, 'months', true);
                     } else {
                         data.reverse();
-                        applyData = fillWeekdaySeries(data, len, -1, 'months');
+                        applyData = fillDateSeries(data, len, -1, 'months', true);
                     }
                 } else {
                     // day diff <= 7 days — use 7 days as step (if that day is a weekend, roll back to nearest weekday)
                     if (direction === 'down' || direction === 'right') {
-                        applyData = fillWeekdaySeries(data, len, 7, 'days');
+                        applyData = fillDateSeries(data, len, 7, 'days', true);
                     } else {
                         data.reverse();
-                        applyData = fillWeekdaySeries(data, len, -7, 'days');
+                        applyData = fillDateSeries(data, len, -7, 'days', true);
                     }
                 }
             } else {
@@ -1330,10 +1302,10 @@ function getDataByType(
             } else {
                 // use 1 month as step
                 if (direction === 'down' || direction === 'right') {
-                    applyData = fillStepSeries(data, len, 1, 'months');
+                    applyData = fillDateSeries(data, len, 1, 'months', false);
                 } else {
                     data.reverse();
-                    applyData = fillStepSeries(data, len, -1, 'months');
+                    applyData = fillDateSeries(data, len, -1, 'months', false);
                 }
             }
         } else {
@@ -1349,10 +1321,10 @@ function getDataByType(
             } else if (!_judgeDate[0] && _judgeDate[2]) {
                 // different day, day difference is an arithmetic sequence — use 1 month as step
                 if (direction === 'down' || direction === 'right') {
-                    applyData = fillStepSeries(data, len, 1, 'months');
+                    applyData = fillDateSeries(data, len, 1, 'months', false);
                 } else {
                     data.reverse();
-                    applyData = fillStepSeries(data, len, -1, 'months');
+                    applyData = fillDateSeries(data, len, -1, 'months', false);
                 }
             } else {
                 // day difference is not an arithmetic sequence — copy data
@@ -1381,10 +1353,10 @@ function getDataByType(
             } else {
                 // use 1 year as step
                 if (direction === 'down' || direction === 'right') {
-                    applyData = fillStepSeries(data, len, 1, 'years');
+                    applyData = fillDateSeries(data, len, 1, 'years', false);
                 } else {
                     data.reverse();
-                    applyData = fillStepSeries(data, len, -1, 'years');
+                    applyData = fillDateSeries(data, len, -1, 'years', false);
                 }
             }
         } else {
@@ -1400,10 +1372,10 @@ function getDataByType(
             } else if ((_judgeDate[0] && _judgeDate[3]) || _judgeDate[2]) {
                 // same day with arithmetic month diff, or arithmetic day diff — use 1 year as step
                 if (direction === 'down' || direction === 'right') {
-                    applyData = fillStepSeries(data, len, 1, 'years');
+                    applyData = fillDateSeries(data, len, 1, 'years', false);
                 } else {
                     data.reverse();
-                    applyData = fillStepSeries(data, len, -1, 'years');
+                    applyData = fillDateSeries(data, len, -1, 'years', false);
                 }
             } else {
                 // day difference is not an arithmetic sequence — copy data

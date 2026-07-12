@@ -63,7 +63,7 @@ export function addSheet(
     }
     const order = ctx.sheets.length;
     const id = newSheetID ?? (settings?.generateSheetId() as string);
-    const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable, ctx);
+    const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
     if (!isNil(sheetData)) {
         delete sheetData.data;
         ctx.sheets.forEach((sheet) => {

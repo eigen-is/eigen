@@ -242,7 +242,7 @@ function checkNoNullValue(cell: Cell | null) {
 
     if (
         !isRealNull(v) &&
-        isdatatypemulti(v).num &&
+        isdatatypemulti(v) &&
         (cell?.ct == null || cell.ct.t == null || cell.ct.t === 'n' || cell.ct.t === 'g')
     ) {
         return true;

@@ -5,7 +5,7 @@ import { copy, selectIsOverlap } from '../modules/selection';
 import { hasPartMC } from '../modules/validation';
 
 export function handleCopy(ctx: Context): boolean {
-    // // if format-painter is active during copy, cancel it
+    // if format-painter is active during copy, cancel it
     if (ctx.formatPainterOn) {
         cancelPaintModel(ctx);
     }

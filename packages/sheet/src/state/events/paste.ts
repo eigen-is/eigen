@@ -113,10 +113,6 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
             ctx.visibledatarow.push(ctx.rh_height); // temporary row height distribution
         }
         ctx.rh_height += 80;
-
-        if (ctx.currentSheetId === source.sheetId) {
-        } else if (ctx.currentSheetId === target.sheetId) {
-        }
     }
 
     if (ctx.currentSheetId === source.sheetId) {
@@ -130,8 +126,6 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
         ctx.selections = [{ row: target.range.row, column: target.range.column }];
     } else {
         ctx.selections = [{ row: source.range.row, column: source.range.column }];
-    }
-    if (ctx.selections.length > 0) {
     }
     // conditional formatting
     ctx.sheets[getSheetIndex(ctx, source.sheetId)!].conditionalFormatRules = source.curCdformat;

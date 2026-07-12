@@ -152,7 +152,7 @@ export function goToLink(
     ctx.linkCard = undefined;
 }
 
-export function isLinkValid(_ctx: Context, linkType: string, linkAddress: string) {
+export function isLinkValid(linkType: string, linkAddress: string) {
     if (!linkAddress) return { isValid: false, tooltip: '' };
     const { insertLink } = en;
     if (linkType === 'webpage') {

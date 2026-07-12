@@ -148,7 +148,7 @@ export function defaultFont(defaultFontSize: number) {
 // renderer and the toolbar picker, so they can't disagree about a cell's font.
 export function resolveFontName(ff: number | string | undefined | null): string {
     if (ff == null || ff === '') return EIGEN_FONTS[0].name;
-    if (isdatatypemulti(ff).num) return EIGEN_FONTS[Number.parseInt(String(ff), 10)]?.name ?? EIGEN_FONTS[0].name;
+    if (isdatatypemulti(ff)) return EIGEN_FONTS[Number.parseInt(String(ff), 10)]?.name ?? EIGEN_FONTS[0].name;
     return String(ff).replace(/["']/g, '').split(',')[0]?.trim() || EIGEN_FONTS[0].name;
 }
 

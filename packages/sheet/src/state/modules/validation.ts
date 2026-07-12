@@ -10,14 +10,8 @@ export function diff(now: dayjs.ConfigType, then: dayjs.ConfigType) {
 }
 
 export function isdatatypemulti(s: unknown) {
-    const type: { num?: boolean } = {};
-
     const str = String(s);
-    if (!Number.isNaN(parseFloat(str)) && !hasChinaword(str)) {
-        type.num = true;
-    }
-
-    return type;
+    return !Number.isNaN(parseFloat(str)) && !hasChinaword(str);
 }
 
 // Whether the range contains only part of a merged cell.
