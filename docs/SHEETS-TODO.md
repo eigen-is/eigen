@@ -29,8 +29,6 @@ Decided behavior changes (Excel/Google parity):
       already does (`engine/conditional-format.ts` greaterThan/lessThan and peers)
 - [ ] formula `=` / `<>` become coercing and case-insensitive (`"A"="a"` → TRUE, `1="1"` → TRUE)
       per Excel (`engine/parser/evaluate-by-operator/operator/equal.ts` + notEqual)
-- [ ] `moveCells` raises a raw `throw Error(drag.noMerge)` out of an immer reducer for an
-      expected user action — use `ctx.warnDialog` like its siblings (`state/modules/move-cells.ts`)
 - [ ] remove the CJK special-case in sort (`state/modules/sort.ts` ~:134) — plain `'en'`
       `localeCompare` for all text
 

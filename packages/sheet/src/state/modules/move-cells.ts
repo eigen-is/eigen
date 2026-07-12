@@ -205,7 +205,8 @@ export function onCellsMoveEnd(
 
     // Selection contains partial cells
     if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {
-        throw new Error(locale_drag.noMerge);
+        ctx.warnDialog = locale_drag.noMerge;
+        return;
     }
 
     let row_s = last.row[0] - row_index_original + row_index;
@@ -235,7 +236,8 @@ export function onCellsMoveEnd(
 
     // Replacement position contains partial cells
     if (hasPartMC(ctx, row_s, row_e, col_s, col_e)) {
-        throw new Error(locale_drag.noMerge);
+        ctx.warnDialog = locale_drag.noMerge;
+        return;
     }
 
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
