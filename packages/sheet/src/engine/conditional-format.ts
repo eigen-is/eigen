@@ -51,6 +51,20 @@ function applyCellStyle(map: ComputeMap, r: number, c: number, style: CellFormat
     if (style.dataBar != null) entry.dataBar = style.dataBar;
 }
 
+// Shared scan scaffolding for the CF evaluator: visits EVERY coordinate of
+// every range in order (range, then row, then column, ascending). No cell
+// filtering — each branch keeps its own guards, and some (duplicateValue,
+// formula) rely on visiting missing cells.
+function forEachCellInRanges(ranges: SingleRange[], cb: (r: number, c: number) => void) {
+    for (const range of ranges) {
+        for (let r = range.row[0]; r <= range.row[1]; r += 1) {
+            for (let c = range.column[0]; c <= range.column[1]; c += 1) {
+                cb(r, c);
+            }
+        }
+    }
+}
+
 // Parse "#rrggbb" or "rgb(R, G, B)" into [r, g, b].
 function parseColorChannels(color: string): [number, number, number] {
     if (color.startsWith('#')) {
@@ -91,151 +105,136 @@ export function evaluateConditionalFormat(
         // data bar
         if (rule.type === 'dataBar') {
             const { cellrange, format } = rule;
-            let max = null;
-            let min = null;
-            for (let s = 0; s < cellrange.length; s += 1) {
-                for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                    for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                        if (isNil(data[r]) || isNil(data[r][c])) {
-                            continue;
-                        }
-                        const cell = data[r][c];
-                        if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
-                            const numVal = Number(cell.v);
-                            if (isNil(max) || numVal > max) {
-                                max = numVal;
-                            }
+            let max: number | null = null;
+            let min: number | null = null;
+            forEachCellInRanges(cellrange, (r, c) => {
+                if (isNil(data[r]) || isNil(data[r][c])) {
+                    return;
+                }
+                const cell = data[r][c];
+                if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
+                    const numVal = Number(cell.v);
+                    if (isNil(max) || numVal > max) {
+                        max = numVal;
+                    }
 
-                            if (isNil(min) || numVal < min) {
-                                min = numVal;
-                            }
-                        }
+                    if (isNil(min) || numVal < min) {
+                        min = numVal;
                     }
                 }
-            }
+            });
             if (!isNil(max) && !isNil(min)) {
-                if (min < 0) {
+                // Narrowed rebinds — the apply callbacks below close over them.
+                const maxNum = max;
+                const minNum = min;
+                if (minNum < 0) {
                     // selection range contains negative numbers
-                    const plusLen = Math.round((max / (max - min)) * 10) / 10; // proportion of positive numbers
-                    const minusLen = Math.round((Math.abs(min) / (max - min)) * 10) / 10; // proportion of negative numbers
+                    const plusLen = Math.round((maxNum / (maxNum - minNum)) * 10) / 10; // proportion of positive numbers
+                    const minusLen = Math.round((Math.abs(minNum) / (maxNum - minNum)) * 10) / 10; // proportion of negative numbers
 
-                    for (let s = 0; s < cellrange.length; s += 1) {
-                        for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                            for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                                if (isNil(data[r]) || isNil(data[r][c])) {
-                                    continue;
-                                }
+                    forEachCellInRanges(cellrange, (r, c) => {
+                        if (isNil(data[r]) || isNil(data[r][c])) {
+                            return;
+                        }
 
-                                const cell = data[r][c];
+                        const cell = data[r][c];
 
-                                if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
-                                    if (Number(cell.v) < 0) {
-                                        const valueLen =
-                                            Math.round((Math.abs(Number(cell.v)) / Math.abs(min)) * 100) / 100;
-                                        applyCellStyle(computeMap, r, c, {
-                                            dataBar: { valueType: 'minus', minusLen, valueLen, format },
-                                        });
-                                    }
+                        if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
+                            if (Number(cell.v) < 0) {
+                                const valueLen = Math.round((Math.abs(Number(cell.v)) / Math.abs(minNum)) * 100) / 100;
+                                applyCellStyle(computeMap, r, c, {
+                                    dataBar: { valueType: 'minus', minusLen, valueLen, format },
+                                });
+                            }
 
-                                    if (Number(cell.v) > 0) {
-                                        const valueLen = Math.round((Number(cell.v) / max) * 100) / 100;
-                                        applyCellStyle(computeMap, r, c, {
-                                            dataBar: { valueType: 'plus', plusLen, minusLen, valueLen, format },
-                                        });
-                                    }
-                                }
+                            if (Number(cell.v) > 0) {
+                                const valueLen = Math.round((Number(cell.v) / maxNum) * 100) / 100;
+                                applyCellStyle(computeMap, r, c, {
+                                    dataBar: { valueType: 'plus', plusLen, minusLen, valueLen, format },
+                                });
                             }
                         }
-                    }
+                    });
                 } else {
                     const plusLen = 1;
 
-                    for (let s = 0; s < cellrange.length; s += 1) {
-                        for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                            for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                                if (isNil(data[r]) || isNil(data[r][c])) {
-                                    continue;
-                                }
-
-                                const cell = data[r][c];
-
-                                if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
-                                    const valueLen = max === 0 ? 1 : Math.round((Number(cell.v) / max) * 100) / 100;
-                                    applyCellStyle(computeMap, r, c, {
-                                        dataBar: { valueType: 'plus', plusLen, minusLen: 0, valueLen, format },
-                                    });
-                                }
-                            }
+                    forEachCellInRanges(cellrange, (r, c) => {
+                        if (isNil(data[r]) || isNil(data[r][c])) {
+                            return;
                         }
-                    }
+
+                        const cell = data[r][c];
+
+                        if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
+                            const valueLen = maxNum === 0 ? 1 : Math.round((Number(cell.v) / maxNum) * 100) / 100;
+                            applyCellStyle(computeMap, r, c, {
+                                dataBar: { valueType: 'plus', plusLen, minusLen: 0, valueLen, format },
+                            });
+                        }
+                    });
                 }
             }
         } else if (rule.type === 'colorGradation') {
             // color scale
             const { cellrange, format } = rule;
-            let max = null;
-            let min = null;
+            let max: number | null = null;
+            let min: number | null = null;
             let sum = 0;
             let count = 0;
-            for (let s = 0; s < cellrange.length; s += 1) {
-                for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                    for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                        if (isNil(data[r]) || isNil(data[r][c])) {
-                            continue;
-                        }
+            forEachCellInRanges(cellrange, (r, c) => {
+                if (isNil(data[r]) || isNil(data[r][c])) {
+                    return;
+                }
 
-                        const cell = data[r][c];
+                const cell = data[r][c];
 
-                        if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
-                            const numVal = Number(cell.v);
-                            count += 1;
-                            sum += numVal;
+                if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
+                    const numVal = Number(cell.v);
+                    count += 1;
+                    sum += numVal;
 
-                            if (isNil(max) || numVal > max) {
-                                max = numVal;
-                            }
+                    if (isNil(max) || numVal > max) {
+                        max = numVal;
+                    }
 
-                            if (isNil(min) || numVal < min) {
-                                min = numVal;
-                            }
-                        }
+                    if (isNil(min) || numVal < min) {
+                        min = numVal;
                     }
                 }
-            }
+            });
             if (!isNil(max) && !isNil(min) && (format.length === 2 || format.length === 3)) {
+                // Narrowed rebinds — stopFor and the apply callback close over them.
+                const maxNum = max;
+                const minNum = min;
                 // Per-cell color picker — interpolates between max/min (2-color) or
                 // max/avg/min (3-color) stops. Returns null for cells outside the
                 // bracketed range, mirroring the original branch behavior.
                 const avg = format.length === 3 ? Math.floor(sum / count) : 0;
                 const stopFor = (numVal: number): string | null => {
                     if (format.length === 3) {
-                        if (numVal === min) return format[2];
-                        if (numVal < avg) return getColorGradation(format[2], format[1], min, avg, numVal);
+                        if (numVal === minNum) return format[2];
+                        if (numVal < avg) return getColorGradation(format[2], format[1], minNum, avg, numVal);
                         if (numVal === avg) return format[1];
-                        if (numVal < max) return getColorGradation(format[1], format[0], avg, max, numVal);
-                        if (numVal === max) return format[0];
+                        if (numVal < maxNum) return getColorGradation(format[1], format[0], avg, maxNum, numVal);
+                        if (numVal === maxNum) return format[0];
                         return null;
                     }
-                    if (numVal === min) return format[1];
-                    if (numVal < max) return getColorGradation(format[1], format[0], min, max, numVal);
-                    if (numVal === max) return format[0];
+                    if (numVal === minNum) return format[1];
+                    if (numVal < maxNum) return getColorGradation(format[1], format[0], minNum, maxNum, numVal);
+                    if (numVal === maxNum) return format[0];
                     return null;
                 };
 
-                for (let s = 0; s < cellrange.length; s += 1) {
-                    for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                        for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                            const cell = data[r]?.[c];
-                            if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
-                                continue;
-                            }
-                            const cellColor = stopFor(Number(cell.v));
-                            if (cellColor !== null) {
-                                applyCellStyle(computeMap, r, c, { cellColor });
-                            }
-                        }
+                forEachCellInRanges(cellrange, (r, c) => {
+                    const cell = data[r]?.[c];
+                    if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
+                        return;
                     }
-                }
+                    const cellColor = stopFor(Number(cell.v));
+                    if (cellColor !== null) {
+                        applyCellStyle(computeMap, r, c, { cellColor });
+                    }
+                });
             }
         } else if (rule.type === 'icons') {
             // icon set — not yet implemented
@@ -245,7 +244,9 @@ export function evaluateConditionalFormat(
             const conditionValue0 = conditionValue[0];
             const conditionValue1 = conditionValue[1];
             const { textColor, cellColor } = format;
-            for (let s = 0; s < cellrange.length; s += 1) {
+            // Per-range on purpose: duplicateValue's dmap, top10/average's dArr and
+            // the formula anchor are all scoped to a single range.
+            for (const range of cellrange) {
                 // check condition type
                 if (
                     conditionName === 'greaterThan' ||
@@ -262,43 +263,41 @@ export function evaluateConditionalFormat(
                     // Matches Excel/Google, mirroring the `between` branch below.
                     const threshold = Number(conditionValue0);
                     // iterate over apply range and evaluate
-                    for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                        for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                            if (isNil(data[r]) || isNil(data[r][c])) {
-                                continue;
-                            }
-                            // cell value
-                            const cell = data[r][c];
-                            if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v)) {
-                                continue;
-                            }
-                            let matches = false;
-                            if (conditionName === 'greaterThan') {
-                                matches = typeof cell.v === 'number' && cell.v > threshold;
-                            } else if (conditionName === 'greaterThanOrEqual') {
-                                matches = typeof cell.v === 'number' && cell.v >= threshold;
-                            } else if (conditionName === 'lessThan') {
-                                matches = typeof cell.v === 'number' && cell.v < threshold;
-                            } else if (conditionName === 'lessThanOrEqual') {
-                                matches = typeof cell.v === 'number' && cell.v <= threshold;
-                            } else if (conditionName === 'equal') {
-                                matches =
-                                    typeof cell.v === 'number' && !Number.isNaN(threshold)
-                                        ? cell.v === threshold
-                                        : cell.v.toString() === conditionValue0;
-                            } else if (conditionName === 'notEqual') {
-                                matches =
-                                    typeof cell.v === 'number' && !Number.isNaN(threshold)
-                                        ? cell.v !== threshold
-                                        : cell.v.toString() !== conditionValue0;
-                            } else if (conditionName === 'textContains') {
-                                matches = cell.v.toString().indexOf(String(conditionValue0)) !== -1;
-                            }
-                            if (matches) {
-                                applyCellStyle(computeMap, r, c, { textColor, cellColor });
-                            }
+                    forEachCellInRanges([range], (r, c) => {
+                        if (isNil(data[r]) || isNil(data[r][c])) {
+                            return;
                         }
-                    }
+                        // cell value
+                        const cell = data[r][c];
+                        if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v)) {
+                            return;
+                        }
+                        let matches = false;
+                        if (conditionName === 'greaterThan') {
+                            matches = typeof cell.v === 'number' && cell.v > threshold;
+                        } else if (conditionName === 'greaterThanOrEqual') {
+                            matches = typeof cell.v === 'number' && cell.v >= threshold;
+                        } else if (conditionName === 'lessThan') {
+                            matches = typeof cell.v === 'number' && cell.v < threshold;
+                        } else if (conditionName === 'lessThanOrEqual') {
+                            matches = typeof cell.v === 'number' && cell.v <= threshold;
+                        } else if (conditionName === 'equal') {
+                            matches =
+                                typeof cell.v === 'number' && !Number.isNaN(threshold)
+                                    ? cell.v === threshold
+                                    : cell.v.toString() === conditionValue0;
+                        } else if (conditionName === 'notEqual') {
+                            matches =
+                                typeof cell.v === 'number' && !Number.isNaN(threshold)
+                                    ? cell.v !== threshold
+                                    : cell.v.toString() !== conditionValue0;
+                        } else if (conditionName === 'textContains') {
+                            matches = cell.v.toString().indexOf(String(conditionValue0)) !== -1;
+                        }
+                        if (matches) {
+                            applyCellStyle(computeMap, r, c, { textColor, cellColor });
+                        }
+                    });
                 } else if (conditionName === 'between' || conditionName === 'notBetween') {
                     // Coerce to number — both variants only compare against numeric cell values
                     // (`typeof cell.v === 'number'` guard below) and form input arrives as string.
@@ -307,22 +306,20 @@ export function evaluateConditionalFormat(
                     const vBig = Math.max(v0, v1);
                     const vSmall = Math.min(v0, v1);
                     // iterate over apply range and evaluate
-                    for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                        for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                            if (isNil(data[r]) || isNil(data[r][c])) {
-                                continue;
-                            }
-                            // cell value
-                            const cell = data[r][c];
-                            if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v) || typeof cell.v !== 'number') {
-                                continue;
-                            }
-                            const within = cell.v >= vSmall && cell.v <= vBig;
-                            if (conditionName === 'between' ? within : !within) {
-                                applyCellStyle(computeMap, r, c, { textColor, cellColor });
-                            }
+                    forEachCellInRanges([range], (r, c) => {
+                        if (isNil(data[r]) || isNil(data[r][c])) {
+                            return;
                         }
-                    }
+                        // cell value
+                        const cell = data[r][c];
+                        if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v) || typeof cell.v !== 'number') {
+                            return;
+                        }
+                        const within = cell.v >= vSmall && cell.v <= vBig;
+                        if (conditionName === 'between' ? within : !within) {
+                            applyCellStyle(computeMap, r, c, { textColor, cellColor });
+                        }
+                    });
                 } else if (conditionName === 'occurrenceDate') {
                     let dBig: string;
                     let dSmall: string;
@@ -335,31 +332,27 @@ export function evaluateConditionalFormat(
                         dSmall = genarate(str[0].trim())[2].toString();
                     }
                     // iterate over apply range and evaluate
-                    for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                        for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                            if (isNil(data[r]) || isNil(data[r][c])) {
-                                continue;
-                            }
-                            if (!isNil(data[r][c]) && !isNil(data[r][c]!.ct) && data[r][c]!.ct!.t === 'd') {
-                                const cellVal = cellValueAt(data, r, c);
-                                if (cellVal != null && cellVal >= dSmall && cellVal <= dBig) {
-                                    applyCellStyle(computeMap, r, c, { textColor, cellColor });
-                                }
+                    forEachCellInRanges([range], (r, c) => {
+                        if (isNil(data[r]) || isNil(data[r][c])) {
+                            return;
+                        }
+                        if (!isNil(data[r][c]) && !isNil(data[r][c]!.ct) && data[r][c]!.ct!.t === 'd') {
+                            const cellVal = cellValueAt(data, r, c);
+                            if (cellVal != null && cellVal >= dSmall && cellVal <= dBig) {
+                                applyCellStyle(computeMap, r, c, { textColor, cellColor });
                             }
                         }
-                    }
+                    });
                 } else if (conditionName === 'duplicateValue') {
                     // process cells in apply range
                     const dmap: Record<string, { r: number; c: number }[]> = {};
-                    for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                        for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                            const item = String(cellValueAt(data, r, c));
-                            if (!(item in dmap)) {
-                                dmap[item] = [];
-                            }
-                            dmap[item].push({ r, c });
+                    forEachCellInRanges([range], (r, c) => {
+                        const item = String(cellValueAt(data, r, c));
+                        if (!(item in dmap)) {
+                            dmap[item] = [];
                         }
-                    }
+                        dmap[item].push({ r, c });
+                    });
                     if (conditionValue0 === '0') {
                         // duplicate values
                         forEach(dmap, (x) => {
@@ -387,18 +380,16 @@ export function evaluateConditionalFormat(
                 ) {
                     // cell values in apply range (numeric type)
                     const dArr: number[] = [];
-                    for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                        for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                            if (isNil(data[r]) || isNil(data[r][c])) {
-                                continue;
-                            }
-
-                            // cell value type is numeric
-                            if (!isNil(data[r][c]) && !isNil(data[r][c]!.ct) && data[r][c]!.ct!.t === 'n') {
-                                dArr.push(Number(cellValueAt(data, r, c)));
-                            }
+                    forEachCellInRanges([range], (r, c) => {
+                        if (isNil(data[r]) || isNil(data[r][c])) {
+                            return;
                         }
-                    }
+
+                        // cell value type is numeric
+                        if (!isNil(data[r][c]) && !isNil(data[r][c]!.ct) && data[r][c]!.ct!.t === 'n') {
+                            dArr.push(Number(cellValueAt(data, r, c)));
+                        }
+                    });
                     // process the array
                     if (
                         conditionName === 'top10' ||
@@ -424,50 +415,44 @@ export function evaluateConditionalFormat(
                         // Membership set — O(1) per-cell lookup instead of indexOf's O(n) scan.
                         const cSet = new Set(cArr);
                         // iterate over apply range and evaluate
-                        for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                            for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                                if (isNil(data[r]) || isNil(data[r][c])) {
-                                    continue;
-                                }
-
-                                const cellVal = Number(cellValueAt(data, r, c));
-                                if (cSet.has(cellVal)) {
-                                    applyCellStyle(computeMap, r, c, { textColor, cellColor });
-                                }
+                        forEachCellInRanges([range], (r, c) => {
+                            if (isNil(data[r]) || isNil(data[r][c])) {
+                                return;
                             }
-                        }
+
+                            const cellVal = Number(cellValueAt(data, r, c));
+                            if (cSet.has(cellVal)) {
+                                applyCellStyle(computeMap, r, c, { textColor, cellColor });
+                            }
+                        });
                     } else if (conditionName === 'aboveAverage' || conditionName === 'belowAverage') {
                         const averageNum = dArr.reduce((acc, n) => acc + n, 0) / dArr.length;
                         const matches = (n: number) =>
                             conditionName === 'aboveAverage' ? n > averageNum : n < averageNum;
-                        for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                            for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                                if (isNil(data[r]) || isNil(data[r][c])) {
-                                    continue;
-                                }
-                                if (matches(Number(cellValueAt(data, r, c)))) {
-                                    applyCellStyle(computeMap, r, c, { textColor, cellColor });
-                                }
+                        forEachCellInRanges([range], (r, c) => {
+                            if (isNil(data[r]) || isNil(data[r][c])) {
+                                return;
                             }
-                        }
+                            if (matches(Number(cellValueAt(data, r, c)))) {
+                                applyCellStyle(computeMap, r, c, { textColor, cellColor });
+                            }
+                        });
                     }
                 } else if (conditionName === 'formula' && options?.evaluateFormula) {
-                    const str = cellrange[s].row[0];
-                    const edr = cellrange[s].row[1];
-                    const stc = cellrange[s].column[0];
-                    const edc = cellrange[s].column[1];
+                    const { evaluateFormula } = options;
+                    // anchor = this range's top-left corner
+                    const str = range.row[0];
+                    const stc = range.column[0];
 
                     const formulaSrc = String(conditionValue0);
                     const formulaTxt = formulaSrc.startsWith('=') ? formulaSrc : `=${formulaSrc}`;
-                    for (let r = str; r <= edr; r += 1) {
-                        for (let c = stc; c <= edc; c += 1) {
-                            const raw = options.evaluateFormula(formulaTxt, str, stc, r, c);
-                            const v = typeof raw === 'boolean' ? raw : !!Number(raw);
-                            if (v) {
-                                applyCellStyle(computeMap, r, c, { textColor, cellColor });
-                            }
+                    forEachCellInRanges([range], (r, c) => {
+                        const raw = evaluateFormula(formulaTxt, str, stc, r, c);
+                        const v = typeof raw === 'boolean' ? raw : !!Number(raw);
+                        if (v) {
+                            applyCellStyle(computeMap, r, c, { textColor, cellColor });
                         }
-                    }
+                    });
                 }
             }
         }

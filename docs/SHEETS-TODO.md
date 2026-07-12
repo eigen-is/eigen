@@ -40,8 +40,6 @@ fix/sheet-decided-fixes.)
 
 ## 4. Tests + gated refactors
 
-- [ ] `evaluateConditionalFormat` (~380 lines) repeats the same per-cell scan 6+ times across
-      rule types — one `forEachCellInRanges` helper collapses most of it (engine tests exist)
 - [ ] server-side recalc: batch-evaluate replayed formulas (`getCalculationOrder` +
       `engine.evaluate`; seam described in `docs/SHEETS.md` § Remaining Work) so exports and the
       search index serve fresh values instead of last-saved `cell.v`
