@@ -4,16 +4,7 @@ import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
-import type {
-    CalcChainEntry,
-    Cell,
-    Freezen,
-    FreezenAxisData,
-    Range,
-    Selection,
-    Sheet as SheetType,
-    SingleRange,
-} from '../types';
+import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
 import { BORDER_STYLE_NAMES, type ComputedBorderEntry, getBorderInfoCompute } from './border';
 import {
@@ -1674,113 +1665,6 @@ export function selectAll(ctx: Context) {
     ];
 
     normalizeSelection(ctx, ctx.selections);
-}
-
-// Shared body of the row/column freeze-overflow clamps — exact axis twins. Works
-// in generic `{pos, size}` terms; the row wrapper maps them to `{top, height}`
-// and the column wrapper to `{left, width}`.
-function fixStyleOverflowInFreeze(
-    scroll: number,
-    i1: number,
-    i2: number,
-    visibledata: number[],
-    axisData: FreezenAxisData | undefined,
-): { pos?: number; size?: number; display?: string } {
-    if (axisData == null) return {};
-
-    const ret: { pos?: number; size?: number; display?: string } = {};
-    const freezenPos = axisData.pos;
-    const freezenIndex = axisData.boundary;
-    const off = scroll - axisData.scroll;
-
-    const end = visibledata[i2];
-    const pre = i1 - 1 === -1 ? 0 : visibledata[i1 - 1];
-
-    const pos_move = pre;
-    const size_move = end - pre - 1;
-
-    let rangeshow = true;
-
-    if (i1 >= freezenIndex) {
-        // Original selection is outside the frozen area
-        if (pos_move + size_move < freezenPos + off) {
-            rangeshow = false;
-        } else if (pos_move < freezenPos + off) {
-            ret.pos = freezenPos + off;
-            ret.size = size_move - (freezenPos + off - pos_move);
-        }
-    } else if (i2 >= freezenIndex) {
-        // Original selection partially overlaps the frozen area
-        if (pos_move + size_move < freezenPos + off) {
-            ret.pos = pos_move + off;
-            ret.size = freezenPos - pos_move;
-        } else {
-            ret.pos = pos_move + off;
-            ret.size = size_move - off;
-        }
-    } else {
-        // Original selection is inside the frozen area
-        ret.pos = pos_move + off;
-    }
-
-    if (!rangeshow) {
-        ret.display = 'none';
-    }
-    return ret;
-}
-
-export function fixRowStyleOverflowInFreeze(
-    ctx: Context,
-    r1: number,
-    r2: number,
-    freeze: Freezen | undefined,
-): {
-    top?: number;
-    height?: number;
-    display?: string;
-} {
-    if (!freeze) return {};
-
-    const { pos, size, display } = fixStyleOverflowInFreeze(
-        ctx.scrollTop,
-        r1,
-        r2,
-        ctx.visibledatarow,
-        freeze.horizontal?.freezenhorizontaldata,
-    );
-
-    const ret: ReturnType<typeof fixRowStyleOverflowInFreeze> = {};
-    if (pos != null) ret.top = pos;
-    if (size != null) ret.height = size;
-    if (display != null) ret.display = display;
-    return ret;
-}
-
-export function fixColumnStyleOverflowInFreeze(
-    ctx: Context,
-    c1: number,
-    c2: number,
-    freeze: Freezen | undefined,
-): {
-    left?: number;
-    width?: number;
-    display?: string;
-} {
-    if (!freeze) return {};
-
-    const { pos, size, display } = fixStyleOverflowInFreeze(
-        ctx.scrollLeft,
-        c1,
-        c2,
-        ctx.visibledatacolumn,
-        freeze.vertical?.freezenverticaldata,
-    );
-
-    const ret: ReturnType<typeof fixColumnStyleOverflowInFreeze> = {};
-    if (pos != null) ret.left = pos;
-    if (size != null) ret.width = size;
-    if (display != null) ret.display = display;
-    return ret;
 }
 
 export function calcSelectionInfo(ctx: Context) {

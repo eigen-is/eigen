@@ -199,10 +199,39 @@ export function computeOverlayRegions(
     return regions;
 }
 
+// The headers share the pane geometry one axis at a time: the column header
+// splits at the vertical-freeze boundary only, the row header at the
+// horizontal one. Derived from computeOverlayRegions with the irrelevant axis
+// dropped — so the header clips can never drift from the body panes — and the
+// header's cross axis pinned to 0 (headers never translate on their fixed axis).
+export function computeColumnHeaderRegions(
+    freeze: Freezen | undefined,
+    viewWidth: number,
+    headerHeight: number,
+): OverlayRegionSpec[] {
+    const vertical = freeze?.vertical;
+    return computeOverlayRegions(vertical ? { vertical } : undefined, viewWidth, headerHeight).map((region) => ({
+        ...region,
+        fixedTop: 0,
+    }));
+}
+
+export function computeRowHeaderRegions(
+    freeze: Freezen | undefined,
+    headerWidth: number,
+    viewHeight: number,
+): OverlayRegionSpec[] {
+    const horizontal = freeze?.horizontal;
+    return computeOverlayRegions(horizontal ? { horizontal } : undefined, headerWidth, viewHeight).map((region) => ({
+        ...region,
+        fixedLeft: 0,
+    }));
+}
+
 // The single region containing a cell — where the stateful overlay singletons
 // (cell editor, validation dropdown trigger, …) render, so they are never
-// duplicated across panes. boundary is the first NON-frozen index, matching
-// fixStyleOverflowInFreeze's `i >= boundary is outside the frozen area`.
+// duplicated across panes. boundary is the first NON-frozen index
+// (`i >= boundary` is outside the frozen area).
 export function overlayRegionForCell(
     regions: OverlayRegionSpec[],
     freeze: Freezen | undefined,

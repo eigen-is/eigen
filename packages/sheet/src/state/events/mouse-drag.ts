@@ -157,7 +157,13 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     scrollToFrozenRowCol(ctx, globalCache.freezen?.[ctx.currentSheetId]);
 }
 
-function renderColResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
+function renderColResize(
+    ctx: Context,
+    globalCache: GlobalCache,
+    e: MouseEvent,
+    scrollEl: HTMLDivElement,
+    container: HTMLDivElement,
+) {
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollEl.scrollLeft - window.scrollX;
     if (x < rect.width + ctx.scrollLeft - 100) {
@@ -165,14 +171,26 @@ function renderColResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, 
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.left = `${x}px`;
         }
+        // The header handle lives in the pane region of the resized column:
+        // live-translated main coordinates normally, pinned frozen-band
+        // coordinates when that column is frozen.
+        const vData = globalCache.freezen?.[ctx.currentSheetId]?.vertical?.freezenverticaldata;
+        const inFreeze = vData != null && ctx.colsResizeStart[1] < vData.boundary;
+        const handleX = inFreeze ? x - scrollEl.scrollLeft + vData.scroll : x;
         const changeSizeCol = container.querySelector('.fortune-cols-change-size');
         if (changeSizeCol) {
-            (changeSizeCol as HTMLDivElement).style.left = `${x - 2}px`;
+            (changeSizeCol as HTMLDivElement).style.left = `${handleX - 2}px`;
         }
     }
 }
 
-function renderRowResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
+function renderRowResize(
+    ctx: Context,
+    globalCache: GlobalCache,
+    e: MouseEvent,
+    scrollEl: HTMLDivElement,
+    container: HTMLDivElement,
+) {
     const rect = container.getBoundingClientRect();
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollEl.scrollTop - window.scrollY;
     if (y < rect.height + ctx.scrollTop - 20) {
@@ -180,9 +198,15 @@ function renderRowResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, 
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.top = `${y}px`;
         }
+        // Same pane-region mapping as renderColResize, on the row axis. The -2
+        // preserves the view position the handle had inside the old header
+        // content frame (shifted up 2px by the header's negative margin).
+        const hData = globalCache.freezen?.[ctx.currentSheetId]?.horizontal?.freezenhorizontaldata;
+        const inFreeze = hData != null && ctx.rowsResizeStart[1] < hData.boundary;
+        const handleY = inFreeze ? y - scrollEl.scrollTop + hData.scroll : y;
         const changeSizeRow = container.querySelector('.fortune-rows-change-size');
         if (changeSizeRow) {
-            (changeSizeRow as HTMLDivElement).style.top = `${y}px`;
+            (changeSizeRow as HTMLDivElement).style.top = `${handleY - 2}px`;
         }
     }
 }
@@ -305,10 +329,10 @@ function mouseRender(
         onDropCellSelect(ctx, e, scrollEl, container);
     } else if (ctx.colsResizing) {
         // Column width resize drag
-        renderColResize(ctx, e, scrollEl, container);
+        renderColResize(ctx, globalCache, e, scrollEl, container);
     } else if (ctx.rowsResizing) {
         // Row height resize drag
-        renderRowResize(ctx, e, scrollEl, container);
+        renderRowResize(ctx, globalCache, e, scrollEl, container);
     } else if (ctx.colsFreezeDragging) {
         // Column freeze drag
         renderColFreezeDrag(ctx, e, container);

@@ -90,6 +90,11 @@
 .fortune-cell-selected-move,
 .fortune-change-size-line,
 .fortune-freeze-drag-line,
+.fortune-cols-change-size,
+.fortune-rows-change-size,
+.fortune-cols-freeze-handle,
+.fortune-rows-freeze-handle,
+.fortune-col-header-hover .header-arrow,
 #luckysheet-dataVerification-dropdown-btn,
 #luckysheet-dataVerification-showHintBox,
 .fortune-formula-functionrange-highlight .fortune-copy,
@@ -115,13 +120,13 @@
     width: 45px;
 }
 
+/* Header hover/selected highlights live inside 0x0 pane-region content divs
+   (grid coordinates), so their cross-axis size is inline, not %-based. */
 .fortune-row-header-hover {
     position: absolute;
     z-index: 11;
     border: 0 none;
-    right: 0;
-    width: 100%;
-    margin-top: 2px;
+    left: 0;
     display: none;
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
@@ -130,9 +135,7 @@
     position: absolute;
     z-index: 10;
     border-right: 1px solid var(--selection-handle);
-    right: 0;
-    width: 100%;
-    margin-top: 2px;
+    left: 0;
     display: none;
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
@@ -159,9 +162,7 @@
     position: absolute;
     z-index: 11;
     border: 0 none;
-    bottom: 0;
-    height: 100%;
-    margin-left: 0px;
+    top: 0;
     display: none;
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
@@ -179,9 +180,7 @@
     position: absolute;
     z-index: 10;
     border-bottom: 1px solid var(--selection-handle);
-    bottom: 0;
-    height: 100%;
-    margin-left: 0px;
+    top: 0;
     display: none;
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
@@ -502,16 +501,18 @@
     z-index: 12;
 }
 
+/* Cross-axis size is inline (the handles live inside 0x0 pane-region content
+   divs, where % height/width resolves to 0). */
 .fortune-cols-change-size {
     width: 5px;
-    height: 100%;
+    top: 0;
     background: var(--selection-handle);
     cursor: ew-resize;
     opacity: 0;
 }
 
 .fortune-rows-change-size {
-    width: 100%;
+    left: 0;
     height: 5px;
     background: var(--selection-handle);
     cursor: ns-resize;

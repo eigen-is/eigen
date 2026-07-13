@@ -6,7 +6,12 @@
 // scroll. Mirrors the canvas pane draw (drawFrozenBoth & friends).
 
 import { describe, expect, it } from 'bun:test';
-import { computeOverlayRegions, overlayRegionForCell } from '../../modules/freeze';
+import {
+    computeColumnHeaderRegions,
+    computeOverlayRegions,
+    computeRowHeaderRegions,
+    overlayRegionForCell,
+} from '../../modules/freeze';
 import type { Freezen } from '../../types';
 
 const VIEW_W = 900;
@@ -126,6 +131,102 @@ describe('computeOverlayRegions', () => {
         const regions = computeOverlayRegions(rowsFreeze(52, 2, 10), VIEW_W, VIEW_H);
         expect(regions[0]).toMatchObject({ pane: 'main', top: 42, height: VIEW_H - 42 });
         expect(regions[1]).toMatchObject({ pane: 'rows', height: 42, fixedTop: 10 });
+    });
+});
+
+// The header projections drop the irrelevant axis of the body regions and pin
+// the header's cross axis to 0 (headers never translate on their fixed axis).
+describe('computeColumnHeaderRegions', () => {
+    const HEADER_H = 19;
+
+    it('no freeze -> one unclipped region following the bus on x, pinned on y', () => {
+        expect(computeColumnHeaderRegions(undefined, VIEW_W, HEADER_H)).toEqual([
+            {
+                pane: 'main',
+                left: 0,
+                top: 0,
+                width: VIEW_W,
+                height: HEADER_H,
+                clip: false,
+                fixedLeft: null,
+                fixedTop: 0,
+            },
+        ]);
+    });
+
+    it('frozen rows only -> nothing to split horizontally, still one unclipped region', () => {
+        const regions = computeColumnHeaderRegions(rowsFreeze(42, 2), VIEW_W, HEADER_H);
+        expect(regions).toHaveLength(1);
+        expect(regions[0]).toMatchObject({ pane: 'main', clip: false, fixedLeft: null, fixedTop: 0 });
+    });
+
+    it('frozen columns -> pinned band + clipped main, matching the body cols band on x', () => {
+        expect(computeColumnHeaderRegions(bothFreeze(42, 2, 73, 1), VIEW_W, HEADER_H)).toEqual([
+            {
+                pane: 'main',
+                left: 73,
+                top: 0,
+                width: VIEW_W - 73,
+                height: HEADER_H,
+                clip: true,
+                fixedLeft: null,
+                fixedTop: 0,
+            },
+            { pane: 'cols', left: 0, top: 0, width: 73, height: HEADER_H, clip: true, fixedLeft: 0, fixedTop: 0 },
+        ]);
+    });
+
+    it('a non-zero freeze-time scroll shrinks the band and pins to that scroll', () => {
+        const regions = computeColumnHeaderRegions(colsFreeze(83, 1, 10), VIEW_W, HEADER_H);
+        expect(regions[0]).toMatchObject({ pane: 'main', left: 73, width: VIEW_W - 73 });
+        expect(regions[1]).toMatchObject({ pane: 'cols', width: 73, fixedLeft: 10, fixedTop: 0 });
+    });
+});
+
+describe('computeRowHeaderRegions', () => {
+    const HEADER_W = 45;
+
+    it('no freeze -> one unclipped region following the bus on y, pinned on x', () => {
+        expect(computeRowHeaderRegions(undefined, HEADER_W, VIEW_H)).toEqual([
+            {
+                pane: 'main',
+                left: 0,
+                top: 0,
+                width: HEADER_W,
+                height: VIEW_H,
+                clip: false,
+                fixedLeft: 0,
+                fixedTop: null,
+            },
+        ]);
+    });
+
+    it('frozen columns only -> nothing to split vertically, still one unclipped region', () => {
+        const regions = computeRowHeaderRegions(colsFreeze(73, 1), HEADER_W, VIEW_H);
+        expect(regions).toHaveLength(1);
+        expect(regions[0]).toMatchObject({ pane: 'main', clip: false, fixedLeft: 0, fixedTop: null });
+    });
+
+    it('frozen rows -> pinned band + clipped main, matching the body rows band on y', () => {
+        expect(computeRowHeaderRegions(bothFreeze(42, 2, 73, 1), HEADER_W, VIEW_H)).toEqual([
+            {
+                pane: 'main',
+                left: 0,
+                top: 42,
+                width: HEADER_W,
+                height: VIEW_H - 42,
+                clip: true,
+                fixedLeft: 0,
+                fixedTop: null,
+            },
+            { pane: 'rows', left: 0, top: 0, width: HEADER_W, height: 42, clip: true, fixedLeft: 0, fixedTop: 0 },
+        ]);
+    });
+
+    it('a non-zero freeze-time scroll shrinks the band and pins to that scroll', () => {
+        const regions = computeRowHeaderRegions(rowsFreeze(52, 2, 10), HEADER_W, VIEW_H);
+        expect(regions[0]).toMatchObject({ pane: 'main', top: 42, height: VIEW_H - 42 });
+        expect(regions[1]).toMatchObject({ pane: 'rows', height: 42, fixedLeft: 0, fixedTop: 10 });
     });
 });
 

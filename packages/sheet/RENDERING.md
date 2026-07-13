@@ -83,10 +83,17 @@ React divs, NOT canvas. They render:
 - Freeze drag handle at the freeze boundary
 - Filter dropdown arrow icon (ColumnHeader only, lucide `CircleChevronDown`)
 
-Headers are NOT scroll containers. Their content sits in a wrapper that is translated
-(`transform: translateX(-scrollLeft)` / `translateY(-scrollTop)`) from the scroll bus, in
-lockstep with the canvas redraw — so the labels/highlights can never drift from the grid.
-The hit-test reads the live offset from `globalCache`.
+Headers are NOT scroll containers. They share the body-overlay pane region model one axis
+at a time (see § Scrolling): each header holds `OverlayRegion` viewports derived by
+`computeColumnHeaderRegions` / `computeRowHeaderRegions` (freeze.ts) — with a freeze, a
+band pinned to the freeze-time scroll plus a bus-translated main band whose clip cuts the
+hover/selected highlights (and their bottom/right border) at the freeze boundary, in
+lockstep with the canvas pane draw. Selected highlights render into every region (passive,
+clipped per pane); the hover highlight and resize handle render into the single region
+containing the hovered column/row. Only the freeze drag handle stays on a plain
+bus-translated wrapper (`translateX(-scrollLeft)` / `translateY(-scrollTop)`), keeping its
+viewport-pinning `+scroll` pattern because freeze drags reposition it imperatively in live
+content coordinates. The hit-test reads the live offset from `globalCache`.
 
 ### 3. Cell Selection — The Blue Rectangle (React DOM)
 
@@ -229,9 +236,9 @@ or touch handler.
 - `cellArea`'s `onScroll` writes `globalCache.scrollLeft` / `globalCache.scrollTop` and calls
   `globalCache.notifyScrollListeners()`. Scroll state lives in `globalCache` (NOT React
   context) to avoid re-rendering every consumer on each tick.
-- Bus subscribers: the rAF-coalesced canvas redraw (`Sheet`), the header `transform`
-  updates (`ColumnHeader` / `RowHeader`), and one `transform` per body-overlay pane region
-  (`OverlayRegion`).
+- Bus subscribers: the rAF-coalesced canvas redraw (`Sheet`), the headers' freeze-handle
+  `transform` wrappers (`ColumnHeader` / `RowHeader`), and one `transform` per pane region
+  (`OverlayRegion` — body and header regions alike).
 - Programmatic scroll (back-to-top, sheet-switch restore, selection auto-follow, freeze reset)
   writes `cellArea.scrollLeft/scrollTop`; the native `scroll` event then re-syncs the bus.
 - `overscroll-behavior: none` disables the macOS rubber-band bounce (the rAF canvas can't
@@ -257,9 +264,12 @@ work).
   highlights, presence, copy/move/extend indicators — `OverlayVisuals`) render into every
   region in pure content coordinates; each region's clip shows exactly its portion, so they
   clip below frozen panes in lockstep with the canvas. This replaces the old per-element
-  `fix*StyleOverflowInFreeze` clamps for body overlays (computed at React render, one frame
-  stale during pure scrolling); the headers still clamp. Imperatively positioned previews
-  (move/extend, formula range select) are written per copy via `querySelectorAll`.
+  `fix*StyleOverflowInFreeze` clamps (computed at React render, one frame stale during pure
+  scrolling — now deleted); the headers apply the same model one axis at a time via
+  `computeColumnHeaderRegions` / `computeRowHeaderRegions` (see § 2). Imperatively positioned
+  previews (move/extend, formula range select) are written per copy via `querySelectorAll`;
+  the header resize handles get the same treatment region-aware in `renderColResize` /
+  `renderRowResize` (frozen-band coordinates when the resized column/row is frozen).
 - **Stateful singletons** are never duplicated: the cell editor (InputBox) and the validation
   dropdown trigger render into the single region containing their anchor cell, clipped —
   editing a frozen cell keeps the editor pinned under the pane, and an editor whose cell
@@ -302,7 +312,9 @@ The SheetOverlay / InputBox / ImgBoxs values live inside `.fortune-cell-overlay-
 (`z-index: 1`) in per-pane region viewports whose translated content divs are atomic stacking
 contexts (see § Scrolling), so they order those elements only among themselves within a pane;
 across panes the region clip rects are disjoint. The layer as a whole sits above the canvas
-and the cell-flow spacer.
+and the cell-flow spacer. The header values (10/11 highlights, 12 resize handle, 20 freeze
+handle) are likewise atomic per header region wrapper — DOM order stands in across wrappers
+(passive regions, then the hover region, then the freeze-handle wrapper on top).
 
 ## Key Performance Patterns
 

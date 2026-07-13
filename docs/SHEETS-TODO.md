@@ -53,9 +53,6 @@ fix/sheet-decided-fixes.)
       the theme — those need surface-scoped values instead). Make the stays-white convention
       consistent with docs and define it once in the global css (same mechanism as the docs
       canvas) rather than per-app
-- [ ] header (row/col) freeze clamps still recompute from `ctx.scroll*` at render time — a
-      pure-scroll tick can leave a stale header highlight clamp until the next recipe; migrate
-      the headers to the body-overlay region model (`computeOverlayRegions`) for symmetry
 
 ## 6. Code debt (opportunistic — fix when touching the area)
 
