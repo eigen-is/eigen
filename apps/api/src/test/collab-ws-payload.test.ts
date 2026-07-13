@@ -7,7 +7,7 @@ import { getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
-// Regression net for audit finding #5 (docs/AUDIT_DEEPDIVE_COLLAB_YJS.md): app.ts
+// Regression net for collab/Yjs audit finding #5 (deep-dive doc removed — see git history): app.ts
 // must keep an explicit maxPayloadLength on the root websocket config — Bun's
 // default is 16 MB, enforced on RECEIVED (client→server) frames against the
 // DECODED size, and perMessageDeflate does not raise the ceiling (verified: a

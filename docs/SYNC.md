@@ -155,3 +155,6 @@ temp-copy backend.
 - The shutdown drain budget is whole-process; a multi-mount home drains its mounts sequentially.
 - Whole-file re-PUT per sync is the redundancy WAL-frame shipping (Litestream model) would remove — the
   strategic next step, out of scope today.
+- Conditional writes (`If-Match` on ETag) would make stale orphaned PUTs fail 412 server-side even across
+  process death, closing the logged-only residual above — unresearched (S3-compatible support on
+  Hetzner/MinIO and Bun `S3Client` header control are open questions).

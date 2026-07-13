@@ -316,7 +316,7 @@ describe('versions HTTP routes', () => {
     });
 
     test('eigendoc: restore from a corrupt snapshot fails 422 and leaves the live doc untouched', async () => {
-        // Seam F (PROPOSAL_DATA_INTEGRITY / AUDIT_DEEPDIVE_COLLAB_YJS #6): replayYjsState
+        // Seam F (PROPOSAL_DATA_INTEGRITY; collab/Yjs audit #6): replayYjsState
         // skips unreadable blobs, so a restore from a corrupt version file used to
         // "succeed" into a half-empty doc. The restore path must fail loud instead:
         // a clean 422 before any state touches the live Y.Doc.
@@ -355,7 +355,7 @@ describe('versions HTTP routes', () => {
     });
 
     test('eigendoc: concurrent restores of the same snapshot do not share a temp file', async () => {
-        // P3-1 (AUDIT_DEEPDIVE_COLLAB_YJS): restore used to key its temp download by the
+        // P3-1 of the collab/Yjs audit: restore used to key its temp download by the
         // snapshot's path id, so two concurrent restores of the same snapshot shared one
         // temp file — the first's cleanup deleted it under the second's read, which then
         // materialised an empty db and failed with "no such table". Unique per-invocation

@@ -1,4 +1,4 @@
-// Regression net for the chat-restore-wipe P1 (docs/AUDIT_DEEPDIVE_COLLAB_YJS.md):
+// Regression net for the collab/Yjs audit's chat-restore-wipe P1 (deep-dive doc removed — see git history):
 // restoreContainer's replaceContainerDataDb deletes + recreates a chat's data.db under the
 // container lock, while ChatRoom.init (built fresh per request by Drive.getChat) lazily
 // auto-creates a missing data.db. Before the fix, a message posted in the delete→recreate

@@ -207,7 +207,13 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
 
 - `emailLabels`/`emailsToLabels` tables are **vestigial** — created by migration, never used.
 - **Step 4 (worker offload) is deferred** — a cold index of tens of thousands of messages saturates the
-  shared event loop until it drains (only matters for one-time bulk imports).
+  shared event loop until it drains (only matters for one-time bulk imports). The move also covers the
+  mailparser-audit residuals: `DOMPurify.sanitize` still runs uncapped synchronous CPU on untrusted HTML
+  (the `htmlToText` input is truncated at 2 MB, DOMPurify's isn't), and `html-to-text`'s stack-overflow
+  catch on pathologically nested HTML rejects the whole parse (that one email becomes unreadable).
+- The summary/cold-index parse fully decodes + buffers attachment content it never reads (audit #12) —
+  a `skipAttachmentContent` flag is deliberately unbuilt; add it only if a real large-mailbox profile
+  justifies it (largely subsumed by the worker move).
 - Fast-saved drafts leave the on-disk `.eml` stale until a full save — external IMAP clients see old content.
 - Primary-password protocol auth fails when 2FA is enabled (use an app password).
 - A second `MailStore` backend (JMAP/Stalwart) is proposed only — see

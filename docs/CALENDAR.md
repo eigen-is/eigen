@@ -305,6 +305,8 @@ stored exception — exception rows are internal and never appear as their own r
 - RECURRENCE-ID / EXDATE → `recurrenceDate` keys are wall-clock dates: TZID-form values key on their
   own wall components (RFC 5545 canonical), UTC-`Z` values convert the instant to the SERIES timezone,
   floating/DATE values keep their raw components
+- Not supported (accepted, low): `RANGE=THISANDFUTURE` on RECURRENCE-ID degrades to a single-instance
+  edit, and RDATE-added occurrences never appear — mainstream clients split such series into new UIDs
 
 **PUT is a full-resource replace**: `syncExceptionEvents` (`resource.ts`) upserts the exceptions in
 the payload (preserving their SEQUENCE) and deletes stored exceptions of the master that are absent —
