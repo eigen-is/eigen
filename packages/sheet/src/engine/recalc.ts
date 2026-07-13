@@ -23,7 +23,7 @@ import { DependencyIndex } from './dependency-index';
 import { update } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { calPostfixExpression, iscelldata, operatorjson, operatorPriority } from './formula-utils';
-import type { EvaluationResult, FormulaCellInfoMap, FormulaDependency } from './types';
+import type { CalcChainEntry, EvaluationResult, FormulaCellInfoMap, FormulaDependency } from './types';
 
 // A formula that reads the wall clock / RNG. Frozen during server recalc so
 // passive exports/search stay deterministic (neither Excel nor Sheets recompute
@@ -659,8 +659,7 @@ function sheetHasFormula(sheet: Sheet): boolean {
 
 // calcChain is an editor-only excess field the wire Sheet type omits; recalc
 // writes it so the read gate recognises a computed doc (audit DP4).
-type CalcChainCell = { r: number; c: number; id: string };
-type SheetWithCalcChain = Sheet & { calcChain?: CalcChainCell[] };
+type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };
 
 // ── Orchestration ──────────────────────────────────────────────────────────────
 
@@ -693,9 +692,9 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
     //    and build each cell's dependency ranges via the ported graph builder.
     const infoMap: FormulaCellInfoMap = {};
     const depIndex = new DependencyIndex();
-    const calcChainBySheet = new Map<string, CalcChainCell[]>();
+    const calcChainBySheet = new Map<string, CalcChainEntry[]>();
     for (const w of working) {
-        const chain: CalcChainCell[] = [];
+        const chain: CalcChainEntry[] = [];
         calcChainBySheet.set(w.id, chain);
         for (let r = 0; r < w.data.length; r += 1) {
             const rowArr = w.data[r];
@@ -753,7 +752,11 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
     //    downstream cell reads its upstream result. Volatiles are frozen. Each
     //    cell is guarded so one poisoned formula never aborts the pass.
     const engine = new FormulaEngine();
-    const resolver = createArrayResolverFor(working);
+    // Resolver over the working sheets: mirrors createArrayResolver's persisted
+    // shape but reads the live `data` matrices we mutate during the ordered pass.
+    const resolver = createArrayResolver(
+        working.map((w) => ({ id: w.id, name: w.name, data: w.data, calculationChain: [], dynamicArrayCompute: [] })),
+    );
     for (const info of order) {
         if (isVolatileFormula(info.calc_funcStr)) continue;
         try {
@@ -789,15 +792,7 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
     return finalize(working, sheets, calcChainBySheet);
 }
 
-// Build the engine resolver over the working sheets. Mirrors createArrayResolver
-// but reads the live `data` matrices we mutate during the ordered pass.
-function createArrayResolverFor(working: WorkingSheet[]) {
-    return createArrayResolver(
-        working.map((w) => ({ id: w.id, name: w.name, data: w.data, calculationChain: [], dynamicArrayCompute: [] })),
-    );
-}
-
-function finalize(working: WorkingSheet[], sheets: Sheet[], calcChainBySheet: Map<string, CalcChainCell[]>): Sheet[] {
+function finalize(working: WorkingSheet[], sheets: Sheet[], calcChainBySheet: Map<string, CalcChainEntry[]>): Sheet[] {
     const byId = new Map<string, WorkingSheet>();
     for (const w of working) byId.set(w.id, w);
 
