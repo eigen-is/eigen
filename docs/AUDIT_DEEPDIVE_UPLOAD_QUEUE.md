@@ -55,6 +55,9 @@ green) — not duplicated.
 > row is already pending — it supersedes the retained ack). Red→green:
 > `upload-queue-failure-injection.test.ts` (finding-1 test) + `upload-queue-chaos.test.ts` (reorder test,
 > flipped from characterizing the bug to pinning the repair, including the settlement log line).
+> Hardened in review: an ack whose orphans all settled while its own PUT was in flight (settlement
+> order says nothing about commit order) is not trusted — the row + staged copy are kept and re-PUT
+> immediately; pinned by the chaos mid-flight test via a split commit/respond stub.
 
 **Where:** `upload-queue.ts` `performUpload`, the accepted-risk comment (~:246-250); timeout clears
 `inFlight` (~:264-272); ack destroys the last local copy (~:299-302).
@@ -93,7 +96,10 @@ brief" to proven silent permanent loss.
 
 > **✅ FIXED** (`fix/upload-queue-orphan-put`). `cancel()` flags the key's unsettled orphans; settlement
 > re-issues `storage.delete` (dead-UUID key, idempotent, safe even during teardown). Pinned by the
-> finding-2 test + the chaos zombie test.
+> finding-2 test + the chaos zombie test. Hardened in review: a cancel landing during the flight,
+> *before* the timeout registers the orphan, is inferred at timeout time from the vanished row (within
+> an in-flight upload only a cancel deletes the row) and flagged identically; pinned by the
+> cancel-before-timeout test.
 
 **Where:** same `performUpload` timeout path; the resurrection guard (~:281-287) requires `putOk`.
 

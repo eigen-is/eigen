@@ -380,6 +380,35 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         expect(await mount.readFile(dataDbId)).toBeNull(); // invisible to users either way
         expect(await fault.exists(key)).toBe(false);
     });
+
+    // The other cancel ordering: the cancel lands while the PUT is still in flight, BEFORE the
+    // timeout fires — cancel() finds no orphan to flag yet. The timeout must infer the cancel from
+    // the vanished row (within an in-flight upload only a cancel deletes the row) and flag it, so
+    // the late landing is still re-deleted.
+    test('cancel during the flight, before the timeout fires: the late landing is still deleted', async () => {
+        const { mount, fault } = createS3Mount('orphan-cancel-early');
+        await mount.init();
+        shrinkPutTimeout(mount, 250);
+        const { containerId, dataDbId } = await provisionDoc(mount);
+        const key = buildStorageKey(dataDbId, 'data.db');
+
+        const managed = await mount.createDatabase(docConfig, dataDbId);
+        await mount.drainPendingUploads({ flushNow: true }); // ack the create-time schema PUT
+        fault.parkWrites = true;
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mount.closeDatabase(dataDbId); // enqueues; drain parks in storage.write
+        await waitFor(() => fault.parkedCount === 1);
+
+        // Permanent delete while the PUT is parked and the 250ms ceiling has NOT fired yet.
+        await mount.deletePath(containerId);
+        expect(mount.pendingUploadCount).toBe(0);
+        await mount.drainPendingUploads(); // returns once the ceiling fired and the PUT was failed
+
+        // The orphan lands after the delete; its settlement must re-issue the delete.
+        await fault.releaseOldestParked();
+        await waitFor(async () => !(await fault.exists(key)));
+        expect(await fault.exists(key)).toBe(false);
+    });
 });
 
 describe('supersede while a PUT is in flight (no timeout involved)', () => {

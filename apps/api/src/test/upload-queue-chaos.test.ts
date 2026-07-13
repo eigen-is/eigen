@@ -51,7 +51,14 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
 
-type ParkedPut = { key: string; rows: number | null; landed: boolean; land: () => Promise<void> };
+type ParkedPut = {
+    key: string;
+    rows: number | null;
+    landed: boolean;
+    commit: () => Promise<void>; // the server applies the bytes; the client response stays pending
+    respond: () => void; // deliver the (long-forgotten) client response
+    land: () => Promise<void>; // commit + respond
+};
 
 // S3-like backend (no getPath) whose writes can be parked: the body is read UP-FRONT (as a real S3
 // PUT streams the request body when issued) and applied to the inner store only when the test lands
@@ -80,9 +87,14 @@ class ReorderStorage implements StorageBackend {
                 key,
                 rows,
                 landed: false,
-                land: async () => {
+                commit: async () => {
                     entry.landed = true;
-                    await this.inner.write(key, bytes).then(resolve, reject);
+                    await this.inner.write(key, bytes).catch(reject);
+                },
+                respond: () => resolve(bytes instanceof ArrayBuffer ? bytes.byteLength : bytes.length),
+                land: async () => {
+                    await entry.commit();
+                    entry.respond();
                 },
             };
             this.parked.push(entry);
@@ -300,6 +312,47 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         await fault.landAllRemaining();
         await waitFor(async () => !(await fault.inner.exists(key)));
         expect(await fault.inner.exists(key)).toBe(false);
+    });
+
+    // Settlement order says nothing about server commit order: an orphan can settle while the
+    // superseding PUT is mid-flight, and its bytes may still have committed AFTER that PUT's. The
+    // ack must notice its orphans vanished mid-flight and convert into an immediate re-PUT.
+    test('an orphan settling while the newer PUT is mid-flight forces a re-upload', async () => {
+        const { mount, fault } = createS3Mount('orphan-midflight');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+
+        // Baseline {1} fully acked.
+        const managed = await mount.createDatabase(docConfig, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await managed.flush();
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
+
+        // Write {2}: its PUT parks and stalls past the ceiling — the orphan.
+        shrinkPutTimeout(mount, 150);
+        fault.park = true;
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
+        await managed.flush();
+        await fault.waitForParked((p) => p.rows === 2);
+        await mount.drainPendingUploads(); // returns once the ceiling fired and the row backed off
+
+        // Write {3}: supersedes the row; its PUT parks mid-flight (well inside its own ceiling).
+        managed.db.insert(docSchema.items).values({ id: 3, data: 'c' }).run();
+        await managed.flush();
+        const newest = await fault.waitForParked((p) => p.rows === 3);
+
+        // Server-side commit order inverts the client view: {1,2,3} commits first (its response
+        // still pending), then the orphan lands fully — the object now holds the OLDER {1,2}
+        // bytes, and the orphan settles while the {1,2,3} PUT is mid-flight with nothing to
+        // repair yet. The subsequent ack must distrust its own commit order and re-PUT.
+        await newest.commit();
+        await fault.parked.find((p) => p.rows === 2 && !p.landed)!.land();
+        expect(await countBackingRows(mount, fault, dataDbId)).toBe(2); // regressed
+        fault.park = false; // the re-PUT must go straight through
+        newest.respond();
+        await waitFor(() => mount.pendingUploadCount === 0);
+        expect(await countBackingRows(mount, fault, dataDbId)).toBe(3); // newest bytes re-asserted
     });
 });
 

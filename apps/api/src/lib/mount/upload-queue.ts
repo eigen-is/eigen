@@ -269,6 +269,9 @@ export class UploadQueue {
             return;
         }
 
+        // Orphans present when this PUT is issued: if they all settle while it is in flight, the
+        // commit order against a landed one is unknown (see the ack branch below).
+        const orphansAtStart = this.orphans.get(storageKey);
         this.inFlight.add(storageKey);
         let putOk = false;
         let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -285,7 +288,14 @@ export class UploadQueue {
                 write,
                 new Promise<never>((_, reject) => {
                     timeout = setTimeout(() => {
-                        this.trackOrphan(storageKey, write);
+                        const orphan = this.trackOrphan(storageKey, write);
+                        // A cancel that landed during this PUT found no orphan to flag (we register
+                        // only now, at timeout). Within an in-flight upload a vanished row can only
+                        // mean cancel — acks are serialized per queue and a supersede keeps the
+                        // row — so flag it here.
+                        if (!this.closing && this.getPendingStagingPath(storageKey) === null) {
+                            orphan.cancelled = true;
+                        }
                         reject(new Error(`PUT exceeded ${this.putTimeoutMs}ms`));
                     }, this.putTimeoutMs);
                 }),
@@ -329,6 +339,19 @@ export class UploadQueue {
         }
         // Acked (still ours) → clear the row. Every remaining case drops the now-unneeded staged copy.
         if (putOk && stillCurrent) {
+            if (orphansAtStart && !this.orphans.has(storageKey)) {
+                // Every orphan for this key settled while our PUT was in flight — a landed one may
+                // have committed server-side after ours (settlement order says nothing about commit
+                // order), so this ack isn't trustworthy. Keep the row + staged copy and re-PUT
+                // immediately: the retry is issued after the orphan's commit, so it lands after it.
+                console.warn(`[sync] orphan settled during PUT of ${storageKey} — re-uploading`);
+                this.db
+                    .update(pendingUploads)
+                    .set({ nextAttemptAt: Date.now() })
+                    .where(eq(pendingUploads.storageKey, storageKey))
+                    .run();
+                return;
+            }
             this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, storageKey)).run();
             const orphan = this.orphans.get(storageKey);
             if (orphan) {
@@ -351,7 +374,7 @@ export class UploadQueue {
     // land server-side after a newer PUT for the key acked (regressing the object — permanently if
     // nothing syncs again) or after a cancel() (resurrecting a deleted object). Track it until it
     // settles so orphanSettled can repair both.
-    private trackOrphan(storageKey: string, write: Promise<number>): void {
+    private trackOrphan(storageKey: string, write: Promise<number>): OrphanState {
         let orphan = this.orphans.get(storageKey);
         if (!orphan) {
             orphan = { count: 0, cancelled: false };
@@ -362,6 +385,7 @@ export class UploadQueue {
             () => this.orphanSettled(storageKey, orphan, true),
             () => this.orphanSettled(storageKey, orphan, false),
         );
+        return orphan;
     }
 
     private orphanSettled(storageKey: string, orphan: OrphanState, landed: boolean): void {
@@ -378,9 +402,18 @@ export class UploadQueue {
             void this.storage.delete(storageKey).catch(() => {});
             return;
         }
-        // No ack while the orphans were pending: either nothing was acked over them (a landed
-        // orphan re-asserted its own bytes) or the row is still pending and re-drives itself.
-        if (!orphan.lastAcked) return;
+        // No ack was retained: either nothing was acked over the orphans (a landed orphan
+        // re-asserted its own bytes and any pending row re-drives itself), or an ack is mid-flight
+        // (its performUpload re-PUTs when it finds the orphans gone — see the ack branch). Log
+        // landed settles so a >ceiling PUT that eventually landed stays diagnosable.
+        if (!orphan.lastAcked) {
+            if (landed) {
+                console.warn(
+                    `[sync] orphaned PUT for ${storageKey} landed with no retained ack — a pending re-upload (if any) supersedes it`,
+                );
+            }
+            return;
+        }
         if (landed) {
             console.error(
                 `[sync] orphaned PUT for ${storageKey} landed after a newer upload acked — re-uploading the acked bytes`,
