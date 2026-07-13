@@ -22,9 +22,11 @@ import {
     saveHyperlink,
 } from '../../state';
 
-// pointer-events-auto: the overlay pane-region wrapper is pointer-events none
+// pointer-events-auto: the overlay pane-region wrapper is pointer-events none.
+// eigen-paper-chrome: the card is app chrome inside the light-pinned workbook
+// surface — it re-themes with the app.
 const modalBase =
-    'absolute overflow-hidden bg-popover z-30 rounded-md border border-border shadow-md px-5 pt-1.5 pb-2.5 pointer-events-auto';
+    'eigen-paper-chrome absolute overflow-hidden bg-popover z-30 rounded-md border border-border shadow-md px-5 pt-1.5 pb-2.5 pointer-events-auto';
 
 export function LinkEditCard({
     r,

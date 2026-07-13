@@ -45,14 +45,14 @@ fix/sheet-decided-fixes.)
 
 ## 5. Rendering
 
-- [ ] sheet dark mode (decided 2026-07-12): the sheet canvas stays WHITE in dark mode, same as
-      the docs canvas — the workbook surface does not re-theme, only the surrounding chrome.
-      `SheetOverlay/index.css` colors now all flow through theme tokens or `--sheet-*` custom
-      properties (verbatim light values); the surface-coupled ones must stay constant, so pin
-      them (and audit the `var(--background)`/`var(--popover)` callsites, which WOULD flip with
-      the theme — those need surface-scoped values instead). Make the stays-white convention
-      consistent with docs and define it once in the global css (same mechanism as the docs
-      canvas) rather than per-app
+- [ ] sheet dark mode — surface invariance DONE 2026-07-13: the workbook surface (canvas +
+      headers + overlays) is pinned light via the `.eigen-paper` convention in `globals.css`
+      (re-pins the theme tokens the surface consumes to their light values; in-grid popup cards —
+      link card, validation hint box — opt back into the theme with `.eigen-paper-chrome`) and
+      renders pixel-identically in light and dark. Remaining for a future dark pass: chrome-side
+      polish only, plus adopting `.eigen-paper` on the docs page — it still pins itself with
+      literal `bg-white text-black`, so token-driven visuals inside it (e.g. the `--warning`
+      search highlights) still flip in dark mode
 
 ## 6. Code debt (opportunistic — fix when touching the area)
 

@@ -446,7 +446,12 @@ export const SheetOverlay: React.FC = () => {
                             fixedLeft={dvRegion.fixedLeft}
                             fixedTop={dvRegion.fixedTop}
                         >
-                            <div id="luckysheet-dataVerification-showHintBox" className="luckysheet-mousedown-cancel" />
+                            {/* eigen-paper-chrome: popup chrome re-themes with the
+                                app inside the light-pinned workbook surface. */}
+                            <div
+                                id="luckysheet-dataVerification-showHintBox"
+                                className="luckysheet-mousedown-cancel eigen-paper-chrome"
+                            />
                         </OverlayRegion>
                         {context.linkCard?.sheetId === context.currentSheetId && (
                             <OverlayRegion
@@ -498,6 +503,10 @@ export const SheetOverlay: React.FC = () => {
                                         width: context.ch_width,
                                     }}
                                 />
+                                {/* No eigen-paper-chrome: the add-row control sits
+                                    directly ON the light-pinned paper (no opaque card
+                                    behind it), so it renders light in both themes —
+                                    dark-themed controls would be illegible here. */}
                                 <div
                                     id="luckysheet-bottom-controll-row"
                                     className="luckysheet-bottom-controll-row flex items-center gap-2"

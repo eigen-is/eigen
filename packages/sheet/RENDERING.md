@@ -57,6 +57,21 @@ positioned absolutely over the canvas.
 `InputBox.tsx` and `FxEditor/index.tsx` use the `ContentEditable` component
 (`SheetOverlay/ContentEditable.tsx`) — a native `contentEditable` div for rich-text cell editing.
 
+### Theming: the light-pinned surface
+
+The workbook surface renders pixel-identically in light and dark mode — like the docs page,
+the paper does not re-theme, only the app chrome around it (MenuBar, FxEditor, SheetTab,
+portaled popups). The Sheet root (`Sheet/index.tsx`, wrapping canvas + headers + overlays)
+carries the `.eigen-paper` scope class from `packages/ui/src/styles/globals.css`, which
+re-pins the theme tokens the surface consumes to their light values and re-resolves
+inherited `color` inside the scope; canvas colors are hardcoded light and
+`--sheet-*`/`--app-current-color` are theme-invariant already. In-grid popup cards
+(LinkEditCard, the validation hint box) opt back into the theme with `.eigen-paper-chrome`;
+Radix-portaled popups escape the scope naturally. The add-row control stays pinned — it sits
+directly on the paper with no card behind it (its shadcn `dark:` variants still match inside
+the scope, resolving against the pinned tokens: legible and near-light, not bit-exact —
+acceptable, it is outside the grid visuals).
+
 ## Layer-by-Layer Breakdown
 
 ### 1. Canvas Layer (bottom)

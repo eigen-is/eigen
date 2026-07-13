@@ -63,11 +63,14 @@
     --selection-handle: #3b82f6;
 }
 
-.dark {
+.dark,
+.dark .eigen-paper-chrome {
     color-scheme: dark;
     /* Neutral surfaces/text are pure grey (chroma 0) — no blue tint. Only
        functional colours (destructive/success/warning/charts/link/handle) and
-       the --sidebar-primary accent keep their hue. */
+       the --sidebar-primary accent keep their hue.
+       .eigen-paper-chrome re-applies the theme to app chrome nested inside a
+       light-pinned .eigen-paper surface (see below). */
     --background: oklch(0.209 0 0);
     --foreground: oklch(0.984 0 0);
     --card: oklch(0.24 0 0);
@@ -107,6 +110,44 @@
     --selected-hover: oklch(0.4 0 0);
     --link: #60a5fa;
     --selection-handle: #60a5fa;
+}
+
+/* Light-pinned paper surface — the convention for editor surfaces that render
+   user content: the paper keeps its light rendering in dark mode, only the app
+   chrome around it re-themes (decision 2026-07-13, matching the docs page).
+   The docs page pins itself with literal bg-white/text-black utilities;
+   token-driven surfaces — the sheets workbook (canvas + headers + overlays) —
+   scope this class on their surface container instead. It re-pins exactly the
+   theme tokens the surface consumes to their light :root values, so every
+   var(--…) reference inside resolves identically in both themes. Not pinned on
+   purpose: the sheet canvas colors (hardcoded light in canvas.ts) and the
+   per-app accents (--app-current-color — theme-invariant by definition); if
+   either ever themes, pin it here. In-grid app chrome (link card, validation
+   hint box, add-row control) opts back into the theme with .eigen-paper-chrome
+   (declared alongside .dark above). */
+.eigen-paper {
+    color-scheme: light;
+    /* Inherited text re-resolves here: `color` computes at the element that
+       declares it, so body's themed color would otherwise inherit INTO the
+       paper as the dark-mode foreground. Values are verbatim copies of the
+       :root light palette — keep in sync. */
+    color: var(--foreground);
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.129 0.042 264.695);
+    --muted: oklch(0.968 0.007 247.896);
+    --muted-foreground: oklch(0.554 0.046 257.417);
+    --accent: oklch(0.968 0.007 247.896);
+    --accent-foreground: oklch(0.208 0.042 265.755);
+    --input: oklch(0.929 0.013 255.508);
+    --ring: oklch(0.704 0.04 256.788);
+    --warning: oklch(0.7 0.17 75);
+    --selection-handle: #3b82f6;
+}
+
+/* Chrome nested in a paper scope re-resolves inherited text against its own
+   (re-themed) tokens, mirroring the `color` re-resolution above. */
+.dark .eigen-paper-chrome {
+    color: var(--foreground);
 }
 
 @theme inline {
