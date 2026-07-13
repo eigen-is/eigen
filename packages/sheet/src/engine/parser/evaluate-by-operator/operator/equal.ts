@@ -3,9 +3,10 @@ import { toNumber } from '../../helper/number.ts';
 
 export const SYMBOL = '=';
 
-// Coercing, case-insensitive equality matching Excel/Google Sheets: numbers and
-// numeric strings compare by value (`1 = "1"` → TRUE), text compares
-// case-insensitively (`"A" = "a"` → TRUE), booleans coerce to 1/0 like the rest
+// Coercing, case-insensitive equality: numbers and numeric strings compare by
+// value (`1 = "1"` → TRUE — the Google Sheets convention; Excel keeps them
+// unequal), text compares case-insensitively (`"A" = "a"` → TRUE, as in both
+// Excel and Sheets), booleans coerce to 1/0 like the rest
 // of the engine, and blank cells (which reach operators as `undefined`) behave as
 // empty string. An Error operand degrades to FALSE — the same silent coercion the
 // other comparison operators rely on (see the dispatcher note in
