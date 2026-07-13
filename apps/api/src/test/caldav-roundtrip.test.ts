@@ -9,6 +9,7 @@ import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/type
 import ICAL from 'ical.js';
 import { parseIcs } from '../lib/caldav/ical-parse';
 import { serializeEventForImip } from '../lib/caldav/ical-serialize';
+import { getHome } from '../lib/home';
 import { app, assertJson, authedRequest, getTestContext } from './setup';
 
 const VTZ_NY = [
@@ -325,6 +326,50 @@ describe('CalDAV round-trip fidelity', () => {
             expect(ics).not.toContain('STATUS:CANCELLED');
         });
 
+        // The full-replace prune presumes the payload represents the whole resource. A degenerate
+        // master-less PUT (no VEVENT without a RECURRENCE-ID) proves nothing about the exceptions
+        // it omits, so it must not delete them.
+        test('a master-less PUT does not prune stored exceptions', async () => {
+            const withOverride = vcal(
+                [
+                    'BEGIN:VEVENT',
+                    'UID:rt-lone@eigen',
+                    'DTSTART:20260501T100000Z',
+                    'DTEND:20260501T110000Z',
+                    'RRULE:FREQ=WEEKLY',
+                    'EXDATE:20260515T100000Z',
+                    'SUMMARY:Lone series',
+                    'END:VEVENT',
+                    'BEGIN:VEVENT',
+                    'UID:rt-lone@eigen',
+                    'RECURRENCE-ID:20260508T100000Z',
+                    'DTSTART:20260508T140000Z',
+                    'DTEND:20260508T150000Z',
+                    'SUMMARY:Lone series (moved)',
+                    'END:VEVENT',
+                ].join('\r\n'),
+            );
+            expect((await putIcs('rt-lone.ics', withOverride)).status).toBe(201);
+
+            const loneOverride = vcal(
+                [
+                    'BEGIN:VEVENT',
+                    'UID:rt-lone@eigen',
+                    'RECURRENCE-ID:20260508T100000Z',
+                    'DTSTART:20260508T140000Z',
+                    'DTEND:20260508T150000Z',
+                    'SUMMARY:Lone series (moved again)',
+                    'END:VEVENT',
+                ].join('\r\n'),
+            );
+            expect((await putIcs('rt-lone.ics', loneOverride)).status).toBe(204);
+
+            const calendar = (await getHome(userId)).calendar;
+            const masterRow = calendar.getEventByUri(calendarId, 'rt-lone.ics')!;
+            // Both rows survive: the override (updated by the PUT) and the cancelled EXDATE row.
+            expect(calendar.getExceptionsForParent(masterRow.id)).toHaveLength(2);
+        });
+
         test('control: TEXT escaping and long-line folding survive the round-trip', async () => {
             const title = 'Board; agenda: budget, planning\nsecond line';
             const description = `Emoji 😀 and a very long line ${'x'.repeat(200)} with, commas; and\\ backslashes`;
@@ -349,6 +394,86 @@ describe('CalDAV round-trip fidelity', () => {
             expect(reparsed).toBeDefined();
             expect(reparsed!.title).toBe(title);
             expect(reparsed!.description).toBe(description);
+        });
+    });
+
+    // Rows written before the route validated recurrenceDate can hold a full ISO datetime or
+    // arbitrary text (the schema accepted any string). App-side expansion truncates to the date
+    // part and treats unparseable keys as inert (calendar.ts getEventsInRange); serving must do
+    // the same — one bad row must never 500 the resource GET or every REPORT touching its UID.
+    describe('legacy recurrenceDate rows', () => {
+        test('an exception keyed by a full ISO datetime serves with the truncated-key RECURRENCE-ID', async () => {
+            const calendar = (await getHome(userId)).calendar;
+            const master = calendar.createEvent(calendarId, {
+                title: 'Legacy key series',
+                startTime: new Date('2026-06-02T03:00:00Z'), // Jun 1 23:00 America/New_York
+                endTime: new Date('2026-06-02T03:50:00Z'),
+                allDay: false,
+                rrule: 'FREQ=DAILY;COUNT=5',
+                timezone: 'America/New_York',
+                uid: 'legacy-rid@eigen',
+                uri: 'legacy-rid.ics',
+                createByUserId: userId,
+            });
+            calendar.createEvent(calendarId, {
+                title: 'Legacy key series (moved)',
+                startTime: new Date('2026-06-05T10:00:00Z'),
+                endTime: new Date('2026-06-05T10:50:00Z'),
+                allDay: false,
+                timezone: 'America/New_York',
+                parentEventId: master.id,
+                recurrenceDate: '2026-06-04T03:00:00.000Z', // legacy form: an instant, not a wall date
+                uid: master.uid,
+                createByUserId: userId,
+            });
+
+            const ics = await getIcs('legacy-rid.ics'); // pre-fix: 500 (RRule.between throws on the raw key)
+            // The truncated key '2026-06-04' names the Jun 4 23:00 NY occurrence — the same
+            // instance the app-side expansion substitutes for this row.
+            expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260604T230000');
+        });
+
+        test('unparseable recurrenceDate keys are inert: the resource still serves', async () => {
+            const calendar = (await getHome(userId)).calendar;
+            const master = calendar.createEvent(calendarId, {
+                title: 'Garbage key series',
+                startTime: new Date('2026-06-02T03:00:00Z'),
+                endTime: new Date('2026-06-02T03:50:00Z'),
+                allDay: false,
+                rrule: 'FREQ=DAILY;COUNT=5',
+                timezone: 'America/New_York',
+                uid: 'legacy-garbage@eigen',
+                uri: 'legacy-garbage.ics',
+                createByUserId: userId,
+            });
+            calendar.createEvent(calendarId, {
+                title: 'Garbage key series',
+                startTime: new Date('2026-06-03T03:00:00Z'),
+                endTime: new Date('2026-06-03T03:50:00Z'),
+                allDay: false,
+                parentEventId: master.id,
+                recurrenceDate: 'not-a-date',
+                status: 'cancelled',
+                uid: master.uid,
+                createByUserId: userId,
+            });
+            calendar.createEvent(calendarId, {
+                title: 'Garbage key series (moved)',
+                startTime: new Date('2026-06-10T10:00:00Z'),
+                endTime: new Date('2026-06-10T10:50:00Z'),
+                allDay: false,
+                timezone: 'America/New_York',
+                parentEventId: master.id,
+                recurrenceDate: 'also!garbage',
+                uid: master.uid,
+                createByUserId: userId,
+            });
+
+            const ics = await getIcs('legacy-garbage.ics'); // pre-fix: 500
+            // The unkeyable cancellation cancels nothing (matches expansion) — no EXDATE emitted.
+            expect(ics).not.toContain('EXDATE');
+            // The unkeyable override falls back to its own startTime (pre-#C shape) rather than 500ing.
+            expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260610T060000');
         });
     });
 

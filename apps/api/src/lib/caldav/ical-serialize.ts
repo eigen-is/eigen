@@ -1,5 +1,5 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
-import { computeOccurrenceTimes } from '../calendar/recurrence';
+import { computeOccurrenceTimes, storedRecurrenceKey } from '../calendar/recurrence';
 import { normalizeTimezone } from '../calendar/timezone';
 import { buildVTimezone } from './vtimezone';
 
@@ -133,11 +133,12 @@ function buildVEvent(
     // which Thunderbird omits from its next PUT (the full-replace exception prune would then
     // resurrect the deleted occurrence).
     for (const exc of options?.exdates ?? []) {
-        if (!exc.recurrenceDate) continue;
+        const key = exc.recurrenceDate ? storedRecurrenceKey(exc.recurrenceDate) : null;
+        if (!key) continue; // an unkeyable cancellation cancels nothing (matches expansion)
         if (event.allDay) {
-            prop(`EXDATE;VALUE=DATE:${exc.recurrenceDate.replace(/-/g, '')}`);
+            prop(`EXDATE;VALUE=DATE:${key.replace(/-/g, '')}`);
         } else {
-            const exTime = computeOccurrenceTimes(event, exc.recurrenceDate).startTime;
+            const exTime = computeOccurrenceTimes(event, key).startTime;
             if (tzid) {
                 prop(`EXDATE;TZID=${tzid}:${formatDateTimeInTZ(exTime, tzid)}`);
             } else {
@@ -151,12 +152,15 @@ function buildVEvent(
     // override that matches no occurrence, so clients render the original slot too (audit #C).
     // The master's tz (not the exception's) decides the form: legacy exception rows hold timezone:null.
     if (event.recurrenceDate) {
+        // An unkeyable legacy value falls back to the exception's own startTime (the pre-#C shape:
+        // a possibly-orphaned override beats 500ing the whole resource).
+        const key = storedRecurrenceKey(event.recurrenceDate);
         if (event.allDay) {
-            const compact = event.recurrenceDate.replace(/-/g, '');
+            const compact = key ? key.replace(/-/g, '') : formatDateUTC(event.startTime);
             prop(`RECURRENCE-ID;VALUE=DATE:${compact}`);
         } else {
             const master = options?.master;
-            const ridTime = master ? computeOccurrenceTimes(master, event.recurrenceDate).startTime : event.startTime;
+            const ridTime = master && key ? computeOccurrenceTimes(master, key).startTime : event.startTime;
             const ridTz = master ? normalizeTimezone(master.timezone) : tzid;
             if (ridTz) {
                 prop(`RECURRENCE-ID;TZID=${ridTz}:${formatDateTimeInTZ(ridTime, ridTz)}`);

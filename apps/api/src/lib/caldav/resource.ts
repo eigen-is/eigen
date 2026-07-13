@@ -1,5 +1,6 @@
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../calendar/calendar';
+import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
 import type { ParsedEvent } from './ical-parse';
 import { parseIcs } from './ical-parse';
@@ -141,9 +142,8 @@ function syncExceptionEvents(
 
     const existingByRecurrenceDate = new Map<string, CalendarEventRow>();
     for (const exc of existingExceptions) {
-        if (exc.recurrenceDate) {
-            existingByRecurrenceDate.set(exc.recurrenceDate.substring(0, 10), exc);
-        }
+        const key = exc.recurrenceDate ? storedRecurrenceKey(exc.recurrenceDate) : null;
+        if (key) existingByRecurrenceDate.set(key, exc);
     }
 
     for (const exc of exceptionParsed) {
@@ -191,11 +191,17 @@ function syncExceptionEvents(
 
     // A CalDAV PUT is a full-resource replace: stored exceptions absent from the payload were
     // removed on the client (e.g. Apple's "undo delete occurrence" re-PUTs the series without the
-    // EXDATE). Without the prune the stale cancelled row keeps the occurrence hidden forever (audit #D).
+    // EXDATE). Without the prune the stale cancelled row keeps the occurrence hidden forever
+    // (audit #D). Only a payload that carries the master VEVENT is a credible full-resource
+    // representation — a degenerate master-less PUT proves nothing about the exceptions it omits.
+    // Unkeyable legacy rows are inert everywhere, so the replace may drop them too.
+    if (!events.some((e) => !e.recurrenceDate)) return;
     const parsedKeys = new Set(exceptionParsed.map((e) => e.recurrenceDate));
-    const stale = existingExceptions.filter(
-        (e) => e.recurrenceDate && !parsedKeys.has(e.recurrenceDate.substring(0, 10)),
-    );
+    const stale = existingExceptions.filter((e) => {
+        if (!e.recurrenceDate) return false;
+        const key = storedRecurrenceKey(e.recurrenceDate);
+        return !key || !parsedKeys.has(key);
+    });
     calendar.deleteExceptions(
         calendarId,
         masterEvent.id,

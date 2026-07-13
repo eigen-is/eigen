@@ -1645,6 +1645,56 @@ describe('Calendar', () => {
         });
     });
 
+    // recurrenceDate is a wall-clock occurrence key (YYYY-MM-DD), but old FE builds sent the full
+    // ISO datetime. The route normalizes to the canonical key at the boundary and rejects the
+    // unkeyable — raw stored garbage used to crash CalDAV serving downstream.
+    describe('Regression: recurrenceDate boundary normalization', () => {
+        const exceptionBody = (recurrenceDate: string, parentEventId: string) => ({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Exception key format',
+                startTime: new Date(1741773600 * 1000),
+                endTime: new Date(1741777200 * 1000),
+                allDay: false,
+                parentEventId,
+                recurrenceDate,
+            }),
+        });
+
+        test('create exception with a full ISO datetime stores the wall-date key', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                exceptionBody('2026-03-19T04:00:00.000Z', aliceRecurringEventId),
+            );
+            const event = await assertJson<CalendarEvent>(res);
+            expect(event.recurrenceDate).toBe('2026-03-19');
+        });
+
+        test('create exception with a garbage recurrenceDate returns 400', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                exceptionBody('garbage', 'irrelevant-rejected-first'),
+            );
+            expect(res.status).toBe(400);
+        });
+
+        test('rsvp with a garbage recurrenceDate returns 400', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/any-id/rsvp`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'accepted', scope: 'this', recurrenceDate: 'garbage' }),
+                },
+            );
+            expect(res.status).toBe(400);
+        });
+    });
+
     describe('Regression: recurrence DoS bounds (finding 19)', () => {
         const subDailyBody = (rrule: string) => ({
             method: 'POST',

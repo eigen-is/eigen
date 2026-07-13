@@ -33,7 +33,13 @@ import {
     dbEventToCalendarEventRow,
     dbRowToSharedCalendar,
 } from './mappers';
-import { computeOccurrenceTimes, constrainRRule, expandRecurrence, utcToLocal } from './recurrence';
+import {
+    computeOccurrenceTimes,
+    constrainRRule,
+    expandRecurrence,
+    storedRecurrenceKey,
+    utcToLocal,
+} from './recurrence';
 import { clampRangeEnd, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
@@ -685,8 +691,8 @@ export class Calendar {
             const modifiedDates = new Map<string, typeof schema.events.$inferSelect>();
 
             for (const exc of parentExceptions) {
-                if (exc.recurrenceDate) {
-                    const dateKey = exc.recurrenceDate.substring(0, 10);
+                const dateKey = exc.recurrenceDate ? storedRecurrenceKey(exc.recurrenceDate) : null;
+                if (dateKey) {
                     if (exc.status === 'cancelled') {
                         cancelledDates.add(dateKey);
                     } else {

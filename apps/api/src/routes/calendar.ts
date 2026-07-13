@@ -6,6 +6,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
+import { storedRecurrenceKey } from '../lib/calendar/recurrence';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
@@ -56,6 +57,15 @@ const EventDataSchema = t.Object({
     notes: t.Optional(t.String()),
     color: t.Optional(t.String()),
 });
+
+// recurrenceDate is a wall-clock occurrence key (YYYY-MM-DD, docs/CALENDAR.md § Recurrence), but
+// old FE builds sent the occurrence's full ISO datetime — normalize at the boundary and reject the
+// unkeyable, so stored keys are always canonical.
+function requireRecurrenceKey(value: string): string {
+    const key = storedRecurrenceKey(value);
+    if (!key) throw new ApiError(400, 'Invalid recurrenceDate');
+    return key;
+}
 
 const CreateEventSchema = t.Object({
     title: t.String(),
@@ -198,7 +208,15 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            return createEventAt(params.ownerId, params.calId, { ...body, createByUserId: user.id }, user);
+            const recurrenceDate = body.recurrenceDate
+                ? requireRecurrenceKey(body.recurrenceDate)
+                : body.recurrenceDate;
+            return createEventAt(
+                params.ownerId,
+                params.calId,
+                { ...body, recurrenceDate, createByUserId: user.id },
+                user,
+            );
         },
         { body: CreateEventSchema, auth: true },
     )
@@ -233,7 +251,10 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const home = await getHome(user.id);
-            home.calendar.rsvp(params.id, user, body);
+            const recurrenceDate = body.recurrenceDate
+                ? requireRecurrenceKey(body.recurrenceDate)
+                : body.recurrenceDate;
+            home.calendar.rsvp(params.id, user, { ...body, recurrenceDate });
             return { success: true };
         },
         {
