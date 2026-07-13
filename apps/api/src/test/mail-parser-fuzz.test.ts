@@ -34,14 +34,14 @@ function hostile(i: number): { name: string; bytes: Buffer } {
         name = 'malformed-headers';
         const n = 3 + Math.floor(r() * 20);
         for (let k = 0; k < n; k++) {
-            const key = 'X-H' + Math.floor(r() * 1000);
+            const key = `X-H${Math.floor(r() * 1000)}`;
             const val = 'v'.repeat(Math.floor(r() * 200));
             s += `${key}: ${val}${pick(r, EOLS)}`;
         }
     } else if (kind === 1) {
         // Unterminated boundary: declared, parts opened, never closed
         name = 'unterminated-boundary';
-        const b = 'b' + Math.floor(r() * 1e6);
+        const b = `b${Math.floor(r() * 1e6)}`;
         s += `Content-Type: multipart/mixed; boundary="${b}"${pick(r, EOLS)}${pick(r, EOLS)}`;
         const parts = 1 + Math.floor(r() * 6);
         for (let k = 0; k < parts; k++) {
@@ -52,13 +52,13 @@ function hostile(i: number): { name: string; bytes: Buffer } {
     } else if (kind === 2) {
         // Charset bomb: bogus / huge charset declaration
         name = 'charset-bomb';
-        const junk = r() < 0.5 ? 'x-'.repeat(2000) : 'utf-' + Math.floor(r() * 1e9);
+        const junk = r() < 0.5 ? 'x-'.repeat(2000) : `utf-${Math.floor(r() * 1e9)}`;
         s += `Content-Type: text/plain; charset="${junk}"${pick(r, EOLS)}${pick(r, EOLS)}`;
         s += 'body text '.repeat(Math.floor(r() * 200));
     } else if (kind === 3) {
         // Truncated base64 attachment (cut mid-stream)
         name = 'truncated-base64';
-        const b = 'b' + Math.floor(r() * 1e6);
+        const b = `b${Math.floor(r() * 1e6)}`;
         s +=
             `Content-Type: multipart/mixed; boundary="${b}"\r\n\r\n--${b}\r\n` +
             'Content-Type: application/octet-stream\r\n' +
@@ -71,7 +71,7 @@ function hostile(i: number): { name: string; bytes: Buffer } {
         // Huge single-line HTML (no newlines)
         name = 'huge-single-line-html';
         s += `Content-Type: text/html; charset=utf-8\r\n\r\n`;
-        s += '<div>' + 'A'.repeat(200_000 + Math.floor(r() * 100_000)) + '</div>';
+        s += `<div>${'A'.repeat(200_000 + Math.floor(r() * 100_000))}</div>`;
     } else if (kind === 5) {
         // Deeply nested multipart (depth bomb) — should hit MAX_CHILD_NODES, not hang
         name = 'nested-multipart-bomb';
@@ -94,11 +94,11 @@ function hostile(i: number): { name: string; bytes: Buffer } {
         s += `Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n`;
         const n = Math.floor(r() * 400);
         for (let k = 0; k < n; k++)
-            s += r() < 0.3 ? '=' + (r() < 0.5 ? 'ZZ' : 'A') : String.fromCharCode(33 + Math.floor(r() * 90));
+            s += r() < 0.3 ? `=${r() < 0.5 ? 'ZZ' : 'A'}` : String.fromCharCode(33 + Math.floor(r() * 90));
     } else {
         // Boundary spoofing: bare-CR / mixed EOL around real boundaries (the #14 family)
         name = 'boundary-eol-chaos';
-        const b = 'bnd' + Math.floor(r() * 1e5);
+        const b = `bnd${Math.floor(r() * 1e5)}`;
         s += `Content-Type: multipart/mixed; boundary="${b}"\r\n\r\n`;
         const parts = 2 + Math.floor(r() * 5);
         for (let k = 0; k < parts; k++) {
