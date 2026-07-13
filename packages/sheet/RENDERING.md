@@ -18,7 +18,6 @@
           freeze lines
           formula range highlights
           <InputBox>                            SheetOverlay/InputBox.tsx   (ContentEditable over canvas)
-          <FilterOptions>                       FilterOption/index.tsx
           <ImgBoxs>                             ImgBoxs/index.tsx
           <LinkEditCard>                        LinkEditCard/index.tsx
           <DropDownList>                        DataVerification/DropdownList.tsx
@@ -39,7 +38,9 @@ The actual spreadsheet grid — cells, text, gridlines, borders, fill colors —
 
 - `Sheet/index.tsx` creates a `<canvas>` element sized to the container
 - On context changes or scroll, it calls `requestAnimationFrame` to coalesce redraws
-- `state/canvas.ts` contains the `Canvas` class with methods like `drawMain()`, `renderCell()`, etc.
+- `state/canvas.ts` contains the `Canvas` facade class (`drawMain()`, `drawRowHeader()`,
+  `drawColumnHeader()`, `drawFreezeLine()`); per-cell painting lives in `state/render/` (`cellRender`
+  in `cells.ts`, driven by the `collectVisibleCells → renderCells → renderMergedCells` phases)
 - **Gridlines**: stroked paths (`#dfdfdf`)
 - **Cell text**: `ctx.fillText()` with font metrics from `getMeasureText()`
 - **Cell backgrounds**: `ctx.fillRect()` with the cell's fill color
@@ -96,7 +97,9 @@ React divs, NOT canvas. They render:
 - Selected column/row highlight (light blue, `z-index: 10`)
 - Resize cursor handle (`.fortune-cols-change-size` / `.fortune-rows-change-size`)
 - Freeze drag handle at the freeze boundary
-- Filter dropdown arrow icon (ColumnHeader only, lucide `CircleChevronDown`)
+- Column-header hover dropdown arrow (ColumnHeader only, lucide `ChevronDown` in a `.header-arrow`
+  span; opens the column context menu). The autofilter buttons are NOT here — they're canvas-painted
+  (see § Filter Buttons)
 
 Headers are NOT scroll containers. They share the body-overlay pane region model one axis
 at a time (see § Scrolling): each header holds `OverlayRegion` viewports derived by
@@ -152,18 +155,21 @@ When you double-click or type into a cell, InputBox appears:
 
 Always visible above the grid. Contains:
 - `NameBox` — shows current cell address (e.g., "A1")
-- Function icon (`FunctionSquare` from Lucide)
-- ContentEditable for formula/value editing
+- `ContentEditable` for formula/value editing, with the shared `FormulaSearch` dropdown +
+  `FormulaHint` card (same autocomplete path as InputBox)
 - Uses Tailwind styling, standard React layout (not overlay)
 
-### 6. Filter Indicators (React DOM)
+### 6. Filter Buttons (Canvas)
 
-**File**: `FilterOption/index.tsx`
+**File**: `state/render/filter-ui.ts` (`drawFilterUI`, called from `drawMain` in `state/canvas.ts`)
 
-Small divs positioned over filtered column header cells:
-- Shows chevron (no filter) or filled filter icon (active filter)
-- Absolutely positioned with freeze-aware offset calculations
-- Class: `.luckysheet-filter-options`
+The autofilter range border and per-column buttons are painted on the canvas inside every `drawMain`
+pass, so freeze-region pinning and clipping match the cells underneath (not React DOM):
+- Google-style glyphs (lazy `Path2D`): a bare strainer when idle, a filled green funnel when the column
+  has an active filter, with a green wash on hover
+- Geometry comes from `filterOptions.items` (`createFilterOptions` in `state/modules/filter.ts`) plus the
+  shared `FILTER_BUTTON_WIDTH`/`FILTER_BUTTON_HEIGHT` constants — the same values the mousedown hit-test
+  reads, so the drawn button and its click target stay aligned
 
 ### 7. Images (React DOM + `<img>`)
 

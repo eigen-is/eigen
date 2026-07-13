@@ -3,8 +3,6 @@
 Single source of truth for all remaining sheets work (`packages/sheet`, `apps/sheets`, xlsx
 import/export). Everything below is open backlog.
 Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two agree.
-(Groups 1-2 — small bugs, decided behavior changes, presence — executed 2026-07-12 on
-fix/sheet-decided-fixes.)
 
 ## 3. xlsx round-trip fidelity backlog
 
@@ -45,14 +43,12 @@ fix/sheet-decided-fixes.)
 
 ## 5. Rendering
 
-- [ ] sheet dark mode — surface invariance DONE 2026-07-13: the workbook surface (canvas +
-      headers + overlays) is pinned light via the `.eigen-paper` convention in `globals.css`
-      (re-pins the theme tokens the surface consumes to their light values; in-grid popup cards —
-      link card, validation hint box — opt back into the theme with `.eigen-paper-chrome`) and
-      renders pixel-identically in light and dark. Remaining for a future dark pass: chrome-side
-      polish only, plus adopting `.eigen-paper` on the docs page — it still pins itself with
-      literal `bg-white text-black`, so token-driven visuals inside it (e.g. the `--warning`
-      search highlights) still flip in dark mode
+- [ ] sheet dark mode — future dark pass, chrome-side only. The workbook surface (canvas + headers +
+      overlays) is already pinned light and renders pixel-identically in light/dark via the
+      `.eigen-paper` convention in `globals.css`. What's left: adopt `.eigen-paper` on the docs page —
+      it still pins itself with literal `bg-white text-black`, so token-driven visuals inside it (e.g.
+      the `--warning` search highlights) still flip in dark mode. Needs its own pixel gate (changes
+      docs dark search-highlights)
 
 ## 6. Code debt (opportunistic — fix when touching the area)
 

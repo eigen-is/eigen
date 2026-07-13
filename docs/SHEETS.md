@@ -60,12 +60,14 @@ reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" mea
 On first mount, the Workbook (`packages/sheet/src/components/Workbook/index.tsx`) reconciles the
 incoming `Sheet[]` before rendering:
 
-1. **Materialize `data`** — expand sparse `celldata` into a 2D `data` matrix.
-2. **Recompute formulas** — `api.calculateFormula(draftCtx)` walks each sheet's `data` matrix, evaluates
-   every cell with `f`, and writes the result back. This refreshes displayed values (not stale cached
-   results from xlsx import or a previous save) and populates `sheet.calcChain` as a side-effect via
-   `insertUpdateFunctionGroup`. `ctx.formulaCache.formulaCellInfoMap` lazy-primes on the first edit via
-   `execFunctionGroup`, so no eager priming is needed at mount.
+1. **Materialize `data`** — expand sparse `celldata` into a 2D `data` matrix (`api.initSheetData`).
+2. **Seed the calc chain, don't recompute** — `api.seedCalcChain(draftCtx)` records each sheet's formula
+   cells in `sheet.calcChain` without evaluating them. Displayed values come straight from the incoming
+   `Sheet[]`: xlsx-imported sheets carry Excel's last computed values (and the importer now recomputes them
+   through our own engine at import — see § Server-side recalc), persisted sheets were saved post-recompute,
+   and a later edit lazily kicks the engine for just the affected sub-graph (`execFunctionGroup`) — recalc
+   is proportional to the edit, not the workbook. `ctx.formulaCache.formulaCellInfoMap` lazy-primes on the
+   first edit, so no eager priming or full-workbook sweep happens at mount.
 
 This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with as little as `celldata + f` — the
 Workbook handles the rest. The xlsx importer goes well beyond that minimum: it also emits `config`
@@ -105,9 +107,11 @@ engine/
 ├── formula-engine.ts       # FormulaEngine class (evaluate)
 ├── formula-utils.ts        # Pure utilities (iscelldata, checkBracketNum, calPostfixExpression)
 ├── formula-shift.ts        # functionCopy + functionStrChange (formula relative-ref shifters)
+├── formula-reference-cycle.ts # cycleReferenceAtCaret (F4 relative/absolute ref cycling)
 ├── rowcol.ts               # applySheetsInsertRowCol / applySheetsDeleteRowCol (pure row/col data shifts)
 ├── replay-ops.ts           # replaySheetsOps (snapshot + ops → Sheet[]; shared by BE + FE initial-load)
 ├── dependency-graph.ts     # Topological sort (getCalculationOrder)
+├── recalc.ts               # recalcSheets — server-side gated full recalc (see § Server-side recalc)
 ├── cell-resolver.ts        # CellResolver interface + createArrayResolver
 ├── format.ts               # Format type inference (uses numfmt for rendering)
 ├── conditional-format.ts   # Pure CF evaluator (evaluateConditionalFormat, cfSplitRange, getColorGradation)
