@@ -86,6 +86,9 @@ message set" (RED until fixed).
 
 ## #5 — WebSocket maxPayloadLength — **ALREADY FIXED @08bda417; deep-dive confirms it's correct, direction corrected**
 
+> **✅ NET COMMITTED — P3 cleanup** (`chore/collab-p3-cleanup`). `collab-ws-payload.test.ts` ported to
+> `apps/api/src/test/` as the regression net; all 3 cases green against the landed 128 MB config.
+
 **Status:** Unit 2 set `maxPayloadLength: 128 * 1024 * 1024` on the root `websocket` config in `app.ts`. (The
 verification worktrees were branched off a **pre-Unit-2** commit, so they observed it unset and "found" it —
 it is landed.) Both passes independently validated the fix:
@@ -116,6 +119,30 @@ it is landed.) Both passes independently validated the fix:
 ---
 
 ## New minor findings (all P3 — no new data-loss windows)
+
+> **✅ FIXED — P3 cleanup** (`chore/collab-p3-cleanup`, 2026-07-13).
+> **#1** restore now generates a unique per-invocation temp id (`randomUUID`) via
+> `downloadToTemp(pathId, tempId)`; the live-working-copy guard moved to `tempId`. Pinned by
+> `versioning.test.ts` › "concurrent restores of the same snapshot" (RED pre-fix: `no such table:
+> doc_snapshots` on the first concurrent pair).
+> **#2** accepted for the BLOCKING path only: `snapshotContainerDataDb` (manual save, pre-restore
+> snapshot) now waits out an in-flight close of the container's data.db before copying. The
+> tick/close path must NOT wait — a close-time snapshot runs inside the very close that registered
+> the `closingDocumentDbs` slot, so awaiting it self-wedges (caught red-handed by
+> `docdb-open-close-race.test.ts` (iii) during this fix). Its torn-copy sub-case is now acknowledged
+> in the `takeSnapshot` comment instead.
+> **#3 DECLINED — a throw is actively harmful, not nice-to-have:** `doc.emit('update')` runs inside
+> yjs's transaction-cleanup `finally`; a throwing handler leaves `doc._transactionCleanups` stale,
+> after which cleanup never runs again for that doc — every later update goes unpersisted AND
+> unbroadcast, silently, until reopen (verified against yjs 13 source). The log-only catches are
+> correct; both now carry WHY comments in `DbProvider` so a future fail-loud pass doesn't escalate.
+> **#4** comment corrected: restore.ts deliberately holds no lock; the surgery is synchronous.
+> **#5** remains a documented product note (retention behavior), unchanged.
+> **#6** `replayYjsState` returns a `blobsSkipped` count; `readYjsStateFromFile` (restore path) fails
+> loud with `ApiError(422)` before any state touches the live doc — live loads (`loadYjsState`) stay
+> lenient, since a throw there would make a doc with one corrupt row unopenable and unexportable.
+> Pinned by `versioning.test.ts` › "restore from a corrupt snapshot fails 422" (RED pre-fix: 200 +
+> half-empty doc).
 
 1. **Concurrent restores of one container share one temp path** (`restore.ts` uses `mount.getTempPath(target.id)`):
    R1's `cleanupTemp` can delete under R2 → `readYjsStateFromFile` (create-allowed open) materialises an empty

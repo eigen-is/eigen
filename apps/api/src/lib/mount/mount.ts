@@ -223,11 +223,8 @@ export class Mount {
             // An open document's working copy lives in tmpDir keyed by its data.db pathId (getTempPath).
             // A delayed restart makes it >maxAge, but crash-recovery only adopts it when the doc is next
             // opened — so skip any entry whose basename is a live paths.id, or the sweep deletes the last
-            // un-synced edits before recovery can run. Transient stream/upload temps use random UUID ids
-            // that are never a paths row, so they're still swept. Download temps (downloadToTemp keys by
-            // the real pathId — e.g. version-file grabs) are also preserved while their row lives: a
-            // benign bounded disk leak that clears when the row goes away (a pruned version), with no
-            // adoption hazard — version-file ids are never opened as managed docs.
+            // un-synced edits before recovery can run. Transient stream/upload/download temps use random
+            // UUID ids that are never a paths row, so they're still swept.
             const liveIds = preserveLivePathIds
                 ? new Set(
                       this.db
@@ -971,14 +968,18 @@ export class Mount {
     }
 
     // Download a stored file to a local temp path the caller can open directly
-    // (e.g. reading a SQLite snapshot on any storage backend). Caller owns
-    // cleanupTemp(pathId).
-    async downloadToTemp(pathId: string): Promise<string> {
-        // Invariant: the temp path doubles as an open doc's live working copy (getTempPath) — never truncate it.
-        if (this.documentDbs.has(pathId)) {
-            throw new Error(`[Mount] downloadToTemp ${pathId}: refusing to overwrite the live working copy`);
+    // (e.g. reading a SQLite snapshot on any storage backend). tempId must be
+    // unique per invocation (a fresh randomUUID): a shared id lets concurrent
+    // downloads of one file clobber each other. Caller owns cleanupTemp(tempId).
+    async downloadToTemp(pathId: string, tempId: string): Promise<string> {
+        // Invariant: an open doc's live working copy is the temp path keyed by its
+        // data.db pathId (getTempPath) — a tempId colliding with one would truncate it.
+        if (this.documentDbs.has(tempId)) {
+            throw new Error(
+                `[Mount] downloadToTemp ${pathId}: tempId ${tempId} is an open document DB — refusing to overwrite its live working copy`,
+            );
         }
-        return this.downloadKeyToTemp(await this.getStorageKey(pathId), pathId);
+        return this.downloadKeyToTemp(await this.getStorageKey(pathId), tempId);
     }
 
     // internal — used by mount/*.ts
