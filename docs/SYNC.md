@@ -92,13 +92,13 @@ memory and re-uploads them through the guarded path once the orphan settles — 
 landing would regress the object **permanently if no further sync occurs** — and a cancel re-issues the
 object delete on settlement (invariant 7 holds through timeouts, whichever of cancel and timeout comes
 first). An ack whose orphans all settled while its own PUT was in flight distrusts its commit order and
-re-PUTs immediately. Residual: an orphan whose
-fully-transmitted body the server commits after process death or queue teardown lands unrepaired
-(logged when detectable; bucket versioning is the recovery). A staged copy that fails the SQLite magic
-check (`isSqliteFile`) is dropped loudly before PUT — the object stays last-good instead of acking
-garbage. Failed uploads back off (full-jitter, capped) and the queue **self-schedules** its
-own retry — there is no global registry or sweep. The only process-global state is the destination→semaphore
-map (infra strings, no per-user data), the backoff function, and the shutdown deadline.
+re-PUTs immediately. Residual: an orphan whose fully-transmitted body the server commits after process
+death or queue teardown lands unrepaired (logged when detectable; bucket versioning is the recovery).
+A staged copy that fails the SQLite magic check (`isSqliteFile`) is dropped loudly before PUT — the
+object stays last-good instead of acking garbage. Failed uploads back off (full-jitter, capped) and the
+queue **self-schedules** its own retry — there is no global registry or sweep. The only process-global
+state is the destination→semaphore map (infra strings, no per-user data), the backoff function, and the
+shutdown deadline.
 
 ## Teardown
 
