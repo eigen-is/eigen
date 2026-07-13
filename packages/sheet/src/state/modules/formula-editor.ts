@@ -1,19 +1,18 @@
 import { indexOf, isEmpty, isNil, last, startsWith, trim } from 'es-toolkit/compat';
+import { iscelldata, operatorjson } from '../../engine/formula-utils';
 import type { Context } from '../context';
-import { locale } from '../locale';
+import { en } from '../locale/en';
 import { escapeHTMLTag, escapeScriptTag } from '../utils';
 import { cancelFunctionrangeSelected } from '.';
-import { createRangeHightlight, setCaretPosition } from './formula-range';
+import { colors } from './color';
 import {
-    colors,
     formulaUIState,
-    iscelldata,
-    operatorjson,
     resetFunctionHTMLIndex,
     resetRangeIndexes,
     setFunctionHTMLIndex,
     setRangeIndexes,
-} from './formula-ui';
+} from './formula-cache';
+import { createRangeHightlight, setCaretPosition } from './formula-range';
 
 function functionHTML(txt: string) {
     if (txt[0] === '=') {
@@ -213,7 +212,7 @@ function getRangeIndexes($editor: HTMLDivElement) {
 }
 
 function searchFunction(ctx: Context, searchtxt: string) {
-    const { functionlist } = locale(ctx);
+    const { functionlist } = en;
 
     // // This logic has been modified from the original project
     // if (isNil($editer)) {
@@ -338,7 +337,7 @@ export function getrangeseleciton() {
 }
 
 function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Context) {
-    const { functionlist } = locale(ctx);
+    const { functionlist } = en;
     if (isEmpty(ctx.formulaCache.functionlistMap)) {
         for (const fn of functionlist) {
             ctx.formulaCache.functionlistMap[fn.n] = fn;

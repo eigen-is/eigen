@@ -1,11 +1,12 @@
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { cloneDeep, omit, set } from 'es-toolkit/compat';
+import { iscelldata } from '../../engine/formula-utils';
 import { type Context, getFlowdata } from '../context';
-import { locale } from '../locale';
+import { en } from '../locale/en';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { mergeBorder } from './cell';
-import { getcellrange, iscelldata } from './formula-ui';
+import { getcellrange } from './formula-exec';
 import { colLocation, rowLocation } from './location';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
@@ -151,9 +152,9 @@ export function goToLink(
     ctx.linkCard = undefined;
 }
 
-export function isLinkValid(ctx: Context, linkType: string, linkAddress: string) {
+export function isLinkValid(linkType: string, linkAddress: string) {
     if (!linkAddress) return { isValid: false, tooltip: '' };
-    const { insertLink } = locale(ctx);
+    const { insertLink } = en;
     if (linkType === 'webpage') {
         // Valid means "navigation would open it": the same resolveWebLink gate
         // goToLink uses, plus a structural parse — one fact, one place.

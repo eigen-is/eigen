@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
     columnIndexToLabel,
     columnLabelToIndex,
-    parseA1,
     parseA1Range,
     rowIndexToLabel,
     rowLabelToIndex,
@@ -41,28 +40,6 @@ describe('engine/a1-notation — rowIndexToLabel', () => {
     test('9 → "10"', () => expect(rowIndexToLabel(9)).toBe('10'));
     test('99 → "100"', () => expect(rowIndexToLabel(99)).toBe('100'));
     test('negative → ""', () => expect(rowIndexToLabel(-1)).toBe(''));
-});
-
-describe('engine/a1-notation — parseA1', () => {
-    test('simple ref A1 → { col: 0, row: 0 }', () => expect(parseA1('A1')).toEqual({ col: 0, row: 0 }));
-
-    test('simple ref B3 → { col: 1, row: 2 }', () => expect(parseA1('B3')).toEqual({ col: 1, row: 2 }));
-
-    test('absolute ref $B$3 → { col: 1, row: 2 }', () => expect(parseA1('$B$3')).toEqual({ col: 1, row: 2 }));
-
-    test('mixed absolute $C4 → { col: 2, row: 3 }', () => expect(parseA1('$C4')).toEqual({ col: 2, row: 3 }));
-
-    test('mixed absolute C$4 → { col: 2, row: 3 }', () => expect(parseA1('C$4')).toEqual({ col: 2, row: 3 }));
-
-    test('AA10 → { col: 26, row: 9 }', () => expect(parseA1('AA10')).toEqual({ col: 26, row: 9 }));
-
-    test('invalid string → null', () => expect(parseA1('hello')).toBeNull());
-
-    test('empty string → null', () => expect(parseA1('')).toBeNull());
-
-    test('only column letter → null', () => expect(parseA1('A')).toBeNull());
-
-    test('only row number → null', () => expect(parseA1('1')).toBeNull());
 });
 
 describe('engine/a1-notation — parseA1Range', () => {

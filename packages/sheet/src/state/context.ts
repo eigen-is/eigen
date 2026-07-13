@@ -2,6 +2,7 @@ import { isNil, sortBy } from 'es-toolkit/compat';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
 import type { SheetConfig } from '.';
+import { en } from './locale/en';
 import { FormulaCache } from './modules';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
@@ -239,27 +240,7 @@ export function defaultContext(refs: RefValues): Context {
         dataVerification: {
             selectStatus: false,
             selectRange: [],
-            optionLabel: {
-                number: 'numeric',
-                number_integer: 'integer',
-                number_decimal: 'decimal',
-                between: 'between',
-                notBetween: 'not between',
-                equal: 'equal to',
-                notEqualTo: 'not equal to',
-                moreThanThe: 'greater',
-                lessThan: 'less than',
-                greaterOrEqualTo: 'greater or equal to',
-                lessThanOrEqualTo: 'less than or equal to',
-                include: 'include',
-                exclude: 'not include',
-                earlierThan: 'earlier than',
-                noEarlierThan: 'not earlier than',
-                laterThan: 'later than',
-                noLaterThan: 'not later than',
-                identificationNumber: 'identification number',
-                phoneNumber: 'phone number',
-            },
+            optionLabel: en.dataVerification.optionLabel,
             dataRegulation: {
                 type: '',
                 type2: '',

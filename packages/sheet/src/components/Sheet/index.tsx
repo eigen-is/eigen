@@ -245,8 +245,11 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         return () => cancelAnimationFrame(rafIdRef.current);
     }, []);
 
+    // eigen-paper: the workbook surface keeps its light rendering in dark mode
+    // (globals.css convention) — canvas, headers, and every overlay painting on
+    // the grid resolve theme tokens to light values.
     return (
-        <div className="flex flex-1 flex-col min-h-0 relative bg-muted">
+        <div className="eigen-paper flex flex-1 flex-col min-h-0 relative bg-muted">
             <div ref={placeholderRef} className="w-full h-full block" />
             <canvas className="w-full h-full block absolute" ref={refs.canvas} aria-hidden="true" />
             <MemoizedSheetOverlay />

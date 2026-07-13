@@ -25,7 +25,8 @@
   },
   "devDependencies": {
     "@types/numeral": "^2.0.5",
-    "@types/uuid": "^9.0.0"
+    "@types/uuid": "^9.0.0",
+    "happy-dom": "^20.10.6"
   },
   "peerDependencies": {
     "react": ">= 18.2",

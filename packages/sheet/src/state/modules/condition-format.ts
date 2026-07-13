@@ -6,15 +6,15 @@ import type {
     SingleRange,
 } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
-import type { CellFormatStyle, ComputeMap } from '../../engine';
-import { evaluateConditionalFormat } from '../../engine';
+import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
+import { evaluateConditionalFormat } from '../../engine/conditional-format';
+import { functionCopy } from '../../engine/formula-shift';
 import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { ConditionRulesProps } from '../types';
 import { getSheetIndex } from '../utils';
 import { getCellValue, getRangeByTxt } from './cell';
 import { createContextResolver } from './formula-cache';
-import { functionCopy } from './formula-ui';
 import { checkProtectionFormatCells } from './protection';
 
 const KNOWN_CONDITION_NAMES = [
@@ -51,13 +51,7 @@ function toRuleValue(raw: unknown): string | number {
 }
 
 // Set condition rules
-export function setConditionRules(
-    ctx: Context,
-    _protection: unknown,
-    _generalDialog: unknown,
-    conditionformat: Record<string, string>,
-    rules: ConditionRulesProps,
-) {
+export function setConditionRules(ctx: Context, conditionformat: Record<string, string>, rules: ConditionRulesProps) {
     if (!checkProtectionFormatCells(ctx)) {
         return;
     }
@@ -210,10 +204,6 @@ let _cfCache: {
     data: CellMatrix;
     result: ComputeMap;
 } | null = null;
-
-export function invalidateCFCache() {
-    _cfCache = null;
-}
 
 export function getComputeMap(ctx: Context): ComputeMap | null {
     const index = getSheetIndex(ctx, ctx.currentSheetId);

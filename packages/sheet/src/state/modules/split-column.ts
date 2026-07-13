@@ -25,8 +25,6 @@ export function updateMoreCell(r: number, c: number, dataMatrix: string[][], ctx
             setCellValue(ctx, r + i, c + j, flowdata, v);
         });
     });
-    // jfrefreshgrid(d, range);
-    // selectHightlightShow();
 }
 
 // Build the split-regex source from the user's checkbox/text-input selection.

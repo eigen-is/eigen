@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../context';
-import { getDropdownList, validateCellData } from '../../modules/dataVerification';
+import { getDropdownList, validateCellData } from '../../modules/data-verification';
 import type { DataVerificationRule } from '../../types';
 import { contextFactory } from '../factories/context';
 

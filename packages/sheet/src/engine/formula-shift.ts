@@ -18,6 +18,17 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
 // ('d'/'u' = ±row, 'r'/'l' = ±col). $-prefixed parts stay put. Returns
 // the original text if it isn't a recognizable ref, '#REF!' if a range
 // endpoint shifts negative.
+//
+// NOTE: this and `functionStrChange_range` parse+reformat refs with the same
+// per-leg idiom (split on '!', split on ':', digits→row / letters→col,
+// detectAbsolute, missing/frozen flags), but they are deliberately NOT merged
+// into a shared parseRef/formatRef. They differ in row convention (this keeps
+// rows 1-based throughout; `functionStrChange_range` works 0-based internally
+// and +1s on output) and, more importantly, in their single-cell fallback: this
+// branches on post-shift `rowValid`/`colValid`, while the other collapses via
+// `r1===r2 && c1===c2` off explicit missing flags. A forced merge would have to
+// rewrite one function's shift math onto the other's convention — high risk on
+// the package's most formula-corruption-sensitive code for a few lines saved.
 function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): string {
     const sheetSplit = txt.split('!');
     let rangetxt: string;
@@ -97,19 +108,31 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
     return `${prefix + $col0 + columnIndexToLabel(col[0]) + $row0 + row[0]}:${$col1}${columnIndexToLabel(col[1])}${$row1}${row[1]}`;
 }
 
-// Walks a formula string, finding cell-data refs and shifting them in the given
-// direction. A leading `=` is stripped before processing; the returned text never
-// carries one. Pure — no Context, no DOM. Negative `step` is allowed and reverses
-// the direction. Used by:
-//   - state/modules/conditionFormat.ts (CF formula rules)
-//   - state/events/paste.ts (formula paste with relative refs)
-//   - state/modules/sort.ts (sort moves formulas around)
-//   - apps/api/src/lib/export/sheets/html.ts (server-side CF rule evaluation)
-export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step = 1): string {
+// Shared formula char-walker. Strips a single leading `=`, then splits the text into
+// reference tokens vs structure — paren depth, double-quote state, `,`, `&`, and the
+// operator handling (including glued two-char operators and leading-unary `-`) — and
+// recurses into each bracketed / comma- / operator-separated segment. Every leaf token
+// that `iscelldata` recognizes as a cell/range ref is passed to `onRef` and replaced by
+// its return value; non-ref leaves pass through untouched. Pure — no Context, no DOM.
+//
+// `functionCopy` (relative shift) and `functionStrChange` (insert/delete shift) are the
+// two consumers; they differ only in the per-ref transform they hand to `onRef`. The
+// state-layer walker `isFunctionRange` (formula-exec.ts) looks similar but is a genuinely
+// different machine — a shunting-yard compiler that emits `luckysheet_*` postfix and
+// carries single-quote / `{}` array / `""`-escape state this walker has no notion of —
+// so it is deliberately NOT built on this helper.
+//
+// A leading `-` is classified as a unary sign (glued to the following number literal) rather
+// than a binary operator when the nearest non-space char before it is one of the unary-trigger
+// chars (opening paren, comma, another operator) or the start of the segment. That predecessor
+// is found by reading i-1 first, then scanning back over spaces — the char immediately before
+// the `-`. (functionStrChange historically decremented before reading, skipping i-1 and starting
+// at i-2; that misclassified e.g. the `-` in `CONCAT(-1:3)` as binary and shifted the trailing
+// range. Both consumers now share this single read-i-1 scan.)
+function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     let stripped = txt;
     if (stripped.startsWith('=')) stripped = stripped.slice(1);
 
-    const orient = mode[0] as 'd' | 'u' | 'l' | 'r';
     const chars = stripped.split('');
     let i = 0;
     let str = '';
@@ -123,7 +146,7 @@ export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step 
             result += str.length > 0 ? `${str}(` : '(';
             str = '';
         } else if (s === ')' && dquote === 0) {
-            result += `${functionCopy(str, mode, step)})`;
+            result += `${walkFormulaRefs(str, onRef)})`;
             str = '';
         } else if (s === '"') {
             if (dquote > 0) {
@@ -135,11 +158,11 @@ export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step 
                 str += '"';
             }
         } else if (s === ',' && dquote === 0) {
-            result += `${functionCopy(str, mode, step)},`;
+            result += `${walkFormulaRefs(str, onRef)},`;
             str = '';
         } else if (s === '&' && dquote === 0) {
             if (str.length > 0) {
-                result += `${functionCopy(str, mode, step)}&`;
+                result += `${walkFormulaRefs(str, onRef)}&`;
                 str = '';
             } else {
                 result += '&';
@@ -157,7 +180,7 @@ export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step 
 
             if (s + sNext in operatorjson) {
                 if (str.length > 0) {
-                    result += functionCopy(str, mode, step) + s + sNext;
+                    result += walkFormulaRefs(str, onRef) + s + sNext;
                     str = '';
                 } else {
                     result += s + sNext;
@@ -170,7 +193,7 @@ export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step 
             ) {
                 str += s;
             } else if (str.length > 0) {
-                result += functionCopy(str, mode, step) + s;
+                result += walkFormulaRefs(str, onRef) + s;
                 str = '';
             } else {
                 result += s;
@@ -181,13 +204,26 @@ export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step 
 
         if (i === chars.length - 1) {
             const trimmed = str.trim();
-            result += iscelldata(trimmed) ? shiftRef(orient, trimmed, step) : trimmed;
+            result += iscelldata(trimmed) ? onRef(trimmed) : trimmed;
         }
 
         i += 1;
     }
 
     return result;
+}
+
+// Walks a formula string, finding cell-data refs and shifting them in the given
+// direction. A leading `=` is stripped before processing; the returned text never
+// carries one. Pure — no Context, no DOM. Negative `step` is allowed and reverses
+// the direction. Used by:
+//   - state/modules/condition-format.ts (CF formula rules)
+//   - state/events/paste.ts (formula paste with relative refs)
+//   - state/modules/sort.ts (sort moves formulas around)
+//   - apps/api/src/lib/export/sheets/html.ts (server-side CF rule evaluation)
+export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step = 1): string {
+    const orient = mode[0] as 'd' | 'u' | 'l' | 'r';
+    return walkFormulaRefs(txt, (ref) => shiftRef(orient, ref, step));
 }
 
 // Shifts formula-text refs in response to an insert ('add') or delete ('del') row/col
@@ -206,117 +242,12 @@ export function functionStrChange(
     if (!txt) {
         return '';
     }
-    if (txt.substring(0, 1) === '=') {
-        txt = txt.substring(1);
-    }
-
-    const funcstack = txt.split('');
-    let i = 0;
-    let str = '';
-    let function_str = '';
-
-    const matchConfig = {
-        bracket: 0,
-        comma: 0,
-        squote: 0,
-        dquote: 0,
-    };
-
-    while (i < funcstack.length) {
-        const s = funcstack[i];
-
-        if (s === '(' && matchConfig.dquote === 0) {
-            matchConfig.bracket += 1;
-
-            if (str.length > 0) {
-                function_str += `${str}(`;
-            } else {
-                function_str += '(';
-            }
-
-            str = '';
-        } else if (s === ')' && matchConfig.dquote === 0) {
-            matchConfig.bracket -= 1;
-            function_str += `${functionStrChange(str, type, rc, orient, stindex, step)})`;
-            str = '';
-        } else if (s === '"' && matchConfig.squote === 0) {
-            if (matchConfig.dquote > 0) {
-                function_str += `${str}"`;
-                matchConfig.dquote -= 1;
-                str = '';
-            } else {
-                matchConfig.dquote += 1;
-                str += '"';
-            }
-        } else if (s === ',' && matchConfig.dquote === 0) {
-            function_str += `${functionStrChange(str, type, rc, orient, stindex, step)},`;
-            str = '';
-        } else if (s === '&' && matchConfig.dquote === 0) {
-            if (str.length > 0) {
-                function_str += `${functionStrChange(str, type, rc, orient, stindex, step)}&`;
-                str = '';
-            } else {
-                function_str += '&';
-            }
-        } else if (s in operatorjson && matchConfig.dquote === 0) {
-            let s_next = '';
-
-            if (i + 1 < funcstack.length) {
-                s_next = funcstack[i + 1];
-            }
-
-            let p = i - 1;
-            let s_pre = null;
-
-            if (p >= 0) {
-                do {
-                    s_pre = funcstack[(p -= 1)];
-                } while (p >= 0 && s_pre === ' ');
-            }
-
-            if (s + s_next in operatorjson) {
-                if (str.length > 0) {
-                    function_str += functionStrChange(str, type, rc, orient, stindex, step) + s + s_next;
-                    str = '';
-                } else {
-                    function_str += s + s_next;
-                }
-
-                i += 1;
-            } else if (
-                !/[^0-9]/.test(s_next) &&
-                s === '-' &&
-                (s_pre === '(' || s_pre == null || s_pre === ',' || s_pre === ' ' || s_pre in operatorjson)
-            ) {
-                str += s;
-            } else {
-                if (str.length > 0) {
-                    function_str += functionStrChange(str, type, rc, orient, stindex, step) + s;
-                    str = '';
-                } else {
-                    function_str += s;
-                }
-            }
-        } else {
-            str += s;
-        }
-
-        if (i === funcstack.length - 1) {
-            if (iscelldata(str.trim())) {
-                function_str += functionStrChange_range(str.trim(), type, rc, orient, stindex, step);
-            } else {
-                function_str += str.trim();
-            }
-        }
-
-        i += 1;
-    }
-
-    return function_str;
+    return walkFormulaRefs(txt, (ref) => functionStrChange_range(ref, type, rc, orient, stindex, step));
 }
 
 // Shifts a single cell or range ref string in response to an insert/delete row/col op.
-// Called recursively by functionStrChange for each ref token it finds.
+// Invoked (via walkFormulaRefs) by functionStrChange for each ref token it finds.
+// See shiftRef's NOTE for why the two ref-parsers are not merged.
 function functionStrChange_range(
     txt: string,
     type: string,

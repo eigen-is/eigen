@@ -21,7 +21,8 @@ export function toNumber(value: FormulaArg | Date): number | undefined {
     if (typeof value === 'boolean') return value ? 1 : 0;
     if (value instanceof Date) return (value.getTime() - EXCEL_EPOCH_MS) / DAY_MS;
     if (typeof value !== 'string') return undefined;
-    return value.indexOf('.') > -1 ? parseFloat(value) : parseInt(value, 10);
+    // Empty/whitespace stays NaN (not Number's 0) so `""+1` propagates #VALUE!.
+    return value.trim() === '' ? Number.NaN : Number(value);
 }
 
 export function invertNumber(value: FormulaArg): number | undefined {

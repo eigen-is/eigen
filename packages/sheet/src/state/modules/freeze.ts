@@ -104,6 +104,150 @@ export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
     frozenTofreezen(ctx, cache, sheetId);
 }
 
+// One body-overlay pane viewport: a fixed rect inside the cell area whose
+// content translates from the scroll bus on its free axes only. A frozen axis
+// pins to the freeze-time scroll (fixedLeft/fixedTop); null = follow the bus.
+export type OverlayRegionSpec = {
+    pane: 'main' | 'rows' | 'cols' | 'corner';
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    clip: boolean;
+    fixedLeft: number | null;
+    fixedTop: number | null;
+};
+
+// Derive the overlay pane viewports from the freeze config, mirroring the
+// canvas pane draw (drawFrozenBoth & friends): a band shows content
+// [scroll, pos) pinned at the viewport edge, main keeps the plain
+// content = viewport + scroll mapping. Rects only change with the freeze
+// config or row/col metrics — never per scroll tick.
+export function computeOverlayRegions(
+    freeze: Freezen | undefined,
+    viewWidth: number,
+    viewHeight: number,
+): OverlayRegionSpec[] {
+    const hData = freeze?.horizontal?.freezenhorizontaldata;
+    const vData = freeze?.vertical?.freezenverticaldata;
+    const bandH = hData ? hData.pos - hData.scroll : 0;
+    const bandW = vData ? vData.pos - vData.scroll : 0;
+
+    if (!hData && !vData) {
+        return [
+            {
+                pane: 'main',
+                left: 0,
+                top: 0,
+                width: viewWidth,
+                height: viewHeight,
+                clip: false,
+                fixedLeft: null,
+                fixedTop: null,
+            },
+        ];
+    }
+
+    const regions: OverlayRegionSpec[] = [
+        {
+            pane: 'main',
+            left: bandW,
+            top: bandH,
+            width: viewWidth - bandW,
+            height: viewHeight - bandH,
+            clip: true,
+            fixedLeft: null,
+            fixedTop: null,
+        },
+    ];
+    if (hData) {
+        regions.push({
+            pane: 'rows',
+            left: bandW,
+            top: 0,
+            width: viewWidth - bandW,
+            height: bandH,
+            clip: true,
+            fixedLeft: null,
+            fixedTop: hData.scroll,
+        });
+    }
+    if (vData) {
+        regions.push({
+            pane: 'cols',
+            left: 0,
+            top: bandH,
+            width: bandW,
+            height: viewHeight - bandH,
+            clip: true,
+            fixedLeft: vData.scroll,
+            fixedTop: null,
+        });
+    }
+    if (hData && vData) {
+        regions.push({
+            pane: 'corner',
+            left: 0,
+            top: 0,
+            width: bandW,
+            height: bandH,
+            clip: true,
+            fixedLeft: vData.scroll,
+            fixedTop: hData.scroll,
+        });
+    }
+    return regions;
+}
+
+// The headers share the pane geometry one axis at a time: the column header
+// splits at the vertical-freeze boundary only, the row header at the
+// horizontal one. Derived from computeOverlayRegions with the irrelevant axis
+// dropped — so the header clips can never drift from the body panes — and the
+// header's cross axis pinned to 0 (headers never translate on their fixed axis).
+export function computeColumnHeaderRegions(
+    freeze: Freezen | undefined,
+    viewWidth: number,
+    headerHeight: number,
+): OverlayRegionSpec[] {
+    const vertical = freeze?.vertical;
+    return computeOverlayRegions(vertical ? { vertical } : undefined, viewWidth, headerHeight).map((region) => ({
+        ...region,
+        fixedTop: 0,
+    }));
+}
+
+export function computeRowHeaderRegions(
+    freeze: Freezen | undefined,
+    headerWidth: number,
+    viewHeight: number,
+): OverlayRegionSpec[] {
+    const horizontal = freeze?.horizontal;
+    return computeOverlayRegions(horizontal ? { horizontal } : undefined, headerWidth, viewHeight).map((region) => ({
+        ...region,
+        fixedLeft: 0,
+    }));
+}
+
+// The single region containing a cell — where the stateful overlay singletons
+// (cell editor, validation dropdown trigger, …) render, so they are never
+// duplicated across panes. boundary is the first NON-frozen index
+// (`i >= boundary` is outside the frozen area).
+export function overlayRegionForCell(
+    regions: OverlayRegionSpec[],
+    freeze: Freezen | undefined,
+    r: number,
+    c: number,
+): OverlayRegionSpec {
+    const hData = freeze?.horizontal?.freezenhorizontaldata;
+    const vData = freeze?.vertical?.freezenverticaldata;
+    const inRows = hData != null && r < hData.boundary;
+    const inCols = vData != null && c < vData.boundary;
+    const key = inRows && inCols ? 'corner' : inRows ? 'rows' : inCols ? 'cols' : 'main';
+    // regions[0] (main) is the safe fallback; computeOverlayRegions built from
+    // the same freeze object always contains the derived key.
+    return regions.find((region) => region.pane === key) ?? regions[0];
+}
+
 export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) {
     const selections = ctx.selections;
     if (!selections) return;

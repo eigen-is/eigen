@@ -1,4 +1,5 @@
 import { isNil } from 'es-toolkit/compat';
+import { iscelldata } from '../../engine/formula-utils';
 import {
     type Context,
     colLocationByIndex,
@@ -10,7 +11,6 @@ import {
     getRangeByTxt,
     getSheetIndex,
     isAllowEdit,
-    iscelldata,
     isdatetime,
     isRealNull,
     isRealNum,
@@ -22,7 +22,7 @@ import {
 import type { en } from '../locale/en';
 
 // Locale slices passed into confirmMessage from the React dialog — the parent
-// destructures `locale(context)` into these named groups.
+// destructures the `en` locale object into these named groups.
 type GeneralDialogLocale = typeof en.generalDialog;
 type DataVerificationLocale = typeof en.dataVerification;
 
@@ -106,44 +106,6 @@ export function getDropdownList(ctx: Context, txt: string) {
         }
     }
     return list;
-}
-
-// ID card validation
-export function validateIdCard(idCard: string) {
-    // regex for 15-digit and 18-digit Chinese ID card numbers
-    const regIdCard =
-        /^(^[1-9]\d{7}((0\d)|(1[0-2]))(([0|1|2]\d)|3[0-1])\d{3}$)|(^[1-9]\d{5}[1-9]\d{3}((0\d)|(1[0-2]))(([0|1|2]\d)|3[0-1])((\d{4})|\d{3}[Xx])$)$/;
-
-    // if this passes, the ID card format is correct, but accuracy still needs to be calculated
-    if (regIdCard.test(idCard)) {
-        if (idCard.length === 18) {
-            const idCardWi = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]; // store the weighting factors for the first 17 digits in an array
-            const idCardY = [1, 0, 10, 9, 8, 7, 6, 5, 4, 3, 2]; // the 11 possible remainders after dividing by 11 (check digits), also stored as array
-            let idCardWiSum = 0; // stores the sum of the first 17 digits each multiplied by their weighting factor
-            for (let i = 0; i < 17; i += 1) {
-                idCardWiSum += Number(idCard.substring(i, i + 1)) * idCardWi[i];
-            }
-
-            const idCardMod = idCardWiSum % 11; // calculate the array index of the check digit
-            const idCardLast = idCard.substring(17); // get the last digit of the ID card
-
-            // if equals 2, the check digit is 10, so the last character of the ID card should be X
-            if (idCardMod === 2) {
-                if (idCardLast === 'X' || idCardLast === 'x') {
-                    return true;
-                }
-                return false;
-            }
-            // match the computed check digit with the last character; if they match it is valid, otherwise the ID card is invalid
-            if (idCardLast === idCardY[idCardMod].toString()) {
-                return true;
-            }
-            return false;
-        }
-    } else {
-        return false;
-    }
-    return false;
 }
 
 // Data validation
@@ -304,15 +266,6 @@ export function validateCellData(ctx: Context, item: DataVerificationRule, cellV
         if (type2 === 'noLaterThan' && diff(dv, value1) > 0) {
             return false;
         }
-    } else if (type === 'validity') {
-        const s = String(cellValue ?? '');
-        if (type2 === 'identificationNumber' && !validateIdCard(s)) {
-            return false;
-        }
-
-        if (type2 === 'phoneNumber' && !/^1[3456789]\d{9}$/.test(s)) {
-            return false;
-        }
     }
     return true;
 }
@@ -356,8 +309,6 @@ export function getFailureText(ctx: Context, item: DataVerificationRule) {
         if (type2 === 'between' || type2 === 'notBetween') {
             failureText += ` and ${value2}`;
         }
-    } else if (type === 'validity') {
-        failureText += `what you entered is not a correct ${optionLabel[type2]}`;
     }
     return failureText;
 }
@@ -392,8 +343,6 @@ export function getHintText(ctx: Context, item: DataVerificationRule) {
         if (type2 === 'between' || type2 === 'notBetween') {
             hintValue += ` and ${value2}`;
         }
-    } else if (type === 'validity') {
-        hintValue += `please enter the correct ${optionLabel[type2]}`;
     }
     return hintValue;
 }
@@ -470,7 +419,7 @@ export function cellFocus(ctx: Context, r: number, c: number, clickMode: boolean
 }
 
 // set the dropdown value
-export function setDropcownValue(ctx: Context, value: string, arr: string[]) {
+export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
     if (!ctx.selections) return;
     const d = getFlowdata(ctx);
     if (!d) return;

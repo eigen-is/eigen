@@ -18,6 +18,7 @@ import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-se
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
+import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
 import { useSheet } from './hooks/use-sheet';
 import { ToolbarLeftItems } from './toolbar';
@@ -59,7 +60,7 @@ function SheetEditorInner({
     const workbookRef = useRef<WorkbookInstance>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
-    const { initialData, snapshotVersion, synced, handleOp, onDataChange, docRef } = useSheet(
+    const { initialData, snapshotVersion, synced, handleOp, onDataChange, docRef, provider } = useSheet(
         ownerId,
         path.mountId,
         path.id,
@@ -67,6 +68,7 @@ function SheetEditorInner({
     );
 
     const auth = useAuth();
+    const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const { resolveMediaUrl, startUpload } = useMediaResolver();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
@@ -287,6 +289,11 @@ function SheetEditorInner({
                             defaultFontSize={10}
                             defaultColWidth={100}
                             hooks={{
+                                afterSelectionChange: (sheetId, selection) => {
+                                    const r = selection.row_focus ?? selection.row?.[0];
+                                    const c = selection.column_focus ?? selection.column?.[0];
+                                    if (r != null && c != null) publishSelection(sheetId, r, c);
+                                },
                                 ...(canWrite && mediaFolderId ? { onInsertImage: () => setImagePickerOpen(true) } : {}),
                                 resolveImageUrl: resolveMediaUrl,
                                 ...(canWrite && chatFolderId

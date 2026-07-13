@@ -1097,9 +1097,183 @@ function numberDisplay(value: number, numFmt?: string): string {
     }
 }
 
+// Excel/ECMA-376 uses one format code (`m`/`M`, case-insensitively) for BOTH month and
+// minute, resolved by context — minute when a run sits next to hours/seconds, month
+// otherwise. numfmt (our renderer) resolves it the same way, so an imported `dd/mm/yyyy`
+// DISPLAYS correctly. But the custom date/time dialog's tokenizer follows the Google
+// convention (uppercase `M` month, lowercase `m` minute, case-significant), so a stored
+// lowercase `mm` month shows a "Minute" chip — and editing that chip writes minute tokens
+// into a month position. Canonicalise every `m`/`M` run to the Google convention at import,
+// applying the exact same context classification numfmt uses, so the stored case matches the
+// render and only the case of `m`/`M` ever changes. Bit flags mirror numfmt's dateChunks:
+// only HOUR/SEC (a preceding one makes a run a minute) and MIN (a following seconds resolves
+// a deferred month) participate; every other date token is a size-0 adjacency breaker.
+const DATE_HOUR = 1;
+const DATE_MIN = 2;
+const DATE_SEC = 4;
+
+type DateChunk = { size: number; used?: boolean; indeterminate?: boolean; mRef?: number };
+
+// Split on top-level `;` section separators, leaving separators inside quoted literals,
+// `\`-escapes and `[...]` brackets in place.
+function splitFormatSections(fmt: string): string[] {
+    const sections: string[] = [];
+    let current = '';
+    let i = 0;
+    while (i < fmt.length) {
+        const ch = fmt[i];
+        if (ch === '"') {
+            const end = fmt.indexOf('"', i + 1);
+            const stop = end === -1 ? fmt.length : end + 1;
+            current += fmt.slice(i, stop);
+            i = stop;
+        } else if (ch === '\\' && i + 1 < fmt.length) {
+            current += fmt.slice(i, i + 2);
+            i += 2;
+        } else if (ch === '[') {
+            const end = fmt.indexOf(']', i + 1);
+            const stop = end === -1 ? fmt.length : end + 1;
+            current += fmt.slice(i, stop);
+            i = stop;
+        } else if (ch === ';') {
+            sections.push(current);
+            current = '';
+            i += 1;
+        } else {
+            current += ch;
+            i += 1;
+        }
+    }
+    sections.push(current);
+    return sections;
+}
+
+function normalizeSectionMonthMinute(section: string): string {
+    const out: string[] = [];
+    const chunks: DateChunk[] = [];
+    let i = 0;
+    while (i < section.length) {
+        const rest = section.slice(i);
+        const ch = section[i];
+
+        if (ch === '"') {
+            const end = section.indexOf('"', i + 1);
+            const stop = end === -1 ? section.length : end + 1;
+            out.push(section.slice(i, stop));
+            i = stop;
+            continue;
+        }
+        // `\x` escape and `_x`/`*x` fill/skip all consume the next char as a literal —
+        // its letter must never be read as a date token.
+        if ((ch === '\\' || ch === '_' || ch === '*') && i + 1 < section.length) {
+            out.push(section.slice(i, i + 2));
+            i += 2;
+            continue;
+        }
+        // AM/PM and A/P carry `m`/`p` letters but are not adjacency tokens — skip whole.
+        const ampm = rest.match(/^(am\/pm|a\/p)/i);
+        if (ampm) {
+            out.push(ampm[0]);
+            i += ampm[0].length;
+            continue;
+        }
+        if (ch === '[') {
+            const end = section.indexOf(']', i + 1);
+            if (end !== -1) {
+                const inner = section.slice(i + 1, end);
+                if (/^m+$/i.test(inner)) {
+                    // Elapsed minutes `[m]`/`[mm]` — always minute, always lowercase.
+                    out.push(`[${'m'.repeat(inner.length)}]`);
+                    chunks.push({ size: DATE_MIN });
+                } else if (/^h+$/i.test(inner)) {
+                    out.push(section.slice(i, end + 1));
+                    chunks.push({ size: DATE_HOUR });
+                } else if (/^s+$/i.test(inner)) {
+                    out.push(section.slice(i, end + 1));
+                    chunks.push({ size: DATE_SEC });
+                } else {
+                    // Colour / condition / currency locale — not a date token.
+                    out.push(section.slice(i, end + 1));
+                }
+                i = end + 1;
+                continue;
+            }
+        }
+
+        const hour = rest.match(/^[hH]+/);
+        if (hour) {
+            out.push(hour[0]);
+            chunks.push({ size: DATE_HOUR });
+            i += hour[0].length;
+            continue;
+        }
+        const sec = rest.match(/^[sS]+/);
+        if (sec) {
+            out.push(sec[0]);
+            const last = chunks[chunks.length - 1];
+            let usedByMinute = false;
+            if (last && last.size & DATE_MIN) {
+                usedByMinute = true;
+            } else if (last?.indeterminate && last.mRef != null) {
+                // Seconds resolve a deferred month back to a minute.
+                last.indeterminate = false;
+                last.size = DATE_MIN;
+                out[last.mRef] = out[last.mRef].toLowerCase();
+                usedByMinute = true;
+            }
+            chunks.push({ size: DATE_SEC, used: usedByMinute });
+            i += sec[0].length;
+            continue;
+        }
+        const month = rest.match(/^[mM]+/);
+        if (month) {
+            const len = month[0].length;
+            const idx = out.length;
+            if (len >= 3) {
+                // mmm/mmmm/mmmmm are always month names.
+                out.push('M'.repeat(len));
+                chunks.push({ size: 0 });
+            } else {
+                const last = chunks[chunks.length - 1];
+                if (last && !last.used && last.size & (DATE_HOUR | DATE_SEC)) {
+                    last.used = true;
+                    out.push('m'.repeat(len));
+                    chunks.push({ size: DATE_MIN });
+                } else {
+                    // Undecided → month for now; a later seconds token may flip it.
+                    out.push('M'.repeat(len));
+                    chunks.push({ size: 0, indeterminate: true, mRef: idx });
+                }
+            }
+            i += len;
+            continue;
+        }
+        // Other date tokens (year/day/b-year/era/weekday) only break hour/second adjacency.
+        const other = rest.match(/^([yY]+|[dD]+|[bB]+|[gG]+|e+|[aA]{3,})/);
+        if (other) {
+            out.push(other[0]);
+            chunks.push({ size: 0 });
+            i += other[0].length;
+            continue;
+        }
+
+        out.push(ch);
+        i += 1;
+    }
+    return out.join('');
+}
+
+export function normalizeMonthMinuteTokens(numFmt: string): string {
+    if (!/[mM]/.test(numFmt)) return numFmt;
+    return splitFormatSections(numFmt).map(normalizeSectionMonthMinute).join(';');
+}
+
 function buildCellType(cell: XlsxCell, value: string | number | boolean | undefined): FortuneCell['ct'] {
     const t = resolveType(cell, value);
-    const numFmt = cell.numFmt && cell.numFmt !== 'General' ? cell.numFmt : null;
+    const rawNumFmt = cell.numFmt && cell.numFmt !== 'General' ? cell.numFmt : null;
+    // Store the Google-convention form so the custom date/time dialog labels chips correctly;
+    // numfmt renders the canonicalised string identically to the original.
+    const numFmt = rawNumFmt != null ? normalizeMonthMinuteTokens(rawNumFmt) : null;
     if (t == null && numFmt == null) return undefined;
     // Fortune-sheet always pairs `t` with `fa`. When Excel reports General (or no numFmt),
     // persist 'General' so numfmt receives a valid format string; otherwise date serials and

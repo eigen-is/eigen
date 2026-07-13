@@ -19,6 +19,7 @@ import { normalizeSelection } from '../modules/selection';
 import type { Settings } from '../settings';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
+import { extendSelectionGeometry } from './mouse-drag';
 import { fixPositionOnFrozenCells } from './mouse-resize';
 
 // Returns true when the filter button consumed the click (the caller must then
@@ -175,30 +176,23 @@ export function handleCellAreaMouseDown(
                     last.width == null
                 )
                     return;
-                if (last.top > row_pre) {
-                    top = row_pre;
-                    height = last.top + last.height - row_pre;
+                const rowGeom = extendSelectionGeometry(
+                    last.top,
+                    last.height,
+                    last.row,
+                    last.row_focus,
+                    row_pre,
+                    row,
+                    row_index,
+                );
+                top = rowGeom.start;
+                height = rowGeom.span;
+                rowseleted = rowGeom.selected;
 
-                    if (last.row[1] > last.row_focus) {
-                        last.row[1] = last.row_focus;
-                    }
-
-                    rowseleted = [row_index, last.row[1]];
-                } else if (last.top === row_pre) {
-                    top = row_pre;
-                    height = last.top + last.height - row_pre;
-                    rowseleted = [row_index, last.row[0]];
-                } else {
-                    top = last.top;
-                    height = row - last.top - 1;
-
-                    if (last.row[0] < last.row_focus) {
-                        last.row[0] = last.row_focus;
-                    }
-
-                    rowseleted = [last.row[0], row_index];
-                }
-
+                // Column axis kept inline: unlike the other copies this site guards
+                // `last.column` / `last.column_focus` lazily inside two arms (the
+                // preamble above only null-checks the row fields), so an early
+                // `return` here can't be expressed through extendSelectionGeometry.
                 left = 0;
                 width = 0;
                 columnseleted = [];
@@ -363,50 +357,30 @@ export function handleCellAreaMouseDown(
                 last.row_focus != null &&
                 last.column_focus != null
             ) {
-                let top = 0;
-                let height = 0;
-                let rowseleted = [];
-                if (last.top > row_pre) {
-                    top = row_pre;
-                    height = last.top + last.height - row_pre;
-                    if (last.row[1] > last.row_focus) {
-                        last.row[1] = last.row_focus;
-                    }
-                    rowseleted = [row_index, last.row[1]];
-                } else if (last.top === row_pre) {
-                    top = row_pre;
-                    height = last.top + last.height - row_pre;
-                    rowseleted = [row_index, last.row[0]];
-                } else {
-                    top = last.top;
-                    height = row - last.top - 1;
-                    if (last.row[0] < last.row_focus) {
-                        last.row[0] = last.row_focus;
-                    }
-                    rowseleted = [last.row[0], row_index];
-                }
-                let left = 0;
-                let width = 0;
-                let columnseleted = [];
-                if (last.left > col_pre) {
-                    left = col_pre;
-                    width = last.left + last.width - col_pre;
-                    if (last.column[1] > last.column_focus) {
-                        last.column[1] = last.column_focus;
-                    }
-                    columnseleted = [col_index, last.column[1]];
-                } else if (last.left === col_pre) {
-                    left = col_pre;
-                    width = last.left + last.width - col_pre;
-                    columnseleted = [col_index, last.column[0]];
-                } else {
-                    left = last.left;
-                    width = col - last.left - 1;
-                    if (last.column[0] < last.column_focus) {
-                        last.column[0] = last.column_focus;
-                    }
-                    columnseleted = [last.column[0], col_index];
-                }
+                const rowGeom = extendSelectionGeometry(
+                    last.top,
+                    last.height,
+                    last.row,
+                    last.row_focus,
+                    row_pre,
+                    row,
+                    row_index,
+                );
+                let top = rowGeom.start;
+                let height = rowGeom.span;
+                let rowseleted = rowGeom.selected;
+                const colGeom = extendSelectionGeometry(
+                    last.left,
+                    last.width,
+                    last.column,
+                    last.column_focus,
+                    col_pre,
+                    col,
+                    col_index,
+                );
+                let left = colGeom.start;
+                let width = colGeom.span;
+                let columnseleted = colGeom.selected;
                 const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
                 if (changeparam != null) {
                     [columnseleted, rowseleted, top, height, left, width] = changeparam;

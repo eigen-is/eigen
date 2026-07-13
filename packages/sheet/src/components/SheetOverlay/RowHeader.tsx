@@ -2,18 +2,21 @@ import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import {
+    computeRowHeaderRegions,
+    type Freezen,
     fixPositionOnFrozenCells,
-    fixRowStyleOverflowInFreeze,
     getSheetIndex,
     handleRowFreezeHandleMouseDown,
     handleRowHeaderMouseDown,
     handleRowSizeHandleMouseDown,
+    overlayRegionForCell,
     rowLocation,
     rowLocationByIndex,
     selectTitlesMap,
     selectTitlesRange,
 } from '../../state';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
+import { OverlayRegion } from './OverlayRegion';
 
 export const RowHeader: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
@@ -26,7 +29,6 @@ export const RowHeader: React.FC = () => {
         row_pre: -1,
         row_index: -1,
     });
-    const [hoverInFreeze, setHoverInFreeze] = useState(false);
     const [selectedLocation, setSelectedLocation] = useState<
         { row: number; row_pre: number; r1: number; r2: number }[]
     >([]);
@@ -55,12 +57,11 @@ export const RowHeader: React.FC = () => {
             const mouseY = e.pageY - containerRef.current!.getBoundingClientRect().top - window.scrollY;
             const _y = mouseY + refs.globalCache.scrollTop;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
-            const { y, inHorizontalFreeze } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
+            const { y } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
             const row_location = rowLocation(y, context.visibledatarow);
             const [row_pre, row, row_index] = row_location;
             if (row_pre !== hoverLocation.row_pre || row !== hoverLocation.row) {
                 setHoverLocation({ row_pre, row, row_index });
-                setHoverInFreeze(inHorizontalFreeze);
             }
         },
         [
@@ -172,12 +173,22 @@ export const RowHeader: React.FC = () => {
         };
     }, [refs.globalCache]);
 
+    // The header shares the body-overlay region model one axis at a time
+    // (RENDERING.md § Scrolling): a pinned frozen band + a bus-translated main
+    // band whose clip cuts the highlights at the freeze boundary, replacing the
+    // recipe-time fix*StyleOverflowInFreeze clamps (stale during pure scroll).
+    const headerWidth = context.rowHeaderWidth - 1.5;
+    const freeze = refs.globalCache.freezen?.[context.currentSheetId];
+    const rowFreeze: Freezen | undefined = freeze?.horizontal ? { horizontal: freeze.horizontal } : undefined;
+    const regions = computeRowHeaderRegions(rowFreeze, headerWidth, context.cellmainHeight);
+    const hoverRegion = overlayRegionForCell(regions, rowFreeze, hoverLocation.row_index, 0);
+
     return (
         <div
             ref={containerRef}
             className="fortune-row-header"
             style={{
-                width: context.rowHeaderWidth - 1.5,
+                width: headerWidth,
                 height: context.cellmainHeight,
             }}
             onMouseMove={onMouseMove}
@@ -185,7 +196,61 @@ export const RowHeader: React.FC = () => {
             onMouseLeave={onMouseLeave}
             onContextMenu={onContextMenu}
         >
-            <div ref={contentRef} style={{ position: 'absolute', inset: 0 }}>
+            {/* Positioned 2px down so the regions inside live in grid
+                coordinates — the container itself is pulled up 2px
+                (margin-top -2 / padding-top 2). OverlayRegion pins its content
+                frame to the containing block's origin, so the offset must sit
+                on an ancestor, not on the region rects. */}
+            <div style={{ position: 'absolute', top: 2, right: 0, bottom: 0, left: 0, pointerEvents: 'none' }}>
+                {/* Selected highlights are passive: render into every region in pure
+                    content coordinates; each region's clip shows exactly its portion. */}
+                {regions.map(({ pane, ...rect }) => (
+                    <OverlayRegion key={pane} {...rect}>
+                        {selectedLocation.map(({ row, row_pre, r1, r2 }) => (
+                            <div
+                                className="fortune-row-header-selected"
+                                key={`${r1}-${r2}`}
+                                style={{
+                                    top: row_pre,
+                                    height: row - row_pre - 1,
+                                    width: headerWidth,
+                                    display: 'block',
+                                }}
+                            />
+                        ))}
+                    </OverlayRegion>
+                ))}
+                {/* Hover highlight + resize handle are singletons in the single
+                    region containing the hovered row. */}
+                <OverlayRegion {...hoverRegion}>
+                    <div
+                        className="fortune-rows-change-size"
+                        ref={rowChangeSizeRef}
+                        onMouseDown={onRowSizeHandleMouseDown}
+                        style={{
+                            top: hoverLocation.row - 5,
+                            width: headerWidth,
+                            opacity: context.rowsResizing ? 1 : 0,
+                        }}
+                    />
+                    {!context.rowsResizing && hoverLocation.row_index >= 0 ? (
+                        <div
+                            className="fortune-row-header-hover"
+                            style={{
+                                top: hoverLocation.row_pre,
+                                height: hoverLocation.row - hoverLocation.row_pre - 1,
+                                width: headerWidth,
+                                display: 'block',
+                            }}
+                        />
+                    ) : null}
+                </OverlayRegion>
+            </div>
+            {/* The freeze drag handle keeps its viewport-pinning +scroll pattern
+                on the live translate (imperatively repositioned during freeze
+                drags in live content coordinates), unclipped like the body's
+                pane-spanning drag lines. */}
+            <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                 <div
                     className="fortune-rows-freeze-handle"
                     onMouseDown={onRowFreezeHandleMouseDown}
@@ -193,52 +258,6 @@ export const RowHeader: React.FC = () => {
                         top: freezeHandleTop || 0,
                     }}
                 />
-                <div
-                    className="fortune-rows-change-size"
-                    ref={rowChangeSizeRef}
-                    onMouseDown={onRowSizeHandleMouseDown}
-                    style={{
-                        top: hoverLocation.row - 3 + (hoverInFreeze ? context.scrollTop : 0),
-                        opacity: context.rowsResizing ? 1 : 0,
-                    }}
-                />
-                {!context.rowsResizing && hoverLocation.row_index >= 0 ? (
-                    <div
-                        className="fortune-row-header-hover"
-                        style={Object.assign(
-                            {
-                                top: hoverLocation.row_pre,
-                                height: hoverLocation.row - hoverLocation.row_pre - 1,
-                                display: 'block',
-                            },
-                            fixRowStyleOverflowInFreeze(
-                                context,
-                                hoverLocation.row_index,
-                                hoverLocation.row_index,
-                                refs.globalCache.freezen?.[context.currentSheetId],
-                            ),
-                        )}
-                    />
-                ) : null}
-                {selectedLocation.map(({ row, row_pre, r1, r2 }) => (
-                    <div
-                        className="fortune-row-header-selected"
-                        key={`${r1}-${r2}`}
-                        style={Object.assign(
-                            {
-                                top: row_pre,
-                                height: row - row_pre - 1,
-                                display: 'block',
-                            },
-                            fixRowStyleOverflowInFreeze(
-                                context,
-                                r1,
-                                r2,
-                                refs.globalCache.freezen?.[context.currentSheetId],
-                            ),
-                        )}
-                    />
-                ))}
             </div>
             {rowMenuAnchor}
         </div>

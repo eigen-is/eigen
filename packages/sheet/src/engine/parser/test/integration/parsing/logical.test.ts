@@ -23,6 +23,15 @@ describe('.parse() logical', () => {
         });
     });
 
+    test('operator: = coerces and case-folds (Excel parity)', () => {
+        expect(parser!.parse('"A" = "a"')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('1 = "1"')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('"1.0" = "1"')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('"abc" = 1')).toMatchObject({ error: null, result: false });
+        expect(parser!.parse('"A" <> "a"')).toMatchObject({ error: null, result: false });
+        expect(parser!.parse('1 <> "1"')).toMatchObject({ error: null, result: false });
+    });
+
     test('operator: >', () => {
         expect(parser!.parse('11 > 10')).toMatchObject({
             error: null,

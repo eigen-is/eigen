@@ -8838,27 +8838,6 @@ export const en = {
         cellFormat: 'Cell format config',
         print: 'Print',
     },
-    alternatingColors: {
-        applyRange: 'Apply to range',
-        selectRange: 'Select a data range',
-        header: 'Header',
-        footer: 'Footer',
-
-        errorInfo:
-            'Cannot perform this operation on multiple selection areas, please select a single area and try again',
-        textTitle: 'Format style',
-        custom: 'CUSTOM',
-        close: 'close',
-        selectionTextColor: 'Click to select text color',
-        selectionCellColor: 'Click to select cell color',
-        removeColor: 'Remove alternating colors',
-        colorShow: 'color',
-        currentColor: 'Current',
-
-        tipSelectRange: 'Please select the range of alternating colors',
-        errorNoRange: 'No range is selected',
-        errorExistColors: 'Alternating colors already exist and cannot be edited',
-    },
     button: {
         confirm: 'OK',
         cancel: 'Cancel',
@@ -9305,30 +9284,6 @@ export const en = {
             'Only one column of data can be converted at a time. The selected area can have multiple rows but not multiple columns. Please try again after selecting a single column range',
         tipNoSelect: 'You cannot separate a cell without selecting it',
     },
-    imageText: {
-        imageSetting: 'Image setting',
-        close: 'Close',
-        conventional: 'Conventional',
-        moveCell1: 'Move and resize cells',
-        moveCell2: 'Move and do not resize the cell',
-        moveCell3: 'Do not move and resize the cell',
-        fixedPos: 'Fixed position',
-        border: 'Border',
-        width: 'Width',
-        radius: 'Radius',
-        style: 'Style',
-        solid: 'Solid',
-        dashed: 'Dashed',
-        dotted: 'Dotted',
-        double: 'Double',
-        color: 'Color',
-    },
-    punctuation: {
-        tab: 'Tab',
-        semicolon: 'semicolon',
-        comma: 'comma',
-        space: 'space',
-    },
     sheetconfig: {
         delete: 'Delete',
         copy: 'Copy',
@@ -9571,7 +9526,6 @@ export const en = {
         text_content: 'Text-content',
         text_length: 'Text-length',
         date: 'Date',
-        validity: 'Effectiveness',
         placeholder1: 'Please enter the options, separated by commas, such as 1,2,3,4,5',
         placeholder2: 'Please enter content',
         placeholder3: 'Numeric value, such as 10',
@@ -9593,8 +9547,6 @@ export const en = {
         noEarlierThan: 'No earlier than',
         laterThan: 'Later than',
         noLaterThan: 'No later than',
-        identificationNumber: 'Identification number',
-        phoneNumber: 'Phone number',
         remote: 'Automatic remote acquisition option',
         prohibitInput: 'Prohibit input when input data is invalid',
         hintShow: 'Show prompt when the cell is selected',
@@ -9607,6 +9559,28 @@ export const en = {
         tooltipInfo6: 'The value entered is not a date type',
         tooltipInfo7: 'Date 2 cannot be less than date 1',
         textlengthInteger: 'Text length must be an integer greater than or equal to 0',
+        // Lowercase phrase fragments for the failureText/hintValue sentence builders in
+        // modules/data-verification.ts (distinct from the Title Case labels above, which
+        // are for the rule-type Select).
+        optionLabel: {
+            number: 'numeric',
+            number_integer: 'integer',
+            number_decimal: 'decimal',
+            between: 'between',
+            notBetween: 'not between',
+            equal: 'equal to',
+            notEqualTo: 'not equal to',
+            moreThanThe: 'greater',
+            lessThan: 'less than',
+            greaterOrEqualTo: 'greater or equal to',
+            lessThanOrEqualTo: 'less than or equal to',
+            include: 'include',
+            exclude: 'not include',
+            earlierThan: 'earlier than',
+            noEarlierThan: 'not earlier than',
+            laterThan: 'later than',
+            noLaterThan: 'not later than',
+        },
     },
     formula: {
         sum: 'Sum',
@@ -9705,77 +9679,9 @@ export const en = {
         pasteMustKeybordAlertHTML:
             "<span style='line-height: 1.0;font-size:36px;font-weight: bold;color:#666;'>Ctrl + C</span>&nbsp;&nbsp;to copy<br/><span style='line-height: 1.0;font-size:36px;font-weight: bold;color:#666;'>Ctrl + V</span>&nbsp;&nbsp;to paste<br/><span style='line-height: 1.0;font-size:36px;font-weight: bold;color:#666;'>Ctrl + X</span>&nbsp;&nbsp;to cut",
     },
+    // Only .title is read (state/utils/index.ts) — rest of the pivot-table UI strings are dead.
     pivotTable: {
         title: 'Pivot Table',
-        closePannel: 'Close',
-        editRange: 'Range',
-        tipPivotFieldSelected: 'Select the fields',
-        tipClearSelectedField: 'Clear all fields',
-        btnClearSelectedField: 'Clear',
-        btnFilter: 'Filter',
-        titleRow: 'Row',
-        titleColumn: 'Column',
-        titleValue: 'Value',
-        tipShowColumn: 'Statistics fields are displayed as columns',
-        tipShowRow: 'Statistics fields are displayed as rows',
-
-        titleSelectionDataRange: 'Select range',
-        titleDataRange: 'Data range',
-
-        valueSum: 'SUM',
-
-        valueStatisticsSUM: 'Sum',
-        valueStatisticsCOUNT: 'Count',
-        valueStatisticsCOUNTA: 'Count A',
-        valueStatisticsCOUNTUNIQUE: 'Count Unique',
-        valueStatisticsAVERAGE: 'Average',
-        valueStatisticsMAX: 'Max',
-        valueStatisticsMIN: 'Min',
-        valueStatisticsMEDIAN: 'Median',
-        valueStatisticsPRODUCT: 'Product',
-        valueStatisticsSTDEV: 'Stdev',
-
-        valueStatisticsSTDEVP: 'Stdevp',
-        valueStatisticslet: 'Var',
-        valueStatisticsVARP: 'VarP',
-
-        errorNotAllowEdit: 'This operation is prohibited in non-editing mode!',
-        errorNotAllowMulti:
-            'Cannot perform this operation on multiple selection areas, please select a single range and try again',
-        errorSelectRange: 'Please select the range of the new pivot table',
-        errorIsDamage: 'The source data of this pivot table is corrupted!',
-        errorNotAllowPivotData: 'Cannot select pivot table as source data!',
-        errorSelectionRange: 'Selection failed, wrong input range!',
-        errorIncreaseRange: 'Please expand the selected range!',
-
-        titleAddColumn: 'Add column to pivot table',
-        titleMoveColumn: 'Move the column to the white box below',
-        titleClearColumnFilter: 'Clear the filter for this column',
-        titleFilterColumn: 'Filter',
-
-        titleSort: 'Sort',
-        titleNoSort: 'No sort',
-        titleSortAsc: 'ASC',
-        titleSortDesc: 'DESC',
-        titleSortBy: 'Sort by',
-        titleShowSum: 'Show total',
-        titleStasticTrue: 'Yes',
-        titleStasticFalse: 'No',
-    },
-    dropCell: {
-        copyCell: 'Copy',
-        sequence: 'Sequence',
-        onlyFormat: 'Only format',
-        noFormat: 'Not format',
-        day: 'Day',
-        workDay: 'Work Day',
-        month: 'Month',
-        year: 'Year',
-        chineseNumber: 'Chinese numbers',
-    },
-    imageCtrl: {
-        borderTile: 'Image border color',
-        borderCur: 'Color',
     },
     protection: {
         protectiontTitle: 'Protection',
@@ -9832,39 +9738,7 @@ export const en = {
         defaultSheetHintText:
             'The cell or chart is in a protected worksheet. To make changes, please unprotect the worksheet. You may need to enter a password',
     },
-    cellFormat: {
-        cellFormatTitle: 'Format cells',
-        protection: 'Protection',
-        locked: 'Locked',
-        hidden: 'Hidden',
-        protectionTips:
-            'To lock cells or hide formulas, protect the worksheet. On the toolbar, Click Protect Sheet Button',
-        tipsPart: 'Partial checked',
-        tipsAll: 'All checked',
-
-        selectionIsNullAlert: 'Selection is required!',
-        sheetDataIsNullAlert: 'error, Data is none!',
-    },
-    print: {
-        normalBtn: 'Normal',
-        layoutBtn: 'Page Layout',
-        pageBtn: 'Page break preview',
-
-        menuItemPrint: 'Print (Ctrl+P)',
-        menuItemAreas: 'Print areas',
-        menuItemRows: 'Print title rows',
-        menuItemColumns: 'Print title columns',
-    },
     edit: {
         typing: 'typing',
-    },
-    websocket: {
-        success: 'WebSocket connection success',
-        refresh: 'An error occurred in the WebSocket connection, please refresh the page!',
-        wait: 'An error occurred in the WebSocket connection, please be patient!',
-        close: 'WebSocket connection closed',
-        contact:
-            'Server communication error occurred, please refresh the page and try again, if not, please contact the administrator!',
-        support: 'The current browser does not support WebSocket',
     },
 };

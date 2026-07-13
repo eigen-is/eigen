@@ -9,7 +9,7 @@ import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
 import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
-import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
+import { userColor } from '@workspace/lib/constants/colors';
 import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -40,6 +40,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { renderPresenceCaret } from '@workspace/ui/components/layout/collab';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
@@ -307,27 +308,10 @@ const TiptapEditor = ({
                     provider,
                     user: {
                         name: auth.user!.name,
-                        color: EIGEN_ACCENT_COLORS_SHUFFLED[
-                            Math.abs([...auth.user!.id].reduce((h, c) => (h << 5) - h + c.charCodeAt(0), 0)) %
-                                EIGEN_ACCENT_COLORS_SHUFFLED.length
-                        ].value,
+                        color: userColor(auth.user!.id),
                     },
-                    render: (user: Record<string, string>) => {
-                        const cursor = document.createElement('span');
-                        cursor.classList.add('collaboration-cursor__caret');
-                        cursor.setAttribute('style', `border-color: ${user.color}`);
-
-                        const label = document.createElement('div');
-                        label.classList.add('collaboration-cursor__label');
-                        label.setAttribute('style', `background-color: ${user.color}`);
-                        label.insertBefore(document.createTextNode(user.name), null);
-
-                        cursor.insertBefore(document.createTextNode('⁠'), null);
-                        cursor.insertBefore(label, null);
-                        cursor.insertBefore(document.createTextNode('⁠'), null);
-
-                        return cursor;
-                    },
+                    render: (user: Record<string, string>) =>
+                        renderPresenceCaret({ name: user.name, color: user.color }),
                 }),
             ],
             editorProps: {

@@ -4,6 +4,7 @@ import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
+    en,
     escapeHTMLTag,
     escapeScriptTag,
     getCellValue,
@@ -13,7 +14,6 @@ import {
     isAllowEdit,
     isInlineStringCell,
     isShowHidenCR,
-    locale,
     moveHighlightCell,
     rangeHightlightselected,
     updateCell,
@@ -22,6 +22,7 @@ import {
 import { ContentEditable } from '../SheetOverlay/ContentEditable';
 import { FormulaHint } from '../SheetOverlay/FormulaHint';
 import { FormulaSearch } from '../SheetOverlay/FormulaSearch';
+import { cycleReferenceInEditor } from '../SheetOverlay/reference-cycle';
 import { NameBox } from './NameBox';
 
 export function FxEditor() {
@@ -33,7 +34,7 @@ export function FxEditor() {
     const prevFirstSelection = usePrevious(firstSelection);
     const prevSheetId = usePrevious(context.currentSheetId);
     const recentText = useRef('');
-    const { info } = locale(context);
+    const { info } = en;
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes; prev-selection comparison avoids collaborative-update echo
     useEffect(() => {
@@ -107,6 +108,14 @@ export function FxEditor() {
 
             if (formulaAutocomplete.handleKeyDown(e)) return;
 
+            if (key === 'F4' && context.editingCellPosition.length > 0) {
+                // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1); keep the
+                // browser default suppressed even when the caret isn't on a reference.
+                e.preventDefault();
+                cycleReferenceInEditor(refs.fxInput.current!, refs.cellInput.current, setContext);
+                return;
+            }
+
             setContext((draftCtx) => {
                 if (context.editingCellPosition.length > 0) {
                     switch (key) {
@@ -156,6 +165,7 @@ export function FxEditor() {
             context.allowEdit,
             context.editingCellPosition.length,
             formulaAutocomplete.handleKeyDown,
+            refs.cellInput,
             refs.fxInput,
             setContext,
         ],

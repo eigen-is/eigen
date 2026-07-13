@@ -7,17 +7,13 @@
 
 export {
     columnIndexToLabel,
-    columnLabelToIndex,
-    parseA1,
     parseA1Range,
     quoteSheetName,
     rowIndexToLabel,
-    rowLabelToIndex,
     toA1,
     unquoteSheetName,
 } from './a1-notation';
 export { createArrayResolver } from './cell-resolver';
-export { celldataToData, dataToCelldata } from './celldata';
 export type {
     CellFormatStyle,
     ComputeMap,
@@ -25,30 +21,17 @@ export type {
     DataBar,
     EvaluateConditionalFormatOptions,
 } from './conditional-format';
-export { cfSplitRange, evaluateConditionalFormat, getColorGradation } from './conditional-format';
+export { evaluateConditionalFormat } from './conditional-format';
 // CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
 // are surfaced through `./types` re-exports below.
-export { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
-export { detectCycle, getCalculationOrder } from './dependency-graph';
-export { datenum_local, genarate, is_date, update, valueShowEs } from './format';
-export { FormulaEngine, isCellReference, isFormula } from './formula-engine';
-export { detectAbsolute, type FormulaShiftMode, functionCopy, functionStrChange } from './formula-shift';
-export {
-    calPostfixExpression,
-    checkBracketNum,
-    iscelldata,
-    operatorjson,
-    operatorPriority,
-} from './formula-utils';
+export { createDefaultSheets } from './defaults';
+export { update } from './format';
+export { FormulaEngine } from './formula-engine';
+export { type FormulaShiftMode, functionCopy } from './formula-shift';
+export { iscelldata } from './formula-utils';
+export { recalcSheets, sheetsNeedRecalc } from './recalc';
 export { replaySheetsOps } from './replay-ops';
-export {
-    applySheetsDeleteRowCol,
-    applySheetsInsertRowCol,
-    type DeleteRowColOp,
-    type InsertRowColOp,
-    RowColError,
-    type RowColErrorCode,
-} from './rowcol';
+export type { DeleteRowColOp, InsertRowColOp, RowColErrorCode } from './rowcol';
 export type {
     CalcChainEntry,
     CellResolver,

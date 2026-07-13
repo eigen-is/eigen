@@ -97,31 +97,29 @@ describe('goToLink scheme allowlist', () => {
 });
 
 describe('isLinkValid scheme allowlist', () => {
-    const ctx = contextFactory() as Context;
-
     test('accepts http/https, mailto and scheme-less addresses', () => {
-        expect(isLinkValid(ctx, 'webpage', 'https://example.com').isValid).toBe(true);
-        expect(isLinkValid(ctx, 'webpage', 'https://example.com/a/b?x=1&y=2').isValid).toBe(true);
-        expect(isLinkValid(ctx, 'webpage', 'mailto:foo@bar.com').isValid).toBe(true);
-        expect(isLinkValid(ctx, 'webpage', 'example.com').isValid).toBe(true);
+        expect(isLinkValid('webpage', 'https://example.com').isValid).toBe(true);
+        expect(isLinkValid('webpage', 'https://example.com/a/b?x=1&y=2').isValid).toBe(true);
+        expect(isLinkValid('webpage', 'mailto:foo@bar.com').isValid).toBe(true);
+        expect(isLinkValid('webpage', 'example.com').isValid).toBe(true);
     });
 
     test('accepts everything navigation would open — same gate as goToLink', () => {
         // The old charset regex rejected these while goToLink happily opened
         // them; validity now derives from resolveWebLink + URL.canParse.
-        expect(isLinkValid(ctx, 'webpage', 'localhost:3000').isValid).toBe(true);
-        expect(isLinkValid(ctx, 'webpage', 'https://example.com/x;y=1#frag').isValid).toBe(true);
-        expect(isLinkValid(ctx, 'webpage', 'https://en.wikipedia.org/wiki/Foo_(bar)').isValid).toBe(true);
+        expect(isLinkValid('webpage', 'localhost:3000').isValid).toBe(true);
+        expect(isLinkValid('webpage', 'https://example.com/x;y=1#frag').isValid).toBe(true);
+        expect(isLinkValid('webpage', 'https://en.wikipedia.org/wiki/Foo_(bar)').isValid).toBe(true);
     });
 
     test('rejects structurally unparseable addresses', () => {
-        expect(isLinkValid(ctx, 'webpage', 'https://exa mple.com').isValid).toBe(false);
-        expect(isLinkValid(ctx, 'webpage', 'https://').isValid).toBe(false);
+        expect(isLinkValid('webpage', 'https://exa mple.com').isValid).toBe(false);
+        expect(isLinkValid('webpage', 'https://').isValid).toBe(false);
     });
 
     test('rejects non-allowlisted schemes', () => {
-        expect(isLinkValid(ctx, 'webpage', 'javascript:alert(1)').isValid).toBe(false);
-        expect(isLinkValid(ctx, 'webpage', 'data:text/html,x').isValid).toBe(false);
-        expect(isLinkValid(ctx, 'webpage', 'file:///etc/passwd').isValid).toBe(false);
+        expect(isLinkValid('webpage', 'javascript:alert(1)').isValid).toBe(false);
+        expect(isLinkValid('webpage', 'data:text/html,x').isValid).toBe(false);
+        expect(isLinkValid('webpage', 'file:///etc/passwd').isValid).toBe(false);
     });
 });

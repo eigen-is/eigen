@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Context } from '../../index';
 import { getFlowdata } from '../context';
-import { collectMatches, replaceAllMatches, replaceSearchMatch } from '../modules/searchReplace';
+import { collectMatches, replaceAllMatches, replaceSearchMatch } from '../modules/search-replace';
 import { contextFactory } from './factories/context';
 
 const OPTS = { matchCase: false, wholeWord: false, regex: false };

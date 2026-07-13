@@ -1,13 +1,5 @@
 export * from './components';
-export {
-    columnIndexToLabel,
-    columnLabelToIndex,
-    parseA1,
-    parseA1Range,
-    rowIndexToLabel,
-    rowLabelToIndex,
-    toA1,
-} from './engine/a1-notation';
+export { columnIndexToLabel, parseA1Range, rowIndexToLabel, toA1 } from './engine/a1-notation';
 export { createArrayResolver } from './engine/cell-resolver';
 export type {
     CellFormatStyle,
@@ -17,7 +9,6 @@ export type {
     EvaluateConditionalFormatOptions,
 } from './engine/conditional-format';
 export { evaluateConditionalFormat } from './engine/conditional-format';
-export { detectCycle, getCalculationOrder } from './engine/dependency-graph';
 export { FormulaEngine } from './engine/formula-engine';
 export {
     ERROR,

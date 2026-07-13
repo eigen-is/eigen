@@ -29,7 +29,7 @@ export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[]
             return x1Value - y1Value;
         }
         if (!isRealNum(x1) && !isRealNum(y1)) {
-            return String(x1).localeCompare(String(y1), 'zh');
+            return String(x1).localeCompare(String(y1), 'en');
         }
         if (!isRealNum(x1)) {
             return 1;
@@ -90,28 +90,15 @@ export function sortDataRange(
 }
 
 export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0) {
-    // if (!checkProtectionAuthorityNormal(ctx.currentSheetIndex, "sort")) {
-    //   return;
-    // }
     if (ctx.allowEdit === false) return;
     if (ctx.selections == null) return;
     if (ctx.selections.length > 1) {
-        // if (isEditMode()) {
-        //   alert("Cannot perform this action on a multi-selection. Please select a single range and try again.");
-        // } else {
-        //   tooltip.info(
-        //     "Cannot perform this action on a multi-selection. Please select a single range and try again.",
-        //     ""
-        //   );
-        // }
-
         return;
     }
 
     if (isAsc == null) {
         isAsc = true;
     }
-    // const d = editor.deepCopyFlowData(Store.flowdata);
     const flowdata = getFlowdata(ctx);
     const d = flowdata;
     if (d == null) return;
@@ -129,11 +116,6 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0
             const cell = d[r][c1];
             if (cell == null) return; //
             if (cell.mc != null || isRealNull(cell.v)) {
-                continue;
-            }
-            if (str == null && /[\u4e00-\u9fa5]+/g.test(`${cell.v}`)) {
-                str = r + 1;
-                edr = r + 1;
                 continue;
             }
 
@@ -167,12 +149,6 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0
     }
 
     if (hasMc) {
-        // if (isEditMode()) {
-        //   alert("The selection contains merged cells. Cannot perform this action!");
-        // } else {
-        //   tooltip.info("The selection contains merged cells. Cannot perform this action!", "");
-        // }
-
         return;
     }
 

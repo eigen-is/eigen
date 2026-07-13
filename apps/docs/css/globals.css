@@ -87,35 +87,8 @@
     cursor: col-resize;
 }
 
-/* Collaboration Cursors (docs-specific) */
-.collaboration-cursor__caret {
-    position: relative;
-    border-left: 2px solid;
-    border-right: none;
-    margin-left: -1px;
-    margin-right: -1px;
-    pointer-events: none;
-    word-break: normal;
-}
-
-.collaboration-cursor__label {
-    position: absolute;
-    top: -1.4em;
-    left: -1px;
-    font-size: 12px;
-    font-weight: 600;
-    font-style: normal;
-    text-decoration: none;
-    text-transform: none;
-    letter-spacing: normal;
-    line-height: 1;
-    padding: 2px 6px;
-    border-radius: 3px 3px 3px 0;
-    color: white;
-    white-space: nowrap;
-    user-select: none;
-    pointer-events: none;
-}
+/* Collaboration cursors moved to @workspace/ui globals.css so docs + sheets share
+   one label visual (see presence-label in packages/ui). */
 
 /* Text alignment (tiptap extension) */
 .tiptap .has-text-align-center {

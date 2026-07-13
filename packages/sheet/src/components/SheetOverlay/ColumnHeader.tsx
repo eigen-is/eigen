@@ -6,7 +6,8 @@ import {
     autoFitColumnWidth,
     colLocation,
     colLocationByIndex,
-    fixColumnStyleOverflowInFreeze,
+    computeColumnHeaderRegions,
+    type Freezen,
     fixPositionOnFrozenCells,
     getFlowdata,
     getSheetIndex,
@@ -14,10 +15,12 @@ import {
     handleColSizeHandleMouseDown,
     handleColumnHeaderMouseDown,
     isAllowEdit,
+    overlayRegionForCell,
     selectTitlesMap,
     selectTitlesRange,
 } from '../../state';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
+import { OverlayRegion } from './OverlayRegion';
 
 export const ColumnHeader: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
@@ -30,7 +33,6 @@ export const ColumnHeader: React.FC = () => {
         col_pre: -1,
         col_index: -1,
     });
-    const [hoverInFreeze, setHoverInFreeze] = useState(false);
     const [selectedLocation, setSelectedLocation] = useState<
         { col: number; col_pre: number; c1: number; c2: number }[]
     >([]);
@@ -62,12 +64,11 @@ export const ColumnHeader: React.FC = () => {
             const mouseX = e.pageX - containerRef.current!.getBoundingClientRect().left - window.scrollX;
             const _x = mouseX + refs.globalCache.scrollLeft;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
-            const { x, inVerticalFreeze } = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
+            const { x } = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
             const col_location = colLocation(x, context.visibledatacolumn);
             const [col_pre, col, col_index] = col_location;
             if (col_index !== hoverLocation.col_index) {
                 setHoverLocation({ col_pre, col, col_index });
-                setHoverInFreeze(inVerticalFreeze);
             }
             const flowdata = getFlowdata(context);
             if (flowdata != null)
@@ -195,26 +196,49 @@ export const ColumnHeader: React.FC = () => {
         };
     }, [refs.globalCache]);
 
+    // The header shares the body-overlay region model one axis at a time
+    // (RENDERING.md § Scrolling): a pinned frozen band + a bus-translated main
+    // band whose clip cuts the highlights at the freeze boundary, replacing the
+    // recipe-time fix*StyleOverflowInFreeze clamps (stale during pure scroll).
+    const headerHeight = context.columnHeaderHeight - 1.5;
+    const freeze = refs.globalCache.freezen?.[context.currentSheetId];
+    const colFreeze: Freezen | undefined = freeze?.vertical ? { vertical: freeze.vertical } : undefined;
+    const regions = computeColumnHeaderRegions(colFreeze, context.cellmainWidth, headerHeight);
+    const hoverRegion = overlayRegionForCell(regions, colFreeze, 0, hoverLocation.col_index);
+
     return (
         <div
             ref={containerRef}
             className="fortune-col-header"
             style={{
-                height: context.columnHeaderHeight - 1.5,
+                height: headerHeight,
             }}
             onMouseMove={onMouseMove}
             onMouseDown={onMouseDown}
             onMouseLeave={onMouseLeave}
             onContextMenu={onContextMenu}
         >
-            <div ref={contentRef} style={{ position: 'absolute', inset: 0 }}>
-                <div
-                    className="fortune-cols-freeze-handle"
-                    onMouseDown={onColFreezeHandleMouseDown}
-                    style={{
-                        left: freezeHandleLeft || 0,
-                    }}
-                />
+            {/* Selected highlights are passive: render into every region in pure
+                content coordinates; each region's clip shows exactly its portion. */}
+            {regions.map(({ pane, ...rect }) => (
+                <OverlayRegion key={pane} {...rect}>
+                    {selectedLocation.map(({ col, col_pre, c1, c2 }) => (
+                        <div
+                            className="fortune-col-header-selected"
+                            key={`${c1}-${c2}`}
+                            style={{
+                                left: col_pre,
+                                width: col - col_pre - 1,
+                                height: headerHeight,
+                                display: 'block',
+                            }}
+                        />
+                    ))}
+                </OverlayRegion>
+            ))}
+            {/* Hover highlight + resize handle are singletons in the single
+                region containing the hovered column. */}
+            <OverlayRegion {...hoverRegion}>
                 <div
                     className="fortune-cols-change-size"
                     ref={colChangeSizeRef}
@@ -222,26 +246,20 @@ export const ColumnHeader: React.FC = () => {
                     onMouseDown={onColSizeHandleMouseDown}
                     onDoubleClick={onColSizeHandleDoubleClick}
                     style={{
-                        left: hoverLocation.col - 5 + (hoverInFreeze ? context.scrollLeft : 0),
+                        left: hoverLocation.col - 5,
+                        height: headerHeight,
                         opacity: context.colsResizing ? 1 : 0,
                     }}
                 />
                 {!context.colsResizing && hoverLocation.col_index >= 0 ? (
                     <div
                         className="fortune-col-header-hover"
-                        style={Object.assign(
-                            {
-                                left: hoverLocation.col_pre,
-                                width: hoverLocation.col - hoverLocation.col_pre - 1,
-                                display: 'block',
-                            },
-                            fixColumnStyleOverflowInFreeze(
-                                context,
-                                hoverLocation.col_index,
-                                hoverLocation.col_index,
-                                refs.globalCache.freezen?.[context.currentSheetId],
-                            ),
-                        )}
+                        style={{
+                            left: hoverLocation.col_pre,
+                            width: hoverLocation.col - hoverLocation.col_pre - 1,
+                            height: headerHeight,
+                            display: 'block',
+                        }}
                     >
                         {allowEditRef.current && (
                             <span className="header-arrow" onClick={onContextMenu} tabIndex={0}>
@@ -255,25 +273,19 @@ export const ColumnHeader: React.FC = () => {
                         )}
                     </div>
                 ) : null}
-                {selectedLocation.map(({ col, col_pre, c1, c2 }) => (
-                    <div
-                        className="fortune-col-header-selected"
-                        key={`${c1}-${c2}`}
-                        style={Object.assign(
-                            {
-                                left: col_pre,
-                                width: col - col_pre - 1,
-                                display: 'block',
-                            },
-                            fixColumnStyleOverflowInFreeze(
-                                context,
-                                c1,
-                                c2,
-                                refs.globalCache.freezen?.[context.currentSheetId],
-                            ),
-                        )}
-                    />
-                ))}
+            </OverlayRegion>
+            {/* The freeze drag handle keeps its viewport-pinning +scroll pattern
+                on the live translate (imperatively repositioned during freeze
+                drags in live content coordinates), unclipped like the body's
+                pane-spanning drag lines. */}
+            <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                <div
+                    className="fortune-cols-freeze-handle"
+                    onMouseDown={onColFreezeHandleMouseDown}
+                    style={{
+                        left: freezeHandleLeft || 0,
+                    }}
+                />
             </div>
             {columnMenuAnchor}
         </div>

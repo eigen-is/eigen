@@ -10,11 +10,11 @@ import type React from 'react';
 import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import {
+    en,
     getRangetxt,
     goToLink,
     isLinkValid,
     type LinkCardProps,
-    locale,
     normalizeSelection,
     onRangeSelectionModalMoveStart,
     removeHyperlink,
@@ -22,8 +22,11 @@ import {
     saveHyperlink,
 } from '../../state';
 
+// pointer-events-auto: the overlay pane-region wrapper is pointer-events none.
+// eigen-paper-chrome: the card is app chrome inside the light-pinned workbook
+// surface — it re-themes with the app.
 const modalBase =
-    'absolute overflow-hidden bg-popover z-30 rounded-md border border-border shadow-md px-5 pt-1.5 pb-2.5';
+    'eigen-paper-chrome absolute overflow-hidden bg-popover z-30 rounded-md border border-border shadow-md px-5 pt-1.5 pb-2.5 pointer-events-auto';
 
 export function LinkEditCard({
     r,
@@ -40,10 +43,10 @@ export function LinkEditCard({
     const [linkText, setLinkText] = useState<string>(originText);
     const [linkAddress, setLinkAddress] = useState<string>(originAddress);
     const [linkType, setLinkType] = useState<string>(originType);
-    const { insertLink, linkTypeList, button } = locale(context);
+    const { insertLink, linkTypeList, button } = en;
     const lastCell = useRef(normalizeSelection(context, [{ row: [r, r], column: [c, c] }]));
     const skipCellRangeSet = useRef(true);
-    const isLinkAddressValid = isLinkValid(context, linkType, linkAddress);
+    const isLinkAddressValid = isLinkValid(linkType, linkAddress);
     const invalidBorder = linkAddress && !isLinkAddressValid.isValid && 'border-destructive';
 
     const tooltip = <div className="h-[17px] my-[3px] text-xs text-destructive">{isLinkAddressValid.tooltip}</div>;
@@ -84,7 +87,7 @@ export function LinkEditCard({
     const renderToolbarButton = useCallback(
         (Icon: LucideIcon, onClick: () => void) => (
             <button type="button" className="p-1.5 cursor-pointer hover:bg-accent" onClick={onClick}>
-                <Icon width={18} height={18} aria-hidden="true" />
+                <Icon className="size-4" aria-hidden="true" />
             </button>
         ),
         [],
@@ -121,12 +124,12 @@ export function LinkEditCard({
         return (
             <div
                 {...containerEvent}
-                className={cn(modalBase, 'flex flex-row items-center py-0.5 pl-4 pr-2')}
+                className={cn(modalBase, 'flex flex-row items-center py-0.5 pl-4 pr-2 text-sm')}
                 style={{ left: position.cellLeft + 20, top: position.cellBottom }}
             >
                 <button
                     type="button"
-                    className="mr-1.5 cursor-pointer hover:text-primary"
+                    className="mr-1.5 cursor-pointer whitespace-nowrap hover:text-primary"
                     onClick={() => {
                         setContext((draftCtx) =>
                             goToLink(draftCtx, r, c, linkType, linkAddress, refs.cellArea.current!),

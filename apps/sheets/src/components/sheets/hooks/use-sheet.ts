@@ -14,6 +14,9 @@ export function useSheet(
     const [initialData, setInitialData] = useState<Sheet[] | null>(null);
     const [synced, setSynced] = useState(false);
     const [snapshotVersion, setSnapshotVersion] = useState(0);
+    // Exposed so presence (use-presence) can attach a Yjs awareness listener to the
+    // same provider without re-owning its lifecycle.
+    const [provider, setProvider] = useState<WebsocketProvider | null>(null);
 
     const docRef = useRef<Y.Doc | null>(null);
     const providerRef = useRef<WebsocketProvider | null>(null);
@@ -57,6 +60,7 @@ export function useSheet(
             connect: true,
         });
         providerRef.current = wsProvider;
+        setProvider(wsProvider);
 
         const handleOps = (event: Y.YArrayEvent<unknown>) => {
             if (!readyForOpsRef.current) return;
@@ -148,6 +152,7 @@ export function useSheet(
             doc.destroy();
             docRef.current = null;
             providerRef.current = null;
+            setProvider(null);
         };
     }, [ownerId, mountId, pathId, workbookRef, flushSnapshot]);
 
@@ -176,5 +181,6 @@ export function useSheet(
         handleOp,
         onDataChange,
         docRef,
+        provider,
     };
 }

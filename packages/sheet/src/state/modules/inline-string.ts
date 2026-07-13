@@ -294,7 +294,7 @@ function getCssText(cssText: string, attr: keyof Cell, value: unknown) {
         styleObj._fontSize = Number(fs);
         styleObj._color = fontColor;
     }
-    const s = getFontStyleByCell(styleObj, undefined, undefined, false);
+    const s = getFontStyleByCell(styleObj, undefined, false);
     const ukey = kebabCase(Object.keys(s)[0]);
     const uvalue = Object.values(s)[0] as string;
     // let cssText = span.style.cssText;

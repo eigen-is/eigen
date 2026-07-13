@@ -1,10 +1,10 @@
 import type { BorderSide, CellBorderInfo, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber, kebabCase, map } from 'es-toolkit/compat';
 import { format } from 'numfmt';
-import { cfSplitRange } from '../../engine';
+import { cfSplitRange } from '../../engine/conditional-format';
 import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
-import type { CalcChainEntry, Cell, Freezen, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
+import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
 import { BORDER_STYLE_NAMES, type ComputedBorderEntry, getBorderInfoCompute } from './border';
 import {
@@ -16,7 +16,7 @@ import {
     mergeMoveMain,
 } from './cell';
 import { setPendingCopy } from './clipboard';
-import { getComputeMap } from './conditionFormat';
+import { getComputeMap } from './condition-format';
 import { hasPartMC } from './validation';
 
 export const selectionCache = {
@@ -31,6 +31,27 @@ type BorderEdgeHistogram = { color: Record<string, number>; style: Record<string
 function bumpHistogram(hist: BorderEdgeHistogram, side: BorderSide) {
     hist.style[side.style] = (hist.style[side.style] ?? 0) + 1;
     hist.color[side.color] = (hist.color[side.color] ?? 0) + 1;
+}
+
+// Pick the dominant color and line-style along one merged-cell edge — each must
+// appear on at least half the edge's cells — and render it as a CSS declaration.
+// An empty histogram serializes to exactly 23 chars, so `> 23` means "saw a border".
+function dominantBorderSideCss(hist: BorderEdgeHistogram, edgeLen: number, cssSide: string): string {
+    if (JSON.stringify(hist).length <= 23) return '';
+
+    let color: string | null = null;
+    let style: string | null = null;
+    for (const key of Object.keys(hist.color)) {
+        if (hist.color[key] >= edgeLen / 2) color = key;
+    }
+    for (const key of Object.keys(hist.style)) {
+        if (hist.style[key] >= edgeLen / 2) style = key;
+    }
+
+    if (!isNil(color) && !isNil(style)) {
+        return `border-${cssSide}:${getHtmlBorderStyle(style, color)}`;
+    }
+    return '';
 }
 
 function cellBorderCss(border: ComputedBorderEntry): string {
@@ -123,9 +144,11 @@ export function normalizeSelection(ctx: Context, selection: SheetType['selection
 
     for (let i = 0; i < selection.length; i += 1) {
         const r1 = selection[i].row[0];
-        const r2 = selection[i].row[1];
+        // `row`/`column` are typed `number[]`, so callers may pass a single-cell
+        // `[n]`; backfill the missing end so it normalizes to a `[n, n]` range.
+        const r2 = selection[i].row[1] ?? r1;
         const c1 = selection[i].column[0];
-        const c2 = selection[i].column[1];
+        const c2 = selection[i].column[1] ?? c1;
 
         let rf: number | undefined;
         let cf: number | undefined;
@@ -241,9 +264,6 @@ export function selectTitlesRange(map: Record<string, number>) {
 }
 
 export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyState']) {
-    // if (!checkProtectionLockedRangeList(ctx.selections, ctx.currentSheetId)) {
-    //   return;
-    // }
     const cfg = ctx.config;
     if (cfg.merge == null) {
         cfg.merge = {};
@@ -252,7 +272,6 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     if (!copyRange) return;
     // Copy range
     const copyHasMC = copyRange.HasMC;
-    // let copyRowlChange = copyRange["RowlChange"];
     const copySheetIndex = copyRange.dataSheetId;
 
     const c_r1 = copyRange.copyRange[0].row[0];
@@ -279,16 +298,10 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
         // Apply range is a single cell; automatically expand to the copy range size (if the expanded range partially overlaps a merged cell, show a warning)
         let has_PartMC = false;
         if (cfg.merge != null) {
-            has_PartMC = hasPartMC(ctx, cfg, minh, minh + copyh - 1, minc, minc + copyc - 1);
+            has_PartMC = hasPartMC(ctx, minh, minh + copyh - 1, minc, minc + copyc - 1);
         }
 
         if (has_PartMC) {
-            // if (isEditMode()) {
-            //   alert("Cannot make partial changes to merged cells");
-            // }
-            // else {
-            //   tooltip.info('<i class="fa fa-exclamation-triangle"></i>Tip', "Cannot make partial changes to merged cells");
-            // }
             return;
         }
 
@@ -299,7 +312,6 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     const timesH = Math.ceil((maxh - minh + 1) / copyh); // Number of row copy groups
     const timesC = Math.ceil((maxc - minc + 1) / copyc); // Number of column copy groups
 
-    // let d = editor.deepCopyFlowData(ctx.flowdata); // fetch data
     const flowdata = getFlowdata(ctx); // fetch data
     if (flowdata == null) return;
     const cellMaxLength = flowdata[0].length;
@@ -547,7 +559,6 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
 export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number) {
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return [null, null];
-    // const r1 = 0;
     const r2 = flowData.length - 1;
     let str = null;
     if (rIndex > 0) {
@@ -599,7 +610,6 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
     if (isNil(flowData)) {
         return [null, null];
     }
-    // const c1 = 0;
     const c2 = flowData[0].length - 1;
     let str = null;
     if (cIndex > 0) {
@@ -647,6 +657,140 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
     return [str, end];
 }
 
+// Merge-aware walk shared by both moveHighlightCell targets. Advances the focused
+// cell by `index` along `postion`, resolving merged-cell spans on both the source
+// and the destination. All fields are pixel/index coordinates, populated from a
+// mergeBorder() tuple or from visibledata{row,column} lookups; returns null on the
+// shared nil failure (same console message both callers logged). The one true
+// difference between the targets: when the destination is NOT a merged cell, the
+// selection target keys the new range off the clamped cursor (curR/curC) while the
+// formula target keys it off the moved anchor (moveX/moveY) — `indexFromMove`.
+type HighlightCellWalk = {
+    row: number | undefined;
+    row_pre: number | undefined;
+    row_index: number | undefined;
+    row_index_ed: number | undefined;
+    col: number | undefined;
+    col_pre: number | undefined;
+    col_index: number | undefined;
+    col_index_ed: number | undefined;
+    moveX: number;
+    moveY: number;
+};
+
+function computeMoveHighlightCell(
+    ctx: Context,
+    flowdata: NonNullable<ReturnType<typeof getFlowdata>>,
+    last: Selection,
+    postion: 'down' | 'right',
+    index: number,
+    indexFromMove: boolean,
+): HighlightCellWalk | null {
+    const datarowlen = flowdata.length;
+    const datacolumnlen = flowdata[0].length;
+
+    let curR: number;
+    if (isNil(last.row_focus)) {
+        [curR] = last.row;
+    } else {
+        curR = last.row_focus;
+    }
+
+    let curC: number;
+    if (isNil(last.column_focus)) {
+        [curC] = last.column;
+    } else {
+        curC = last.column_focus;
+    }
+
+    // Whether the focused cell is a merged cell
+    const margeset = mergeBorder(ctx, flowdata, curR, curC);
+    if (margeset) {
+        const str_r = margeset.row[2];
+        const end_r = margeset.row[3];
+
+        const str_c = margeset.column[2];
+        const end_c = margeset.column[3];
+
+        if (index > 0) {
+            if (postion === 'down') {
+                curR = end_r;
+                curC = str_c;
+            } else if (postion === 'right') {
+                curR = str_r;
+                curC = end_c;
+            }
+        } else {
+            curR = str_r;
+            curC = str_c;
+        }
+    }
+
+    if (isNil(curR) || isNil(curC)) {
+        console.error('moveHighlightCell: curR or curC is nil');
+        return null;
+    }
+
+    let moveX = isNil(last.moveXY) ? curR : last.moveXY.x;
+    let moveY = isNil(last.moveXY) ? curC : last.moveXY.y;
+
+    if (postion === 'down') {
+        curR += index;
+        moveX = curR;
+    } else if (postion === 'right') {
+        curC += index;
+        moveY = curC;
+    }
+
+    if (curR >= datarowlen) {
+        curR = datarowlen - 1;
+        moveX = curR;
+    }
+
+    if (curR < 0) {
+        curR = 0;
+        moveX = curR;
+    }
+
+    if (curC >= datacolumnlen) {
+        curC = datacolumnlen - 1;
+        moveY = curC;
+    }
+
+    if (curC < 0) {
+        curC = 0;
+        moveY = curC;
+    }
+
+    // Whether the next cell to move to is a merged cell
+    const margeset2 = mergeBorder(ctx, flowdata, curR, curC);
+    if (margeset2) {
+        const [row_pre, row, row_index, row_index_ed] = margeset2.row;
+        const [col_pre, col, col_index, col_index_ed] = margeset2.column;
+        return { row, row_pre, row_index, row_index_ed, col, col_pre, col_index, col_index_ed, moveX, moveY };
+    }
+
+    const row = ctx.visibledatarow[moveX];
+    const row_pre = moveX - 1 === -1 ? 0 : ctx.visibledatarow[moveX - 1];
+    const col = ctx.visibledatacolumn[moveY];
+    const col_pre = moveY - 1 === -1 ? 0 : ctx.visibledatacolumn[moveY - 1];
+    const anchorR = indexFromMove ? moveX : curR;
+    const anchorC = indexFromMove ? moveY : curC;
+
+    return {
+        row,
+        row_pre,
+        row_index: anchorR,
+        row_index_ed: anchorR,
+        col,
+        col_pre,
+        col_index: anchorC,
+        col_index_ed: anchorC,
+        moveX,
+        moveY,
+    };
+}
+
 export function moveHighlightCell(
     ctx: Context,
     postion: 'down' | 'right',
@@ -655,19 +799,6 @@ export function moveHighlightCell(
 ) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
-    const datarowlen = flowdata.length;
-    const datacolumnlen = flowdata[0].length;
-
-    // [pre, end, index, index_ed] all in pixel/index coordinates; populated either
-    // from a mergeBorder() tuple or from visibledata{row,column} lookups.
-    let row: number | undefined;
-    let row_pre: number | undefined;
-    let row_index: number | undefined;
-    let row_index_ed: number | undefined;
-    let col: number | undefined;
-    let col_pre: number | undefined;
-    let col_index: number | undefined;
-    let col_index_ed: number | undefined;
 
     if (type === 'rangeOfSelect') {
         const last = ctx.selections?.[ctx.selections.length - 1];
@@ -676,95 +807,9 @@ export function moveHighlightCell(
             return;
         }
 
-        let curR: number;
-        if (isNil(last.row_focus)) {
-            [curR] = last.row;
-        } else {
-            curR = last.row_focus;
-        }
-
-        let curC: number;
-        if (isNil(last.column_focus)) {
-            [curC] = last.column;
-        } else {
-            curC = last.column_focus;
-        }
-
-        // Whether the focused cell is a merged cell
-        const margeset = mergeBorder(ctx, flowdata, curR, curC);
-        if (margeset) {
-            const str_r = margeset.row[2];
-            const end_r = margeset.row[3];
-
-            const str_c = margeset.column[2];
-            const end_c = margeset.column[3];
-
-            if (index > 0) {
-                if (postion === 'down') {
-                    curR = end_r;
-                    curC = str_c;
-                } else if (postion === 'right') {
-                    curR = str_r;
-                    curC = end_c;
-                }
-            } else {
-                curR = str_r;
-                curC = str_c;
-            }
-        }
-
-        if (isNil(curR) || isNil(curC)) {
-            console.error('moveHighlightCell: curR or curC is nil');
-            return;
-        }
-
-        let moveX = isNil(last.moveXY) ? curR : last.moveXY.x;
-        let moveY = isNil(last.moveXY) ? curC : last.moveXY.y;
-
-        if (postion === 'down') {
-            curR += index;
-            moveX = curR;
-        } else if (postion === 'right') {
-            curC += index;
-            moveY = curC;
-        }
-
-        if (curR >= datarowlen) {
-            curR = datarowlen - 1;
-            moveX = curR;
-        }
-
-        if (curR < 0) {
-            curR = 0;
-            moveX = curR;
-        }
-
-        if (curC >= datacolumnlen) {
-            curC = datacolumnlen - 1;
-            moveY = curC;
-        }
-
-        if (curC < 0) {
-            curC = 0;
-            moveY = curC;
-        }
-
-        // Whether the next cell to move to is a merged cell
-        const margeset2 = mergeBorder(ctx, flowdata, curR, curC);
-        if (margeset2) {
-            [row_pre, row, row_index, row_index_ed] = margeset2.row;
-            [col_pre, col, col_index, col_index_ed] = margeset2.column;
-        } else {
-            row = ctx.visibledatarow[moveX];
-            row_pre = moveX - 1 === -1 ? 0 : ctx.visibledatarow[moveX - 1];
-            col = ctx.visibledatacolumn[moveY];
-            col_pre = moveY - 1 === -1 ? 0 : ctx.visibledatacolumn[moveY - 1];
-
-            row_index = curR;
-            row_index_ed = curR;
-            col_index = curC;
-            col_index_ed = curC;
-        }
+        const walk = computeMoveHighlightCell(ctx, flowdata, last, postion, index, false);
+        if (!walk) return;
+        const { row_index, row_index_ed, col_index, col_index_ed, moveX, moveY } = walk;
 
         if (isNil(row_index) || isNil(row_index_ed) || isNil(col_index) || isNil(col_index_ed)) {
             console.error('moveHighlightCell: row_index or row_index_ed or col_index or col_index_ed is nil');
@@ -778,102 +823,14 @@ export function moveHighlightCell(
         last.moveXY = { x: moveX, y: moveY };
 
         normalizeSelection(ctx, ctx.selections);
-        // TODO pivotTable.pivotclick(row_index, col_index);
-        // TODO formula.fucntionboxshow(row_index, col_index);
         scrollToHighlightCell(ctx, row_index, col_index);
     } else if (type === 'rangeOfFormula') {
         const last = ctx.formulaCache.func_selectedrange;
         if (!last) return;
 
-        let curR: number;
-        if (isNil(last.row_focus)) {
-            [curR] = last.row;
-        } else {
-            curR = last.row_focus;
-        }
-
-        let curC: number;
-        if (isNil(last.column_focus)) {
-            [curC] = last.column;
-        } else {
-            curC = last.column_focus;
-        }
-
-        // Whether the focused cell is a merged cell
-        const margeset = mergeBorder(ctx, flowdata, curR, curC);
-        if (margeset) {
-            const str_r = margeset.row[2];
-            const end_r = margeset.row[3];
-
-            const str_c = margeset.column[2];
-            const end_c = margeset.column[3];
-
-            if (index > 0) {
-                if (postion === 'down') {
-                    curR = end_r;
-                    curC = str_c;
-                } else if (postion === 'right') {
-                    curR = str_r;
-                    curC = end_c;
-                }
-            } else {
-                curR = str_r;
-                curC = str_c;
-            }
-        }
-
-        if (isNil(curR) || isNil(curC)) {
-            console.error('moveHighlightCell: curR or curC is nil');
-            return;
-        }
-
-        let moveX = isNil(last.moveXY) ? curR : last.moveXY.x;
-        let moveY = isNil(last.moveXY) ? curC : last.moveXY.y;
-
-        if (postion === 'down') {
-            curR += index;
-            moveX = curR;
-        } else if (postion === 'right') {
-            curC += index;
-            moveY = curC;
-        }
-
-        if (curR >= datarowlen) {
-            curR = datarowlen - 1;
-            moveX = curR;
-        }
-
-        if (curR < 0) {
-            curR = 0;
-            moveX = curR;
-        }
-
-        if (curC >= datacolumnlen) {
-            curC = datacolumnlen - 1;
-            moveY = curC;
-        }
-
-        if (curC < 0) {
-            curC = 0;
-            moveY = curC;
-        }
-
-        // Whether the next cell to move to is a merged cell
-        const margeset2 = mergeBorder(ctx, flowdata, curR, curC);
-        if (margeset2) {
-            [row_pre, row, row_index, row_index_ed] = margeset2.row;
-            [col_pre, col, col_index, col_index_ed] = margeset2.column;
-        } else {
-            row = ctx.visibledatarow[moveX];
-            row_pre = moveX - 1 === -1 ? 0 : ctx.visibledatarow[moveX - 1];
-            row_index = moveX;
-            row_index_ed = moveX;
-
-            col = ctx.visibledatacolumn[moveY];
-            col_pre = moveY - 1 === -1 ? 0 : ctx.visibledatacolumn[moveY - 1];
-            col_index = moveY;
-            col_index_ed = moveY;
-        }
+        const walk = computeMoveHighlightCell(ctx, flowdata, last, postion, index, true);
+        if (!walk) return;
+        const { row, row_pre, row_index, row_index_ed, col, col_pre, col_index, col_index_ed, moveX, moveY } = walk;
 
         if (
             isNil(col) ||
@@ -904,54 +861,26 @@ export function moveHighlightCell(
             column_focus: col_index,
             moveXY: { x: moveX, y: moveY },
         };
-
-        // formula.rangeSetValue({
-        //   row: [row_index, row_index_ed],
-        //   column: [col_index, col_index_ed],
-        // });
     }
-
-    /*
-    const scrollLeft = $("#luckysheet-cell-main").scrollLeft();
-    const scrollTop = $("#luckysheet-cell-main").scrollTop();
-    const winH = $("#luckysheet-cell-main").height();
-    const winW = $("#luckysheet-cell-main").width();
-
-    let sleft = 0;
-    let stop = 0;
-    if (col - scrollLeft - winW + 20 > 0) {
-      sleft = col - winW + 20;
-      if (isScroll) {
-        $("#luckysheet-scrollbar-x").scrollLeft(sleft);
-      }
-    } else if (col_pre - scrollLeft - 20 < 0) {
-      sleft = col_pre - 20;
-      if (isScroll) {
-        $("#luckysheet-scrollbar-x").scrollLeft(sleft);
-      }
-    }
-
-    if (row - scrollTop - winH + 20 > 0) {
-      stop = row - winH + 20;
-      if (isScroll) {
-        $("#luckysheet-scrollbar-y").scrollTop(stop);
-      }
-    } else if (row_pre - scrollTop - 20 < 0) {
-      stop = row_pre - 20;
-      if (isScroll) {
-        $("#luckysheet-scrollbar-y").scrollTop(stop);
-      }
-    }
-
-    clearTimeout(ctx.countfuncTimeout);
-    countfunc();
-    */
-
-    // Notify the server of cell move
-    // server.saveParam("mv", ctx.currentSheetId, ctx.selections);
 }
 
 // shift + arrow key: adjust the selection range
+//
+// NOTE (C4): the two targets below look like clones but are NOT — do not
+// "de-duplicate" them. The formula arm diverges from the selection arm inside
+// several merge branches, preserved verbatim from luckysheet:
+//   - down / merged, `rf_end < endR` branch: the selection arm reads
+//     getRowMerge(ctx, curR, …) and applies `endR += index` outside the guard;
+//     the formula arm reads getRowMerge(ctx, endR, …) and applies it inside.
+//   - right / first branch (both merged and non-merged): the selection arm adds
+//     `curC += index` twice (inside + outside the inner guard); the formula arm
+//     adds it once.
+//   - the selection arm returns early when rf/cf are nil and then compares them
+//     directly; the formula arm guards every rf/cf use with !isNil instead.
+//   - the write-backs differ (in-place selection mutate + normalize + scroll vs.
+//     rebuilding func_selectedrange with fresh geometry).
+// Unifying would change behavior. The shared clamp/geometry tail is left inline
+// so these divergences stay visible side by side.
 export function moveHighlightRange(
     ctx: Context,
     postion: 'down' | 'right',
@@ -1397,9 +1326,6 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
 
     let colgroup = '';
 
-    // rowIndexArr = rowIndexArr.sort();
-    // colIndexArr = colIndexArr.sort();
-
     for (let i = 0; i < rowIndexArr.length; i += 1) {
         const r = rowIndexArr[i];
 
@@ -1493,89 +1419,10 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                             const rowlen = cell.mc.rs!;
                             const collen = cell.mc.cs!;
 
-                            if (JSON.stringify(bl_obj).length > 23) {
-                                let bl_color = null;
-                                let bl_style = null;
-
-                                Object.keys(bl_obj.color).forEach((x) => {
-                                    if (bl_obj.color[x] >= rowlen / 2) {
-                                        bl_color = x;
-                                    }
-                                });
-
-                                Object.keys(bl_obj.style).forEach((x) => {
-                                    if (bl_obj.style[x] >= rowlen / 2) {
-                                        bl_style = x;
-                                    }
-                                });
-
-                                if (!isNil(bl_color) && !isNil(bl_style)) {
-                                    style += `border-left:${getHtmlBorderStyle(bl_style, bl_color)}`;
-                                }
-                            }
-
-                            if (JSON.stringify(br_obj).length > 23) {
-                                let br_color = null;
-                                let br_style = null;
-
-                                Object.keys(br_obj.color).forEach((x) => {
-                                    if (br_obj.color[x] >= rowlen / 2) {
-                                        br_color = x;
-                                    }
-                                });
-
-                                Object.keys(br_obj.style).forEach((x) => {
-                                    if (br_obj.style[x] >= rowlen / 2) {
-                                        br_style = x;
-                                    }
-                                });
-
-                                if (!isNil(br_color) && !isNil(br_style)) {
-                                    style += `border-right:${getHtmlBorderStyle(br_style, br_color)}`;
-                                }
-                            }
-
-                            if (JSON.stringify(bt_obj).length > 23) {
-                                let bt_color = null;
-                                let bt_style = null;
-
-                                Object.keys(bt_obj.color).forEach((x) => {
-                                    if (bt_obj.color[x] >= collen / 2) {
-                                        bt_color = x;
-                                    }
-                                });
-
-                                Object.keys(bt_obj.style).forEach((x) => {
-                                    if (bt_obj.style[x] >= collen / 2) {
-                                        bt_style = x;
-                                    }
-                                });
-
-                                if (!isNil(bt_color) && !isNil(bt_style)) {
-                                    style += `border-top:${getHtmlBorderStyle(bt_style, bt_color)}`;
-                                }
-                            }
-
-                            if (JSON.stringify(bb_obj).length > 23) {
-                                let bb_color = null;
-                                let bb_style = null;
-
-                                Object.keys(bb_obj.color).forEach((x) => {
-                                    if (bb_obj.color[x] >= collen / 2) {
-                                        bb_color = x;
-                                    }
-                                });
-
-                                Object.keys(bb_obj.style).forEach((x) => {
-                                    if (bb_obj.style[x] >= collen / 2) {
-                                        bb_style = x;
-                                    }
-                                });
-
-                                if (!isNil(bb_color) && !isNil(bb_style)) {
-                                    style += `border-bottom:${getHtmlBorderStyle(bb_style, bb_color)}`;
-                                }
-                            }
+                            style += dominantBorderSideCss(bl_obj, rowlen, 'left');
+                            style += dominantBorderSideCss(br_obj, rowlen, 'right');
+                            style += dominantBorderSideCss(bt_obj, collen, 'top');
+                            style += dominantBorderSideCss(bb_obj, collen, 'bottom');
                         }
                     } else {
                         continue;
@@ -1729,7 +1576,7 @@ export function deleteSelectedCellText(ctx: Context): string {
             const c1 = selection[s].column[0];
             const c2 = selection[s].column[1];
 
-            if (hasPartMC(ctx, ctx.config, r1, r2, c1, c2)) {
+            if (hasPartMC(ctx, r1, r2, c1, c2)) {
                 has_PartMC = true;
                 break;
             }
@@ -1818,123 +1665,6 @@ export function selectAll(ctx: Context) {
     ];
 
     normalizeSelection(ctx, ctx.selections);
-}
-
-export function fixRowStyleOverflowInFreeze(
-    ctx: Context,
-    r1: number,
-    r2: number,
-    freeze: Freezen | undefined,
-): {
-    top?: number;
-    height?: number;
-    display?: string;
-} {
-    if (!freeze) return {};
-
-    const ret: ReturnType<typeof fixRowStyleOverflowInFreeze> = {};
-    const { scrollTop } = ctx;
-    const horizontalData = freeze.horizontal?.freezenhorizontaldata;
-
-    let rangeshow = true;
-
-    if (horizontalData != null) {
-        const freezenTop = horizontalData.pos;
-        const freezen_rowindex = horizontalData.boundary;
-        const offTop = scrollTop - horizontalData.scroll;
-
-        const row = ctx.visibledatarow[r2];
-        const row_pre = r1 - 1 === -1 ? 0 : ctx.visibledatarow[r1 - 1];
-
-        const top_move = row_pre;
-        const height_move = row - row_pre - 1;
-
-        if (r1 >= freezen_rowindex) {
-            // Original selection is outside the frozen area
-            if (top_move + height_move < freezenTop + offTop) {
-                rangeshow = false;
-            } else if (top_move < freezenTop + offTop) {
-                ret.top = freezenTop + offTop;
-                ret.height = height_move - (freezenTop + offTop - top_move);
-            } else {
-            }
-        } else if (r2 >= freezen_rowindex) {
-            // Original selection partially overlaps the frozen area
-            if (top_move + height_move < freezenTop + offTop) {
-                ret.top = top_move + offTop;
-                ret.height = freezenTop - top_move;
-            } else {
-                ret.top = top_move + offTop;
-                ret.height = height_move - offTop;
-            }
-        } else {
-            // Original selection is inside the frozen area
-            ret.top = top_move + offTop;
-        }
-    }
-
-    if (!rangeshow) {
-        ret.display = 'none';
-    }
-    return ret;
-}
-
-export function fixColumnStyleOverflowInFreeze(
-    ctx: Context,
-    c1: number,
-    c2: number,
-    freeze: Freezen | undefined,
-): {
-    left?: number;
-    width?: number;
-    display?: string;
-} {
-    if (!freeze) return {};
-
-    const ret: ReturnType<typeof fixColumnStyleOverflowInFreeze> = {};
-    const { scrollLeft } = ctx;
-    const verticalData = freeze.vertical?.freezenverticaldata;
-
-    let rangeshow = true;
-
-    if (verticalData != null) {
-        const freezenLeft = verticalData.pos;
-        const freezen_colindex = verticalData.boundary;
-        const offLeft = scrollLeft - verticalData.scroll;
-
-        const col = ctx.visibledatacolumn[c2];
-        const col_pre = c1 - 1 === -1 ? 0 : ctx.visibledatacolumn[c1 - 1];
-
-        const left_move = col_pre;
-        const width_move = col - col_pre - 1;
-
-        if (c1 >= freezen_colindex) {
-            // Original selection is outside the frozen area
-            if (left_move + width_move < freezenLeft + offLeft) {
-                rangeshow = false;
-            } else if (left_move < freezenLeft + offLeft) {
-                ret.left = freezenLeft + offLeft;
-                ret.width = width_move - (freezenLeft + offLeft - left_move);
-            } else {
-            }
-        } else if (c2 >= freezen_colindex) {
-            // Original selection partially overlaps the frozen area
-            if (left_move + width_move < freezenLeft + offLeft) {
-                ret.left = left_move + offLeft;
-                ret.width = freezenLeft - left_move;
-            } else {
-                ret.left = left_move + offLeft;
-                ret.width = width_move - offLeft;
-            }
-        } else {
-            // Original selection is inside the frozen area
-            ret.left = left_move + offLeft;
-        }
-    }
-    if (!rangeshow) {
-        ret.display = 'none';
-    }
-    return ret;
 }
 
 export function calcSelectionInfo(ctx: Context) {

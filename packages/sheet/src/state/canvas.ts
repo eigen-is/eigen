@@ -4,7 +4,7 @@
 // per region with their own offsets.
 
 import { type Context, getFlowdata } from './context';
-import { getComputeMap } from './modules/conditionFormat';
+import { getComputeMap } from './modules/condition-format';
 import { clearMeasureTextCache, defaultFont } from './modules/text';
 import { drawCellBorders } from './render/borders';
 import { drawFilterUI } from './render/filter-ui';

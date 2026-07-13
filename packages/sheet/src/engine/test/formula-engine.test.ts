@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createArrayResolver, type SheetData } from '../cell-resolver';
-import { FormulaEngine, isCellReference, isFormula } from '../formula-engine';
+import { FormulaEngine, isFormula } from '../formula-engine';
 
 const sheets: SheetData[] = [
     {
@@ -57,42 +57,6 @@ describe('engine/formula-engine — isFormula', () => {
     });
 });
 
-// ─── isCellReference ────────────────────────────────────────────────────────
-
-describe('engine/formula-engine — isCellReference', () => {
-    test('recognizes A1', () => {
-        expect(isCellReference('A1')).toBe(true);
-    });
-
-    test('recognizes $B$3', () => {
-        expect(isCellReference('$B$3')).toBe(true);
-    });
-
-    test('recognizes AA100', () => {
-        expect(isCellReference('AA100')).toBe(true);
-    });
-
-    test('recognizes range A1:B3', () => {
-        expect(isCellReference('A1:B3')).toBe(true);
-    });
-
-    test('recognizes Sheet1!A1', () => {
-        expect(isCellReference('Sheet1!A1')).toBe(true);
-    });
-
-    test('rejects plain string', () => {
-        expect(isCellReference('hello')).toBe(false);
-    });
-
-    test('rejects bare number', () => {
-        expect(isCellReference('123')).toBe(false);
-    });
-
-    test('rejects empty string', () => {
-        expect(isCellReference('')).toBe(false);
-    });
-});
-
 // ─── FormulaEngine.evaluate ─────────────────────────────────────────────────
 
 describe('engine/formula-engine — FormulaEngine.evaluate', () => {
@@ -143,68 +107,5 @@ describe('engine/formula-engine — FormulaEngine.evaluate', () => {
         const result = engine.evaluate('=A2*2', 'sheet1', 0, 0, resolver);
         expect(result.value).toBe(10);
         expect(result.type).toBe('number');
-    });
-});
-
-// ─── FormulaEngine.getDependencies ──────────────────────────────────────────
-
-describe('engine/formula-engine — FormulaEngine.getDependencies', () => {
-    const engine = new FormulaEngine();
-
-    test('single cell reference', () => {
-        const deps = engine.getDependencies('=A1', 'sheet1');
-        expect(deps).toHaveLength(1);
-        expect(deps[0].row).toEqual([0, 0]);
-        expect(deps[0].column).toEqual([0, 0]);
-    });
-
-    test('range reference', () => {
-        const deps = engine.getDependencies('=SUM(A1:C2)', 'sheet1');
-        expect(deps).toHaveLength(1);
-        expect(deps[0].row).toEqual([0, 1]);
-        expect(deps[0].column).toEqual([0, 2]);
-    });
-
-    test('multiple references', () => {
-        const deps = engine.getDependencies('=A1+B2', 'sheet1');
-        expect(deps).toHaveLength(2);
-    });
-
-    test('no dependencies for pure arithmetic', () => {
-        const deps = engine.getDependencies('=1+2', 'sheet1');
-        expect(deps).toHaveLength(0);
-    });
-});
-
-// ─── FormulaEngine.format ───────────────────────────────────────────────────
-
-describe('engine/formula-engine — FormulaEngine.format', () => {
-    const engine = new FormulaEngine();
-
-    test('formats number with decimal places', () => {
-        expect(engine.format(1.5, '0.00')).toBe('1.50');
-    });
-
-    test('formats number with thousands separator', () => {
-        expect(engine.format(1234567, '#,##0')).toBe('1,234,567');
-    });
-
-    test('formats General', () => {
-        expect(engine.format(42, 'General')).toBe('42');
-    });
-
-    test('formats percentage', () => {
-        expect(engine.format(0.25, '0%')).toBe('25%');
-    });
-});
-
-// ─── FormulaEngine.resetState ───────────────────────────────────────────────
-
-describe('engine/formula-engine — FormulaEngine.resetState', () => {
-    test('clears cached data', () => {
-        const engine = new FormulaEngine();
-        engine.state.execFunctionGlobalData['test'] = { v: 1 };
-        engine.resetState();
-        expect(engine.state.execFunctionGlobalData).toEqual({});
     });
 });

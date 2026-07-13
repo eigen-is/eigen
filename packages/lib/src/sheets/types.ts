@@ -74,7 +74,7 @@ export type SingleRange = { row: number[]; column: number[] };
 export type Range = SingleRange[];
 
 export type BorderSide = { style: number; color: string };
-// Editor producers (selection.ts, paste.ts, dropCell.ts) write `l: null` (and
+// Editor producers (selection.ts, paste.ts, drop-cell.ts) write `l: null` (and
 // peers) to mean "cleared" so the entry survives JSON / Yjs serialization with
 // the slot explicitly absent; readers narrow via `!isNil(value.l)`. Treating
 // null and undefined identically keeps both representations in the type.
@@ -122,7 +122,7 @@ export type BorderInfo = CellBorderInfo | RangeBorderInfo;
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
 // Per-cell data-validation rule, produced by the editor's state layer
-// (state/modules/dataVerification.ts) and consumed by the canvas painter
+// (state/modules/data-verification.ts) and consumed by the canvas painter
 // (red-triangle indicator + checkbox draw). Keyed by `${row}_${col}` on
 // `Sheet.dataVerification`.
 //
@@ -139,11 +139,10 @@ export type MergeCell = { r: number; c: number; rs: number; cs: number };
 // `onValueChange(value: string)` and threading a union through the dialog
 // requires runtime narrowing at every callback. Known values today:
 // type  ∈ dropdown | checkbox | number | number_integer | number_decimal |
-//         text_content | text_length | date | validity
+//         text_content | text_length | date
 // type2 ∈ between | notBetween | equal | notEqualTo | moreThanThe | lessThan |
 //         greaterOrEqualTo | lessThanOrEqualTo | include | exclude |
-//         earlierThan | noEarlierThan | laterThan | noLaterThan |
-//         identificationNumber | phoneNumber | true | ''
+//         earlierThan | noEarlierThan | laterThan | noLaterThan | true | ''
 export type DataVerificationRule = {
     type: string;
     type2: string;
@@ -171,7 +170,7 @@ export type SheetConfig = {
 };
 
 // Conditional-format rule shape, produced by the editor's state layer
-// (state/modules/conditionFormat.ts) and consumed by the engine's
+// (state/modules/condition-format.ts) and consumed by the engine's
 // `evaluateConditionalFormat` (canvas painter + apps/api HTML export).
 export type ConditionalFormatConditionName =
     | 'greaterThan'

@@ -1,14 +1,43 @@
 import { cloneDeep, isEmpty } from 'es-toolkit/compat';
 import type { Context } from '../context';
-import type { Cell, Range } from '../types';
+import type { Cell, CellMatrix, MergeCell, Range } from '../types';
 import { getSheetIndex } from '../utils';
 import { isInlineStringCT } from './inline-string';
 
+// Restore the cells covered by merges intersecting the range: the anchor cell's
+// content is stashed in `fv` and re-applied, the other members are cleared.
+function unmergeRange(d: CellMatrix, merge: Record<string, MergeCell>, r1: number, r2: number, c1: number, c2: number) {
+    const fv: Record<string, Cell> = {};
+
+    for (let r = r1; r <= r2; r += 1) {
+        for (let c = c1; c <= c2; c += 1) {
+            const cell = d[r][c];
+
+            if (cell != null && cell.mc != null) {
+                const mc_r = cell.mc.r;
+                const mc_c = cell.mc.c;
+
+                if ('rs' in cell.mc) {
+                    delete cell.mc;
+                    delete merge[`${mc_r}_${mc_c}`];
+
+                    fv[`${mc_r}_${mc_c}`] = cloneDeep(cell) || {};
+                } else {
+                    const cell_clone = cloneDeep(fv[`${mc_r}_${mc_c}`]);
+
+                    delete cell_clone.v;
+                    delete cell_clone.m;
+                    delete cell_clone.ct;
+                    delete cell_clone.f;
+
+                    d[r][c] = cell_clone;
+                }
+            }
+        }
+    }
+}
+
 export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: string) {
-    // if (!checkIsAllowEdit()) {
-    //   tooltip.info("", locale().pivotTable.errorNotAllowEdit);
-    //   return;
-    // }
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return;
 
@@ -21,9 +50,6 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
 
     const d = sheet.data!;
 
-    // if (!checkProtectionNotEnable(ctx.currentSheetId)) {
-    //   return;
-    // }
     if (type === 'merge-cancel') {
         for (let i = 0; i < ranges.length; i += 1) {
             const range = ranges[i];
@@ -36,35 +62,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
                 continue;
             }
 
-            const fv: Record<string, Cell> = {};
-
-            for (let r = r1; r <= r2; r += 1) {
-                for (let c = c1; c <= c2; c += 1) {
-                    const cell = d[r][c];
-
-                    if (cell != null && cell.mc != null) {
-                        const mc_r = cell.mc.r;
-                        const mc_c = cell.mc.c;
-
-                        if ('rs' in cell.mc) {
-                            delete cell.mc;
-                            delete cfg.merge[`${mc_r}_${mc_c}`];
-
-                            fv[`${mc_r}_${mc_c}`] = cloneDeep(cell) || {};
-                        } else {
-                            // let cell_clone = fv[mc_r + "_" + mc_c];
-                            const cell_clone = cloneDeep(fv[`${mc_r}_${mc_c}`]);
-
-                            delete cell_clone.v;
-                            delete cell_clone.m;
-                            delete cell_clone.ct;
-                            delete cell_clone.f;
-
-                            d[r][c] = cell_clone;
-                        }
-                    }
-                }
-            }
+            unmergeRange(d, cfg.merge, r1, r2, c1, c2);
         }
     } else {
         let isHasMc = false; // Whether the selection contains merged cells
@@ -101,35 +99,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
                     continue;
                 }
 
-                const fv: Record<string, Cell> = {};
-
-                for (let r = r1; r <= r2; r += 1) {
-                    for (let c = c1; c <= c2; c += 1) {
-                        const cell = d[r][c];
-
-                        if (cell != null && cell.mc != null) {
-                            const mc_r = cell.mc.r;
-                            const mc_c = cell.mc.c;
-
-                            if ('rs' in cell.mc) {
-                                delete cell.mc;
-                                delete cfg.merge[`${mc_r}_${mc_c}`];
-
-                                fv[`${mc_r}_${mc_c}`] = cloneDeep(cell) || {};
-                            } else {
-                                // let cell_clone = fv[mc_r + "_" + mc_c];
-                                const cell_clone = cloneDeep(fv[`${mc_r}_${mc_c}`]);
-
-                                delete cell_clone.v;
-                                delete cell_clone.m;
-                                delete cell_clone.ct;
-                                delete cell_clone.f;
-
-                                d[r][c] = cell_clone;
-                            }
-                        }
-                    }
-                }
+                unmergeRange(d, cfg.merge, r1, r2, c1, c2);
             }
         } else {
             for (let i = 0; i < ranges.length; i += 1) {

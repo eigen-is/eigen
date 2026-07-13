@@ -25,6 +25,7 @@ import {
 import { ContentEditable } from './ContentEditable';
 import { FormulaHint } from './FormulaHint';
 import { FormulaSearch } from './FormulaSearch';
+import { cycleReferenceInEditor } from './reference-cycle';
 
 export const InputBox: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
@@ -91,6 +92,11 @@ export const InputBox: React.FC = () => {
             if (!refs.globalCache.ignoreWriteCell) inputRef.current!.innerHTML = escapeHTMLTag(escapeScriptTag(value));
             refs.globalCache.ignoreWriteCell = false;
             if (!refs.globalCache.doNotFocus) {
+                // Synchronously too: the innerHTML write leaves the caret at 0, and
+                // fast typing can land before the timeout below — the keystrokes
+                // would insert mid-value. The deferred pass still runs after the
+                // click handler's focus-follow timeout settles focus on the input.
+                moveToEnd(inputRef.current!);
                 setTimeout(() => {
                     moveToEnd(inputRef.current!);
                 });
@@ -137,14 +143,19 @@ export const InputBox: React.FC = () => {
                     moveHighlightCell(draftCtx, 'down', 0, 'rangeOfSelect');
                 });
                 e.preventDefault();
+            } else if (e.key === 'F4' && context.editingCellPosition.length > 0) {
+                // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1); keep the
+                // browser default suppressed even when the caret isn't on a reference.
+                e.preventDefault();
+                cycleReferenceInEditor(inputRef.current!, refs.fxInput.current, setContext);
             } else if (
                 context.editingCellPosition.length > 0 &&
-                (e.key === 'Tab' || e.key === 'F4' || e.key === 'ArrowUp' || e.key === 'ArrowDown')
+                (e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown')
             ) {
                 e.preventDefault();
             }
         },
-        [context.editingCellPosition.length, formulaAutocomplete.handleKeyDown, setContext],
+        [context.editingCellPosition.length, formulaAutocomplete.handleKeyDown, refs.fxInput, setContext],
     );
 
     const onChange = useCallback(
@@ -212,6 +223,19 @@ export const InputBox: React.FC = () => {
                           left: firstSelection.left,
                           top: firstSelection.top,
                           zIndex: context.editingCellPosition.length === 0 ? -1 : 19,
+                          // z:-1 no longer hides the box: inside the overlay layer's
+                          // transformed content div (a stacking context) it can't sink
+                          // below the canvas. opacity 0 hides it while keeping the cell
+                          // input focusable at the cell position (display/visibility
+                          // would break focus; off-screen focus auto-scrolls the grid),
+                          // and pointer-events none keeps it unhittable like the old
+                          // behind-the-canvas box (opacity 0 alone still hit-tests, and
+                          // the box's stopPropagation would swallow focus-cell clicks).
+                          // While editing it must be an explicit auto: the pane-region
+                          // wrapper is pointer-events none, and inheriting that would
+                          // kill caret clicks in the open editor.
+                          opacity: context.editingCellPosition.length === 0 ? 0 : 1,
+                          pointerEvents: context.editingCellPosition.length === 0 ? 'none' : 'auto',
                           display: 'block',
                       }
                     : { left: -10000, top: -10000, display: 'block' }

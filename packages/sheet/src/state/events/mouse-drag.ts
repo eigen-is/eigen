@@ -12,9 +12,10 @@ import {
     rangeDrag,
 } from '../modules';
 import { mergeMoveMain } from '../modules/cell';
-import { onDropCellSelect, onDropCellSelectEnd } from '../modules/dropCell';
+import { onDropCellSelect, onDropCellSelectEnd } from '../modules/drop-cell';
 import { getFilterButtonAtPosition } from '../modules/filter';
-import { handleFormulaInput, rangeDragColumn, rangeDragRow } from '../modules/formula-ui';
+import { handleFormulaInput } from '../modules/formula-editor';
+import { rangeDragColumn, rangeDragRow } from '../modules/formula-range';
 import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
 import { onRangeSelectionModalMove, onRangeSelectionModalMoveEnd } from '../modules/hyperlink';
 import { colLocation, rowLocation } from '../modules/location';
@@ -24,6 +25,37 @@ import type { Settings } from '../settings';
 import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
 import { fixPositionOnFrozenCells } from './mouse-resize';
+
+// Shift-click / drag selection extension along a single axis (row or column).
+// The classic luckysheet motif, previously pasted across the mouse layer
+// (mouse-cell / mouse-drag / mouse-header): given the anchor selection's start
+// (`pos`) and span, plus the newly hit cell's near edge (`pre`), far edge (`end`)
+// and index, it returns the extended axis start/span and the new [start, end]
+// index pair. It clamps the anchor's index `range` toward its `focus` in place —
+// the same side effect the inlined copies had on `last.row` / `last.column`.
+export function extendSelectionGeometry(
+    pos: number,
+    span: number,
+    range: number[],
+    focus: number,
+    pre: number,
+    end: number,
+    index: number,
+): { start: number; span: number; selected: number[] } {
+    if (pos > pre) {
+        if (range[1] > focus) {
+            range[1] = focus;
+        }
+        return { start: pre, span: pos + span - pre, selected: [index, range[1]] };
+    }
+    if (pos === pre) {
+        return { start: pre, span: pos + span - pre, selected: [index, range[0]] };
+    }
+    if (range[0] < focus) {
+        range[0] = focus;
+    }
+    return { start: pos, span: end - pos - 1, selected: [range[0], index] };
+}
 
 // ---------------------------------------------------------------------------
 // mouseRender sub-functions (private)
@@ -73,59 +105,23 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
         return;
     }
 
-    let top = 0;
-    let height = 0;
-    let rowseleted = [];
-    if (last.top > row_pre) {
-        top = row_pre;
-        height = last.top + last.height - row_pre;
+    const rowGeom = extendSelectionGeometry(last.top, last.height, last.row, last.row_focus, row_pre, row, row_index);
+    let top = rowGeom.start;
+    let height = rowGeom.span;
+    let rowseleted = rowGeom.selected;
 
-        if (last.row[1] > last.row_focus) {
-            last.row[1] = last.row_focus;
-        }
-
-        rowseleted = [row_index, last.row[1]];
-    } else if (last.top === row_pre) {
-        top = row_pre;
-        height = last.top + last.height - row_pre;
-        rowseleted = [row_index, last.row[0]];
-    } else {
-        top = last.top;
-        height = row - last.top - 1;
-
-        if (last.row[0] < last.row_focus) {
-            last.row[0] = last.row_focus;
-        }
-
-        rowseleted = [last.row[0], row_index];
-    }
-
-    let left = 0;
-    let width = 0;
-    let columnseleted = [];
-    if (last.left > col_pre) {
-        left = col_pre;
-        width = last.left + last.width - col_pre;
-
-        if (last.column[1] > last.column_focus) {
-            last.column[1] = last.column_focus;
-        }
-
-        columnseleted = [col_index, last.column[1]];
-    } else if (last.left === col_pre) {
-        left = col_pre;
-        width = last.left + last.width - col_pre;
-        columnseleted = [col_index, last.column[0]];
-    } else {
-        left = last.left;
-        width = col - last.left - 1;
-
-        if (last.column[0] < last.column_focus) {
-            last.column[0] = last.column_focus;
-        }
-
-        columnseleted = [last.column[0], col_index];
-    }
+    const colGeom = extendSelectionGeometry(
+        last.left,
+        last.width,
+        last.column,
+        last.column_focus,
+        col_pre,
+        col,
+        col_index,
+    );
+    let left = colGeom.start;
+    let width = colGeom.span;
+    let columnseleted = colGeom.selected;
 
     const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
     if (changeparam != null) {
@@ -161,7 +157,13 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
     scrollToFrozenRowCol(ctx, globalCache.freezen?.[ctx.currentSheetId]);
 }
 
-function renderColResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
+function renderColResize(
+    ctx: Context,
+    globalCache: GlobalCache,
+    e: MouseEvent,
+    scrollEl: HTMLDivElement,
+    container: HTMLDivElement,
+) {
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollEl.scrollLeft - window.scrollX;
     if (x < rect.width + ctx.scrollLeft - 100) {
@@ -169,14 +171,26 @@ function renderColResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, 
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.left = `${x}px`;
         }
+        // The header handle lives in the pane region of the resized column:
+        // live-translated main coordinates normally, pinned frozen-band
+        // coordinates when that column is frozen.
+        const vData = globalCache.freezen?.[ctx.currentSheetId]?.vertical?.freezenverticaldata;
+        const inFreeze = vData != null && ctx.colsResizeStart[1] < vData.boundary;
+        const handleX = inFreeze ? x - scrollEl.scrollLeft + vData.scroll : x;
         const changeSizeCol = container.querySelector('.fortune-cols-change-size');
         if (changeSizeCol) {
-            (changeSizeCol as HTMLDivElement).style.left = `${x - 2}px`;
+            (changeSizeCol as HTMLDivElement).style.left = `${handleX - 2}px`;
         }
     }
 }
 
-function renderRowResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
+function renderRowResize(
+    ctx: Context,
+    globalCache: GlobalCache,
+    e: MouseEvent,
+    scrollEl: HTMLDivElement,
+    container: HTMLDivElement,
+) {
     const rect = container.getBoundingClientRect();
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollEl.scrollTop - window.scrollY;
     if (y < rect.height + ctx.scrollTop - 20) {
@@ -184,9 +198,15 @@ function renderRowResize(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, 
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.top = `${y}px`;
         }
+        // Same pane-region mapping as renderColResize, on the row axis. The -2
+        // preserves the view position the handle had inside the old header
+        // content frame (shifted up 2px by the header's negative margin).
+        const hData = globalCache.freezen?.[ctx.currentSheetId]?.horizontal?.freezenhorizontaldata;
+        const inFreeze = hData != null && ctx.rowsResizeStart[1] < hData.boundary;
+        const handleY = inFreeze ? y - scrollEl.scrollTop + hData.scroll : y;
         const changeSizeRow = container.querySelector('.fortune-rows-change-size');
         if (changeSizeRow) {
-            (changeSizeRow as HTMLDivElement).style.top = `${y}px`;
+            (changeSizeRow as HTMLDivElement).style.top = `${handleY - 2}px`;
         }
     }
 }
@@ -309,10 +329,10 @@ function mouseRender(
         onDropCellSelect(ctx, e, scrollEl, container);
     } else if (ctx.colsResizing) {
         // Column width resize drag
-        renderColResize(ctx, e, scrollEl, container);
+        renderColResize(ctx, globalCache, e, scrollEl, container);
     } else if (ctx.rowsResizing) {
         // Row height resize drag
-        renderRowResize(ctx, e, scrollEl, container);
+        renderRowResize(ctx, globalCache, e, scrollEl, container);
     } else if (ctx.colsFreezeDragging) {
         // Column freeze drag
         renderColFreezeDrag(ctx, e, container);

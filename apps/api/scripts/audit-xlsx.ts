@@ -1,4 +1,4 @@
-// Audit tooling for the sheets xlsx-fidelity program (docs/SHEETS-XLSX-FIDELITY.md):
+// Audit tooling for the sheets xlsx-fidelity program:
 // reports, per feature dimension, what an xlsx contains (raw XML), what exceljs
 // exposes, and what survives xlsxToSheets — the 4-stage gap report.
 // Usage: bun apps/api/scripts/audit-xlsx.ts "<path-to-xlsx>"

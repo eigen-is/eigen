@@ -266,6 +266,14 @@ export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) =>
 ) as EigenColor[][];
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
 export const EIGEN_ACCENT_COLORS_SHUFFLED = goldenRatioShuffle(EIGEN_ACCENT_COLORS);
+
+// Deterministic accent color (hex) for a user id. Stable across sessions and
+// editors so a collaborator keeps one color everywhere (docs carets, sheet
+// cursors). Same hash the docs presence caret has always used.
+export function userColor(userId: string): string {
+    const hash = Math.abs([...userId].reduce((h, c) => (h << 5) - h + c.charCodeAt(0), 0));
+    return EIGEN_ACCENT_COLORS_SHUFFLED[hash % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
+}
 export const EIGEN_STICKIES_COLORS = [EIGEN_STICKIES_COLOR_ROW].map((ri) =>
     [1, 3, 5, 7, 9, 11, 13, 15].map((ci) => EIGEN_COLORS[ci][ri]),
 );

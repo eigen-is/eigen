@@ -1,5 +1,6 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
+import { recalcSheets } from '@workspace/sheet/engine';
 import { ApiError } from '../core';
 import { writeEigendocToYjs } from '../document/doc';
 import { writeSheetsToYjs } from '../document/sheets';
@@ -17,6 +18,27 @@ async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
     } catch (err) {
         if (err instanceof ApiError) throw err;
         throw new ApiError(400, 'Not a valid xlsx file');
+    }
+}
+
+// Recompute formula cells through our engine once at import so the persisted
+// snapshot carries engine-verified v/m (and a calcChain, so the read-path gate
+// never fires for imported docs). The importer's cached values are usually
+// Excel's own, so this mainly reconciles divergence; a recalc failure must not
+// block the import, so fall back to the parsed sheets. recalcSheets returns a
+// dense `data` matrix, but the importer persists sparse `celldata` only (the
+// computed values are synced into it) — drop `data` so a large import doesn't
+// bloat the snapshot; the read path re-materializes it.
+function recalcImportedSheets(sheets: Sheet[]): Sheet[] {
+    try {
+        return recalcSheets(sheets).map((sheet) => {
+            const lean = { ...sheet };
+            delete lean.data;
+            return lean;
+        });
+    } catch (err) {
+        console.warn('[import] server recalc of imported sheets failed, persisting parsed values:', err);
+        return sheets;
     }
 }
 
@@ -61,7 +83,7 @@ export async function convertToDocument(
         const name = sourcePath.name.replace(/\.xlsx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets', user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeSheetsToYjs(collabDoc.doc, sheets);
+        writeSheetsToYjs(collabDoc.doc, recalcImportedSheets(sheets));
         return newPath;
     }
 
@@ -90,7 +112,7 @@ export async function importIntoDocument(
     if (path.mimeType === DRIVE_MIME_SHEETS) {
         const sheets = await parseXlsxOrThrow(buffer);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
-        writeSheetsToYjs(collabDoc.doc, sheets);
+        writeSheetsToYjs(collabDoc.doc, recalcImportedSheets(sheets));
         return;
     }
 

@@ -1,5 +1,3 @@
-import { format } from 'numfmt';
-import { getCalculationOrder } from './dependency-graph';
 import { DependencyIndex } from './dependency-index';
 import { ERROR_REF, Parser } from './parser';
 import type {
@@ -7,8 +5,6 @@ import type {
     CellInfo,
     CellResolver,
     EvaluationResult,
-    FormulaCellInfoMap,
-    FormulaDependency,
     FormulaEngineState,
     ParserDoneCallback,
     ParserOptions,
@@ -17,15 +13,6 @@ import type {
 
 export function isFormula(value: unknown): boolean {
     return typeof value === 'string' && value.length > 1 && value[0] === '=';
-}
-
-// Matches a cell reference like A1, $B$3, AA100, A1:B3, or Sheet1!A1
-const CELL_REF_RE =
-    /^(?:(?:[A-Za-z0-9_\u00C0-\u02AF]+|'(?:(?!').|'')*')!)?\$?[A-Za-z]+\$?[0-9]+(?::\$?[A-Za-z]+\$?[0-9]+)?$/;
-
-export function isCellReference(txt: string): boolean {
-    if (txt.length === 0) return false;
-    return CELL_REF_RE.test(txt);
 }
 
 function getCellValue(cell: Cell | null | undefined): unknown {
@@ -156,137 +143,5 @@ export class FormulaEngine {
         } finally {
             this.currentResolver = null;
         }
-    }
-
-    getDependencies(formula: string, sheetId: string): FormulaDependency[] {
-        const deps: FormulaDependency[] = [];
-
-        const cellHandler = (cellCoord: CellInfo, options: ParserOptions, done: ParserDoneCallback) => {
-            const depSheetId = cellCoord.sheetName == null ? options.sheetId : sheetId;
-            deps.push({
-                row: [cellCoord.row.index, cellCoord.row.index],
-                column: [cellCoord.column.index, cellCoord.column.index],
-                sheetId: depSheetId,
-            });
-            done(0);
-        };
-
-        const rangeHandler = (
-            startCellCoord: RangeCell,
-            endCellCoord: RangeCell,
-            options: ParserOptions,
-            done: ParserDoneCallback,
-        ) => {
-            const depSheetId = startCellCoord.sheetName == null ? options.sheetId : sheetId;
-            deps.push({
-                row: [startCellCoord.row.index, endCellCoord.row.index],
-                column: [startCellCoord.column.index, endCellCoord.column.index],
-                sheetId: depSheetId,
-            });
-            done([[0]]);
-        };
-
-        const tempParser = new Parser();
-        tempParser.on('callCellValue', cellHandler);
-        tempParser.on('callRangeValue', rangeHandler);
-
-        try {
-            tempParser.parse(formula.substring(1), { sheetId });
-        } catch {
-            // Parse failure — return whatever deps were collected
-        }
-
-        return deps;
-    }
-
-    format(value: unknown, pattern: string): string {
-        return format(pattern, value);
-    }
-
-    resetState(): void {
-        this.state = {
-            execFunctionGlobalData: {},
-            formulaCellInfoMap: null,
-            dependencyIndex: new DependencyIndex(),
-            cellTextToIndexList: {},
-        };
-    }
-
-    recalculateAll(resolver: CellResolver): Map<string, EvaluationResult> {
-        this.resetState();
-
-        // 1. Collect all formula cells from every sheet's calculationChain
-        const formulaCellInfoMap: FormulaCellInfoMap = {};
-
-        for (const sheet of resolver.getSheets()) {
-            for (const entry of sheet.calculationChain) {
-                const cell = resolver.getCell(entry.id, entry.r, entry.c);
-                if (cell == null || !isFormula(cell.f)) continue;
-
-                const key = `r${entry.r}c${entry.c}i${entry.id}`;
-                const deps = this.getDependencies(cell.f!, entry.id);
-
-                formulaCellInfoMap[key] = {
-                    formulaDependency: deps,
-                    calc_funcStr: cell.f!,
-                    key,
-                    r: entry.r,
-                    c: entry.c,
-                    id: entry.id,
-                    parents: {},
-                    chidren: {},
-                    color: 'w',
-                };
-            }
-        }
-
-        // 2. Build parent relationships using this codebase's convention:
-        //    depKey.parents[info.key] = 1 means "info depends on depKey",
-        //    so depKey must evaluate before info.
-        for (const info of Object.values(formulaCellInfoMap)) {
-            for (const dep of info.formulaDependency) {
-                const depSheetId = dep.sheetId ?? info.id;
-                for (let r = dep.row[0]; r <= dep.row[1]; r++) {
-                    for (let c = dep.column[0]; c <= dep.column[1]; c++) {
-                        const depKey = `r${r}c${c}i${depSheetId}`;
-                        if (depKey in formulaCellInfoMap) {
-                            formulaCellInfoMap[depKey].parents[info.key] = 1;
-                            info.chidren[depKey] = 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Topological sort to get evaluation order
-        const allFormulas = Object.values(formulaCellInfoMap);
-        if (allFormulas.length === 0) {
-            return new Map();
-        }
-
-        const ordered = getCalculationOrder(allFormulas, formulaCellInfoMap);
-
-        // 4. Evaluate in dependency order, caching results for subsequent formulas
-        const results = new Map<string, EvaluationResult>();
-
-        for (const info of ordered) {
-            const result = this.evaluate(info.calc_funcStr, info.id, info.r, info.c, resolver);
-
-            const resultKey = `${info.r}_${info.c}_${info.id}`;
-            results.set(resultKey, result);
-
-            // Cache result so subsequent formulas can reference it
-            if (result.type !== 'error') {
-                this.state.execFunctionGlobalData[resultKey] = {
-                    v: result.value,
-                    ct: {
-                        t: result.type === 'number' ? 'n' : 's',
-                        fa: 'General',
-                    },
-                };
-            }
-        }
-
-        return results;
     }
 }

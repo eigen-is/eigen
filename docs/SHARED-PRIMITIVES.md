@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-813 primitives across 6 kinds. `packages/sheet` internals are excluded.
+817 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (112)
+## Components (113)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -89,6 +89,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NoteCard` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card.tsx |
 | `NoteCardDialog` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card-dialog.tsx |
 | `NotFound` | `@workspace/ui` | packages/ui/src/components/layout/app/not-found.tsx |
+| `PresenceLabel` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |
 | `RequestAccessView` | `@workspace/ui` | packages/ui/src/components/layout/app/request-access-view.tsx |
 | `ShadowContent` | `@workspace/ui` | packages/ui/src/components/layout/shadow-content.tsx |
 | `SidebarBody` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
@@ -361,7 +362,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (227)
+## Types (228)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -572,6 +573,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LabelFilterHeaderProps` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-filter-header.tsx |
 | `LabelManagerProps` | `@workspace/ui` | packages/ui/src/components/layout/labels/types.ts |
 | `LayoutContextType` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
+| `PresenceUser` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |
 | `SidebarBodyProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
 | `SidebarItemProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-item.tsx |
 | `SidebarSectionProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
@@ -593,7 +595,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (256)
+## Utilities & constants (258)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -738,6 +740,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isLightColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isSearchableTextFile` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `lightenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
+| `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
 | `formatDate` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
@@ -848,6 +851,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFilePresentation` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
 | `getSlashTargetQuery` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-utils.ts |
 | `loginSearchSchema` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-route.tsx |
+| `renderPresenceCaret` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |
 | `SHEETS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `SLIDES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `STICKIES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |

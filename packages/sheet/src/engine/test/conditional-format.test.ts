@@ -234,6 +234,80 @@ describe('engine/conditional-format — comparison rules', () => {
         expect(styles['0_2']).toBeUndefined();
         expect(styles['0_3']?.cellColor).toBe('#abcdef');
     });
+
+    test('greaterThan skips text cells — ordering rules only match numbers (Excel/Google parity)', () => {
+        // 'abc' > '5' is true lexicographically in JS (charcode); Excel/Google never
+        // apply an ordering rule to a text cell.
+        const data: CellMatrix = [[{ v: 'abc', ct: { t: 'g', fa: 'General' } }]];
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { cellColor: '#ff0000' },
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: ['5'],
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']).toBeUndefined();
+    });
+
+    test('greaterThan coerces a string threshold and matches numeric cells', () => {
+        const data = buildMatrix([[10]]);
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { cellColor: '#ff0000' },
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: ['9'],
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']?.cellColor).toBe('#ff0000');
+    });
+
+    test('equal coerces both sides so a "5.0" threshold matches numeric cell 5', () => {
+        const data = buildMatrix([[5]]);
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { cellColor: '#00ff00' },
+                    conditionName: 'equal',
+                    conditionRange: [],
+                    conditionValue: ['5.0'],
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']?.cellColor).toBe('#00ff00');
+    });
+
+    test('notEqual coerces both sides so a "5.0" threshold excludes numeric cell 5', () => {
+        const data = buildMatrix([[5]]);
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { cellColor: '#00ff00' },
+                    conditionName: 'notEqual',
+                    conditionRange: [],
+                    conditionValue: ['5.0'],
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']).toBeUndefined();
+    });
 });
 
 describe('engine/conditional-format — dataBar', () => {

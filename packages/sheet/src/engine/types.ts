@@ -85,7 +85,6 @@ export type FormulaCellInfoMap = {
 
 export type CellResolver = {
     getCell(sheetId: string, row: number, col: number): Cell | null;
-    getRange(sheetId: string, startRow: number, startCol: number, endRow: number, endCol: number): (Cell | null)[][];
     getSheetIdByName(name: string): string | null;
     getSheetData(sheetId: string): CellMatrix | null;
     getSheets(): SheetInfo[];

@@ -60,12 +60,14 @@ reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" mea
 On first mount, the Workbook (`packages/sheet/src/components/Workbook/index.tsx`) reconciles the
 incoming `Sheet[]` before rendering:
 
-1. **Materialize `data`** — expand sparse `celldata` into a 2D `data` matrix.
-2. **Recompute formulas** — `api.calculateFormula(draftCtx)` walks each sheet's `data` matrix, evaluates
-   every cell with `f`, and writes the result back. This refreshes displayed values (not stale cached
-   results from xlsx import or a previous save) and populates `sheet.calcChain` as a side-effect via
-   `insertUpdateFunctionGroup`. `ctx.formulaCache.formulaCellInfoMap` lazy-primes on the first edit via
-   `execFunctionGroup`, so no eager priming is needed at mount.
+1. **Materialize `data`** — expand sparse `celldata` into a 2D `data` matrix (`api.initSheetData`).
+2. **Seed the calc chain, don't recompute** — `api.seedCalcChain(draftCtx)` records each sheet's formula
+   cells in `sheet.calcChain` without evaluating them. Displayed values come straight from the incoming
+   `Sheet[]`: xlsx-imported sheets carry Excel's last computed values (and the importer now recomputes them
+   through our own engine at import — see § Server-side recalc), persisted sheets were saved post-recompute,
+   and a later edit lazily kicks the engine for just the affected sub-graph (`execFunctionGroup`) — recalc
+   is proportional to the edit, not the workbook. `ctx.formulaCache.formulaCellInfoMap` lazy-primes on the
+   first edit, so no eager priming or full-workbook sweep happens at mount.
 
 This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with as little as `celldata + f` — the
 Workbook handles the rest. The xlsx importer goes well beyond that minimum: it also emits `config`
@@ -102,12 +104,14 @@ evaluation (resolver reads from Yjs snapshot).
 
 ```
 engine/
-├── formula-engine.ts       # FormulaEngine class (evaluate, recalculateAll, getDependencies)
+├── formula-engine.ts       # FormulaEngine class (evaluate)
 ├── formula-utils.ts        # Pure utilities (iscelldata, checkBracketNum, calPostfixExpression)
 ├── formula-shift.ts        # functionCopy + functionStrChange (formula relative-ref shifters)
+├── formula-reference-cycle.ts # cycleReferenceAtCaret (F4 relative/absolute ref cycling)
 ├── rowcol.ts               # applySheetsInsertRowCol / applySheetsDeleteRowCol (pure row/col data shifts)
 ├── replay-ops.ts           # replaySheetsOps (snapshot + ops → Sheet[]; shared by BE + FE initial-load)
-├── dependency-graph.ts     # Topological sort + cycle detection
+├── dependency-graph.ts     # Topological sort (getCalculationOrder)
+├── recalc.ts               # recalcSheets — server-side gated full recalc (see § Server-side recalc)
 ├── cell-resolver.ts        # CellResolver interface + createArrayResolver
 ├── format.ts               # Format type inference (uses numfmt for rendering)
 ├── conditional-format.ts   # Pure CF evaluator (evaluateConditionalFormat, cfSplitRange, getColorGradation)
@@ -120,9 +124,6 @@ engine/
 
 **Key capabilities:**
 - `evaluate(formula, sheetId, row, col, resolver)` — single formula evaluation
-- `recalculateAll(resolver)` — batch recalculation of all formulas in dependency order (server-side)
-- `getDependencies(formula, sheetId)` — extract cell references from a formula
-- `format(value, pattern)` — numfmt-backed number/date formatting
 - `replaySheetsOps(sheets, opBatches)` — pure snapshot + ops → `Sheet[]`. Handles `add`/`remove`/`replace`
   patches via `opToPatchOnSheets`, `addSheet`/`deleteSheet` inline, and `insertRowCol`/`deleteRowCol` via
   the typed shape-adapter + `applySheetsInsertRowCol`/`applySheetsDeleteRowCol`. Used by the BE document
@@ -140,16 +141,49 @@ engine/
   state wrapper in `state/modules/rowcol.ts` after the engine call.
 
 **Architecture boundary:** Context-coupled orchestration functions (`execFunctionGroup`, `groupValuesRefresh`,
-etc.) live in `state/modules/formula-exec.ts`. The `formula-ui.ts` barrel re-exports from both, so UI consumers
-don't see the split.
+etc.) live in `state/modules/formula-exec.ts`; UI consumers import the engine modules and `formula-exec.ts`
+directly.
 
-### Remaining Work — Server-side recalc
+### Server-side recalc
 
-The engine is extracted and the BE replay path is wired (`apps/api/src/lib/document/sheets.ts` calls
-`replaySheetsOps`), so cell positions and formula text are correct. But `readSheetsContent()` still returns
-the last-saved `cell.v` from the post-replay snapshot — values aren't recomputed. To get fresh values,
-build a `CellResolver` over the replayed `Sheet[]` and call `engine.recalculateAll(resolver)` before mapping
-to `SheetContent`. Consumers (export, search indexing, scripting) pick this up transparently.
+`readSheetsContent()` recomputes formula cells through our own engine before returning, so exports,
+preview, and the search index serve engine-verified `v`/`m` rather than whatever value was last cached
+in the snapshot. The recompute is a single pure engine function, `recalcSheets(Sheet[]) → Sheet[]`
+(`engine/recalc.ts`, barrel-exported), and it runs **gated** — only where staleness can actually exist.
+
+Why gated, not on every read: a doc edited live in a browser is already fresh. The client's dependent
+recompute runs inside the op-emitting `produce`, so recomputed `v` **and** `m` persist as Yjs ops and
+replay server-side (`replaySheetsOps`). The genuinely stale population is narrow — xlsx-imported docs
+never opened in an editor, and crash/race divergence between formula text and cached value.
+`recalcSheets` therefore fires only when `sheetsNeedRecalc` sees a sheet with `f` cells but no populated
+`calcChain` (editor-flushed snapshots carry the chain; imported ones don't), and any recalc failure
+falls back to the replayed stale-but-valid `Sheet[]` — an export must never 500 because recalc
+hiccuped. The xlsx importer (`import/import-document.ts`) also runs `recalcSheets` once at import, so the
+persisted snapshot carries computed values (and a `calcChain`) and the read gate never fires for it.
+
+What the function does, in order: materialize each sheet's dense `data` from `celldata` (a resolver over
+null `data` would recompute everything to blanks); discover formula cells by scanning `data` for `f`
+(never trusting `calcChain`); build the dependency graph by porting the state layer's
+`setFormulaCellInfo`/`getcellrange`/`isFunctionRange` into the engine (the engine has zero state imports,
+so the logic is duplicated rather than shared — the INDIRECT/OFFSET/INDEX special-casing is preserved);
+order via `getCalculationOrder`; evaluate through the shared `FormulaEngine`, results flowing through
+`execFunctionGlobalData` so a downstream cell reads its upstream result; **freeze volatiles**
+(`NOW`/`TODAY`/`RAND`/`RANDBETWEEN` keep their cached value, matching Excel/Sheets "read a closed file"
+semantics — a passive export stays deterministic); and write back `v` plus a pragmatic `m`
+(`update(ct.fa, v)` when the cell carries a format mask, error sentinels as `v = m = '#…'` with
+`ct.t = 'e'`, `String(v)` otherwise). An engine error never overwrites a non-error cached value: a
+function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) evaluates to `#NAME?`, so rather than
+destroy Excel's correct cached result at import the cached `v`/`m` is kept and the
+`execFunctionGlobalData` seed is skipped, so downstream cells read the cached value through the resolver
+(same freeze-is-safe direction as volatiles); only a cell with no cached value gets the error sentinel.
+Every cell is guarded, so one poisoned formula never aborts the pass.
+
+Two earlier notes here were wrong and are corrected: the deleted `recalculateAll` was **not** a
+"three-line reintroduction" — it was ~100 lines plus a `getDependencies` extractor (~35) and
+`resetState` (~8), and it never wrote values back into cells. And it built its graph by iterating each
+sheet's `calculationChain`, so a faithful revive would have **silently no-op'd on exactly the
+imported-never-opened docs that are the main target** (they carry no chain). `recalcSheets` scans for
+`f` cells instead.
 
 ## Headless Conditional Formatting
 
@@ -175,7 +209,7 @@ any context.
 
 The callback shifts the rule's formula by `(targetRow - anchorRow, targetCol - anchorCol)` via the
 shared `functionCopy` ref shifter (in `engine/formula-shift.ts`), then evaluates against a
-`CellResolver`. Both state (`state/modules/conditionFormat.ts::getComputeMap`) and the server-side
+`CellResolver`. Both state (`state/modules/condition-format.ts::getComputeMap`) and the server-side
 HTML/PDF export use this same shape — see § HTML/PDF export below.
 
 ### HTML/PDF export
@@ -189,14 +223,40 @@ user-configured `format` colors.
 Formula-based CF rules are wired too: `renderSheetsHtml` builds a single `FormulaEngine` plus a
 `createArrayResolver` over all loaded sheets (so cross-sheet refs like `=Sheet2!A1>10` resolve),
 threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produces the
-`evaluateFormula` callback. Cell values come from the saved snapshot's `cell.v` — formulas inside
-the sheet aren't recomputed; only the CF rule's own formula is evaluated against existing values.
+`evaluateFormula` callback. This CF pass reads `cell.v` — it doesn't recompute the sheet's own
+formulas, only the CF rule's formula against existing values. The cell values it reads are already
+engine-fresh, though: `readSheetsContent` runs the gated `recalcSheets` (see § Server-side recalc)
+before the sheets reach any exporter.
 
 Webpage hyperlinks render as `target="_blank" rel="noopener noreferrer"` anchors, scheme-gated
 through the same `resolveWebLink` (`@workspace/lib/sheets/web-link`) the editor's link navigation
 uses; internal (`sheet`/`cellrange`) links stay plain text. Native xlsx export lives in
-`export/sheets/xlsx.ts` — coverage and encoding decisions in [EXPORT.md](EXPORT.md#sheets-export)
-and the cycle-8 row of [SHEETS-XLSX-FIDELITY.md](SHEETS-XLSX-FIDELITY.md).
+`export/sheets/xlsx.ts` — coverage and encoding decisions in [EXPORT.md](EXPORT.md#sheets-export).
+
+### Accepted xlsx round-trip drifts (decisions, pinned in tests where applicable)
+
+Recorded by the xlsx-fidelity program (cycles 0–8, 2026-06; full history in git —
+`docs/SHEETS-XLSX-FIDELITY.md` before its 2026-07-12 removal). These are deliberate, not bugs:
+
+- Hyperlinks: `sheet` links re-import as `cellrange` anchored at `'Name'!A1`; `cellrange` range
+  tails reduce to their top-left cell (exceljs's internal-link pattern needs a single trailing
+  cell ref); bare refs gain the own sheet's quoted prefix; a webpage URL containing exactly one
+  `!` with a cell-shaped tail is misdetected as internal by exceljs's pattern.
+- Imported hyperlink cells keep Excel's font styling while dialog-authored links hardcode
+  blue + underline — forcing the dialog style at import would clobber theme-styled link cells.
+- An Excel link to ANOTHER workbook carrying a sheet anchor (`r:id → other.xlsx` +
+  `location="Sheet1!A1"`) imports as an internal cellrange link (the location attr wins over
+  the rel; disambiguating needs the rel target compared against the location — edge-case wash).
+- `duplicateValue` CF exports as the COUNTIF expression recipe and re-imports as a `formula`
+  rule (rule-type drift, rendering identical); `occurrenceDate` CF (editor-only) is not exported.
+- `encodeCfOperand` quotes exotic numeric literals (`1e5`, `+5`) as text — the faithful inverse
+  of the importer's `parseCfLiteral`; the engine compares with JS coercion, so rendering is
+  unaffected either way.
+- Export denormalizes CF — one `<conditionalFormatting>` element per engine rule — while exceljs
+  re-merges per-cell DV back to a handful of sqrefs; exported files stay smaller than their
+  sources (size note only).
+- The DV exporter always writes `allowBlank: true` (Excel's UI default).
+- Excel comments/notes are not imported (decided 2026-06-10) — Eigen has its own comment cards.
 
 The engine is exposed as a `@workspace/sheet/engine` subpath export. Server-side
 consumers (`apps/api`) import only from this subpath, which restricts type-checking to the pure
@@ -209,7 +269,8 @@ DOM-free subset that satisfies stricter compiler options (`verbatimModuleSyntax`
   via the upstream fortune-sheet fork); `@formulajs/formulajs` covers ~200 functions, not Excel's full ~400.
 - **Volatile functions** (`RAND`, `NOW`, `TODAY`) return new values on each server evaluation — correct
   behavior, but differs from the cached snapshot.
-- **Circular references** are detected by `detectCycle()` in `engine/dependency-graph.ts`.
+- **Circular references**: `getCalculationOrder` (`engine/dependency-graph.ts`) never errors on a
+  cycle — its visited-set breaks the walk, so cyclic cells evaluate in visit order.
 - **INDIRECT/OFFSET/INDEX** produce dynamic references the dependency graph can't analyze statically;
   `isFunctionRange()` handles these specially — preserve that logic when touching the graph.
 

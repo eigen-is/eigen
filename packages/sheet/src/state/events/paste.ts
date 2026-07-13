@@ -18,22 +18,17 @@ import {
     trim,
     zip,
 } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine';
+import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
+import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { type Context, getFlowdata } from '../context';
-import { locale } from '../locale';
+import { en } from '../locale/en';
 import { getBorderInfoCompute } from '../modules/border';
 import { getdatabyselection, getQKBorder } from '../modules/cell';
-import {
-    createContextResolver,
-    delFunctionGroup,
-    execFunctionGroup,
-    execfunction,
-    functionCopy,
-} from '../modules/formula-ui';
-import { setFormulaCellInfo } from '../modules/formulaHelper';
+import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
+import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
 import { normalizeSelection, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetParamALL } from '../modules/sheet';
@@ -60,7 +55,6 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
     // trigger linked cell data updates
     const execF_rc: Record<string, number> = {};
     ctx.formulaCache.execFunctionExist = [];
-    // clearTimeout(refreshCanvasTimeOut);
     for (let r = source.range.row[0]; r <= source.range.row[1]; r += 1) {
         for (let c = source.range.column[0]; c <= source.range.column[1]; c += 1) {
             setFormulaCellInfo(ctx, { r, c, id: source.sheetId });
@@ -119,48 +113,19 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
             ctx.visibledatarow.push(ctx.rh_height); // temporary row height distribution
         }
         ctx.rh_height += 80;
-        // sheetmanage.showSheet();
-
-        if (ctx.currentSheetId === source.sheetId) {
-            // const rowlenArr = computeRowlenArr(
-            //   ctx,
-            //   target.curData.length,
-            //   target.curConfig
-            // );
-            // ctx.sheets[
-            //   getSheetIndex(ctx, target.sheetId)!
-            // ].visibledatarow = rowlenArr;
-        } else if (ctx.currentSheetId === target.sheetId) {
-            // const rowlenArr = computeRowlenArr(
-            //   ctx,
-            //   source.curData.length,
-            //   source.curConfig
-            // );
-            // ctx.sheets[getSheetIndex(ctx, source.sheetId)].visibledatarow =
-            //   rowlenArr;
-        }
     }
 
-    // ctx.flowdata
     if (ctx.currentSheetId === source.sheetId) {
-        // ctx.flowdata = source.curData;
         ctx.sheets[getSheetIndex(ctx, target.sheetId)!].data = target.curData;
     } else if (ctx.currentSheetId === target.sheetId) {
-        // ctx.flowdata = target.curData;
         ctx.sheets[getSheetIndex(ctx, source.sheetId)!].data = source.curData;
     }
-    // editor.webWorkerFlowDataCache(ctx.flowdata); // store data in worker
-    // ctx.sheets[getSheetIndex(ctx.currentSheetId)].data = ctx.flowdata;
 
     // selections
     if (ctx.currentSheetId === target.sheetId) {
         ctx.selections = [{ row: target.range.row, column: target.range.column }];
     } else {
         ctx.selections = [{ row: source.range.row, column: source.range.column }];
-    }
-    if (ctx.selections.length > 0) {
-        // if there is a selection, refresh the selection highlight
-        // selectHightlightShow();
     }
     // conditional formatting
     ctx.sheets[getSheetIndex(ctx, source.sheetId)!].conditionalFormatRules = source.curCdformat;
@@ -182,26 +147,10 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
 type CellBorderMap = Record<string, Pick<CellBorderInfo['value'], 'l' | 'r' | 't' | 'b'>>;
 
 function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: CellBorderMap) {
-    // if (
-    //   !checkProtectionLockedRangeList(
-    //     ctx.selections,
-    //     ctx.currentSheetId
-    //   )
-    // ) {
-    //   return;
-    // }
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
     if ((ctx.selections?.length ?? 0) !== 1) {
-        // if (isEditMode()) {
-        //   alert("Cannot perform this operation on multiple selection areas, please select a single area and try again");
-        // } else {
-        //   tooltip.info(
-        //     '<i class="fa fa-exclamation-triangle"></i>Warning',
-        //     "Cannot perform this operation on multiple selection areas, please select a single area and try again"
-        //   );
-        // }
         return;
     }
 
@@ -230,18 +179,10 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         // return with a warning if the apply range contains partially merged cells
         let has_PartMC = false;
         if (cfg.merge != null) {
-            has_PartMC = hasPartMC(ctx, cfg, minh, maxh, minc, maxc);
+            has_PartMC = hasPartMC(ctx, minh, maxh, minc, maxc);
         }
 
         if (has_PartMC) {
-            // if (isEditMode()) {
-            //   alert("Cannot make partial changes to merged cells");
-            // } else {
-            //   tooltip.info(
-            //     '<i class="fa fa-exclamation-triangle"></i>Warning',
-            //     "Cannot make partial changes to merged cells"
-            //   );
-            // }
             return;
         }
 
@@ -368,18 +309,10 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         // return with a warning if the apply range contains partially merged cells
         let has_PartMC = false;
         if (ctx.config.merge != null) {
-            has_PartMC = hasPartMC(ctx, ctx.config, curR, curR + rlen - 1, curC, curC + clen - 1);
+            has_PartMC = hasPartMC(ctx, curR, curR + rlen - 1, curC, curC + clen - 1);
         }
 
         if (has_PartMC) {
-            // if (isEditMode()) {
-            //   alert("Cannot make partial changes to merged cells");
-            // } else {
-            //   tooltip.info(
-            //     '<i class="fa fa-exclamation-triangle"></i>Warning',
-            //     "Cannot make partial changes to merged cells"
-            //   );
-            // }
             return;
         }
 
@@ -430,15 +363,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         last.row = [curR, curR + rlen - 1];
         last.column = [curC, curC + clen - 1];
 
-        // if (addr > 0 || addc > 0) {
-        //   const allParam = {
-        //     RowlChange: true,
-        //   };
-        //   jfrefreshgrid(d, ctx.selections, allParam);
-        // } else {
-        //   jfrefreshgrid(d, ctx.selections);
-        //   selectHightlightShow();
-        // }
         jfrefreshgrid(ctx, null, undefined);
     }
 }
@@ -458,14 +382,6 @@ function setCellHyperlink(
 }
 
 function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
-    // if (
-    //   !checkProtectionLockedRangeList(
-    //     ctx.selections,
-    //     ctx.currentSheetId
-    //   )
-    // ) {
-    //   return;
-    // }
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
@@ -503,18 +419,10 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     // warn if the apply range contains partially merged cells
     let has_PartMC = false;
     if (cfg.merge != null) {
-        has_PartMC = hasPartMC(ctx, cfg, minh, maxh, minc, maxc);
+        has_PartMC = hasPartMC(ctx, minh, maxh, minc, maxc);
     }
 
     if (has_PartMC) {
-        // if (isEditMode()) {
-        //   alert("Cannot make partial changes to merged cells");
-        // } else {
-        //   tooltip.info(
-        //     '<i class="fa fa-exclamation-triangle"></i>Warning',
-        //     "Cannot make partial changes to merged cells"
-        //   );
-        // }
         return;
     }
 
@@ -934,14 +842,6 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
 }
 
 function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) {
-    // if (
-    //   !checkProtectionLockedRangeList(
-    //     ctx.selections,
-    //     ctx.currentSheetId
-    //   )
-    // ) {
-    //   return;
-    // }
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
@@ -1039,18 +939,10 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     // warn if the apply range contains partially merged cells
     let has_PartMC = false;
     if (!isNil(cfg.merge)) {
-        has_PartMC = hasPartMC(ctx, cfg, minh, maxh, minc, maxc);
+        has_PartMC = hasPartMC(ctx, minh, maxh, minc, maxc);
     }
 
     if (has_PartMC) {
-        // if (isEditMode()) {
-        //   alert("Cannot make partial changes to merged cells");
-        // } else {
-        //   tooltip.info(
-        //     '<i class="fa fa-exclamation-triangle"></i>Warning',
-        //     "Cannot make partial changes to merged cells"
-        //   );
-        // }
         return;
     }
 
@@ -1343,10 +1235,6 @@ function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
 }
 
 export function handlePaste(ctx: Context, e: ClipboardEvent) {
-    // if (isEditMode()) {
-    //   // paste is disabled in this mode
-    //   return;
-    // }
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
@@ -1447,7 +1335,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             }
         }
 
-        const locale_fontjson = locale(ctx).fontjson;
+        const locale_fontjson = en.fontjson;
 
         if (ctx.hooks.beforePaste?.(ctx.selections, txtdata) === false) {
             return;
@@ -1464,12 +1352,10 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 ctx.pasteIsCut = false;
                 pasteHandlerOfCutPaste(ctx, ctx.copyState);
                 ctx.formulaRangeSelections = [];
-                // selection.clearcopy(e);
             } else {
                 pasteHandlerOfCopyPaste(ctx, ctx.copyState);
             }
         } else if (txtdata.indexOf('fortune-copy-action-image') > -1) {
-            // imageCtrl.pasteImgItem();
         } else {
             if (txtdata.indexOf('table') > -1) {
                 const ele = document.createElement('div');
@@ -1753,7 +1639,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             }
             // the copied content is an image
             else if (clipboardData.files.length === 1 && clipboardData.files[0].type.indexOf('image') > -1) {
-                //   imageCtrl.insertImg(clipboardData.files[0]);
             } else {
                 txtdata = clipboardData.getData('text/plain');
                 const isExcelFormula = txtdata.startsWith('=');

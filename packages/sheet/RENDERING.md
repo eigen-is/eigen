@@ -18,16 +18,13 @@
           freeze lines
           formula range highlights
           <InputBox>                            SheetOverlay/InputBox.tsx   (ContentEditable over canvas)
-          <FilterOptions>                       FilterOption/index.tsx
           <ImgBoxs>                             ImgBoxs/index.tsx
           <LinkEditCard>                        LinkEditCard/index.tsx
           <DropDownList>                        DataVerification/DropdownList.tsx
+          cell right-click menu anchor          ContextMenu/useSheetContextMenu.tsx (shared ContextMenuAnchor; column/row anchors live in the headers)
       <SheetTab>                                SheetTab/index.tsx         (React)
-        <SheetItem> per sheet                   SheetTab/SheetItem.tsx
-      <ContextMenu>                             ContextMenu/index.tsx      (React + shadcn DropdownMenu)
+        <SheetItem> per sheet                   SheetTab/SheetItem.tsx     (shadcn ContextMenu + DropdownMenu)
       <FilterMenu>                              ContextMenu/FilterMenu.tsx
-      <SheetTabContextMenu>                     ContextMenu/SheetTab.tsx
-      backdrop div (z-1003)
 ```
 
 ## Rendering Technologies
@@ -41,7 +38,9 @@ The actual spreadsheet grid — cells, text, gridlines, borders, fill colors —
 
 - `Sheet/index.tsx` creates a `<canvas>` element sized to the container
 - On context changes or scroll, it calls `requestAnimationFrame` to coalesce redraws
-- `state/canvas.ts` contains the `Canvas` class with methods like `drawMain()`, `renderCell()`, etc.
+- `state/canvas.ts` contains the `Canvas` facade class (`drawMain()`, `drawRowHeader()`,
+  `drawColumnHeader()`, `drawFreezeLine()`); per-cell painting lives in `state/render/` (`cellRender`
+  in `cells.ts`, driven by the `collectVisibleCells → renderCells → renderMergedCells` phases)
 - **Gridlines**: stroked paths (`#dfdfdf`)
 - **Cell text**: `ctx.fillText()` with font metrics from `getMeasureText()`
 - **Cell backgrounds**: `ctx.fillRect()` with the cell's fill color
@@ -58,6 +57,21 @@ positioned absolutely over the canvas.
 
 `InputBox.tsx` and `FxEditor/index.tsx` use the `ContentEditable` component
 (`SheetOverlay/ContentEditable.tsx`) — a native `contentEditable` div for rich-text cell editing.
+
+### Theming: the light-pinned surface
+
+The workbook surface renders pixel-identically in light and dark mode — like the docs page,
+the paper does not re-theme, only the app chrome around it (MenuBar, FxEditor, SheetTab,
+portaled popups). The Sheet root (`Sheet/index.tsx`, wrapping canvas + headers + overlays)
+carries the `.eigen-paper` scope class from `packages/ui/src/styles/globals.css`, which
+re-pins the theme tokens the surface consumes to their light values and re-resolves
+inherited `color` inside the scope; canvas colors are hardcoded light and
+`--sheet-*`/`--app-current-color` are theme-invariant already. In-grid popup cards
+(LinkEditCard, the validation hint box) opt back into the theme with `.eigen-paper-chrome`;
+Radix-portaled popups escape the scope naturally. The add-row control stays pinned — it sits
+directly on the paper with no card behind it (its shadcn `dark:` variants still match inside
+the scope, resolving against the pinned tokens: legible and near-light, not bit-exact —
+acceptable, it is outside the grid visuals).
 
 ## Layer-by-Layer Breakdown
 
@@ -83,12 +97,21 @@ React divs, NOT canvas. They render:
 - Selected column/row highlight (light blue, `z-index: 10`)
 - Resize cursor handle (`.fortune-cols-change-size` / `.fortune-rows-change-size`)
 - Freeze drag handle at the freeze boundary
-- Filter dropdown arrow icon (ColumnHeader only, lucide `CircleChevronDown`)
+- Column-header hover dropdown arrow (ColumnHeader only, lucide `ChevronDown` in a `.header-arrow`
+  span; opens the column context menu). The autofilter buttons are NOT here — they're canvas-painted
+  (see § Filter Buttons)
 
-Headers are NOT scroll containers. Their content sits in a wrapper that is translated
-(`transform: translateX(-scrollLeft)` / `translateY(-scrollTop)`) from the scroll bus, in
-lockstep with the canvas redraw — so the labels/highlights can never drift from the grid.
-The hit-test reads the live offset from `globalCache`.
+Headers are NOT scroll containers. They share the body-overlay pane region model one axis
+at a time (see § Scrolling): each header holds `OverlayRegion` viewports derived by
+`computeColumnHeaderRegions` / `computeRowHeaderRegions` (freeze.ts) — with a freeze, a
+band pinned to the freeze-time scroll plus a bus-translated main band whose clip cuts the
+hover/selected highlights (and their bottom/right border) at the freeze boundary, in
+lockstep with the canvas pane draw. Selected highlights render into every region (passive,
+clipped per pane); the hover highlight and resize handle render into the single region
+containing the hovered column/row. Only the freeze drag handle stays on a plain
+bus-translated wrapper (`translateX(-scrollLeft)` / `translateY(-scrollTop)`), keeping its
+viewport-pinning `+scroll` pattern because freeze drags reposition it imperatively in live
+content coordinates. The hit-test reads the live offset from `globalCache`.
 
 ### 3. Cell Selection — The Blue Rectangle (React DOM)
 
@@ -113,7 +136,9 @@ Positioned with `left_move` / `top_move` / `width_move` / `height_move` from the
 
 When you double-click or type into a cell, InputBox appears:
 - A ContentEditable div positioned at the cell's location
-- `z-index: 19` when editing, `-1` when hidden
+- `z-index: 19` when editing; when not editing it is hidden via `opacity: 0` +
+  `pointer-events: none` (it must stay focusable at the cell position — keyboard input
+  flows through it after every cell click)
 - Renders `FormulaSearch` dropdown (typed candidate list) and `FormulaHint` card
   (post-commit signature/argument help). Both wrap `SheetOverlay/FormulaPopup`,
   which uses Radix `Popover` with a virtual anchor at the input's bounding rect
@@ -130,25 +155,28 @@ When you double-click or type into a cell, InputBox appears:
 
 Always visible above the grid. Contains:
 - `NameBox` — shows current cell address (e.g., "A1")
-- Function icon (`FunctionSquare` from Lucide)
-- ContentEditable for formula/value editing
+- `ContentEditable` for formula/value editing, with the shared `FormulaSearch` dropdown +
+  `FormulaHint` card (same autocomplete path as InputBox)
 - Uses Tailwind styling, standard React layout (not overlay)
 
-### 6. Filter Indicators (React DOM)
+### 6. Filter Buttons (Canvas)
 
-**File**: `FilterOption/index.tsx`
+**File**: `state/render/filter-ui.ts` (`drawFilterUI`, called from `drawMain` in `state/canvas.ts`)
 
-Small divs positioned over filtered column header cells:
-- Shows chevron (no filter) or filled filter icon (active filter)
-- Absolutely positioned with freeze-aware offset calculations
-- Class: `.luckysheet-filter-options`
+The autofilter range border and per-column buttons are painted on the canvas inside every `drawMain`
+pass, so freeze-region pinning and clipping match the cells underneath (not React DOM):
+- Google-style glyphs (lazy `Path2D`): a bare strainer when idle, a filled green funnel when the column
+  has an active filter, with a green wash on hover
+- Geometry comes from `filterOptions.items` (`createFilterOptions` in `state/modules/filter.ts`) plus the
+  shared `FILTER_BUTTON_WIDTH`/`FILTER_BUTTON_HEIGHT` constants — the same values the mousedown hit-test
+  reads, so the drawn button and its click target stay aligned
 
 ### 7. Images (React DOM + `<img>`)
 
 **File**: `ImgBoxs/index.tsx`
 
-- Active image: `z-index: 300`, with resize handles (8-point) and control buttons (Crop, Restore, Delete)
-- Inactive images: `z-index: 200`, just `<img>` in a bordered div
+- Active image: `z-index: 20`, an 8-point resize-handle frame with a `selection-handle` outline
+- Inactive images: `z-index: 19`, an `<img>` in an `overflow-hidden` div
 - ID: `luckysheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`)
 
 ### 8. Comments
@@ -174,19 +202,24 @@ Positioned absolutely near the active cell. Class: `.fortune-link-modify-modal` 
 
 **File**: `DataVerification/DropdownList.tsx`
 
-- Simple list of values with checkmarks
-- `z-index: 10000` (highest in the app)
-- Absolutely positioned at the validated cell
-- Uses shadcn-style Tailwind classes (`bg-background`, `hover:bg-accent`)
+- A portaled shadcn `DropdownMenu` — checkbox items for multi-select validations, plain items otherwise
+- Relies on shadcn's default `z-index: 50` (Radix portal), not a bespoke high z-index
+- Anchored to a hidden trigger div positioned at the validated cell
 
 ### 11. Context Menus (React + shadcn)
 
-**Files**: `ContextMenu/index.tsx`, `ContextMenu/FilterMenu.tsx`, `ContextMenu/SheetTab.tsx`
+**Files**: `ContextMenu/useSheetContextMenu.tsx`, `ContextMenu/FilterMenu.tsx`, `SheetTab/SheetItem.tsx`
 
-- Cell right-click menu: uses shadcn `DropdownMenu` with standard menu items
-- Filter menu: custom rendering with select/deselect checkboxes, color filter submenu
-- Sheet tab menu: rename, delete, hide, show, color options
-- Backdrop div at `z-index: 1003` captures outside clicks
+- Cell / row-header / column-header right-click menus: `useSheetContextMenu(area)` builds each
+  menu from shadcn `DropdownMenu` items on the shared `@workspace/ui` singleton context menu
+  (`useContextMenu` + `ContextMenuAnchor`, anchored at the cursor). The cell anchor renders in
+  `SheetOverlay`, the row/column anchors in their headers
+- Filter menu (`FilterMenu.tsx`): the remaining bespoke panel — select/deselect checkboxes,
+  color filter submenu; mounted by `Workbook`
+- Sheet tab menu (`SheetItem.tsx`): rename, delete, hide, show, color options — the same items
+  rendered through a shadcn `ContextMenu` (tab right-click) and a `DropdownMenu` (chevron on
+  the active tab)
+- Outside clicks are dismissed by the shadcn/Radix portals — there is no separate backdrop div
 
 ### 12. MenuBar (React + shadcn)
 
@@ -199,7 +232,9 @@ Pure React UI — no overlays. Google-Sheets-style menu bar (Edit / View / Inser
 - shadcn `Popover` for `CustomBorder` (border style picker)
 - Tailwind styling
 - `luckysheet-mousedown-cancel` must be on any `DropdownMenuSubContent` rendered inside
-  `cellArea` (see [`docs/TODO-SHEETS.md` § Floating UI inside `cellArea`](../../docs/TODO-SHEETS.md#floating-ui-inside-cellarea))
+  `cellArea`. Radix portals the submenu out of the DOM, but React synthetic events still
+  bubble across the portal — without the class, `cellArea`'s mousedown guard misses the
+  menu items and selection jumps to the cell underneath the popup.
 
 ### 13. Sheet Tabs (React)
 
@@ -222,8 +257,9 @@ or touch handler.
 - `cellArea`'s `onScroll` writes `globalCache.scrollLeft` / `globalCache.scrollTop` and calls
   `globalCache.notifyScrollListeners()`. Scroll state lives in `globalCache` (NOT React
   context) to avoid re-rendering every consumer on each tick.
-- Bus subscribers: the rAF-coalesced canvas redraw (`Sheet`) and the header `transform`
-  updates (`ColumnHeader` / `RowHeader`).
+- Bus subscribers: the rAF-coalesced canvas redraw (`Sheet`), the headers' freeze-handle
+  `transform` wrappers (`ColumnHeader` / `RowHeader`), and one `transform` per pane region
+  (`OverlayRegion` — body and header regions alike).
 - Programmatic scroll (back-to-top, sheet-switch restore, selection auto-follow, freeze reset)
   writes `cellArea.scrollLeft/scrollTop`; the native `scroll` event then re-syncs the bus.
 - `overscroll-behavior: none` disables the macOS rubber-band bounce (the rAF canvas can't
@@ -231,12 +267,50 @@ or touch handler.
 - Mouse hit-testing reads `ctx.scrollLeft/scrollTop`, which `setContextWithProduce` lazily
   syncs from `globalCache` at the top of every recipe.
 
-**Known limitation**: the body overlays (selection box, cell editor, presence, fill handle)
-are children of `cellArea`, so they scroll *natively* (compositor speed) while the canvas
-repaints on rAF — during a fast / ProMotion scroll they can drift ~1 frame from the grid. The
-headers do NOT drift (they transform from the bus, locked to the redraw). Locking the body
-overlays the same way is a tracked follow-up — see
-[`docs/TODO-SHEETS.md`](../../docs/TODO-SHEETS.md).
+**Body overlay layer**: the body overlays (selection box, cell editor, presence, fill handle,
+formula-range visuals, search highlights, images, link/validation cards) do NOT scroll
+natively. They live in a `position: sticky` layer (`.fortune-cell-overlay-layer`) that is the
+first child of `cellArea` — a 0×0 anchor pinned to the scrollport origin at compositor speed —
+holding up to four **pane region viewports** (`OverlayRegion`) that mirror how the canvas
+draws frozen panes: main, frozen-rows band, frozen-cols band, corner. Each region is a
+`position: absolute` div at its fixed viewport rect with `overflow: hidden`; rects derive from
+the freeze config (`computeOverlayRegions` in `state/modules/freeze.ts`) and change only when
+the freeze config or row/col metrics change. Inside each region a content div restores the
+content-coordinate origin and translates from the scroll bus on its free axes only — main
+`(-sx, -sy)`, rows band `(-sx, ·)`, cols band `(·, -sy)`, corner pinned — the header transform
+mechanism generalized per pane, locked to the rAF canvas redraw (no drift, no per-scroll React
+work).
+
+- **Passive rectangles** (selection boxes, focus box, formula-range selects/highlights, search
+  highlights, presence, copy/move/extend indicators — `OverlayVisuals`) render into every
+  region in pure content coordinates; each region's clip shows exactly its portion, so they
+  clip below frozen panes in lockstep with the canvas. This replaces the old per-element
+  `fix*StyleOverflowInFreeze` clamps (computed at React render, one frame stale during pure
+  scrolling — now deleted); the headers apply the same model one axis at a time via
+  `computeColumnHeaderRegions` / `computeRowHeaderRegions` (see § 2). Imperatively positioned
+  previews (move/extend, formula range select) are written per copy via `querySelectorAll`;
+  the header resize handles get the same treatment region-aware in `renderColResize` /
+  `renderRowResize` (frozen-band coordinates when the resized column/row is frozen).
+- **Stateful singletons** are never duplicated: the cell editor (InputBox) and the validation
+  dropdown trigger render into the single region containing their anchor cell, clipped —
+  editing a frozen cell keeps the editor pinned under the pane, and an editor whose cell
+  scrolls under a band clips at the boundary, like Excel. Popup chrome (validation hint box,
+  LinkEditCard) pins with its anchor's pane but never clips; the pane-spanning resize/freeze
+  drag lines live in an unclipped wrapper on the main transform. With no freeze configured
+  there is exactly one unclipped main region.
+- The `luckysheet-cell-flow` spacer (which defines the scroll range and holds the bottom
+  add-row control, pinned via `left: scrollLeft`) and the cell context-menu anchor stay direct
+  children of `cellArea`.
+
+Hit-testing: the layer carries `z-index: 1` so its content sits above the later full-size
+cell-flow spacer sibling (each region's translated content div is an atomic stacking context,
+so the children's z-indexes 8–30 order them only among themselves). The region divs are
+`pointer-events: none`; interactive overlay elements re-enable themselves with
+`pointer-events: auto` (selection handles, images, open editor, drag lines, validation
+trigger/hint, link card) and everything else falls through to `cellArea`. The not-editing
+InputBox (`z-index: -1`, which used to sink below the canvas) is hidden with `opacity: 0` +
+`pointer-events: none`, keeping the cell input focusable at the cell position without painting
+over the grid or swallowing focus-cell clicks.
 
 ## Z-Index Stack
 
@@ -251,10 +325,17 @@ overlays the same way is a tracked follow-up — see
 | 16 | Move / extend indicators | SheetOverlay |
 | 18 | Copy selection borders (dashed) | SheetOverlay |
 | 19 | Cell editor (InputBox) | SheetOverlay/InputBox |
-| 200 | Images (inactive) | ImgBoxs |
-| 300 | Active image (with resize handles) | ImgBoxs |
-| 1003 | Context menu backdrop | Workbook |
-| 10000 | Data verification dropdown | DataVerification/DropdownList |
+| 19 | Images (inactive) | ImgBoxs |
+| 20 | Active image (with resize handles) | ImgBoxs |
+| 50 | Data verification dropdown (portaled shadcn) | DataVerification/DropdownList |
+
+The SheetOverlay / InputBox / ImgBoxs values live inside `.fortune-cell-overlay-layer`
+(`z-index: 1`) in per-pane region viewports whose translated content divs are atomic stacking
+contexts (see § Scrolling), so they order those elements only among themselves within a pane;
+across panes the region clip rects are disjoint. The layer as a whole sits above the canvas
+and the cell-flow spacer. The header values (10/11 highlights, 12 resize handle, 20 freeze
+handle) are likewise atomic per header region wrapper — DOM order stands in across wrappers
+(passive regions, then the hover region, then the freeze-handle wrapper on top).
 
 ## Key Performance Patterns
 

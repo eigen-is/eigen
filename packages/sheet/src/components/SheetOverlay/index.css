@@ -1,3 +1,26 @@
+/* Sheet-overlay colour facts. Each value is the pre-migration colour verbatim so
+   light mode is pixel-identical; the dark-mode pass overrides these under `.dark`.
+   Colours that already equal an app theme token in light mode (white surfaces and
+   background-coloured halos → --background/--popover, header selection borders →
+   --selection-handle) reference the token directly at the callsite instead. */
+:root {
+    --sheet-scrollbar-thumb: #babac0;
+    --sheet-header-text: #5e5e5e;
+    --sheet-funcrange-border: #5e5e5e;
+    --sheet-grid-border: #dfdfdf;
+    --sheet-cell-text: #000000;
+    --sheet-formula-string: forestgreen;
+    --sheet-editor-border: #5292f7;
+    --sheet-input-shadow: rgb(0 0 0 / 40%);
+    --sheet-freeze-handle: #ddd;
+    --sheet-freeze-line: #ccc;
+    --sheet-touch-knob-bg: #ffffff;
+    --sheet-touch-knob-border: rgba(0, 0, 0, 0.15);
+    --sheet-touch-btn: #018ffb;
+    --sheet-hintbox-border: #ccc;
+    --sheet-hintbox-shadow: rgba(0, 0, 0, 0.2);
+}
+
 .fortune-sheet-overlay {
     position: absolute;
     width: 100%;
@@ -15,7 +38,7 @@
     outline-style: none;
     cursor: default;
     scrollbar-width: thin;
-    scrollbar-color: #babac0 transparent;
+    scrollbar-color: var(--sheet-scrollbar-thumb) transparent;
 }
 
 .fortune-cell-area::-webkit-scrollbar {
@@ -29,12 +52,54 @@
 }
 
 .fortune-cell-area::-webkit-scrollbar-thumb {
-    background-color: #babac0;
+    background-color: var(--sheet-scrollbar-thumb);
     border-radius: 16px;
 }
 
 .fortune-cell-area::-webkit-scrollbar-button {
     display: none;
+}
+
+/* Body overlay layer: a 0×0 sticky anchor pinned to the scrollport origin. It
+   holds the pane-region viewports (OverlayRegion) whose translated content divs
+   carry the selection box, cell editor, presence, fill handle, images, etc., so
+   they track the scroll bus in lockstep with the rAF canvas redraw instead of
+   scrolling natively (which drifts a frame) and clip below frozen panes. The
+   anchor is 0×0 with overflow visible and the regions are pointer-events none,
+   so the grid is never covered — empty-grid clicks fall through to
+   .fortune-cell-area. */
+.fortune-cell-overlay-layer {
+    position: sticky;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    overflow: visible;
+    /* Each region's translated content div is an atomic stacking context, so the
+       children's z-indexes (8-30) can no longer individually lift them above the
+       later full-size cell-flow spacer sibling (z auto) — without this the spacer
+       shadows every interactive overlay (fill handle, editor, images) from
+       hit-testing. z 1 lifts the whole layer above it; the children's relative
+       order inside is unchanged. */
+    z-index: 1;
+}
+
+/* The pane-region wrappers are pointer-events none (full-size hit rects that
+   must not shadow the grid); interactive overlay elements that relied on the
+   default value re-enable themselves here. */
+.fortune-cell-selected-move,
+.fortune-change-size-line,
+.fortune-freeze-drag-line,
+.fortune-cols-change-size,
+.fortune-rows-change-size,
+.fortune-cols-freeze-handle,
+.fortune-rows-freeze-handle,
+.fortune-col-header-hover .header-arrow,
+#luckysheet-dataVerification-dropdown-btn,
+#luckysheet-dataVerification-showHintBox,
+.fortune-formula-functionrange-highlight .fortune-copy,
+.fortune-formula-functionrange-highlight .luckysheet-highlight {
+    pointer-events: auto;
 }
 
 .fortune-row-body {
@@ -46,7 +111,7 @@
     position: relative;
     flex-shrink: 0;
     outline-style: none;
-    color: #5e5e5e;
+    color: var(--sheet-header-text);
     overflow: hidden;
     padding: 0;
     margin-top: -2px;
@@ -55,13 +120,13 @@
     width: 45px;
 }
 
+/* Header hover/selected highlights live inside 0x0 pane-region content divs
+   (grid coordinates), so their cross-axis size is inline, not %-based. */
 .fortune-row-header-hover {
     position: absolute;
     z-index: 11;
     border: 0 none;
-    right: 0;
-    width: 100%;
-    margin-top: 2px;
+    left: 0;
     display: none;
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
@@ -70,9 +135,7 @@
     position: absolute;
     z-index: 10;
     border-right: 1px solid var(--selection-handle);
-    right: 0;
-    width: 100%;
-    margin-top: 2px;
+    left: 0;
     display: none;
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
@@ -83,7 +146,7 @@
 }
 
 .fortune-col-header {
-    color: #5e5e5e;
+    color: var(--sheet-header-text);
     overflow: hidden;
     padding: 0;
     cursor: default;
@@ -94,14 +157,12 @@
 }
 
 .fortune-col-header-hover {
-    color: #5e5e5e;
+    color: var(--sheet-header-text);
     cursor: default;
     position: absolute;
     z-index: 11;
     border: 0 none;
-    bottom: 0;
-    height: 100%;
-    margin-left: 0px;
+    top: 0;
     display: none;
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
@@ -114,14 +175,12 @@
 }
 
 .fortune-col-header-selected {
-    color: #5e5e5e;
+    color: var(--sheet-header-text);
     cursor: default;
     position: absolute;
     z-index: 10;
     border-bottom: 1px solid var(--selection-handle);
-    bottom: 0;
-    height: 100%;
-    margin-left: 0px;
+    top: 0;
     display: none;
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
@@ -129,13 +188,13 @@
 .fortune-left-top {
     width: 44.5px;
     height: 18.5px;
-    border: solid 0 #dfdfdf;
+    border: solid 0 var(--sheet-grid-border);
     position: relative;
     padding-top: 0;
     border-width: 0 1px 1px 0;
     padding-left: 0;
     cursor: pointer;
-    background-color: white;
+    background-color: var(--background);
 }
 
 .luckysheet-cell-selected-focus {
@@ -222,7 +281,7 @@
 
 .luckysheet-cs-inner-border {
     pointer-events: none;
-    border: 1px solid #fff;
+    border: 1px solid var(--background);
     position: absolute;
     top: 0;
     bottom: 0;
@@ -237,7 +296,7 @@
     bottom: -5px;
     cursor: crosshair;
     background-color: var(--selection-handle);
-    border: solid 1px #fff;
+    border: solid 1px var(--background);
     z-index: 16;
     pointer-events: auto;
     right: -5px;
@@ -246,11 +305,11 @@
 .luckysheet-cs-draghandle {
     position: absolute;
     cursor: move;
-    background-color: #fff;
+    background-color: var(--background);
     opacity: 0.01;
     z-index: 15;
     pointer-events: auto;
-    border: 2px solid #fff;
+    border: 2px solid var(--background);
 }
 
 .luckysheet-cs-draghandle-top {
@@ -297,8 +356,8 @@
     display: block;
     width: 16px;
     height: 16px;
-    border: 0.5px solid rgba(0, 0, 0, 0.15);
-    background-color: #ffffff;
+    border: 0.5px solid var(--sheet-touch-knob-border);
+    background-color: var(--sheet-touch-knob-bg);
     box-sizing: border-box;
     border-radius: 50%;
 }
@@ -329,7 +388,7 @@
     height: 10px;
     left: 8px;
     top: 8px;
-    background-color: #018ffb;
+    background-color: var(--sheet-touch-btn);
     background-position: center;
     box-sizing: border-box;
     border-radius: 50%;
@@ -351,18 +410,18 @@
     text-align: left;
     max-height: 9900px;
     max-width: 9900px;
-    border: 1px #5292f7 solid;
+    border: 1px var(--sheet-editor-border) solid;
     padding: 0 2px;
     margin: 0;
     resize: none;
     overflow: hidden;
     white-space: pre-wrap;
     outline: none;
-    -webkit-box-shadow: 0 2px 5px rgb(0 0 0 / 40%);
-    -moz-box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
-    box-shadow: 0 2px 5px rgb(0 0 0 / 40%);
+    -webkit-box-shadow: 0 2px 5px var(--sheet-input-shadow);
+    -moz-box-shadow: 0 2px 5px var(--sheet-input-shadow);
+    box-shadow: 0 2px 5px var(--sheet-input-shadow);
     word-wrap: break-word;
-    background-color: rgb(255, 255, 255);
+    background-color: var(--background);
     right: auto;
     overflow-y: auto;
     box-sizing: border-box;
@@ -377,11 +436,11 @@
 }
 
 .luckysheet-formula-text-color {
-    color: black;
+    color: var(--sheet-cell-text);
 }
 
 .luckysheet-formula-text-string {
-    color: forestgreen;
+    color: var(--sheet-formula-string);
 }
 
 .luckysheet-cell-flow {
@@ -418,7 +477,7 @@
     /*background-color: #fff;*/
     text-align: left;
     font-size: 11pt;
-    color: #000000;
+    color: var(--sheet-cell-text);
     text-decoration: none;
 }
 
@@ -442,16 +501,18 @@
     z-index: 12;
 }
 
+/* Cross-axis size is inline (the handles live inside 0x0 pane-region content
+   divs, where % height/width resolves to 0). */
 .fortune-cols-change-size {
     width: 5px;
-    height: 100%;
+    top: 0;
     background: var(--selection-handle);
     cursor: ew-resize;
     opacity: 0;
 }
 
 .fortune-rows-change-size {
-    width: 100%;
+    left: 0;
     height: 5px;
     background: var(--selection-handle);
     cursor: ns-resize;
@@ -470,7 +531,7 @@
     left: 0;
     width: 3px;
     height: 100%;
-    background-color: #ddd;
+    background-color: var(--sheet-freeze-handle);
     cursor: grab;
     z-index: 20;
 }
@@ -480,13 +541,13 @@
     top: 0;
     height: 3px;
     width: 100%;
-    background-color: #ddd;
+    background-color: var(--sheet-freeze-handle);
     cursor: grab;
     z-index: 20;
 }
 
 .fortune-freeze-drag-line {
-    border-color: #ccc;
+    border-color: var(--sheet-freeze-line);
     border-style: solid;
     z-index: 15;
     cursor: ew-resize;
@@ -675,30 +736,30 @@
 
 .fortune-formula-functionrange-highlight .fortune-selection-copy-top {
     top: -2px;
-    border-top: 2px solid #fff;
-    border-bottom: 2px solid #fff;
+    border-top: 2px solid var(--background);
+    border-bottom: 2px solid var(--background);
 }
 
 .fortune-formula-functionrange-highlight .fortune-selection-copy-right {
     right: -2px;
-    border-left: 2px solid #fff;
-    border-right: 2px solid #fff;
+    border-left: 2px solid var(--background);
+    border-right: 2px solid var(--background);
 }
 
 .fortune-formula-functionrange-highlight .fortune-selection-copy-bottom {
     bottom: -2px;
-    border-top: 2px solid #fff;
-    border-bottom: 2px solid #fff;
+    border-top: 2px solid var(--background);
+    border-bottom: 2px solid var(--background);
 }
 
 .fortune-formula-functionrange-highlight .fortune-selection-copy-left {
     left: -2px;
-    border-left: 2px solid #fff;
-    border-right: 2px solid #fff;
+    border-left: 2px solid var(--background);
+    border-right: 2px solid var(--background);
 }
 
 .fortune-formula-functionrange-highlight .fortune-selection-copy-hc {
-    border: 2px solid #5e5e5e;
+    border: 2px solid var(--sheet-funcrange-border);
     opacity: 0.03;
     z-index: initial;
 }
@@ -730,40 +791,27 @@
 .fortune-formula-functionrange-highlight .luckysheet-highlight {
     position: absolute;
     z-index: 19;
-    border: 1px solid #fff;
+    border: 1px solid var(--background);
     background: var(--selection-handle);
     width: 6px;
     height: 6px;
 }
 
-.fortune-presence-username {
-    position: absolute;
-    padding-left: 6px;
-    padding-right: 6px;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    left: -2px;
-    font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    box-sizing: content-box;
-    color: #fff;
-}
+/* The presence name chip now renders via @workspace/ui PresenceLabel
+   (.collaboration-cursor__label), shared with the docs caret. */
 
 .fortune-presence-selection {
     position: absolute;
     border-style: solid;
     border-width: 1;
-    opacity: 0.7;
 }
 
 #luckysheet-dataVerification-showHintBox {
     display: none;
     padding: 10px;
-    background-color: #ffffff;
-    border: 1px solid #ccc;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    background-color: var(--popover);
+    border: 1px solid var(--sheet-hintbox-border);
+    box-shadow: 0 2px 4px var(--sheet-hintbox-shadow);
     position: absolute;
     z-index: 30;
     user-select: none;
@@ -776,7 +824,7 @@
     display: none;
     width: 20px;
     height: 20px;
-    background-color: #ffffff;
+    background-color: var(--background);
     position: absolute;
     z-index: 10;
     overflow: hidden;

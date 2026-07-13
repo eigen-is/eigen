@@ -161,7 +161,10 @@ describe('Sheets xlsx export', () => {
         const byCoord = new Map((rt[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.ct).toEqual({ fa: '[$€]#,##0.00', t: 'n' });
         expect(byCoord.get('1:0')?.ct).toEqual({ fa: '0.00%', t: 'n' });
-        expect(byCoord.get('2:0')?.ct).toEqual({ fa: 'm/d/yyyy', t: 'd' });
+        // Number/currency masks round-trip byte-for-byte; a date mask's month token is
+        // canonicalised to the Google convention on re-import (`m` → `M`), which numfmt
+        // renders identically (see normalizeMonthMinuteTokens in from-xlsx).
+        expect(byCoord.get('2:0')?.ct).toEqual({ fa: 'M/d/yyyy', t: 'd' });
         expect(byCoord.get('2:0')?.v).toBe(45366);
     });
 });
@@ -734,23 +737,18 @@ describe('Sheets xlsx export — data validation', () => {
         expect(rt[0].dataVerification).toBeUndefined();
     });
 
-    test('skips checkbox and validity rules while keeping cell values', async () => {
+    test('skips checkbox rules while keeping cell values', async () => {
         const sheets: Sheet[] = [
             {
                 name: 'DV',
-                celldata: [
-                    { r: 0, c: 0, v: { v: 'done' } },
-                    { r: 1, c: 0, v: { v: '06-12345678' } },
-                ],
+                celldata: [{ r: 0, c: 0, v: { v: 'done' } }],
                 dataVerification: {
                     '0_0': dvRule({ type: 'checkbox', type2: '', value1: 'selected', checked: true }),
-                    '1_0': dvRule({ type: 'validity', type2: 'phoneNumber', value1: '' }),
                 },
             },
         ];
         const ws = getSheet(await exportAndReload(sheets), 'DV');
         expect(ws.getCell('A1').dataValidation).toBeUndefined();
-        expect(ws.getCell('A2').dataValidation).toBeUndefined();
         expect(ws.getCell('A1').value).toBe('done');
 
         const rt = await roundTrip(sheets);

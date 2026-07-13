@@ -4,7 +4,7 @@ import { hideCRCount } from '..';
 import { type Context, getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
 import { handleCut } from '../modules/clipboard';
-import { handleFormulaInput } from '../modules/formula-ui';
+import { handleFormulaInput } from '../modules/formula-editor';
 import { jfrefreshgrid } from '../modules/refresh';
 import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
 import { handleBold } from '../modules/toolbar';
@@ -440,11 +440,6 @@ export function handleGlobalKeyDown(
         if (!last || last.row_focus == null || last.column_focus == null) return;
 
         ctx.editingCellPosition = [last.row_focus, last.column_focus];
-        e.preventDefault();
-    } else if (kstr === 'F4' && ctx.editingCellPosition.length > 0) {
-        // F4 should cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1).
-        // Tracked as feature work in docs/TODO-SHEETS.md; for now just suppress
-        // the browser default so the address-bar dropdown doesn't open mid-edit.
         e.preventDefault();
     } else if (kstr === 'Escape' && ctx.editingCellPosition.length > 0) {
         cancelNormalSelected(ctx);

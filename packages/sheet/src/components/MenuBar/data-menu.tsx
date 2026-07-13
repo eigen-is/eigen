@@ -9,7 +9,7 @@ import { size } from 'es-toolkit/compat';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { type Context, clearFilter, createFilter, locale, sortSelection } from '../../state';
+import { type Context, clearFilter, createFilter, en, sortSelection } from '../../state';
 import { CustomSort } from '../CustomSort';
 import { DataVerification } from '../DataVerification';
 import { SplitColumn } from '../SplitColumn';
@@ -17,7 +17,7 @@ import { SplitColumn } from '../SplitColumn';
 export function DataMenu() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
-    const { sort, filter, toolbar } = locale(context);
+    const { sort, filter, toolbar } = en;
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 

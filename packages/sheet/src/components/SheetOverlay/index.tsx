@@ -1,7 +1,6 @@
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import type React from 'react';
-import type { CSSProperties } from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './index.css';
 import { debounce } from 'es-toolkit/compat';
@@ -11,10 +10,9 @@ import { useDialog } from '../../hooks/useDialog';
 import {
     api,
     type Context,
-    createDropCellRange,
+    computeOverlayRegions,
     createFilterOptions,
-    fixColumnStyleOverflowInFreeze,
-    fixRowStyleOverflowInFreeze,
+    en,
     type GlobalCache,
     getCellHyperlink,
     getCellRowColumn,
@@ -24,10 +22,8 @@ import {
     handleCellAreaMouseDown,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
-    locale,
-    onCellsMoveStart,
+    overlayRegionForCell,
     selectAll,
-    seletedHighlistByindex,
     showLinkCard,
     tryInsertRowCol,
 } from '../../state';
@@ -37,11 +33,13 @@ import { ImgBoxs } from '../ImgBoxs';
 import { LinkEditCard } from '../LinkEditCard';
 import { ColumnHeader } from './ColumnHeader';
 import { InputBox } from './InputBox';
+import { OverlayRegion } from './OverlayRegion';
+import { OverlayVisuals } from './OverlayVisuals';
 import { RowHeader } from './RowHeader';
 
 export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
-    const { info } = locale(context);
+    const { info } = en;
     const { showDialog } = useDialog();
     const { onContextMenu: cellAreaContextMenu, anchor: cellMenuAnchor } = useSheetContextMenu('cell');
     const containerRef = useRef<HTMLDivElement>(null);
@@ -247,7 +245,7 @@ export const SheetOverlay: React.FC = () => {
 
             // Only reset selection if there's no existing selection
             if (!currentSheet.selections?.length) {
-                api.setSelection(draftCtx, [{ row: [0], column: [0] }], {});
+                api.setSelection(draftCtx, [{ row: [0, 0], column: [0, 0] }], {});
             }
         });
     }, [setContext]);
@@ -357,6 +355,20 @@ export const SheetOverlay: React.FC = () => {
 
     const computedCellValue = cellValue();
 
+    // Pane regions replace the per-element freeze clamps (RENDERING.md
+    // § Scrolling): the passive visuals render into every region and each
+    // region's clip shows exactly its portion; stateful singletons render into
+    // the single region containing their anchor cell.
+    const freeze = refs.globalCache.freezen?.[context.currentSheetId];
+    const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
+    const firstSel = context.selections?.[0];
+    const lastSel = context.selections?.at(-1);
+    const editorRegion = overlayRegionForCell(regions, freeze, firstSel?.row_focus ?? 0, firstSel?.column_focus ?? 0);
+    const dvRegion = overlayRegionForCell(regions, freeze, lastSel?.row_focus ?? 0, lastSel?.column_focus ?? 0);
+    const linkRegion = context.linkCard
+        ? overlayRegionForCell(regions, freeze, context.linkCard.r, context.linkCard.c)
+        : regions[0];
+
     // biome-ignore lint/correctness/useExhaustiveDependencies: intentional one-shot snapshot on focus toggle — adding rangeText/cellValue as deps would re-snapshot on every selection change and overwrite the cached "last" values
     useEffect(() => {
         if (context.sheetFocused) {
@@ -406,293 +418,82 @@ export const SheetOverlay: React.FC = () => {
                               : 'default',
                     }}
                 >
-                    {cellMenuAnchor}
-                    <div id="fortune-formula-functionrange" />
-                    {context.formulaRangeSelect && (
-                        <div
-                            className="fortune-selection-copy fortune-formula-functionrange-select"
-                            style={context.formulaRangeSelect}
+                    <div className="fortune-cell-overlay-layer">
+                        {/* Validation dropdown trigger: its own pane wrapper before the
+                            passive regions, so it keeps painting under the selection
+                            tints (old z-10 vs z-14/15). */}
+                        <OverlayRegion {...dvRegion}>
+                            <DropDownList />
+                        </OverlayRegion>
+                        {regions.map(({ pane, ...rect }) => (
+                            <OverlayRegion key={pane} {...rect}>
+                                <OverlayVisuals containerRef={containerRef} />
+                                {pane === 'main' && <ImgBoxs />}
+                            </OverlayRegion>
+                        ))}
+                        <OverlayRegion {...editorRegion}>
+                            <InputBox />
+                        </OverlayRegion>
+                        {/* Popup chrome (hint box, link card) pins with its anchor's pane
+                            but never clips — popups overflow pane boundaries, like the
+                            portaled dropdowns. */}
+                        <OverlayRegion
+                            left={0}
+                            top={0}
+                            width={0}
+                            height={0}
+                            clip={false}
+                            fixedLeft={dvRegion.fixedLeft}
+                            fixedTop={dvRegion.fixedTop}
                         >
-                            <div className="fortune-selection-copy-top fortune-copy" />
-                            <div className="fortune-selection-copy-right fortune-copy" />
-                            <div className="fortune-selection-copy-bottom fortune-copy" />
-                            <div className="fortune-selection-copy-left fortune-copy" />
-                            <div className="fortune-selection-copy-hc" />
-                        </div>
-                    )}
-                    {context.formulaRangeHighlight.map((v) => {
-                        const { rangeIndex, backgroundColor } = v;
-                        return (
+                            {/* eigen-paper-chrome: popup chrome re-themes with the
+                                app inside the light-pinned workbook surface. */}
                             <div
-                                key={rangeIndex}
-                                id="fortune-formula-functionrange-highlight"
-                                className="fortune-selection-highlight fortune-formula-functionrange-highlight"
-                                style={(() => {
-                                    const { backgroundColor: _, ...rest } = v;
-                                    return rest;
-                                })()}
+                                id="luckysheet-dataVerification-showHintBox"
+                                className="luckysheet-mousedown-cancel eigen-paper-chrome"
+                            />
+                        </OverlayRegion>
+                        {context.linkCard?.sheetId === context.currentSheetId && (
+                            <OverlayRegion
+                                left={0}
+                                top={0}
+                                width={0}
+                                height={0}
+                                clip={false}
+                                fixedLeft={linkRegion.fixedLeft}
+                                fixedTop={linkRegion.fixedTop}
                             >
-                                {['top', 'right', 'bottom', 'left'].map((d) => (
-                                    <div
-                                        key={d}
-                                        data-type={d}
-                                        className={`fortune-selection-copy-${d} fortune-copy`}
-                                        style={{ backgroundColor }}
-                                    />
-                                ))}
-                                <div className="fortune-selection-copy-hc" style={{ backgroundColor }} />
-                                {['lt', 'rt', 'lb', 'rb'].map((d) => (
-                                    <div
-                                        key={d}
-                                        data-type={d}
-                                        className={`fortune-selection-highlight-${d} luckysheet-highlight`}
-                                        style={{ backgroundColor }}
-                                    />
-                                ))}
-                            </div>
-                        );
-                    })}
-                    {context.searchHighlights
-                        ?.filter((h) => h.sheetId === context.currentSheetId)
-                        .slice(0, 200)
-                        .map((h) => {
-                            const rect = seletedHighlistByindex(context, h.r, h.r, h.c, h.c);
-                            if (!rect) return null;
-                            const active =
-                                context.searchActive?.sheetId === h.sheetId &&
-                                context.searchActive.r === h.r &&
-                                context.searchActive.c === h.c;
-                            return (
-                                <div
-                                    key={`${h.r}_${h.c}`}
-                                    className={`fortune-search-highlight eigen-search-match${active ? ' eigen-search-match-active' : ''}`}
-                                    style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
-                                />
-                            );
-                        })}
-                    <div className="luckysheet-row-count-show luckysheet-count-show" id="luckysheet-row-count-show" />
-                    <div
-                        className="luckysheet-column-count-show luckysheet-count-show"
-                        id="luckysheet-column-count-show"
-                    />
-                    <div
-                        className="fortune-change-size-line"
-                        hidden={
-                            !context.colsResizing &&
-                            !context.rowsResizing &&
-                            !context.colsFreezeDragging &&
-                            !context.rowsFreezeDragging
-                        }
-                    />
-                    <div
-                        className="fortune-freeze-drag-line"
-                        hidden={!context.colsFreezeDragging && !context.rowsFreezeDragging}
-                    />
-                    <div
-                        className="luckysheet-cell-selected-focus"
-                        style={
-                            (context.selections?.length ?? 0) > 0
-                                ? (() => {
-                                      const selection = context.selections!.at(-1)!;
-                                      return Object.assign(
-                                          {
-                                              left: selection.left,
-                                              top: selection.top,
-                                              width: selection?.width || 0,
-                                              height: selection?.height || 0,
-                                              display: 'block',
-                                          },
-                                          fixRowStyleOverflowInFreeze(
-                                              context,
-                                              selection.row_focus || 0,
-                                              selection.row_focus || 0,
-                                              refs.globalCache.freezen?.[context.currentSheetId],
-                                          ),
-                                          fixColumnStyleOverflowInFreeze(
-                                              context,
-                                              selection.column_focus || 0,
-                                              selection.column_focus || 0,
-                                              refs.globalCache.freezen?.[context.currentSheetId],
-                                          ),
-                                      );
-                                  })()
-                                : {}
-                        }
-                        onMouseDown={(e) => e.preventDefault()}
-                    />
-                    {(context.formulaRangeSelections?.length ?? 0) > 0 && (
-                        <div id="fortune-selection-copy">
-                            {context.formulaRangeSelections!.map((range) => {
-                                const r1 = range.row[0];
-                                const r2 = range.row[1];
-                                const c1 = range.column[0];
-                                const c2 = range.column[1];
-
-                                const row = context.visibledatarow[r2];
-                                const row_pre = r1 - 1 === -1 ? 0 : context.visibledatarow[r1 - 1];
-                                const col = context.visibledatacolumn[c2];
-                                const col_pre = c1 - 1 === -1 ? 0 : context.visibledatacolumn[c1 - 1];
-
-                                return (
-                                    <div
-                                        className="fortune-selection-copy"
-                                        key={`${r1}-${r2}-${c1}-${c2}`}
-                                        style={{
-                                            left: col_pre,
-                                            width: col - col_pre - 1,
-                                            top: row_pre,
-                                            height: row - row_pre - 1,
-                                        }}
-                                    >
-                                        <div className="fortune-selection-copy-top fortune-copy" />
-                                        <div className="fortune-selection-copy-right fortune-copy" />
-                                        <div className="fortune-selection-copy-bottom fortune-copy" />
-                                        <div className="fortune-selection-copy-left fortune-copy" />
-                                        <div className="fortune-selection-copy-hc" />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                    <div id="luckysheet-chart-rangeShow" />
-                    <div className="fortune-cell-selected-extend" />
-                    <div
-                        className="fortune-cell-selected-move"
-                        id="fortune-cell-selected-move"
-                        onMouseDown={(e) => e.preventDefault()}
-                    />
-                    {(context.selections?.length ?? 0) > 0 && (
-                        <div id="luckysheet-cell-selected-boxs">
-                            {context.selections!.map((selection) => (
-                                <div
-                                    key={`${selection.row[0]}-${selection.row[1]}-${selection.column[0]}-${selection.column[1]}`}
-                                    id="luckysheet-cell-selected"
-                                    className="luckysheet-cell-selected"
-                                    style={Object.assign(
-                                        {
-                                            left: selection.left_move,
-                                            top: selection.top_move,
-                                            width: selection?.width_move || 0,
-                                            height: selection?.height_move || 0,
-                                            display: 'block',
-                                        },
-                                        fixRowStyleOverflowInFreeze(
-                                            context,
-                                            selection.row[0],
-                                            selection.row[1],
-                                            refs.globalCache.freezen?.[context.currentSheetId],
-                                        ),
-                                        fixColumnStyleOverflowInFreeze(
-                                            context,
-                                            selection.column[0],
-                                            selection.column[1],
-                                            refs.globalCache.freezen?.[context.currentSheetId],
-                                        ),
-                                    )}
-                                    onMouseDown={(e) => {
-                                        e.stopPropagation();
-                                        const { nativeEvent } = e;
-                                        setContext((draftCtx) => {
-                                            onCellsMoveStart(
-                                                draftCtx,
-                                                refs.globalCache,
-                                                nativeEvent,
-                                                refs.cellArea.current!,
-                                                containerRef.current!,
-                                            );
-                                        });
-                                    }}
-                                >
-                                    <div className="luckysheet-cs-inner-border" />
-                                    <div
-                                        className="luckysheet-cs-fillhandle"
-                                        onMouseDown={(e) => {
-                                            const { nativeEvent } = e;
-                                            setContext((draftContext) => {
-                                                createDropCellRange(draftContext, nativeEvent, containerRef.current!);
-                                            });
-                                            e.stopPropagation();
-                                        }}
-                                    />
-                                    <div className="luckysheet-cs-inner-border" />
-                                    <div
-                                        className="luckysheet-cs-draghandle-top luckysheet-cs-draghandle"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                    />
-                                    <div
-                                        className="luckysheet-cs-draghandle-bottom luckysheet-cs-draghandle"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                    />
-                                    <div
-                                        className="luckysheet-cs-draghandle-left luckysheet-cs-draghandle"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                    />
-                                    <div
-                                        className="luckysheet-cs-draghandle-right luckysheet-cs-draghandle"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                    />
-                                    <div className="luckysheet-cs-touchhandle luckysheet-cs-touchhandle-lt">
-                                        <div className="luckysheet-cs-touchhandle-btn" />
-                                    </div>
-                                    <div className="luckysheet-cs-touchhandle luckysheet-cs-touchhandle-rb">
-                                        <div className="luckysheet-cs-touchhandle-btn" />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    {(context.presences?.length ?? 0) > 0 &&
-                        context.presences!.map((presence, index) => {
-                            if (presence.sheetId !== context.currentSheetId) {
-                                return null;
-                            }
-                            const {
-                                selection: { r, c },
-                                color,
-                            } = presence;
-                            const row_pre = r - 1 === -1 ? 0 : context.visibledatarow[r - 1];
-                            const col_pre = c - 1 === -1 ? 0 : context.visibledatacolumn[c - 1];
-                            const row = context.visibledatarow[r];
-                            const col = context.visibledatacolumn[c];
-                            const width = col - col_pre - 1;
-                            const height = row - row_pre - 1;
-                            const usernameStyle: CSSProperties = {
-                                maxWidth: width + 1,
-                                backgroundColor: color,
-                            };
-                            usernameStyle[r === 0 ? 'top' : 'bottom'] = height;
-
-                            return (
-                                <div
-                                    key={presence?.userId || index}
-                                    className="fortune-presence-selection"
-                                    style={{
-                                        left: col_pre,
-                                        top: row_pre - 2,
-                                        width,
-                                        height,
-                                        borderColor: color,
-                                        borderWidth: 1,
-                                    }}
-                                >
-                                    <div className="fortune-presence-username" style={usernameStyle}>
-                                        {presence.username}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    {context.linkCard?.sheetId === context.currentSheetId && <LinkEditCard {...context.linkCard} />}
-                    <InputBox />
-                    <div id="luckysheet-multipleRange-show" />
-                    <div id="luckysheet-dynamicArray-hightShow" />
-                    <ImgBoxs />
-                    <DropDownList />
-                    <div id="luckysheet-dataVerification-showHintBox" className="luckysheet-mousedown-cancel" />
-                    <div className="luckysheet-cell-copy" />
-                    <div className="luckysheet-grdblkflowpush" />
+                                <LinkEditCard {...context.linkCard} />
+                            </OverlayRegion>
+                        )}
+                        {/* Pane-spanning drag lines stay unclipped on the main transform. */}
+                        <OverlayRegion
+                            left={0}
+                            top={0}
+                            width={0}
+                            height={0}
+                            clip={false}
+                            fixedLeft={null}
+                            fixedTop={null}
+                        >
+                            <div
+                                className="fortune-change-size-line"
+                                hidden={
+                                    !context.colsResizing &&
+                                    !context.rowsResizing &&
+                                    !context.colsFreezeDragging &&
+                                    !context.rowsFreezeDragging
+                                }
+                            />
+                            <div
+                                className="fortune-freeze-drag-line"
+                                hidden={!context.colsFreezeDragging && !context.rowsFreezeDragging}
+                            />
+                        </OverlayRegion>
+                    </div>
+                    {cellMenuAnchor}
                     <div id="luckysheet-cell-flow_0" className="luckysheet-cell-flow luckysheetsheetchange">
                         <div className="luckysheet-cell-flow-clip">
-                            <div className="luckysheet-grdblkpush" />
                             <div id="luckysheetcoltable_0" className="luckysheet-cell-flow-col">
                                 <div
                                     id="luckysheet-sheettable_0"
@@ -702,6 +503,10 @@ export const SheetOverlay: React.FC = () => {
                                         width: context.ch_width,
                                     }}
                                 />
+                                {/* No eigen-paper-chrome: the add-row control sits
+                                    directly ON the light-pinned paper (no opaque card
+                                    behind it), so it renders light in both themes —
+                                    dark-themed controls would be illegible here. */}
                                 <div
                                     id="luckysheet-bottom-controll-row"
                                     className="luckysheet-bottom-controll-row flex items-center gap-2"

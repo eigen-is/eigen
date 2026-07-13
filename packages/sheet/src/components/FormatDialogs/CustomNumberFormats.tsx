@@ -5,13 +5,13 @@ import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { handleNumberFormat, locale } from '../../state';
+import { en, handleNumberFormat } from '../../state';
 import { NUMBER_FORMAT_PRESETS, previewPattern } from './format-pattern';
 import { useAnchorCell } from './useAnchorCell';
 
 export function CustomNumberFormats() {
-    const { context, setContext, refs } = useContext(WorkbookContext);
-    const { button, format } = locale(context);
+    const { setContext, refs } = useContext(WorkbookContext);
+    const { button, format } = en;
     const { hideDialog } = useDialog();
 
     const anchor = useAnchorCell();

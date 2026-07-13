@@ -183,9 +183,6 @@ export function setCellFormat(
     const sheet = getSheet(ctx, options);
 
     const targetSheetData = sheet.data!;
-    // if (targetSheetData.length === 0) {
-    //   targetSheetData = sheetmanage.buildGridData(sheet);
-    // }
 
     const cellData = targetSheetData?.[row]?.[column] || {};
     const cfg = sheet.config || {};

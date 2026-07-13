@@ -11,12 +11,12 @@ import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import {
     clearSelectedContents,
+    en,
     flushPendingCopy,
     handleCopy,
     handleCut,
     handleFormatPainter,
     handlePasteByClick,
-    locale,
     readClipboardText,
     tryDeleteRowCol,
 } from '../../state';
@@ -27,7 +27,7 @@ import {
 export function EditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
     const { context, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
-    const { toolbar, button } = locale(context);
+    const { toolbar, button } = en;
     const docSearchBar = useOptionalDocSearchBar();
 
     const selection = context.selections?.[0];

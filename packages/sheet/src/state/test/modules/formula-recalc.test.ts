@@ -8,8 +8,8 @@ import { enablePatches, produceWithPatches } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../context';
 import { setCellValue } from '../../modules/cell';
+import { setFormulaCellInfo } from '../../modules/formula-cache';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../modules/formula-exec';
-import { setFormulaCellInfo } from '../../modules/formulaHelper';
 import { contextFactory } from '../factories/context';
 
 enablePatches();

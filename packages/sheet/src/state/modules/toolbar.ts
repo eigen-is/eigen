@@ -1,23 +1,17 @@
 import type { BorderInfo, BorderType, RangeBorderInfo } from '@workspace/lib/sheets';
 import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round, set } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine';
+import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, is_date, update } from '../../engine/format';
-// import { locale } from "../locale";
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
 import { colors } from './color';
-import {
-    createFormulaRangeSelect,
-    execFunctionGroup,
-    execfunction,
-    israngeseleciton,
-    rangeSetValue,
-    setCaretPosition,
-} from './formula-ui';
-import { setFormulaCellInfo } from './formulaHelper';
+import { setFormulaCellInfo } from './formula-cache';
+import { israngeseleciton } from './formula-editor';
+import { execFunctionGroup, execfunction } from './formula-exec';
+import { createFormulaRangeSelect, rangeSetValue, setCaretPosition } from './formula-range';
 import { showLinkCard } from './hyperlink';
 import {
     inlineStyleAffectAttribute,
@@ -92,7 +86,6 @@ export function updateFormatCell(
                 } else if (foucsStatus === '@' || foucsStatus === 49) {
                     type = 's';
                 } else if (foucsStatus === 'General' || foucsStatus === 0) {
-                    // type = "g";
                     type = isRealNum(value) ? 'n' : 'g';
                 }
 
@@ -152,12 +145,8 @@ export function updateFormatCell(
                 const value = d[r][c];
 
                 if (value && isPlainObject(value)) {
-                    // if(attr in inlineStyleAffectAttribute && isInlineStringCell(value)){
                     updateInlineStringFormatOutside(value, attr, foucsStatus);
-                    // }
-                    // else{
                     (value as Record<string, unknown>)[attr as string] = foucsStatus;
-                    // }
                     ctx.sheets[sheetIndex].config ||= {};
                     const cfg = ctx.sheets[sheetIndex].config!;
                     const cellWidth = cfg.columnlen?.[c] || ctx.sheets[sheetIndex].defaultColWidth;
@@ -193,10 +182,6 @@ export function updateFormat(
     foucsStatus: string | number,
     canvas?: CanvasRenderingContext2D,
 ) {
-    //   if (!checkProtectionFormatCells(ctx.currentSheetId)) {
-    //     return;
-    //   }
-
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
@@ -257,7 +242,7 @@ function checkNoNullValue(cell: Cell | null) {
 
     if (
         !isRealNull(v) &&
-        isdatatypemulti(v).num &&
+        isdatatypemulti(v) &&
         (cell?.ct == null || cell.ct.t == null || cell.ct.t === 'n' || cell.ct.t === 'g')
     ) {
         return true;
@@ -280,7 +265,6 @@ function checkNoNullValueAll(cell: Cell | null) {
 }
 
 function getNoNullValue(d: CellMatrix, st_x: number, ed: number, type: string) {
-    // let hasValueSum = 0;
     let hasValueStart = null;
     let nullNum = 0;
     let nullTime = 0;
@@ -294,7 +278,6 @@ function getNoNullValue(d: CellMatrix, st_x: number, ed: number, type: string) {
         }
 
         if (checkNoNullValue(cell)) {
-            // hasValueSum += 1;
             hasValueStart = r;
         } else if (cell == null || cell.v == null || cell.v === '') {
             nullNum += 1;
@@ -412,11 +395,6 @@ function backFormulaInput(
         c,
         id: ctx.currentSheetId,
     });
-
-    // server.historyParam(d, ctx.currentSheetId, {
-    //   row: [r, r],
-    //   column: [c, c],
-    // }); No server at this time
 }
 
 function singleFormulaInput(
@@ -576,7 +554,6 @@ export function autoSelectionFormula(
     if (!allowEdit) return;
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return;
-    // const nullfindnum = 40;
     let isfalse = true;
     ctx.formulaCache.execFunctionExist = [];
 
@@ -722,7 +699,6 @@ export function cancelPaintModel(ctx: Context) {
         if (!ctx.copyState) return;
         const index = getSheetIndex(ctx, ctx.copyState.dataSheetId);
         if (!index) return;
-        // ctx.sheets[getSheetIndex(ctx.copyState["dataSheetIndex"])].formulaRangeSelections = [];
         ctx.sheets[index].formulaRangeSelections = [];
     }
 
@@ -938,33 +914,12 @@ export function handleVerticalAlign(ctx: Context, cellInput: HTMLDivElement, val
 }
 
 export function handleFormatPainter(ctx: Context) {
-    //   if (!checkIsAllowEdit()) {
-    //     tooltip.info("", locale().pivotTable.errorNotAllowEdit);
-    //     return
-    // }
-
-    // e.stopPropagation();
-
-    // let _locale = locale();
-    // let locale_paint = _locale.paint;
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
     if (ctx.selections == null || ctx.selections.length === 0) {
-        // if(isEditMode()){
-        //     alert(locale_paint.tipSelectRange);
-        // }
-        // else{
-        //     tooltip.info("",locale_paint.tipSelectRange);
-        // }
         return;
     }
     if (ctx.selections.length > 1) {
-        // if(isEditMode()){
-        //     alert(locale_paint.tipNotMulti);
-        // }
-        // else{
-        //     tooltip.info("",locale_paint.tipNotMulti);
-        // }
         return;
     }
 
@@ -979,11 +934,9 @@ export function handleFormatPainter(ctx: Context) {
     const c1 = ctx.selections[0].column[0];
     const c2 = ctx.selections[0].column[1];
 
-    has_PartMC = hasPartMC(ctx, ctx.config, r1, r2, c1, c2);
+    has_PartMC = hasPartMC(ctx, r1, r2, c1, c2);
 
     if (has_PartMC) {
-        // *Show warning and abort next step
-        // tooltip.info('Cannot perform this action on partial merged cells', '');
         return;
     }
 
@@ -1164,16 +1117,8 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
 export function handleMerge(ctx: Context, type: string) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
-    // if (!checkProtectionNotEnable(ctx.currentSheetId)) {
-    //   return;
-    // }
 
     if (selectIsOverlap(ctx)) {
-        //   if (isEditMode()) {
-        //     alert("Cannot merge overlapping areas");
-        //   } else {
-        //     tooltip.info("Cannot merge overlapping areas", "");
-        //   }
         return;
     }
 
@@ -1186,7 +1131,7 @@ export function handleMerge(ctx: Context, type: string) {
             const c1 = ctx.selections[s].column[0];
             const c2 = ctx.selections[s].column[1];
 
-            has_PartMC = hasPartMC(ctx, ctx.config, r1, r2, c1, c2);
+            has_PartMC = hasPartMC(ctx, r1, r2, c1, c2);
 
             if (has_PartMC) {
                 break;
@@ -1194,11 +1139,6 @@ export function handleMerge(ctx: Context, type: string) {
         }
 
         if (has_PartMC) {
-            // if (isEditMode()) {
-            //   alert("Cannot perform this action on partial merged cells");
-            // } else {
-            //   tooltip.info("Cannot perform this action on partial merged cells", "");
-            // }
             return;
         }
     }

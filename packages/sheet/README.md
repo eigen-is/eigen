@@ -17,8 +17,8 @@ remains actively maintained at the time of writing.
 The fork was vendored into this monorepo on 2026-03-10 (commit
 `84a57a06`), at which point the external `@fortune-sheet/core` dependency
 was removed and the code became internal. The package is now treated as
-**owned code** — see [`docs/TODO-SHEETS.md`](../../docs/TODO-SHEETS.md)
-for the modernisation roadmap and outstanding work.
+**owned code** — remaining work is tracked in
+[`docs/SHEETS-TODO.md`](../../docs/SHEETS-TODO.md).
 
 ## What changed since the fork
 
@@ -33,8 +33,7 @@ for the modernisation roadmap and outstanding work.
   re-exports the canonicals to keep the FE↔BE type chain honest.
 - Many `any`-typed APIs tightened to discriminated unions (border info,
   conditional-format rules, freeze-pane data, sheet authority, range or
-  whole-axis selections, computed border maps, …). See TODO-SHEETS.md
-  "Tightened" entries for the list.
+  whole-axis selections, computed border maps, …).
 - All `/** */` JSDoc/doc-comment blocks removed; comments only where the
   *why* is non-obvious.
 - lodash → [es-toolkit](https://github.com/toss/es-toolkit) (zero lodash
@@ -50,12 +49,9 @@ for the modernisation roadmap and outstanding work.
   per-cell ops on snapshot read so unflushed edits survive a reload and
   are visible in xlsx/PDF/HTML exports.
 
-In-progress work (see TODO-SHEETS.md for the canonical list):
+In-progress work (see SHEETS-TODO.md for the canonical list):
 
-- Three CSS files still un-Tailwindised (`SheetOverlay/index.css`,
-  `SheetTab/index.css`, `SheetOverlay/ScrollBar/index.css`).
-- `SheetTab` chrome migration to shadcn.
-- xlsx conditional-format export.
+- One CSS file still un-Tailwindised (`SheetOverlay/index.css`).
 - Grammar parser (`engine/parser/grammar-parser/grammar-parser.ts`)
   regeneration from upstream jison.
 

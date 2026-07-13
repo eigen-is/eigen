@@ -40,6 +40,92 @@ export const BORDER_STYLE_NAMES: Record<string, string> = {
     '13': 'Thick',
 };
 
+type BorderSideKey = keyof ComputedBorderEntry;
+type PropagableSide = 'l' | 'r' | 't' | 'b';
+
+// Ensure `${r}_${c}` has an entry, creating it (empty) only on first touch — same
+// `=== undefined` guard the branches used inline, so key insertion order is
+// unchanged.
+function ensureEntry(map: ComputedBorderMap, r: number, c: number): ComputedBorderEntry {
+    const key = `${r}_${c}`;
+    let entry = map[key];
+    if (entry === undefined) {
+        entry = {};
+        map[key] = entry;
+    }
+    return entry;
+}
+
+// Stamp one side of (r, c) with a fresh border object (the branches always wrote a
+// new `{ color, style }` literal, never a shared reference — preserved here).
+function setSide(
+    map: ComputedBorderMap,
+    r: number,
+    c: number,
+    side: BorderSideKey,
+    color: string,
+    style: number,
+): void {
+    ensureEntry(map, r, c)[side] = { color, style };
+}
+
+// Merge-aware neighbour geometry. A border on `side` of the source cell also lands
+// on the OPPOSITE side of the adjacent cell across that side. When that neighbour is
+// merged, only the merge edge that touches the source may receive it.
+const NEIGHBOUR: Record<
+    PropagableSide,
+    {
+        opposite: PropagableSide;
+        dr: number;
+        dc: number;
+        inBounds: (data: CellMatrix, r: number, c: number) => boolean;
+        onMergeEdge: (mc: MergeCell, r: number, c: number) => boolean;
+    }
+> = {
+    l: {
+        opposite: 'r',
+        dr: 0,
+        dc: -1,
+        inBounds: (_d, _r, c) => c >= 0,
+        onMergeEdge: (mc, _r, c) => mc.c + mc.cs - 1 === c,
+    },
+    r: { opposite: 'l', dr: 0, dc: 1, inBounds: (d, _r, c) => c < d[0].length, onMergeEdge: (mc, _r, c) => mc.c === c },
+    t: { opposite: 'b', dr: -1, dc: 0, inBounds: (_d, r) => r >= 0, onMergeEdge: (mc, r) => mc.r + mc.rs - 1 === r },
+    b: { opposite: 't', dr: 1, dc: 0, inBounds: (d, r) => r < d.length, onMergeEdge: (mc, r) => mc.r === r },
+};
+
+// Propagate a border across `side` to the merge-aware neighbour. Only writes when
+// that neighbour entry already exists — every original propagation block guarded on
+// the neighbour key being present, so this never creates keys.
+function propagateToNeighbour(
+    map: ComputedBorderMap,
+    data: CellMatrix,
+    merge: Record<string, MergeCell> | undefined,
+    r: number,
+    c: number,
+    side: PropagableSide,
+    color: string,
+    style: number,
+): void {
+    const dir = NEIGHBOUR[side];
+    const nr = r + dir.dr;
+    const nc = c + dir.dc;
+    if (!dir.inBounds(data, nr, nc)) return;
+
+    const entry = map[`${nr}_${nc}`];
+    if (!entry) return;
+
+    const neighbourCell = data[nr]?.[nc];
+    if (isPlainObject(neighbourCell) && !isNil(neighbourCell?.mc)) {
+        const mc = merge?.[`${neighbourCell?.mc?.r}_${neighbourCell?.mc?.c}`];
+        if (mc && dir.onMergeEdge(mc, nr, nc)) {
+            entry[dir.opposite] = { color, style };
+        }
+    } else {
+        entry[dir.opposite] = { color, style };
+    }
+}
+
 export function getBorderInfoComputeRange(
     ctx: Context,
     dataset_row_st: number,
@@ -101,19 +187,13 @@ export function getBorderInfoComputeRange(
                 }
 
                 if (borderType === 'border-slash') {
-                    const bd_r = borderRange[0].row_focus;
-                    const bd_c = borderRange[0].column_focus;
+                    const bd_r = borderRange[j].row_focus;
+                    const bd_c = borderRange[j].column_focus;
                     if (bd_r == null || bd_c == null) continue;
                     if (cfg.rowhidden?.[bd_r] != null) continue;
                     if (bd_c < dataset_col_st || bd_c > dataset_col_ed) continue;
                     if (bd_r < dataset_row_st || bd_r > dataset_row_ed) continue;
-                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                    }
-                    borderInfoCompute[`${bd_r}_${bd_c}`].s = {
-                        color: borderColor,
-                        style: borderStyle,
-                    };
+                    setSide(borderInfoCompute, bd_r, bd_c, 's', borderColor, borderStyle);
                 }
                 if (borderType === 'border-left') {
                     for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
@@ -121,36 +201,17 @@ export function getBorderInfoComputeRange(
                             continue;
                         }
 
-                        if (borderInfoCompute[`${bd_r}_${bd_c1}`] === undefined) {
-                            borderInfoCompute[`${bd_r}_${bd_c1}`] = {};
-                        }
-
-                        borderInfoCompute[`${bd_r}_${bd_c1}`].l = {
-                            color: borderColor,
-                            style: borderStyle,
-                        };
-
-                        const bd_c_left = bd_c1 - 1;
-
-                        if (bd_c_left >= 0 && borderInfoCompute[`${bd_r}_${bd_c_left}`]) {
-                            if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
-                                const cell_left = data[bd_r][bd_c_left];
-
-                                const mc = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
-
-                                if (mc && mc.c + mc.cs - 1 === bd_c_left) {
-                                    borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c1, 'l', borderColor, borderStyle);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c1,
+                            'l',
+                            borderColor,
+                            borderStyle,
+                        );
 
                         const mc = cfg.merge || {};
                         Object.keys(mc).forEach((key) => {
@@ -166,36 +227,18 @@ export function getBorderInfoComputeRange(
                             continue;
                         }
 
-                        if (borderInfoCompute[`${bd_r}_${bd_c2}`] === undefined) {
-                            borderInfoCompute[`${bd_r}_${bd_c2}`] = {};
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c2, 'r', borderColor, borderStyle);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c2,
+                            'r',
+                            borderColor,
+                            borderStyle,
+                        );
 
-                        borderInfoCompute[`${bd_r}_${bd_c2}`].r = {
-                            color: borderColor,
-                            style: borderStyle,
-                        };
-
-                        const bd_c_right = bd_c2 + 1;
-
-                        if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
-                            if (!isNil(data[bd_r]?.[bd_c_right]?.mc)) {
-                                const cell_right = data[bd_r][bd_c_right];
-
-                                const mc = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
-
-                                if (mc && mc.c === bd_c_right) {
-                                    borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-                            }
-                        }
                         const mc = cfg.merge || {};
                         Object.keys(mc).forEach((key) => {
                             const { c, r, cs, rs } = mc[key];
@@ -210,36 +253,17 @@ export function getBorderInfoComputeRange(
                     }
 
                     for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                        if (borderInfoCompute[`${bd_r1}_${bd_c}`] === undefined) {
-                            borderInfoCompute[`${bd_r1}_${bd_c}`] = {};
-                        }
-
-                        borderInfoCompute[`${bd_r1}_${bd_c}`].t = {
-                            color: borderColor,
-                            style: borderStyle,
-                        };
-
-                        const bd_r_top = bd_r1 - 1;
-
-                        if (bd_r_top >= 0 && borderInfoCompute[`${bd_r_top}_${bd_c}`]) {
-                            if (!isNil(data[bd_r_top]?.[bd_c]?.mc)) {
-                                const cell_top = data[bd_r_top][bd_c];
-
-                                const mc = cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
-
-                                if (mc && mc.r + mc.rs - 1 === bd_r_top) {
-                                    borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r1, bd_c, 't', borderColor, borderStyle);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r1,
+                            bd_c,
+                            't',
+                            borderColor,
+                            borderStyle,
+                        );
 
                         const mc = cfg.merge || {};
                         Object.keys(mc).forEach((key) => {
@@ -255,36 +279,17 @@ export function getBorderInfoComputeRange(
                     }
 
                     for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                        if (borderInfoCompute[`${bd_r2}_${bd_c}`] === undefined) {
-                            borderInfoCompute[`${bd_r2}_${bd_c}`] = {};
-                        }
-
-                        borderInfoCompute[`${bd_r2}_${bd_c}`].b = {
-                            color: borderColor,
-                            style: borderStyle,
-                        };
-
-                        const bd_r_bottom = bd_r2 + 1;
-
-                        if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
-                            if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
-                                const cell_bottom = data[bd_r_bottom][bd_c];
-
-                                const mc = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
-
-                                if (mc?.r === bd_r_bottom) {
-                                    borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r2, bd_c, 'b', borderColor, borderStyle);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r2,
+                            bd_c,
+                            'b',
+                            borderColor,
+                            borderStyle,
+                        );
 
                         const mc = cfg.merge || {};
                         Object.keys(mc).forEach((key) => {
@@ -307,165 +312,77 @@ export function getBorderInfoComputeRange(
                                 const mc: MergeCell | undefined = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                                 if (mc?.r === bd_r) {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                 }
 
                                 if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
                                 }
 
                                 if (mc?.c === bd_c) {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
                                 }
 
                                 if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
                                 }
                             } else {
-                                if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                    borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                }
-
-                                borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-                                borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-                                borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-                                borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
+                                setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
+                                setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
+                                setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
+                                setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
                             }
 
                             if (bd_r === bd_r1) {
-                                const bd_r_top = bd_r1 - 1;
-
-                                if (bd_r_top >= 0 && borderInfoCompute[`${bd_r_top}_${bd_c}`]) {
-                                    if (!isNil(data[bd_r_top]?.[bd_c]?.mc)) {
-                                        const cell_top = data[bd_r_top][bd_c];
-
-                                        const mc = cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
-
-                                        if (mc && mc.r + mc.rs - 1 === bd_r_top) {
-                                            borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
-                                    } else {
-                                        borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                }
+                                propagateToNeighbour(
+                                    borderInfoCompute,
+                                    data,
+                                    cfg.merge,
+                                    bd_r,
+                                    bd_c,
+                                    't',
+                                    borderColor,
+                                    borderStyle,
+                                );
                             }
 
                             if (bd_r === bd_r2) {
-                                const bd_r_bottom = bd_r2 + 1;
-
-                                if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
-                                    if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
-                                        const cell_bottom = data[bd_r_bottom][bd_c];
-
-                                        const mc = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
-
-                                        if (mc?.r === bd_r_bottom) {
-                                            borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
-                                    } else {
-                                        borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                }
+                                propagateToNeighbour(
+                                    borderInfoCompute,
+                                    data,
+                                    cfg.merge,
+                                    bd_r,
+                                    bd_c,
+                                    'b',
+                                    borderColor,
+                                    borderStyle,
+                                );
                             }
 
                             if (bd_c === bd_c1) {
-                                const bd_c_left = bd_c1 - 1;
-
-                                if (bd_c_left >= 0 && borderInfoCompute[`${bd_r}_${bd_c_left}`]) {
-                                    if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
-                                        const cell_left = data[bd_r][bd_c_left];
-
-                                        const mc = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
-
-                                        if (mc && mc.c + mc.cs - 1 === bd_c_left) {
-                                            borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
-                                    } else {
-                                        borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                }
+                                propagateToNeighbour(
+                                    borderInfoCompute,
+                                    data,
+                                    cfg.merge,
+                                    bd_r,
+                                    bd_c,
+                                    'l',
+                                    borderColor,
+                                    borderStyle,
+                                );
                             }
 
                             if (bd_c === bd_c2) {
-                                const bd_c_right = bd_c2 + 1;
-
-                                if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
-                                    if (!isNil(data[bd_r]?.[bd_c_right]?.mc)) {
-                                        const cell_right = data[bd_r][bd_c_right];
-
-                                        const mc = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
-
-                                        if (mc?.c === bd_c_right) {
-                                            borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
-                                    } else {
-                                        borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                }
+                                propagateToNeighbour(
+                                    borderInfoCompute,
+                                    data,
+                                    cfg.merge,
+                                    bd_r,
+                                    bd_c,
+                                    'r',
+                                    borderColor,
+                                    borderStyle,
+                                );
                             }
                         }
                     }
@@ -481,135 +398,59 @@ export function getBorderInfoComputeRange(
                             }
 
                             if (bd_r === bd_r1) {
-                                if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                    borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                }
-
-                                borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-
-                                const bd_r_top = bd_r1 - 1;
-
-                                if (bd_r_top >= 0 && borderInfoCompute[`${bd_r_top}_${bd_c}`]) {
-                                    if (!isNil(data[bd_r_top]?.[bd_c]?.mc)) {
-                                        const cell_top = data[bd_r_top][bd_c];
-
-                                        const mc = cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
-
-                                        if (mc && mc.r + mc.rs - 1 === bd_r_top) {
-                                            borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
-                                    } else {
-                                        borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                }
+                                setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
+                                propagateToNeighbour(
+                                    borderInfoCompute,
+                                    data,
+                                    cfg.merge,
+                                    bd_r,
+                                    bd_c,
+                                    't',
+                                    borderColor,
+                                    borderStyle,
+                                );
                             }
 
                             if (bd_r === bd_r2) {
-                                if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                    borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                }
-
-                                borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-
-                                const bd_r_bottom = bd_r2 + 1;
-
-                                if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
-                                    if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
-                                        const cell_bottom = data[bd_r_bottom][bd_c];
-
-                                        const mc = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
-
-                                        if (mc?.r === bd_r_bottom) {
-                                            borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
-                                    } else {
-                                        borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                }
+                                setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
+                                propagateToNeighbour(
+                                    borderInfoCompute,
+                                    data,
+                                    cfg.merge,
+                                    bd_r,
+                                    bd_c,
+                                    'b',
+                                    borderColor,
+                                    borderStyle,
+                                );
                             }
 
                             if (bd_c === bd_c1) {
-                                if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                    borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                }
-
-                                borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-
-                                const bd_c_left = bd_c1 - 1;
-
-                                if (bd_c_left >= 0 && borderInfoCompute[`${bd_r}_${bd_c_left}`]) {
-                                    if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
-                                        const cell_left = data[bd_r][bd_c_left];
-
-                                        const mc = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
-
-                                        if (mc && mc.c + mc.cs - 1 === bd_c_left) {
-                                            borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
-                                    } else {
-                                        borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                }
+                                setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
+                                propagateToNeighbour(
+                                    borderInfoCompute,
+                                    data,
+                                    cfg.merge,
+                                    bd_r,
+                                    bd_c,
+                                    'l',
+                                    borderColor,
+                                    borderStyle,
+                                );
                             }
 
                             if (bd_c === bd_c2) {
-                                if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                    borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                }
-
-                                borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                    color: borderColor,
-                                    style: borderStyle,
-                                };
-
-                                const bd_c_right = bd_c2 + 1;
-
-                                if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
-                                    if (!isNil(data[bd_r]?.[bd_c_right]?.mc)) {
-                                        const cell_right = data[bd_r][bd_c_right];
-
-                                        const mc = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
-
-                                        if (mc?.c === bd_c_right) {
-                                            borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                                color: borderColor,
-                                                style: borderStyle,
-                                            };
-                                        }
-                                    } else {
-                                        borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
-                                    }
-                                }
+                                setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
+                                propagateToNeighbour(
+                                    borderInfoCompute,
+                                    data,
+                                    cfg.merge,
+                                    bd_r,
+                                    bd_c,
+                                    'r',
+                                    borderColor,
+                                    borderStyle,
+                                );
                             }
                         }
                     }
@@ -623,48 +464,23 @@ export function getBorderInfoComputeRange(
                             if (bd_r === bd_r1 && bd_c === bd_c1) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
+                                    ensureEntry(borderInfoCompute, bd_r, bd_c);
                                 }
                             } else if (bd_r === bd_r2 && bd_c === bd_c1) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                 }
                             } else if (bd_r === bd_r1 && bd_c === bd_c2) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
                                 }
                             } else if (bd_r === bd_r2 && bd_c === bd_c2) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
+                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                 }
                             } else if (bd_r === bd_r1) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -673,28 +489,12 @@ export function getBorderInfoComputeRange(
                                     const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                                     if (mc?.c === bd_c) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
                                     } else if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
+                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
                                     }
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
                                 }
                             } else if (bd_r === bd_r2) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -703,32 +503,13 @@ export function getBorderInfoComputeRange(
                                     const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                                     if (mc?.c === bd_c) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
                                     } else if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
+                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
                                     }
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
+                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                 }
                             } else if (bd_c === bd_c1) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -737,27 +518,12 @@ export function getBorderInfoComputeRange(
                                     const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                                     if (mc?.r === bd_r) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                     } else if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
+                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
                                     }
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                 }
                             } else if (bd_c === bd_c2) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -766,32 +532,13 @@ export function getBorderInfoComputeRange(
                                     const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                                     if (mc?.r === bd_r) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                     } else if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
+                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
                                     }
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
+                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                 }
                             } else {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -800,47 +547,19 @@ export function getBorderInfoComputeRange(
                                     const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                                     if (mc?.r === bd_r) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                     } else if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
+                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
                                     }
 
                                     if (mc?.c === bd_c) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
                                     } else if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
+                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
                                     }
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
+                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                 }
                             }
                         }
@@ -855,26 +574,12 @@ export function getBorderInfoComputeRange(
                             if (bd_r === bd_r1) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
                                 }
                             } else if (bd_r === bd_r2) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                 }
                             } else {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -883,37 +588,13 @@ export function getBorderInfoComputeRange(
                                     const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                                     if (mc?.r === bd_r) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
                                     } else if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
                                     }
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
                                 }
                             }
                         }
@@ -928,26 +609,12 @@ export function getBorderInfoComputeRange(
                             if (bd_c === bd_c1) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
                                 }
                             } else if (bd_c === bd_c2) {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
                                 }
                             } else {
                                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
@@ -956,37 +623,13 @@ export function getBorderInfoComputeRange(
                                     const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                                     if (mc?.c === bd_c) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
                                     } else if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                        if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                            borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                        }
-
-                                        borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                            color: borderColor,
-                                            style: borderStyle,
-                                        };
+                                        setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
                                     }
                                 } else {
-                                    if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                                        borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                                    }
-
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
-                                    borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                                        color: borderColor,
-                                        style: borderStyle,
-                                    };
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
+                                    setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
                                 }
                             }
                         }
@@ -1052,270 +695,136 @@ export function getBorderInfoComputeRange(
             }
 
             if (!isNil(value.l) || !isNil(value.r) || !isNil(value.t) || !isNil(value.b)) {
-                if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
-                    borderInfoCompute[`${bd_r}_${bd_c}`] = {};
-                }
+                ensureEntry(borderInfoCompute, bd_r, bd_c);
 
                 if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
                     const cell: Cell | null = data[bd_r][bd_c];
                     const mc: MergeCell | undefined = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
 
                     if (!isNil(value.l) && bd_c === mc?.c) {
-                        // Left border
-                        borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                            color: value.l.color,
-                            style: value.l.style,
-                        };
-
-                        const bd_c_left = bd_c - 1;
-
-                        if (bd_c_left >= 0 && borderInfoCompute[`${bd_r}_${bd_c_left}`]) {
-                            if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
-                                const cell_left = data[bd_r][bd_c_left];
-
-                                const mc_l = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
-
-                                if (mc_l && mc_l.c + mc_l.cs - 1 === bd_c_left) {
-                                    borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                        color: value.l.color,
-                                        style: value.l.style,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                    color: value.l.color,
-                                    style: value.l.style,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c, 'l', value.l.color, value.l.style);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c,
+                            'l',
+                            value.l.color,
+                            value.l.style,
+                        );
                     } else {
                         borderInfoCompute[`${bd_r}_${bd_c}`].l = null;
                     }
 
                     if (!isNil(value.r) && mc && bd_c === mc.c + mc.cs - 1) {
-                        // Right border
-                        borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                            color: value.r.color,
-                            style: value.r.style,
-                        };
-
-                        const bd_c_right = bd_c + 1;
-
-                        if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
-                            if (!isNil(data[bd_r]?.[bd_c_right]?.mc)) {
-                                const cell_right = data[bd_r][bd_c_right];
-
-                                const mc_r = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
-
-                                if (mc_r?.c === bd_c_right) {
-                                    borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                        color: value.r.color,
-                                        style: value.r.style,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                    color: value.r.color,
-                                    style: value.r.style,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c, 'r', value.r.color, value.r.style);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c,
+                            'r',
+                            value.r.color,
+                            value.r.style,
+                        );
                     } else {
                         borderInfoCompute[`${bd_r}_${bd_c}`].r = null;
                     }
 
                     if (!isNil(value.t) && bd_r === mc?.r) {
-                        // Top border
-                        borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                            color: value.t.color,
-                            style: value.t.style,
-                        };
-
-                        const bd_r_top = bd_r - 1;
-
-                        if (bd_r_top >= 0 && borderInfoCompute[`${bd_r_top}_${bd_c}`]) {
-                            if (!isNil(data[bd_r_top]?.[bd_c]?.mc)) {
-                                const cell_top = data[bd_r_top][bd_c];
-
-                                const mc_t = cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
-
-                                if (mc_t && mc_t.r + mc_t.rs - 1 === bd_r_top) {
-                                    borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                        color: value.t.color,
-                                        style: value.t.style,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                    color: value.t.color,
-                                    style: value.t.style,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c, 't', value.t.color, value.t.style);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c,
+                            't',
+                            value.t.color,
+                            value.t.style,
+                        );
                     } else {
                         borderInfoCompute[`${bd_r}_${bd_c}`].t = null;
                     }
 
                     if (!isNil(value.b) && mc && bd_r === mc.r + mc.rs - 1) {
-                        // Bottom border
-                        borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                            color: value.b.color,
-                            style: value.b.style,
-                        };
-
-                        const bd_r_bottom = bd_r + 1;
-
-                        if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
-                            if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
-                                const cell_bottom = data[bd_r_bottom][bd_c];
-
-                                const mc_b = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
-
-                                if (mc_b?.r === bd_r_bottom) {
-                                    borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                        color: value.b.color,
-                                        style: value.b.style,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                    color: value.b.color,
-                                    style: value.b.style,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c, 'b', value.b.color, value.b.style);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c,
+                            'b',
+                            value.b.color,
+                            value.b.style,
+                        );
                     } else {
                         borderInfoCompute[`${bd_r}_${bd_c}`].b = null;
                     }
                 } else {
                     if (!isNil(value.l)) {
-                        // Left border
-                        borderInfoCompute[`${bd_r}_${bd_c}`].l = {
-                            color: value.l.color,
-                            style: value.l.style,
-                        };
-
-                        const bd_c_left = bd_c - 1;
-
-                        if (bd_c_left >= 0 && borderInfoCompute[`${bd_r}_${bd_c_left}`]) {
-                            if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
-                                const cell_left = data[bd_r][bd_c_left];
-
-                                const mc_l = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
-
-                                if (mc_l && mc_l.c + mc_l.cs - 1 === bd_c_left) {
-                                    borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                        color: value.l.color,
-                                        style: value.l.style,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
-                                    color: value.l.color,
-                                    style: value.l.style,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c, 'l', value.l.color, value.l.style);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c,
+                            'l',
+                            value.l.color,
+                            value.l.style,
+                        );
                     } else {
                         borderInfoCompute[`${bd_r}_${bd_c}`].l = null;
                     }
 
                     if (!isNil(value.r)) {
-                        // Right border
-                        borderInfoCompute[`${bd_r}_${bd_c}`].r = {
-                            color: value.r.color,
-                            style: value.r.style,
-                        };
-
-                        const bd_c_right = bd_c + 1;
-
-                        if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
-                            if (
-                                !isNil(data[bd_r]) &&
-                                isPlainObject(data[bd_r][bd_c_right]) &&
-                                !isNil(data[bd_r]?.[bd_c_right]?.mc)
-                            ) {
-                                const cell_right = data[bd_r][bd_c_right];
-
-                                const mc_r = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
-
-                                if (mc_r?.c === bd_c_right) {
-                                    borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                        color: value.r.color,
-                                        style: value.r.style,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
-                                    color: value.r.color,
-                                    style: value.r.style,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c, 'r', value.r.color, value.r.style);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c,
+                            'r',
+                            value.r.color,
+                            value.r.style,
+                        );
                     } else {
                         borderInfoCompute[`${bd_r}_${bd_c}`].r = null;
                     }
 
                     if (!isNil(value.t)) {
-                        // Top border
-                        borderInfoCompute[`${bd_r}_${bd_c}`].t = {
-                            color: value.t.color,
-                            style: value.t.style,
-                        };
-
-                        const bd_r_top = bd_r - 1;
-
-                        if (bd_r_top >= 0 && borderInfoCompute[`${bd_r_top}_${bd_c}`]) {
-                            if (!isNil(data[bd_r_top]?.[bd_c]?.mc)) {
-                                const cell_top = data[bd_r_top][bd_c];
-
-                                const mc_t = cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
-
-                                if (mc_t && mc_t.r + mc_t.rs - 1 === bd_r_top) {
-                                    borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                        color: value.t.color,
-                                        style: value.t.style,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
-                                    color: value.t.color,
-                                    style: value.t.style,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c, 't', value.t.color, value.t.style);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c,
+                            't',
+                            value.t.color,
+                            value.t.style,
+                        );
                     } else {
                         borderInfoCompute[`${bd_r}_${bd_c}`].t = null;
                     }
 
                     if (!isNil(value.b)) {
-                        // Bottom border
-                        borderInfoCompute[`${bd_r}_${bd_c}`].b = {
-                            color: value.b.color,
-                            style: value.b.style,
-                        };
-
-                        const bd_r_bottom = bd_r + 1;
-
-                        if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
-                            if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
-                                const cell_bottom = data[bd_r_bottom][bd_c];
-
-                                const mc_b = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
-
-                                if (mc_b?.r === bd_r_bottom) {
-                                    borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                        color: value.b.color,
-                                        style: value.b.style,
-                                    };
-                                }
-                            } else {
-                                borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
-                                    color: value.b.color,
-                                    style: value.b.style,
-                                };
-                            }
-                        }
+                        setSide(borderInfoCompute, bd_r, bd_c, 'b', value.b.color, value.b.style);
+                        propagateToNeighbour(
+                            borderInfoCompute,
+                            data,
+                            cfg.merge,
+                            bd_r,
+                            bd_c,
+                            'b',
+                            value.b.color,
+                            value.b.style,
+                        );
                     } else {
                         borderInfoCompute[`${bd_r}_${bd_c}`].b = null;
                     }

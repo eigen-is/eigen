@@ -1,10 +1,10 @@
 import type { BorderInfo, CellBorderInfo, RangeBorderInfo } from '@workspace/lib/sheets';
 import { cloneDeep, set } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine';
+import { cfSplitRange } from '../../engine/conditional-format';
 import type { SingleRange } from '../../engine/types';
 
 import { type Context, getFlowdata } from '../context';
-import { locale } from '../locale';
+import { en } from '../locale/en';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getBorderInfoCompute } from './border';
@@ -34,7 +34,6 @@ export function onCellsMoveStart(
     scrollEl: HTMLDivElement,
     container: HTMLDivElement,
 ) {
-    // if (isEditMode() || ctx.allowEdit === false) {
     const allowEdit = isAllowEdit(ctx);
     if (allowEdit === false) {
         // Selection drag is disabled in this mode
@@ -64,13 +63,17 @@ export function onCellsMoveStart(
 
     ctx.cellSelectMoveIndex = [row_index, col_index];
 
-    const ele = document.getElementById('fortune-cell-selected-move');
-    if (ele == null) return;
-    ele.style.left = `${col_pre}px`;
-    ele.style.top = `${row_pre}px`;
-    ele.style.width = `${col - col_pre - 1}px`;
-    ele.style.height = `${row - row_pre - 1}px`;
-    ele.style.display = 'block';
+    // The move preview renders once per overlay pane region; write every copy —
+    // each region's clip shows exactly its portion.
+    const eles = container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move');
+    if (eles.length === 0) return;
+    for (const ele of eles) {
+        ele.style.left = `${col_pre}px`;
+        ele.style.top = `${row_pre}px`;
+        ele.style.width = `${col - col_pre - 1}px`;
+        ele.style.height = `${row - row_pre - 1}px`;
+        ele.style.display = 'block';
+    }
 
     e.stopPropagation();
 }
@@ -137,13 +140,13 @@ export function onCellsMove(
     row_pre = row_s - 1 === -1 ? 0 : ctx.visibledatarow[row_s - 1];
     row = ctx.visibledatarow[row_e];
 
-    const ele = document.getElementById('fortune-cell-selected-move');
-    if (ele == null) return;
-    ele.style.left = `${col_pre}px`;
-    ele.style.top = `${row_pre}px`;
-    ele.style.width = `${col - col_pre - 2}px`;
-    ele.style.height = `${row - row_pre - 2}px`;
-    ele.style.display = 'block';
+    for (const ele of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move')) {
+        ele.style.left = `${col_pre}px`;
+        ele.style.top = `${row_pre}px`;
+        ele.style.width = `${col - col_pre - 2}px`;
+        ele.style.height = `${row - row_pre - 2}px`;
+        ele.style.display = 'block';
+    }
 }
 
 export function onCellsMoveEnd(
@@ -156,8 +159,9 @@ export function onCellsMoveEnd(
     // Change selection box position and replace target cells
     if (!ctx.cellSelectMoving) return;
     ctx.cellSelectMoving = false;
-    const ele = document.getElementById('fortune-cell-selected-move');
-    if (ele != null) ele.style.display = 'none';
+    for (const ele of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move')) {
+        ele.style.display = 'none';
+    }
     if (globalCache.dragCellStartPos != null) {
         globalCache.dragCellStartPos = undefined;
         return;
@@ -202,34 +206,18 @@ export function onCellsMoveEnd(
     if (cfg.rowlen == null) {
         cfg.rowlen = {};
     }
-    const { drag: locale_drag } = locale(ctx);
+    const { drag: locale_drag } = en;
 
     // Selection contains partial cells
-    if (hasPartMC(ctx, cfg, last.row[0], last.row[1], last.column[0], last.column[1])) {
-        // if (isEditMode()) {
-        //   alert(locale_drag.noMerge);
-        // } else {
-        // drag.info(
-        //   '<i class="fa fa-exclamation-triangle"></i>',
-        throw new Error(locale_drag.noMerge);
-        // );
-        // }
-        // return;
+    if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {
+        ctx.warnDialog = locale_drag.noMerge;
+        return;
     }
 
     let row_s = last.row[0] - row_index_original + row_index;
     let row_e = last.row[1] - row_index_original + row_index;
     let col_s = last.column[0] - col_index_original + col_index;
     let col_e = last.column[1] - col_index_original + col_index;
-
-    // if (
-    //   !checkProtectionLockedRangeList(
-    //     [{ row: [row_s, row_e], column: [col_s, col_e] }],
-    //     ctx.currentSheetIndex
-    //   )
-    // ) {
-    //   return;
-    // }
 
     if (row_s < 0 || y < 0) {
         row_s = 0;
@@ -252,16 +240,9 @@ export function onCellsMoveEnd(
     }
 
     // Replacement position contains partial cells
-    if (hasPartMC(ctx, cfg, row_s, row_e, col_s, col_e)) {
-        // if (isEditMode()) {
-        //   alert(locale_drag.noMerge);
-        // } else {
-        // tooltip.info(
-        //   '<i class="fa fa-exclamation-triangle"></i>',
-        throw new Error(locale_drag.noMerge);
-        // );
-        // }
-        // return;
+    if (hasPartMC(ctx, row_s, row_e, col_s, col_e)) {
+        ctx.warnDialog = locale_drag.noMerge;
+        return;
     }
 
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
@@ -274,13 +255,8 @@ export function onCellsMoveEnd(
         }
     > = {};
     // Delete data from original position
-    // const RowlChange = null;
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     for (let r = last.row[0]; r <= last.row[1]; r += 1) {
-        // if (r in cfg.rowlen) {
-        //   RowlChange = true;
-        // }
-
         for (let c = last.column[0]; c <= last.column[1]; c += 1) {
             const cellData = d[r][c];
 

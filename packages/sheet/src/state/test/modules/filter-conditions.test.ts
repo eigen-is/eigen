@@ -11,10 +11,10 @@ import { genarate } from '../../../engine/format';
 import type { Context } from '../../context';
 import { en } from '../../locale/en';
 import {
+    buildFilterConditionMatcher,
     clearFilter,
     FILTER_CONDITION_ITEMS,
     getFilterConditionHiddenRows,
-    matchesFilterCondition,
     saveFilter,
 } from '../../modules/filter';
 import type { Cell, FilterCondition, FilterConditionName } from '../../types';
@@ -40,150 +40,150 @@ function cond(conditionName: FilterConditionName, ...values: string[]): FilterCo
 
 const BLANKS: (Cell | null)[] = [null, {}, { v: '' }, { v: '  ' }];
 
-describe('matchesFilterCondition', () => {
+describe('buildFilterConditionMatcher', () => {
     test('isEmpty matches missing, null, empty and whitespace-only cells', () => {
         for (const cell of BLANKS) {
-            expect(matchesFilterCondition(cell, cond('isEmpty'))).toBe(true);
+            expect(buildFilterConditionMatcher(cond('isEmpty'))(cell)).toBe(true);
         }
-        expect(matchesFilterCondition(text('a'), cond('isEmpty'))).toBe(false);
-        expect(matchesFilterCondition(num(0), cond('isEmpty'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('isEmpty'))(text('a'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('isEmpty'))(num(0))).toBe(false);
     });
 
     test('isNotEmpty is the exact complement of isEmpty', () => {
         for (const cell of BLANKS) {
-            expect(matchesFilterCondition(cell, cond('isNotEmpty'))).toBe(false);
+            expect(buildFilterConditionMatcher(cond('isNotEmpty'))(cell)).toBe(false);
         }
-        expect(matchesFilterCondition(num(0), cond('isNotEmpty'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('isNotEmpty'))(num(0))).toBe(true);
     });
 
     test('textContains is case-insensitive (Google behavior)', () => {
-        expect(matchesFilterCondition(text('Apple Pie'), cond('textContains', 'apple'))).toBe(true);
-        expect(matchesFilterCondition(text('apple pie'), cond('textContains', 'APPLE'))).toBe(true);
-        expect(matchesFilterCondition(text('cherry'), cond('textContains', 'apple'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('textContains', 'apple'))(text('Apple Pie'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('textContains', 'APPLE'))(text('apple pie'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('textContains', 'apple'))(text('cherry'))).toBe(false);
     });
 
     test('text conditions compare the display string, not the raw value', () => {
         // 50% renders as m '50%' over raw v 0.5
         const percent: Cell = { v: 0.5, m: '50%', ct: { fa: '0%', t: 'n' } };
-        expect(matchesFilterCondition(percent, cond('textContains', '50%'))).toBe(true);
-        expect(matchesFilterCondition(percent, cond('textContains', '0.5'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('textContains', '50%'))(percent)).toBe(true);
+        expect(buildFilterConditionMatcher(cond('textContains', '0.5'))(percent)).toBe(false);
     });
 
     test('textNotContains keeps blank cells visible', () => {
         for (const cell of BLANKS) {
-            expect(matchesFilterCondition(cell, cond('textNotContains', 'apple'))).toBe(true);
+            expect(buildFilterConditionMatcher(cond('textNotContains', 'apple'))(cell)).toBe(true);
         }
-        expect(matchesFilterCondition(text('Apple'), cond('textNotContains', 'apple'))).toBe(false);
-        expect(matchesFilterCondition(text('cherry'), cond('textNotContains', 'apple'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('textNotContains', 'apple'))(text('Apple'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('textNotContains', 'apple'))(text('cherry'))).toBe(true);
     });
 
     test('textStartsWith and textEndsWith are case-insensitive', () => {
-        expect(matchesFilterCondition(text('Apple Pie'), cond('textStartsWith', 'app'))).toBe(true);
-        expect(matchesFilterCondition(text('Apple Pie'), cond('textStartsWith', 'pie'))).toBe(false);
-        expect(matchesFilterCondition(text('Apple Pie'), cond('textEndsWith', 'PIE'))).toBe(true);
-        expect(matchesFilterCondition(text('Apple Pie'), cond('textEndsWith', 'app'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('textStartsWith', 'app'))(text('Apple Pie'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('textStartsWith', 'pie'))(text('Apple Pie'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('textEndsWith', 'PIE'))(text('Apple Pie'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('textEndsWith', 'app'))(text('Apple Pie'))).toBe(false);
     });
 
     test('textEquals matches the whole display string case-insensitively', () => {
-        expect(matchesFilterCondition(text('Apple'), cond('textEquals', 'apple'))).toBe(true);
-        expect(matchesFilterCondition(text('Apple Pie'), cond('textEquals', 'apple'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('textEquals', 'apple'))(text('Apple'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('textEquals', 'apple'))(text('Apple Pie'))).toBe(false);
     });
 
     test('greaterThan compares numerically when both sides parse as numbers', () => {
         // lexicographic '9' > '10' would be true; numeric compare must win
-        expect(matchesFilterCondition(num(9), cond('greaterThan', '10'))).toBe(false);
-        expect(matchesFilterCondition(num(11), cond('greaterThan', '10'))).toBe(true);
-        expect(matchesFilterCondition(num(10), cond('greaterThan', '10'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('greaterThan', '10'))(num(9))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('greaterThan', '10'))(num(11))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('greaterThan', '10'))(num(10))).toBe(false);
     });
 
     test('greaterThan falls back to case-insensitive string compare for non-numeric sides', () => {
-        expect(matchesFilterCondition(text('banana'), cond('greaterThan', 'Apple'))).toBe(true);
-        expect(matchesFilterCondition(text('Apple'), cond('greaterThan', 'banana'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('greaterThan', 'Apple'))(text('banana'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('greaterThan', 'banana'))(text('Apple'))).toBe(false);
     });
 
     test('greaterThanOrEqual / lessThan / lessThanOrEqual respect the boundary', () => {
-        expect(matchesFilterCondition(num(10), cond('greaterThanOrEqual', '10'))).toBe(true);
-        expect(matchesFilterCondition(num(9), cond('greaterThanOrEqual', '10'))).toBe(false);
-        expect(matchesFilterCondition(num(9), cond('lessThan', '10'))).toBe(true);
-        expect(matchesFilterCondition(num(10), cond('lessThan', '10'))).toBe(false);
-        expect(matchesFilterCondition(num(10), cond('lessThanOrEqual', '10'))).toBe(true);
-        expect(matchesFilterCondition(num(11), cond('lessThanOrEqual', '10'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('greaterThanOrEqual', '10'))(num(10))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('greaterThanOrEqual', '10'))(num(9))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('lessThan', '10'))(num(9))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('lessThan', '10'))(num(10))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('lessThanOrEqual', '10'))(num(10))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('lessThanOrEqual', '10'))(num(11))).toBe(false);
     });
 
     test('equal matches a number cell against an equivalent numeric string', () => {
-        expect(matchesFilterCondition(num(5), cond('equal', '5'))).toBe(true);
-        expect(matchesFilterCondition(num(5), cond('equal', '5.0'))).toBe(true);
-        expect(matchesFilterCondition(num(5), cond('equal', '6'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('equal', '5'))(num(5))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('equal', '5.0'))(num(5))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('equal', '6'))(num(5))).toBe(false);
     });
 
     test('equal vs notEqual on mixed types: a text cell never equals a numeric input', () => {
-        expect(matchesFilterCondition(text('abc'), cond('equal', '5'))).toBe(false);
-        expect(matchesFilterCondition(text('abc'), cond('notEqual', '5'))).toBe(true);
-        expect(matchesFilterCondition(text('ABC'), cond('equal', 'abc'))).toBe(true);
-        expect(matchesFilterCondition(text('ABC'), cond('notEqual', 'abc'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('equal', '5'))(text('abc'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('notEqual', '5'))(text('abc'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('equal', 'abc'))(text('ABC'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('notEqual', 'abc'))(text('ABC'))).toBe(false);
     });
 
     test('notEqual keeps blank cells visible', () => {
         for (const cell of BLANKS) {
-            expect(matchesFilterCondition(cell, cond('notEqual', '5'))).toBe(true);
+            expect(buildFilterConditionMatcher(cond('notEqual', '5'))(cell)).toBe(true);
         }
     });
 
     test('between bounds are inclusive', () => {
-        expect(matchesFilterCondition(num(5), cond('between', '5', '10'))).toBe(true);
-        expect(matchesFilterCondition(num(10), cond('between', '5', '10'))).toBe(true);
-        expect(matchesFilterCondition(num(7), cond('between', '5', '10'))).toBe(true);
-        expect(matchesFilterCondition(num(4), cond('between', '5', '10'))).toBe(false);
-        expect(matchesFilterCondition(num(11), cond('between', '5', '10'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('between', '5', '10'))(num(5))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('between', '5', '10'))(num(10))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('between', '5', '10'))(num(7))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('between', '5', '10'))(num(4))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('between', '5', '10'))(num(11))).toBe(false);
     });
 
     test('between normalizes reversed bounds', () => {
-        expect(matchesFilterCondition(num(7), cond('between', '10', '5'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('between', '10', '5'))(num(7))).toBe(true);
     });
 
     test('notBetween is the complement of between and keeps blanks visible', () => {
-        expect(matchesFilterCondition(num(7), cond('notBetween', '5', '10'))).toBe(false);
-        expect(matchesFilterCondition(num(11), cond('notBetween', '5', '10'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('notBetween', '5', '10'))(num(7))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('notBetween', '5', '10'))(num(11))).toBe(true);
         for (const cell of BLANKS) {
-            expect(matchesFilterCondition(cell, cond('notBetween', '5', '10'))).toBe(true);
+            expect(buildFilterConditionMatcher(cond('notBetween', '5', '10'))(cell)).toBe(true);
         }
     });
 
     test('dateEqual matches same-day date cells only', () => {
-        expect(matchesFilterCondition(date('2026-06-11'), cond('dateEqual', '2026-06-11'))).toBe(true);
-        expect(matchesFilterCondition(date('2026-06-12'), cond('dateEqual', '2026-06-11'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('dateEqual', '2026-06-11'))(date('2026-06-11'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('dateEqual', '2026-06-11'))(date('2026-06-12'))).toBe(false);
     });
 
     test('dateBefore and dateAfter compare at day granularity', () => {
-        expect(matchesFilterCondition(date('2026-06-10'), cond('dateBefore', '2026-06-11'))).toBe(true);
-        expect(matchesFilterCondition(date('2026-06-11'), cond('dateBefore', '2026-06-11'))).toBe(false);
-        expect(matchesFilterCondition(date('2026-06-12'), cond('dateAfter', '2026-06-11'))).toBe(true);
-        expect(matchesFilterCondition(date('2026-06-11'), cond('dateAfter', '2026-06-11'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('dateBefore', '2026-06-11'))(date('2026-06-10'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('dateBefore', '2026-06-11'))(date('2026-06-11'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('dateAfter', '2026-06-11'))(date('2026-06-12'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('dateAfter', '2026-06-11'))(date('2026-06-11'))).toBe(false);
     });
 
     test('date conditions never match non-date cells', () => {
-        expect(matchesFilterCondition(text('2026-06-11'), cond('dateEqual', '2026-06-11'))).toBe(false);
-        expect(matchesFilterCondition(num(45000), cond('dateBefore', '2026-06-11'))).toBe(false);
-        expect(matchesFilterCondition(null, cond('dateAfter', '2026-06-11'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('dateEqual', '2026-06-11'))(text('2026-06-11'))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('dateBefore', '2026-06-11'))(num(45000))).toBe(false);
+        expect(buildFilterConditionMatcher(cond('dateAfter', '2026-06-11'))(null)).toBe(false);
     });
 
     test('unparseable date input is a no-op: every cell matches', () => {
-        expect(matchesFilterCondition(date('2026-06-11'), cond('dateEqual', 'not a date'))).toBe(true);
-        expect(matchesFilterCondition(text('x'), cond('dateBefore', 'garbage'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('dateEqual', 'not a date'))(date('2026-06-11'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('dateBefore', 'garbage'))(text('x'))).toBe(true);
     });
 
     test('blank required input is a no-op: every cell matches', () => {
-        expect(matchesFilterCondition(text('anything'), cond('textContains', ''))).toBe(true);
-        expect(matchesFilterCondition(num(1), cond('greaterThan', ' '))).toBe(true);
-        expect(matchesFilterCondition(num(7), cond('between', '5', ''))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('textContains', ''))(text('anything'))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('greaterThan', ' '))(num(1))).toBe(true);
+        expect(buildFilterConditionMatcher(cond('between', '5', ''))(num(7))).toBe(true);
     });
 
     test('positive conditions never match blank cells', () => {
         for (const cell of BLANKS) {
-            expect(matchesFilterCondition(cell, cond('textContains', 'a'))).toBe(false);
-            expect(matchesFilterCondition(cell, cond('greaterThan', '0'))).toBe(false);
-            expect(matchesFilterCondition(cell, cond('equal', ''.padEnd(1, '0')))).toBe(false);
-            expect(matchesFilterCondition(cell, cond('between', '0', '9'))).toBe(false);
+            expect(buildFilterConditionMatcher(cond('textContains', 'a'))(cell)).toBe(false);
+            expect(buildFilterConditionMatcher(cond('greaterThan', '0'))(cell)).toBe(false);
+            expect(buildFilterConditionMatcher(cond('equal', ''.padEnd(1, '0')))(cell)).toBe(false);
+            expect(buildFilterConditionMatcher(cond('between', '0', '9'))(cell)).toBe(false);
         }
     });
 });
