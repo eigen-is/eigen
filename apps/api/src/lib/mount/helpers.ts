@@ -85,8 +85,9 @@ export function buildStorageKey(id: string, name: string): string {
 
 // A document working copy must be a real SQLite db. The 16-byte magic header is the cheapest proof;
 // a 0-byte or partial download (an empty/failed S3 GET) fails it. Used to refuse opening such a file
-// as a fresh empty doc and re-uploading it over good stored bytes (the 2026-06-08 data loss).
-function isSqliteFile(filePath: string): boolean {
+// as a fresh empty doc and re-uploading it over good stored bytes (the 2026-06-08 data loss), and by
+// the upload queue to refuse PUTting a corrupted staged copy over the good stored object.
+export function isSqliteFile(filePath: string): boolean {
     let fd: number | null = null;
     try {
         fd = fs.openSync(filePath, 'r');
