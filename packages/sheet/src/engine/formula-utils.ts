@@ -22,8 +22,7 @@ export const operatorjson: Readonly<Record<string, number>> = (() => {
 })();
 
 // Handles single cells (A1, $A$1), ranges (A1:B3), column-only ranges (A:C),
-// and sheet-qualified references (Sheet1!A1). Differs from `isCellReference`
-// in formula-engine.ts which requires digits in every part.
+// and sheet-qualified references (Sheet1!A1).
 export function iscelldata(txt: string) {
     const val = txt.split('!');
     let rangetxt: string;

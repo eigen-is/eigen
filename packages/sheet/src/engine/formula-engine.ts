@@ -15,15 +15,6 @@ export function isFormula(value: unknown): boolean {
     return typeof value === 'string' && value.length > 1 && value[0] === '=';
 }
 
-// Matches a cell reference like A1, $B$3, AA100, A1:B3, or Sheet1!A1
-const CELL_REF_RE =
-    /^(?:(?:[A-Za-z0-9_\u00C0-\u02AF]+|'(?:(?!').|'')*')!)?\$?[A-Za-z]+\$?[0-9]+(?::\$?[A-Za-z]+\$?[0-9]+)?$/;
-
-export function isCellReference(txt: string): boolean {
-    if (txt.length === 0) return false;
-    return CELL_REF_RE.test(txt);
-}
-
 function getCellValue(cell: Cell | null | undefined): unknown {
     if (cell == null) return undefined;
     if (cell.ct?.t === 'n') {

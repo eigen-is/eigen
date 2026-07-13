@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createArrayResolver, type SheetData } from '../cell-resolver';
-import { FormulaEngine, isCellReference, isFormula } from '../formula-engine';
+import { FormulaEngine, isFormula } from '../formula-engine';
 
 const sheets: SheetData[] = [
     {
@@ -54,42 +54,6 @@ describe('engine/formula-engine — isFormula', () => {
 
     test('rejects undefined', () => {
         expect(isFormula(undefined)).toBe(false);
-    });
-});
-
-// ─── isCellReference ────────────────────────────────────────────────────────
-
-describe('engine/formula-engine — isCellReference', () => {
-    test('recognizes A1', () => {
-        expect(isCellReference('A1')).toBe(true);
-    });
-
-    test('recognizes $B$3', () => {
-        expect(isCellReference('$B$3')).toBe(true);
-    });
-
-    test('recognizes AA100', () => {
-        expect(isCellReference('AA100')).toBe(true);
-    });
-
-    test('recognizes range A1:B3', () => {
-        expect(isCellReference('A1:B3')).toBe(true);
-    });
-
-    test('recognizes Sheet1!A1', () => {
-        expect(isCellReference('Sheet1!A1')).toBe(true);
-    });
-
-    test('rejects plain string', () => {
-        expect(isCellReference('hello')).toBe(false);
-    });
-
-    test('rejects bare number', () => {
-        expect(isCellReference('123')).toBe(false);
-    });
-
-    test('rejects empty string', () => {
-        expect(isCellReference('')).toBe(false);
     });
 });
 
