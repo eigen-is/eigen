@@ -43,7 +43,7 @@ export function utcToLocal(date: Date, tz: string): LocalComponents {
     };
 }
 
-function localToUtc(
+export function localToUtc(
     tz: string,
     year: number,
     month: number,

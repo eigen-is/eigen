@@ -335,6 +335,19 @@ export class Calendar {
             .map(dbEventToCalendarEventRow);
     }
 
+    // Drop exception rows a CalDAV full-resource replace no longer carries (audit #D). Deliberately
+    // quiet: no tombstone (the client-visible resource is the master, whose etag changes via touch)
+    // and no cancellation fan-out (removing an override RESTORES the base occurrence).
+    public deleteExceptions(calendarId: string, parentEventId: string, ids: string[]): void {
+        if (!ids.length) return;
+        this.db
+            .delete(schema.events)
+            .where(and(eq(schema.events.parentEventId, parentEventId), inArray(schema.events.id, ids)))
+            .run();
+        this.incrementCtag(calendarId);
+        this.touchEvent(parentEventId);
+    }
+
     public getRawEventsInRange(calendarId: string, from: Date, to: Date): CalendarEventRow[] {
         // Clamp the window span (see recurrence-limits) so an over-wide CalDAV time-range can't make
         // rrule materialise a giant occurrence set and block the event loop.
@@ -689,9 +702,12 @@ export class Calendar {
                 const modified = modifiedDates.get(occ.occurrenceDate);
                 if (modified) {
                     const modEvt = dbEventToCalendarEvent(modified);
+                    // Keep the stored exception key, not the UTC date of the (possibly moved) startTime —
+                    // the FE round-trips occurrenceDate into scope='this' RSVPs, and a drifted key would
+                    // miss getException and duplicate the exception row (audit #E).
                     results.push({
                         ...modEvt,
-                        occurrenceDate: occurrenceDateToString(modEvt.startTime),
+                        occurrenceDate: occ.occurrenceDate,
                     });
                 } else {
                     results.push(occ);

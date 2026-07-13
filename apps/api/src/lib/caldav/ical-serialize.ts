@@ -1,5 +1,7 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
+import { computeOccurrenceTimes } from '../calendar/recurrence';
 import { normalizeTimezone } from '../calendar/timezone';
+import { buildVTimezone } from './vtimezone';
 
 // RFC 5545 §3.3.11 — escape TEXT values
 function escapeICalText(s: string): string {
@@ -83,7 +85,7 @@ function mapAttendeeStatus(status: Attendee['status']): string {
     }
 }
 
-function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string[] {
+function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean; master?: CalendarEvent }): string[] {
     const lines: string[] = [];
 
     const prop = (line: string) => lines.push(foldLine(line));
@@ -123,16 +125,23 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string
         prop(`RRULE:${rruleValue}`);
     }
 
-    // RECURRENCE-ID for exception events — use startTime (the actual occurrence time),
-    // not the date string, so timed events have the correct time component
+    // RECURRENCE-ID names the ORIGINAL occurrence being overridden, in the master's TZID form
+    // (RFC 5545). The exception's own startTime may have been moved — echoing it back produces an
+    // override that matches no occurrence, so clients render the original slot too (audit #C).
+    // The master's tz (not the exception's) decides the form: legacy exception rows hold timezone:null.
     if (event.recurrenceDate) {
         if (event.allDay) {
             const compact = event.recurrenceDate.replace(/-/g, '');
             prop(`RECURRENCE-ID;VALUE=DATE:${compact}`);
-        } else if (tzid) {
-            prop(`RECURRENCE-ID;TZID=${tzid}:${formatDateTimeInTZ(event.startTime, tzid)}`);
         } else {
-            prop(`RECURRENCE-ID:${formatDateTimeUTC(event.startTime)}`);
+            const master = options?.master;
+            const ridTime = master ? computeOccurrenceTimes(master, event.recurrenceDate).startTime : event.startTime;
+            const ridTz = master ? normalizeTimezone(master.timezone) : tzid;
+            if (ridTz) {
+                prop(`RECURRENCE-ID;TZID=${ridTz}:${formatDateTimeInTZ(ridTime, ridTz)}`);
+            } else {
+                prop(`RECURRENCE-ID:${formatDateTimeUTC(ridTime)}`);
+            }
         }
     }
 
@@ -177,8 +186,38 @@ function wrapInVCalendar(eventLines: string[], method?: 'REQUEST' | 'REPLY' | 'C
     return `${lines.join('\r\n')}\r\n`;
 }
 
+// One VTIMEZONE per IANA TZID the events reference (RFC 5545 §3.6.5) — without it, strict parsers
+// (including ical.js, i.e. a peer Eigen receiving this via iMIP) read the wall times as floating.
+function vtimezoneLines(events: CalendarEvent[]): string[] {
+    const tzids = new Set<string>();
+    let minYear = Number.POSITIVE_INFINITY;
+    let maxYear = Number.NEGATIVE_INFINITY;
+    let hasRrule = false;
+    for (const event of events) {
+        if (event.allDay) continue;
+        const tzid = normalizeTimezone(event.timezone);
+        if (!tzid) continue;
+        tzids.add(tzid);
+        minYear = Math.min(minYear, event.startTime.getUTCFullYear());
+        maxYear = Math.max(maxYear, event.endTime.getUTCFullYear());
+        if (event.rrule) hasRrule = true;
+    }
+    if (!tzids.size) return [];
+    // Open-ended RRULEs recur past the stored times; regular zones compress to open-ended RRULE
+    // observances anyway, so the horizon only bounds irregular zones. The span cap keeps a
+    // pathological far-future event from turning the transition scan into a seconds-long stall.
+    if (hasRrule) maxYear = Math.max(maxYear, new Date().getUTCFullYear() + 5);
+    maxYear = Math.min(maxYear, minYear + 50);
+
+    const lines: string[] = [];
+    for (const tzid of tzids) {
+        lines.push(...buildVTimezone(tzid, minYear, maxYear));
+    }
+    return lines;
+}
+
 export function serializeEventForImip(event: CalendarEvent, method: 'REQUEST' | 'REPLY' | 'CANCEL'): string {
-    return wrapInVCalendar(buildVEvent(event, { rsvp: method === 'REQUEST' }), method);
+    return wrapInVCalendar([...vtimezoneLines([event]), ...buildVEvent(event, { rsvp: method === 'REQUEST' })], method);
 }
 
 export function eventsToIcs(events: CalendarEvent[]): string {
@@ -198,10 +237,11 @@ export function eventsToIcs(events: CalendarEvent[]): string {
 
     const eventLines: string[] = [];
     for (const group of groups.values()) {
+        const master = group[0].recurrenceDate == null ? group[0] : undefined;
         for (const event of group) {
-            eventLines.push(...buildVEvent(event));
+            eventLines.push(...buildVEvent(event, { master }));
         }
     }
 
-    return wrapInVCalendar(eventLines);
+    return wrapInVCalendar([...vtimezoneLines(events), ...eventLines]);
 }
