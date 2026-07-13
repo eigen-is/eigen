@@ -1,7 +1,9 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
-import { computeOccurrenceTimes, storedRecurrenceKey } from '../calendar/recurrence';
+import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
 import { normalizeTimezone } from '../calendar/timezone';
 import { buildVTimezone } from './vtimezone';
+
+const pad = (n: number) => n.toString().padStart(2, '0');
 
 // RFC 5545 §3.3.11 — escape TEXT values
 function escapeICalText(s: string): string {
@@ -42,30 +44,17 @@ function foldLine(line: string): string {
 }
 
 function formatDateTimeUTC(d: Date): string {
-    const pad = (n: number) => n.toString().padStart(2, '0');
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
 }
 
 function formatDateUTC(d: Date): string {
-    const pad = (n: number) => n.toString().padStart(2, '0');
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
 }
 
 // Format a Date as local wall-clock time in the given IANA timezone (YYYYMMDDTHHmmSS)
 function formatDateTimeInTZ(d: Date, tz: string): string {
-    // Use Intl to extract local-time parts in the target timezone
-    const fmt = new Intl.DateTimeFormat('en-CA', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
-    const partsMap = new Map(fmt.formatToParts(d).map((p) => [p.type, p.value]));
-    return `${partsMap.get('year')}${partsMap.get('month')}${partsMap.get('day')}T${partsMap.get('hour')}${partsMap.get('minute')}${partsMap.get('second')}`;
+    const l = utcToLocal(d, tz);
+    return `${l.year}${pad(l.month)}${pad(l.day)}T${pad(l.hour)}${pad(l.minute)}${pad(l.second)}`;
 }
 
 function mapAttendeeRole(role: Attendee['role']): string {

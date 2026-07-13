@@ -243,7 +243,8 @@ export class UploadQueue {
         }
         const file = Bun.file(stagingPath);
         if (!(await file.exists())) {
-            // staged copy vanished (cancelled mid-flight) — drop the orphan row
+            // staged copy vanished mid-flight (cancelled, or superseded before inFlight was set);
+            // the keyed delete only drops a row still pointing at this staging
             if (!this.closing) {
                 this.db
                     .delete(pendingUploads)

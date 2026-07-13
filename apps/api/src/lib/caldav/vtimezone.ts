@@ -20,6 +20,7 @@ type WallInfo = {
 };
 
 const tznameCache = new Map<string, Intl.DateTimeFormat>();
+// Entries are returned by reference — callers must not mutate them.
 const resultCache = new Map<string, string[]>();
 
 function offsetMinutes(tzid: string, instant: Date): number {
