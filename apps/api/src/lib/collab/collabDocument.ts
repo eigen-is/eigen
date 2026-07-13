@@ -73,6 +73,10 @@ class DbProvider {
                 this.createSnapshot();
             }
         } catch (error) {
+            // Never rethrow: 'update' handlers run inside yjs's transaction-cleanup
+            // finally — a throw leaves the cleanup queue stale and silently wedges every
+            // later update on this doc (no persistence, no broadcast). A later snapshot
+            // self-heals the gap: it encodes the full doc state.
             console.error(`[DbProvider] Error storing update for ${this.docId}:`, error);
         }
     }
@@ -115,6 +119,8 @@ class DbProvider {
             this.updatesSinceSnapshot = 0;
             this.bytesSinceSnapshot = 0;
         } catch (error) {
+            // Swallow: the update rows all survive (deleted only inside the successful
+            // transaction), and the un-reset counters make the next update retry.
             console.error(`[DbProvider] Error creating snapshot for ${this.docId}:`, error);
         }
     }
@@ -269,7 +275,8 @@ export default class CollabDocument {
     // transaction → one update → existing 'update' handler persists to data.db
     // and broadcasts to every connected WebSocket. Connected editors converge
     // live; disconnected sessions pick up the new state via the next sync
-    // handshake. Caller (versioning/restore.ts) holds the container lock.
+    // handshake. The caller (versioning/restore.ts) deliberately holds no
+    // container lock: the surgery is synchronous, so nothing interleaves with it.
     public applySnapshotState(state: Uint8Array): void {
         // Internal invariants — the only caller (versioning/restore) already
         // branched on isCollabType, and every Yjs type declares yjsRoots.

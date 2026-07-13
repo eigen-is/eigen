@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { type DrivePath, isCollabType } from '@workspace/lib/types/drive';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
@@ -22,7 +23,10 @@ export async function restoreContainer(
     // restoring. Read raw (downloadToTemp works on every backend); opening via
     // Mount.openDatabase would migrate and cache an immutable archive. Every step
     // self-serializes on the container lock; we never hold a lock across them.
-    const tempPath = await mount.downloadToTemp(target.id);
+    // The temp id is unique per invocation: concurrent restores of the same snapshot
+    // must not share a temp file (one's cleanup would delete it under the other's read).
+    const tempId = randomUUID();
+    const tempPath = await mount.downloadToTemp(target.id, tempId);
     try {
         await mount.snapshotContainerDataDb(container.id, policy);
         if (isCollabType(container.type)) {
@@ -35,7 +39,7 @@ export async function restoreContainer(
             await mount.replaceContainerDataDb(container.id, tempPath);
         }
     } finally {
-        await mount.cleanupTemp(target.id);
+        await mount.cleanupTemp(tempId);
     }
 }
 
