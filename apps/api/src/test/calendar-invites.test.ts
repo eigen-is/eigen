@@ -580,4 +580,94 @@ describe('Calendar Invites', () => {
             expect(renamed).toBeDefined(); // pre-fix: dropped by the replay guard (Bob's SEQUENCE had outrun the organizer's)
         });
     });
+
+    // Audit #24: every write path must hash the etag over the same basis. rsvpForOccurrence used to
+    // omit `timezone`, so a byte-identical repeat RSVP flipped the exception's etag and triggered a
+    // spurious CalDAV re-download.
+    describe('#24 occurrence-RSVP etag consistency', () => {
+        const from = Math.floor(Date.parse('2026-03-09T00:00:00Z') / 1000);
+        const to = Math.floor(Date.parse('2026-03-16T00:00:00Z') / 1000);
+        let bobCalId: string;
+        // The master linked event's id, captured BEFORE the first per-occurrence RSVP: once an
+        // exception exists, event-range substitutes it and the occurrence carries the exception row's id.
+        let linkedMasterId: string;
+
+        async function rsvpThis(status: 'accepted' | 'tentative') {
+            await assertJson(
+                await authedRequest(
+                    ctx.bob.user.sessionToken,
+                    `/calendar/${ctx.bob.user.id}/calendars/${bobCalId}/events/${linkedMasterId}/rsvp`,
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status, scope: 'this', recurrenceDate: '2026-03-12' }),
+                    },
+                ),
+            );
+        }
+
+        async function findExceptionOccurrence() {
+            const events = await assertJson<CalendarEventOccurrence[]>(
+                await authedRequest(
+                    ctx.bob.user.sessionToken,
+                    `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
+                ),
+            );
+            return findOrFail(
+                events,
+                (e) => e.title === 'Etag Audit' && new Date(e.startTime).toISOString() === '2026-03-13T03:00:00.000Z',
+            );
+        }
+
+        test('identical repeated occurrence-RSVP keeps the exception etag stable', async () => {
+            bobCalId = findOrFail(
+                await assertJson<CalendarItem[]>(
+                    await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`),
+                ),
+                (c) => c.isDefault,
+            ).id;
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Etag Audit',
+                        startTime: '2026-03-06T04:00:00Z', // Thu Mar 5, 23:00 America/New_York (EST)
+                        endTime: '2026-03-06T04:30:00Z',
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY',
+                        timezone: 'America/New_York',
+                        data: { attendees: [{ email: ctx.bob.user.email, status: 'pending', role: 'required' }] },
+                    }),
+                },
+            );
+            const bobEvents = await assertJson<CalendarEventOccurrence[]>(
+                await authedRequest(
+                    ctx.bob.user.sessionToken,
+                    `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
+                ),
+            );
+            linkedMasterId = findOrFail(bobEvents, (e) => e.title === 'Etag Audit').id;
+
+            await rsvpThis('accepted');
+            const occ1 = await findExceptionOccurrence();
+            expect(occ1.data?.attendees?.[0]?.status).toBe('accepted');
+
+            await rsvpThis('accepted');
+            const occ2 = await findExceptionOccurrence();
+
+            // Identical content — the etag must not change.
+            expect(occ2.etag).toBe(occ1.etag);
+        });
+
+        test('control: an RSVP that changes the status does change the etag', async () => {
+            const before = await findExceptionOccurrence();
+            await rsvpThis('tentative');
+            const after = await findExceptionOccurrence();
+            expect(after.data?.attendees?.[0]?.status).toBe('tentative');
+            expect(after.etag).not.toBe(before.etag);
+        });
+    });
 });

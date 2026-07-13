@@ -877,4 +877,54 @@ describe('Calendar Timezone', () => {
             expect(atMoved[0].title).toBe('Moved via Z-form');
         });
     });
+
+    // Audit #E: a substituted modified occurrence must render with the exception's STORED
+    // recurrenceDate, not the UTC date of its startTime. The FE round-trips the rendered
+    // occurrenceDate into its next scope='this' RSVP — a drifted key misses getException and
+    // creates a second exception row for the same occurrence.
+    describe('#E rendered occurrenceDate of a modified occurrence', () => {
+        test('second RSVP via the rendered occurrenceDate does not duplicate the exception', async () => {
+            await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
+                title: 'Rekey Series',
+                startTime: '2026-06-02T03:00:00.000Z', // Jun 1 23:00 EDT — wall date ≠ UTC date
+                endTime: '2026-06-02T03:50:00.000Z',
+                allDay: false,
+                rrule: 'FREQ=DAILY;COUNT=5',
+                timezone: 'America/New_York',
+                data: { attendees: [{ email: ctx.bob.user.email, status: 'pending', role: 'required' }] },
+            });
+            const from = Math.floor(new Date('2026-06-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-06-08T00:00:00Z').getTime() / 1000);
+            const linked = findOrFail(
+                await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to),
+                (e) => e.title === 'Rekey Series',
+            );
+
+            const rsvp = async (recurrenceDate: string) =>
+                assertJson(
+                    await authedRequest(
+                        ctx.bob.user.sessionToken,
+                        `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${linked.id}/rsvp`,
+                        {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: 'accepted', scope: 'this', recurrenceDate }),
+                        },
+                    ),
+                );
+            await rsvp('2026-06-02'); // wall-clock key of the Jun 2 occurrence
+
+            const rendered = (await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to)).filter(
+                (e) => e.title === 'Rekey Series' && new Date(e.startTime).toISOString() === '2026-06-03T03:00:00.000Z',
+            );
+            expect(rendered).toHaveLength(1);
+            expect(rendered[0].occurrenceDate).toBe('2026-06-02'); // pre-fix: '2026-06-03' (UTC date)
+
+            // What the FE sends on the next RSVP for this same occurrence:
+            await rsvp(rendered[0].occurrenceDate);
+            const home = await getHome(ctx.bob.user.id);
+            const exceptions = home.calendar.getRawEvents(bobCalendarId).filter((e) => e.parentEventId === linked.id);
+            expect(exceptions).toHaveLength(1); // pre-fix: 2 rows for one occurrence
+        });
+    });
 });
