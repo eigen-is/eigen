@@ -4,6 +4,10 @@
 > the same two bugs and the same fix. This is one of the two surfaces the audit told the fix-pass **not** to
 > sweep ("needs dedicated concurrency testing, not a drive-by") — this is that testing.
 >
+> **Update (2026-07-13):** findings 1+2, the staging integrity check, and the SYNC.md wording all shipped on
+> `fix/upload-queue-orphan-put` — see the ✅ FIXED blockquotes below. Both preserved test files are committed
+> in `apps/api/src/test/`, updated to pin the fixed behavior.
+>
 > **Branch:** `fix/api-audit-2026-07` (HEAD `08bda417`).
 > **Original audit:** the 2026-07-11 `apps/api` audit (report removed after all findings shipped — see git history), P1 finding #2, which documents the *mechanism* as an accepted
 > risk; "spend more time" item #2). **Also:** `docs/SYNC.md`.
@@ -45,6 +49,13 @@ green) — not duplicated.
 
 ## Finding 1 — orphaned PUT permanently + silently regresses the object — **REAL, worse than documented (P1)**
 
+> **✅ FIXED** (`fix/upload-queue-orphan-put`). `performUpload`'s timeout registers the still-live write
+> promise as an in-process orphan (`trackOrphan`); an ack while orphans are unsettled retains the acked
+> bytes on the orphan state, and settlement re-stages them through `enqueueStaged` (skipped when a newer
+> row is already pending — it supersedes the retained ack). Red→green:
+> `upload-queue-failure-injection.test.ts` (finding-1 test) + `upload-queue-chaos.test.ts` (reorder test,
+> flipped from characterizing the bug to pinning the repair, including the settlement log line).
+
 **Where:** `upload-queue.ts` `performUpload`, the accepted-risk comment (~:246-250); timeout clears
 `inFlight` (~:264-272); ack destroys the last local copy (~:299-302).
 
@@ -80,6 +91,10 @@ brief" to proven silent permanent loss.
 
 ## Finding 2 — orphan landing after cancel/delete resurrects deleted bytes as an undeletable zombie — **REAL (invariant-7 hole)**
 
+> **✅ FIXED** (`fix/upload-queue-orphan-put`). `cancel()` flags the key's unsettled orphans; settlement
+> re-issues `storage.delete` (dead-UUID key, idempotent, safe even during teardown). Pinned by the
+> finding-2 test + the chaos zombie test.
+
 **Where:** same `performUpload` timeout path; the resurrection guard (~:281-287) requires `putOk`.
 
 **Why:** the celebrated cancel-mid-PUT guard only works while `performUpload` is still awaiting its own PUT.
@@ -93,6 +108,15 @@ persists remotely forever. Not user-visible, but a retention/GDPR smell.
 ---
 
 ## The fix (both passes converged on this)
+
+> **✅ SHIPPED** (`fix/upload-queue-orphan-put`), with one shape change: the ack does **not** park the
+> durable row — the preserved red tests themselves pin `pendingUploadCount === 0` and an empty
+> `staging/` after an ack — so the acked bytes are retained **in memory** on the per-key orphan state
+> and re-staged on settlement. Sound for the key-insight reason (an orphan's request dies with the
+> process); the residual is a fully-transmitted body the server commits after process death or queue
+> teardown, which is logged when detectable and recoverable via bucket versioning. The ship-regardless
+> log is folded into settlement (`landed after a newer upload acked` / `landed after cancel`), plus a
+> warn at ack-with-unsettled-orphans time.
 
 **Key insight: an orphan cannot outlive the process** — its HTTP request dies with the process — so purely
 **in-process** tracking is sound and covers essentially the entire hazard. `performUpload` already holds the
@@ -128,9 +152,16 @@ questions — research task, not the first move. Chunking is unrelated.
   (`openDatabase` → `SQLITE_NOTADB`), and importantly does **not** silently wipe/re-create (the 2026-06-08 wipe
   class does not recur here). Recovery is bucket versioning. Borderline: a one-line `isSqliteFile` check
   (already in `mount/helpers.ts`) before PUT would leave the object stale-good instead of corrupt-loud.
+  > **✅ FIXED** (`fix/upload-queue-orphan-put`). `performUpload` refuses a staged copy that fails the
+  > SQLite magic check (`isSqliteFile`, now exported from `mount/helpers.ts`): the poison row + staging
+  > are dropped loudly and the object stays last-good — the loss is bounded to the writes in that copy.
+  > Both corruption tests flipped to pin the stale-good outcome.
 - **Doc nit:** `docs/SYNC.md` § Concurrency says the orphan "can briefly regress the object until the next
   sync" — update it to say the regression is **permanent if no further sync occurs** and that it also bypasses
   the no-resurrection invariant.
+  > **✅ FIXED** (`fix/upload-queue-orphan-put`). § Concurrency now documents the orphan tracking, the
+  > permanent-regression consequence it prevents, the invariant-7 re-delete, and the residual; the
+  > no-resurrection bullet covers late-landing orphans.
 - **Non-issue confirmed:** the abandoned `write` promise's later rejection is absorbed by `Promise.race`'s
   subscription — no unhandled-rejection crash (verified under Bun).
 

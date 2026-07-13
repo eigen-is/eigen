@@ -48,7 +48,8 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
   reopen, copy/duplicate, and copy-across all read the newest bytes during an outage, never a stale/absent
   S3 object.
 - **No resurrection** — permanent delete + chat restore cancel the pending upload; if a PUT finishes after
-  a cancel, the queue deletes the resurrected object (the key is a dead UUID, never reused).
+  a cancel — including a timed-out orphaned PUT landing late — the queue deletes the resurrected object
+  (the key is a dead UUID, never reused).
 - **Consistent version snapshots** — version copies source the freshest *local* bytes (never a stale S3
   read) and are themselves queued, so a close-time snapshot never blocks on the backend.
 
@@ -85,9 +86,15 @@ One `Semaphore` **per S3 destination** (`endpoint+bucket`), not one per process
 never blocks uploads to other destinations — important once team mounts + user-owned endpoints point at
 different buckets. Each PUT is raced against a **~120 s client-side ceiling** (`S3Storage` can't abort);
 a timeout counts as a failure, so backoff takes over instead of a black-holed request parking the drain
-and its semaphore. Caveat: the orphaned request may still land later — a retry re-PUT of the same staged
-bytes is harmless, but an orphan superseded by a newer upload can briefly regress the object until the
-next sync (accepted). Failed uploads back off (full-jitter, capped) and the queue **self-schedules** its
+and its semaphore. The timed-out request may still land server-side later, so the queue tracks it as an
+**in-process orphan** (`trackOrphan`): an ack while an orphan is unsettled retains the acked bytes in
+memory and re-uploads them through the guarded path once the orphan settles — without this the late
+landing would regress the object **permanently if no further sync occurs** — and a cancel re-issues the
+object delete on settlement (invariant 7 holds through timeouts). Residual: an orphan whose
+fully-transmitted body the server commits after process death or queue teardown lands unrepaired
+(logged when detectable; bucket versioning is the recovery). A staged copy that fails the SQLite magic
+check (`isSqliteFile`) is dropped loudly before PUT — the object stays last-good instead of acking
+garbage. Failed uploads back off (full-jitter, capped) and the queue **self-schedules** its
 own retry — there is no global registry or sweep. The only process-global state is the destination→semaphore
 map (infra strings, no per-user data), the backoff function, and the shutdown deadline.
 
@@ -108,7 +115,7 @@ temp-copy backend.
 
 | File | Responsibility |
 |---|---|
-| `lib/mount/upload-queue.ts` | The per-mount `UploadQueue` — enqueue / drain / backoff / cancel / reconcile + staging |
+| `lib/mount/upload-queue.ts` | The per-mount `UploadQueue` — enqueue / drain / backoff / cancel / reconcile + staging + orphan tracking |
 | `lib/sync/index.ts` | Process-global bits: per-destination semaphore map, backoff, shutdown deadline |
 | `lib/mount/document-db.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring. Open-vs-close is serialized per pathId: a close registers in `Mount.closingDocumentDbs` and a concurrent open of the same pathId waits for it before building, so a fresh instance never shares the closing one's temp/journal files |
 | `lib/core/managed-database.ts` | `markDirty` (crash recovery), `stageCopy` (`VACUUM INTO`), `mustExist` open guard (refuse a missing/0-byte working copy) |
