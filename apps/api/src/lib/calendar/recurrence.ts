@@ -43,7 +43,7 @@ export function utcToLocal(date: Date, tz: string): LocalComponents {
     };
 }
 
-function localToUtc(
+export function localToUtc(
     tz: string,
     year: number,
     month: number,
@@ -148,6 +148,16 @@ export function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEn
         endTime: new Date(date.getTime() + durationMs),
         occurrenceDate: occurrenceDateToString(date),
     }));
+}
+
+// The wall-date key a stored recurrenceDate resolves to, or null when it can't name an occurrence.
+// Rows written before the route validated the format can hold a full ISO datetime (truncates to its
+// date part) or arbitrary text (inert: cancels/substitutes nothing). Every reader of stored keys
+// must resolve them through this — and never feed a raw one to RRule.between, which throws on
+// invalid dates.
+export function storedRecurrenceKey(recurrenceDate: string): string | null {
+    const key = recurrenceDate.substring(0, 10);
+    return Number.isNaN(Date.parse(`${key}T00:00:00Z`)) ? null : key;
 }
 
 export function constrainRRule(incoming: string | null, local: string | null): string | null {

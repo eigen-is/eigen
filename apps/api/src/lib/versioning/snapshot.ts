@@ -26,7 +26,9 @@ export async function snapshotContainerDataDb(
     containerId: string,
     policy: RetentionPolicy,
 ): Promise<DrivePath> {
-    return mount.withPathLock(containerId, () => takeSnapshot(mount, containerId, policy));
+    return mount.withPathLock(containerId, () =>
+        takeSnapshot(mount, containerId, policy, { awaitInFlightClose: true }),
+    );
 }
 
 // The tick/close (ManagedDatabase onSnapshot) twin: those snapshots must never PARK on the
@@ -43,9 +45,28 @@ export async function trySnapshotContainerDataDb(
     return taken === null ? 'skipped' : 'taken';
 }
 
-async function takeSnapshot(mount: Mount, containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
+async function takeSnapshot(
+    mount: Mount,
+    containerId: string,
+    policy: RetentionPolicy,
+    opts?: { awaitInFlightClose?: boolean },
+): Promise<DrivePath> {
     const dataDb = await mount.getChildByName(containerId, 'data.db');
     if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
+
+    // A registry close never takes the container lock, and delete-before-close empties
+    // the documentDbs slot — mid-close the peek below finds nothing, so the copy would
+    // source staged/storage bytes predating the close's final sync (or, on local
+    // backends, overlap its checkpoint: a torn versions/ entry). The blocking path
+    // (manual save, pre-restore snapshot) waits out such an in-flight close: that close
+    // is never its own, and a close never parks on this container lock (its own snapshot
+    // try-locks and skips), so there is no cycle. The tick/close path must NOT wait —
+    // a close-time snapshot runs inside the very close that registered the slot, and
+    // awaiting it would wedge on itself. The close's error stays with its own caller.
+    if (opts?.awaitInFlightClose) {
+        const closing = mount.closingDocumentDbs.get(dataDb.id);
+        if (closing) await closing.catch(() => {});
+    }
 
     // Flush any cached managedDb so the on-storage data.db reflects pending
     // writes. No-op if not cached, or cached and not dirty. peek(), never the

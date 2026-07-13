@@ -158,6 +158,9 @@ Shared calendar users are also notified via `notifySharedCalendarUsers()` when e
 - **Never store expanded occurrences** — expand in memory per query
 - **Exceptions**: Regular events with `parentEventId` + `recurrenceDate`. Cancel = `status: 'cancelled'`, modify =
   different data at that date
+- **Occurrence keys are wall-clock dates** (`YYYY-MM-DD` in the event's timezone). A substituted
+  modified occurrence renders with the exception's STORED `recurrenceDate` — never the UTC date of
+  its (possibly moved) startTime — so the FE can round-trip `occurrenceDate` into `scope='this'` RSVPs
 
 ## All-Day Events
 
@@ -245,7 +248,7 @@ iMIP enables calendar invitations between Eigen users and external parties via e
 - **Create event with external attendees**: `invite-propagation.ts` detects attendees with no Eigen account and calls `composeInviteEmail()` → `sendMail()`. Sends `METHOD:REQUEST`.
 - **Update event**: same path calls `composeUpdateEmail()` → updated `METHOD:REQUEST`.
 - **Cancel event**: `composeCancelEmail()` → `METHOD:CANCEL`.
-- **Attendee RSVP**: when an Eigen user RSVPs to an externally-organized event, `calendar.ts` calls `composeRsvpReply()` → `METHOD:REPLY`. Triggered both from `rsvp()` and from `deleteEvent()` (delete = decline).
+- **Attendee RSVP**: when an Eigen user RSVPs to an externally-organized event, `calendar.ts` calls `composeRsvpReply()` → `METHOD:REPLY`. Triggered both from `rsvp()` and from `deleteEvent()` (delete = decline). A `scope:'this'` RSVP passes the occurrence's `recurrenceDate`, so the REPLY carries a `RECURRENCE-ID` for the original instant (from `computeOccurrenceTimes`) and the organizer applies the PARTSTAT to that occurrence, not the whole series; a master-scoped RSVP replies without one (RFC 5546).
 
 ### Inbound flow (external → Eigen)
 
@@ -274,6 +277,54 @@ External organizers have no Eigen user ID. `organizerUserId` is set to `external
 ### Mail UI widget
 
 `apps/mail/src/components/mail/calendar-invite-widget.tsx` — rendered inline in `email-detail.tsx` for any attachment with `contentType.startsWith('text/calendar')`. Regular file attachments with `text/calendar` content type are excluded from the normal attachment list and shown as the widget instead.
+
+## CalDAV
+
+`apps/api/src/lib/caldav/` serves RFC 4791 CalDAV at `/dav/calendars/:ownerId/:calendarId/` (PROPFIND,
+REPORT calendar-query/multiget/sync-collection, per-resource GET/PUT/DELETE). Auth via
+`verifyProtocolAuth()`. One `.ics` resource per UID: the master VEVENT plus one override VEVENT per
+stored exception — exception rows are internal and never appear as their own resources.
+
+**Serialization** (`ical-serialize.ts`):
+
+- Every referenced TZID gets a generated VTIMEZONE block (RFC 5545 §3.6.5). `vtimezone.ts` builds it
+  from Intl offset data: transitions compressed to two open-ended RRULE observances when the zone's
+  DST rule is regular, one observance per transition otherwise
+- RECURRENCE-ID names the ORIGINAL occurrence — computed from the master via
+  `computeOccurrenceTimes(master, recurrenceDate)` — in the master's TZID form, never the exception's
+  moved startTime (which would orphan the override)
+- The same serializer produces outbound iMIP bodies (`serializeEventForImip`), so Eigen↔Eigen
+  federation keeps instants intact for non-server timezones
+
+**Parsing** (`ical-parse.ts`):
+
+- Datetimes with a resolvable zone (VTIMEZONE present, or UTC `Z`) resolve through ical.js. A valid
+  IANA TZID without a VTIMEZONE is interpreted in that zone (RFC 7809) — consistent with the stored
+  `timezone` column that recurrence expansion trusts. Genuinely floating datetimes map their wall
+  components via `Date.UTC`, never through the server's local timezone
+- RECURRENCE-ID / EXDATE → `recurrenceDate` keys are wall-clock dates: TZID-form values key on their
+  own wall components (RFC 5545 canonical), UTC-`Z` values convert the instant to the SERIES timezone,
+  floating/DATE values keep their raw components
+- Not supported (accepted, low): `RANGE=THISANDFUTURE` on RECURRENCE-ID degrades to a single-instance
+  edit, and RDATE-added occurrences never appear — mainstream clients split such series into new UIDs
+
+**PUT is a full-resource replace**: `syncExceptionEvents` (`resource.ts`) upserts the exceptions in
+the payload (preserving their SEQUENCE) and deletes stored exceptions of the master that are absent —
+how Apple models "undo delete occurrence". The prune is quiet: ctag bump + master etag touch, no
+tombstone, no cancellation fan-out. The PUT response ETag is re-read after the exception sync so it
+always matches storage.
+
+**Cancelled exceptions serve as EXDATE, never as override VEVENTs**: `eventsToIcs` emits a deleted
+occurrence as an `EXDATE` line on the master (master-TZID form; `VALUE=DATE` for all-day) and skips
+the cancelled row's VEVENT. Clients round-trip EXDATE natively; a `STATUS:CANCELLED` override VEVENT
+is dropped by Thunderbird's next PUT, which the full-replace prune would read as "client removed the
+exception" and resurrect the occurrence. The parser maps EXDATE back to cancelled exception rows, so
+the round-trip is symmetric.
+
+Regression nets: `caldav.test.ts` (protocol), `caldav-roundtrip.test.ts` (serialization/parse
+round-trips, TZ-pinned floating tests), `vtimezone.test.ts` (generator vs Intl),
+`calendar-timezone.test.ts` (occurrence keying), `ical-imip.test.ts` (iMIP scoping),
+`caldav-client-sync.test.ts` (client-faithful sync flows against web-created events).
 
 ## Files
 

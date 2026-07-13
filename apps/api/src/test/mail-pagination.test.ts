@@ -87,7 +87,8 @@ describe.skipIf(isWindows)('Mail pagination', () => {
             seeds.push({ id, subject, dateMs });
             if (i === LONG_IDX) longId = id;
         }
-    });
+        // Seeding a whole mailbox with per-message index polls regularly outruns bun's 5s hook default under load.
+    }, 60_000);
 
     test('page 1 returns the newest messages, capped at limit', async () => {
         const page = await assertJson<EmailSummary[]>(

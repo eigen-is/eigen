@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -312,6 +313,72 @@ describe('versions HTTP routes', () => {
         // data.db row identity preserved (no file swap).
         const dataDbAfter = await drive.getChildByName(aliceMountId, sheetsPath.id, 'data.db');
         expect(dataDbAfter?.id).toBe(dataDbBefore?.id);
+    });
+
+    test('eigendoc: restore from a corrupt snapshot fails 422 and leaves the live doc untouched', async () => {
+        // Seam F (PROPOSAL_DATA_INTEGRITY; collab/Yjs audit #6): replayYjsState
+        // skips unreadable blobs, so a restore from a corrupt version file used to
+        // "succeed" into a half-empty doc. The restore path must fail loud instead:
+        // a clean 422 before any state touches the live Y.Doc.
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        const drive = home.drive;
+
+        const sheetsPath = await drive.create(aliceMountId, aliceRootId, 'versions-corrupt-blob', 'sheets');
+        const collab = await drive.getCollabDocument(aliceMountId, sheetsPath.id);
+        collab.doc.getMap('state').set('marker', 'V1');
+        const saved = await drive.saveVersion(aliceMountId, sheetsPath.id);
+        collab.doc.getMap('state').set('marker', 'V2');
+
+        // Corrupt every Yjs blob inside the saved version file on storage.
+        const mount = (drive as unknown as { getMount(id: string): Mount }).getMount(aliceMountId);
+        const versionsFolder = await mount.getChildByName(sheetsPath.id, 'versions');
+        const versionFile = await mount.getChildByName(versionsFolder!.id, saved.name);
+        const versionLocalPath = mount.storage.getPath!(await mount.getStorageKey(versionFile!.id));
+        const rawDb = new Database(versionLocalPath);
+        try {
+            rawDb.run(`UPDATE doc_updates SET updateData = X'DEADBEEF'`);
+            rawDb.run(`UPDATE doc_snapshots SET stateData = X'DEADBEEF'`);
+        } finally {
+            rawDb.close();
+        }
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${sheetsPath.id}/versions/${encodeURIComponent(saved.name)}/restore`,
+            { method: 'POST' },
+        );
+        expect(res.status).toBe(422);
+
+        // The live doc must be untouched — not half-emptied by a "successful" restore.
+        expect(collab.doc.getMap('state').get('marker')).toBe('V2');
+    });
+
+    test('eigendoc: concurrent restores of the same snapshot do not share a temp file', async () => {
+        // P3-1 of the collab/Yjs audit: restore used to key its temp download by the
+        // snapshot's path id, so two concurrent restores of the same snapshot shared one
+        // temp file — the first's cleanup deleted it under the second's read, which then
+        // materialised an empty db and failed with "no such table". Unique per-invocation
+        // temp ids make concurrent restores independent: both must succeed. One round
+        // only: each restore's pre-restore snapshot prunes the same-hour target (the
+        // documented retention behavior), so the saved name doesn't survive a second one.
+        const { getHome } = await import('../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        const drive = home.drive;
+
+        const sheetsPath = await drive.create(aliceMountId, aliceRootId, 'versions-concurrent-restore', 'sheets');
+        // Hold the doc open for the whole test so restores never open/close it themselves.
+        const collab = await drive.getCollabDocument(aliceMountId, sheetsPath.id);
+        collab.doc.getMap('state').set('marker', 'V1');
+        const saved = await drive.saveVersion(aliceMountId, sheetsPath.id);
+
+        collab.doc.getMap('state').set('marker', 'V2');
+        const results = await Promise.allSettled([
+            drive.restoreContainer(aliceMountId, sheetsPath.id, saved.name),
+            drive.restoreContainer(aliceMountId, sheetsPath.id, saved.name),
+        ]);
+        expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+        expect(collab.doc.getMap('state').get('marker')).toBe('V1');
     });
 
     test('eigendoc: restore from the file list does not leak an open collab doc', async () => {

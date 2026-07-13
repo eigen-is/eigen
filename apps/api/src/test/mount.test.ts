@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq, type SQL, sql } from 'drizzle-orm';
@@ -86,9 +87,10 @@ describe('downloadToTemp', () => {
     test('copies a stored file to a temp path, then cleanupTemp removes it', async () => {
         const data = Buffer.from('snapshot-bytes');
         const fileId = await mount.createFile(rootId, 'snap.db', 'application/octet-stream', data.length, data);
-        const tempPath = await mount.downloadToTemp(fileId);
+        const tempId = randomUUID();
+        const tempPath = await mount.downloadToTemp(fileId, tempId);
         expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes');
-        await mount.cleanupTemp(fileId);
+        await mount.cleanupTemp(tempId);
         expect(existsSync(tempPath)).toBe(false);
     });
 
@@ -103,18 +105,19 @@ describe('downloadToTemp', () => {
         const originalGetPath = storage.getPath;
         storage.getPath = undefined;
         try {
-            const tempPath = await mount.downloadToTemp(fileId);
+            const tempId = randomUUID();
+            const tempPath = await mount.downloadToTemp(fileId, tempId);
             expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes-no-getpath');
-            await mount.cleanupTemp(fileId);
+            await mount.cleanupTemp(tempId);
         } finally {
             storage.getPath = originalGetPath;
         }
     });
 
-    // The temp path doubles as an open doc's live working copy (getTempPath keys both by pathId),
-    // so downloading onto an open document DB would truncate live state. Safe today (only version
-    // files pass through) — this pins the invariant.
-    test('refuses a path whose document DB is open', async () => {
+    // An open doc's live working copy is the temp path keyed by its data.db pathId, so a
+    // tempId colliding with an open document DB would truncate live state. Safe today
+    // (callers pass fresh randomUUIDs) — this pins the invariant.
+    test('refuses a tempId whose document DB is open', async () => {
         const guardSchema = { items: sqliteTable('items', { id: integer('id').primaryKey() }) };
         const guardConfig: DatabaseConfig<typeof guardSchema> = {
             name: 'download-guard-test',
@@ -125,7 +128,7 @@ describe('downloadToTemp', () => {
         const containerId = await mount.createFolder(rootId, 'OpenDoc', 'doc');
         const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
         await mount.createDatabase(guardConfig, dataDbId);
-        expect(mount.downloadToTemp(dataDbId)).rejects.toThrow('live working copy');
+        await expect(mount.downloadToTemp(dataDbId, dataDbId)).rejects.toThrow('live working copy');
         await mount.closeDatabase(dataDbId);
     });
 });

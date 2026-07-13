@@ -33,7 +33,13 @@ import {
     dbEventToCalendarEventRow,
     dbRowToSharedCalendar,
 } from './mappers';
-import { computeOccurrenceTimes, constrainRRule, expandRecurrence, utcToLocal } from './recurrence';
+import {
+    computeOccurrenceTimes,
+    constrainRRule,
+    expandRecurrence,
+    storedRecurrenceKey,
+    utcToLocal,
+} from './recurrence';
 import { clampRangeEnd, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
@@ -333,6 +339,19 @@ export class Calendar {
             .where(eq(schema.events.parentEventId, parentEventId))
             .all()
             .map(dbEventToCalendarEventRow);
+    }
+
+    // Drop exception rows a CalDAV full-resource replace no longer carries (audit #D). Deliberately
+    // quiet: no tombstone (the client-visible resource is the master, whose etag changes via touch)
+    // and no cancellation fan-out (removing an override RESTORES the base occurrence).
+    public deleteExceptions(calendarId: string, parentEventId: string, ids: string[]): void {
+        if (!ids.length) return;
+        this.db
+            .delete(schema.events)
+            .where(and(eq(schema.events.parentEventId, parentEventId), inArray(schema.events.id, ids)))
+            .run();
+        this.incrementCtag(calendarId);
+        this.touchEvent(parentEventId);
     }
 
     public getRawEventsInRange(calendarId: string, from: Date, to: Date): CalendarEventRow[] {
@@ -672,8 +691,8 @@ export class Calendar {
             const modifiedDates = new Map<string, typeof schema.events.$inferSelect>();
 
             for (const exc of parentExceptions) {
-                if (exc.recurrenceDate) {
-                    const dateKey = exc.recurrenceDate.substring(0, 10);
+                const dateKey = exc.recurrenceDate ? storedRecurrenceKey(exc.recurrenceDate) : null;
+                if (dateKey) {
                     if (exc.status === 'cancelled') {
                         cancelledDates.add(dateKey);
                     } else {
@@ -689,9 +708,12 @@ export class Calendar {
                 const modified = modifiedDates.get(occ.occurrenceDate);
                 if (modified) {
                     const modEvt = dbEventToCalendarEvent(modified);
+                    // Keep the stored exception key, not the UTC date of the (possibly moved) startTime —
+                    // the FE round-trips occurrenceDate into scope='this' RSVPs, and a drifted key would
+                    // miss getException and duplicate the exception row (audit #E).
                     results.push({
                         ...modEvt,
-                        occurrenceDate: occurrenceDateToString(modEvt.startTime),
+                        occurrenceDate: occ.occurrenceDate,
                     });
                 } else {
                     results.push(occ);
@@ -1381,8 +1403,8 @@ export class Calendar {
         const organizerEventId = event.data.organizerEventId!;
         const isExternalOrganizer = isExternalOwnerId(organizerUserId);
 
-        const sendRsvpReply = (status: Attendee['status']) => {
-            const mail = composeRsvpReply(event, user.email, user.name ?? user.email, status);
+        const sendRsvpReply = (status: Attendee['status'], recurrenceDate?: string) => {
+            const mail = composeRsvpReply(event, user.email, user.name ?? user.email, status, recurrenceDate);
             sendMail(mail).catch(console.error);
         };
 
@@ -1390,7 +1412,7 @@ export class Calendar {
             if (input.remove) {
                 this.removeOccurrence(eventId, input.recurrenceDate);
                 if (isExternalOrganizer) {
-                    sendRsvpReply('declined');
+                    sendRsvpReply('declined', input.recurrenceDate);
                 } else {
                     propagateRsvp(
                         organizerUserId,
@@ -1403,7 +1425,7 @@ export class Calendar {
             } else {
                 this.rsvpForOccurrence(eventId, user.email, input.status, input.recurrenceDate);
                 if (isExternalOrganizer) {
-                    sendRsvpReply(input.status);
+                    sendRsvpReply(input.status, input.recurrenceDate);
                 } else {
                     propagateRsvp(
                         organizerUserId,

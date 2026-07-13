@@ -1,5 +1,6 @@
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../calendar/calendar';
+import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
 import type { ParsedEvent } from './ical-parse';
 import { parseIcs } from './ical-parse';
@@ -57,8 +58,7 @@ export async function handlePut(
     const masterParsed = events.find((e) => !e.recurrenceDate) || events[0];
 
     if (existingEvent) {
-        // Update existing event
-        calendar.updateEvent(calendarId, existingEvent.id, {
+        const updatedEvent = calendar.updateEvent(calendarId, existingEvent.id, {
             title: masterParsed.title,
             startTime: masterParsed.startTime,
             endTime: masterParsed.endTime,
@@ -72,12 +72,13 @@ export async function handlePut(
             data: masterParsed.data,
         });
 
-        const updatedEvent = calendar.getEventByUri(calendarId, uri)!;
         syncExceptionEvents(calendar, calendarId, updatedEvent, events, userId);
 
+        // Exception sync touches the master's etag — re-read so the response ETag matches storage
+        // (a stale ETag would fail the client's next If-Match).
         return new Response(null, {
             status: 204,
-            headers: { ETag: `"${updatedEvent?.etag || ''}"` },
+            headers: { ETag: `"${calendar.getEventByUri(calendarId, uri)!.etag}"` },
         });
     }
 
@@ -104,7 +105,7 @@ export async function handlePut(
     return new Response(null, {
         status: 201,
         headers: {
-            ETag: `"${newEvent.etag}"`,
+            ETag: `"${calendar.getEventByUri(calendarId, uri)!.etag}"`,
             Location: `/dav/calendars/${ownerId}/${calendarId}/${uri}`,
         },
     });
@@ -136,15 +137,13 @@ function syncExceptionEvents(
     userId: string,
 ) {
     const exceptionParsed = events.filter((e) => e.recurrenceDate);
-    if (!exceptionParsed.length) return;
 
     const existingExceptions = calendar.getExceptionsForParent(masterEvent.id);
 
     const existingByRecurrenceDate = new Map<string, CalendarEventRow>();
     for (const exc of existingExceptions) {
-        if (exc.recurrenceDate) {
-            existingByRecurrenceDate.set(exc.recurrenceDate, exc);
-        }
+        const key = exc.recurrenceDate ? storedRecurrenceKey(exc.recurrenceDate) : null;
+        if (key) existingByRecurrenceDate.set(key, exc);
     }
 
     for (const exc of exceptionParsed) {
@@ -162,6 +161,9 @@ function syncExceptionEvents(
                 // already-stored exception at timezone:null, so it never converges (audit #24).
                 timezone: exc.timezone ?? masterEvent.timezone,
                 status: exc.status,
+                // Keep the client's SEQUENCE: GET must echo it (a regression to 0 confuses clients)
+                // and the iMIP replay guards compare inbound occurrence updates against it.
+                sequence: exc.sequence,
                 data: exc.data,
             });
         } else {
@@ -176,6 +178,7 @@ function syncExceptionEvents(
                 // its etag hashes consistently with the create/update paths (audit #24).
                 timezone: exc.timezone ?? masterEvent.timezone,
                 status: exc.status,
+                sequence: exc.sequence,
                 data: exc.data,
                 parentEventId: masterEvent.id,
                 recurrenceDate: exc.recurrenceDate,
@@ -185,4 +188,23 @@ function syncExceptionEvents(
             });
         }
     }
+
+    // A CalDAV PUT is a full-resource replace: stored exceptions absent from the payload were
+    // removed on the client (e.g. Apple's "undo delete occurrence" re-PUTs the series without the
+    // EXDATE). Without the prune the stale cancelled row keeps the occurrence hidden forever
+    // (audit #D). Only a payload that carries the master VEVENT is a credible full-resource
+    // representation — a degenerate master-less PUT proves nothing about the exceptions it omits.
+    // Unkeyable legacy rows are inert everywhere, so the replace may drop them too.
+    if (!events.some((e) => !e.recurrenceDate)) return;
+    const parsedKeys = new Set(exceptionParsed.map((e) => e.recurrenceDate));
+    const stale = existingExceptions.filter((e) => {
+        if (!e.recurrenceDate) return false;
+        const key = storedRecurrenceKey(e.recurrenceDate);
+        return !key || !parsedKeys.has(key);
+    });
+    calendar.deleteExceptions(
+        calendarId,
+        masterEvent.id,
+        stale.map((e) => e.id),
+    );
 }

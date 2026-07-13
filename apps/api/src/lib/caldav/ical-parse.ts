@@ -1,6 +1,6 @@
 import { type Attendee, type EventData, IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
-import { utcToLocal } from '../calendar/recurrence';
+import { localToUtc, utcToLocal } from '../calendar/recurrence';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../calendar/recurrence-limits';
 import { normalizeTimezone } from '../calendar/timezone';
 
@@ -33,6 +33,24 @@ function parseImipMethod(raw: unknown): ImipMethod | undefined {
     if (typeof raw !== 'string') return undefined;
     const upper = raw.toUpperCase();
     return IMIP_METHODS.includes(upper as ImipMethod) ? (upper as ImipMethod) : undefined;
+}
+
+// A property's normalized IANA TZID parameter, or null.
+function propTzid(prop: ICAL.Property | null | undefined): string | null {
+    const raw = prop?.getParameter('tzid') || null;
+    return normalizeTimezone(Array.isArray(raw) ? raw[0] : raw);
+}
+
+// Resolve an ICAL.Time to its absolute instant. ical.js leaves a datetime whose TZID has no
+// VTIMEZONE in the payload as *floating*, and toJSDate() reinterprets floating times through the
+// server's local zone — shifting the instant on any non-UTC server (audit #G). TZID params name
+// IANA zones in practice (RFC 7809 even allows omitting their VTIMEZONE), and the rest of the
+// pipeline (timezone column, rrule expansion) already trusts them, so interpret the wall components
+// in that zone. A genuinely floating time maps via Date.UTC, mirroring the all-day path.
+function icalTimeToInstant(t: ICAL.Time, tzid: string | null): Date {
+    if (t.zone !== ICAL.Timezone.localTimezone) return t.toJSDate();
+    if (tzid) return localToUtc(tzid, t.year, t.month, t.day, t.hour, t.minute, t.second);
+    return new Date(Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second));
 }
 
 // The wall-clock day a RECURRENCE-ID / EXDATE keys to. Occurrence expansion and keying work in
@@ -74,8 +92,7 @@ export function parseIcs(icsText: string): IcsParseResult {
     let seriesTz: string | null = null;
     for (const vevent of vevents) {
         if (vevent.getFirstProperty('recurrence-id')) continue;
-        const dtstartTz = vevent.getFirstProperty('dtstart')?.getParameter('tzid') || null;
-        seriesTz = normalizeTimezone(Array.isArray(dtstartTz) ? dtstartTz[0] : dtstartTz);
+        seriesTz = propTzid(vevent.getFirstProperty('dtstart'));
         break;
     }
 
@@ -95,6 +112,7 @@ export function parseIcs(icsText: string): IcsParseResult {
         const dtstart = vevent.getFirstProperty('dtstart');
         const dtend = vevent.getFirstProperty('dtend');
         const allDay = event.startDate.isDate;
+        const tzid = propTzid(dtstart);
 
         // For all-day events (VALUE=DATE), construct UTC midnight manually.
         // ical.js toJSDate() converts through local timezone, shifting the date.
@@ -110,12 +128,11 @@ export function parseIcs(icsText: string): IcsParseResult {
                 endTime = new Date(startTime.getTime() + 86400_000);
             }
         } else {
-            startTime = event.startDate.toJSDate();
-            endTime = dtend ? event.endDate.toJSDate() : new Date(startTime.getTime() + 3600_000);
+            startTime = icalTimeToInstant(event.startDate, tzid);
+            endTime = dtend
+                ? icalTimeToInstant(event.endDate, propTzid(dtend) ?? tzid)
+                : new Date(startTime.getTime() + 3600_000);
         }
-
-        const tzidRaw = dtstart?.getParameter('tzid') || null;
-        const tzid = normalizeTimezone(Array.isArray(tzidRaw) ? tzidRaw[0] : tzidRaw);
 
         const rruleProp = vevent.getFirstPropertyValue('rrule');
         const rruleRaw = rruleProp ? rruleProp.toString() : null;
@@ -241,6 +258,7 @@ export function parseIcs(icsText: string): IcsParseResult {
         if (rrule) {
             const exdateProps = vevent.getAllProperties('exdate');
             for (const exdateProp of exdateProps) {
+                const exTzid = propTzid(exdateProp) ?? tzid;
                 const values = exdateProp.getValues() as ICAL.Time[];
                 for (const exVal of values) {
                     const isDateOnly = exVal.isDate;
@@ -252,7 +270,7 @@ export function parseIcs(icsText: string): IcsParseResult {
                         exStartTime = new Date(Date.UTC(exVal.year, exVal.month - 1, exVal.day));
                         exEndTime = new Date(exStartTime.getTime() + 86400_000);
                     } else {
-                        exStartTime = exVal.toJSDate();
+                        exStartTime = icalTimeToInstant(exVal, exTzid);
                         exEndTime = new Date(exStartTime.getTime() + (endTime.getTime() - startTime.getTime()));
                     }
 

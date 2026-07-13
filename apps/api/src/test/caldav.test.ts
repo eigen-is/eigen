@@ -265,7 +265,8 @@ describe('CalDAV', () => {
         );
         expect(updateRes.status).toBe(204);
 
-        // GET the event — should contain both master and exception VEVENTs
+        // GET the event — the cancelled exception round-trips as EXDATE on the master, not as a
+        // STATUS:CANCELLED override VEVENT (clients like Thunderbird drop those from their next PUT).
         const getRes = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
                 method: 'GET',
@@ -274,8 +275,8 @@ describe('CalDAV', () => {
         );
         const body = await getRes.text();
         expect(body).toContain('RRULE:FREQ=DAILY');
-        expect(body).toContain('RECURRENCE-ID');
-        expect(body).toContain('CANCELLED');
+        expect(body).toContain('EXDATE:20260403T090000Z');
+        expect(body).not.toContain('RECURRENCE-ID');
 
         // The master event's etag should have changed (so CalDAV clients detect the change)
         const newEtag = getRes.headers.get('ETag');

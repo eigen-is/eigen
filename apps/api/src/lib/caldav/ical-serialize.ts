@@ -1,5 +1,9 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
+import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
 import { normalizeTimezone } from '../calendar/timezone';
+import { buildVTimezone } from './vtimezone';
+
+const pad = (n: number) => n.toString().padStart(2, '0');
 
 // RFC 5545 §3.3.11 — escape TEXT values
 function escapeICalText(s: string): string {
@@ -40,30 +44,17 @@ function foldLine(line: string): string {
 }
 
 function formatDateTimeUTC(d: Date): string {
-    const pad = (n: number) => n.toString().padStart(2, '0');
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
 }
 
 function formatDateUTC(d: Date): string {
-    const pad = (n: number) => n.toString().padStart(2, '0');
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
 }
 
 // Format a Date as local wall-clock time in the given IANA timezone (YYYYMMDDTHHmmSS)
 function formatDateTimeInTZ(d: Date, tz: string): string {
-    // Use Intl to extract local-time parts in the target timezone
-    const fmt = new Intl.DateTimeFormat('en-CA', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
-    const partsMap = new Map(fmt.formatToParts(d).map((p) => [p.type, p.value]));
-    return `${partsMap.get('year')}${partsMap.get('month')}${partsMap.get('day')}T${partsMap.get('hour')}${partsMap.get('minute')}${partsMap.get('second')}`;
+    const l = utcToLocal(d, tz);
+    return `${l.year}${pad(l.month)}${pad(l.day)}T${pad(l.hour)}${pad(l.minute)}${pad(l.second)}`;
 }
 
 function mapAttendeeRole(role: Attendee['role']): string {
@@ -83,7 +74,10 @@ function mapAttendeeStatus(status: Attendee['status']): string {
     }
 }
 
-function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string[] {
+function buildVEvent(
+    event: CalendarEvent,
+    options?: { rsvp?: boolean; master?: CalendarEvent; exdates?: CalendarEvent[] },
+): string[] {
     const lines: string[] = [];
 
     const prop = (line: string) => lines.push(foldLine(line));
@@ -123,16 +117,45 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string
         prop(`RRULE:${rruleValue}`);
     }
 
-    // RECURRENCE-ID for exception events — use startTime (the actual occurrence time),
-    // not the date string, so timed events have the correct time component
-    if (event.recurrenceDate) {
+    // A cancelled exception is a deleted occurrence: emit it as EXDATE in the master's own DTSTART
+    // form — the shape every client round-trips — never as a STATUS:CANCELLED override VEVENT,
+    // which Thunderbird omits from its next PUT (the full-replace exception prune would then
+    // resurrect the deleted occurrence).
+    for (const exc of options?.exdates ?? []) {
+        const key = exc.recurrenceDate ? storedRecurrenceKey(exc.recurrenceDate) : null;
+        if (!key) continue; // an unkeyable cancellation cancels nothing (matches expansion)
         if (event.allDay) {
-            const compact = event.recurrenceDate.replace(/-/g, '');
-            prop(`RECURRENCE-ID;VALUE=DATE:${compact}`);
-        } else if (tzid) {
-            prop(`RECURRENCE-ID;TZID=${tzid}:${formatDateTimeInTZ(event.startTime, tzid)}`);
+            prop(`EXDATE;VALUE=DATE:${key.replace(/-/g, '')}`);
         } else {
-            prop(`RECURRENCE-ID:${formatDateTimeUTC(event.startTime)}`);
+            const exTime = computeOccurrenceTimes(event, key).startTime;
+            if (tzid) {
+                prop(`EXDATE;TZID=${tzid}:${formatDateTimeInTZ(exTime, tzid)}`);
+            } else {
+                prop(`EXDATE:${formatDateTimeUTC(exTime)}`);
+            }
+        }
+    }
+
+    // RECURRENCE-ID names the ORIGINAL occurrence being overridden, in the master's TZID form
+    // (RFC 5545). The exception's own startTime may have been moved — echoing it back produces an
+    // override that matches no occurrence, so clients render the original slot too (audit #C).
+    // The master's tz (not the exception's) decides the form: legacy exception rows hold timezone:null.
+    if (event.recurrenceDate) {
+        // An unkeyable legacy value falls back to the exception's own startTime (the pre-#C shape:
+        // a possibly-orphaned override beats 500ing the whole resource).
+        const key = storedRecurrenceKey(event.recurrenceDate);
+        if (event.allDay) {
+            const compact = key ? key.replace(/-/g, '') : formatDateUTC(event.startTime);
+            prop(`RECURRENCE-ID;VALUE=DATE:${compact}`);
+        } else {
+            const master = options?.master;
+            const ridTime = master && key ? computeOccurrenceTimes(master, key).startTime : event.startTime;
+            const ridTz = master ? normalizeTimezone(master.timezone) : tzid;
+            if (ridTz) {
+                prop(`RECURRENCE-ID;TZID=${ridTz}:${formatDateTimeInTZ(ridTime, ridTz)}`);
+            } else {
+                prop(`RECURRENCE-ID:${formatDateTimeUTC(ridTime)}`);
+            }
         }
     }
 
@@ -177,8 +200,38 @@ function wrapInVCalendar(eventLines: string[], method?: 'REQUEST' | 'REPLY' | 'C
     return `${lines.join('\r\n')}\r\n`;
 }
 
+// One VTIMEZONE per IANA TZID the events reference (RFC 5545 §3.6.5) — without it, strict parsers
+// (including ical.js, i.e. a peer Eigen receiving this via iMIP) read the wall times as floating.
+function vtimezoneLines(events: CalendarEvent[]): string[] {
+    const tzids = new Set<string>();
+    let minYear = Number.POSITIVE_INFINITY;
+    let maxYear = Number.NEGATIVE_INFINITY;
+    let hasRrule = false;
+    for (const event of events) {
+        if (event.allDay) continue;
+        const tzid = normalizeTimezone(event.timezone);
+        if (!tzid) continue;
+        tzids.add(tzid);
+        minYear = Math.min(minYear, event.startTime.getUTCFullYear());
+        maxYear = Math.max(maxYear, event.endTime.getUTCFullYear());
+        if (event.rrule) hasRrule = true;
+    }
+    if (!tzids.size) return [];
+    // Open-ended RRULEs recur past the stored times; regular zones compress to open-ended RRULE
+    // observances anyway, so the horizon only bounds irregular zones. The span cap keeps a
+    // pathological far-future event from turning the transition scan into a seconds-long stall.
+    if (hasRrule) maxYear = Math.max(maxYear, new Date().getUTCFullYear() + 5);
+    maxYear = Math.min(maxYear, minYear + 50);
+
+    const lines: string[] = [];
+    for (const tzid of tzids) {
+        lines.push(...buildVTimezone(tzid, minYear, maxYear));
+    }
+    return lines;
+}
+
 export function serializeEventForImip(event: CalendarEvent, method: 'REQUEST' | 'REPLY' | 'CANCEL'): string {
-    return wrapInVCalendar(buildVEvent(event, { rsvp: method === 'REQUEST' }), method);
+    return wrapInVCalendar([...vtimezoneLines([event]), ...buildVEvent(event, { rsvp: method === 'REQUEST' })], method);
 }
 
 export function eventsToIcs(events: CalendarEvent[]): string {
@@ -198,10 +251,13 @@ export function eventsToIcs(events: CalendarEvent[]): string {
 
     const eventLines: string[] = [];
     for (const group of groups.values()) {
+        const master = group[0].recurrenceDate == null ? group[0] : undefined;
+        const cancelled = master ? group.filter((e) => e.recurrenceDate != null && e.status === 'cancelled') : [];
         for (const event of group) {
-            eventLines.push(...buildVEvent(event));
+            if (master && event.recurrenceDate != null && event.status === 'cancelled') continue;
+            eventLines.push(...buildVEvent(event, { master, exdates: event === master ? cancelled : undefined }));
         }
     }
 
-    return wrapInVCalendar(eventLines);
+    return wrapInVCalendar([...vtimezoneLines(events), ...eventLines]);
 }

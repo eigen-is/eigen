@@ -206,6 +206,33 @@ describe('iMIP Outbound Email Composition', () => {
         expect(mail.icalEvent?.content).toContain('METHOD:REPLY');
         expect(mail.icalEvent?.content).toContain('ACCEPTED');
     });
+
+    // A scope:'this' RSVP answers ONE occurrence of a recurring series. The REPLY must carry a
+    // RECURRENCE-ID for the ORIGINAL occurrence (RFC 5546), or an external organizer (Google/Outlook)
+    // applies the PARTSTAT to the whole series — the outbound mirror of the inbound #H fix.
+    const RECURRING_EVENT: CalendarEvent = {
+        ...MOCK_EVENT,
+        startTime: new Date('2026-04-01T14:00:00Z'), // 10:00 America/New_York
+        endTime: new Date('2026-04-01T15:00:00Z'),
+        rrule: 'FREQ=WEEKLY;COUNT=8',
+        timezone: 'America/New_York',
+    };
+
+    test('composeRsvpReply scopes a scope:this reply to the original occurrence via RECURRENCE-ID', () => {
+        const mail = composeRsvpReply(RECURRING_EVENT, 'bob@external.com', 'Bob', 'declined', '2026-04-08');
+        const ics = mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
+        // Apr 8 2026 10:00 America/New_York (EDT) is the original occurrence instant.
+        expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260408T100000');
+        // A single instance must not carry the series RRULE alongside the RECURRENCE-ID
+        // (the VTIMEZONE block's own FREQ=YEARLY observances are unrelated).
+        expect(ics).not.toContain('RRULE:FREQ=WEEKLY');
+        expect(ics).toContain('DECLINED');
+    });
+
+    test('composeRsvpReply for the whole series sends no RECURRENCE-ID (RFC 5546)', () => {
+        const mail = composeRsvpReply(RECURRING_EVENT, 'bob@external.com', 'Bob', 'accepted');
+        expect(mail.icalEvent?.content).not.toContain('RECURRENCE-ID');
+    });
 });
 
 describe('iMIP Inbound Processing (integration)', () => {
