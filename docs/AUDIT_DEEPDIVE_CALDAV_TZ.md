@@ -1,6 +1,13 @@
 # Deep-dive: CalDAV timezone + recurrence correctness (audit #8, #9, #24 + new bugs)
 
-> **Status (2026-07-12):** verified, no production code changed. Two independent verification passes
+> **Status (2026-07-13): all findings fixed.** #8/#9/#A/#B/#H/#24 landed in Unit 4
+> (`fix/api-audit-2026-07`, merged to main); #C/#D/#E/#F/#G landed on
+> `fix/caldav-occurrence-followups`. Remaining non-findings: RANGE=THISANDFUTURE / RDATE (low, see
+> "Also found"), and the outbound occurrence-scoped RSVP REPLY to an external organizer, which is
+> serialized from the master without a RECURRENCE-ID (`calendar.ts` `rsvp()` `sendRsvpReply`) — the
+> outbound mirror of #H, found while landing #C, not yet fixed.
+>
+> **Original status (2026-07-12):** verified, no production code changed. Two independent verification passes
 > converged. This feeds **pending Unit 4** of the audit fix pass (calendar tz: #7/#8/#9/#24). All claims
 > below are test-proven unless marked *(reading only)*.
 >
@@ -182,6 +189,14 @@ final whole-branch review.
 
 ## NEW #C — RECURRENCE-ID serialized from the moved startTime → orphan override — **P2, timezone-independent (not in audit)**
 
+> **✅ FIXED — occurrence follow-ups** (`fix/caldav-occurrence-followups`). `eventsToIcs` passes each
+> UID group's master into `buildVEvent`; the RECURRENCE-ID comes from
+> `computeOccurrenceTimes(master, recurrenceDate)` in the MASTER's TZID form — which also covers
+> legacy exception rows stored with `timezone: null`. Residual: `serializeEventForImip` of a lone
+> exception (no master in the VCALENDAR) keeps the startTime fallback; the only such path today is
+> the outbound occurrence-REPLY gap noted below. Tests: `caldav-roundtrip.test.ts` › "moved override
+> round-trips RECURRENCE-ID" (UTC + TZID flavours).
+
 **Where:** `caldav/ical-serialize.ts` (~:126-137).
 
 **Symptom / failure scenario:** a "move this occurrence" edit round-trips with a `RECURRENCE-ID` computed
@@ -201,8 +216,16 @@ master's TZID form), not from `event.startTime`.
 
 ## NEW #D — CalDAV re-PUT never deletes stale exceptions → "undo delete occurrence" doesn't stick — **P2 (not in audit)**
 
-**Where:** `caldav/resource.ts` `syncExceptionEvents` (~:131-182) only **upserts**; it never deletes
-exceptions absent from the PUT body.
+> **✅ FIXED — occurrence follow-ups**. `syncExceptionEvents` now treats a PUT as a full-resource
+> replace: stored exceptions absent from the payload are deleted via the new
+> `Calendar.deleteExceptions` — deliberately quiet (ctag bump + master etag touch; no tombstone,
+> exception rows are never client-visible resources; no cancellation fan-out, removing an override
+> RESTORES the occurrence). The reading-only note is also fixed: the parsed exception `sequence` is
+> kept on both the create and update branches (GET echoes the client's SEQUENCE; the iMIP replay
+> guards compare against it). While in the function: `handlePut` re-reads the response ETag after
+> the exception sync, since exception create/prune touches the master's etag and a stale response
+> ETag would fail the client's next If-Match. Tests: `caldav-roundtrip.test.ts` › "removing an
+> EXDATE on re-PUT restores the occurrence".
 
 **Symptom / failure scenario:** PUT with an EXDATE (occurrence hidden), then PUT without it (Apple's "undo
 delete occurrence"). The cancelled exception row survives the full-resource replace, so the occurrence stays
@@ -219,6 +242,11 @@ exceptions of the master that are absent from the PUT payload.
 ---
 
 ## NEW #E — FE RSVP scope='this' duplicates exception rows via UTC-date occurrenceDate — **P2, no CalDAV needed (not in audit)**
+
+> **✅ FIXED — occurrence follow-ups**. `getEventsInRange` renders a substituted occurrence under
+> `occ.occurrenceDate` — the stored exception key it was matched on — instead of the UTC date of its
+> moved startTime. Test: `calendar-timezone.test.ts` › "#E rendered occurrenceDate of a modified
+> occurrence" (double-RSVP leaves exactly one exception row).
 
 **Where:** `calendar/calendar.ts` `getEventsInRange` (~:656) re-keys a substituted modified occurrence with
 `occurrenceDateToString(modEvt.startTime)` — the **UTC date** — instead of the exception's stored wall-clock
@@ -266,6 +294,18 @@ real changes.
 ---
 
 ## Also found (RFC / hygiene)
+
+> **✅ FIXED — occurrence follow-ups** (#F + #G). **#F:** `eventsToIcs` and `serializeEventForImip`
+> emit a generated VTIMEZONE per referenced TZID (`caldav/vtimezone.ts` — Intl-derived transitions,
+> compressed to two open-ended RRULE observances when the zone's rule is regular, per-transition
+> observances otherwise; covers the events' year span plus a +5y horizon for recurring events).
+> **#G:** genuinely floating datetimes map their wall components via `Date.UTC`; a valid IANA TZID
+> whose VTIMEZONE is missing is interpreted in that zone (RFC 7809) — consistent with the stored
+> `timezone` column that expansion already trusts. Keying stays consistent with the landed #8 rule:
+> floating/TZID-form keys still come from raw wall components, which now match the wall date of the
+> stored startTime by construction. RANGE=THISANDFUTURE + RDATE remain out of scope (low; mainstream
+> clients split UIDs). Tests: `caldav-roundtrip.test.ts` (GET→parse + iMIP federation round-trips,
+> TZ-pinned #G suite), `vtimezone.test.ts` (generator vs Intl acid test).
 
 - **NEW #F — no VTIMEZONE emitted** (`ical-serialize.ts` `wrapInVCalendar`/`eventsToIcs`): TZIDs are
   referenced with no VTIMEZONE block (RFC 5545 §3.6.5 violation). Apple/Google/Thunderbird tolerate IANA
