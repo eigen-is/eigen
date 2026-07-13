@@ -129,7 +129,7 @@ export function LinkEditCard({
             >
                 <button
                     type="button"
-                    className="mr-1.5 cursor-pointer hover:text-primary"
+                    className="mr-1.5 cursor-pointer whitespace-nowrap hover:text-primary"
                     onClick={() => {
                         setContext((draftCtx) =>
                             goToLink(draftCtx, r, c, linkType, linkAddress, refs.cellArea.current!),
