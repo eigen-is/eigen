@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-819 primitives across 6 kinds. `packages/sheet` internals are excluded.
+817 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -595,7 +595,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (260)
+## Utilities & constants (258)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -851,8 +851,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFilePresentation` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
 | `getSlashTargetQuery` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-utils.ts |
 | `loginSearchSchema` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-route.tsx |
-| `PRESENCE_CARET_CLASS` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |
-| `PRESENCE_LABEL_CLASS` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |
 | `renderPresenceCaret` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |
 | `SHEETS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `SLIDES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |

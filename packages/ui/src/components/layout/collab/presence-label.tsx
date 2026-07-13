@@ -4,8 +4,8 @@
 // stay one source of truth — style lives in `.collaboration-cursor__label` (shared
 // globals.css).
 
-export const PRESENCE_CARET_CLASS = 'collaboration-cursor__caret';
-export const PRESENCE_LABEL_CLASS = 'collaboration-cursor__label';
+const PRESENCE_CARET_CLASS = 'collaboration-cursor__caret';
+const PRESENCE_LABEL_CLASS = 'collaboration-cursor__label';
 
 export type PresenceUser = {
     name: string;
