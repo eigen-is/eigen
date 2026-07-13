@@ -248,7 +248,7 @@ iMIP enables calendar invitations between Eigen users and external parties via e
 - **Create event with external attendees**: `invite-propagation.ts` detects attendees with no Eigen account and calls `composeInviteEmail()` → `sendMail()`. Sends `METHOD:REQUEST`.
 - **Update event**: same path calls `composeUpdateEmail()` → updated `METHOD:REQUEST`.
 - **Cancel event**: `composeCancelEmail()` → `METHOD:CANCEL`.
-- **Attendee RSVP**: when an Eigen user RSVPs to an externally-organized event, `calendar.ts` calls `composeRsvpReply()` → `METHOD:REPLY`. Triggered both from `rsvp()` and from `deleteEvent()` (delete = decline).
+- **Attendee RSVP**: when an Eigen user RSVPs to an externally-organized event, `calendar.ts` calls `composeRsvpReply()` → `METHOD:REPLY`. Triggered both from `rsvp()` and from `deleteEvent()` (delete = decline). A `scope:'this'` RSVP passes the occurrence's `recurrenceDate`, so the REPLY carries a `RECURRENCE-ID` for the original instant (from `computeOccurrenceTimes`) and the organizer applies the PARTSTAT to that occurrence, not the whole series; a master-scoped RSVP replies without one (RFC 5546).
 
 ### Inbound flow (external → Eigen)
 

@@ -2,10 +2,19 @@
 
 > **Status (2026-07-13): all findings fixed.** #8/#9/#A/#B/#H/#24 landed in Unit 4
 > (`fix/api-audit-2026-07`, merged to main); #C/#D/#E/#F/#G landed on
-> `fix/caldav-occurrence-followups`. Remaining non-findings: RANGE=THISANDFUTURE / RDATE (low, see
-> "Also found"), and the outbound occurrence-scoped RSVP REPLY to an external organizer, which is
-> serialized from the master without a RECURRENCE-ID (`calendar.ts` `rsvp()` `sendRsvpReply`) — the
-> outbound mirror of #H, found while landing #C, not yet fixed.
+> `fix/caldav-occurrence-followups`.
+>
+> **✅ FIXED — outbound occurrence RSVP REPLY** (`merge/audit-deepdive-fixes`). A `scope:'this'` RSVP
+> to an external organizer was serialized from the master with no RECURRENCE-ID (`calendar.ts`
+> `rsvp()` `sendRsvpReply`), so Google/Outlook applied the PARTSTAT to the whole series — the outbound
+> mirror of the inbound fix #H. `composeRsvpReply` now takes the occurrence's `recurrenceDate`, drops
+> the rrule, and derives DTSTART/RECURRENCE-ID for the original instant from
+> `computeOccurrenceTimes(master, …)` (an RSVP never moves the occurrence); this also clears the #C
+> residual startTime-fallback path in `serializeEventForImip`. A master-scoped RSVP still replies
+> without a RECURRENCE-ID (RFC 5546). Tests: `ical-imip.test.ts` › "composeRsvpReply scopes a
+> scope:this reply …" / "… whole series sends no RECURRENCE-ID".
+>
+> Remaining non-finding: RANGE=THISANDFUTURE / RDATE (low, see "Also found").
 >
 > **Original status (2026-07-12):** verified, no production code changed. Two independent verification passes
 > converged. This feeds **pending Unit 4** of the audit fix pass (calendar tz: #7/#8/#9/#24). All claims

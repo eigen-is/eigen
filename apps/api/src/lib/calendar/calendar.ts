@@ -1397,8 +1397,8 @@ export class Calendar {
         const organizerEventId = event.data.organizerEventId!;
         const isExternalOrganizer = isExternalOwnerId(organizerUserId);
 
-        const sendRsvpReply = (status: Attendee['status']) => {
-            const mail = composeRsvpReply(event, user.email, user.name ?? user.email, status);
+        const sendRsvpReply = (status: Attendee['status'], recurrenceDate?: string) => {
+            const mail = composeRsvpReply(event, user.email, user.name ?? user.email, status, recurrenceDate);
             sendMail(mail).catch(console.error);
         };
 
@@ -1406,7 +1406,7 @@ export class Calendar {
             if (input.remove) {
                 this.removeOccurrence(eventId, input.recurrenceDate);
                 if (isExternalOrganizer) {
-                    sendRsvpReply('declined');
+                    sendRsvpReply('declined', input.recurrenceDate);
                 } else {
                     propagateRsvp(
                         organizerUserId,
@@ -1419,7 +1419,7 @@ export class Calendar {
             } else {
                 this.rsvpForOccurrence(eventId, user.email, input.status, input.recurrenceDate);
                 if (isExternalOrganizer) {
-                    sendRsvpReply(input.status);
+                    sendRsvpReply(input.status, input.recurrenceDate);
                 } else {
                     propagateRsvp(
                         organizerUserId,

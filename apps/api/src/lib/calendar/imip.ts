@@ -14,6 +14,7 @@ import { serializeEventForImip } from '../caldav/ical-serialize';
 import { renderEigenEmail } from '../core/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
+import { computeOccurrenceTimes } from './recurrence';
 import type { ReceiveInvitationPayload } from './types';
 
 type Organizer = NonNullable<EventData['organizer']>;
@@ -110,6 +111,7 @@ export function composeRsvpReply(
     attendeeEmail: string,
     attendeeName: string,
     status: Attendee['status'],
+    recurrenceDate?: string,
 ): OutboundMail {
     const organizer = event.data?.organizer;
     if (!organizer) throw new Error('Event has no organizer');
@@ -121,6 +123,18 @@ export function composeRsvpReply(
             attendees: [{ email: attendeeEmail, name: attendeeName, status, role: 'required' }],
         },
     };
+
+    // A scope:'this' RSVP answers ONE occurrence: carry a RECURRENCE-ID for the original instant
+    // (RFC 5546) so an external organizer applies the PARTSTAT to that instance, not the whole series.
+    // An RSVP never moves the occurrence, so its time comes straight from the master's recurrence via
+    // computeOccurrenceTimes; dropping the rrule makes the VEVENT read as a single instance.
+    if (recurrenceDate) {
+        const { startTime, endTime } = computeOccurrenceTimes(event, recurrenceDate);
+        replyEvent.rrule = null;
+        replyEvent.recurrenceDate = recurrenceDate;
+        replyEvent.startTime = startTime;
+        replyEvent.endTime = endTime;
+    }
 
     const statusLabel = STATUS_LABELS[status].toLowerCase();
     return {
