@@ -235,6 +235,15 @@ master's TZID form), not from `event.startTime`.
 > the exception sync, since exception create/prune touches the master's etag and a stale response
 > ETag would fail the client's next If-Match. Tests: `caldav-roundtrip.test.ts` › "removing an
 > EXDATE on re-PUT restores the occurrence".
+>
+> **Browser-testing follow-up (2026-07-13, Thunderbird):** the prune made the old serving shape a
+> data hazard — cancelled exceptions were served as `STATUS:CANCELLED` override VEVENTs, which
+> Thunderbird does NOT round-trip in its PUTs, so a web-deleted occurrence was resurrected on TB's
+> next write. `eventsToIcs` now emits cancelled exceptions as `EXDATE` on the master (master-TZID
+> form via the #C helper; `VALUE=DATE` for all-day) and never as override VEVENTs — the shape
+> clients round-trip natively, and the shape the parser already maps back to cancelled exception
+> rows, so the prune keys stay symmetric. Net: `caldav-client-sync.test.ts` (client-faithful flows
+> against WEB-created events — PUT-to-existing, TB-strips-cancelled-overrides re-PUT).
 
 **Symptom / failure scenario:** PUT with an EXDATE (occurrence hidden), then PUT without it (Apple's "undo
 delete occurrence"). The cancelled exception row survives the full-resource replace, so the occurrence stays

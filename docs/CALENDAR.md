@@ -312,9 +312,17 @@ how Apple models "undo delete occurrence". The prune is quiet: ctag bump + maste
 tombstone, no cancellation fan-out. The PUT response ETag is re-read after the exception sync so it
 always matches storage.
 
+**Cancelled exceptions serve as EXDATE, never as override VEVENTs**: `eventsToIcs` emits a deleted
+occurrence as an `EXDATE` line on the master (master-TZID form; `VALUE=DATE` for all-day) and skips
+the cancelled row's VEVENT. Clients round-trip EXDATE natively; a `STATUS:CANCELLED` override VEVENT
+is dropped by Thunderbird's next PUT, which the full-replace prune would read as "client removed the
+exception" and resurrect the occurrence. The parser maps EXDATE back to cancelled exception rows, so
+the round-trip is symmetric.
+
 Regression nets: `caldav.test.ts` (protocol), `caldav-roundtrip.test.ts` (serialization/parse
 round-trips, TZ-pinned floating tests), `vtimezone.test.ts` (generator vs Intl),
-`calendar-timezone.test.ts` (occurrence keying), `ical-imip.test.ts` (iMIP scoping).
+`calendar-timezone.test.ts` (occurrence keying), `ical-imip.test.ts` (iMIP scoping),
+`caldav-client-sync.test.ts` (client-faithful sync flows against web-created events).
 
 ## Files
 

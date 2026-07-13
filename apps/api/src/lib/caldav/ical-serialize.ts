@@ -85,7 +85,10 @@ function mapAttendeeStatus(status: Attendee['status']): string {
     }
 }
 
-function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean; master?: CalendarEvent }): string[] {
+function buildVEvent(
+    event: CalendarEvent,
+    options?: { rsvp?: boolean; master?: CalendarEvent; exdates?: CalendarEvent[] },
+): string[] {
     const lines: string[] = [];
 
     const prop = (line: string) => lines.push(foldLine(line));
@@ -123,6 +126,24 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean; master?: 
         // Eigen's frontend stores RRULE with "RRULE:" prefix; strip it to avoid doubling
         const rruleValue = event.rrule.replace(/^RRULE:/i, '');
         prop(`RRULE:${rruleValue}`);
+    }
+
+    // A cancelled exception is a deleted occurrence: emit it as EXDATE in the master's own DTSTART
+    // form — the shape every client round-trips — never as a STATUS:CANCELLED override VEVENT,
+    // which Thunderbird omits from its next PUT (the full-replace exception prune would then
+    // resurrect the deleted occurrence).
+    for (const exc of options?.exdates ?? []) {
+        if (!exc.recurrenceDate) continue;
+        if (event.allDay) {
+            prop(`EXDATE;VALUE=DATE:${exc.recurrenceDate.replace(/-/g, '')}`);
+        } else {
+            const exTime = computeOccurrenceTimes(event, exc.recurrenceDate).startTime;
+            if (tzid) {
+                prop(`EXDATE;TZID=${tzid}:${formatDateTimeInTZ(exTime, tzid)}`);
+            } else {
+                prop(`EXDATE:${formatDateTimeUTC(exTime)}`);
+            }
+        }
     }
 
     // RECURRENCE-ID names the ORIGINAL occurrence being overridden, in the master's TZID form
@@ -238,8 +259,10 @@ export function eventsToIcs(events: CalendarEvent[]): string {
     const eventLines: string[] = [];
     for (const group of groups.values()) {
         const master = group[0].recurrenceDate == null ? group[0] : undefined;
+        const cancelled = master ? group.filter((e) => e.recurrenceDate != null && e.status === 'cancelled') : [];
         for (const event of group) {
-            eventLines.push(...buildVEvent(event, { master }));
+            if (master && event.recurrenceDate != null && event.status === 'cancelled') continue;
+            eventLines.push(...buildVEvent(event, { master, exdates: event === master ? cancelled : undefined }));
         }
     }
 
