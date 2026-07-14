@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Eigen demo reset every hour
+
+[Timer]
+OnCalendar=hourly
+# Catch up a run missed while the box was down (e.g. after a reboot).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

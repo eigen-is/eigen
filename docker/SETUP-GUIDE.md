@@ -200,11 +200,69 @@ Pulls latest code, rebuilds the frontend, restarts containers. Active SSE/WebSoc
 ./scripts/backup.sh
 ```
 
-Saves all data (mail, files, contacts, calendars, settings) to `./backups/`. Schedule daily:
+Saves all data (mail, files, contacts, calendars, settings) to `./backups/`. This runs against the
+**live** tree, so an in-flight SQLite WAL can be caught mid-write — fine for routine daily copies.
+Schedule daily:
 
 ```bash
 crontab -e
 # 0 3 * * * /opt/eigen/scripts/backup.sh
+```
+
+For a **consistent** archive, `snapshot.sh` briefly stops `eigen-api`, tars the quiesced tree
+(WAL/`-shm` files included, so the two never-checkpointed server databases are captured intact),
+then restarts it — seconds of downtime for a crash-consistent copy:
+
+```bash
+./scripts/snapshot.sh                             # -> ./backups/eigen-snapshot-<timestamp>.tar.gz
+./scripts/snapshot.sh /path/to/backup.tar.gz      # custom output path
+```
+
+Restore either archive with `restore.sh`. It stops `eigen-api`, moves the current `data/` aside to
+`data.pre-restore-<timestamp>` (never deleted), unpacks the archive, and starts `eigen-api`:
+
+```bash
+./scripts/restore.sh ./backups/eigen-snapshot-<timestamp>.tar.gz
+```
+
+### Demo instance
+
+A demo box wipes and reseeds itself every hour, so strangers can try the product without a login and
+without leaving anything behind. Turn it on with `EIGEN_DEMO=1` in `.env.production` (any other value,
+or unset, keeps normal behaviour):
+
+```
+EIGEN_DEMO=1
+```
+
+Reset the world once by hand, then let the timer keep it fresh. `demo-reset.sh` stops `eigen-api`,
+wipes the per-home + server data (never `data/certs` or `data/dkim`), runs the seeder in a throwaway
+container off the current image, and starts `eigen-api` again:
+
+```bash
+./scripts/demo-reset.sh
+```
+
+It refuses to run unless `EIGEN_DEMO=1` is present in `.env.production`, so it can never wipe a real
+instance.
+
+Install the hourly reset with the shipped systemd units (they are **not** auto-installed by `git pull`):
+
+```bash
+cp scripts/systemd/eigen-demo-reset.service scripts/systemd/eigen-demo-reset.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now eigen-demo-reset.timer
+```
+
+The units assume the repo lives at `/opt/eigen`; edit `WorkingDirectory`/`ExecStart` if yours differs.
+Check the schedule with `systemctl list-timers eigen-demo-reset.timer` and follow a run with
+`journalctl -u eigen-demo-reset.service -f`.
+
+Prefer cron? One line does the same:
+
+```bash
+crontab -e
+# 0 * * * * /opt/eigen/scripts/demo-reset.sh >> /var/log/eigen-demo-reset.log 2>&1
 ```
 
 ### Firewall
