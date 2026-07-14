@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { and, eq } from 'drizzle-orm';
 import { account as accountSchema, member as memberSchema } from '../../auth-schema.ts';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
@@ -28,12 +28,27 @@ async function resolveUserId(res: Response): Promise<string> {
 describe('Demo mode', () => {
     let ctx: TestCtx;
     let orgId: string;
+    let originalPasswords: { id: string; password: string | null }[];
 
     beforeAll(async () => {
         ctx = await getTestContext();
         const config = getServerConfig();
         if (!config) throw new Error('server config not set');
         orgId = config.orgId;
+        originalPasswords = getAuthDrizzleDb()
+            .select({ id: accountSchema.id, password: accountSchema.password })
+            .from(accountSchema)
+            .where(eq(accountSchema.providerId, 'credential'))
+            .all();
+    });
+
+    // Entry sign-ins overwrite the picked persona's password with the demo-derived HMAC; restore the
+    // originals so later suite files (WebDAV Basic auth) can still sign in with the seeded passwords.
+    afterAll(() => {
+        const db = getAuthDrizzleDb();
+        for (const row of originalPasswords) {
+            db.update(accountSchema).set({ password: row.password }).where(eq(accountSchema.id, row.id)).run();
+        }
     });
 
     // Restore the toggle after every test — a leaked EIGEN_DEMO would 403 api-key creation and
