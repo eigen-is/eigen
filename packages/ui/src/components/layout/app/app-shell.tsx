@@ -13,6 +13,7 @@ import { useOptionalPreview, usePreview } from '../preview-provider/preview-prov
 import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container.tsx';
 import { CommandPalette } from './command-palette/command-palette.tsx';
 import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts.ts';
+import { DemoBanner } from './demo-banner.tsx';
 import { LayoutContext } from './layout-context.tsx';
 import { Topbar } from './topbar.tsx';
 
@@ -74,6 +75,7 @@ export function AppShell({
         <LayoutContext.Provider value={layoutValue}>
             <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute} />
+                <DemoBanner />
                 <PaletteRunner />
                 <div className="flex flex-1 w-full overflow-hidden">
                     {sidebar && !sidebarHidden && <SidebarContainer sidebar={sidebar} />}

@@ -216,6 +216,12 @@ function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
 
 export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
     const { appName } = useApp();
+    const { data: config } = usePublicConfig();
+    const [showLogin, setShowLogin] = useState(false);
+
+    // Demo instances hand every visitor a random seeded persona; the credentials
+    // form stays reachable behind a toggle so the admin can still sign in.
+    const showDemoEntry = config?.demoMode && !showLogin;
 
     return (
         <div className="flex w-full h-[calc(100vh-64px)] items-center justify-center">
@@ -229,26 +235,46 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
                             <Ket />
                         </span>
                     </CardTitle>
-                    <CardDescription>Sign in to access your account</CardDescription>
+                    <CardDescription>
+                        {showDemoEntry ? 'Explore a shared demo workspace.' : 'Sign in to access your account'}
+                    </CardDescription>
                 </CardHeader>
 
                 <CardContent>
-                    <Tabs defaultValue={initialEmail ? 'guest' : 'signin'}>
-                        <TabsList className="w-full mb-6">
-                            <TabsTrigger value="signin" className="flex-1">
-                                Sign in
-                            </TabsTrigger>
-                            <TabsTrigger value="guest" className="flex-1">
-                                Guest
-                            </TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="signin">
-                            <PasswordLoginForm />
-                        </TabsContent>
-                        <TabsContent value="guest">
-                            <GuestLoginForm initialEmail={initialEmail} />
-                        </TabsContent>
-                    </Tabs>
+                    {showDemoEntry ? (
+                        <div className="space-y-4">
+                            <Button asChild className="w-full">
+                                <a href={`${API_HOST}/p/demo/enter`}>Enter demo</a>
+                            </Button>
+                            <div className="text-center">
+                                <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="text-muted-foreground"
+                                    onClick={() => setShowLogin(true)}
+                                >
+                                    Sign in with password
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <Tabs defaultValue={initialEmail ? 'guest' : 'signin'}>
+                            <TabsList className="w-full mb-6">
+                                <TabsTrigger value="signin" className="flex-1">
+                                    Sign in
+                                </TabsTrigger>
+                                <TabsTrigger value="guest" className="flex-1">
+                                    Guest
+                                </TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="signin">
+                                <PasswordLoginForm />
+                            </TabsContent>
+                            <TabsContent value="guest">
+                                <GuestLoginForm initialEmail={initialEmail} />
+                            </TabsContent>
+                        </Tabs>
+                    )}
                 </CardContent>
             </Card>
         </div>
