@@ -11,6 +11,7 @@ const DEMO_BLOCKED_AUTH_PATHS = new Set([
     '/auth/api-key/delete',
     '/auth/two-factor/enable',
     '/auth/revoke-sessions',
+    '/auth/revoke-other-sessions',
 ]);
 
 // user middleware (compute user and session and pass to routes)

@@ -164,6 +164,13 @@ describe('Demo mode', () => {
             });
             expect(revoke.status).toBe(403);
 
+            const revokeOthers = await authedRequest(token, '/auth/revoke-other-sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            expect(revokeOthers.status).toBe(403);
+
             // A non-denylisted auth route still works — the guard must not over-block.
             const session = await authedRequest(token, '/auth/get-session');
             expect(session.status).toBe(200);
