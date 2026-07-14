@@ -1,8 +1,13 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { JSONContent } from '@tiptap/core';
+import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
+import { loadYjsState } from '../lib/collab/yjs-loader';
+import { openLocalDatabase } from '../lib/core';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
 // (the Elysia app, the auth DB, the Home map), so it cannot run in-process alongside the
@@ -21,6 +26,21 @@ function query<T>(dbPath: string, sql: string): T[] {
     } finally {
         db.close();
     }
+}
+
+// Open a container's collab data.db (via a temp copy — openLocalDatabase writes WAL journals)
+// and return its Y.Doc, using the same loader the shipped readers use.
+async function loadCollabDoc(dataDbPath: string) {
+    const tmp = join(mkdtempSync(join(tmpdir(), 'seed-demo-ydoc-')), 'data.db');
+    cpSync(dataDbPath, tmp);
+    return loadYjsState(await openLocalDatabase(COLLAB_DB_CONFIG, tmp)).doc;
+}
+
+function collectCommentMarkIds(json: JSONContent, out: Set<string>): void {
+    for (const mark of json.marks ?? []) {
+        if (mark.type === 'comment' && typeof mark.attrs?.['cardId'] === 'string') out.add(mark.attrs['cardId']);
+    }
+    for (const child of json.content ?? []) collectCommentMarkIds(child, out);
 }
 
 describe('seed-demo', () => {
@@ -93,6 +113,44 @@ describe('seed-demo', () => {
             expect(existsSync(calendarDb)).toBe(true);
             const calEvents = query<{ n: number }>(calendarDb, 'SELECT count(*) AS n FROM events');
             expect(calEvents[0].n).toBeGreaterThanOrEqual(1);
+
+            // Doc comments: the panel renders exclusively from the doc's `comments` Y.Map, and
+            // only cards anchored by a comment mark in the text. Assert both for the seeded doc.
+            const docRow = query<{ id: string }>(
+                metadataDb,
+                "SELECT id FROM paths WHERE name = 'production plan.eigendoc' AND trashedAt IS NULL",
+            );
+            expect(docRow.length).toBe(1);
+            const dataDbRow = query<{ file: string }>(
+                metadataDb,
+                `SELECT file FROM paths WHERE parentId = '${docRow[0].id}' AND name = 'data.db'`,
+            );
+            expect(dataDbRow.length).toBe(1);
+            const ydoc = await loadCollabDoc(join(mountsDir, mountId!, 'data', dataDbRow[0].file));
+            const cards = [...ydoc.getMap<import('yjs').Map<unknown>>('comments').values()].map((card) => ({
+                id: card.get('id') as string,
+                chatName: card.get('chatName') as string,
+                creator: card.get('creator') as string,
+            }));
+            expect(cards.length).toBeGreaterThanOrEqual(3);
+            for (const card of cards) {
+                expect(card.chatName).toEndWith('.eigenchat');
+                expect(card.creator).toContain('@');
+            }
+            const anchored = new Set<string>();
+            collectCommentMarkIds(yXmlFragmentToProsemirrorJSON(ydoc.getXmlFragment('default')), anchored);
+            for (const card of cards) {
+                expect(anchored.has(card.id)).toBe(true);
+            }
+
+            // Assignment: the volunteer coordinator got the bell notification the assign route persists.
+            const assignees = query<{ id: string }>(usersDb, "SELECT id FROM user WHERE email = 'nour@tuimel.test'");
+            expect(assignees.length).toBe(1);
+            const notifications = query<{ n: number }>(
+                join(root, 'home', assignees[0].id, 'eigen.notifications', 'notifications.db'),
+                "SELECT count(*) AS n FROM notifications WHERE type = 'assigned'",
+            );
+            expect(notifications[0].n).toBeGreaterThanOrEqual(1);
         } finally {
             rmSync(root, { recursive: true, force: true });
         }

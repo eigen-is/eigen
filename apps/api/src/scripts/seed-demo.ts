@@ -22,9 +22,13 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { JSONContent } from '@tiptap/core';
+import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
+import type { CommentCard } from '@workspace/lib/types/comments';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import ExcelJS from 'exceljs';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 import type { User } from '../lib/user';
 import {
     ADMIN_LOCALPART,
@@ -109,6 +113,47 @@ async function workbookBytes(workbook: ExcelJS.Workbook): Promise<Buffer> {
     return Buffer.from(view);
 }
 
+// Anchor a card the way the editor's setComment command does: wrap the first occurrence of the
+// anchor phrase in a `comment` mark carrying the card id. Mutates the PM JSON in place.
+function injectCommentMark(json: JSONContent, anchor: string, cardId: string): boolean {
+    if (!json.content) return false;
+    for (let i = 0; i < json.content.length; i++) {
+        const node = json.content[i];
+        if (node.type === 'text' && typeof node.text === 'string') {
+            const idx = node.text.indexOf(anchor);
+            if (idx === -1) continue;
+            const marked: JSONContent = {
+                type: 'text',
+                text: anchor,
+                marks: [...(node.marks ?? []), { type: 'comment', attrs: { cardId } }],
+            };
+            const parts: JSONContent[] = [];
+            if (idx > 0) parts.push({ ...node, text: node.text.slice(0, idx) });
+            parts.push(marked);
+            if (idx + anchor.length < node.text.length)
+                parts.push({ ...node, text: node.text.slice(idx + anchor.length) });
+            json.content.splice(i, 1, ...parts);
+            return true;
+        }
+        if (injectCommentMark(node, anchor, cardId)) return true;
+    }
+    return false;
+}
+
+// The comments panel renders from the doc's `comments` Y.Map. Mirrors the FE's writeCardToDoc
+// (packages/lib .../use-create-comment-card.ts), which lives in a React hooks module the API
+// must not pull into its module graph.
+function writeCommentCard(doc: Y.Doc, card: CommentCard): void {
+    const y = new Y.Map<unknown>();
+    y.set('id', card.id);
+    y.set('title', card.title);
+    y.set('description', card.description);
+    if (card.chatName) y.set('chatName', card.chatName);
+    if (card.creator) y.set('creator', card.creator);
+    if (card.createdAt !== undefined) y.set('createdAt', card.createdAt);
+    doc.getMap<Y.Map<unknown>>('comments').set(card.id, y);
+}
+
 function buildBudgetWorkbook(): ExcelJS.Workbook {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Budget');
@@ -173,6 +218,9 @@ async function main(): Promise<void> {
     const { getContacts } = await import('../lib/contacts/contacts');
     const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
     const { convertToDocument } = await import('../lib/import/import-document');
+    const { writeEigendocToYjs } = await import('../lib/document/doc');
+    const { docSchema } = await import('../lib/import/doc/from-docx');
+    const { sendToHome } = await import('../lib/home/home-relay');
     const { default: htmlToDocx } = await import('@turbodocx/html-to-docx');
 
     // Tiny quotas + no signups; local-id storage came from the setup call. Apply before any home
@@ -261,24 +309,61 @@ async function main(): Promise<void> {
         // Comment threads are chats inside the container's chat/ subfolder (see assertCommentChatExists).
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, 'chat');
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
+        const collab = await teamDrive.getCollabDocument(teamMountId, docPath.id);
+        const docJson = yXmlFragmentToProsemirrorJSON(collab.doc.getXmlFragment('default')) as JSONContent;
+        const cards: { spec: (typeof doc.comments)[number]; card: CommentCard }[] = [];
         for (const comment of doc.comments) {
             const commentAuthor = userByKey.get(comment.author)!;
-            const card = await teamDrive.create(teamMountId, chatFolder.id, comment.card, 'chat', commentAuthor);
-            await postTo(card.id, commentAuthor, comment.text);
+            const chat = await teamDrive.create(teamMountId, chatFolder.id, comment.card, 'chat', commentAuthor);
+            await postTo(chat.id, commentAuthor, comment.text);
             for (const reply of comment.replies ?? []) {
-                await postTo(card.id, userByKey.get(reply.author)!, reply.text);
+                await postTo(chat.id, userByKey.get(reply.author)!, reply.text);
             }
-            if (comment.assignTo) {
-                await teamDrive.assignComment(
-                    teamMountId,
-                    docPath.id,
-                    card.name,
-                    emailForRole(comment.assignTo),
-                    commentAuthor,
-                    comment.text.slice(0, 80),
-                );
+            // Title = anchored text, matching the editor's create flow.
+            const card: CommentCard = {
+                id: randomUUID(),
+                title: comment.anchor.slice(0, 100),
+                description: '',
+                chatName: chat.name,
+                creator: commentAuthor.email,
+                createdAt: Date.now(),
+            };
+            if (!injectCommentMark(docJson, comment.anchor, card.id)) {
+                throw new Error(`Anchor "${comment.anchor}" not found in "${doc.name}"`);
             }
+            cards.push({ spec: comment, card });
         }
+        // One fragment rebuild with the anchored marks; cards land in the comments Y.Map the
+        // panel renders from. Both persist through the live collab doc.
+        writeEigendocToYjs(collab.doc, docJson, docSchema);
+        collab.doc.transact(() => {
+            for (const { card } of cards) writeCommentCard(collab.doc, card);
+        });
+        for (const { spec, card } of cards) {
+            if (!spec.assignTo) continue;
+            const commentAuthor = userByKey.get(spec.author)!;
+            const assignee = userForRole(spec.assignTo);
+            await teamDrive.assignComment(
+                teamMountId,
+                docPath.id,
+                card.chatName!,
+                assignee.email,
+                commentAuthor,
+                card.title,
+            );
+            // The bell notification is the assign ROUTE's job (routes/collab.ts), not Drive's — mirror it.
+            await sendToHome(assignee.id, {
+                type: 'notification',
+                notification: {
+                    type: 'assigned',
+                    actorEmail: commentAuthor.email,
+                    title: `${commentAuthor.name} assigned you a comment on "${stripEigenExtension(docPath.name)}"`,
+                    tag: `assigned:team_${teamId}:${teamMountId}:${docPath.id}:${card.chatName}`,
+                    details: { pathType: docPath.type },
+                },
+            });
+        }
+        await teamDrive.flushContainerDb(teamMountId, docPath.id);
     }
 
     // --- Budget sheet: .xlsx -> shipped converter -> eigensheets. ---

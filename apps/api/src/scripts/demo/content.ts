@@ -65,6 +65,9 @@ export type TeamFolder = (typeof TEAM_FOLDERS)[number];
 export type DocComment = {
     // Slug used for the comment thread's chat name (lowercase, no extension).
     card: string;
+    // Exact phrase from the doc text the comment mark anchors on (also the card title,
+    // mirroring the editor's "title = selected text" convention).
+    anchor: string;
     author: string; // persona key
     text: string;
     replies?: { author: string; text: string }[];
@@ -100,6 +103,7 @@ export const DOCS: SeededDoc[] = [
         comments: [
             {
                 card: 'volunteers-gap',
+                anchor: 'short on crew for the build weekend',
                 author: 'saar',
                 text: "We're still about 10 volunteers short for the build weekend. Can we push the call-out again?",
                 replies: [{ author: 'nour', text: 'On it — sending a fresh call-out to the mailing list today.' }],
@@ -107,6 +111,7 @@ export const DOCS: SeededDoc[] = [
             },
             {
                 card: 'sunday-weather',
+                anchor: 'wind cover for the second stage',
                 author: 'timo',
                 text: 'The Sunday forecast for the field looks rough. Do we tent the second stage?',
                 replies: [
@@ -115,6 +120,7 @@ export const DOCS: SeededDoc[] = [
             },
             {
                 card: 'shuttle-timing',
+                anchor: 'Shuttle buses from the nearest station',
                 author: 'joris',
                 text: 'Last shuttle at 01:00 or 02:00? It affects the closing set.',
                 replies: [{ author: 'mees', text: "02:00 — I'll put it on the info page." }],
@@ -134,6 +140,7 @@ export const DOCS: SeededDoc[] = [
         comments: [
             {
                 card: 'headline',
+                anchor: 'full line-up reveal',
                 author: 'anouk',
                 text: 'Can we lead with the line-up reveal date instead of the theme?',
             },
