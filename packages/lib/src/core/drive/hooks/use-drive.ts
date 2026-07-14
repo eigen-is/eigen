@@ -57,6 +57,9 @@ export const driveKeys = {
     fileHistory: (ownerId: string, mountId: string, pathId: string, limit: number) =>
         [...driveKeys.history(ownerId), mountId, pathId, limit] as const,
     watches: (ownerId: string) => [...driveKeys.owner(ownerId), 'watches'] as const,
+    // Aggregate watches across the caller's own home, teams, and shared owners. Owner-less like
+    // mimeAll: it always means "everything the current user watches".
+    watchesAll: () => [...driveKeys.all, 'watchesAll'] as const,
     pathWatched: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.watches(ownerId), mountId, pathId] as const,
 };

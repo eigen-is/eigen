@@ -655,11 +655,38 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
+    // Watched listing. With ?all=1 it fans out server-side over the caller's own home, every team
+    // they belong to, and every owner that shared a path into this home; self-only. Each owner reuses
+    // the same per-owner path (getSharedDrive → ACL-checked getWatches), so authorization is identical
+    // to a single-owner request and per-owner errors isolate to []. Without the param it is unchanged.
     .get(
         '/drive/:ownerId/watches',
-        async ({ params, user }): Promise<DrivePath[]> => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return drive.getWatches(user);
+        async ({ params, query, user }): Promise<DrivePath[]> => {
+            if (!query.all) {
+                const drive = await getSharedDrive(params.ownerId, user);
+                return drive.getWatches(user);
+            }
+
+            // Aggregation reads other homes (team mounts, foreign-owner shares), so it is self-only.
+            requireSelf(params.ownerId, user.id);
+            const { teamIds } = await getMemberships(user.id);
+            const teamOwners = teamIds.map((id) => teamOwnerId(id));
+            const covered = new Set([user.id, ...teamOwners]);
+            const sharedOwners = (await (await getDrive(user)).getSharedOwnerIds()).filter((id) => !covered.has(id));
+            const owners = [user.id, ...teamOwners, ...sharedOwners];
+
+            const lists = await Promise.all(
+                owners.map((ownerId) =>
+                    getSharedDrive(ownerId, user)
+                        .then((drive) => drive.getWatches(user))
+                        .catch(() => [] as DrivePath[]),
+                ),
+            );
+
+            // Dedupe by path.id; the Watched view sorts client-side, so leave ordering to the FE.
+            const byId = new Map<string, DrivePath>();
+            for (const list of lists) for (const path of list) byId.set(path.id, path);
+            return [...byId.values()];
         },
-        { auth: true },
+        { auth: true, query: t.Object({ all: t.Optional(t.String()) }) },
     );

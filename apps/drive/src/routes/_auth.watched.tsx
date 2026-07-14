@@ -1,9 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths, useUserWatches } from '@workspace/lib/drive';
-import { useMyTeams } from '@workspace/lib/home';
-import { teamOwnerId } from '@workspace/lib/types';
+import { DEFAULT_MOUNT_ID, useAllWatches, usePathInfo } from '@workspace/lib/drive';
 import {
     type DrivePath,
     type DriveSearchParams,
@@ -36,17 +34,9 @@ function WatchedRoute() {
     const { isMobile } = useLayout();
     const { openPreview, updatePreview, isPreviewOpen } = usePreview();
 
-    const { data: myTeams, isLoading: isTeamsLoading } = useMyTeams();
-    const teams = myTeams?.map((t) => teamOwnerId(t.id)) ?? [];
-
-    // Watches on alice's share live in alice's mount; include her ownerId so those watches
-    // are fetched. Wait for the share list so the owner set is complete on the first fetch.
-    const { data: sharedWithMe, isLoading: isSharedLoading } = useSharedPaths(userId, 'with-me');
-    const ownerIds = isSharedLoading
-        ? []
-        : [...new Set([userId, ...teams, ...(sharedWithMe?.map((p) => p.ownerId) ?? [])])];
-
-    const watches = useUserWatches(ownerIds);
+    // One request fans out server-side over the caller's own home, their teams, and every owner
+    // who shared a path with them (?all=1).
+    const { data: watches = [], isLoading } = useAllWatches();
     const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
 
     const onRowSelect = (path: DrivePath) => {
@@ -90,7 +80,7 @@ function WatchedRoute() {
         navigate({ to: Route.fullPath, search: { pid: undefined, uid: undefined, mid: undefined } });
     };
 
-    if (isTeamsLoading || isSharedLoading) return <LoadingState />;
+    if (isLoading) return <LoadingState />;
 
     return (
         <DriveLayout

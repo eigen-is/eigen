@@ -1,5 +1,6 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { PathWatchStatus } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
@@ -30,6 +31,7 @@ export function useWatchPath(ownerId: string, mountId: string, pathId: string) {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: driveKeys.watches(ownerId) });
+            queryClient.invalidateQueries({ queryKey: driveKeys.watchesAll() });
             queryClient.invalidateQueries({ queryKey: driveKeys.pathWatched(ownerId, mountId, pathId) });
         },
         onError: onMutationError,
@@ -47,26 +49,27 @@ export function useUnwatchPath(ownerId: string, mountId: string, pathId: string)
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: driveKeys.watches(ownerId) });
+            queryClient.invalidateQueries({ queryKey: driveKeys.watchesAll() });
             queryClient.invalidateQueries({ queryKey: driveKeys.pathWatched(ownerId, mountId, pathId) });
         },
         onError: onMutationError,
     });
 }
 
-// GET WATCHES FOR MULTIPLE OWNERS — one query per owner, error → [] so a removed mount
-// doesn't break the aggregate list.
-export function useUserWatches(ownerIds: string[]) {
-    return useQueries({
-        queries: ownerIds.map((ownerId) => ({
-            queryKey: driveKeys.watches(ownerId),
-            queryFn: async (): Promise<DrivePath[]> => {
-                const response = await driveApi({ ownerId }).watches.get();
-                if (response.error) throw new AppError(response);
-                return response.data;
-            },
-            enabled: !!ownerId,
-            staleTime: 60_000,
-        })),
-        combine: (results) => results.flatMap((r) => (r.status === 'error' ? [] : (r.data ?? []))),
+// GET ALL WATCHES — everything the signed-in user watches across their own home, every team they
+// belong to, and every owner who shared a path with them, merged and deduped server-side
+// (GET /drive/:ownerId/watches?all=1). Always the current user, so it reads useAuth itself.
+export function useAllWatches() {
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
+    return useQuery<DrivePath[]>({
+        queryKey: driveKeys.watchesAll(),
+        queryFn: async () => {
+            const response = await driveApi({ ownerId }).watches.get({ query: { all: '1' } });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        enabled: !!ownerId,
+        staleTime: 60_000,
     });
 }

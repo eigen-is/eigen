@@ -248,6 +248,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
 | `useAggregateMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useAllWatches` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useCheckPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useConvertDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-convert-document.ts |
@@ -291,7 +292,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUnwatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useUserWatches` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useWatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useFileContent` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-content.ts |
 | `useFileSave` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-save.ts |
