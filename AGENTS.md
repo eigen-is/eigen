@@ -173,8 +173,8 @@ of changes needs all of it.
 | **Server settings**   | `apps/api/src/lib/config/server-settings.ts` | Runtime-adjustable quotas, storage default (`defaults.mount.{storageType,s3Config}`), onboarding, guests   |
 | **Quota resolution**  | `apps/api/src/lib/config/quota.ts`           | `resolveUserQuotas()` — server default + team overrides (most permissive wins)                             |
 | **Quota enforcement** | `apps/api/src/lib/config/enforcement.ts`     | `getUploadMaxSize`, `enforceAvatarUpload`                                                                  |
-| **Mailer**            | `apps/api/src/lib/core/mailer.ts`            | `sendMail(OutboundMail)` — sendmail transport, skips in dev, supports replyTo/attachments                  |
-| **Environment**       | `apps/api/src/lib/config/env.ts`             | `isProduction()` — checks `PRODUCTION=1` or `NODE_ENV=production`                                         |
+| **Mailer**            | `apps/api/src/lib/core/mailer.ts`            | `sendMail(OutboundMail)` — sendmail transport, skips in dev + demo mode, supports replyTo/attachments      |
+| **Environment**       | `apps/api/src/lib/config/env.ts`             | `isProduction()` (`PRODUCTION=1`/`NODE_ENV=production`); `isDemo()` (`EIGEN_DEMO=1`) — demo-instance deployment shape, see [DEMO_MODE.md](docs/DEMO_MODE.md) |
 | **Singleton factory** | `apps/api/src/utils/singleton.ts`            | `createAsyncSingleton()` for Home/DB instances                                                             |
 | **Home relay**        | `apps/api/src/lib/home/home-relay.ts`        | Cross-home messaging via `sendToHome()`; reads via `pull*()`. See [SCALABILITY.md](docs/SCALABILITY.md)    |
 | **Scheduler**         | `apps/api/src/lib/scheduler/`                | `scheduleInterval(name, ms, fn)` for in-process periodic jobs; register in `jobs.ts`                       |

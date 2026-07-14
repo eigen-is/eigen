@@ -108,17 +108,16 @@ closed), the sheets engine (dev-frozen format, own fidelity program), versioning
 
 ## On hold (decision needed)
 
-- **Demo mode** — spec approved (`docs/superpowers/specs/2026-06-10-demo-mode-design.md`),
-  implementation on hold. [PROPOSAL_DEMO_MODE.md](PROPOSAL_DEMO_MODE.md) (2026-07-11, deep-reviewed +
-  rewritten 2026-07-14) settles on a **small fixed pool of ~20 persona colleagues** in one org
-  (random assignment on entry) + hourly host-level wipe-and-reseed, estimate ~3–5 days for the
-  machinery. The review dropped the fixed-persona-id requirement (data model is name/email-keyed),
-  added a small `isDemo()` auth guard (blocks api-key creation, 2FA enrollment, org creation),
-  and kept the full data-root wipe (a partial home/team wipe
-  reopens identity-tamper + share-registry accumulation). Design decision now closed; remaining open
-  points are cadence, pool size, and slides/stickies content. It is both the public launch's headline
-  asset and the grant's "public demo instance" deliverable, so it moves up sharply once a launch or
-  the grant push is the active goal. Start on explicit go.
+- **Demo mode** — **machinery implemented on branch `demo-mode` (2026-07-14), awaiting merge + a
+  Tuimel content pass.** As-built design in [DEMO_MODE.md](DEMO_MODE.md); rationale in
+  [PROPOSAL_DEMO_MODE.md](PROPOSAL_DEMO_MODE.md). A **small fixed pool of ~20 persona colleagues** in
+  one org (random assignment on entry) + hourly host-level wipe-and-reseed. Shipped: `EIGEN_DEMO`
+  entry route, `isDemo()` auth guard (api-key writes / 2FA enable / revoke-sessions — org-create left
+  to the product-level privesc fix `32fe269d`), `/p/config` flag, `sendMail` skip, `seed-demo.ts` +
+  reset/snapshot/restore scripts + systemd units. The "Tuimel Festival" content is a minimal first
+  pass; a content-deepening pass is the remaining work. It is both the public launch's headline asset
+  and the grant's "public demo instance" deliverable, so it moves up sharply once a launch or the
+  grant push is the active goal. Merge + content pass on explicit go.
 
 ---
 

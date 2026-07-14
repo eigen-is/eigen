@@ -1,0 +1,188 @@
+# Demo mode
+
+> **TLDR**: Demo mode is a **deployment shape, not a code mode**. A dedicated box runs with
+> `EIGEN_DEMO=1`; visitors enter through one public route, `GET /p/demo/enter`, which signs them
+> into a random seeded persona from a ~20-user pool using the same session-minting mechanism the
+> guest-OTP flow uses in production. An offline `seed-demo.ts` script builds a lived-in workspace
+> through the real product surfaces, and a host-level script wipes and reseeds the box every hour.
+> Mainline conditional surface on a real instance is near zero: one line in `sendMail`, one
+> `/p/config` flag, one login-page conditional, a demo banner, a pass-through auth guard, and the
+> inert entry route — all keyed off `isDemo()` (`EIGEN_DEMO === '1'`) and dead without the env var.
+
+## What demo mode is
+
+`isDemo()` (`apps/api/src/lib/config/env.ts`) reads `process.env.EIGEN_DEMO === '1'`. It is an env
+var, not a server setting — the whole instance is the mode, so it can't be toggled from an admin UI
+and can't drift onto a real box. Everything else is a runtime check against it. The exact touchpoints
+that exist in mainline code (all inert when `EIGEN_DEMO` is unset):
+
+- **`sendMail` skip** (`lib/core/mailer.ts`) — the existing dev-skip early-return also fires on
+  `isDemo()`. Load-bearing: a demo box has no MTA, so a real send would throw on every share/invite/iMIP.
+- **`/p/config` `demoMode`** (`routes/public.ts`) — `getPublicConfig()` gains `demoMode: isDemo()`,
+  the single flag the frontend keys off.
+- **login-page conditional** (`packages/ui/.../pages/login-page.tsx`) — when `demoMode` is true the
+  card shows an **Enter demo** button (linking to `/p/demo/enter`) with the password form behind a
+  "Sign in with password" toggle, so the admin can still get in.
+- **`DemoBanner`** (`packages/ui/.../app/demo-banner.tsx`, mounted once in `AppShell`) — a muted top
+  strip ("You are exploring as \<name\>. Everything resets every hour.").
+- **pass-through auth guard** (`routes/auth.ts`) — an `onBeforeHandle` that returns immediately when
+  `!isDemo()`.
+- **inert `/p/demo/enter`** (`routes/demo.ts`) — the route is always registered but 404s when
+  `!isDemo()`.
+
+No new tables, no scheduler jobs, no settings-schema churn, no changes to Drive/ACL/Home code.
+
+## Entry: `GET /p/demo/enter`
+
+Public route (no `auth: true`), gated at the top by `isDemo()` (else 404). It reads the demo org id
+from server config, then discovers the pool from org membership — members with role `member`
+(the setup admin is org `owner`, so it's excluded), so the pool can never drift from the seeder — and
+picks one at random. It signs that persona in via `signInWithScopedPassword('demo', id, email)`
+(`lib/auth/guest-auth.ts`), relays the response's `Set-Cookie` headers with `getSetCookie()` (which
+keeps multiple cookies distinct where `get()` would comma-join them), and 302s to `/space`.
+
+`signInWithScopedPassword` is shared with the guest-OTP flow (scope `'guest' | 'demo'`). It upserts
+the account's credential with a deterministic password `HMAC-SHA256('<scope>:' + email, auth.secret)`
+that nobody ever sees, then calls `auth.api.signInEmail({ asResponse: true })` for a real signed
+better-auth session. Re-deriving and overwriting the password **on every entry** is the
+password-tamper heal: a visitor who changes a persona's password can't lock the next visitor out.
+
+**Random-assignment residual:** two concurrent visitors can land on the same persona (~1/20 per
+pair) and co-edit its private drive; shared/team content is the common case and the point of the pool.
+
+## Auth guard
+
+Three auth mutations are open to any signed-in persona; the hourly wipe heals them but a small guard
+closes the within-the-hour window. `routes/auth.ts` adds an `onBeforeHandle` on the `betterAuth`
+instance that, **only when `isDemo()`**, 403s a short denylist (`DEMO_BLOCKED_AUTH_PATHS`):
+
+- `/auth/api-key/{create,update,delete}` — api keys are live IMAP/CalDAV/WebDAV credentials
+  (`protocol-auth.ts` accepts any key), so a visitor could mint working protocol credentials.
+- `/auth/two-factor/enable` — a 2FA enrollment would turn the persona's next sign-in into a challenge,
+  locking it out of the pool until the reset.
+- `/auth/revoke-sessions`, `/auth/revoke-other-sessions` — kicking other visitors is griefing.
+
+**Org create/leave are deliberately NOT blocked here.** The privilege-escalation path they used to
+open (create an org → leave the default org as `owner` → `requireAdmin` passes) was fixed at the
+product level: `requireAdmin`/`getOrgRole` are scoped to `config.orgId` and the org plugin sets
+`allowUserToCreateOrganization: false` (commit `32fe269d`, regression-pinned by `org-privesc.test.ts`).
+No demo-specific guard is needed.
+
+**Ordering constraint.** The guard MUST be chained before `.mount(auth.handler)`. Elysia's AOT
+compilation freezes each instance's lifecycle pipeline in registration order, so a hook added after
+`.mount()` never runs for the mounted better-auth handler.
+
+## Seeder: `apps/api/src/scripts/seed-demo.ts`
+
+An offline, in-process seeder — it imports `../app`, POSTs `/setup/complete`, and drives the real
+domain surfaces as the personas, so Activity panels, file history, watchers, and the notification
+bell populate for free. It runs against an **empty** `EIGEN_DATA_ROOT` and refuses a completed setup
+(`server/config.json` exists — the reset script wipes first). Storage is `local-id`; it enforces the
+demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUploadSizeMB: 5`).
+
+- **Email-keyed personas, no fixed ids.** `content.ts` `PERSONAS` are keyed by a stable email
+  local-part; the runtime email is `<key>@MAIL_DOMAIN`. Everything the data model keys on (ACLs,
+  comments, calendar attendees, stickies `creator`) resolves by email, so ids may be random each
+  rebuild. `auth.api.createUser` generates them; the `user.create` hook auto-joins each to the org.
+- **Content split from mechanics.** `apps/api/src/scripts/demo/content.ts` is **data only** — the
+  "Tuimel Festival" personas, folder names, and document/mail/event/chat/contact text. `seed-demo.ts`
+  turns it into a live workspace. A later content-deepening pass swaps `content.ts` without touching
+  mechanics.
+- **Content conventions.** All seeded directory and file names are lowercase; chat channels live in a
+  `chats/` directory on the team drive. A `festival crew` team is created (`createTeam` +
+  `addTeamMember` per persona) with an explicit shared mount.
+- **Docs and sheets through the shipped importers.** Docs are HTML → `.docx` (`@turbodocx/html-to-docx`)
+  → `convertToDocument(..., 'eigendoc')`; the budget sheet is built with `exceljs` → `convertToDocument(...,
+  'eigensheets')`. The demo dogfoods import on every reset; no bespoke Y.Doc builders.
+- **Slides and stickies from fixture containers.** `demo/fixtures/{sponsor-pitch.eigenslides,
+  festival-kanban.eigenstickies}` (`data.db` + `comments.db`) are byte-copied in — legal because
+  eigen-doc containers reference their internals by name, not pathId. Stickies `creator` keys are
+  rewritten to runtime emails after copy. Regenerate the fixtures with `demo/author-fixtures.ts`
+  whenever the deck/board content changes.
+- **Mail as raw RFC822.** `buildRfc822` writes real `Date` headers (dates relative to seed time) and
+  `Home.mail.mailboxDeliver` indexes them into `mail.db`. Inbox threads land in one persona; all-hands
+  mail lands in every inbox.
+- **Comment cards written AND anchored.** For each seeded comment the seeder wraps the anchor phrase
+  in a `comment` mark carrying the card id (`injectCommentMark`, mirroring the editor's `setComment`)
+  and writes the card into the doc's `comments` Y.Map (`writeCommentCard`, mirroring the FE's
+  `writeCardToDoc`). The comment thread is a real chat under the container's `chat/` folder; assignment
+  records the same `assigned` event + bell notification the route would.
+- **`__Secure-` cookie name.** With an https `API_URL` (or `NODE_ENV=production`) better-auth prefixes
+  its cookie names with `__Secure-`. The seeder needs an admin session for `addTeamMember`, so it
+  matches the full `name=value` pair verbatim (`(?:__Secure-|__Host-)?better-auth.session_token=...`)
+  rather than rebuilding the name — otherwise the session lookup misses and the seed aborts on a real box.
+- **Invocations.** Locally: `cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun
+  run src/scripts/seed-demo.ts`. On the box (throwaway container, WORKDIR `/app/apps/api`): the reset
+  script runs it by **absolute** path, `bun run /app/apps/api/src/scripts/seed-demo.ts`.
+
+## Reset: `scripts/demo-reset.sh`
+
+Hourly, on the hour, host-level (no in-app scheduler — swapping DB files under open handles is the
+`SQLITE_IOERR_VNODE` hazard, so the reset must live outside the app). Sequence:
+
+1. `docker compose stop eigen-api` — graceful SIGTERM within the 30 s `stop_grace_period`.
+2. `rm -rf data/server data/home data/team data/org data/guest` — an **explicit list, never a
+   wildcard**. `data/certs` (Caddy) and `data/dkim` (mail) survive.
+3. Reseed in a throwaway container off the current image (`run --rm --no-deps eigen-api ...`).
+4. Restart `eigen-api` — via a trap, but **only if `data/server/config.json` exists**. A failed seed
+   leaves the API stopped rather than serving the public first-run setup wizard to strangers; the next
+   hourly run (or an operator) retries.
+
+**Hard gate:** the script refuses to run unless `.env.production` contains `EIGEN_DEMO=1`, so it is
+physically unable to wipe a real box. The full-root wipe (rather than restoring a golden tarball)
+keeps every timestamp < 1 h old (rot immunity), rebuilds `users3.db` from current code each hour
+(schema-drift immunity), and heals every auth-DB tamper by construction (rogue orgs, minted keys,
+enrolled 2FA all vanish).
+
+Install the hourly run with the shipped systemd units (`scripts/systemd/eigen-demo-reset.{service,
+timer}`, `OnCalendar=hourly`, `Persistent=true` to catch a run missed while the box was down), or the
+one-line cron alternative in the setup guide.
+
+`scripts/snapshot.sh` / `scripts/restore.sh` are the general offline backup/restore that fall out of
+the same stop → copy-quiesced-tree → start sequence: `snapshot.sh` tars the quiesced `data/` (WAL/`-shm`
+included, so the never-checkpointed server DBs restore crash-consistent), `restore.sh` moves the current
+tree aside before unpacking. Both are production-usable, independent of demo mode.
+
+## Deployment shape
+
+- `COMPOSE_PROFILES=edge` (no `mail`): no postfix/dovecot/unbound, no MX — outbound and inbound mail
+  are physically absent, which is why `sendMail` skips.
+- Local mounts only — an `s3` mount stores bytes outside the data root and would desync from the wipe.
+- `docker-compose.yml` passes `EIGEN_DEMO: ${EIGEN_DEMO:-0}` through to the API; `scripts/update.sh`
+  adds it via `add_var_if_missing EIGEN_DEMO 0`, so an update never breaks an existing `.env.production`.
+- The seeder sets the server settings (signups off, quotas) each run, so they can't drift.
+
+See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator walkthrough.
+
+## Accepted residuals and deferred items
+
+- Two concurrent visitors can land on the same persona (~1/20 per pair) and see each other's private-drive edits.
+- Offensive content a visitor creates is visible to others for up to an hour, until the reset.
+- A visitor's outbound "send" silently succeeds-then-vanishes (mailer skip); a later 403 + toast on the send route is a consciously deferred option.
+- Seeded booking-thread replies sit in the recipient's inbox, not their Sent folder — a content-pass realism gap, not a mechanics bug.
+- The login page holds its form area until `/p/config` resolves, so a demo box costs one uncached paint before the Enter-demo button appears.
+- Idle visitors aren't kicked at the top of the hour; their next request 401s and the client redirects to login (a client-side session check, not a server push).
+- The elastic per-visitor warm pool (per-visitor pre-seeded accounts) remains the documented scale-up path if traffic ever demands per-visitor isolation; the entry route, seeder, and reset all survive that upgrade.
+
+## Key files
+
+| File | Purpose |
+|------|---------|
+| `apps/api/src/lib/config/env.ts` | `isDemo()` |
+| `apps/api/src/routes/demo.ts` | `GET /p/demo/enter` (pool pick + session mint) |
+| `apps/api/src/lib/auth/guest-auth.ts` | `signInWithScopedPassword` (shared HMAC session mint) |
+| `apps/api/src/routes/auth.ts` | `DEMO_BLOCKED_AUTH_PATHS` guard (before `.mount`) |
+| `apps/api/src/routes/public.ts` | `/p/config` `demoMode` flag |
+| `apps/api/src/lib/core/mailer.ts` | `sendMail` demo skip |
+| `apps/api/src/scripts/seed-demo.ts` | Offline in-process seeder (mechanics) |
+| `apps/api/src/scripts/demo/content.ts` | Tuimel Festival content (data only) |
+| `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the slides/stickies fixture containers |
+| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigenstickies` containers |
+| `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate) |
+| `scripts/snapshot.sh` / `scripts/restore.sh` | General offline backup/restore |
+| `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units |
+| `packages/ui/.../app/demo-banner.tsx` | Workspace banner |
+| `packages/ui/.../pages/login-page.tsx` | Enter-demo entry |
+| `apps/api/src/test/demo-mode.test.ts`, `seed-demo.test.ts` | Contract tests |
+</content>
+</invoke>

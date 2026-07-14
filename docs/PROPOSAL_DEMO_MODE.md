@@ -1,12 +1,32 @@
 # Proposal: Demo instance (no-login, small persona pool, hourly reset)
 
-> **Status — Proposal, written 2026-07-11, deep-reviewed against code 2026-07-14, not started.**
-> The ROADMAP row "Demo mode" (on hold, decision needed). Supersedes an earlier internal design
-> round (2026-06-10, approved then parked) that was built around an *elastic* pool of per-visitor
-> pre-seeded accounts. This version keeps that round's structural decisions but replaces both the
-> elastic pool and the interim single-shared-account idea with a **small fixed pool of ~20 persona
-> colleagues** in one org; a visitor is signed into a random one on entry. Also part of the grant
-> story: a public demo instance is a named deliverable.
+> **Status — Implemented 2026-07-14 on branch `demo-mode`; machinery shipped, content pass pending.**
+> The machinery in this proposal is built and tested (entry route, auth guard, `/p/config` flag,
+> `sendMail` skip, `seed-demo.ts` + reset/snapshot/restore scripts, systemd units). The "Tuimel
+> Festival" content is a minimal first pass; a content-deepening pass is the remaining work.
+> **The as-built design is documented in [DEMO_MODE.md](DEMO_MODE.md) — that is the authoritative
+> reference.** This file is kept for the design rationale and rejected alternatives.
+> Supersedes an earlier internal design round (2026-06-10, approved then parked) that was built
+> around an *elastic* pool of per-visitor pre-seeded accounts. This version keeps that round's
+> structural decisions but replaces both the elastic pool and the interim single-shared-account idea
+> with a **small fixed pool of ~20 persona colleagues** in one org; a visitor is signed into a random
+> one on entry. Also part of the grant story: a public demo instance is a named deliverable.
+
+> **Implementation deltas** (where the shipped code diverged from this proposal; see DEMO_MODE.md):
+> - **Org guard reduced.** The proposal's demo guard blocked `/auth/organization/{create,leave}`. It
+>   doesn't need to: the org privilege-escalation bug was fixed at the product level (`requireAdmin`
+>   scoped to `config.orgId` + `allowUserToCreateOrganization: false`, commit `32fe269d`,
+>   `org-privesc.test.ts`). The shipped denylist is api-key writes, 2FA enable, and revoke-(other-)sessions.
+> - **Converter seam is `convertToDocument`.** Docs/sheets seed through `convertToDocument`
+>   (`lib/import/import-document.ts`), not the `writeEigendocToYjs` / `writeSheetsToYjs` seams named here.
+> - **Mail needs raw RFC822.** Persona threads are delivered via hand-built RFC822 with explicit `Date`
+>   headers into `Home.mail.mailboxDeliver`, not `composeRfc822()` — dates must land in the wire headers.
+> - **Teams are explicit.** The crew shares a `createTeam` + `addTeamMember` team with its own mounted
+>   shared drive, not just the default org.
+> - **Comment cards must be anchored in the doc text.** Seeding a comment writes both the `comment` mark
+>   over the anchor phrase (`injectCommentMark`) and the card into the doc's `comments` Y.Map.
+> - **`__Secure-` cookie gotcha.** Under an https `API_URL` / `NODE_ENV=production`, better-auth prefixes
+>   its session cookie name; the seeder must reuse the full `name=value` pair or `addTeamMember` 401s.
 >
 > **Changes from the 2026-07-11 draft** (from the 2026-07-14 deep review — each finding verified
 > against source, file:line in § Why this shape):
