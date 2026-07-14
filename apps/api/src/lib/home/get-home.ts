@@ -1,5 +1,5 @@
 import { parseOwnerId } from '@workspace/lib/types';
-import { createAsyncSingleton } from '../../utils/singleton';
+import { type AsyncSingleton, createAsyncSingleton } from '../../utils/singleton';
 import { ApiError } from '../core';
 import { getOrgExists } from '../org/org.ts';
 import { getTeam } from '../team/team.ts';
@@ -10,10 +10,16 @@ import { getSyntheticOrgUser, OrgHome } from './org-home.ts';
 import { getSyntheticTeamUser, TeamHome } from './team-home.ts';
 import { UserHome } from './user-home.ts';
 
-const homeFactories: Map<string, () => Promise<Home>> = new Map();
+const homeFactories: Map<string, AsyncSingleton<Home>> = new Map();
 
 export function atHome(ownerId: string): boolean {
     return homeFactories.has(ownerId);
+}
+
+// Resets the idle timer on an already-loaded home. peek() never triggers the factory,
+// so a keepalive tick pins a live home without resurrecting an evicted one.
+export function touchHomeIfLoaded(ownerId: string): void {
+    homeFactories.get(ownerId)?.peek()?.touch();
 }
 
 export async function getHome(ownerId: string): Promise<Home> {
@@ -39,7 +45,7 @@ export async function getHome(ownerId: string): Promise<Home> {
             continue;
         }
 
-        const factory: () => Promise<Home> = createAsyncSingleton(async () => {
+        const factory: AsyncSingleton<Home> = createAsyncSingleton(async () => {
             // Identity-checked cleanup: evict only while we are still the installed factory, so a
             // superseded/orphaned home's teardown cannot evict a live successor for the same owner.
             const cleanUp = () => {
