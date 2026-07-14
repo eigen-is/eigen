@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { member, teamMember, user } from '../../../auth-schema.ts';
 import { type auth, getAuthDrizzleDb } from '../auth/auth.ts';
+import { getServerConfig } from '../config/server-config';
 
 // Canonical User type — the better-auth session user, including plugin columns
 // (role, banned, twoFactorEnabled, etc.). Derived from the configured `auth`
@@ -62,14 +63,32 @@ export async function getMemberships(userId: string): Promise<Memberships> {
 }
 
 export async function getOrgRole(userId: string): Promise<string | null> {
+    // Scope to the default org (config.orgId, pinned at setup). A user can self-create a second
+    // org and become its 'owner'; a lookup that isn't org-scoped could return that role and pass
+    // the instance-wide requireAdmin check. Scoping to the pinned id (not "the first org row",
+    // whose order is unspecified) stays correct even if a stray second org exists.
+    const orgId = getServerConfig()?.orgId;
+    if (!orgId) return null;
     const db = getAuthDrizzleDb();
-    const row = await db.select({ role: member.role }).from(member).where(eq(member.userId, userId)).get();
+    const row = await db
+        .select({ role: member.role })
+        .from(member)
+        .where(and(eq(member.userId, userId), eq(member.organizationId, orgId)))
+        .get();
     return row?.role ?? null;
 }
 
 export async function getOrgOwner(): Promise<User | null> {
+    // Scope to the default org — same reason as getOrgRole: a self-created org's owner must not
+    // be returned as the instance owner.
+    const orgId = getServerConfig()?.orgId;
+    if (!orgId) return null;
     const db = getAuthDrizzleDb();
-    const ownerMember = await db.select({ userId: member.userId }).from(member).where(eq(member.role, 'owner')).get();
+    const ownerMember = await db
+        .select({ userId: member.userId })
+        .from(member)
+        .where(and(eq(member.organizationId, orgId), eq(member.role, 'owner')))
+        .get();
     if (!ownerMember) return null;
     return getUserById(ownerMember.userId);
 }

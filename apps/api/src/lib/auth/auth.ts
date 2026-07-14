@@ -120,6 +120,12 @@ export const auth = betterAuth({
         // here. Existing users get auto-added to the default org via the user-create hook
         // above, and to teams via `auth.api.addMember` (admin UI), which both bypass invites.
         organization({
+            // Single-org app: product code never calls /organization/create (the plugin is used
+            // only for its data model). Block user-initiated creation so a normal user can't spin
+            // up an org they own and escalate past requireAdmin. Setup creates the default org via
+            // a system action (auth.api.createOrganization with userId, no session), which bypasses
+            // this gate.
+            allowUserToCreateOrganization: false,
             teams: {
                 enabled: true,
             },

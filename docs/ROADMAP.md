@@ -69,6 +69,7 @@ Large net-new builds or low value-per-effort today.
 
 | Item | Effort | Notes |
 |---|---|---|
+| Chat/comment `authorId` → email-only (verify) | S | Frozen-format (per-container `data.db` migration if pursued). Chat `messages` rows store both `authorId` (user id, NOT NULL) and `authorEmail`; display resolves from **email** (`chat-message-list.tsx:453-455`), and `authorId` is used only for the self-message check (`:223`). Comments are already email-keyed. **Verify** whether `authorId` can be dropped in favour of `authorEmail` (self-check compares current-user email instead) — it is the last user-id embedded in container bytes, and dropping it makes chat/comment fixtures fully id-free. Surfaced by the 2026-07-14 demo-mode ID audit. |
 | rspamd sidecar + spam learn-loop ([proposal](PROPOSAL_RSPAMD.md)) | 1–2 d | The real fix for the spam/DMARC pain that the Stalwart proposal exists to solve. rspamd+Redis as a Postfix milter (edge scoring, SPF/DKIM/DMARC); `mailboxDeliver` routes flagged mail to Junk; the existing "Report Spam" button trains Bayes via `/learnspam`·`/learnham` in `messageMove`. Fail-open, no frozen-format impact. |
 | Audit-branch deferred minors (2026-07-03 ledger) | S | Recorded, not fixed, all verified still present 2026-07-11: (1) `TeamHome.updateMount` persists-before-push — a mid-push `addMount` init failure on a storage re-point leaves settings enabled with no live mount until eviction (rare, self-heals on reload; add catch-and-revert). (2) HTML (non-PDF) export keeps remote `url()` in inline CSS — client-side beacon; needs a CSS `url()` stripper. (3) O(N·depth) descendant re-walk on permanent delete of large trees (s3/local-key perf). (4) Large-numeric `@page` values in PDF export — weasyprint cost blow-up. |
 | Audit P3 duplication folding | S–M | Still open from the audit P3 list (verified 2026-07-11): the `use-drive.ts` copy-mutation quartet (4 near-identical call-sites), drive's 4 list handlers, and the per-app `_auth.tsx` variants (10+ copies). Mechanical, subagent-friendly sweep. |
@@ -108,12 +109,16 @@ closed), the sheets engine (dev-frozen format, own fidelity program), versioning
 ## On hold (decision needed)
 
 - **Demo mode** — spec approved (`docs/superpowers/specs/2026-06-10-demo-mode-design.md`),
-  implementation on hold. A simplified counter-proposal
-  ([PROPOSAL_DEMO_MODE.md](PROPOSAL_DEMO_MODE.md), 2026-07-11) drops the account pool for a
-  shared-account + hourly host-level wipe-and-reseed design, cutting the estimate to ~3–5 days;
-  decision between the two designs is open. It is both the public launch's headline asset and the
-  grant's "public demo instance" deliverable, so it moves up sharply once a launch or the grant
-  push is the active goal. Start on explicit go.
+  implementation on hold. [PROPOSAL_DEMO_MODE.md](PROPOSAL_DEMO_MODE.md) (2026-07-11, deep-reviewed +
+  rewritten 2026-07-14) settles on a **small fixed pool of ~20 persona colleagues** in one org
+  (random assignment on entry) + hourly host-level wipe-and-reseed, estimate ~3–5 days for the
+  machinery. The review dropped the fixed-persona-id requirement (data model is name/email-keyed),
+  added a small `isDemo()` auth guard (blocks api-key creation, 2FA enrollment, org creation),
+  and kept the full data-root wipe (a partial home/team wipe
+  reopens identity-tamper + share-registry accumulation). Design decision now closed; remaining open
+  points are cadence, pool size, and slides/stickies content. It is both the public launch's headline
+  asset and the grant's "public demo instance" deliverable, so it moves up sharply once a launch or
+  the grant push is the active goal. Start on explicit go.
 
 ---
 
