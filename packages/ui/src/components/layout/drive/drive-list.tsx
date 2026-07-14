@@ -298,6 +298,17 @@ export function DriveList({
         unreadPathIds,
     };
 
+    // Context-aware default empty-state hint: only mention drag-drop where it works,
+    // and point at the "New" button only when there's something to create.
+    const dropWorks = allowUpload && !!onUploadFiles;
+    const defaultEmptyHint = dropWorks
+        ? createItems.length > 0
+            ? 'Drop files here, or use the “New” button.'
+            : 'Drop files here.'
+        : createItems.length > 0
+          ? 'Use the “New” button to create one.'
+          : undefined;
+
     const contentDiv = (
         <div className="h-full flex flex-col relative border-r" {...targetProps}>
             {allowUpload && (
@@ -327,7 +338,7 @@ export function DriveList({
                 />
             )}
 
-            {items.length === 0 && (emptyState ?? <EmptyState />)}
+            {items.length === 0 && (emptyState ?? <EmptyState hint={defaultEmptyHint} />)}
         </div>
     );
 

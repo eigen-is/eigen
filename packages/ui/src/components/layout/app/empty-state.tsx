@@ -2,12 +2,14 @@ import type { ReactNode } from 'react';
 
 type EmptyStateProps = {
     message?: string;
+    hint?: string;
     icon?: ReactNode;
     action?: ReactNode;
 };
 
 export function EmptyState({
     message = 'Within this void, all possibilities are yet unobserved.',
+    hint,
     icon,
     action,
 }: EmptyStateProps) {
@@ -15,6 +17,7 @@ export function EmptyState({
         <div className="flex flex-col items-center justify-center h-full w-full gap-4 p-8 text-center">
             {icon && <div className="text-muted-foreground">{icon}</div>}
             <p className="text-muted-foreground">{message}</p>
+            {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
             {action}
         </div>
     );

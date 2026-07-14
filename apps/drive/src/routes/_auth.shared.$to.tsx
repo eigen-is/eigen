@@ -11,6 +11,7 @@ import {
     isInlineEditable,
 } from '@workspace/lib/types/drive';
 import { LoadingState, NotFound } from '@workspace/ui';
+import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
@@ -115,6 +116,15 @@ function DriveRoute() {
             allowRename={to === 'by-me'}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}
+            emptyState={
+                <EmptyState
+                    message={
+                        to === 'by-me'
+                            ? 'Files you’ve shared will appear here.'
+                            : 'Files shared with you will appear here.'
+                    }
+                />
+            }
         />
     );
 }

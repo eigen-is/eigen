@@ -3,6 +3,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useMimeContent, useMountMimeContent, usePathInfo } from '@workspace/lib/drive';
 import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
+import { EmptyState } from '../app/empty-state';
 import { useLayout } from '../app/layout-context';
 import { NotFound } from '../app/not-found';
 import { usePreview } from '../preview-provider';
@@ -92,6 +93,7 @@ export function EigenDocListView({
             showBreadcrumb={false}
             title={config.allLabel}
             currentPath={rootPath}
+            emptyState={<EmptyState hint={`Use the “${config.newLabel}” button to create one.`} />}
         />
     );
 }
