@@ -1,5 +1,6 @@
 import type { PublicUser } from '@workspace/lib/types/public';
 import { Elysia, t } from 'elysia';
+import { isDemo } from '../lib/config/env';
 import { getPublicConfig } from '../lib/config/server-config';
 import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core/errors';
@@ -74,5 +75,5 @@ export const publicRouter = new Elysia({ name: 'public' })
     .get('/p/config', async () => {
         const config = getPublicConfig();
         const settings = getServerSettings();
-        return { ...config, waitlistEnabled: settings.onboarding?.waitlist?.enabled ?? false };
+        return { ...config, waitlistEnabled: settings.onboarding?.waitlist?.enabled ?? false, demoMode: isDemo() };
     });
