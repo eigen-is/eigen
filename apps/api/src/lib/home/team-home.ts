@@ -24,6 +24,9 @@ export class TeamHome extends Home {
     public teamId: string;
     public declare settings: JsonStore<TeamSettings>;
 
+    // Team homes have no SSE keep-alive pin (collab sockets touch only at open), so they get a longer idle window.
+    protected override idleMs = Number(process.env['TEAM_HOME_IDLE_MS']) || 1000 * 60 * 30;
+
     constructor(syntheticUser: User, cleanUp?: () => void) {
         super(syntheticUser, cleanUp);
 

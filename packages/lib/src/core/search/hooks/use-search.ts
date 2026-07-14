@@ -12,6 +12,8 @@ export type UseSearchOptions = {
     from?: string;
     to?: string;
     limit?: number;
+    // '1' fans the file source out over the caller's team drives server-side.
+    teams?: string;
     enabled?: boolean;
 };
 
@@ -27,6 +29,7 @@ export function useSearch(opts: UseSearchOptions) {
                     from: opts.from,
                     to: opts.to,
                     limit: opts.limit,
+                    teams: opts.teams,
                 },
                 fetch: { signal },
             });

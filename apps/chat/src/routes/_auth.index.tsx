@@ -1,6 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
-import { useChats } from '@workspace/lib/chat';
+import { useAllChats } from '@workspace/lib/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -9,14 +8,13 @@ import { MessageSquare, Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 function ChatIndex() {
-    const { user } = useAuth();
     const navigate = useNavigate();
-    const { data } = useChats(user?.id || '');
+    const { chats, isLoading } = useAllChats();
     const [createChatOpen, setCreateChatOpen] = useState(false);
 
     useEffect(() => {
-        if (data && data.length > 0) {
-            const chat = data[0];
+        if (chats.length > 0) {
+            const chat = chats[0];
             navigate({
                 to: '/$ownerId/$mountId/$chatId',
                 params: {
@@ -26,7 +24,7 @@ function ChatIndex() {
                 },
             });
         }
-    }, [data, navigate]);
+    }, [chats, navigate]);
 
     const handleAfterCreate = useCallback(
         (newPath: DrivePath) => {
@@ -38,7 +36,7 @@ function ChatIndex() {
         [navigate],
     );
 
-    if (data && data.length === 0) {
+    if (!isLoading && chats.length === 0) {
         return (
             <>
                 <EmptyState

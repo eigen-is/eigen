@@ -7,6 +7,7 @@ import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { contentDisposition, setCacheHeaders } from '../lib/core/http';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
+import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
 import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
@@ -476,16 +477,23 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Mime type filter (aggregates over all mounts)
+    // Mime type filter (aggregates over all mounts). ?teams=1 also fans out over the caller's teams via home-relay.
     .get(
         '/drive/:ownerId/mime/:mimeType',
-        async ({ params, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.getMimeTypeContents(params.mimeType.replace('-', '/'), {
-                excludeDocumentChildren: true,
-            });
+        async ({ params, query, user }) => {
+            const mimeType = params.mimeType.replace('-', '/');
+            const options = { excludeDocumentChildren: true };
+
+            if (!query.teams) {
+                const drive = await getSharedDrive(params.ownerId, user);
+                return await drive.getMimeTypeContents(mimeType, options);
+            }
+
+            // Aggregation reads other homes (team mounts), so it is self-only.
+            requireSelf(params.ownerId, user.id);
+            return await aggregateMimeContents(user, mimeType, options);
         },
-        { auth: true },
+        { auth: true, query: t.Object({ teams: t.Optional(t.String()) }) },
     )
     // Mime type filter scoped to a single mount
     .get(
@@ -630,11 +638,19 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
+    // Watched listing. ?all=1 fans out over the caller's own home, their teams, and every owner that
+    // shared into this home — each via the same ACL-checked getSharedDrive → getWatches; self-only.
     .get(
         '/drive/:ownerId/watches',
-        async ({ params, user }): Promise<DrivePath[]> => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return drive.getWatches(user);
+        async ({ params, query, user }): Promise<DrivePath[]> => {
+            if (!query.all) {
+                const drive = await getSharedDrive(params.ownerId, user);
+                return drive.getWatches(user);
+            }
+
+            // Aggregation reads other homes (team mounts, foreign-owner shares), so it is self-only.
+            requireSelf(params.ownerId, user.id);
+            return aggregateWatches(user);
         },
-        { auth: true },
+        { auth: true, query: t.Object({ all: t.Optional(t.String()) }) },
     );

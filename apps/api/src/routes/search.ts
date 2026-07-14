@@ -1,6 +1,8 @@
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SearchResponse, SearchSource } from '@workspace/lib/types/search';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
+import { aggregateFileSearch } from '../lib/drive/aggregate';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
 
@@ -43,7 +45,14 @@ export const searchRouter = new Elysia({ name: 'search' })
                       to: query.to,
                   })
                 : [];
-            const file = searchFile ? home.drive.search({ q: query.q, limit }) : [];
+
+            let file: DrivePath[] = [];
+            if (searchFile) {
+                // ?teams fans the file source out over the caller's team memberships (self-only route).
+                file = query.teams
+                    ? await aggregateFileSearch(user, query.q, limit)
+                    : home.drive.search({ q: query.q, limit });
+            }
             return { mail, file };
         },
         {
@@ -55,6 +64,7 @@ export const searchRouter = new Elysia({ name: 'search' })
                 from: t.Optional(t.String({ maxLength: 256 })),
                 to: t.Optional(t.String({ maxLength: 256 })),
                 limit: t.Optional(t.Integer({ minimum: 1, maximum: 50 })),
+                teams: t.Optional(t.String()),
             }),
         },
     );

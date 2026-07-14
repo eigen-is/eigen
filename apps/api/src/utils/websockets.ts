@@ -5,6 +5,7 @@ export function keepWebSocketAlive(
     user: User,
     ws: ServerWebSocket,
     onClose: () => void,
+    onTick?: () => void,
 ): ReturnType<typeof setInterval> {
     const pingInterval = setInterval(() => {
         if (ws.readyState === 1) {
@@ -15,7 +16,10 @@ export function keepWebSocketAlive(
                 clearInterval(pingInterval);
                 console.log(`Ping failed, closing connection for user ${user.id}`);
                 onClose();
+                return;
             }
+            // Only pin liveness once the socket has proven still open — a failed ping never reaches here.
+            onTick?.();
         } else {
             clearInterval(pingInterval);
             console.log(`Ping failed, closing connection for user ${user.id}`);
