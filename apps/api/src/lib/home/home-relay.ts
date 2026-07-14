@@ -266,3 +266,14 @@ export async function pullTeamMounts(
         }),
     );
 }
+
+// Mime-filtered contents of a team drive, aggregated over its mounts. Team membership grants read
+// of everything in the mount by design, so the caller-side membership check is the only gate.
+export async function pullMimeContents(
+    ownerId: string,
+    mimeType: string,
+    options?: { excludeDocumentChildren?: boolean },
+): Promise<DrivePath[]> {
+    const home = await getTeamHome(ownerId);
+    return home.drive.getMimeTypeContents(mimeType, options);
+}

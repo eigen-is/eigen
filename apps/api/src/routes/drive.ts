@@ -1,3 +1,4 @@
+import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { Elysia, t } from 'elysia';
@@ -11,9 +12,11 @@ import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
+import { pullMimeContents } from '../lib/home/home-relay';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
+import { getMemberships } from '../lib/user';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
 import { eigenDocTypeSchema } from './shared-schemas';
@@ -476,16 +479,38 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Mime type filter (aggregates over all mounts)
+    // Mime type filter (aggregates over all mounts). With ?teams=1 it also fans out server-side over
+    // the caller's own team memberships (via home-relay); team copies win over shared_paths mirrors.
     .get(
         '/drive/:ownerId/mime/:mimeType',
-        async ({ params, user }) => {
+        async ({ params, query, user }) => {
+            const mimeType = params.mimeType.replace('-', '/');
+            const options = { excludeDocumentChildren: true };
+
+            if (!query.teams) {
+                const drive = await getSharedDrive(params.ownerId, user);
+                return await drive.getMimeTypeContents(mimeType, options);
+            }
+
+            // Aggregation reads other homes (team mounts), so it is self-only.
+            requireSelf(params.ownerId, user.id);
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.getMimeTypeContents(params.mimeType.replace('-', '/'), {
-                excludeDocumentChildren: true,
-            });
+            const personal = await drive.getMimeTypeContents(mimeType, options);
+            const { teamIds } = await getMemberships(user.id);
+            const teamResults = await Promise.all(
+                teamIds.map((teamId) =>
+                    pullMimeContents(teamOwnerId(teamId), mimeType, options).catch(() => [] as DrivePath[]),
+                ),
+            );
+
+            // Dedupe by path.id: personal first, authoritative team copies overwrite shared_paths
+            // mirrors; return sorted by updatedAt DESC.
+            const byId = new Map<string, DrivePath>();
+            for (const path of personal) byId.set(path.id, path);
+            for (const list of teamResults) for (const path of list) byId.set(path.id, path);
+            return [...byId.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         },
-        { auth: true },
+        { auth: true, query: t.Object({ teams: t.Optional(t.String()) }) },
     )
     // Mime type filter scoped to a single mount
     .get(
