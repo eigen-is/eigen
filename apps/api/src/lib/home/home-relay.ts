@@ -277,3 +277,10 @@ export async function pullMimeContents(
     const home = await getTeamHome(ownerId);
     return home.drive.getMimeTypeContents(mimeType, options);
 }
+
+// FTS search over a team drive's own mounts (name + body). Same design as pullMimeContents: team
+// membership grants read of the whole mount, so the caller-side membership check is the only gate.
+export async function pullDriveSearch(ownerId: string, opts: { q: string; limit: number }): Promise<DrivePath[]> {
+    const home = await getTeamHome(ownerId);
+    return home.drive.search(opts);
+}

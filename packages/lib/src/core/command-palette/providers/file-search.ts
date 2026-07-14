@@ -29,6 +29,8 @@ export function useFileSearchResults(
         q: parsed.q,
         sources: ['file'],
         limit: 6,
+        // Include the caller's team drives in palette file hits (server-side fan-out).
+        teams: '1',
         enabled: !scopeBlocks && parsed.q.length > 0,
     });
 
