@@ -1,44 +1,24 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { getServerConfig } from '../lib/config/server-config';
-import { app, assertJson, authedRequest, driveGet, driveUpload, getTestContext } from './setup';
+import {
+    addMember,
+    addTeamMount,
+    app,
+    assertJson,
+    authedRequest,
+    createTeam,
+    driveGet,
+    driveUpload,
+    firstMountId,
+    getTestContext,
+} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
 const isWindows = process.platform === 'win32';
-
-async function createTeam(ctx: TestCtx, orgId: string, name: string): Promise<string> {
-    const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, organizationId: orgId }),
-    });
-    return (await assertJson<OrgTeam>(res)).id;
-}
-
-async function addMember(ctx: TestCtx, teamId: string, userId: string): Promise<void> {
-    await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamId, userId }),
-    });
-}
-
-async function addTeamMount(ctx: TestCtx, teamId: string, name: string): Promise<void> {
-    await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, storageType: 'local', maxSizeMB: 500 }),
-    });
-}
-
-async function firstMountId(token: string, ownerId: string): Promise<string> {
-    const res = await authedRequest(token, `/drive/${ownerId}/mounts`);
-    const mounts = await assertJson<MountInfo[]>(res);
-    return mounts[0].id;
-}
 
 // Upload a plaintext file with a distinctive name AND body — plaintext bodies get contentDirty at
 // upload, so a content reindex sweep on the owning home makes the body FTS-searchable.

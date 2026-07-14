@@ -479,8 +479,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Mime type filter (aggregates over all mounts). With ?teams=1 it also fans out server-side over
-    // the caller's own team memberships (via home-relay); team copies win over shared_paths mirrors.
+    // Mime type filter (aggregates over all mounts). ?teams=1 also fans out over the caller's teams via home-relay.
     .get(
         '/drive/:ownerId/mime/:mimeType',
         async ({ params, query, user }) => {
@@ -503,8 +502,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 ),
             );
 
-            // Dedupe by path.id: personal first, authoritative team copies overwrite shared_paths
-            // mirrors; return sorted by updatedAt DESC.
+            // Dedupe by path.id (authoritative team copies overwrite shared_paths mirrors); newest first.
             const byId = new Map<string, DrivePath>();
             for (const path of personal) byId.set(path.id, path);
             for (const list of teamResults) for (const path of list) byId.set(path.id, path);
@@ -655,10 +653,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Watched listing. With ?all=1 it fans out server-side over the caller's own home, every team
-    // they belong to, and every owner that shared a path into this home; self-only. Each owner reuses
-    // the same per-owner path (getSharedDrive → ACL-checked getWatches), so authorization is identical
-    // to a single-owner request and per-owner errors isolate to []. Without the param it is unchanged.
+    // Watched listing. ?all=1 fans out over the caller's own home, their teams, and every owner that
+    // shared into this home — each via the same ACL-checked getSharedDrive → getWatches; self-only.
     .get(
         '/drive/:ownerId/watches',
         async ({ params, query, user }): Promise<DrivePath[]> => {
@@ -672,7 +668,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const { teamIds } = await getMemberships(user.id);
             const teamOwners = teamIds.map((id) => teamOwnerId(id));
             const covered = new Set([user.id, ...teamOwners]);
-            const sharedOwners = (await (await getDrive(user)).getSharedOwnerIds()).filter((id) => !covered.has(id));
+            const ownDrive = await getDrive(user);
+            const sharedOwners = (await ownDrive.getSharedOwnerIds()).filter((id) => !covered.has(id));
             const owners = [user.id, ...teamOwners, ...sharedOwners];
 
             const lists = await Promise.all(

@@ -52,9 +52,8 @@ export const searchRouter = new Elysia({ name: 'search' })
             if (searchFile) {
                 const personal = home.drive.search({ q: query.q, limit });
                 if (query.teams) {
-                    // Fan out over the caller's team memberships (self-only route, so membership is the
-                    // sole gate — team membership grants read of the whole mount by design). Each team
-                    // keeps the same limit so recency competes fairly; the final slice trims the merge.
+                    // Fan out over the caller's team memberships (self-only route; team membership grants
+                    // read of the whole mount). Each team keeps the full limit so recency competes fairly.
                     const { teamIds } = await getMemberships(user.id);
                     const teamResults = await Promise.all(
                         teamIds.map((teamId) =>

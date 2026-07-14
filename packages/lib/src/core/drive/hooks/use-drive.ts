@@ -32,9 +32,8 @@ export const driveKeys = {
         [...driveKeys.folders(ownerId), mountId, pathId] as const,
     mimeTypes: (ownerId: string) => [...driveKeys.owner(ownerId), 'mime'] as const,
     mime: (ownerId: string, mimeType: string) => [...driveKeys.mimeTypes(ownerId), mimeType] as const,
-    // Aggregate (personal + every team the caller belongs to) mime listing. Deliberately owner-less:
-    // it always means "the current user's everything", so it can't be keyed by a single owner. The
-    // family prefix mirrors mimeTypes() so invalidation stays form-agnostic (slug vs real mime).
+    // Aggregate (personal + every team the caller belongs to) mime listing. Deliberately owner-less
+    // (always "the current user's everything"); the mimeAllTypes prefix enables form-agnostic invalidation.
     mimeAllTypes: () => [...driveKeys.all, 'mimeAll'] as const,
     mimeAll: (mimeType: string) => [...driveKeys.mimeAllTypes(), mimeType] as const,
     mountMime: (ownerId: string, mountId: string, mimeType: string) =>

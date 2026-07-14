@@ -56,10 +56,9 @@ export function useChatSections(): ChatSections & { isLoading: boolean } {
     }, [chats, isLoading, myTeams, teamsLoading]);
 }
 
-// Flat chat list in sidebar order (personal first, then teams in useMyTeams order) — used by the
-// chat index to auto-open the first chat and decide the empty state. Empty until fully settled:
-// while useMyTeams loads, team chats sit in the catch-all personal bucket, and exposing that interim
-// list would let the index auto-open the wrong "first" chat.
+// Flat chat list in sidebar order (personal first, then teams), for the chat index's auto-open. Empty
+// while loading: until useMyTeams settles, team chats sit in the personal catch-all, so the interim
+// list would auto-open the wrong "first" chat.
 export function useAllChats(): { chats: DrivePath[]; isLoading: boolean } {
     const { personal, teams, isLoading } = useChatSections();
     return useMemo(

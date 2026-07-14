@@ -1,8 +1,19 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getServerConfig } from '../lib/config/server-config';
-import { assertJson, authedRequest, driveGet, drivePut, driveUpload, getTestContext } from './setup';
+import {
+    addMember,
+    addTeamMount,
+    assertJson,
+    authedRequest,
+    createTeam,
+    driveGet,
+    drivePut,
+    driveUpload,
+    firstMountId,
+    getTestContext,
+} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -10,37 +21,6 @@ type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 // what other suites uploaded. `.replace('-', '/')` in the route swaps the FIRST hyphen only.
 const FANOUT_MIME = 'application/x-eigen-fanout';
 const MIME_SEGMENT = 'application-x-eigen-fanout';
-
-async function createTeam(ctx: TestCtx, orgId: string, name: string): Promise<string> {
-    const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, organizationId: orgId }),
-    });
-    return (await assertJson<OrgTeam>(res)).id;
-}
-
-async function addMember(ctx: TestCtx, teamId: string, userId: string): Promise<void> {
-    await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamId, userId }),
-    });
-}
-
-async function addTeamMount(ctx: TestCtx, teamId: string, name: string): Promise<void> {
-    await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, storageType: 'local', maxSizeMB: 500 }),
-    });
-}
-
-async function firstMountId(token: string, ownerId: string): Promise<string> {
-    const res = await authedRequest(token, `/drive/${ownerId}/mounts`);
-    const mounts = await assertJson<MountInfo[]>(res);
-    return mounts[0].id;
-}
 
 async function uploadFanout(token: string, ownerId: string, mountId: string, name: string): Promise<DrivePath> {
     const root = await driveGet(token, ownerId, mountId, 'root');
