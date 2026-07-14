@@ -72,7 +72,7 @@ export function EigenDocListView({
         <DriveLayout
             pid={pid}
             selectedPath={selectedPath}
-            ownerId={effectiveOwnerId}
+            ownerId={uid || effectiveOwnerId}
             mountId={effectiveMountId}
             folderContents={folderContents}
             isLoading={isFolderContentLoading}

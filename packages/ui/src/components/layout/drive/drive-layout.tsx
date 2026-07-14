@@ -448,7 +448,12 @@ export function DriveLayout({
                 confirmLabel={dialogs.copyMove.mode === 'move' ? 'Move here' : 'Copy here'}
                 defaultOwnerId={ownerId}
                 defaultMountId={mountId}
-                defaultFolderId={currentPath?.id}
+                // currentPath can belong to another drive (eigendoc views pass the user's own
+                // root while a teamdrive item is selected) — only seed it as the start folder
+                // when it lives on the layout's drive, else fall back to that drive's root.
+                defaultFolderId={
+                    currentPath?.ownerId === ownerId && currentPath?.mountId === mountId ? currentPath?.id : undefined
+                }
                 onConfirm={handlePickDestination}
             />
 
