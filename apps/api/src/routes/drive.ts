@@ -1,4 +1,3 @@
-import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { Elysia, t } from 'elysia';
@@ -8,15 +7,14 @@ import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { contentDisposition, setCacheHeaders } from '../lib/core/http';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
+import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
 import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
-import { pullMimeContents } from '../lib/home/home-relay';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
-import { getMemberships } from '../lib/user';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
 import { eigenDocTypeSchema } from './shared-schemas';
@@ -493,20 +491,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
 
             // Aggregation reads other homes (team mounts), so it is self-only.
             requireSelf(params.ownerId, user.id);
-            const drive = await getSharedDrive(params.ownerId, user);
-            const personal = await drive.getMimeTypeContents(mimeType, options);
-            const { teamIds } = await getMemberships(user.id);
-            const teamResults = await Promise.all(
-                teamIds.map((teamId) =>
-                    pullMimeContents(teamOwnerId(teamId), mimeType, options).catch(() => [] as DrivePath[]),
-                ),
-            );
-
-            // Dedupe by path.id (authoritative team copies overwrite shared_paths mirrors); newest first.
-            const byId = new Map<string, DrivePath>();
-            for (const path of personal) byId.set(path.id, path);
-            for (const list of teamResults) for (const path of list) byId.set(path.id, path);
-            return [...byId.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+            return await aggregateMimeContents(user, mimeType, options);
         },
         { auth: true, query: t.Object({ teams: t.Optional(t.String()) }) },
     )
@@ -665,25 +650,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
 
             // Aggregation reads other homes (team mounts, foreign-owner shares), so it is self-only.
             requireSelf(params.ownerId, user.id);
-            const { teamIds } = await getMemberships(user.id);
-            const teamOwners = teamIds.map((id) => teamOwnerId(id));
-            const covered = new Set([user.id, ...teamOwners]);
-            const ownDrive = await getDrive(user);
-            const sharedOwners = (await ownDrive.getSharedOwnerIds()).filter((id) => !covered.has(id));
-            const owners = [user.id, ...teamOwners, ...sharedOwners];
-
-            const lists = await Promise.all(
-                owners.map((ownerId) =>
-                    getSharedDrive(ownerId, user)
-                        .then((drive) => drive.getWatches(user))
-                        .catch(() => [] as DrivePath[]),
-                ),
-            );
-
-            // Dedupe by path.id; the Watched view sorts client-side, so leave ordering to the FE.
-            const byId = new Map<string, DrivePath>();
-            for (const list of lists) for (const path of list) byId.set(path.id, path);
-            return [...byId.values()];
+            return aggregateWatches(user);
         },
         { auth: true, query: t.Object({ all: t.Optional(t.String()) }) },
     );
