@@ -80,14 +80,6 @@ if (existsSync(join(DATA_ROOT, 'server', 'config.json'))) {
 mkdirSync(join(DATA_ROOT, 'server'), { recursive: true });
 mkdirSync(join(DATA_ROOT, 'home'), { recursive: true });
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const DOWS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-function rfc822Date(d: Date): string {
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${DOWS[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:00 +0000`;
-}
-
 function buildRfc822(o: {
     from: string;
     to: string;
@@ -100,7 +92,7 @@ function buildRfc822(o: {
 }): Buffer {
     let headers =
         `From: ${o.from}\r\nTo: ${o.to}\r\nSubject: ${o.subject}\r\n` +
-        `Date: ${rfc822Date(o.date)}\r\nMessage-ID: <${o.messageId}>\r\n`;
+        `Date: ${o.date.toUTCString()}\r\nMessage-ID: <${o.messageId}>\r\n`;
     if (o.inReplyTo) headers += `In-Reply-To: <${o.inReplyTo}>\r\n`;
     if (o.references?.length) headers += `References: ${o.references.map((r) => `<${r}>`).join(' ')}\r\n`;
     headers += 'Content-Type: text/plain; charset=utf-8\r\n\r\n';
