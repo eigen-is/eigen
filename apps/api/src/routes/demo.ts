@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { Elysia } from 'elysia';
 import { member, user } from '../../auth-schema.ts';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
@@ -18,11 +18,18 @@ export const demoRouter = new Elysia({ name: 'demo' }).get('/p/demo/enter', asyn
 
     // Discover the pool from org membership so it can't drift from the seeder. role='member'
     // excludes the setup admin (org 'owner'), keeping the admin surface out of a visitor's reach.
+    // 2FA-enabled members are excluded: signInEmail diverts them to the 2FA flow with no cookie.
     const pool = getAuthDrizzleDb()
         .select({ id: user.id, email: user.email })
         .from(member)
         .innerJoin(user, eq(member.userId, user.id))
-        .where(and(eq(member.organizationId, orgId), eq(member.role, 'member')))
+        .where(
+            and(
+                eq(member.organizationId, orgId),
+                eq(member.role, 'member'),
+                or(isNull(user.twoFactorEnabled), eq(user.twoFactorEnabled, false)),
+            ),
+        )
         .all();
     if (pool.length === 0) throw new ApiError(503, 'Demo not available');
 

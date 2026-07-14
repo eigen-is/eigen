@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { and, eq } from 'drizzle-orm';
-import { account as accountSchema, member as memberSchema } from '../../auth-schema.ts';
+import { account as accountSchema, member as memberSchema, user as userSchema } from '../../auth-schema.ts';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { signInWithScopedPassword } from '../lib/auth/guest-auth';
 import { getServerConfig } from '../lib/config/server-config';
@@ -136,6 +136,27 @@ describe('Demo mode', () => {
                 const res = await enter();
                 expect(res.status).toBe(302);
                 expect(await resolveUserId(res)).not.toBe(ctx.alice.user.id);
+            }
+        }, 20000);
+
+        test('a 2FA-enabled member is excluded from the pool', async () => {
+            process.env['EIGEN_DEMO'] = '1';
+            const db = getAuthDrizzleDb();
+
+            // A 2FA member would divert signInEmail into the 2FA flow (no session cookie), so the
+            // route must never pick one — every entry keeps minting valid sessions.
+            db.update(userSchema).set({ twoFactorEnabled: true }).where(eq(userSchema.id, ctx.charlie.user.id)).run();
+            try {
+                for (let i = 0; i < 10; i++) {
+                    const res = await enter();
+                    expect(res.status).toBe(302);
+                    expect(await resolveUserId(res)).not.toBe(ctx.charlie.user.id);
+                }
+            } finally {
+                db.update(userSchema)
+                    .set({ twoFactorEnabled: false })
+                    .where(eq(userSchema.id, ctx.charlie.user.id))
+                    .run();
             }
         }, 20000);
 
