@@ -15,8 +15,18 @@ fi
 
 echo "[demo-reset] Stopping eigen-api..."
 docker compose --env-file .env.production stop eigen-api
-# Always bring the API back, even if the wipe or seed fails — the next hourly run heals it.
-trap 'docker compose --env-file .env.production start eigen-api' EXIT
+# Bring the API back on exit — but never onto an un-setup data root: a failed seed would
+# otherwise serve the public first-run setup wizard to strangers. Left stopped, the next
+# hourly run (or an operator) retries.
+restart_api() {
+    if [ -f data/server/config.json ]; then
+        docker compose --env-file .env.production start eigen-api
+    else
+        echo "[demo-reset] Seed did not complete (no data/server/config.json); leaving eigen-api STOPPED." >&2
+        exit 1
+    fi
+}
+trap restart_api EXIT
 
 # Explicit list — never a wildcard. data/certs (Caddy) and data/dkim (mail) must survive.
 echo "[demo-reset] Wiping per-home + server data..."
