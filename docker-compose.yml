@@ -45,6 +45,9 @@ services:
       # which would make `bun install` skip devDependencies. Dev overrides this back (dev compose).
       NODE_ENV: production
       EIGEN_DATA_ROOT: /app/data
+      # Demo-instance mode (hourly wipe + reseed via scripts/demo-reset.sh). Unset on real
+      # instances → 0, so the demo entry route + auth guards stay inert.
+      EIGEN_DEMO: ${EIGEN_DEMO:-0}
       DOMAIN: ${DOMAIN}
       MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
       SMTP_HOST: ${SMTP_HOST:-postfix}

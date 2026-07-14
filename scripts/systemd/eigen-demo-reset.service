@@ -1,0 +1,10 @@
+[Unit]
+Description=Eigen demo instance hourly wipe + reseed
+# Needs the Docker daemon up before it can stop/seed/start the eigen-api container.
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/eigen
+ExecStart=/opt/eigen/scripts/demo-reset.sh
