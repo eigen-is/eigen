@@ -79,6 +79,16 @@ describe('seed-demo', () => {
             const members = query<{ n: number }>(usersDb, "SELECT count(*) AS n FROM member WHERE role = 'member'");
             expect(members[0].n).toBeGreaterThanOrEqual(20);
 
+            // Avatars: every org member got a portrait through the real avatar path — user.image
+            // is set and the served webp exists under data/server/avatars (deterministic, offline).
+            const membersMissingImage = query<{ n: number }>(
+                usersDb,
+                "SELECT count(*) AS n FROM member m JOIN user u ON u.id = m.user_id WHERE m.role = 'member' AND (u.image IS NULL OR u.image = '')",
+            );
+            expect(membersMissingImage[0].n).toBe(0);
+            const avatarFiles = readdirSync(join(root, 'server', 'avatars')).filter((f) => f.endsWith('.webp'));
+            expect(avatarFiles.length).toBeGreaterThanOrEqual(20);
+
             // The organization plugin auto-creates a default team; target the one the seeder
             // actually gave a mount (its data dir exists on disk).
             const teams = query<{ id: string }>(usersDb, 'SELECT id FROM team');

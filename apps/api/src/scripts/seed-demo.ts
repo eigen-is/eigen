@@ -31,6 +31,7 @@ import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
 import type { User } from '../lib/user';
 import {
+    ADMIN_AVATAR,
     ADMIN_LOCALPART,
     ADMIN_NAME,
     BUDGET,
@@ -56,6 +57,7 @@ const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const SQLITE_MIME = 'application/x-sqlite3';
 const FIXTURES_DIR = join(import.meta.dir, 'demo', 'fixtures');
+const AVATARS_DIR = join(FIXTURES_DIR, 'avatars');
 
 const DATA_ROOT = process.env['EIGEN_DATA_ROOT'];
 if (!DATA_ROOT) {
@@ -236,6 +238,41 @@ async function main(): Promise<void> {
     }
     const userForRole = (role: LeadRole): User => userByKey.get(personaByRole(role).key)!;
     const emailForRole = (role: LeadRole): string => emailFor(personaByRole(role).key);
+
+    // --- Avatars: upload each persona's portrait through the real avatar path so it lands in
+    // data/server/avatars and sets user.image, exactly like a user-uploaded avatar. Resilient:
+    // a missing/unreadable fixture is logged and skipped, never fatal. ---
+    const seedAvatar = async (user: User, fixtureFile: string): Promise<void> => {
+        const filePath = join(AVATARS_DIR, fixtureFile);
+        if (!existsSync(filePath)) {
+            console.warn(`avatar fixture missing, skipping: ${fixtureFile}`);
+            return;
+        }
+        const contacts = await getContacts(user);
+        const me = await contacts.getMe();
+        if (!me) return;
+        const uploadedPath = await contacts.uploadAvatar(
+            new File([readFileSync(filePath)], fixtureFile, { type: 'image/jpeg' }),
+        );
+        const { id, ...fields } = me;
+        // Self-update threads through pushUserProfile: writes server/avatars/<id>.webp + user.image.
+        await contacts.updateContact(id, { ...fields, avatar: uploadedPath });
+    };
+    for (const persona of PERSONAS) {
+        try {
+            await seedAvatar(userByKey.get(persona.key)!, persona.avatar);
+        } catch (err) {
+            console.warn(`avatar seed failed for ${persona.key}:`, err instanceof Error ? err.message : err);
+        }
+    }
+    const adminUser = await getUserByEmail(ADMIN_EMAIL);
+    if (adminUser) {
+        try {
+            await seedAvatar(adminUser, ADMIN_AVATAR);
+        } catch (err) {
+            console.warn('avatar seed failed for admin:', err instanceof Error ? err.message : err);
+        }
+    }
 
     const orgId = getServerConfig()?.orgId;
     if (!orgId) throw new Error('orgId missing after setup');

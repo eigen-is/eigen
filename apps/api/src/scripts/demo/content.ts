@@ -24,34 +24,36 @@ export type Persona = {
     name: string;
     title: string;
     role?: LeadRole; // set for the 8 named leads
+    avatar: string; // fixture filename under fixtures/avatars/ (curated Unsplash portrait, see CREDITS.md)
 };
 
 // 8 named leads do the visible authoring; 12 lighter crew fill the roster and @-mention lists.
 export const PERSONAS: Persona[] = [
-    { key: 'anouk', name: 'Anouk de Wit', title: 'Festival director', role: 'director' },
-    { key: 'joris', name: 'Joris Bakker', title: 'Programming lead', role: 'programming' },
-    { key: 'saar', name: 'Saar Vermeer', title: 'Production & logistics lead', role: 'production' },
-    { key: 'mees', name: 'Mees de Groot', title: 'Comms & marketing', role: 'comms' },
-    { key: 'nour', name: 'Nour El Amrani', title: 'Volunteer coordinator', role: 'volunteers' },
-    { key: 'bram', name: 'Bram Visser', title: 'Finance & ticketing', role: 'finance' },
-    { key: 'timo', name: 'Timo Jansen', title: 'Stage & tech lead', role: 'tech' },
-    { key: 'lieke', name: 'Lieke Smits', title: 'Artist liaison & hospitality', role: 'liaison' },
-    { key: 'fenna', name: 'Fenna Bos', title: 'Bar coordinator' },
-    { key: 'daan', name: 'Daan Mulder', title: 'Gate & wristbands' },
-    { key: 'sanne', name: 'Sanne Kok', title: 'Stage crew' },
-    { key: 'ravi', name: 'Ravi Nair', title: 'Site crew' },
-    { key: 'joost', name: 'Joost Peters', title: 'Workshops host' },
-    { key: 'imke', name: 'Imke de Vries', title: 'First aid' },
-    { key: 'lars', name: 'Lars Hendriks', title: 'Waste & recycling' },
-    { key: 'yara', name: 'Yara Haddad', title: 'Camping host' },
-    { key: 'pieter', name: 'Pieter van Dijk', title: 'Box office' },
-    { key: 'maud', name: 'Maud Willems', title: 'Runner' },
-    { key: 'sem', name: 'Sem Dekker', title: 'Décor & art' },
-    { key: 'tessa', name: 'Tessa Meijer', title: 'Sound assistant' },
+    { key: 'anouk', name: 'Anouk de Wit', title: 'Festival director', role: 'director', avatar: 'anouk.jpg' },
+    { key: 'joris', name: 'Joris Bakker', title: 'Programming lead', role: 'programming', avatar: 'joris.jpg' },
+    { key: 'saar', name: 'Saar Vermeer', title: 'Production & logistics lead', role: 'production', avatar: 'saar.jpg' },
+    { key: 'mees', name: 'Mees de Groot', title: 'Comms & marketing', role: 'comms', avatar: 'mees.jpg' },
+    { key: 'nour', name: 'Nour El Amrani', title: 'Volunteer coordinator', role: 'volunteers', avatar: 'nour.jpg' },
+    { key: 'bram', name: 'Bram Visser', title: 'Finance & ticketing', role: 'finance', avatar: 'bram.jpg' },
+    { key: 'timo', name: 'Timo Jansen', title: 'Stage & tech lead', role: 'tech', avatar: 'timo.jpg' },
+    { key: 'lieke', name: 'Lieke Smits', title: 'Artist liaison & hospitality', role: 'liaison', avatar: 'lieke.jpg' },
+    { key: 'fenna', name: 'Fenna Bos', title: 'Bar coordinator', avatar: 'fenna.jpg' },
+    { key: 'daan', name: 'Daan Mulder', title: 'Gate & wristbands', avatar: 'daan.jpg' },
+    { key: 'sanne', name: 'Sanne Kok', title: 'Stage crew', avatar: 'sanne.jpg' },
+    { key: 'ravi', name: 'Ravi Nair', title: 'Site crew', avatar: 'ravi.jpg' },
+    { key: 'joost', name: 'Joost Peters', title: 'Workshops host', avatar: 'joost.jpg' },
+    { key: 'imke', name: 'Imke de Vries', title: 'First aid', avatar: 'imke.jpg' },
+    { key: 'lars', name: 'Lars Hendriks', title: 'Waste & recycling', avatar: 'lars.jpg' },
+    { key: 'yara', name: 'Yara Haddad', title: 'Camping host', avatar: 'yara.jpg' },
+    { key: 'pieter', name: 'Pieter van Dijk', title: 'Box office', avatar: 'pieter.jpg' },
+    { key: 'maud', name: 'Maud Willems', title: 'Runner', avatar: 'maud.jpg' },
+    { key: 'sem', name: 'Sem Dekker', title: 'Décor & art', avatar: 'sem.jpg' },
+    { key: 'tessa', name: 'Tessa Meijer', title: 'Sound assistant', avatar: 'tessa.jpg' },
 ];
 
 export const ADMIN_NAME = 'Tuimel Admin';
 export const ADMIN_LOCALPART = 'admin';
+export const ADMIN_AVATAR = 'admin.jpg';
 export const ORG_NAME = 'Tuimel Festival';
 export const TEAM_NAME = 'festival crew';
 export const TEAM_MOUNT_NAME = 'festival';
