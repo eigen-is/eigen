@@ -13,6 +13,7 @@ import {
     isInlineEditable,
 } from '@workspace/lib/types/drive';
 import { LoadingState } from '@workspace/ui';
+import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
@@ -115,6 +116,7 @@ function WatchedRoute() {
             allowedCreateTypes={new Set<EigenDocType>()}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}
+            emptyState={<EmptyState message="Watched files will appear here." />}
         />
     );
 }

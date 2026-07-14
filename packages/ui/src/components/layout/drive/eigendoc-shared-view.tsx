@@ -4,6 +4,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
 import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
+import { EmptyState } from '../app/empty-state';
 import { useLayout } from '../app/layout-context';
 import { LoadingState } from '../app/loading-state';
 import { NotFound } from '../app/not-found';
@@ -77,6 +78,15 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             title={`${config.labelPlural} shared ${to === 'by-me' ? 'by' : 'with'} me`}
             currentPath={rootPath}
             allowRename={to === 'by-me'}
+            emptyState={
+                <EmptyState
+                    message={
+                        to === 'by-me'
+                            ? `${config.labelPlural} you’ve shared will appear here.`
+                            : `${config.labelPlural} shared with you will appear here.`
+                    }
+                />
+            }
         />
     );
 }

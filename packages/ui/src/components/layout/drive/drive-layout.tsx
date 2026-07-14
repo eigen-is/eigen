@@ -11,6 +11,7 @@ import {
     useMovePath,
 } from '@workspace/lib/drive';
 import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
+import type React from 'react';
 import { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
@@ -56,6 +57,7 @@ export type DriveLayoutProps = {
     getItemHref?: (item: DrivePath) => string | undefined;
     pid?: string;
     unreadPathIds?: Set<string>;
+    emptyState?: React.ReactNode;
     highlightHistory?: boolean;
 };
 
@@ -85,6 +87,7 @@ export function DriveLayout({
     showBreadcrumb = false,
     title,
     unreadPathIds,
+    emptyState,
     highlightHistory,
 }: DriveLayoutProps) {
     const { isMobile } = useLayout();
@@ -316,6 +319,7 @@ export function DriveLayout({
         onDuplicate: allowMove ? handleDuplicate : undefined,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         unreadPathIds,
+        emptyState,
     };
 
     const listToolbar = (
