@@ -97,6 +97,16 @@ export async function listSharedWithMe(sharedDb: SharedDb): Promise<DrivePath[]>
     return results.map((r) => sharedRowToDrivePath(r));
 }
 
+// Distinct owners that shared at least one path into this home — one row per foreign owner,
+// so the Watched aggregate can fan out over them without loading every shared path.
+export async function listSharedOwnerIds(sharedDb: SharedDb): Promise<string[]> {
+    const results = await sharedDb
+        .selectDistinct({ ownerId: sharedSchema.sharedPaths.ownerId })
+        .from(sharedSchema.sharedPaths)
+        .all();
+    return results.map((r) => r.ownerId);
+}
+
 export async function listSharedWithMeByMimeType(sharedDb: SharedDb, mimeType: string): Promise<DrivePath[]> {
     const results = await sharedDb
         .select()

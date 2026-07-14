@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { DrivePath } from '@workspace/lib/types';
+import { type DrivePath, type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
 import type { SSEvent } from '@workspace/lib/types/sse';
 
 const TEST_DATA_ROOT = join(import.meta.dir, '../../../../data-test');
@@ -300,6 +300,39 @@ export async function driveUploadMultiple<T = DrivePath>(
         body: formData,
     });
     return res.json() as Promise<T[]>;
+}
+
+// --- Team setup helpers (shared by the *-fanout integration tests). Team admin actions run as alice. ---
+
+export async function createTeam(ctx: TestContext, orgId: string, name: string): Promise<string> {
+    const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, organizationId: orgId }),
+    });
+    return (await assertJson<OrgTeam>(res)).id;
+}
+
+export async function addMember(ctx: TestContext, teamId: string, userId: string): Promise<void> {
+    await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamId, userId }),
+    });
+}
+
+export async function addTeamMount(ctx: TestContext, teamId: string, name: string): Promise<void> {
+    await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, storageType: 'local', maxSizeMB: 500 }),
+    });
+}
+
+export async function firstMountId(token: string, ownerId: string): Promise<string> {
+    const res = await authedRequest(token, `/drive/${ownerId}/mounts`);
+    const mounts = await assertJson<MountInfo[]>(res);
+    return mounts[0].id;
 }
 
 export function chatPost<T = unknown>(

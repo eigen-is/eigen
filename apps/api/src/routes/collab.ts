@@ -9,6 +9,7 @@ import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type Drive from '../lib/drive/drive';
 import type SharedDrive from '../lib/drive/sharedDrive';
+import { touchHomeIfLoaded } from '../lib/home';
 import { sendToHome } from '../lib/home/home-relay';
 import { getUserByEmail, type User } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
@@ -203,7 +204,13 @@ export const collabRouter = new Elysia({
 
                 data.drive = drive;
                 data.collabDocument = document;
-                data.pingInterval = keepWebSocketAlive(user, rawWs, () => cleanupSession(data, rawWs));
+                // Pin the doc-owner's home on every keepalive tick, mirroring how SSE pins a user's own home.
+                data.pingInterval = keepWebSocketAlive(
+                    user,
+                    rawWs,
+                    () => cleanupSession(data, rawWs),
+                    () => touchHomeIfLoaded(ownerId),
+                );
             } catch (err) {
                 console.error('Error opening collab session:', err);
                 ws.close(1008, 'Failed to open document');

@@ -63,7 +63,12 @@ import { diffACLEmails, propagateSharedPathChange, resolveACLToEmails } from './
 import { CollabRegistry } from './collab-registry';
 import { LockManager } from './lock-manager';
 import { getSharedDatabase } from './shared';
-import { listSharedWithMe, listSharedWithMeByMimeType, receiveSharedPathChange } from './shared-with-me';
+import {
+    listSharedOwnerIds,
+    listSharedWithMe,
+    listSharedWithMeByMimeType,
+    receiveSharedPathChange,
+} from './shared-with-me';
 import type * as sharedSchema from './sharedschema';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp, writeTempWithHash } from './streaming';
@@ -1173,6 +1178,12 @@ export default class Drive {
     // meaning. See class doc above.
     async getSharedPathsWithMe(): Promise<DrivePath[]> {
         return listSharedWithMe(this.sharedDb);
+    }
+
+    // Called by: GET /drive/:ownerId/watches?all=1 — escape-hatch aggregate (requireSelf +
+    // getDrive). Owners that shared into this home, so the watches fan-out can pull each.
+    async getSharedOwnerIds(): Promise<string[]> {
+        return listSharedOwnerIds(this.sharedDb);
     }
 
     async getSharedWith(user: User): Promise<DrivePath[]> {

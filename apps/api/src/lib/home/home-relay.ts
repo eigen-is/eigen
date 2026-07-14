@@ -266,3 +266,21 @@ export async function pullTeamMounts(
         }),
     );
 }
+
+// Mime-filtered contents of a team drive, aggregated over its mounts. Team membership grants read
+// of everything in the mount by design, so the caller-side membership check is the only gate.
+export async function pullMimeContents(
+    ownerId: string,
+    mimeType: string,
+    options?: { excludeDocumentChildren?: boolean },
+): Promise<DrivePath[]> {
+    const home = await getTeamHome(ownerId);
+    return home.drive.getMimeTypeContents(mimeType, options);
+}
+
+// FTS search over a team drive's own mounts (name + body). Same design as pullMimeContents: team
+// membership grants read of the whole mount, so the caller-side membership check is the only gate.
+export async function pullDriveSearch(ownerId: string, opts: { q: string; limit: number }): Promise<DrivePath[]> {
+    const home = await getTeamHome(ownerId);
+    return home.drive.search(opts);
+}

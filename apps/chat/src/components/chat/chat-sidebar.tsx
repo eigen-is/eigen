@@ -1,9 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import { useChats, useTeamsHaveChats, useUnreadChatIds } from '@workspace/lib/chat';
+import { useChatSections, useUnreadChatIds } from '@workspace/lib/chat';
 import { useDriveAccess } from '@workspace/lib/drive';
-import { useMyTeams } from '@workspace/lib/home';
-import { teamOwnerId } from '@workspace/lib/types';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
@@ -63,24 +61,6 @@ function ChatItem({ chat, condensed, hasUnread }: ChatItemProps) {
     );
 }
 
-type TeamChatItemsProps = {
-    teamId: string;
-    condensed: boolean;
-    unreadChatIds: Set<string>;
-};
-
-function TeamChatItems({ teamId, condensed, unreadChatIds }: TeamChatItemsProps) {
-    const { data: chats } = useChats(teamOwnerId(teamId));
-    if (!chats || chats.length === 0) return null;
-    return (
-        <>
-            {chats.map((chat) => (
-                <ChatItem key={chat.id} chat={chat} condensed={condensed} hasUnread={unreadChatIds.has(chat.id)} />
-            ))}
-        </>
-    );
-}
-
 export function ChatSidebar({
     condensed = false,
     isMobile = false,
@@ -92,12 +72,12 @@ export function ChatSidebar({
     const { user } = useAuth();
     const isGuest = useIsGuest();
     const unreadChatIds = useUnreadChatIds(user?.id ?? '');
-    const { data: chats, isLoading } = useChats(ownerId);
+    const { personal, teams, isLoading } = useChatSections();
     const [createChatOpen, setCreateChatOpen] = useState(false);
     const navigate = useNavigate();
 
-    const { data: myTeams } = useMyTeams();
-    const hasAnyTeamChats = useTeamsHaveChats((myTeams ?? []).map((t) => t.id));
+    // Team chats render under a single "Team Chats" heading, flattened in useMyTeams order.
+    const teamChats = teams.flatMap((t) => t.chats);
 
     const handleAfterCreate = useCallback(
         (newPath: DrivePath) => {
@@ -123,14 +103,14 @@ export function ChatSidebar({
                     />
                 )}
 
-                {isLoading || !chats ? (
+                {isLoading ? (
                     <div className="flex justify-center py-4">
                         <EigenLoader />
                     </div>
                 ) : (
-                    chats.length > 0 && (
+                    personal.length > 0 && (
                         <SidebarSection condensed={condensed}>
-                            {chats.map((chat) => (
+                            {personal.map((chat) => (
                                 <ChatItem
                                     key={chat.id}
                                     chat={chat}
@@ -142,14 +122,14 @@ export function ChatSidebar({
                     )
                 )}
 
-                {hasAnyTeamChats && (
+                {teamChats.length > 0 && (
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Chats'}>
-                        {(myTeams ?? []).map((team) => (
-                            <TeamChatItems
-                                key={team.id}
-                                teamId={team.id}
+                        {teamChats.map((chat) => (
+                            <ChatItem
+                                key={chat.id}
+                                chat={chat}
                                 condensed={condensed}
-                                unreadChatIds={unreadChatIds}
+                                hasUnread={unreadChatIds.has(chat.id)}
                             />
                         ))}
                     </SidebarSection>

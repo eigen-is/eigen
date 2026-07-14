@@ -9,6 +9,7 @@ export const searchKeys = {
         from?: string;
         to?: string;
         limit?: number;
+        teams?: string;
     }) =>
         [
             ...searchKeys.owner(params.ownerId),
@@ -19,6 +20,7 @@ export const searchKeys = {
             params.from ?? null,
             params.to ?? null,
             params.limit ?? null,
+            params.teams ?? null,
         ] as const,
     // IN COMMENTS palette section: keyed by the capability's docKey — the OPEN DOCUMENT's
     // `${ownerId}:${mountId}:${pathId}`, NOT ctx.ownerId (which can differ on shared docs) — + query.

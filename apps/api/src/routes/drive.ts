@@ -1,3 +1,4 @@
+import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { Elysia, t } from 'elysia';
@@ -11,9 +12,11 @@ import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
+import { pullMimeContents } from '../lib/home/home-relay';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
+import { getMemberships } from '../lib/user';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
 import { eigenDocTypeSchema } from './shared-schemas';
@@ -476,16 +479,36 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Mime type filter (aggregates over all mounts)
+    // Mime type filter (aggregates over all mounts). ?teams=1 also fans out over the caller's teams via home-relay.
     .get(
         '/drive/:ownerId/mime/:mimeType',
-        async ({ params, user }) => {
+        async ({ params, query, user }) => {
+            const mimeType = params.mimeType.replace('-', '/');
+            const options = { excludeDocumentChildren: true };
+
+            if (!query.teams) {
+                const drive = await getSharedDrive(params.ownerId, user);
+                return await drive.getMimeTypeContents(mimeType, options);
+            }
+
+            // Aggregation reads other homes (team mounts), so it is self-only.
+            requireSelf(params.ownerId, user.id);
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.getMimeTypeContents(params.mimeType.replace('-', '/'), {
-                excludeDocumentChildren: true,
-            });
+            const personal = await drive.getMimeTypeContents(mimeType, options);
+            const { teamIds } = await getMemberships(user.id);
+            const teamResults = await Promise.all(
+                teamIds.map((teamId) =>
+                    pullMimeContents(teamOwnerId(teamId), mimeType, options).catch(() => [] as DrivePath[]),
+                ),
+            );
+
+            // Dedupe by path.id (authoritative team copies overwrite shared_paths mirrors); newest first.
+            const byId = new Map<string, DrivePath>();
+            for (const path of personal) byId.set(path.id, path);
+            for (const list of teamResults) for (const path of list) byId.set(path.id, path);
+            return [...byId.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         },
-        { auth: true },
+        { auth: true, query: t.Object({ teams: t.Optional(t.String()) }) },
     )
     // Mime type filter scoped to a single mount
     .get(
@@ -630,11 +653,37 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
+    // Watched listing. ?all=1 fans out over the caller's own home, their teams, and every owner that
+    // shared into this home — each via the same ACL-checked getSharedDrive → getWatches; self-only.
     .get(
         '/drive/:ownerId/watches',
-        async ({ params, user }): Promise<DrivePath[]> => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return drive.getWatches(user);
+        async ({ params, query, user }): Promise<DrivePath[]> => {
+            if (!query.all) {
+                const drive = await getSharedDrive(params.ownerId, user);
+                return drive.getWatches(user);
+            }
+
+            // Aggregation reads other homes (team mounts, foreign-owner shares), so it is self-only.
+            requireSelf(params.ownerId, user.id);
+            const { teamIds } = await getMemberships(user.id);
+            const teamOwners = teamIds.map((id) => teamOwnerId(id));
+            const covered = new Set([user.id, ...teamOwners]);
+            const ownDrive = await getDrive(user);
+            const sharedOwners = (await ownDrive.getSharedOwnerIds()).filter((id) => !covered.has(id));
+            const owners = [user.id, ...teamOwners, ...sharedOwners];
+
+            const lists = await Promise.all(
+                owners.map((ownerId) =>
+                    getSharedDrive(ownerId, user)
+                        .then((drive) => drive.getWatches(user))
+                        .catch(() => [] as DrivePath[]),
+                ),
+            );
+
+            // Dedupe by path.id; the Watched view sorts client-side, so leave ordering to the FE.
+            const byId = new Map<string, DrivePath>();
+            for (const list of lists) for (const path of list) byId.set(path.id, path);
+            return [...byId.values()];
         },
-        { auth: true },
+        { auth: true, query: t.Object({ all: t.Optional(t.String()) }) },
     );
