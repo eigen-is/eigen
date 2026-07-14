@@ -1,6 +1,12 @@
 import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, useMimeContent, useMountMimeContent, usePathInfo } from '@workspace/lib/drive';
+import {
+    DEFAULT_MOUNT_ID,
+    useAggregateMimeContent,
+    useMimeContent,
+    useMountMimeContent,
+    usePathInfo,
+} from '@workspace/lib/drive';
 import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
 import { EmptyState } from '../app/empty-state';
@@ -49,13 +55,17 @@ export function EigenDocListView({
     const { isMobile } = useLayout();
     const { openPreview } = usePreview();
 
-    const ownerScoped = useMimeContent(isMountScoped ? '' : effectiveOwnerId, config.mimeType);
+    // Own aggregate (personal + all my team mounts) is the default index; an explicit foreign owner
+    // (no mount) stays a plain per-owner listing, and a mount-scoped view stays single-mount.
+    const isOwnAggregate = !isMountScoped && effectiveOwnerId === user!.id;
+    const aggregate = useAggregateMimeContent(isOwnAggregate ? config.mimeType : '');
+    const ownerScoped = useMimeContent(isMountScoped || isOwnAggregate ? '' : effectiveOwnerId, config.mimeType);
     const mountScoped = useMountMimeContent(isMountScoped ? effectiveOwnerId : '', mountId || '', config.mimeType);
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError,
-    } = isMountScoped ? mountScoped : ownerScoped;
+    } = isMountScoped ? mountScoped : isOwnAggregate ? aggregate : ownerScoped;
 
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && isDocumentType(path.type)) {

@@ -1,13 +1,12 @@
-import { type QueryClient, useInfiniteQuery, useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi, driveApi } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { DRIVE_MIME_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
-import { driveKeys, invalidateItemCreated, mimeContentQueryConfig, useMimeContent } from '../../drive/hooks/use-drive';
+import { driveKeys, invalidateItemCreated, useAggregateMimeContent } from '../../drive/hooks/use-drive';
 
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_MIME_SLUG = EIGEN_DOC_TYPE_INFO.chat.urlSlug; // 'application-eigenchat'
@@ -19,46 +18,53 @@ export const chatKeys = {
         [...chatKeys.owner(ownerId), 'messages', mountId, chatId] as const,
 };
 
-export function useChats(ownerId: string) {
-    // Why: chat sidebar needs fresher data than drive-folder browsing; use 1 min instead of the 5-min default.
-    return useMimeContent(ownerId, CHAT_MIME_SLUG, 60_000);
+type ChatSections = {
+    personal: DrivePath[];
+    teams: { id: string; name: string; chats: DrivePath[] }[];
+};
+
+// Splits the aggregate chat list into one section per team (useMyTeams order, empty teams omitted)
+// and a personal catch-all: everything not owned by one of the caller's teams — own chats AND chats
+// other users shared with the caller (shared_paths mirrors carry the sharer's ownerId, e.g. 1:1 chat
+// invites), which have always rendered in the personal section. Pure — unit-tested.
+export function groupChatsBySection(chats: DrivePath[], teams: readonly { id: string; name: string }[]): ChatSections {
+    const personal: DrivePath[] = [];
+    const byTeamOwner = new Map<string, DrivePath[]>();
+    for (const team of teams) byTeamOwner.set(teamOwnerId(team.id), []);
+    for (const chat of chats) {
+        const teamChats = byTeamOwner.get(chat.ownerId);
+        if (teamChats) teamChats.push(chat);
+        else personal.push(chat);
+    }
+    const teamSections: ChatSections['teams'] = [];
+    for (const team of teams) {
+        const teamChats = byTeamOwner.get(teamOwnerId(team.id));
+        if (teamChats?.length) teamSections.push({ id: team.id, name: team.name, chats: teamChats });
+    }
+    return { personal, teams: teamSections };
 }
 
-// Flattens per-team chat query results into one list (team order preserved) plus a combined loading flag.
-export function combineTeamChats(results: { data?: DrivePath[]; isLoading: boolean }[]): {
-    chats: DrivePath[];
-    isLoading: boolean;
-} {
-    return {
-        chats: results.flatMap((r) => r.data ?? []),
-        isLoading: results.some((r) => r.isLoading),
-    };
-}
-
-function useTeamChats(teamIds: string[]): { chats: DrivePath[]; isLoading: boolean } {
-    return useQueries({
-        queries: teamIds.map((id) => mimeContentQueryConfig(teamOwnerId(id), CHAT_MIME_SLUG)),
-        combine: (results) => combineTeamChats(results),
-    });
-}
-
-export function useTeamsHaveChats(teamIds: string[]): boolean {
-    return useTeamChats(teamIds).chats.length > 0;
-}
-
-// All chats in sidebar order (personal first, then per team); isLoading until every source settled.
-export function useAllChats(): { chats: DrivePath[]; isLoading: boolean } {
-    const { user } = useAuth();
-    const personal = useChats(user?.id || '');
+// One aggregate request (personal + all team chats), split into sidebar sections. Both the personal
+// and per-team lists keep the aggregate's updatedAt-desc order.
+export function useChatSections(): ChatSections & { isLoading: boolean } {
+    // Chat sidebar wants fresher data than drive-folder browsing: 1 min instead of the 5-min default.
+    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, 60_000);
     const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
-    const team = useTeamChats((myTeams ?? []).map((t) => t.id));
+    return useMemo(() => {
+        const sections = groupChatsBySection(chats ?? [], myTeams ?? []);
+        return { ...sections, isLoading: isLoading || teamsLoading };
+    }, [chats, isLoading, myTeams, teamsLoading]);
+}
 
+// Flat chat list in sidebar order (personal first, then teams in useMyTeams order) — used by the
+// chat index to auto-open the first chat and decide the empty state. Empty until fully settled:
+// while useMyTeams loads, team chats sit in the catch-all personal bucket, and exposing that interim
+// list would let the index auto-open the wrong "first" chat.
+export function useAllChats(): { chats: DrivePath[]; isLoading: boolean } {
+    const { personal, teams, isLoading } = useChatSections();
     return useMemo(
-        () => ({
-            chats: [...(personal.data ?? []), ...team.chats],
-            isLoading: personal.isLoading || teamsLoading || team.isLoading,
-        }),
-        [personal.data, personal.isLoading, teamsLoading, team.chats, team.isLoading],
+        () => ({ chats: isLoading ? [] : [...personal, ...teams.flatMap((t) => t.chats)], isLoading }),
+        [personal, teams, isLoading],
     );
 }
 

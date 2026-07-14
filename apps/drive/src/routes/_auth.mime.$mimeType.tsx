@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, useMimeContent, usePathInfo } from '@workspace/lib/drive';
+import { DEFAULT_MOUNT_ID, useAggregateMimeContent, usePathInfo } from '@workspace/lib/drive';
 import {
     type DrivePath,
     type DriveSearchParams,
@@ -41,7 +41,7 @@ function DriveRoute() {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError,
-    } = useMimeContent(ownerId, mimeType);
+    } = useAggregateMimeContent(mimeType);
 
     const onRowSelect = (path: DrivePath) => {
         if (isPreviewOpen) {

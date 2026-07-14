@@ -1,5 +1,6 @@
 import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import {
     DRIVE_MIME_CHAT,
     DRIVE_MIME_DOC,
@@ -31,6 +32,11 @@ export const driveKeys = {
         [...driveKeys.folders(ownerId), mountId, pathId] as const,
     mimeTypes: (ownerId: string) => [...driveKeys.owner(ownerId), 'mime'] as const,
     mime: (ownerId: string, mimeType: string) => [...driveKeys.mimeTypes(ownerId), mimeType] as const,
+    // Aggregate (personal + every team the caller belongs to) mime listing. Deliberately owner-less:
+    // it always means "the current user's everything", so it can't be keyed by a single owner. The
+    // family prefix mirrors mimeTypes() so invalidation stays form-agnostic (slug vs real mime).
+    mimeAllTypes: () => [...driveKeys.all, 'mimeAll'] as const,
+    mimeAll: (mimeType: string) => [...driveKeys.mimeAllTypes(), mimeType] as const,
     mountMime: (ownerId: string, mountId: string, mimeType: string) =>
         [...driveKeys.mimeTypes(ownerId), mountId, mimeType] as const,
     paths: (ownerId: string) => [...driveKeys.owner(ownerId), 'path'] as const,
@@ -138,8 +144,7 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
     return useMemo(() => ({ contents: data, findByName }), [data, findByName]);
 }
 
-// GET MIME CONTENTS (aggregates over all mounts)
-// Factored query config — reused by useMimeContent and useTeamsHaveChats (use-chat.ts)
+// GET MIME CONTENTS (aggregates over all mounts of one owner)
 export function mimeContentQueryConfig(ownerId: string, mimeType: string, staleTime: number = 1000 * 60 * 5) {
     return {
         queryKey: driveKeys.mime(ownerId, mimeType),
@@ -157,6 +162,28 @@ export function mimeContentQueryConfig(ownerId: string, mimeType: string, staleT
 
 export function useMimeContent(ownerId: string, mimeType: string, staleTime?: number) {
     return useQuery<DrivePath[]>(mimeContentQueryConfig(ownerId, mimeType, staleTime));
+}
+
+// GET AGGREGATE MIME CONTENTS — personal + every team the signed-in user belongs to, merged and
+// deduped server-side (GET /drive/:ownerId/mime/:mimeType?teams=1). Always scoped to the current
+// user, so it reads useAuth itself rather than taking an ownerId.
+export function useAggregateMimeContent(mimeType: string, staleTime: number = 1000 * 60 * 5) {
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
+    return useQuery<DrivePath[]>({
+        queryKey: driveKeys.mimeAll(mimeType),
+        queryFn: async () => {
+            if (!mimeType || !ownerId) return [];
+            const response = await driveApi({ ownerId })
+                .mime({ mimeType })
+                .get({ query: { teams: '1' } });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        enabled: !!mimeType && !!ownerId,
+        retry: 1,
+        staleTime,
+    });
 }
 
 // GET MIME CONTENTS scoped to a single mount
@@ -795,6 +822,7 @@ export function invalidateItemCreated(
     }
     if (mimeType) {
         queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
+        queryClient.invalidateQueries({ queryKey: driveKeys.mimeAllTypes() });
     }
     invalidateHomeSize(queryClient, ownerId);
 }
@@ -813,6 +841,7 @@ export function invalidateItemDeleted(
     queryClient.removeQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
     if (mimeType) {
         queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
+        queryClient.invalidateQueries({ queryKey: driveKeys.mimeAllTypes() });
     }
     invalidateHomeSize(queryClient, ownerId);
 }
@@ -832,6 +861,7 @@ export function invalidatePathRenamed(
     }
     if (mimeType) {
         queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
+        queryClient.invalidateQueries({ queryKey: driveKeys.mimeAllTypes() });
     }
 }
 
@@ -872,6 +902,7 @@ export function invalidateAclUpdated(
     // reopens on a stale ACL after a change made from those views.
     if (mimeType) {
         queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
+        queryClient.invalidateQueries({ queryKey: driveKeys.mimeAllTypes() });
     }
 }
 

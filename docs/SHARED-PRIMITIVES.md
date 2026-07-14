@@ -205,7 +205,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAutoMarkChatRead` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
 | `useChatEditing` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-editing.ts |
 | `useChatRoom` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-room.ts |
-| `useChats` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
+| `useChatSections` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useComments` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-comments.ts |
 | `useCreateChat` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useDeleteMessage` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
@@ -215,7 +215,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMessages` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `usePostMessage` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useResolveComment` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-comments.ts |
-| `useTeamsHaveChats` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useUnreadChatIds` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
 | `useCollabDocumentInfo` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab.ts |
 | `useYjsUndoHotkeys` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
@@ -248,6 +247,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMeContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
+| `useAggregateMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useCheckPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `useConvertDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-convert-document.ts |
@@ -694,12 +694,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `toLocalDateString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `combineTeamChats` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `commandNeedsSpace` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `COMMANDS_HELP` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `formatChatPreview` | `@workspace/lib/chat` | packages/lib/src/core/chat/format-preview.ts |
 | `getEmoteCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/emotes.ts |
 | `getLocalCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
+| `groupChatsBySection` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `handleChatSSEvent` | `@workspace/lib/chat` | packages/lib/src/core/chat/sse-handlers.ts |
 | `isEmoteCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/emotes.ts |
 | `isUnknownCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
