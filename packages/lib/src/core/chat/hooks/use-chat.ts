@@ -1,8 +1,11 @@
 import { type QueryClient, useInfiniteQuery, useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { chatApi, driveApi } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import { useMyTeams } from '@workspace/lib/home';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { DRIVE_MIME_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
+import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateItemCreated, mimeContentQueryConfig, useMimeContent } from '../../drive/hooks/use-drive';
 
@@ -21,11 +24,42 @@ export function useChats(ownerId: string) {
     return useMimeContent(ownerId, CHAT_MIME_SLUG, 60_000);
 }
 
-export function useTeamsHaveChats(teamIds: string[]): boolean {
-    const results = useQueries({
+// Flattens per-team chat query results into one list (team order preserved) plus a combined loading flag.
+export function combineTeamChats(results: { data?: DrivePath[]; isLoading: boolean }[]): {
+    chats: DrivePath[];
+    isLoading: boolean;
+} {
+    return {
+        chats: results.flatMap((r) => r.data ?? []),
+        isLoading: results.some((r) => r.isLoading),
+    };
+}
+
+function useTeamChats(teamIds: string[]): { chats: DrivePath[]; isLoading: boolean } {
+    return useQueries({
         queries: teamIds.map((id) => mimeContentQueryConfig(teamOwnerId(id), CHAT_MIME_SLUG)),
+        combine: (results) => combineTeamChats(results),
     });
-    return results.some((q) => (q.data?.length ?? 0) > 0);
+}
+
+export function useTeamsHaveChats(teamIds: string[]): boolean {
+    return useTeamChats(teamIds).chats.length > 0;
+}
+
+// All chats in sidebar order (personal first, then per team); isLoading until every source settled.
+export function useAllChats(): { chats: DrivePath[]; isLoading: boolean } {
+    const { user } = useAuth();
+    const personal = useChats(user?.id || '');
+    const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
+    const team = useTeamChats((myTeams ?? []).map((t) => t.id));
+
+    return useMemo(
+        () => ({
+            chats: [...(personal.data ?? []), ...team.chats],
+            isLoading: personal.isLoading || teamsLoading || team.isLoading,
+        }),
+        [personal.data, personal.isLoading, teamsLoading, team.chats, team.isLoading],
+    );
 }
 
 export function useMessages(ownerId: string, mountId: string, chatId: string | undefined) {
