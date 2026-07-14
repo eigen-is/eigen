@@ -34,6 +34,8 @@ export class Home {
     protected _calendar!: Calendar;
     protected _notifications!: NotificationCenter;
 
+    protected idleMs = 1000 * 60 * 5;
+
     private initialized: boolean = false;
     private initializationStarted: boolean = false;
     private initWaiters: { resolve: (home: Home) => void; reject: (reason: unknown) => void }[] = [];
@@ -136,15 +138,12 @@ export class Home {
         if (this.timeout) {
             clearTimeout(this.timeout);
         }
-        this.timeout = setTimeout(
-            () => {
-                console.log(`[Home] Idle timeout for ${this.user.id}, destructing`);
-                this.destruct()
-                    .catch((e) => console.error(`[Home] Destruct failed for ${this.user.id}:`, e))
-                    .finally(() => this.cleanUp?.());
-            },
-            1000 * 60 * 5,
-        );
+        this.timeout = setTimeout(() => {
+            console.log(`[Home] Idle timeout for ${this.user.id}, destructing`);
+            this.destruct()
+                .catch((e) => console.error(`[Home] Destruct failed for ${this.user.id}:`, e))
+                .finally(() => this.cleanUp?.());
+        }, this.idleMs);
         return this;
     }
 
