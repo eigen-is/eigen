@@ -253,10 +253,12 @@ async function main(): Promise<void> {
         returnHeaders: true,
         body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
     });
+    // An https API_URL (or NODE_ENV=production) makes better-auth __Secure--prefix its cookie
+    // names — keep the full name=value pair so the session lookup finds it.
     const setCookie = signIn.headers.get('set-cookie') ?? '';
-    const tokenMatch = setCookie.match(/better-auth\.session_token=([^;,]+)/);
-    if (!tokenMatch) throw new Error('Could not obtain an admin session token');
-    const adminHeaders = new Headers({ cookie: `better-auth.session_token=${tokenMatch[1]}` });
+    const cookieMatch = setCookie.match(/(?:__Secure-|__Host-)?better-auth\.session_token=[^;,]+/);
+    if (!cookieMatch) throw new Error('Could not obtain an admin session token');
+    const adminHeaders = new Headers({ cookie: cookieMatch[0] });
 
     // --- Team + membership (the whole crew shares one workspace). ---
     const team = await auth.api.createTeam({ body: { name: TEAM_NAME, organizationId: orgId } });

@@ -47,14 +47,17 @@ describe('seed-demo', () => {
     test('produces a coherent Tuimel Festival world', async () => {
         const root = mkdtempSync(join(tmpdir(), 'eigen-demo-seed-'));
         try {
-            // Drop any inherited API_URL so the seeder's own default is exercised.
+            // Env mirrors the real demo box: production mode, EIGEN_DEMO, and an https API_URL —
+            // which makes better-auth __Secure--prefix its cookies, pinning the seeder's handling.
             const env: Record<string, string | undefined> = {
                 ...process.env,
                 EIGEN_DATA_ROOT: root,
                 MAIL_DOMAIN,
                 DOMAIN: MAIL_DOMAIN,
+                PRODUCTION: '1',
+                EIGEN_DEMO: '1',
+                API_URL: 'https://localhost',
             };
-            env['API_URL'] = undefined;
             const proc = Bun.spawn(['bun', 'src/scripts/seed-demo.ts'], {
                 cwd: API_DIR,
                 env,
