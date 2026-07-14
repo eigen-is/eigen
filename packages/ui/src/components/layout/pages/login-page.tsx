@@ -216,7 +216,7 @@ function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
 
 export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
     const { appName } = useApp();
-    const { data: config } = usePublicConfig();
+    const { data: config, isPending: isConfigPending } = usePublicConfig();
     const [showLogin, setShowLogin] = useState(false);
 
     // Demo instances hand every visitor a random seeded persona; the credentials
@@ -235,13 +235,16 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
                             <Ket />
                         </span>
                     </CardTitle>
-                    <CardDescription>
-                        {showDemoEntry ? 'Explore a shared demo workspace.' : 'Sign in to access your account'}
-                    </CardDescription>
+                    {!isConfigPending && (
+                        <CardDescription>
+                            {showDemoEntry ? 'Explore a shared demo workspace.' : 'Sign in to access your account'}
+                        </CardDescription>
+                    )}
                 </CardHeader>
 
                 <CardContent>
-                    {showDemoEntry ? (
+                    {/* Hold the form area until config resolves — a demo box must not flash the credentials form */}
+                    {isConfigPending ? null : showDemoEntry ? (
                         <div className="space-y-4">
                             <Button asChild className="w-full">
                                 <a href={`${API_HOST}/p/demo/enter`}>Enter demo</a>
