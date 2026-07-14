@@ -292,7 +292,16 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
             });
             if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
             const data = (await res.json()) as DrivePath[];
-            return data[0];
+            // Raw fetch bypasses Eden's Date reviver, so the JSON dates arrive as strings.
+            // Revive them so the returned value honours its DrivePath type (callers like
+            // the media-resolver probe call updatedAt.getTime()).
+            const path = data[0];
+            return {
+                ...path,
+                createdAt: new Date(path.createdAt),
+                updatedAt: new Date(path.updatedAt),
+                trashedAt: path.trashedAt ? new Date(path.trashedAt) : null,
+            };
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
         onError: onMutationError,
