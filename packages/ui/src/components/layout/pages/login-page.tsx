@@ -260,6 +260,32 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
                                 </Button>
                             </div>
                         </div>
+                    ) : config?.demoMode ? (
+                        // Demo box: the Demo tab is the way back to the entry button. Guest login is
+                        // disabled for demo (server settings), so it's replaced by Demo here.
+                        <Tabs defaultValue="signin">
+                            <TabsList className="w-full mb-6">
+                                <TabsTrigger value="signin" className="flex-1">
+                                    Sign in
+                                </TabsTrigger>
+                                <TabsTrigger value="demo" className="flex-1">
+                                    Demo
+                                </TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="signin">
+                                <PasswordLoginForm />
+                            </TabsContent>
+                            <TabsContent value="demo">
+                                <div className="space-y-4">
+                                    <p className="text-center text-sm text-muted-foreground">
+                                        Explore a shared demo workspace.
+                                    </p>
+                                    <Button asChild className="w-full">
+                                        <a href={`${API_HOST}/p/demo/enter`}>Enter demo</a>
+                                    </Button>
+                                </div>
+                            </TabsContent>
+                        </Tabs>
                     ) : (
                         <Tabs defaultValue={initialEmail ? 'guest' : 'signin'}>
                             <TabsList className="w-full mb-6">
