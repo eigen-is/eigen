@@ -359,10 +359,12 @@ export const CHATS: SeededChat[] = [
             { author: 'timo', text: 'Heads up: the Sunday forecast for the field is turning windy.' },
             { author: 'saar', text: 'How bad? The second stage is the exposed one.' },
             { author: 'timo', text: 'Gusts into the evening. No shelter out there right now.' },
+            { author: 'saar', text: '/groan' },
             { author: 'sanne', text: 'We could move the quieter acts to the barn stage on Sunday.' },
             { author: 'anouk', text: "Let's keep the option open and decide at the go/no-go. Get a wind-cover quote." },
             { author: 'saar', text: 'On it. Will have numbers before the meeting.' },
             { author: 'ravi', text: 'Site crew can re-peg the second stage either way. Ready for both.' },
+            { author: 'timo', text: '/highfive' },
         ],
     },
     {
@@ -397,6 +399,9 @@ export type SeededMail = {
         daysAgo: number;
         hour: number;
         text: string;
+        // Optional rich body — the mail client renders real paragraphs/lists, not just plain text.
+        // `text` stays as the plain-text fallback (multipart/alternative) when this is set.
+        html?: string;
     }[];
 };
 
@@ -707,7 +712,8 @@ export const MAILS: SeededMail[] = [
                 from: 'director',
                 daysAgo: 2,
                 hour: 8,
-                text: "Hi everyone,\n\nThree weeks to go. Line-up is about 80% confirmed, tickets are moving, and the build weekend is getting close. Two things on my mind: we are still short on volunteers, so if you can bring one person along, tell Nour. And the Sunday forecast for the field looks iffy, we will decide on wind cover at the go/no-go.\n\nProud of this crew. Let's make it a good one.\n\nAnouk",
+                text: "Hi everyone,\n\nThree weeks to go. Line-up is about 80% confirmed, tickets are moving, and the build weekend is getting close. Two things on my mind:\n\n- We are still short on volunteers, so if you can bring one person along, tell Nour.\n- The Sunday forecast for the field looks iffy, we will decide on wind cover at the go/no-go.\n\nProud of this crew. Let's make it a good one.\n\nAnouk",
+                html: "<p>Hi everyone,</p><p>Three weeks to go. Line-up is about 80% confirmed, tickets are moving, and the build weekend is getting close. Two things on my mind:</p><ul><li>We are still short on volunteers, so if you can bring one person along, tell Nour.</li><li>The Sunday forecast for the field looks iffy, we will decide on wind cover at the go/no-go.</li></ul><p>Proud of this crew. Let's make it a good one.</p><p>Anouk</p>",
             },
         ],
     },

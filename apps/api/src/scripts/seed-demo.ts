@@ -29,6 +29,7 @@ import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import ExcelJS from 'exceljs';
+import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
 import type { User } from '../lib/user';
 import {
@@ -87,23 +88,35 @@ if (existsSync(join(DATA_ROOT, 'server', 'config.json'))) {
 mkdirSync(join(DATA_ROOT, 'server'), { recursive: true });
 mkdirSync(join(DATA_ROOT, 'home'), { recursive: true });
 
-function buildRfc822(o: {
+// Same MIME engine the real app uses for outbound mail (composeRfc822 in lib/core/mailer.ts) —
+// used directly rather than through composeRfc822/OutboundMail so the thread-linking headers
+// (Message-ID/In-Reply-To/References) stay under our control. HTML is optional: when given, this
+// produces a real multipart/alternative message so the mail client renders lists/paragraphs
+// properly instead of the plain-text-only fallback.
+async function buildRfc822(o: {
     from: string;
     to: string;
     subject: string;
     date: Date;
     text: string;
+    html?: string;
     messageId: string;
     inReplyTo?: string;
     references?: string[];
-}): Buffer {
-    let headers =
-        `From: ${o.from}\r\nTo: ${o.to}\r\nSubject: ${o.subject}\r\n` +
-        `Date: ${o.date.toUTCString()}\r\nMessage-ID: <${o.messageId}>\r\n`;
-    if (o.inReplyTo) headers += `In-Reply-To: <${o.inReplyTo}>\r\n`;
-    if (o.references?.length) headers += `References: ${o.references.map((r) => `<${r}>`).join(' ')}\r\n`;
-    headers += 'Content-Type: text/plain; charset=utf-8\r\n\r\n';
-    return Buffer.from(`${headers}${o.text.replace(/\n/g, '\r\n')}\r\n`, 'utf8');
+}): Promise<Buffer> {
+    return new MailComposer({
+        from: o.from,
+        to: o.to,
+        subject: o.subject,
+        date: o.date,
+        text: o.text,
+        html: o.html,
+        messageId: `<${o.messageId}>`,
+        inReplyTo: o.inReplyTo ? `<${o.inReplyTo}>` : undefined,
+        references: o.references?.length ? o.references.map((r) => `<${r}>`) : undefined,
+    })
+        .compile()
+        .build();
 }
 
 // exceljs's writeBuffer returns a view over a larger ArrayBuffer; copy into a standalone one.
@@ -572,12 +585,13 @@ async function main(): Promise<void> {
                 const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
                 date.setHours(message.hour, 0, 0, 0);
                 const messageId = `${randomUUID()}@${MAIL_DOMAIN}`;
-                const buffer = buildRfc822({
+                const buffer = await buildRfc822({
                     from,
                     to,
                     subject: previousId ? `Re: ${flow.subject}` : flow.subject,
                     date,
                     text: message.text,
+                    html: message.html,
                     messageId,
                     inReplyTo: previousId,
                     references: references.length ? references : undefined,
@@ -595,12 +609,13 @@ async function main(): Promise<void> {
             const to = `${TEAM_NAME} <crew@${MAIL_DOMAIN}>`;
             for (const persona of PERSONAS) {
                 const home = await getHome(userByKey.get(persona.key)!.id);
-                const buffer = buildRfc822({
+                const buffer = await buildRfc822({
                     from,
                     to,
                     subject: flow.subject,
                     date,
                     text: message.text,
+                    html: message.html,
                     messageId: `${randomUUID()}@${MAIL_DOMAIN}`,
                 });
                 await home.mail.mailboxDeliver(buffer);
