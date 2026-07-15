@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
@@ -9,6 +9,7 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import { loadYjsState } from '../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../lib/core';
+import { PHOTOS } from '../scripts/demo/content';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
 // (the Elysia app, the auth DB, the Home map), so it cannot run in-process alongside the
@@ -137,6 +138,25 @@ describe('seed-demo', () => {
             expect(existsSync(metadataDb)).toBe(true);
             const events = query<{ n: number }>(metadataDb, 'SELECT count(*) AS n FROM file_events');
             expect(events[0].n).toBeGreaterThanOrEqual(1);
+
+            // Team drive images/: every site photo landed as a real .webp blob on disk (each row's
+            // `file` is the storage key under the mount's data dir, non-trivial size = real image data).
+            const imagesFolder = query<{ id: string }>(
+                metadataDb,
+                "SELECT id FROM paths WHERE name = 'images' AND trashedAt IS NULL",
+            );
+            expect(imagesFolder.length).toBe(1);
+            const photoRows = query<{ name: string; file: string }>(
+                metadataDb,
+                `SELECT name, file FROM paths WHERE parentId = '${imagesFolder[0].id}' AND trashedAt IS NULL`,
+            );
+            expect(photoRows.length).toBe(PHOTOS.length);
+            for (const photo of photoRows) {
+                expect(photo.name).toEndWith('.webp');
+                const blob = join(mountsDir, mountId!, 'data', photo.file);
+                expect(existsSync(blob)).toBe(true);
+                expect(statSync(blob).size).toBeGreaterThan(10_000);
+            }
 
             // Team calendar: seeded events exist on the enabled team calendar.
             const calendarDb = join(root, 'team', teamId!, 'eigen.calendar', 'calendar.db');

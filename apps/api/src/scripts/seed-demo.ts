@@ -46,6 +46,7 @@ import {
     ORG_NAME,
     PERSONAL_SHARES,
     PERSONAS,
+    PHOTOS,
     personaByKey,
     personaByRole,
     SPONSOR_DECK,
@@ -327,6 +328,20 @@ async function main(): Promise<void> {
         const room = await teamDrive.getChat(teamMountId, chatId);
         await room.postMessage(author, text);
     };
+
+    // --- Site photos: committed .webp fixtures uploaded into images/ through the real drive path. ---
+    const imagesFolderId = folderId.get('images')!;
+    for (const photo of PHOTOS) {
+        const bytes = readFileSync(join(FIXTURES_DIR, 'images', photo.file));
+        await teamDrive.createFileFromData(
+            teamMountId,
+            imagesFolderId,
+            photo.file,
+            'image/webp',
+            bytes,
+            userByKey.get(photo.uploader)!,
+        );
+    }
 
     // --- Docs: HTML -> .docx -> shipped converter -> eigendoc; comment threads as nested chats. ---
     for (const doc of DOCS) {

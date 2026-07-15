@@ -102,6 +102,10 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   carries a `chat` slug + starter text (`chatText`/`chatReplies`); the seeder creates that chat
   live per run (real personas, same as doc comments — see below) and patches `color`/`chatName`
   onto the placed board's `tasks` Y.Map, so this part does NOT need a fixture regen.
+- **Site photos in `images/`.** `demo/fixtures/images/*.webp` (five of the maintainer's own
+  coastal/festival photos, two Unsplash) are uploaded into an `images/` team-drive folder through
+  the real `createFileFromData` path, keyed to plausible persona uploaders (`content.ts` `PHOTOS`).
+  Attribution + licensing in `demo/fixtures/images/CREDITS.md`.
 - **Mail as raw RFC822.** `buildRfc822` writes real `Date` headers (dates relative to seed time) and
   `Home.mail.mailboxDeliver` indexes them into `mail.db`. Inbox threads land in one persona; all-hands
   mail lands in every inbox.
@@ -184,7 +188,7 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `apps/api/src/scripts/seed-demo.ts` | Offline in-process seeder (mechanics) |
 | `apps/api/src/scripts/demo/content.ts` | Tuimel Festival content (data only) |
 | `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the slides/stickies fixture containers |
-| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigenstickies` containers |
+| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigenstickies` containers + `images/` site photos (see its `CREDITS.md`) |
 | `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate) |
 | `scripts/snapshot.sh` / `scripts/restore.sh` | General offline backup/restore |
 | `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units |

@@ -59,7 +59,15 @@ export const TEAM_NAME = 'festival crew';
 export const TEAM_MOUNT_NAME = 'festival';
 
 // All seeded directory and file names are lowercase. Chat channels live under `chats/`.
-export const TEAM_FOLDERS = ['production', 'programming', 'marketing', 'finance', 'volunteers', 'chats'] as const;
+export const TEAM_FOLDERS = [
+    'production',
+    'programming',
+    'marketing',
+    'finance',
+    'volunteers',
+    'images',
+    'chats',
+] as const;
 export type TeamFolder = (typeof TEAM_FOLDERS)[number];
 
 // --- Documents (seeded via the shipped .docx -> eigendoc converter, dogfooding import) ---
@@ -297,6 +305,44 @@ export const KANBAN = {
         },
     ] as CardSpec[],
 };
+
+// --- Site photos (committed .webp fixtures uploaded into the team drive's images/ folder) ---
+
+export type PhotoSpec = {
+    file: string; // fixture filename under fixtures/images/ (see CREDITS.md)
+    caption: string; // in-world note describing the shot
+    uploader: string; // persona key
+};
+
+export const PHOTOS: PhotoSpec[] = [
+    { file: 'camping-field.webp', caption: 'Camping field is taking shape. The sign went up today.', uploader: 'yara' },
+    {
+        file: 'storm-over-the-field.webp',
+        caption: 'Sky over the field last week. This is the Sunday weather I keep flagging.',
+        uploader: 'timo',
+    },
+    {
+        file: 'wildflower-meadow.webp',
+        caption: 'The meadow by the entrance is in full bloom right now.',
+        uploader: 'mees',
+    },
+    {
+        file: 'beach-poles-sunset.webp',
+        caption: 'Sunset five minutes from the field. One for the socials.',
+        uploader: 'mees',
+    },
+    { file: 'dune-sunset.webp', caption: 'Dune and sea at golden hour, for the marketing set.', uploader: 'mees' },
+    {
+        file: 'crowd-arriving.webp',
+        caption: 'Crowd arriving from last edition. Nice for the announcement.',
+        uploader: 'mees',
+    },
+    {
+        file: 'hands-up-at-camp.webp',
+        caption: 'Camping mornings from last year. Still makes me smile.',
+        uploader: 'mees',
+    },
+];
 
 // --- Chat channels (real chat rooms in chats/, seeded via ChatRoom.postMessage as personas) ---
 
