@@ -98,7 +98,10 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   festival-kanban.eigenstickies}` (`data.db` + `comments.db`) are byte-copied in — legal because
   eigen-doc containers reference their internals by name, not pathId. Stickies `creator` keys are
   rewritten to runtime emails after copy. Regenerate the fixtures with `demo/author-fixtures.ts`
-  whenever the deck/board content changes.
+  whenever the deck/board's title/description/column/creator content changes. Each `CardSpec` also
+  carries a `chat` slug + starter text (`chatText`/`chatReplies`); the seeder creates that chat
+  live per run (real personas, same as doc comments — see below) and patches `color`/`chatName`
+  onto the placed board's `tasks` Y.Map, so this part does NOT need a fixture regen.
 - **Mail as raw RFC822.** `buildRfc822` writes real `Date` headers (dates relative to seed time) and
   `Home.mail.mailboxDeliver` indexes them into `mail.db`. Inbox threads land in one persona; all-hands
   mail lands in every inbox.
@@ -107,6 +110,10 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   and writes the card into the doc's `comments` Y.Map (`writeCommentCard`, mirroring the FE's
   `writeCardToDoc`). The comment thread is a real chat under the container's `chat/` folder; assignment
   records the same `assigned` event + bell notification the route would.
+- **Every card gets the shared default color.** Doc comment cards and stickies cards both use
+  `CommentCard`/`color` — no seeded card is left uncolored. `DEFAULT_CARD_COLOR` in `seed-demo.ts`
+  is `EIGEN_STICKIES_COLORS[0][1].value` (yellow-100, `#fef9c2`), the same fallback the shared card
+  dialog (`card-dialog.tsx`) uses for an uncolored card, so seeded and manually-created cards match.
 - **`__Secure-` cookie name.** With an https `API_URL` (or `NODE_ENV=production`) better-auth prefixes
   its cookie names with `__Secure-`. The seeder needs an admin session for `addTeamMember`, so it
   matches the full `name=value` pair verbatim (`(?:__Secure-|__Host-)?better-auth.session_token=...`)

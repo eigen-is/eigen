@@ -24,6 +24,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
@@ -58,6 +59,9 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 const SQLITE_MIME = 'application/x-sqlite3';
 const FIXTURES_DIR = join(import.meta.dir, 'demo', 'fixtures');
 const AVATARS_DIR = join(FIXTURES_DIR, 'avatars');
+// Same fallback the card dialog uses when a card has no color (card-dialog.tsx initialColor) —
+// every seeded card gets it explicitly so none render uncolored.
+const DEFAULT_CARD_COLOR = EIGEN_STICKIES_COLORS[0][1].value;
 
 const DATA_ROOT = process.env['EIGEN_DATA_ROOT'];
 if (!DATA_ROOT) {
@@ -142,6 +146,7 @@ function writeCommentCard(doc: Y.Doc, card: CommentCard): void {
     y.set('id', card.id);
     y.set('title', card.title);
     y.set('description', card.description);
+    if (card.color) y.set('color', card.color);
     if (card.chatName) y.set('chatName', card.chatName);
     if (card.creator) y.set('creator', card.creator);
     if (card.createdAt !== undefined) y.set('createdAt', card.createdAt);
@@ -355,6 +360,7 @@ async function main(): Promise<void> {
                 id: randomUUID(),
                 title: comment.anchor.slice(0, 100),
                 description: '',
+                color: DEFAULT_CARD_COLOR,
                 chatName: chat.name,
                 creator: commentAuthor.email,
                 createdAt: Date.now(),
@@ -446,9 +452,26 @@ async function main(): Promise<void> {
         'festival-kanban.eigenstickies',
         userForRole('production'),
     );
-    // The fixture bakes card/column creators as bare persona keys; rewrite them to runtime emails
-    // so the board resolves author names under any MAIL_DOMAIN.
     const board = await teamDrive.getCollabDocument(teamMountId, boardId);
+
+    // Card chat threads: same pattern as doc comments — a real chat inside the container's chat/
+    // subfolder, seeded by the card's creator persona and linked back onto the card by name.
+    const boardChatFolder = await teamDrive.getChildByName(teamMountId, boardId, 'chat');
+    if (!boardChatFolder) throw new Error(`chat/ subfolder missing for ${KANBAN.name}`);
+    const cardChatNames = new Map<string, string>();
+    for (const [i, card] of KANBAN.cards.entries()) {
+        const cardAuthor = userByKey.get(card.creator)!;
+        const chat = await teamDrive.create(teamMountId, boardChatFolder.id, card.chat, 'chat', cardAuthor);
+        await postTo(chat.id, cardAuthor, card.chatText);
+        for (const reply of card.chatReplies ?? []) {
+            await postTo(chat.id, userByKey.get(reply.author)!, reply.text);
+        }
+        cardChatNames.set(`card-${i + 1}`, chat.name);
+    }
+
+    // The fixture bakes card/column creators as bare persona keys; rewrite them to runtime emails
+    // so the board resolves author names under any MAIL_DOMAIN. Every card also gets the shared
+    // default card color and its chat link.
     board.doc.transact(() => {
         for (const rootName of ['tasks', 'columns']) {
             for (const [, value] of board.doc.getMap(rootName)) {
@@ -456,6 +479,11 @@ async function main(): Promise<void> {
                 const creator = entry.get('creator');
                 if (typeof creator === 'string' && !creator.includes('@')) entry.set('creator', emailFor(creator));
             }
+        }
+        for (const [cardId, chatName] of cardChatNames) {
+            const task = board.doc.getMap<Y.Map<unknown>>('tasks').get(cardId)!;
+            task.set('color', DEFAULT_CARD_COLOR);
+            task.set('chatName', chatName);
         }
     });
     await teamDrive.flushContainerDb(teamMountId, boardId);

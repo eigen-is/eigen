@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import { loadYjsState } from '../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../lib/core';
@@ -41,6 +42,22 @@ function collectCommentMarkIds(json: JSONContent, out: Set<string>): void {
         if (mark.type === 'comment' && typeof mark.attrs?.['cardId'] === 'string') out.add(mark.attrs['cardId']);
     }
     for (const child of json.content ?? []) collectCommentMarkIds(child, out);
+}
+
+// Resolve a top-level container's data.db path from metadata.db (used for both the seeded doc
+// and the stickies board — each container's data.db is a child path row, not the container itself).
+function findContainerDataDb(metadataDb: string, mountsDir: string, mountId: string, containerName: string): string {
+    const containerRow = query<{ id: string }>(
+        metadataDb,
+        `SELECT id FROM paths WHERE name = '${containerName}' AND trashedAt IS NULL`,
+    );
+    expect(containerRow.length).toBe(1);
+    const dataDbRow = query<{ file: string }>(
+        metadataDb,
+        `SELECT file FROM paths WHERE parentId = '${containerRow[0].id}' AND name = 'data.db'`,
+    );
+    expect(dataDbRow.length).toBe(1);
+    return join(mountsDir, mountId, 'data', dataDbRow[0].file);
 }
 
 describe('seed-demo', () => {
@@ -129,24 +146,18 @@ describe('seed-demo', () => {
 
             // Doc comments: the panel renders exclusively from the doc's `comments` Y.Map, and
             // only cards anchored by a comment mark in the text. Assert both for the seeded doc.
-            const docRow = query<{ id: string }>(
-                metadataDb,
-                "SELECT id FROM paths WHERE name = 'production plan.eigendoc' AND trashedAt IS NULL",
-            );
-            expect(docRow.length).toBe(1);
-            const dataDbRow = query<{ file: string }>(
-                metadataDb,
-                `SELECT file FROM paths WHERE parentId = '${docRow[0].id}' AND name = 'data.db'`,
-            );
-            expect(dataDbRow.length).toBe(1);
-            const ydoc = await loadCollabDoc(join(mountsDir, mountId!, 'data', dataDbRow[0].file));
+            const docDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, 'production plan.eigendoc');
+            const ydoc = await loadCollabDoc(docDataDb);
             const cards = [...ydoc.getMap<import('yjs').Map<unknown>>('comments').values()].map((card) => ({
                 id: card.get('id') as string,
+                color: card.get('color') as string,
                 chatName: card.get('chatName') as string,
                 creator: card.get('creator') as string,
             }));
             expect(cards.length).toBeGreaterThanOrEqual(3);
+            const defaultCardColor = EIGEN_STICKIES_COLORS[0][1].value;
             for (const card of cards) {
+                expect(card.color).toBe(defaultCardColor);
                 expect(card.chatName).toEndWith('.eigenchat');
                 expect(card.creator).toContain('@');
             }
@@ -154,6 +165,22 @@ describe('seed-demo', () => {
             collectCommentMarkIds(yXmlFragmentToProsemirrorJSON(ydoc.getXmlFragment('default')), anchored);
             for (const card of cards) {
                 expect(anchored.has(card.id)).toBe(true);
+            }
+
+            // Stickies board: every card gets the same default color plus a real linked chat
+            // (same pattern as doc comments), so no card ever renders uncolored or unlinked.
+            const boardDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, 'festival kanban.eigenstickies');
+            const board = await loadCollabDoc(boardDataDb);
+            const tasks = [...board.getMap<import('yjs').Map<unknown>>('tasks').values()].map((task) => ({
+                color: task.get('color') as string,
+                chatName: task.get('chatName') as string,
+                creator: task.get('creator') as string,
+            }));
+            expect(tasks.length).toBeGreaterThanOrEqual(8);
+            for (const task of tasks) {
+                expect(task.color).toBe(defaultCardColor);
+                expect(task.chatName).toEndWith('.eigenchat');
+                expect(task.creator).toContain('@');
             }
 
             // Assignment: the volunteer coordinator got the bell notification the assign route persists.

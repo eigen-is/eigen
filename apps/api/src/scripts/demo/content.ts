@@ -199,6 +199,11 @@ export type CardSpec = {
     description: string;
     column: string; // must be one of KANBAN.columns
     creator: string; // persona key; domainised into an email by the seeder
+    // Linked chat thread, mirroring DocComment: a real chat inside the container's chat/ subfolder,
+    // seeded by the creator persona (chat) and referenced back by name (chatName on the card).
+    chat: string; // slug, lowercase, no extension
+    chatText: string;
+    chatReplies?: { author: string; text: string }[];
 };
 
 export const KANBAN = {
@@ -211,38 +216,78 @@ export const KANBAN = {
             description: 'Signed and countersigned.',
             column: 'done',
             creator: 'joris',
+            chat: 'headliner-contract',
+            chatText: 'Signed and countersigned today.',
+            chatReplies: [{ author: 'anouk', text: "Great news — let's get it into the press release." }],
         },
-        { title: 'Order fencing', description: 'Build-weekend delivery.', column: 'doing', creator: 'saar' },
+        {
+            title: 'Order fencing',
+            description: 'Build-weekend delivery.',
+            column: 'doing',
+            creator: 'saar',
+            chat: 'fencing-order',
+            chatText: 'Getting quotes in for the build-weekend delivery.',
+            chatReplies: [
+                { author: 'timo', text: 'See if they can drop it Thursday — we need the site clear before that.' },
+            ],
+        },
         {
             title: 'Publish full line-up',
             description: 'Once the last two acts confirm.',
             column: 'to do',
             creator: 'mees',
+            chat: 'lineup-publish',
+            chatText: 'Holding this until the last two acts confirm.',
+            chatReplies: [{ author: 'joris', text: 'Should have both locked in by Friday.' }],
         },
         {
             title: 'Recruit 10 more volunteers',
             description: 'Blocked on the call-out going out.',
             column: 'to do',
             creator: 'nour',
+            chat: 'volunteer-recruit',
+            chatText: 'Still about 10 short for the build weekend. Call-out goes out today.',
+            chatReplies: [{ author: 'anouk', text: 'Let me know if you want a hand drafting it.' }],
         },
         {
             title: 'Fix generator quote',
             description: 'Two generators plus a backup.',
             column: 'doing',
             creator: 'saar',
+            chat: 'generator-quote',
+            chatText: 'Chasing numbers for two generators plus a backup.',
+            chatReplies: [
+                { author: 'timo', text: 'Make sure the backup can carry the second stage on its own if it has to.' },
+            ],
         },
-        { title: 'Print wristbands', description: 'Three tiers, camping included.', column: 'to do', creator: 'daan' },
+        {
+            title: 'Print wristbands',
+            description: 'Three tiers, camping included.',
+            column: 'to do',
+            creator: 'daan',
+            chat: 'wristbands-print',
+            chatText: 'Three tiers, camping included. Sending the design to print this week.',
+            chatReplies: [{ author: 'anouk', text: "Nice — post a preview here when it's back." }],
+        },
         {
             title: 'Book shuttle buses',
             description: 'Every 30 minutes from the station.',
             column: 'done',
             creator: 'saar',
+            chat: 'shuttle-buses',
+            chatText: 'Booked — every 30 minutes from the station.',
+            chatReplies: [{ author: 'mees', text: "I'll put the schedule on the info page." }],
         },
         {
             title: 'Sunday wind cover',
             description: 'Decide at the go/no-go meeting.',
             column: 'to do',
             creator: 'timo',
+            chat: 'wind-cover',
+            chatText: 'Forecast for the field is turning windy Sunday. Need a call on tenting the second stage.',
+            chatReplies: [
+                { author: 'saar', text: "Let's decide at the go/no-go — I'll get a wind-cover quote before then." },
+            ],
         },
     ] as CardSpec[],
 };
