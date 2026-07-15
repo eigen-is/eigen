@@ -223,10 +223,13 @@ async function main(): Promise<void> {
     const { default: htmlToDocx } = await import('@turbodocx/html-to-docx');
 
     // Tiny quotas + no signups; local-id storage came from the setup call. Apply before any home
-    // is created — a user home fixes its mount type on first init.
+    // is created — a user home fixes its mount type on first init. No welcome mail: every persona's
+    // first mail-store touch would otherwise drop a "Welcome to Tuimel Festival!" system email as
+    // message #1 in their inbox, breaking the lived-in-world illusion.
     await updateServerSettings({
         guests: { openSignup: false },
         quotas: { defaultMountMaxSizeMB: 50, maxUploadSizeMB: 5 },
+        onboarding: { welcomeMail: { enabled: false } },
     });
 
     // --- Personas: the user.create hook auto-joins each to the default org as `member`. ---
@@ -536,7 +539,7 @@ async function main(): Promise<void> {
     // --- Mail: raw RFC822 delivered into persona inboxes (indexed into mail.db on delivery). ---
     for (const flow of MAILS) {
         if (flow.kind === 'inbox-thread') {
-            const recipient = userForRole(flow.to!);
+            const recipient = userByKey.get(resolvePersona(flow.to!).key)!;
             const recipientHome = await getHome(recipient.id);
             // The thread's external party (booker) — the other end of every message.
             const externalParty = flow.messages.find((m) => m.fromExternal)?.fromExternal;

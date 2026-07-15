@@ -108,7 +108,10 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'short on crew for the build weekend',
                 author: 'saar',
                 text: "We're still about 10 volunteers short for the build weekend. Can we push the call-out again?",
-                replies: [{ author: 'nour', text: 'On it — sending a fresh call-out to the mailing list today.' }],
+                replies: [
+                    { author: 'nour', text: 'On it, sending a fresh call-out to the mailing list today.' },
+                    { author: 'saar', text: '/highfive' },
+                ],
                 assignTo: 'volunteers',
             },
             {
@@ -125,7 +128,7 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'Shuttle buses from the nearest station',
                 author: 'joris',
                 text: 'Last shuttle at 01:00 or 02:00? It affects the closing set.',
-                replies: [{ author: 'mees', text: "02:00 — I'll put it on the info page." }],
+                replies: [{ author: 'mees', text: "02:00, I'll put it on the info page." }],
             },
         ],
     },
@@ -134,7 +137,7 @@ export const DOCS: SeededDoc[] = [
         name: 'press release draft',
         author: 'comms',
         html: [
-            '<h1>Press release — draft</h1>',
+            '<h1>Press release draft</h1>',
             '<p><em>For release once the line-up hits 100%.</em></p>',
             '<p>Tuimel Festival returns to the coastal fields near Vlierzand for a weekend of emerging music, spoken word, installations and workshops. Small on purpose: two stages, a food corner, and camping under big skies.</p>',
             '<p>Tickets are on sale now. The full line-up reveal follows in the coming days.</p>',
@@ -185,7 +188,7 @@ export const SPONSOR_DECK = {
         { heading: 'Who comes', body: 'A couple thousand curious people, two stages, camping under big skies' },
         {
             heading: 'Why partner with us',
-            body: 'Warm, local, and independent — your name next to a much-loved weekend',
+            body: 'Warm, local, and independent. Your name next to a much-loved weekend',
         },
         { heading: 'What you get', body: 'Stage credit, on-site presence, and a mention in every announcement' },
         { heading: "Let's talk", body: 'Reach out to the crew and join this edition' },
@@ -218,7 +221,10 @@ export const KANBAN = {
             creator: 'joris',
             chat: 'headliner-contract',
             chatText: 'Signed and countersigned today.',
-            chatReplies: [{ author: 'anouk', text: "Great news — let's get it into the press release." }],
+            chatReplies: [
+                { author: 'anouk', text: "Nice one, let's get it into the press release." },
+                { author: 'joris', text: '/cheer' },
+            ],
         },
         {
             title: 'Order fencing',
@@ -228,7 +234,7 @@ export const KANBAN = {
             chat: 'fencing-order',
             chatText: 'Getting quotes in for the build-weekend delivery.',
             chatReplies: [
-                { author: 'timo', text: 'See if they can drop it Thursday — we need the site clear before that.' },
+                { author: 'timo', text: 'See if they can drop it Thursday, we need the site clear before that.' },
             ],
         },
         {
@@ -267,7 +273,7 @@ export const KANBAN = {
             creator: 'daan',
             chat: 'wristbands-print',
             chatText: 'Three tiers, camping included. Sending the design to print this week.',
-            chatReplies: [{ author: 'anouk', text: "Nice — post a preview here when it's back." }],
+            chatReplies: [{ author: 'anouk', text: "Nice, post a preview here when it's back." }],
         },
         {
             title: 'Book shuttle buses',
@@ -275,7 +281,7 @@ export const KANBAN = {
             column: 'done',
             creator: 'saar',
             chat: 'shuttle-buses',
-            chatText: 'Booked — every 30 minutes from the station.',
+            chatText: 'Booked. Every 30 minutes from the station.',
             chatReplies: [{ author: 'mees', text: "I'll put the schedule on the info page." }],
         },
         {
@@ -286,7 +292,7 @@ export const KANBAN = {
             chat: 'wind-cover',
             chatText: 'Forecast for the field is turning windy Sunday. Need a call on tenting the second stage.',
             chatReplies: [
-                { author: 'saar', text: "Let's decide at the go/no-go — I'll get a wind-cover quote before then." },
+                { author: 'saar', text: "Let's decide at the go/no-go, I'll get a wind-cover quote before then." },
             ],
         },
     ] as CardSpec[],
@@ -303,7 +309,7 @@ export const CHATS: SeededChat[] = [
         messages: [
             { author: 'saar', text: 'Build weekend plan is up in the drive. Shout if a slot clashes.' },
             { author: 'timo', text: 'Power run looks fine. One generator quote still open.' },
-            { author: 'daan', text: 'Wristbands ordered — three tiers, camping included.' },
+            { author: 'daan', text: 'Wristbands ordered. Three tiers, camping included.' },
             { author: 'timo', text: 'Heads up: the Sunday forecast for the field is turning windy.' },
             { author: 'saar', text: 'How bad? The second stage is the exposed one.' },
             { author: 'timo', text: 'Gusts into the evening. No shelter out there right now.' },
@@ -318,7 +324,7 @@ export const CHATS: SeededChat[] = [
         messages: [
             { author: 'nour', text: "We're about 10 short for the build weekend. Pushing the call-out today." },
             { author: 'maud', text: 'I can bring two friends for load-in Friday.' },
-            { author: 'nour', text: 'Amazing — added you three to the roster.' },
+            { author: 'nour', text: 'Nice, added you three to the roster.' },
             { author: 'yara', text: 'Camping host desk needs one more for the night shift.' },
             { author: 'imke', text: 'First aid is covered for both days, one gap Sunday morning.' },
             { author: 'nour', text: "I'll flag the Sunday morning gap in the call-out." },
@@ -326,6 +332,7 @@ export const CHATS: SeededChat[] = [
             { author: 'pieter', text: 'Box office wants two runners at peak. Any takers?' },
             { author: 'maud', text: 'Put me down as a runner for Saturday peak.' },
             { author: 'nour', text: 'Thanks all. Roster is looking a lot healthier.' },
+            { author: 'maud', text: '/cheer' },
         ],
     },
 ];
@@ -335,7 +342,7 @@ export const CHATS: SeededChat[] = [
 export type SeededMail = {
     // 'inbox-thread' lands in one persona's inbox; 'all-hands' lands in every persona's inbox.
     kind: 'inbox-thread' | 'all-hands';
-    to?: LeadRole; // required for inbox-thread
+    to?: LeadRole | string; // required for inbox-thread; role or persona key (mirrors EVENTS.attendees)
     from?: LeadRole; // sender lead for all-hands
     subject: string;
     messages: {
@@ -351,7 +358,7 @@ export const MAILS: SeededMail[] = [
     {
         kind: 'inbox-thread',
         to: 'programming',
-        subject: 'Booking — Tuimel Festival',
+        subject: 'Tuimel Festival booking',
         messages: [
             {
                 fromExternal: { name: 'Wolf Nachtlicht', email: 'wolf@nachtlicht-bookings.example' },
@@ -363,13 +370,285 @@ export const MAILS: SeededMail[] = [
                 from: 'joris',
                 daysAgo: 8,
                 hour: 16,
-                text: 'Hi Wolf,\n\nGreat news! Saturday it is. Fee as discussed, half on signing. Stage times land next week once the grid is locked. Sending the contract shortly.\n\nJoris',
+                text: 'Hi Wolf,\n\nSaturday works for us too, glad that is settled. Fee as discussed, half on signing. Stage times land next week once the grid is locked. Sending the contract shortly.\n\nJoris',
             },
             {
                 fromExternal: { name: 'Wolf Nachtlicht', email: 'wolf@nachtlicht-bookings.example' },
                 daysAgo: 7,
                 hour: 9,
-                text: 'Perfect, thanks Joris. We will watch for the contract. One question: is there a backline on the second stage or do we bring our own?\n\nWolf',
+                text: 'Sounds good, thanks Joris. We will watch for the contract. One question: is there a backline on the second stage or do we bring our own?\n\nWolf',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'director',
+        subject: 'Are you doing it again this year',
+        messages: [
+            {
+                fromExternal: { name: 'Tom Rovers', email: 'tom.rovers@example.com' },
+                daysAgo: 8,
+                hour: 21,
+                text: 'Hi Anouk,\n\nSaw the posters going up near the station. Are you all doing Tuimel again this year? Would love to come back, it was the best weekend of last summer.\n\nTom',
+            },
+            {
+                from: 'anouk',
+                daysAgo: 8,
+                hour: 22,
+                text: 'Hi Tom,\n\nWe are, three weeks out now. Tickets are up on the site, hope to see you on the field again.\n\nAnouk',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'production',
+        subject: 'Generator quote',
+        messages: [
+            {
+                fromExternal: { name: 'Rob Tempel', email: 'rob@vlierkracht-verhuur.example' },
+                daysAgo: 6,
+                hour: 11,
+                text: 'Hi Saar,\n\nQuote attached for two 60kVA units plus a backup. We can deliver Thursday morning, pickup Monday. Let me know if the dates work.\n\nRob\nVlierkracht Verhuur',
+            },
+            {
+                from: 'saar',
+                daysAgo: 6,
+                hour: 15,
+                text: 'Hi Rob,\n\nThursday works. Can the backup run the second stage on its own if the main unit trips? Timo will want to know before we sign off.\n\nSaar',
+            },
+            {
+                fromExternal: { name: 'Rob Tempel', email: 'rob@vlierkracht-verhuur.example' },
+                daysAgo: 5,
+                hour: 9,
+                text: 'Yes, the backup is rated for a full stage on its own. Sending the contract now.\n\nRob',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'comms',
+        subject: 'Line-up reveal',
+        messages: [
+            {
+                fromExternal: { name: 'Sanne Post', email: 'sanne@kustkrant.example' },
+                daysAgo: 4,
+                hour: 13,
+                text: 'Hi Mees,\n\nWe would love to run something on the line-up reveal for the weekend edition. Deadline is Wednesday, any chance you can send a draft before then?\n\nSanne\nKustkrant',
+            },
+            {
+                from: 'mees',
+                daysAgo: 3,
+                hour: 10,
+                text: 'Hi Sanne,\n\nWe are two acts away from the full line-up, should land by Friday. I will send you the draft as soon as it is locked, before Wednesday if I can.\n\nMees',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'volunteers',
+        subject: 'Volunteering this weekend',
+        messages: [
+            {
+                fromExternal: { name: 'Femke Aarts', email: 'femke.aarts@example.com' },
+                daysAgo: 3,
+                hour: 19,
+                text: 'Hi,\n\nSaw the call-out from a friend. I am free the whole build weekend and Saturday of the festival. Happy to help wherever needed.\n\nFemke',
+            },
+            {
+                from: 'nour',
+                daysAgo: 3,
+                hour: 20,
+                text: 'Hi Femke,\n\nThat is a big help, thank you. Put you down for build weekend and Saturday gate duty, I will send the schedule closer to the time.\n\nNour',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'finance',
+        subject: 'Grant paperwork',
+        messages: [
+            {
+                fromExternal: { name: 'Marijke Veen', email: 'marijke@cultuurfonds-kust.example' },
+                daysAgo: 5,
+                hour: 10,
+                text: 'Hi Bram,\n\nAhead of our call, could you send the updated budget and the visitor estimate? We need both for the committee.\n\nMarijke\nCultuurfonds Kust',
+            },
+            {
+                from: 'bram',
+                daysAgo: 4,
+                hour: 16,
+                text: 'Hi Marijke,\n\nBudget is attached. Estimating around two thousand visitors across the weekend, similar to last edition. See you at the call.\n\nBram',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'tech',
+        subject: 'Backline second stage',
+        messages: [
+            {
+                fromExternal: { name: 'Jasper Cools', email: 'jasper@geluidsploeg.example' },
+                daysAgo: 4,
+                hour: 9,
+                text: 'Hi Timo,\n\nCan confirm a backline for the second stage: drums, two guitar amps, a bass rig. Same crew that did the barn last year.\n\nJasper\nGeluidsploeg',
+            },
+            {
+                from: 'timo',
+                daysAgo: 4,
+                hour: 14,
+                text: 'Hi Jasper,\n\nGood timing, one of the headliners just asked about exactly that. I will pass the specs along. Can you be on-site Friday for load-in?\n\nTimo',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'liaison',
+        subject: 'Quiet room for Wolf',
+        messages: [
+            {
+                fromExternal: { name: 'Nadia Roos', email: 'nadia@wolfpack-management.example' },
+                daysAgo: 3,
+                hour: 12,
+                text: 'Hi Lieke,\n\nWolf needs a quiet room before the set, ideally somewhere out of the wind. Vegetarian catering is fine, nothing fancy.\n\nNadia\nWolfpack Management',
+            },
+            {
+                from: 'lieke',
+                daysAgo: 3,
+                hour: 17,
+                text: 'Hi Nadia,\n\nWe have a small back room behind the stage that should do. Catering is sorted. See you at load-in.\n\nLieke',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'fenna',
+        subject: 'Bar delivery',
+        messages: [
+            {
+                fromExternal: { name: 'Bo Reijn', email: 'bo@brouwerij-vlier.example' },
+                daysAgo: 5,
+                hour: 14,
+                text: 'Hi Fenna,\n\nDelivery is set for Friday afternoon: the usual kegs plus the extra crate of soft drinks you asked for. Let me know if the gate needs a heads-up.\n\nBo\nBrouwerij Vlier',
+            },
+            {
+                from: 'fenna',
+                daysAgo: 5,
+                hour: 16,
+                text: 'Hi Bo,\n\nFriday works, I will let the gate know a van is coming in. Thanks for sorting the extra crate.\n\nFenna',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'daan',
+        subject: 'Wristband print run',
+        messages: [
+            {
+                fromExternal: { name: 'Print shop', email: 'orders@drukkerij-vlierzand.example' },
+                daysAgo: 4,
+                hour: 10,
+                text: 'Hi Daan,\n\nDesign received, three tiers as discussed. Print run will be ready for pickup Wednesday.\n\nDrukkerij Vlierzand',
+            },
+            {
+                from: 'daan',
+                daysAgo: 4,
+                hour: 11,
+                text: 'Thanks, I will swing by Wednesday afternoon. Can you double-check the camping tier is the blue one? Last year it printed green.\n\nDaan',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'ravi',
+        subject: 'Fencing delivery',
+        messages: [
+            {
+                fromExternal: { name: 'Hein Klarenbeek', email: 'hein@hekwerkverhuur.example' },
+                daysAgo: 6,
+                hour: 8,
+                text: 'Hi Ravi,\n\nFencing is loaded and coming Thursday, same as last year. Where do you want the pallets dropped this time?\n\nHein\nHekwerkverhuur Vlierzand',
+            },
+            {
+                from: 'ravi',
+                daysAgo: 6,
+                hour: 13,
+                text: 'Hi Hein,\n\nDrop them by the north track this year, closer to where we are building. Saar can meet you there.\n\nRavi',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'imke',
+        subject: 'Sunday morning shift',
+        messages: [
+            {
+                fromExternal: { name: 'Willem de Boer', email: 'willem.deboer@example.com' },
+                daysAgo: 2,
+                hour: 20,
+                text: 'Hi Imke,\n\nHeard first aid still needs someone Sunday morning. I did the course last year, happy to cover it if you still need someone.\n\nWillem',
+            },
+            {
+                from: 'imke',
+                daysAgo: 2,
+                hour: 21,
+                text: 'Hi Willem,\n\nThat would fill the last gap, thank you. Sunday 8 to 12, I will send the kit list closer to the time.\n\nImke',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'yara',
+        subject: 'Camping field toilets',
+        messages: [
+            {
+                fromExternal: { name: 'Sanitair Kust', email: 'planning@sanitairkust.example' },
+                daysAgo: 5,
+                hour: 9,
+                text: 'Hi Yara,\n\nConfirming four units for the camping field, placed Friday morning, serviced once during the weekend.\n\nSanitair Kust',
+            },
+            {
+                from: 'yara',
+                daysAgo: 5,
+                hour: 12,
+                text: 'Hi,\n\nFriday morning works, before campers start arriving at midday. Can the service happen early Sunday, before it gets busy?\n\nYara',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'pieter',
+        subject: 'Box office scanners',
+        messages: [
+            {
+                fromExternal: { name: 'Ticketing support', email: 'support@ticketflow.example' },
+                daysAgo: 3,
+                hour: 15,
+                text: 'Hi Pieter,\n\nYour two scanners are shipped, tracking attached. They come pre-loaded with the guest list, just charge them the night before.\n\nTicketFlow Support',
+            },
+            {
+                from: 'pieter',
+                daysAgo: 3,
+                hour: 18,
+                text: 'Thanks, will do. Does the offline mode still work if the field has no signal? Last year we lost it for an hour.\n\nPieter',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'sem',
+        subject: 'Installation on the dune path',
+        messages: [
+            {
+                fromExternal: { name: 'Iris Bergman', email: 'iris.bergman@example.com' },
+                daysAgo: 4,
+                hour: 16,
+                text: 'Hi Sem,\n\nI can bring the driftwood piece we talked about, it just needs a spot that will not flood if it rains. The dune path near the entrance still open?\n\nIris',
+            },
+            {
+                from: 'sem',
+                daysAgo: 4,
+                hour: 19,
+                text: 'Hi Iris,\n\nYes, that spot is still free and it sits high enough. Bring it Friday and we will find the exact angle together.\n\nSem',
             },
         ],
     },
@@ -382,14 +661,14 @@ export const MAILS: SeededMail[] = [
                 from: 'director',
                 daysAgo: 2,
                 hour: 8,
-                text: 'Hi everyone,\n\nThree weeks to go. Line-up is about 80% confirmed, tickets are moving, and the build weekend is close. Two things I need from all of us:\n\n1. Volunteers — we are short. If you can bring one person, please tell Nour.\n2. The Sunday forecast for the field looks iffy. We decide on wind cover at the go/no-go.\n\nProud of this crew. Let us make it a good one.\n\nAnouk',
+                text: "Hi everyone,\n\nThree weeks to go. Line-up is about 80% confirmed, tickets are moving, and the build weekend is getting close. Two things on my mind: we are still short on volunteers, so if you can bring one person along, tell Nour. And the Sunday forecast for the field looks iffy, we will decide on wind cover at the go/no-go.\n\nProud of this crew. Let's make it a good one.\n\nAnouk",
             },
         ],
     },
     {
         kind: 'all-hands',
         from: 'volunteers',
-        subject: 'Volunteer call-out — build weekend',
+        subject: 'Volunteers needed for build weekend',
         messages: [
             {
                 from: 'volunteers',
