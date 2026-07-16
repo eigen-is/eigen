@@ -75,6 +75,24 @@ process.env['API_URL'] ||= 'http://localhost';
 
 const MAIL_DOMAIN = process.env['MAIL_DOMAIN'] || 'tuimel.example';
 const DOMAIN = process.env['DOMAIN'] || MAIL_DOMAIN;
+
+// Drive-reference pills in seeded mail ("Open festival →") are built server-side by mail-template's
+// appUrl(), which reads the frontend per-app URL vars (VITE_APP_*_URL). The live API gets them from
+// `.env.production` via its CMD's --env-file, but the offline seeder runs through `compose run …
+// seed-demo.ts`, which replaces that CMD — so without setting them here the links fall back to dev
+// localhost URLs and get baked into the stored mail. Point them at the deploy host (same-origin under
+// each app name), which is exactly what the live API resolves for a real user's outbound mail.
+const WEB_ORIGIN = DOMAIN === 'localhost' ? 'http://localhost' : `https://${DOMAIN}`;
+for (const [name, path] of [
+    ['VITE_APP_DRIVE_URL', '/drive'],
+    ['VITE_APP_DOCS_URL', '/docs'],
+    ['VITE_APP_SLIDES_URL', '/slides'],
+    ['VITE_APP_SHEETS_URL', '/sheets'],
+    ['VITE_APP_STICKIES_URL', '/stickies'],
+    ['VITE_APP_CHAT_URL', '/chat'],
+] as const) {
+    process.env[name] ||= `${WEB_ORIGIN}${path}`;
+}
 const ADMIN_PASSWORD = process.env['EIGEN_DEMO_ADMIN_PASSWORD'] || randomBytes(12).toString('base64url');
 // Throwaway — the demo entry route resets each persona's password on every visit.
 const PERSONA_PASSWORD = randomBytes(18).toString('base64url');

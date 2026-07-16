@@ -211,7 +211,14 @@ export const KANBAN = {
         },
         {
             title: 'Order fencing',
-            description: 'Build-weekend delivery.',
+            // TipTap task-list HTML (rendered by NoteCard + the card editor) so this card shows a
+            // checklist with a progress badge. Keep the <li data-checked> shape — NoteCard counts it.
+            description:
+                '<ul data-type="taskList">' +
+                '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"><span></span></label><div><p>Get quotes from two suppliers</p></div></li>' +
+                '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"><span></span></label><div><p>Confirm build-weekend delivery slot</p></div></li>' +
+                '<li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p>Sign off on the final quote</p></div></li>' +
+                '</ul>',
             column: 'doing',
             creator: 'saar',
             chat: 'fencing-order',
