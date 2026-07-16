@@ -11,6 +11,7 @@ import type {
 } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip } from '../calendar/imip';
+import { isDemo } from '../config/env';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { renderAttachmentPills } from '../core/mail-template';
 import { sendMail } from '../core/mailer';
@@ -542,6 +543,16 @@ export class Mail {
 
         if (!message.subject.trim() && !message.text.trim() && !message.html) {
             throw new ApiError(400, 'Cannot send email with empty subject and body');
+        }
+
+        // A demo box has no MTA, so this send can't leave the building. Surface that as a toast
+        // instead of silently pretending to send — draftFullSave above kept the message in Drafts.
+        // (sendMail itself still no-ops in demo, for the background share/invite/iMIP notifications.)
+        if (isDemo()) {
+            throw new ApiError(
+                403,
+                'This is a shared demo, so outgoing email is turned off. Your message is saved in Drafts.',
+            );
         }
 
         const sent = await sendMail(message);

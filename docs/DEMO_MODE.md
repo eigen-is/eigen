@@ -5,9 +5,10 @@
 > into a random seeded persona from a ~20-user pool using the same session-minting mechanism the
 > guest-OTP flow uses in production. An offline `seed-demo.ts` script builds a lived-in workspace
 > through the real product surfaces, and a host-level script wipes and reseeds the box every hour.
-> Mainline conditional surface on a real instance is near zero: one line in `sendMail`, one
-> `/p/config` flag, one login-page conditional, a demo banner, a pass-through auth guard, and the
-> inert entry route — all keyed off `isDemo()` (`EIGEN_DEMO === '1'`) and dead without the env var.
+> Mainline conditional surface on a real instance is near zero: one line in `sendMail`, a
+> compose-send guard, one `/p/config` flag, one login-page conditional, a demo banner, a
+> pass-through auth guard, and the inert entry route — all keyed off `isDemo()`
+> (`EIGEN_DEMO === '1'`) and dead without the env var.
 
 ## What demo mode is
 
@@ -18,6 +19,11 @@ that exist in mainline code (all inert when `EIGEN_DEMO` is unset):
 
 - **`sendMail` skip** (`lib/core/mailer.ts`) — the existing dev-skip early-return also fires on
   `isDemo()`. Load-bearing: a demo box has no MTA, so a real send would throw on every share/invite/iMIP.
+- **compose-send guard** (`lib/mail/mail-domain.ts` `messageSend`) — the one interactive send path
+  throws a friendly `ApiError` in demo (the mail mutation toasts it), so a visitor gets "outgoing
+  email is turned off" instead of a silent fake send. Deliberately NOT in `sendMail`: that would turn
+  the ~10 fire-and-forget notification sends (share/invite/iMIP/access-request) into logged errors and
+  regress the shared dev/test skip that guest-OTP and 2FA rely on. The message stays in Drafts.
 - **`/p/config` `demoMode`** (`routes/public.ts`) — `getPublicConfig()` gains `demoMode: isDemo()`,
   the single flag the frontend keys off.
 - **login-page conditional** (`packages/ui/.../pages/login-page.tsx`) — when `demoMode` is true the
