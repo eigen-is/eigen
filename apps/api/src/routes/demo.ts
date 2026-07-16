@@ -9,6 +9,25 @@ import { getServerConfig } from '../lib/config/server-config';
 import { clientIpKey } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 
+// The demo visitor pool, discovered from org membership so it can't drift from the seeder.
+// role='member' excludes the setup admin (org 'owner'), keeping the admin surface out of a
+// visitor's reach. 2FA-enabled members are excluded: signInEmail would divert them into the 2FA
+// flow with no cookie. Exported so the demo-mode tests assert against THE query the route uses.
+export function getDemoPersonaPool(orgId: string): { id: string; email: string }[] {
+    return getAuthDrizzleDb()
+        .select({ id: user.id, email: user.email })
+        .from(member)
+        .innerJoin(user, eq(member.userId, user.id))
+        .where(
+            and(
+                eq(member.organizationId, orgId),
+                eq(member.role, 'member'),
+                or(isNull(user.twoFactorEnabled), eq(user.twoFactorEnabled, false)),
+            ),
+        )
+        .all();
+}
+
 // The /p/ prefix is eigen's PUBLIC API surface — intentionally unauthenticated. Do NOT add
 // `auth: true` / `.use(betterAuth)` (see routes/public.ts). The route is registered at startup;
 // isDemo() is the runtime gate, so on real instances it 404s and is inert.
@@ -21,21 +40,7 @@ export const demoRouter = new Elysia({ name: 'demo' }).get('/p/demo/enter', asyn
     const orgId = getServerConfig()?.orgId;
     if (!orgId) throw new ApiError(503, 'Demo not available');
 
-    // Discover the pool from org membership so it can't drift from the seeder. role='member'
-    // excludes the setup admin (org 'owner'), keeping the admin surface out of a visitor's reach.
-    // 2FA-enabled members are excluded: signInEmail diverts them to the 2FA flow with no cookie.
-    const pool = getAuthDrizzleDb()
-        .select({ id: user.id, email: user.email })
-        .from(member)
-        .innerJoin(user, eq(member.userId, user.id))
-        .where(
-            and(
-                eq(member.organizationId, orgId),
-                eq(member.role, 'member'),
-                or(isNull(user.twoFactorEnabled), eq(user.twoFactorEnabled, false)),
-            ),
-        )
-        .all();
+    const pool = getDemoPersonaPool(orgId);
     if (pool.length === 0) throw new ApiError(503, 'Demo not available');
 
     const persona = pool[Math.floor(Math.random() * pool.length)]!;

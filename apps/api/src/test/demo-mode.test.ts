@@ -5,6 +5,7 @@ import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { signInWithScopedPassword } from '../lib/auth/guest-auth';
 import { getServerConfig } from '../lib/config/server-config';
 import { sendMail } from '../lib/core/mailer';
+import { getDemoPersonaPool } from '../routes/demo';
 import { authedRequest, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -135,13 +136,11 @@ describe('Demo mode', () => {
                 .get();
             expect(bobAccount?.password).not.toBe('tampered-not-a-valid-hash');
 
-            // And the public route keeps minting valid sessions across repeated visits, never the owner.
-            for (let i = 0; i < 10; i++) {
-                const res = await enter(`10.0.0.${i}`);
-                expect(res.status).toBe(302);
-                expect(await resolveUserId(res)).not.toBe(ctx.alice.user.id);
-            }
-        }, 20000);
+            // The owner is never a candidate: the role='member' filter keeps alice out of the pool
+            // the route draws from — deterministically, not by luck across random draws.
+            const pool = getDemoPersonaPool(orgId);
+            expect(pool.some((p) => p.id === ctx.alice.user.id)).toBe(false);
+        });
 
         test('rate-limits the public entry route per IP', async () => {
             process.env['EIGEN_DEMO'] = '1';
@@ -155,26 +154,28 @@ describe('Demo mode', () => {
             expect(limited.status).toBe(429);
         }, 20000);
 
-        test('a 2FA-enabled member is excluded from the pool', async () => {
-            process.env['EIGEN_DEMO'] = '1';
+        test('a 2FA-enabled member is excluded from the pool', () => {
             const db = getAuthDrizzleDb();
 
+            // charlie starts as a plain member, so he must be a candidate up front — otherwise the
+            // exclusion below would pass vacuously.
+            expect(getDemoPersonaPool(orgId).some((p) => p.id === ctx.charlie.user.id)).toBe(true);
+
             // A 2FA member would divert signInEmail into the 2FA flow (no session cookie), so the
-            // route must never pick one — every entry keeps minting valid sessions.
+            // pool query the route draws from must drop them the instant 2FA is enabled.
             db.update(userSchema).set({ twoFactorEnabled: true }).where(eq(userSchema.id, ctx.charlie.user.id)).run();
             try {
-                for (let i = 0; i < 10; i++) {
-                    const res = await enter(`10.0.1.${i}`);
-                    expect(res.status).toBe(302);
-                    expect(await resolveUserId(res)).not.toBe(ctx.charlie.user.id);
-                }
+                expect(getDemoPersonaPool(orgId).some((p) => p.id === ctx.charlie.user.id)).toBe(false);
             } finally {
                 db.update(userSchema)
                     .set({ twoFactorEnabled: false })
                     .where(eq(userSchema.id, ctx.charlie.user.id))
                     .run();
             }
-        }, 20000);
+
+            // Restored: charlie is a candidate again, proving the 2FA flag was the only thing excluding him.
+            expect(getDemoPersonaPool(orgId).some((p) => p.id === ctx.charlie.user.id)).toBe(true);
+        });
 
         test('the auth guard blocks the abuse denylist but not other auth routes', async () => {
             process.env['EIGEN_DEMO'] = '1';
