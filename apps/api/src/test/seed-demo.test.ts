@@ -9,7 +9,7 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import { loadYjsState } from '../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../lib/core';
-import { BRANDING, PHOTOS } from '../scripts/demo/content';
+import { BRANDING, BUDGET, KANBAN, PHOTOS, personaByRole, SPONSOR_DECK } from '../scripts/demo/content';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
 // (the Elysia app, the auth DB, the Home map), so it cannot run in-process alongside the
@@ -90,6 +90,9 @@ describe('seed-demo', () => {
             if (exitCode !== 0) {
                 throw new Error(`seeder exited ${exitCode}\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`);
             }
+
+            // End-of-seed sentinel: the reset script's restart gate, written as the final step.
+            expect(existsSync(join(root, 'server', '.demo-seeded'))).toBe(true);
 
             // Auth DB: the persona pool joined the default org as `member` (admin is `owner`).
             const usersDb = join(root, 'server', 'users3.db');
@@ -185,14 +188,14 @@ describe('seed-demo', () => {
             expect(notesDoc[0].n).toBe(1);
 
             // Budget sheet: hand-maintained fixture placed onto the team drive with real data.db bytes.
-            const sheetDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, 'budget.eigensheets');
+            const sheetDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, `${BUDGET.name}.eigensheets`);
             expect(statSync(sheetDataDb).size).toBeGreaterThan(0);
 
             // Sponsor deck: its embedded image (media/logo.svg) landed as a real blob, so the
             // byte-copied deck stays whole (the deck references it by name).
             const deck = query<{ id: string }>(
                 metadataDb,
-                "SELECT id FROM paths WHERE name = 'sponsor pitch.eigenslides' AND trashedAt IS NULL",
+                `SELECT id FROM paths WHERE name = '${SPONSOR_DECK.name}.eigenslides' AND trashedAt IS NULL`,
             );
             expect(deck.length).toBe(1);
             const deckMedia = query<{ id: string }>(
@@ -242,7 +245,7 @@ describe('seed-demo', () => {
 
             // Stickies board: every card gets the same default color plus a real linked chat
             // (same pattern as doc comments), so no card ever renders uncolored or unlinked.
-            const boardDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, 'festival kanban.eigenstickies');
+            const boardDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, `${KANBAN.name}.eigenstickies`);
             const board = await loadCollabDoc(boardDataDb);
             const tasks = [...board.getMap<import('yjs').Map<unknown>>('tasks').values()].map((task) => ({
                 color: task.get('color') as string,
@@ -257,7 +260,10 @@ describe('seed-demo', () => {
             }
 
             // Assignment: the volunteer coordinator got the bell notification the assign route persists.
-            const assignees = query<{ id: string }>(usersDb, "SELECT id FROM user WHERE email = 'nour@tuimel.test'");
+            const assignees = query<{ id: string }>(
+                usersDb,
+                `SELECT id FROM user WHERE email = '${personaByRole('volunteers').key}@${MAIL_DOMAIN}'`,
+            );
             expect(assignees.length).toBe(1);
             const notifications = query<{ n: number }>(
                 join(root, 'home', assignees[0].id, 'eigen.notifications', 'notifications.db'),

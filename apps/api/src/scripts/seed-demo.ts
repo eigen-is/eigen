@@ -20,7 +20,7 @@
  *   docker compose run --rm --no-deps eigen-api bun run /app/apps/api/src/scripts/seed-demo.ts
  */
 import { randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
@@ -66,7 +66,7 @@ const AVATARS_DIR = join(FIXTURES_DIR, 'avatars');
 // every seeded card gets it explicitly so none render uncolored.
 const DEFAULT_CARD_COLOR = EIGEN_STICKIES_COLORS[0][1].value;
 
-const DATA_ROOT = process.env['EIGEN_DATA_ROOT'];
+const DATA_ROOT = process.env['EIGEN_DATA_ROOT'] ?? '';
 if (!DATA_ROOT) {
     console.error('EIGEN_DATA_ROOT is required (absolute path to the data root). Aborting.');
     process.exit(1);
@@ -705,6 +705,10 @@ async function main(): Promise<void> {
     console.log(`Seeded "Tuimel Festival" for ${PERSONAS.length} personas at ${DATA_ROOT}`);
     console.log(`  org:   ${ORG_NAME}  team: ${TEAM_NAME}`);
     console.log(`  admin: ${ADMIN_EMAIL}  password: ${ADMIN_PASSWORD}`);
+
+    // The reset script's restart gate — written last so a mid-seed crash leaves no gate and the
+    // API stays down rather than restarting onto a half-built world. The wipe clears data/server.
+    writeFileSync(join(DATA_ROOT, 'server', '.demo-seeded'), '');
     process.exit(0);
 }
 

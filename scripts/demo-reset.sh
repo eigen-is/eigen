@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # HARD SAFETY GATE: only ever run on a box explicitly flagged as a demo instance. Without this
@@ -19,10 +19,10 @@ docker compose --env-file .env.production stop eigen-api
 # otherwise serve the public first-run setup wizard to strangers. Left stopped, the next
 # hourly run (or an operator) retries.
 restart_api() {
-    if [ -f data/server/config.json ]; then
+    if [ -f data/server/.demo-seeded ]; then
         docker compose --env-file .env.production start eigen-api
     else
-        echo "[demo-reset] Seed did not complete (no data/server/config.json); leaving eigen-api STOPPED." >&2
+        echo "[demo-reset] Seed did not complete (no data/server/.demo-seeded); leaving eigen-api STOPPED." >&2
         exit 1
     fi
 }

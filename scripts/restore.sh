@@ -1,8 +1,9 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ARCHIVE="$1"
+# `${1:-}`: under `set -u` a bare $1 would abort before the friendly usage message below.
+ARCHIVE="${1:-}"
 if [ -z "$ARCHIVE" ]; then
     echo "Usage: $(basename "$0") <archive.tar.gz>" >&2
     exit 1

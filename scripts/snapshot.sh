@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 cd "$(dirname "$0")/.."
 
 OUTPUT="${1:-./backups/eigen-snapshot-$(date +%Y%m%d-%H%M%S).tar.gz}"
