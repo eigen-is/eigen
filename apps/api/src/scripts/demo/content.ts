@@ -162,46 +162,20 @@ export const DOCS: SeededDoc[] = [
     },
 ];
 
-// --- Budget sheet (built as .xlsx, converted through the shipped xlsx -> eigensheets path) ---
+// --- Budget sheet + sponsor deck: hand-maintained fixture containers (edited in a live demo and
+// copied back into fixtures/, so the content lives in their data.db, not here). These just say where
+// each lands and who authors it in the story: the budget → finance, the deck → comms. ---
 
 export const BUDGET = {
     folder: 'finance' as TeamFolder,
     name: 'budget', // lowercase, no extension
     author: 'finance' as LeadRole,
-    income: [
-        ['Ticket sales', 42000],
-        ['Bar', 9000],
-        ['Culture fund grant', 15000],
-        ['Local sponsors', 6000],
-    ] as [string, number][],
-    costs: [
-        ['Artist fees', 28000],
-        ['Stage & tech', 12000],
-        ['Security', 6000],
-        ['Sanitation', 4000],
-        ['Shuttle buses', 3500],
-        ['Marketing', 2500],
-    ] as [string, number][],
 };
-
-// --- Slides deck fixture (authored once, byte-copied in; slides embed no identity) ---
-
-export type SlideSpec = { heading: string; body: string };
 
 export const SPONSOR_DECK = {
     folder: 'marketing' as TeamFolder,
     name: 'sponsor pitch', // lowercase, no extension
     author: 'comms' as LeadRole,
-    slides: [
-        { heading: 'Tuimel Festival', body: 'A small coastal festival for emerging music and art' },
-        { heading: 'Who comes', body: 'A couple thousand curious people, two stages, camping under big skies' },
-        {
-            heading: 'Why partner with us',
-            body: 'Warm, local, and independent. Your name next to a much-loved weekend',
-        },
-        { heading: 'What you get', body: 'Stage credit, on-site presence, and a mention in every announcement' },
-        { heading: "Let's talk", body: 'Reach out to the crew and join this edition' },
-    ] as SlideSpec[],
 };
 
 // --- Stickies board fixture (authored once, byte-copied in; creator = persona email) ---

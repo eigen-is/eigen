@@ -1,16 +1,20 @@
-// One-off authoring script for the slides/stickies fixture containers. Boots the API in-process
-// against a throwaway data root (as the test harness does), creates a real slides deck and a real
-// stickies board through the shipped drive + collab surfaces, then copies each container's data.db
-// and comments.db bytes into scripts/demo/fixtures/. The seeder byte-copies those into the demo
-// world — legal because eigen-doc containers reference their internals by name, not pathId.
+// One-off authoring script for the stickies board fixture container. Boots the API in-process
+// against a throwaway data root (as the test harness does), creates a real stickies board through
+// the shipped drive + collab surfaces, then copies its data.db and comments.db bytes into
+// scripts/demo/fixtures/. The seeder byte-copies those into the demo world — legal because eigen-doc
+// containers reference their internals by name, not pathId.
 //
-// Re-run whenever the deck/board content in content.ts changes:
+// The slides deck (`sponsor-pitch.eigenslides`) and budget sheet (`festival-budget.eigensheets`)
+// fixtures are NOT authored here — they are hand-maintained (edited in a live demo and copied back),
+// so this script must never regenerate them or it would clobber those edits.
+//
+// Re-run whenever the board content (KANBAN) in content.ts changes:
 //   cd apps/api && bun run src/scripts/demo/author-fixtures.ts
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { KANBAN, personaByRole, SPONSOR_DECK } from './content';
-import { buildSlidesDoc, buildStickiesDoc } from './fixtures-build';
+import { KANBAN, personaByRole } from './content';
+import { buildStickiesDoc } from './fixtures-build';
 
 const FIXTURES_DIR = join(import.meta.dir, 'fixtures');
 
@@ -49,7 +53,7 @@ const mountId = 'default';
 const root = await drive.getRootFolder(mountId);
 if (!root) throw new Error('Default mount root not found');
 
-async function authorContainer(name: string, type: 'slides' | 'stickies', build: (doc: import('yjs').Doc) => void) {
+async function authorContainer(name: string, type: 'stickies', build: (doc: import('yjs').Doc) => void) {
     const container = await drive.create(mountId, root!.id, name, type, home.user);
     const collab = await drive.getCollabDocument(mountId, container.id);
     build(collab.doc);
@@ -57,7 +61,6 @@ async function authorContainer(name: string, type: 'slides' | 'stickies', build:
     console.log(`authored ${container.name}`);
 }
 
-await authorContainer(SPONSOR_DECK.name, 'slides', (doc) => buildSlidesDoc(doc, SPONSOR_DECK.slides));
 await authorContainer(KANBAN.name, 'stickies', (doc) =>
     buildStickiesDoc(doc, KANBAN.columns, KANBAN.cards, personaByRole('production').key),
 );
@@ -87,7 +90,6 @@ function copyContainerDbs(extension: string, destDirName: string) {
     console.log(`wrote ${destDirName} (${copied} files)`);
 }
 
-copyContainerDbs('.eigenslides', 'sponsor-pitch.eigenslides');
 copyContainerDbs('.eigenstickies', 'festival-kanban.eigenstickies');
 
 rmSync(scratch, { recursive: true, force: true });

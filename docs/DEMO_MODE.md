@@ -91,17 +91,20 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
 - **Content conventions.** All seeded directory and file names are lowercase; chat channels live in a
   `chats/` directory on the team drive. A `festival crew` team is created (`createTeam` +
   `addTeamMember` per persona) with an explicit shared mount.
-- **Docs and sheets through the shipped importers.** Docs are HTML → `.docx` (`@turbodocx/html-to-docx`)
-  → `convertToDocument(..., 'eigendoc')`; the budget sheet is built with `exceljs` → `convertToDocument(...,
-  'eigensheets')`. The demo dogfoods import on every reset; no bespoke Y.Doc builders.
-- **Slides and stickies from fixture containers.** `demo/fixtures/{sponsor-pitch.eigenslides,
-  festival-kanban.eigenstickies}` (`data.db` + `comments.db`) are byte-copied in — legal because
-  eigen-doc containers reference their internals by name, not pathId. Stickies `creator` keys are
-  rewritten to runtime emails after copy. Regenerate the fixtures with `demo/author-fixtures.ts`
-  whenever the deck/board's title/description/column/creator content changes. Each `CardSpec` also
-  carries a `chat` slug + starter text (`chatText`/`chatReplies`); the seeder creates that chat
-  live per run (real personas, same as doc comments — see below) and patches `color`/`chatName`
-  onto the placed board's `tasks` Y.Map, so this part does NOT need a fixture regen.
+- **Docs through the shipped importer.** Docs are HTML → `.docx` (`@turbodocx/html-to-docx`) →
+  `convertToDocument(..., 'eigendoc')`. The demo dogfoods import on every reset; no bespoke Y.Doc builder.
+- **Slides, sheets, and stickies from fixture containers.** `demo/fixtures/{sponsor-pitch.eigenslides,
+  festival-budget.eigensheets, festival-kanban.eigenstickies}` (`data.db` + `comments.db`, plus a
+  `media/` folder for any embedded images) are byte-copied in via `placeFixture` — legal because
+  eigen-doc containers reference their internals (including media) by name, not pathId.
+  - The **slides deck and budget sheet are hand-maintained**: edit them in a live demo, then copy the
+    container's `data.db`/`comments.db`/`media/*` back into `fixtures/` (the content lives in `data.db`,
+    not in `content.ts`). `author-fixtures.ts` must NOT regenerate them.
+  - The **stickies board is content-driven**: `author-fixtures.ts` regenerates it from `KANBAN` when the
+    board's title/description/column/creator content changes. Its `creator` keys are rewritten to runtime
+    emails after copy, and each `CardSpec`'s `chat` slug + `chatText`/`chatReplies` become a live chat
+    (real personas, same as doc comments) with `color`/`chatName` patched onto the placed board's `tasks`
+    Y.Map — so that part needs no fixture regen.
 - **Site photos in `images/`.** `demo/fixtures/images/*.webp` (five of the maintainer's own
   coastal/festival photos, two Unsplash) are uploaded into an `images/` team-drive folder through
   the real `createFileFromData` path, keyed to plausible persona uploaders (`content.ts` `PHOTOS`).
@@ -195,8 +198,8 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `apps/api/src/lib/core/mailer.ts` | `sendMail` demo skip |
 | `apps/api/src/scripts/seed-demo.ts` | Offline in-process seeder (mechanics) |
 | `apps/api/src/scripts/demo/content.ts` | Tuimel Festival content (data only) |
-| `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the slides/stickies fixture containers |
-| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigenstickies` containers + `images/` site photos (see its `CREDITS.md`) + `branding/` logo |
+| `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the stickies board fixture (slides/sheets are hand-maintained) |
+| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigensheets` / `.eigenstickies` containers + `images/` site photos (see its `CREDITS.md`) + `branding/` logo |
 | `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate) |
 | `scripts/snapshot.sh` / `scripts/restore.sh` | General offline backup/restore |
 | `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units |

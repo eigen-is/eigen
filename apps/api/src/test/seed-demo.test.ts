@@ -184,6 +184,33 @@ describe('seed-demo', () => {
             );
             expect(notesDoc[0].n).toBe(1);
 
+            // Budget sheet: hand-maintained fixture placed onto the team drive with real data.db bytes.
+            const sheetDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, 'budget.eigensheets');
+            expect(statSync(sheetDataDb).size).toBeGreaterThan(0);
+
+            // Sponsor deck: its embedded image (media/logo.svg) landed as a real blob, so the
+            // byte-copied deck stays whole (the deck references it by name).
+            const deck = query<{ id: string }>(
+                metadataDb,
+                "SELECT id FROM paths WHERE name = 'sponsor pitch.eigenslides' AND trashedAt IS NULL",
+            );
+            expect(deck.length).toBe(1);
+            const deckMedia = query<{ id: string }>(
+                metadataDb,
+                `SELECT id FROM paths WHERE parentId = '${deck[0].id}' AND name = 'media' AND trashedAt IS NULL`,
+            );
+            expect(deckMedia.length).toBe(1);
+            const deckImages = query<{ name: string; file: string }>(
+                metadataDb,
+                `SELECT name, file FROM paths WHERE parentId = '${deckMedia[0].id}' AND trashedAt IS NULL`,
+            );
+            expect(deckImages.length).toBeGreaterThanOrEqual(1);
+            for (const img of deckImages) {
+                const blob = join(mountsDir, mountId!, 'data', img.file);
+                expect(existsSync(blob)).toBe(true);
+                expect(statSync(blob).size).toBeGreaterThan(0);
+            }
+
             // Team calendar: seeded events exist on the enabled team calendar.
             const calendarDb = join(root, 'team', teamId!, 'eigen.calendar', 'calendar.db');
             expect(existsSync(calendarDb)).toBe(true);

@@ -20,7 +20,7 @@
  *   docker compose run --rm --no-deps eigen-api bun run /app/apps/api/src/scripts/seed-demo.ts
  */
 import { randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
@@ -29,7 +29,6 @@ import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import ExcelJS from 'exceljs';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
 import type { User } from '../lib/user';
@@ -60,7 +59,6 @@ import {
 } from './demo/content';
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const SQLITE_MIME = 'application/x-sqlite3';
 const FIXTURES_DIR = join(import.meta.dir, 'demo', 'fixtures');
 const AVATARS_DIR = join(FIXTURES_DIR, 'avatars');
@@ -122,12 +120,6 @@ async function buildRfc822(o: {
         .build();
 }
 
-// exceljs's writeBuffer returns a view over a larger ArrayBuffer; copy into a standalone one.
-async function workbookBytes(workbook: ExcelJS.Workbook): Promise<Buffer> {
-    const view = new Uint8Array(await workbook.xlsx.writeBuffer());
-    return Buffer.from(view);
-}
-
 // Anchor a card the way the editor's setComment command does: wrap the first occurrence of the
 // anchor phrase in a `comment` mark carrying the card id. Mutates the PM JSON in place.
 function injectCommentMark(json: JSONContent, anchor: string, cardId: string): boolean {
@@ -168,43 +160,6 @@ function writeCommentCard(doc: Y.Doc, card: CommentCard): void {
     if (card.creator) y.set('creator', card.creator);
     if (card.createdAt !== undefined) y.set('createdAt', card.createdAt);
     doc.getMap<Y.Map<unknown>>('comments').set(card.id, y);
-}
-
-function buildBudgetWorkbook(): ExcelJS.Workbook {
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Budget');
-    ws.getCell('A1').value = 'Item';
-    ws.getCell('B1').value = 'Amount (EUR)';
-    let row = 2;
-    ws.getCell(`A${row}`).value = 'Income';
-    row++;
-    const incomeStart = row;
-    for (const [label, amount] of BUDGET.income) {
-        ws.getCell(`A${row}`).value = label;
-        ws.getCell(`B${row}`).value = amount;
-        row++;
-    }
-    const incomeTotalRow = row;
-    ws.getCell(`A${row}`).value = 'Total income';
-    ws.getCell(`B${row}`).value = { formula: `SUM(B${incomeStart}:B${row - 1})` };
-    row += 2;
-    ws.getCell(`A${row}`).value = 'Costs';
-    row++;
-    const costStart = row;
-    for (const [label, amount] of BUDGET.costs) {
-        ws.getCell(`A${row}`).value = label;
-        ws.getCell(`B${row}`).value = amount;
-        row++;
-    }
-    const costTotalRow = row;
-    ws.getCell(`A${row}`).value = 'Total costs';
-    ws.getCell(`B${row}`).value = { formula: `SUM(B${costStart}:B${row - 1})` };
-    row += 1;
-    ws.getCell(`A${row}`).value = 'Margin';
-    ws.getCell(`B${row}`).value = { formula: `B${incomeTotalRow}-B${costTotalRow}` };
-    ws.getColumn(1).width = 22;
-    ws.getColumn(2).width = 16;
-    return wb;
 }
 
 async function main(): Promise<void> {
@@ -452,50 +407,61 @@ async function main(): Promise<void> {
         await teamDrive.flushContainerDb(teamMountId, docPath.id);
     }
 
-    // --- Budget sheet: .xlsx -> shipped converter -> eigensheets. ---
-    {
-        const author = userForRole(BUDGET.author);
-        const parentId = folderId.get(BUDGET.folder)!;
-        const xlsxBytes = await workbookBytes(buildBudgetWorkbook());
-        const upload = await teamDrive.createFileFromData(
-            teamMountId,
-            parentId,
-            `${BUDGET.name}.xlsx`,
-            XLSX_MIME,
-            xlsxBytes,
-            author,
-        );
-        const { mount: sheetMount, path: sheetSource } = await teamDrive.resolveFile(teamMountId, upload.id);
-        await convertToDocument(teamDrive, sheetMount, sheetSource, 'eigensheets', author);
-        await teamDrive.deletePath(teamMountId, upload.id, author);
-    }
-
-    // --- Slides + stickies: byte-copy the committed fixture containers, then domainise creators. ---
+    // --- Slides / sheets / stickies: byte-copy the committed fixture containers. The slides deck and
+    // budget sheet are hand-maintained (edited in a live demo, copied back — see fixtures/), so their
+    // data.db carries the real content; the stickies board's creators/colors are patched below. ---
     const placeFixture = async (
+        parentId: string,
         driveName: string,
-        type: 'slides' | 'stickies',
+        type: 'slides' | 'sheets' | 'stickies',
         fixtureDir: string,
         actor: User,
     ): Promise<string> => {
-        const parentIdForType = type === 'slides' ? folderId.get(SPONSOR_DECK.folder)! : folderId.get(KANBAN.folder)!;
-        const container = await teamDrive.createFolder(teamMountId, parentIdForType, driveName, actor, type);
+        const container = await teamDrive.createFolder(teamMountId, parentId, driveName, actor, type);
         for (const dbName of ['data.db', 'comments.db']) {
             const bytes = readFileSync(join(FIXTURES_DIR, fixtureDir, dbName));
             await teamDrive.createFileFromData(teamMountId, container.id, dbName, SQLITE_MIME, bytes, actor);
         }
-        await teamDrive.createFolder(teamMountId, container.id, 'media', actor);
+        // Embedded media (e.g. an image dropped into the deck) lives under the fixture's media/ folder
+        // and is referenced by name from data.db — copy it so the byte-copied doc stays whole.
+        const mediaFolder = await teamDrive.createFolder(teamMountId, container.id, 'media', actor);
+        const mediaDir = join(FIXTURES_DIR, fixtureDir, 'media');
+        if (existsSync(mediaDir)) {
+            for (const file of readdirSync(mediaDir)) {
+                const path = join(mediaDir, file);
+                const bytes = readFileSync(path);
+                await teamDrive.createFileFromData(
+                    teamMountId,
+                    mediaFolder.id,
+                    file,
+                    Bun.file(path).type,
+                    bytes,
+                    actor,
+                );
+            }
+        }
         await teamDrive.createFolder(teamMountId, container.id, 'chat', actor);
         return container.id;
     };
 
     await placeFixture(
+        folderId.get(SPONSOR_DECK.folder)!,
         `${SPONSOR_DECK.name}.eigenslides`,
         'slides',
         'sponsor-pitch.eigenslides',
         userForRole(SPONSOR_DECK.author),
     );
 
+    await placeFixture(
+        folderId.get(BUDGET.folder)!,
+        `${BUDGET.name}.eigensheets`,
+        'sheets',
+        'festival-budget.eigensheets',
+        userForRole(BUDGET.author),
+    );
+
     const boardId = await placeFixture(
+        folderId.get(KANBAN.folder)!,
         `${KANBAN.name}.eigenstickies`,
         'stickies',
         'festival-kanban.eigenstickies',
@@ -624,7 +590,14 @@ async function main(): Promise<void> {
                     inReplyTo: previousId,
                     references: references.length ? references : undefined,
                 });
-                await recipientHome.mail.mailboxDeliver(buffer);
+                const deliveredId = await recipientHome.mail.mailboxDeliver(buffer);
+                // The persona's own replies in the thread belong in their Sent box, not their inbox
+                // (the other end is the external party). Moving them keeps only genuinely inbound mail
+                // in the inbox; mark read since you sent it.
+                if (!external) {
+                    await recipientHome.mail.messageMove(deliveredId, 'Sent');
+                    await recipientHome.mail.messageSetRead(deliveredId, true);
+                }
                 references.push(messageId);
                 previousId = messageId;
             }
