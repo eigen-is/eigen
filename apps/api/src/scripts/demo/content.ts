@@ -61,7 +61,6 @@ export const TEAM_MOUNT_NAME = 'festival';
 // All seeded directory and file names are lowercase. Chat channels live under `chats/`.
 export const TEAM_FOLDERS = [
     'production',
-    'programming',
     'marketing',
     'finance',
     'volunteers',

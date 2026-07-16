@@ -425,6 +425,36 @@ async function main(): Promise<void> {
         await teamDrive.flushContainerDb(teamMountId, docPath.id);
     }
 
+    // --- Volunteer roster: a doc in volunteers/ listing every crew member with a link to their team
+    // contact card. Built here (not in content.ts) so the links carry the runtime team id + emails.
+    // The team id is shared by every persona, so one URL works for every visitor. Links are
+    // root-relative (no host) so they resolve against whatever domain the demo is served on. ---
+    {
+        const author = userForRole('volunteers');
+        const rosterItems = PERSONAS.map((p) => {
+            const url = `/contacts/team/${teamId}?contactId=${encodeURIComponent(emailFor(p.key))}`;
+            return `<li><a href="${url}">${p.name}</a> - ${p.title}</li>`;
+        }).join('');
+        const rosterHtml = [
+            '<h1>Crew roster</h1>',
+            '<p>Everyone helping to run the festival this edition. Click a name to open their contact card.</p>',
+            `<ul>${rosterItems}</ul>`,
+        ].join('');
+        const docxBytes = Buffer.from(await htmlToDocx(rosterHtml));
+        const upload = await teamDrive.createFileFromData(
+            teamMountId,
+            folderId.get('volunteers')!,
+            'crew roster.docx',
+            DOCX_MIME,
+            docxBytes,
+            author,
+        );
+        const { mount: docMount, path: docSource } = await teamDrive.resolveFile(teamMountId, upload.id);
+        const docPath = await convertToDocument(teamDrive, docMount, docSource, 'eigendoc', author);
+        await teamDrive.deletePath(teamMountId, upload.id, author); // trash the raw upload
+        await teamDrive.flushContainerDb(teamMountId, docPath.id);
+    }
+
     // --- Slides / sheets / stickies: byte-copy the committed fixture containers. The slides deck and
     // budget sheet are hand-maintained (edited in a live demo, copied back — see fixtures/), so their
     // data.db carries the real content; the stickies board's creators/colors are patched below. ---
