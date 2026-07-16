@@ -136,7 +136,7 @@ function GuestAppSidebar({
     onClose?: () => void;
 }) {
     return (
-        <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
+        <div className="flex h-full flex-col">
             {isMobile && <SidebarHeader appName={currentApp} onClose={onClose} />}
             <SidebarBody>
                 <SidebarSection condensed={condensed}>
@@ -181,7 +181,7 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
     const watchedProps = currentApp === 'drive' ? { to: '/watched' } : { href: getDriveAppUrl('watched') };
 
     return (
-        <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
+        <div className="flex h-full flex-col">
             {isMobile && <SidebarHeader appName={appName} onClose={onClose} />}
 
             <SidebarBody>
@@ -242,18 +242,22 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Drives'}>
                         {myTeams.flatMap((team) =>
                             team.mounts
-                                .filter((mount) => currentApp !== 'drive' || mount.rootPathId)
+                                .filter((mount) => mount.rootPathId)
                                 .map((mount) => {
                                     const owner = teamOwnerId(team.id);
-                                    const to =
+                                    // A team drive always opens its folder view — in Drive directly, from
+                                    // an eigendoc app over in the Drive app (like the Drive home link). The
+                                    // type-filtered slice already lives in this app's "All …" view.
+                                    const fsPath = `fs/${owner}/${mount.id}/${mount.rootPathId}`;
+                                    const mountProps =
                                         currentApp === 'drive'
-                                            ? `/fs/${owner}/${mount.id}/${mount.rootPathId}`
-                                            : `/drive/${owner}/${mount.id}`;
+                                            ? { to: `/${fsPath}` }
+                                            : { href: getDriveAppUrl(fsPath) };
                                     return (
                                         <SidebarItem
                                             key={`${team.id}-${mount.id}`}
                                             icon={<UserAvatar email={owner} className="h-4 w-4" />}
-                                            to={to}
+                                            {...mountProps}
                                             label={mount.name}
                                             condensed={condensed}
                                         />
