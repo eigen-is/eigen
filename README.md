@@ -2,6 +2,8 @@
 
 **Your own workspace. Simple, secure, self-hosted.**
 
+**Try the live demo at [demo.eigen.is](https://demo.eigen.is).** It is a shared workspace that resets every hour.
+
 Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email,
 file storage, documents, spreadsheets, presentations, calendar, contacts, and real-time chat — all sharing one API,
 one auth system, and one UI.
