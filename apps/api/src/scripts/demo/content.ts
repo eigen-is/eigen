@@ -345,7 +345,7 @@ export const CHATS: SeededChat[] = [
             { author: 'saar', text: 'How bad? The second stage is the exposed one.' },
             { author: 'timo', text: 'Gusts into the evening. No shelter out there right now.' },
             { author: 'saar', text: '/groan' },
-            { author: 'sanne', text: 'We could move the quieter acts to the barn stage on Sunday.' },
+            { author: 'sanne', text: 'we could move the quieter acts to the barn stage sunday?' },
             { author: 'anouk', text: "Let's keep the option open and decide at the go/no-go. Get a wind-cover quote." },
             { author: 'saar', text: 'On it. Will have numbers before the meeting.' },
             { author: 'ravi', text: 'Site crew can re-peg the second stage either way. Ready for both.' },
@@ -356,7 +356,8 @@ export const CHATS: SeededChat[] = [
         name: 'volunteers',
         messages: [
             { author: 'nour', text: "We're about 10 short for the build weekend. Pushing the call-out today." },
-            { author: 'maud', text: 'I can bring two friends for load-in Friday.' },
+            { author: 'maud', text: 'i can bring two friends for load-in thursday' },
+            { author: 'maud', text: '*friday' },
             { author: 'nour', text: 'Nice, added you three to the roster.' },
             { author: 'maud', text: '/allthethings' },
             { author: 'yara', text: 'Camping host desk needs one more for the night shift.' },
