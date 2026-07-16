@@ -27,7 +27,8 @@ import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import ExcelJS from 'exceljs';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
@@ -36,6 +37,7 @@ import {
     ADMIN_AVATAR,
     ADMIN_LOCALPART,
     ADMIN_NAME,
+    BRANDING,
     BUDGET,
     CHATS,
     CONTACTS,
@@ -44,6 +46,7 @@ import {
     KANBAN,
     type LeadRole,
     MAILS,
+    NOTES,
     ORG_NAME,
     PERSONAL_SHARES,
     PERSONAS,
@@ -234,6 +237,7 @@ async function main(): Promise<void> {
     const { writeEigendocToYjs } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/import/doc/from-docx');
     const { sendToHome } = await import('../lib/home/home-relay');
+    const { renderAttachmentPills } = await import('../lib/core/mail-template');
     const { default: htmlToDocx } = await import('@turbodocx/html-to-docx');
 
     // Tiny quotas + no signups; local-id storage came from the setup call. Apply before any home
@@ -353,6 +357,20 @@ async function main(): Promise<void> {
             'image/webp',
             bytes,
             userByKey.get(photo.uploader)!,
+        );
+    }
+
+    // --- Branding assets: committed fixtures uploaded into branding/ (see fixtures/branding/). ---
+    const brandingFolderId = folderId.get('branding')!;
+    for (const asset of BRANDING) {
+        const bytes = readFileSync(join(FIXTURES_DIR, 'branding', asset.file));
+        await teamDrive.createFileFromData(
+            teamMountId,
+            brandingFolderId,
+            asset.file,
+            asset.mimeType,
+            bytes,
+            userByKey.get(asset.uploader)!,
         );
     }
 
@@ -565,6 +583,16 @@ async function main(): Promise<void> {
     }
 
     // --- Mail: raw RFC822 delivered into persona inboxes (indexed into mail.db on delivery). ---
+    // A drive-reference to the shared team drive root, for all-hands mails that link the workspace.
+    const teamDriveRef: AttachmentReference = {
+        type: 'reference',
+        ownerId: `team_${teamId}`,
+        mountId: teamMountId,
+        id: teamRoot.id,
+        name: TEAM_MOUNT_NAME,
+        driveType: DRIVE_TYPE_FOLDER,
+        mimeType: DRIVE_MIME_FOLDER,
+    };
     for (const flow of MAILS) {
         if (flow.kind === 'inbox-thread') {
             const recipient = userByKey.get(resolvePersona(flow.to!).key)!;
@@ -607,6 +635,12 @@ async function main(): Promise<void> {
             date.setHours(message.hour, 0, 0, 0);
             const from = `${sender.name} <${sender.email}>`;
             const to = `${TEAM_NAME} <crew@${MAIL_DOMAIN}>`;
+            // Seeded bodies are HTML fragments (no <body>), so the pill just appends — the same
+            // outcome as the mail client's appendReferenceLinks fallback for a sent message.
+            const html =
+                flow.attachTeamDrive && message.html
+                    ? message.html + renderAttachmentPills([teamDriveRef])
+                    : message.html;
             for (const persona of PERSONAS) {
                 const home = await getHome(userByKey.get(persona.key)!.id);
                 const buffer = await buildRfc822({
@@ -615,7 +649,7 @@ async function main(): Promise<void> {
                     subject: flow.subject,
                     date,
                     text: message.text,
-                    html: message.html,
+                    html,
                     messageId: `${randomUUID()}@${MAIL_DOMAIN}`,
                 });
                 await home.mail.mailboxDeliver(buffer);
@@ -665,6 +699,28 @@ async function main(): Promise<void> {
             undefined,
             owner,
         );
+    }
+
+    // --- Personal notes: a private "my notes" eigendoc in every persona's own drive (same cozy
+    // content for all). Dogfoods the .docx importer like the team docs; the docx is built once and
+    // converted per persona into their own home drive. ---
+    const notesDocx = Buffer.from(await htmlToDocx(NOTES.html));
+    for (const persona of PERSONAS) {
+        const owner = userByKey.get(persona.key)!;
+        const ownerHome = await getHome(owner.id);
+        const ownerRoot = await ownerHome.drive.getRootFolder('default');
+        if (!ownerRoot) throw new Error(`Root missing for ${owner.email}`);
+        const upload = await ownerHome.drive.createFileFromData(
+            'default',
+            ownerRoot.id,
+            `${NOTES.name}.docx`,
+            DOCX_MIME,
+            notesDocx,
+            owner,
+        );
+        const { mount: notesMount, path: notesSource } = await ownerHome.drive.resolveFile('default', upload.id);
+        await convertToDocument(ownerHome.drive, notesMount, notesSource, 'eigendoc', owner);
+        await ownerHome.drive.deletePath('default', upload.id, owner); // trash the raw upload
     }
 
     // Clean exit: drain fire-and-forget fan-outs, checkpoint + close every home, then exit.

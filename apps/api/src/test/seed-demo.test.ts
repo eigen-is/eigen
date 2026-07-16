@@ -9,7 +9,7 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import { loadYjsState } from '../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../lib/core';
-import { PHOTOS } from '../scripts/demo/content';
+import { BRANDING, PHOTOS } from '../scripts/demo/content';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
 // (the Elysia app, the auth DB, the Home map), so it cannot run in-process alongside the
@@ -157,6 +157,32 @@ describe('seed-demo', () => {
                 expect(existsSync(blob)).toBe(true);
                 expect(statSync(blob).size).toBeGreaterThan(10_000);
             }
+
+            // Team drive branding/: the logo landed as a real blob on disk.
+            const brandingFolder = query<{ id: string }>(
+                metadataDb,
+                "SELECT id FROM paths WHERE name = 'branding' AND trashedAt IS NULL",
+            );
+            expect(brandingFolder.length).toBe(1);
+            const brandingRows = query<{ name: string; file: string }>(
+                metadataDb,
+                `SELECT name, file FROM paths WHERE parentId = '${brandingFolder[0].id}' AND trashedAt IS NULL`,
+            );
+            expect(brandingRows.length).toBe(BRANDING.length);
+            for (const asset of brandingRows) {
+                const blob = join(mountsDir, mountId!, 'data', asset.file);
+                expect(existsSync(blob)).toBe(true);
+                expect(statSync(blob).size).toBeGreaterThan(0);
+            }
+
+            // Personal notes: the sampled persona's own drive has a "my notes" eigendoc container.
+            const personaMetaDb = join(personaHome, 'mounts', 'default', 'metadata.db');
+            expect(existsSync(personaMetaDb)).toBe(true);
+            const notesDoc = query<{ n: number }>(
+                personaMetaDb,
+                "SELECT count(*) AS n FROM paths WHERE name = 'my notes.eigendoc' AND trashedAt IS NULL",
+            );
+            expect(notesDoc[0].n).toBe(1);
 
             // Team calendar: seeded events exist on the enabled team calendar.
             const calendarDb = join(root, 'team', teamId!, 'eigen.calendar', 'calendar.db');

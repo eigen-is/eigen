@@ -66,6 +66,7 @@ export const TEAM_FOLDERS = [
     'finance',
     'volunteers',
     'images',
+    'branding',
     'chats',
 ] as const;
 export type TeamFolder = (typeof TEAM_FOLDERS)[number];
@@ -344,6 +345,16 @@ export const PHOTOS: PhotoSpec[] = [
     },
 ];
 
+// --- Branding assets (committed fixtures uploaded into the team drive's branding/ folder) ---
+
+export type BrandingAsset = {
+    file: string; // fixture filename under fixtures/branding/
+    mimeType: string;
+    uploader: string; // persona key
+};
+
+export const BRANDING: BrandingAsset[] = [{ file: 'logo.svg', mimeType: 'image/svg+xml', uploader: 'mees' }];
+
 // --- Chat channels (real chat rooms in chats/, seeded via ChatRoom.postMessage as personas) ---
 
 export type ChatLine = { author: string; text: string };
@@ -373,6 +384,7 @@ export const CHATS: SeededChat[] = [
             { author: 'nour', text: "We're about 10 short for the build weekend. Pushing the call-out today." },
             { author: 'maud', text: 'I can bring two friends for load-in Friday.' },
             { author: 'nour', text: 'Nice, added you three to the roster.' },
+            { author: 'maud', text: '/allthethings' },
             { author: 'yara', text: 'Camping host desk needs one more for the night shift.' },
             { author: 'imke', text: 'First aid is covered for both days, one gap Sunday morning.' },
             { author: 'nour', text: "I'll flag the Sunday morning gap in the call-out." },
@@ -393,6 +405,9 @@ export type SeededMail = {
     to?: LeadRole | string; // required for inbox-thread; role or persona key (mirrors EVENTS.attendees)
     from?: LeadRole; // sender lead for all-hands
     subject: string;
+    // Appends an "Open festival →" drive-reference pill to this mail's HTML body at seed time,
+    // linking the shared team drive (the pathId is only known at runtime). Requires a message html.
+    attachTeamDrive?: boolean;
     messages: {
         fromExternal?: { name: string; email: string }; // else `from` is the persona key
         from?: string; // persona key
@@ -707,13 +722,14 @@ export const MAILS: SeededMail[] = [
         kind: 'all-hands',
         from: 'director',
         subject: 'Three weeks out',
+        attachTeamDrive: true,
         messages: [
             {
                 from: 'director',
                 daysAgo: 2,
                 hour: 8,
-                text: "Hi everyone,\n\nThree weeks to go. Line-up is about 80% confirmed, tickets are moving, and the build weekend is getting close. Two things on my mind:\n\n- We are still short on volunteers, so if you can bring one person along, tell Nour.\n- The Sunday forecast for the field looks iffy, we will decide on wind cover at the go/no-go.\n\nProud of this crew. Let's make it a good one.\n\nAnouk",
-                html: "<p>Hi everyone,</p><p>Three weeks to go. Line-up is about 80% confirmed, tickets are moving, and the build weekend is getting close. Two things on my mind:</p><ul><li>We are still short on volunteers, so if you can bring one person along, tell Nour.</li><li>The Sunday forecast for the field looks iffy, we will decide on wind cover at the go/no-go.</li></ul><p>Proud of this crew. Let's make it a good one.</p><p>Anouk</p>",
+                text: "Hi everyone,\n\nThree weeks to go. Line-up is about 80% confirmed, tickets are moving, and the build weekend is getting close. Two things on my mind:\n\n- We are still short on volunteers, so if you can bring one person along, tell Nour.\n- The Sunday forecast for the field looks iffy, we will decide on wind cover at the go/no-go.\n\nEverything lives in our shared drive, have a poke around when you get a minute.\n\nProud of this crew. Let's make it a good one.\n\nAnouk",
+                html: "<p>Hi everyone,</p><p>Three weeks to go. Line-up is about 80% confirmed, tickets are moving, and the build weekend is getting close. Two things on my mind:</p><ul><li>We are still short on volunteers, so if you can bring one person along, tell Nour.</li><li>The Sunday forecast for the field looks iffy, we will decide on wind cover at the go/no-go.</li></ul><p>Everything lives in our shared drive, have a poke around when you get a minute.</p><p>Proud of this crew. Let's make it a good one.</p><p>Anouk</p>",
             },
         ],
     },
@@ -905,6 +921,39 @@ export const PERSONAL_SHARES: SeededShare[] = [
         shareWith: 'programming',
     },
 ];
+
+// --- Personal notes doc, seeded into every persona's OWN drive (same cozy content for all —
+// a private scratch pad, not shared). Role-agnostic on purpose so one docx serves everyone. ---
+
+export const NOTES = {
+    name: 'my notes', // lowercase, no extension
+    html: [
+        '<h1>My notes</h1>',
+        '<p>Just my own scratch pad for the festival. Nothing official, do not read too much into it.</p>',
+        '<h2>Before the weekend</h2>',
+        '<ul>',
+        '<li>Pack rain gear, the field has no shelter if Sunday turns</li>',
+        '<li>Charge the radio and grab a spare battery from the crew cabin</li>',
+        '<li>Cash for the food trucks, the card reader crawls at peak</li>',
+        '<li>Swap my Saturday lunch break so I can catch the barn stage set</li>',
+        '<li>Say hi to the new volunteers, they will not know where anything is yet</li>',
+        '</ul>',
+        '<h2>My weekend, roughly</h2>',
+        '<ul>',
+        '<li>Friday: load-in from midday, dinner with the crew, early night (ha)</li>',
+        '<li>Saturday: doors at midday, on shift most of the afternoon, off in the evening</li>',
+        '<li>Sunday: go/no-go call first thing, then wind permitting, the good stuff</li>',
+        '<li>Monday: strike, coffee, and a very long nap</li>',
+        '</ul>',
+        '<h2>Do not forget</h2>',
+        '<ul>',
+        '<li>The big thermos, last year the coffee ran out by ten</li>',
+        '<li>That playlist for the drive back</li>',
+        '<li>Sunset from the dune path on Saturday if there is a gap, it is worth it</li>',
+        '</ul>',
+        '<p>That is it. Back to work.</p>',
+    ].join(''),
+};
 
 export function personaByRole(role: LeadRole): Persona {
     const persona = PERSONAS.find((p) => p.role === role);

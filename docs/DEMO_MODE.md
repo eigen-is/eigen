@@ -106,9 +106,17 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   coastal/festival photos, two Unsplash) are uploaded into an `images/` team-drive folder through
   the real `createFileFromData` path, keyed to plausible persona uploaders (`content.ts` `PHOTOS`).
   Attribution + licensing in `demo/fixtures/images/CREDITS.md`.
-- **Mail as raw RFC822.** `buildRfc822` writes real `Date` headers (dates relative to seed time) and
-  `Home.mail.mailboxDeliver` indexes them into `mail.db`. Inbox threads land in one persona; all-hands
-  mail lands in every inbox.
+- **Branding in `branding/`.** `demo/fixtures/branding/*` (the festival logo) uploaded into a
+  `branding/` team-drive folder the same way (`content.ts` `BRANDING`).
+- **Personal notes doc per persona.** Every persona gets a private `my notes.eigendoc` in their OWN
+  drive (`content.ts` `NOTES`, same cozy role-agnostic content for all) — one `.docx` built once,
+  converted per persona through the shipped importer into their home drive. Not shared.
+- **Mail as raw RFC822.** `buildRfc822` (nodemailer `MailComposer`) writes real `Date` headers (dates
+  relative to seed time) and `Home.mail.mailboxDeliver` indexes them into `mail.db`. Inbox threads
+  land in one persona; all-hands mail lands in every inbox. A message may carry `html` (rendered as a
+  real `multipart/alternative` list/paragraph body); an all-hands flow may set `attachTeamDrive` to
+  append an "Open festival →" drive-reference pill (`renderAttachmentPills`) linking the shared team
+  drive, the same pill the mail client bakes into a sent message.
 - **Comment cards written AND anchored.** For each seeded comment the seeder wraps the anchor phrase
   in a `comment` mark carrying the card id (`injectCommentMark`, mirroring the editor's `setComment`)
   and writes the card into the doc's `comments` Y.Map (`writeCommentCard`, mirroring the FE's
@@ -188,7 +196,7 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `apps/api/src/scripts/seed-demo.ts` | Offline in-process seeder (mechanics) |
 | `apps/api/src/scripts/demo/content.ts` | Tuimel Festival content (data only) |
 | `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the slides/stickies fixture containers |
-| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigenstickies` containers + `images/` site photos (see its `CREDITS.md`) |
+| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigenstickies` containers + `images/` site photos (see its `CREDITS.md`) + `branding/` logo |
 | `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate) |
 | `scripts/snapshot.sh` / `scripts/restore.sh` | General offline backup/restore |
 | `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units |
