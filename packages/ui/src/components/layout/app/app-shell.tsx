@@ -75,12 +75,12 @@ export function AppShell({
         <LayoutContext.Provider value={layoutValue}>
             <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute} />
-                <DemoBanner />
                 <PaletteRunner />
                 <div className="flex flex-1 w-full overflow-hidden">
                     {sidebar && !sidebarHidden && <SidebarContainer sidebar={sidebar} />}
                     <main className="flex-1 flex h-full overflow-hidden">{children ?? <Outlet />}</main>
                 </div>
+                <DemoBanner />
             </div>
             <Suspense>
                 <TanStackRouterDevtools position="bottom-left" />

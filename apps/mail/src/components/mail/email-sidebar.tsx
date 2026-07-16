@@ -148,7 +148,7 @@ export function EmailSidebar({
     }, [mailboxes, isLoading, error]);
 
     return (
-        <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
+        <div className="flex h-full flex-col">
             {isMobile && <SidebarHeader appName="mail" onClose={onClose} />}
 
             <SidebarBody>
