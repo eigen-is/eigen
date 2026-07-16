@@ -23,8 +23,10 @@ that exist in mainline code (all inert when `EIGEN_DEMO` is unset):
 - **login-page conditional** (`packages/ui/.../pages/login-page.tsx`) — when `demoMode` is true the
   card shows an **Enter demo** button (linking to `/p/demo/enter`) with the password form behind a
   "Sign in with password" toggle, so the admin can still get in.
-- **`DemoBanner`** (`packages/ui/.../app/demo-banner.tsx`, mounted once in `AppShell`) — a muted top
-  strip ("You are exploring as \<name\>. Everything resets every hour.").
+- **`DemoBanner`** (`packages/ui/.../app/demo-banner.tsx`, mounted once in `AppShell`) — a
+  warning-toned strip (`bg-warning`, `border-t`) pinned to the BOTTOM edge of the app shell:
+  "Shared demo workspace. You are exploring as \<first name\>. Everything resets every hour."
+  (the name-less fallback drops the middle sentence).
 - **pass-through auth guard** (`routes/auth.ts`) — an `onBeforeHandle` that returns immediately when
   `!isDemo()`.
 - **inert `/p/demo/enter`** (`routes/demo.ts`) — the route is always registered but 404s when
@@ -146,9 +148,10 @@ Hourly, on the hour, host-level (no in-app scheduler — swapping DB files under
 2. `rm -rf data/server data/home data/team data/org data/guest` — an **explicit list, never a
    wildcard**. `data/certs` (Caddy) and `data/dkim` (mail) survive.
 3. Reseed in a throwaway container off the current image (`run --rm --no-deps eigen-api ...`).
-4. Restart `eigen-api` — via a trap, but **only if `data/server/config.json` exists**. A failed seed
-   leaves the API stopped rather than serving the public first-run setup wizard to strangers; the next
-   hourly run (or an operator) retries.
+4. Restart `eigen-api` — via a trap, but **only if `data/server/.demo-seeded` exists** (an empty
+   sentinel the seeder writes as its final step, so a crash mid-seed can't satisfy the gate — the
+   half-built world stays behind the stopped API). A failed seed leaves the API stopped rather than
+   serving the public first-run setup wizard to strangers; the next hourly run (or an operator) retries.
 
 **Hard gate:** the script refuses to run unless `.env.production` contains `EIGEN_DEMO=1`, so it is
 physically unable to wipe a real box. The full-root wipe (rather than restoring a golden tarball)
@@ -181,7 +184,6 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 - Two concurrent visitors can land on the same persona (~1/20 per pair) and see each other's private-drive edits.
 - Offensive content a visitor creates is visible to others for up to an hour, until the reset.
 - A visitor's outbound "send" silently succeeds-then-vanishes (mailer skip); a later 403 + toast on the send route is a consciously deferred option.
-- Seeded booking-thread replies sit in the recipient's inbox, not their Sent folder — a content-pass realism gap, not a mechanics bug.
 - The login page holds its form area until `/p/config` resolves, so a demo box costs one uncached paint before the Enter-demo button appears.
 - Idle visitors aren't kicked at the top of the hour; their next request 401s and the client redirects to login (a client-side session check, not a server push).
 - The elastic per-visitor warm pool (per-visitor pre-seeded accounts) remains the documented scale-up path if traffic ever demands per-visitor isolation; the entry route, seeder, and reset all survive that upgrade.
