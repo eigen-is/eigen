@@ -27,8 +27,10 @@ that exist in mainline code (all inert when `EIGEN_DEMO` is unset):
 - **`/p/config` `demoMode`** (`routes/public.ts`) — `getPublicConfig()` gains `demoMode: isDemo()`,
   the single flag the frontend keys off.
 - **login-page conditional** (`packages/ui/.../pages/login-page.tsx`) — when `demoMode` is true the
-  card shows an **Enter demo** button (linking to `/p/demo/enter`) with the password form behind a
-  "Sign in with password" toggle, so the admin can still get in.
+  card leads with an **Enter demo** button (linking to `/p/demo/enter`) plus a "Sign in with password"
+  link. That link swaps in **Sign in / Demo** tabs: the Sign in tab is the password form (so the admin
+  can still get in), the Demo tab holds the Enter demo button. The normal **Guest** tab is dropped in
+  demo (guest signup is off) and replaced by the Demo tab.
 - **`DemoBanner`** (`packages/ui/.../app/demo-banner.tsx`, mounted once in `AppShell`) — a
   warning-toned strip (`bg-warning`, `border-t`) pinned to the BOTTOM edge of the app shell:
   "Shared demo workspace. You are exploring as \<first name\>. Everything resets every hour."
@@ -42,10 +44,14 @@ No new tables, no scheduler jobs, no settings-schema churn, no changes to Drive/
 
 ## Entry: `GET /p/demo/enter`
 
-Public route (no `auth: true`), gated at the top by `isDemo()` (else 404). It reads the demo org id
-from server config, then discovers the pool from org membership — members with role `member`
-(the setup admin is org `owner`, so it's excluded), so the pool can never drift from the seeder — and
-picks one at random. It signs that persona in via `signInWithScopedPassword('demo', id, email)`
+Public route (no `auth: true`), gated at the top by `isDemo()` (else 404), then a tight per-IP rate
+limit (`checkDemoRateLimit`, `lib/auth/demo-rate-limit.ts`, 10/60s — the route is unauthenticated and
+runs two scrypt ops per hit, so the global 1000/60s limiter isn't enough; Caddy's `X-Real-IP` keys it).
+It reads the demo org id from server config, then discovers the pool via `getDemoPersonaPool`
+(`lib/auth/demo-persona-pool.ts`) — org members with role `member` (the setup admin is org `owner`, so
+it's excluded) and 2FA off (a 2FA member would divert `signInEmail` into the two-factor flow), so the
+pool can never drift from the seeder — and picks one at random. It signs that persona in via
+`signInWithScopedPassword('demo', id, email)`
 (`lib/auth/guest-auth.ts`), relays the response's `Set-Cookie` headers with `getSetCookie()` (which
 keeps multiple cookies distinct where `get()` would comma-join them), and 302s to `/space`.
 
@@ -86,7 +92,8 @@ An offline, in-process seeder — it imports `../app`, POSTs `/setup/complete`, 
 domain surfaces as the personas, so Activity panels, file history, watchers, and the notification
 bell populate for free. It runs against an **empty** `EIGEN_DATA_ROOT` and refuses a completed setup
 (`server/config.json` exists — the reset script wipes first). Storage is `local-id`; it enforces the
-demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUploadSizeMB: 5`).
+demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUploadSizeMB: 5`, and
+`onboarding.welcomeMail.enabled: false` so no "Welcome to …" system mail lands as inbox message #1).
 
 - **Email-keyed personas, no fixed ids.** `content.ts` `PERSONAS` are keyed by a stable email
   local-part; the runtime email is `<key>@MAIL_DOMAIN`. Everything the data model keys on (ACLs,
@@ -97,8 +104,9 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   turns it into a live workspace. A later content-deepening pass swaps `content.ts` without touching
   mechanics.
 - **Content conventions.** All seeded directory and file names are lowercase; chat channels live in a
-  `chats/` directory on the team drive. A `festival crew` team is created (`createTeam` +
-  `addTeamMember` per persona) with an explicit shared mount.
+  `chats/` directory on the team drive (a few messages, and some doc/stickies comment replies, are
+  `/cheer`-style slash-command emotes the chat app renders). A `festival crew` team is created
+  (`createTeam` + `addTeamMember` per persona) with an explicit shared mount.
 - **Docs through the shipped importer.** Docs are HTML → `.docx` (`@turbodocx/html-to-docx`) →
   `convertToDocument(..., 'eigendoc')`. The demo dogfoods import on every reset; no bespoke Y.Doc builder.
 - **Slides, sheets, and stickies from fixture containers.** `demo/fixtures/{sponsor-pitch.eigenslides,
@@ -123,11 +131,13 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   drive (`content.ts` `NOTES`, same cozy role-agnostic content for all) — one `.docx` built once,
   converted per persona through the shipped importer into their home drive. Not shared.
 - **Mail as raw RFC822.** `buildRfc822` (nodemailer `MailComposer`) writes real `Date` headers (dates
-  relative to seed time) and `Home.mail.mailboxDeliver` indexes them into `mail.db`. Inbox threads
-  land in one persona; all-hands mail lands in every inbox. A message may carry `html` (rendered as a
-  real `multipart/alternative` list/paragraph body); an all-hands flow may set `attachTeamDrive` to
-  append an "Open festival →" drive-reference pill (`renderAttachmentPills`) linking the shared team
-  drive, the same pill the mail client bakes into a sent message.
+  relative to seed time) and `Home.mail.mailboxDeliver` indexes them into `mail.db`. Most personas get
+  a dedicated `inbox-thread` with an external party; a persona's OWN replies in that thread are moved
+  to their Sent box and marked read (`messageMove`/`messageSetRead`), so only genuinely inbound mail
+  stays in the inbox. All-hands mail lands in every persona's inbox. A message may carry `html`
+  (rendered as a real `multipart/alternative` list/paragraph body); an all-hands flow may set
+  `attachTeamDrive` to append an "Open festival →" drive-reference pill (`renderAttachmentPills`)
+  linking the shared team drive, the same pill the mail client bakes into a sent message.
 - **Comment cards written AND anchored.** For each seeded comment the seeder wraps the anchor phrase
   in a `comment` mark carrying the card id (`injectCommentMark`, mirroring the editor's `setComment`)
   and writes the card into the doc's `comments` Y.Map (`writeCommentCard`, mirroring the FE's
@@ -189,7 +199,6 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 
 - Two concurrent visitors can land on the same persona (~1/20 per pair) and see each other's private-drive edits.
 - Offensive content a visitor creates is visible to others for up to an hour, until the reset.
-- A visitor's outbound "send" silently succeeds-then-vanishes (mailer skip); a later 403 + toast on the send route is a consciously deferred option.
 - The login page holds its form area until `/p/config` resolves, so a demo box costs one uncached paint before the Enter-demo button appears.
 - Idle visitors aren't kicked at the top of the hour; their next request 401s and the client redirects to login (a client-side session check, not a server push).
 - The elastic per-visitor warm pool (per-visitor pre-seeded accounts) remains the documented scale-up path if traffic ever demands per-visitor isolation; the entry route, seeder, and reset all survive that upgrade.
@@ -199,11 +208,14 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | File | Purpose |
 |------|---------|
 | `apps/api/src/lib/config/env.ts` | `isDemo()` |
-| `apps/api/src/routes/demo.ts` | `GET /p/demo/enter` (pool pick + session mint) |
+| `apps/api/src/routes/demo.ts` | `GET /p/demo/enter` (rate-limit + pool pick + session mint) |
+| `apps/api/src/lib/auth/demo-persona-pool.ts` | `getDemoPersonaPool` (pool query: org members, minus admin + 2FA) |
+| `apps/api/src/lib/auth/demo-rate-limit.ts` | `checkDemoRateLimit` (per-IP cap on `/p/demo/enter`) |
 | `apps/api/src/lib/auth/guest-auth.ts` | `signInWithScopedPassword` (shared HMAC session mint) |
 | `apps/api/src/routes/auth.ts` | `DEMO_BLOCKED_AUTH_PATHS` guard (before `.mount`) |
 | `apps/api/src/routes/public.ts` | `/p/config` `demoMode` flag |
 | `apps/api/src/lib/core/mailer.ts` | `sendMail` demo skip |
+| `apps/api/src/lib/mail/mail-domain.ts` | `messageSend` compose-send guard (403 + toast in demo) |
 | `apps/api/src/scripts/seed-demo.ts` | Offline in-process seeder (mechanics) |
 | `apps/api/src/scripts/demo/content.ts` | Tuimel Festival content (data only) |
 | `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the stickies board fixture (slides/sheets are hand-maintained) |

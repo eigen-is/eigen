@@ -109,8 +109,8 @@ closed), the sheets engine (dev-frozen format, own fidelity program), versioning
 ## On hold (decision needed)
 
 - **Demo mode** — **machinery implemented on branch `demo-mode` (2026-07-14), awaiting merge + a
-  Tuimel content pass.** As-built design in [DEMO_MODE.md](DEMO_MODE.md); rationale in
-  [PROPOSAL_DEMO_MODE.md](PROPOSAL_DEMO_MODE.md). A **small fixed pool of ~20 persona colleagues** in
+  Tuimel content pass.** As-built design and rationale in [DEMO_MODE.md](DEMO_MODE.md). A **small
+  fixed pool of ~20 persona colleagues** in
   one org (random assignment on entry) + hourly host-level wipe-and-reseed. Shipped: `EIGEN_DEMO`
   entry route, `isDemo()` auth guard (api-key writes / 2FA enable / revoke-sessions — org-create left
   to the product-level privesc fix `32fe269d`), `/p/config` flag, `sendMail` skip, `seed-demo.ts` +
