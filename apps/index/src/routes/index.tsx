@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { getSpaceAppUrl, publicApi } from '@workspace/lib/api';
+import { getDemoEnterUrl, getSpaceAppUrl, publicApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { Button } from '@workspace/ui/components/button';
@@ -22,6 +22,7 @@ export function HomeComponent() {
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const { data: config } = usePublicConfig();
     const waitlistEnabled = config?.waitlistEnabled ?? false;
+    const demoMode = config?.demoMode ?? false;
     const { isAuthenticated } = useAuth();
 
     // This page is prerendered and hydrates before the session check resolves, so
@@ -39,8 +40,10 @@ export function HomeComponent() {
     }, []);
 
     const handleLogin = useCallback(() => {
-        window.location.href = '/space/';
-    }, []);
+        // Demo instances send visitors straight into a seeded persona via the entry route,
+        // which mints the session and 302s to /space.
+        window.location.href = demoMode ? getDemoEnterUrl() : '/space/';
+    }, [demoMode]);
 
     const handleShowWaitlist = useCallback(() => {
         setShowWaitlistForm(true);
@@ -88,7 +91,7 @@ export function HomeComponent() {
                 <>
                     <div className="flex gap-4">
                         <Button className="px-8 py-2 font-medium flex-3" onClick={handleLogin}>
-                            Login
+                            {demoMode ? 'Enter demo' : 'Login'}
                         </Button>
                         {waitlistEnabled && (
                             <Button variant="outline" className="px-6 py-2 flex-1" onClick={handleShowWaitlist}>

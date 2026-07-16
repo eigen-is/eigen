@@ -128,6 +128,8 @@ export const getChangelogUrl = () => getIndexAppUrl('changelog');
 export const getSpaceLogin2faUrl = (search: string = '') => `${getSpaceAppUrl('login-2fa')}${search}`;
 
 export const getPublicAvatarUrl = (emailOrId: string) => `${API_HOST}/p/avatar/${encodeURIComponent(emailOrId)}`;
+// Demo-instance entry: mints a random seeded persona session and 302s into the app.
+export const getDemoEnterUrl = () => `${API_HOST}/p/demo/enter`;
 export const getSSEEventsUrl = (ownerId: string) => `${API_HOST}/sse/${ownerId}/events`;
 export const getContactsAvatarUploadUrl = (ownerId: string) => `${API_HOST}/contacts/${ownerId}/avatar`;
 export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: string) =>

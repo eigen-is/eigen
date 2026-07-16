@@ -6,7 +6,7 @@
 > guest-OTP flow uses in production. An offline `seed-demo.ts` script builds a lived-in workspace
 > through the real product surfaces, and a host-level script wipes and reseeds the box every hour.
 > Mainline conditional surface on a real instance is near zero: one line in `sendMail`, a
-> compose-send guard, one `/p/config` flag, one login-page conditional, a demo banner, a
+> compose-send guard, one `/p/config` flag, two login-surface conditionals, a demo banner, a
 > pass-through auth guard, and the inert entry route — all keyed off `isDemo()`
 > (`EIGEN_DEMO === '1'`) and dead without the env var.
 
@@ -27,10 +27,12 @@ that exist in mainline code (all inert when `EIGEN_DEMO` is unset):
 - **`/p/config` `demoMode`** (`routes/public.ts`) — `getPublicConfig()` gains `demoMode: isDemo()`,
   the single flag the frontend keys off.
 - **login-page conditional** (`packages/ui/.../pages/login-page.tsx`) — when `demoMode` is true the
-  card leads with an **Enter demo** button (linking to `/p/demo/enter`) plus a "Sign in with password"
-  link. That link swaps in **Sign in / Demo** tabs: the Sign in tab is the password form (so the admin
-  can still get in), the Demo tab holds the Enter demo button. The normal **Guest** tab is dropped in
-  demo (guest signup is off) and replaced by the Demo tab.
+  card is just an **Enter demo** button (linking to `/p/demo/enter`); there is no password sign-in and
+  no Guest tab (guest signup is off in demo). The hourly wipe/reseed rebuilds the admin account each
+  hour, so a demo box deliberately exposes no web credentials form to visitors.
+- **index-landing conditional** (`apps/index/.../routes/index.tsx`) — when `demoMode` is true the
+  landing page's primary button reads **Enter demo** and points at `/p/demo/enter` instead of the
+  normal **Login** button that goes to `/space`.
 - **`DemoBanner`** (`packages/ui/.../app/demo-banner.tsx`, mounted once in `AppShell`) — a
   warning-toned strip (`bg-warning`, `border-t`) pinned to the BOTTOM edge of the app shell:
   "Shared demo workspace. You are exploring as \<first name\>. Everything resets every hour."
@@ -224,7 +226,8 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `scripts/snapshot.sh` / `scripts/restore.sh` | General offline backup/restore |
 | `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units |
 | `packages/ui/.../app/demo-banner.tsx` | Workspace banner |
-| `packages/ui/.../pages/login-page.tsx` | Enter-demo entry |
+| `packages/ui/.../pages/login-page.tsx` | Enter-demo entry (app login card) |
+| `apps/index/src/routes/index.tsx` | Enter-demo entry (landing-page button) |
 | `apps/api/src/test/demo-mode.test.ts`, `seed-demo.test.ts` | Contract tests |
 </content>
 </invoke>
