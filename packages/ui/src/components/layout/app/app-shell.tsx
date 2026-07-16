@@ -13,6 +13,7 @@ import { useOptionalPreview, usePreview } from '../preview-provider/preview-prov
 import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container.tsx';
 import { CommandPalette } from './command-palette/command-palette.tsx';
 import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts.ts';
+import { DemoBanner } from './demo-banner.tsx';
 import { LayoutContext } from './layout-context.tsx';
 import { Topbar } from './topbar.tsx';
 
@@ -79,6 +80,7 @@ export function AppShell({
                     {sidebar && !sidebarHidden && <SidebarContainer sidebar={sidebar} />}
                     <main className="flex-1 flex h-full overflow-hidden">{children ?? <Outlet />}</main>
                 </div>
+                <DemoBanner />
             </div>
             <Suspense>
                 <TanStackRouterDevtools position="bottom-left" />

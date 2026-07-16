@@ -23,10 +23,43 @@ function generateOtp(): string {
     return String(num % 1_000_000).padStart(6, '0');
 }
 
-// Deterministic password guests never see — exists so we can call
-// auth.api.signInEmail to get a response with signed session cookies.
-function guestPassword(email: string): string {
-    return createHmac('sha256', auth.options.secret).update(`guest:${email}`).digest('hex');
+// Deterministic password nobody sees — exists so we can call auth.api.signInEmail to get a
+// response with signed session cookies. Scoped per flow so the two surfaces never collide.
+function scopedPassword(scope: 'guest' | 'demo', email: string): string {
+    return createHmac('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
+}
+
+// Upsert the account's credential with the freshly derived password, then sign in and return the
+// response carrying the signed session cookie. Re-deriving + overwriting on every call is
+// load-bearing: it heals a tampered password so one visitor can't lock out the next.
+export async function signInWithScopedPassword(
+    scope: 'guest' | 'demo',
+    userId: string,
+    email: string,
+): Promise<Response> {
+    const db = getAuthDrizzleDb();
+    const password = scopedPassword(scope, email);
+    const hashedPassword = await hashPassword(password);
+    const existingAccount = db.select().from(account).where(eq(account.userId, userId)).get();
+    if (existingAccount) {
+        db.update(account)
+            .set({ password: hashedPassword, updatedAt: new Date() })
+            .where(eq(account.id, existingAccount.id))
+            .run();
+    } else {
+        db.insert(account)
+            .values({
+                id: generateId(),
+                accountId: userId,
+                providerId: 'credential',
+                userId,
+                password: hashedPassword,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .run();
+    }
+    return auth.api.signInEmail({ body: { email, password }, asResponse: true });
 }
 
 export async function requestOtp(email: string, ip: string): Promise<void> {
@@ -122,29 +155,6 @@ export async function verifyOtpAndSignIn(email: string, otp: string): Promise<Re
     // succeed but "Shared with me" stayed blank.
     await reconcileSharesForNewUser(guestUser);
 
-    // Upsert credential account so sign-in works
-    const password = guestPassword(email);
-    const hashedPassword = await hashPassword(password);
-    const existingAccount = db.select().from(account).where(eq(account.userId, guestUser.id)).get();
-    if (existingAccount) {
-        db.update(account)
-            .set({ password: hashedPassword, updatedAt: new Date() })
-            .where(eq(account.id, existingAccount.id))
-            .run();
-    } else {
-        db.insert(account)
-            .values({
-                id: generateId(),
-                accountId: guestUser.id,
-                providerId: 'credential',
-                userId: guestUser.id,
-                password: hashedPassword,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            })
-            .run();
-    }
-
-    // Sign in and return response with session cookie
-    return auth.api.signInEmail({ body: { email, password }, asResponse: true });
+    // Upsert credential account and return the response with the signed session cookie.
+    return signInWithScopedPassword('guest', guestUser.id, email);
 }

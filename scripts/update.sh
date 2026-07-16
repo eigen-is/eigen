@@ -25,6 +25,7 @@ if [ -f .env.production ]; then
     echo "Checking .env.production for new variables..."
     add_var_if_missing COMPOSE_PROFILES "edge,mail"
     add_var_if_missing MAIL_DOMAIN "$(grep '^DOMAIN=' .env.production | cut -d= -f2-)"
+    add_var_if_missing EIGEN_DEMO 0
 
     # Migrate EIGEN_STATIC_BIND (single "ip:port" value) → EIGEN_STATIC_HOST + EIGEN_STATIC_PORT.
     # The compose long-form ports binding needs them split. If the user customised BIND

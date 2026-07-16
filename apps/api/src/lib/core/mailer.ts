@@ -2,7 +2,7 @@ import type { ImipMethod } from '@workspace/lib/types/calendar';
 import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import type Mail from 'nodemailer/lib/mailer';
-import { isProduction } from '../config/env';
+import { isDemo, isProduction } from '../config/env';
 import { getMailDomain } from '../config/server-config';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
@@ -91,8 +91,9 @@ function buildMailOptions(message: OutboundMail): Mail.Options {
 }
 
 export async function sendMail(message: OutboundMail): Promise<boolean> {
-    // Skip outbound delivery in dev/test unless an SMTP host is explicitly configured.
-    if (!isProduction() && !process.env['SMTP_HOST']) {
+    // Skip outbound delivery in dev/test unless an SMTP host is explicitly configured, and always
+    // in demo mode (a demo box has no MTA — a real send would throw on every share/invite/iMIP).
+    if ((!isProduction() && !process.env['SMTP_HOST']) || isDemo()) {
         console.log('[DEV] Skipping email:', {
             from: message.from ?? { name: '', address: `noreply@${getMailDomain()}` },
             to: message.to,

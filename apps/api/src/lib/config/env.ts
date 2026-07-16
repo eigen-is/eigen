@@ -5,3 +5,7 @@ export function isProduction(): boolean {
 export function isTest(): boolean {
     return process.env['NODE_ENV'] === 'test';
 }
+
+export function isDemo(): boolean {
+    return process.env['EIGEN_DEMO'] === '1';
+}

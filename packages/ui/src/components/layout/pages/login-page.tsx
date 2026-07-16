@@ -4,7 +4,7 @@ import { API_HOST } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import { usePublicConfig } from '@workspace/lib/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '../../button.tsx';
@@ -214,8 +214,98 @@ function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
     );
 }
 
+// Sign-in tab shell shared by the demo and normal login boxes: the "Sign in" tab is identical
+// in both; only the second tab (Demo vs Guest) and the initially-active tab differ.
+function SignInTabs({
+    defaultValue,
+    secondTab,
+}: {
+    defaultValue: string;
+    secondTab: { value: string; label: string; content: ReactNode };
+}) {
+    return (
+        <Tabs defaultValue={defaultValue}>
+            <TabsList className="w-full mb-6">
+                <TabsTrigger value="signin" className="flex-1">
+                    Sign in
+                </TabsTrigger>
+                <TabsTrigger value={secondTab.value} className="flex-1">
+                    {secondTab.label}
+                </TabsTrigger>
+            </TabsList>
+            <TabsContent value="signin">
+                <PasswordLoginForm />
+            </TabsContent>
+            <TabsContent value={secondTab.value}>{secondTab.content}</TabsContent>
+        </Tabs>
+    );
+}
+
 export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
     const { appName } = useApp();
+    const { data: config, isPending: isConfigPending } = usePublicConfig();
+    const [showLogin, setShowLogin] = useState(false);
+
+    // Demo instances hand every visitor a random seeded persona; the credentials
+    // form stays reachable behind a toggle so the admin can still sign in.
+    const showDemoEntry = config?.demoMode && !showLogin;
+
+    // Hold the form area until config resolves — a demo box must not flash the credentials form.
+    let formContent: ReactNode = null;
+    if (!isConfigPending) {
+        if (showDemoEntry) {
+            formContent = (
+                <div className="space-y-4">
+                    <Button asChild className="w-full">
+                        <a href={`${API_HOST}/p/demo/enter`}>Enter demo</a>
+                    </Button>
+                    <div className="text-center">
+                        <Button
+                            variant="link"
+                            size="sm"
+                            className="text-muted-foreground"
+                            onClick={() => setShowLogin(true)}
+                        >
+                            Sign in with password
+                        </Button>
+                    </div>
+                </div>
+            );
+        } else if (config?.demoMode) {
+            // Demo box: the Demo tab is the way back to the entry button. Guest login is
+            // disabled for demo (server settings), so it's replaced by Demo here.
+            formContent = (
+                <SignInTabs
+                    defaultValue="signin"
+                    secondTab={{
+                        value: 'demo',
+                        label: 'Demo',
+                        content: (
+                            <div className="space-y-4">
+                                <p className="text-center text-sm text-muted-foreground">
+                                    Explore a shared demo workspace.
+                                </p>
+                                <Button asChild className="w-full">
+                                    <a href={`${API_HOST}/p/demo/enter`}>Enter demo</a>
+                                </Button>
+                            </div>
+                        ),
+                    }}
+                />
+            );
+        } else {
+            formContent = (
+                <SignInTabs
+                    defaultValue={initialEmail ? 'guest' : 'signin'}
+                    secondTab={{
+                        value: 'guest',
+                        label: 'Guest',
+                        content: <GuestLoginForm initialEmail={initialEmail} />,
+                    }}
+                />
+            );
+        }
+    }
 
     return (
         <div className="flex w-full h-[calc(100vh-64px)] items-center justify-center">
@@ -229,27 +319,14 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
                             <Ket />
                         </span>
                     </CardTitle>
-                    <CardDescription>Sign in to access your account</CardDescription>
+                    {!isConfigPending && (
+                        <CardDescription>
+                            {showDemoEntry ? 'Explore a shared demo workspace.' : 'Sign in to access your account'}
+                        </CardDescription>
+                    )}
                 </CardHeader>
 
-                <CardContent>
-                    <Tabs defaultValue={initialEmail ? 'guest' : 'signin'}>
-                        <TabsList className="w-full mb-6">
-                            <TabsTrigger value="signin" className="flex-1">
-                                Sign in
-                            </TabsTrigger>
-                            <TabsTrigger value="guest" className="flex-1">
-                                Guest
-                            </TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="signin">
-                            <PasswordLoginForm />
-                        </TabsContent>
-                        <TabsContent value="guest">
-                            <GuestLoginForm initialEmail={initialEmail} />
-                        </TabsContent>
-                    </Tabs>
-                </CardContent>
+                <CardContent>{formContent}</CardContent>
             </Card>
         </div>
     );

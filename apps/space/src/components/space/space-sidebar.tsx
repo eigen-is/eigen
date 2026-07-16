@@ -16,7 +16,7 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
     const isAdmin = useIsAdmin();
 
     return (
-        <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
+        <div className="flex h-full flex-col">
             {isMobile && <SidebarHeader appName="space" onClose={onClose} />}
 
             <SidebarBody>

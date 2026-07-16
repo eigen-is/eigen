@@ -14,6 +14,7 @@ import { calendarRouter } from './routes/calendar';
 import { chatRouter } from './routes/chat';
 import { collabRouter } from './routes/collab';
 import { contactsRouter } from './routes/contacts';
+import { demoRouter } from './routes/demo';
 import { driveRouter } from './routes/drive.ts';
 import { editorRouter } from './routes/editor';
 import { guestAuthRouter } from './routes/guest-auth';
@@ -115,6 +116,7 @@ export const app = new Elysia({
     .use(waitlistRouter)
     .use(spaceRouter)
     .use(publicRouter)
+    .use(demoRouter)
     .use(driveRouter)
     .use(homeRouter)
     .use(collabRouter)
