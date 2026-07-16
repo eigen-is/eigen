@@ -57,8 +57,12 @@ describe('Demo mode', () => {
         delete process.env['EIGEN_DEMO'];
     });
 
-    function enter(): Promise<Response> {
-        return ctx.app.handle(new Request('http://localhost/p/demo/enter'));
+    // Optional X-Real-IP so loop tests spread across distinct IPs and never trip the per-IP
+    // entry limiter (10/min); the burst test reuses one dedicated IP to prove the cap.
+    function enter(ip?: string): Promise<Response> {
+        return ctx.app.handle(
+            new Request('http://localhost/p/demo/enter', ip ? { headers: { 'x-real-ip': ip } } : undefined),
+        );
     }
 
     describe('demo OFF (default)', () => {
@@ -133,10 +137,22 @@ describe('Demo mode', () => {
 
             // And the public route keeps minting valid sessions across repeated visits, never the owner.
             for (let i = 0; i < 10; i++) {
-                const res = await enter();
+                const res = await enter(`10.0.0.${i}`);
                 expect(res.status).toBe(302);
                 expect(await resolveUserId(res)).not.toBe(ctx.alice.user.id);
             }
+        }, 20000);
+
+        test('rate-limits the public entry route per IP', async () => {
+            process.env['EIGEN_DEMO'] = '1';
+            const ip = '203.0.113.7'; // dedicated fake IP so no other test can trip this bucket
+
+            // The 10/min per-IP cap allows a short burst, then 429s further hits from the same IP.
+            for (let i = 0; i < 10; i++) {
+                expect((await enter(ip)).status).toBe(302);
+            }
+            const limited = await enter(ip);
+            expect(limited.status).toBe(429);
         }, 20000);
 
         test('a 2FA-enabled member is excluded from the pool', async () => {
@@ -148,7 +164,7 @@ describe('Demo mode', () => {
             db.update(userSchema).set({ twoFactorEnabled: true }).where(eq(userSchema.id, ctx.charlie.user.id)).run();
             try {
                 for (let i = 0; i < 10; i++) {
-                    const res = await enter();
+                    const res = await enter(`10.0.1.${i}`);
                     expect(res.status).toBe(302);
                     expect(await resolveUserId(res)).not.toBe(ctx.charlie.user.id);
                 }
