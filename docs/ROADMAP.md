@@ -2,7 +2,7 @@
 
 Prioritised backlog of open work. Each item was checked against the codebase on **2026-06-25**;
 the P0/P1 proposals were deep-reviewed and re-verified against code on **2026-07-06**. Done items
-are pruned on completion (last prune 2026-07-06 — git history keeps them). Status is
+are pruned on completion (last prune 2026-07-16 — git history keeps them). Status is
 what exists today, not what the proposal hoped for. The detailed designs live in the
 `docs/PROPOSAL_*.md` files referenced per row.
 
@@ -105,30 +105,3 @@ closed), the sheets engine (dev-frozen format, own fidelity program), versioning
 > allowed; `scripts/s3-local` has MinIO). Cross-check `docs/PROPOSAL_*.md` and past audits so you
 > don't re-report known work. Signal over volume — "clean" is a valid verdict. Write findings and
 > recommendations to `docs/AUDIT_<AREA>.md`.
-
-## On hold (decision needed)
-
-- **Demo mode** — **machinery implemented on branch `demo-mode` (2026-07-14), awaiting merge + a
-  Tuimel content pass.** As-built design and rationale in [DEMO_MODE.md](DEMO_MODE.md). A **small
-  fixed pool of ~20 persona colleagues** in
-  one org (random assignment on entry) + hourly host-level wipe-and-reseed. Shipped: `EIGEN_DEMO`
-  entry route, `isDemo()` auth guard (api-key writes / 2FA enable / revoke-sessions — org-create left
-  to the product-level privesc fix `32fe269d`), `/p/config` flag, `sendMail` skip, `seed-demo.ts` +
-  reset/snapshot/restore scripts + systemd units. The "Tuimel Festival" content is a minimal first
-  pass; a content-deepening pass is the remaining work. It is both the public launch's headline asset
-  and the grant's "public demo instance" deliverable, so it moves up sharply once a launch or the
-  grant push is the active goal. Merge + content pass on explicit go.
-
----
-
-## Create/open resilience under degraded storage — 2026-07-03 incident follow-up
-
-**Superseded by [PROPOSAL_CREATE_RESILIENCE.md](PROPOSAL_CREATE_RESILIENCE.md)** (2026-07-05), which
-expands the seed spec that lived here into the full design and corrects its mechanics against source
-(the 500s were real API responses from the unguarded `S3Storage.exists` throw — no client or Caddy
-timeout exists; orphaned containers self-heal on open, so the atomicity fix targets the duplicate-trap
-phantom row, not a permanent 503). Kept for the incident record: 2026-07-03 ~15:10–15:35 UTC, Hetzner
-nbg1 Object Storage degraded (slow→503); testers saw 500s on doc create, docs appearing only after
-refresh (→ duplicates from re-clicking), a sticky card posting on the 4th attempt, and minute-long
-opens. A read-only orphan scan of the affected home found **0 orphans** — no data lost; uploads were
-safe throughout (durable retry queue).
