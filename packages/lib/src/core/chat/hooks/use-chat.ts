@@ -193,7 +193,10 @@ export function useStartChatWith() {
 
     return async (email: string): Promise<'opened' | ChatMatch[]> => {
         if (!ownerId) return [];
-        const matches = await queryClient.fetchQuery(byMembersQueryConfig(ownerId, [email]));
+        // A failed lookup degrades to "no matches" so the caller falls through to opening the wizard.
+        const matches = await queryClient
+            .fetchQuery(byMembersQueryConfig(ownerId, [email]))
+            .catch(() => [] as ChatMatch[]);
         const writable = matches.filter((m) => m.canWrite);
         if (writable.length === 1) {
             openDocument(writable[0].path);
