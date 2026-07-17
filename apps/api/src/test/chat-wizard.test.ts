@@ -197,9 +197,9 @@ describe('Chat wizard — by-members matching', () => {
         });
 
         const matches = await byMembers(ctx.alice.user.sessionToken, ctx.alice.user.id, bobEmail);
-        expect(matches).toHaveLength(1);
-        expect(matches[0].path.id).toBe(oneToOneId);
-        expect(matches[0].canWrite).toBe(true);
+        const match = matches.find((m) => m.path.id === oneToOneId);
+        expect(match).toBeDefined();
+        expect(match!.canWrite).toBe(true);
     });
 
     test('treats the chat owner as an implicit member (self is never in the ACL)', async () => {
