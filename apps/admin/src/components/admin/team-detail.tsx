@@ -19,6 +19,7 @@ import { type MountSettings, mapStorageType } from '@workspace/lib/types/setting
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { AvatarEditor } from '@workspace/ui/components/layout/avatar-editor';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import type { MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
@@ -27,8 +28,8 @@ import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
-import { Camera, HardDrive, Pencil, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { HardDrive, Pencil, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { AddMemberDialog } from './add-member-dialog';
 import { MountDialog } from './mount-dialog';
 
@@ -72,7 +73,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const [editingMount, setEditingMount] = useState<{ id: string; mount: MountSettings } | null>(null);
     const [showSettingsForm, setShowSettingsForm] = useState(false);
     const [avatarVersion, setAvatarVersion] = useState(0);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
@@ -189,10 +189,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
 
-    const handleAvatarSelected = async (e: ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        e.target.value = '';
-        if (!file) return;
+    const handleAvatarUpload = async (file: File) => {
         await uploadAvatar.mutateAsync(file);
         setAvatarVersion((v) => v + 1);
     };
@@ -221,22 +218,14 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                 <div className="space-y-5 border rounded-lg p-4">
                     <div className="space-y-1.5">
                         <Label>Avatar</Label>
-                        <div className="flex items-center gap-3">
-                            <UserAvatar size="lg" userId={ownerId} imageUrl={avatarImageUrl} />
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={handleAvatarSelected}
-                            />
-                            <TooltipButton
-                                icon={Camera}
-                                tooltipText="Upload image"
-                                onClick={() => fileInputRef.current?.click()}
-                            />
-                            <TooltipButton icon={Trash2} tooltipText="Remove image" onClick={handleRemoveAvatar} />
-                        </div>
+                        <AvatarEditor
+                            className="h-24 w-24"
+                            userId={ownerId}
+                            imageUrl={avatarImageUrl}
+                            showRemove
+                            onUpload={handleAvatarUpload}
+                            onRemove={handleRemoveAvatar}
+                        />
                     </div>
 
                     <div className="space-y-1.5">

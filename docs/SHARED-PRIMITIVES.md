@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-823 primitives across 6 kinds. `packages/sheet` internals are excluded.
+825 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (113)
+## Components (114)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -24,6 +24,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AppSidebar` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `AssigneeMenuItems` | `@workspace/ui` | packages/ui/src/components/layout/comments/assignee-menu-items.tsx |
 | `AssigneePicker` | `@workspace/ui` | packages/ui/src/components/layout/comments/assignee-picker.tsx |
+| `AvatarEditor` | `@workspace/ui` | packages/ui/src/components/layout/avatar-editor.tsx |
 | `Bar` | `@workspace/ui` | packages/ui/src/components/layout/braket/bar.tsx |
 | `CardDialog` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-dialog.tsx |
 | `CardForm` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-form.tsx |
@@ -365,7 +366,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (228)
+## Types (229)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -561,6 +562,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `ActivityRowProps` | `@workspace/ui` | packages/ui/src/components/layout/activity-row.tsx |
+| `AvatarEditorProps` | `@workspace/ui` | packages/ui/src/components/layout/avatar-editor.tsx |
 | `ChatMessageInputHandle` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-message-input.tsx |
 | `ColorPickerButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker-button.tsx |
 | `ColorPickerProps` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |

@@ -3,19 +3,13 @@ import { useNavigate } from '@tanstack/react-router';
 import { getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useMeContact, useUpdateContact } from '@workspace/lib/contacts';
-import { ErrorState, LoadingState, UserAvatar } from '@workspace/ui';
+import { AvatarEditor, ErrorState, LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@workspace/ui/components/dropdown-menu';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
 import { useUpload } from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import { uploadWithProgress } from '@workspace/ui/components/layout/upload-provider/upload-with-progress';
-import { Camera, InfoIcon } from 'lucide-react';
+import { InfoIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -31,7 +25,6 @@ export function ProfileEditor() {
     const { user } = useAuth();
     const { data: contact, isLoading, error: fetchError } = useMeContact();
     const [avatar, setAvatar] = useState<string | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const initializedRef = useRef(false);
 
     const upload = useUpload();
@@ -84,84 +77,40 @@ export function ProfileEditor() {
         <Form {...form}>
             <form onSubmit={handleSubmit} className="space-y-8">
                 <div className="flex justify-center mb-8">
-                    <div className="h-32 w-32 relative group">
-                        <UserAvatar
-                            name={contact ? `${contact.firstName} ${contact.lastName}` : ''}
-                            email={contact?.email?.[0]}
-                            imageUrl={avatar || ''}
-                            className="h-full w-full"
-                            size="lg"
-                        />
+                    <AvatarEditor
+                        name={contact ? `${contact.firstName} ${contact.lastName}` : ''}
+                        email={contact?.email?.[0]}
+                        imageUrl={avatar || ''}
+                        showRemove={!!avatar}
+                        onRemove={() => setAvatar(null)}
+                        onUpload={async (file) => {
+                            const formData = new FormData();
+                            formData.append('file', file);
 
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                    const formData = new FormData();
-                                    formData.append('file', file);
+                            const uploadHandler = upload.createUpload(file.name);
 
-                                    const uploadHandler = upload.createUpload(file.name);
-
-                                    try {
-                                        await uploadWithProgress({
-                                            url: getContactsAvatarUploadUrl(user?.id || ''),
-                                            formData,
-                                            onProgress: (progress: number) => {
-                                                uploadHandler.updateProgress(progress);
-                                            },
-                                            onSuccess: (response: string) => {
-                                                uploadHandler.complete();
-                                                setAvatar(response);
-                                            },
-                                            onError: (err) => {
-                                                uploadHandler.error();
-                                                console.error('Upload error:', err);
-                                            },
-                                        });
-                                    } catch (err: unknown) {
-                                        console.error('Error uploading file:', err);
+                            try {
+                                await uploadWithProgress({
+                                    url: getContactsAvatarUploadUrl(user?.id || ''),
+                                    formData,
+                                    onProgress: (progress: number) => {
+                                        uploadHandler.updateProgress(progress);
+                                    },
+                                    onSuccess: (response: string) => {
+                                        uploadHandler.complete();
+                                        setAvatar(response);
+                                    },
+                                    onError: (err) => {
                                         uploadHandler.error();
-                                    }
-
-                                    e.target.value = '';
-                                }
-                            }}
-                        />
-
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    size="icon"
-                                    variant="secondary"
-                                    className="absolute bottom-1 right-1 rounded-full h-8 w-8 shadow-md opacity-80 hover:opacity-100"
-                                >
-                                    <Camera className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                    onSelect={() => {
-                                        fileInputRef.current?.click();
-                                    }}
-                                >
-                                    Upload from files
-                                </DropdownMenuItem>
-                                {avatar && (
-                                    <DropdownMenuItem
-                                        onSelect={() => {
-                                            setAvatar(null);
-                                        }}
-                                    >
-                                        Remove avatar
-                                    </DropdownMenuItem>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+                                        console.error('Upload error:', err);
+                                    },
+                                });
+                            } catch (err: unknown) {
+                                console.error('Error uploading file:', err);
+                                uploadHandler.error();
+                            }
+                        }}
+                    />
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
