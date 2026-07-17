@@ -5,6 +5,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
+// selections is a per-client cursor — the ops path already drops it (filterPatch).
+// Strip it at the snapshot seam too, both ways: writing keeps one client's cursor
+// from fossilizing into the doc, reading heals docs that already carry one (which
+// showed phantom stats-bar values for an invisible selection on open).
+function stripSelections(sheets: Sheet[]): Sheet[] {
+    return sheets.map(({ selections: _selections, ...sheet }) => sheet);
+}
+
 export function useSheet(
     ownerId: string,
     mountId: string,
@@ -31,7 +39,7 @@ export function useSheet(
         if (!doc || !data) return;
         let json: string;
         try {
-            json = JSON.stringify(data);
+            json = JSON.stringify(stripSelections(data));
         } catch {
             return;
         }
@@ -96,7 +104,7 @@ export function useSheet(
                 // Replay any pending ops on top of the remote snapshot. When browser
                 // A flushes while B has unflushed local ops, B's edits survive Yjs
                 // merge and must be reapplied here or they're lost on next render.
-                const initial = JSON.parse(snapshot) as Sheet[];
+                const initial = stripSelections(JSON.parse(snapshot) as Sheet[]);
                 const pending = opsArray.toArray() as Op[][];
                 const data = pending.length > 0 ? replaySheetsOps(initial, pending) : initial;
                 latestDataRef.current = data;
@@ -114,7 +122,7 @@ export function useSheet(
             let initial: Sheet[] = createDefaultSheets();
             if (snapshot) {
                 try {
-                    initial = JSON.parse(snapshot) as Sheet[];
+                    initial = stripSelections(JSON.parse(snapshot) as Sheet[]);
                 } catch (e) {
                     console.warn('[sheet] Failed to parse initial snapshot, falling back to defaults:', e);
                 }

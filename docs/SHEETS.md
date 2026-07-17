@@ -55,6 +55,10 @@ load from the snapshot, then replay any pending ops that arrived during initial 
 `replaySheetsOps(sheets, opBatches)` from `@workspace/sheet/engine` — the same function the BE document
 reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" means.
 
+**`selections` never persists**: it's a per-client cursor — the ops path drops it (`filterPatch`), and
+`use-sheet.ts` strips it from the snapshot on both write and read (older docs may still carry one baked in;
+a persisted cursor resurfaced on open as phantom stats-bar values for a selection nobody made).
+
 ## Mount-time Bootstrap
 
 On first mount, the Workbook (`packages/sheet/src/components/Workbook/index.tsx`) reconciles the
