@@ -1680,11 +1680,14 @@ export function calcSelectionInfo(ctx: Context) {
             for (let c = 0; c < data[0].length; c += 1) {
                 // Prevent the selection length from exceeding data bounds
                 if (r >= data.length || c >= data[0].length) break;
-                const ct = data![r][c]?.ct?.t as string;
-                const value = data![r][c]?.m as string;
-                // Check whether the value is a number
-                if (ct === 'n' || (ct === 'g' && parseFloat(value).toString() !== 'NaN')) {
-                    const valueNumber = parseFloat(value);
+                const cell = data![r][c];
+                const ct = cell?.ct?.t as string;
+                const value = cell?.m as string;
+                // Numeric cells keep the raw number in v; m is the formatted display
+                // string (currency symbols, separators) that parseFloat cannot read.
+                // A nil v (empty cell formatted as numeric) must not become Number(null) = 0
+                const valueNumber = ct === 'n' ? Number(cell?.v ?? Number.NaN) : parseFloat(value);
+                if ((ct === 'n' || ct === 'g') && !Number.isNaN(valueNumber)) {
                     count += 1;
                     sum += valueNumber;
                     max = Math.max(valueNumber, max);
