@@ -1,8 +1,12 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
+import { enforceMaxUploadSize } from '../lib/config/enforcement';
 import { requireTeamAccess, requireTeamAdmin } from '../lib/core/access';
+import { ApiError } from '../lib/core/errors';
 import { getTeamHome } from '../lib/home';
+import { pushTeamAvatar } from '../lib/home/home-relay';
+import { generateImagePreview } from '../lib/shared/thumbnails';
 import { getTeamMembers } from '../lib/team';
 import { betterAuth } from './auth';
 
@@ -125,4 +129,35 @@ export const teamRouter = new Elysia({ name: 'team' })
             }),
             auth: true,
         },
+    )
+
+    .post(
+        '/team/:ownerId/avatar',
+        async ({ params, body, user }): Promise<void> => {
+            await requireTeamAdmin(user.id, teamId(params.ownerId));
+            // Global max upload size only — a team avatar shouldn't bill the uploading admin's
+            // personal mail+contacts quota (that's what enforceAvatarUpload adds on top).
+            enforceMaxUploadSize(body.file.size);
+            const buffer = Buffer.from(await body.file.arrayBuffer());
+            const result = await generateImagePreview(buffer, body.file.type, body.file.name, '', 'avatar', {
+                maxSize: 512,
+                quality: 80,
+                fit: 'cover',
+            });
+            if (!result) throw new ApiError(400, 'Failed to generate avatar thumbnail');
+            await pushTeamAvatar(teamId(params.ownerId), result.data);
+        },
+        {
+            body: t.Object({ file: t.File({ format: 'image/*' }) }),
+            auth: true,
+        },
+    )
+
+    .delete(
+        '/team/:ownerId/avatar',
+        async ({ params, user }): Promise<void> => {
+            await requireTeamAdmin(user.id, teamId(params.ownerId));
+            await pushTeamAvatar(teamId(params.ownerId), null);
+        },
+        { auth: true },
     );

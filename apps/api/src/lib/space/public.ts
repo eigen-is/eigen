@@ -51,7 +51,13 @@ export async function getBatchPublicInfo(ids: string[]): Promise<Record<string, 
 
 export async function getAvatarByEmailOrId(emailOrId: string): Promise<BunFile | null> {
     const parsed = parseOwnerId(emailOrId);
-    if (parsed.type === 'team') return null;
+    if (parsed.type === 'team') {
+        // Build the filename from the parsed id (`team_{id}.webp`), never the raw input — the
+        // `team_` prefix keeps it clear of user UUIDs. Existence is the only source of truth.
+        if (!(await getTeam(parsed.id))) return null;
+        const file = Bun.file(path.join(getAvatarsDir(), `team_${parsed.id}.webp`));
+        return (await file.exists()) ? file : null;
+    }
 
     const user = await getUserByEmailOrId(emailOrId);
     if (!user) return null;

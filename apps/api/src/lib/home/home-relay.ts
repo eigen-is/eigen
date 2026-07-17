@@ -248,6 +248,20 @@ export async function pushUserProfile(userId: string, name: string, avatarWebP: 
     await updateUser(userId, name, avatarWebP ? `server/avatars/${userId}.webp` : '');
 }
 
+// Team avatars share the user-avatar file layout, but file existence is the only source of truth —
+// there's no auth-schema row to update (unlike pushUserProfile).
+export async function pushTeamAvatar(teamId: string, avatarWebP: Buffer | null): Promise<void> {
+    const avatarPath = path.join(getAvatarsDir(), `team_${teamId}.webp`);
+
+    if (avatarWebP) {
+        await Bun.write(avatarPath, avatarWebP);
+    } else {
+        await Bun.file(avatarPath)
+            .delete()
+            .catch(() => {});
+    }
+}
+
 export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQuotaOverrides> {
     const home = await getTeamHome(teamOwnerId);
     return home.settings.get().memberOverrides ?? {};
