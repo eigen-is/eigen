@@ -1,15 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { driveGet, driveUpload, getTestContext, type TestContext } from '../setup';
+import { driveGet, driveUpload, getTestContext, TEST_PNG_BYTES, type TestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
-
-// Smallest valid 4×4 PNG — same payload preview.test.ts uses.
-const PNG_BYTES = new Uint8Array([
-    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38, 147, 9, 41,
-    0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73, 68, 65, 84, 120,
-    156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0, 0, 0, 73, 69, 78, 68,
-    174, 66, 96, 130,
-]);
 
 describe('WebDAV GET/HEAD', () => {
     let ctx: TestContext;
@@ -216,7 +208,7 @@ describe('WebDAV PUT thumbnails', () => {
         const placeholder = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: '' });
         expect(placeholder.status).toBe(201);
 
-        const real = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: PNG_BYTES });
+        const real = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: TEST_PNG_BYTES });
         expect(real.status).toBe(204);
 
         const child = await findChild('finder-two-step.png');
@@ -242,7 +234,7 @@ describe('WebDAV PUT thumbnails', () => {
         expect(before.thumbnail).toBeNull();
 
         const url = `/webdav/${ctx.alice.user.id}/${mountId}/overwrite-image.png`;
-        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: PNG_BYTES });
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: TEST_PNG_BYTES });
         expect(res.status).toBe(204);
 
         const path = await pollThumbnail(uploaded.id);

@@ -114,6 +114,7 @@ export function MembersList({ members, searchQuery, activeMemberId, onRowClick }
                         <UserItem
                             name={member.name}
                             email={member.email}
+                            userId={member.userId}
                             label={
                                 <Badge variant={roleBadgeVariant[member.role] ?? 'outline'} className="text-xs">
                                     {member.role}

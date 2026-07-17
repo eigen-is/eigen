@@ -47,6 +47,29 @@ to the new member's Home.
 - Calendar can be disabled via `settings.calendar.enabled`
 - Created lazily, auto-destructs after 5min inactivity
 
+### Team Avatars
+
+Teams can have an avatar image, set by org admins from the admin app's team detail page (member-facing/self-serve
+avatar management is out of scope). Storage mirrors the user-avatar pipeline: a single webp in the server-central
+avatars dir, keyed by owner id — `data/server/avatars/team_{teamId}.webp`. File existence is the only source of
+truth; there's no `TeamSettings` pointer or auth-schema column (`pushTeamAvatar` in `home-relay.ts`, next to
+`pushUserProfile`). Deleting a team removes its avatar file (`afterDeleteTeam` hook in `auth.ts`), and serving
+double-checks the team still exists so an orphaned file is never served.
+
+- `POST /team/:ownerId/avatar` (body `{ file }`) and `DELETE /team/:ownerId/avatar` — gated by `requireTeamAdmin`,
+  so org admins/owners pass without needing team membership. Upload converts through `generateImagePreview`
+  (512px cover crop, same as user avatars); global max-upload-size check only, not the uploading admin's personal
+  quota
+- **Serving**: `GET /p/avatar/team_{teamId}` (`getAvatarByEmailOrId` in `apps/api/src/lib/space/public.ts`) serves
+  the webp if it exists, falling back to the deterministic team SVG otherwise. `getPublicInfo` already returns
+  this URL for teams, so `UserAvatar`/`UserItem`/`useResolvedUser` pick it up with zero per-surface changes.
+  Responses carry the same 24h public `Cache-Control` as user avatars — no special casing
+- **Freshness**: the team filename is stable (unlike per-upload-UUID user avatars), so the admin team detail
+  page always renders its avatar with a client-generated `?v={timestamp}` (stamped on mount/team switch and
+  after upload/remove) — the editing surface never shows the browser-cached copy. A `?v` value must never be
+  reused across page loads (a repeated value serves a stale cache entry — never use a counter). Other surfaces
+  (sidebar rows, shares) accept up-to-24h staleness, same as user avatars viewed by others
+
 ### OrgHome
 
 **File**: `apps/api/src/lib/home/org-home.ts`
@@ -151,7 +174,8 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
   Supports drag-and-drop of members onto team sidebar items
 - **Teams**: Team list in sidebar with create dialog. Team detail as main content
 - **Team Detail**: List/add/remove team members, toggle team calendar on/off, set calendar member access
-  (free-busy/read/write), manage mounts (add/edit/enable/disable), set quota overrides (mail & contacts, default mount)
+  (free-busy/read/write), manage mounts (add/edit/enable/disable), set quota overrides (mail & contacts, default
+  mount), set/remove the team avatar (see [Team Avatars](#team-avatars))
 - **Settings**: Server-wide settings — quotas, storage defaults (mount type), S3 configuration
 
 ### Access

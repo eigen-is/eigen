@@ -65,10 +65,14 @@ export async function getMailUploadMaxSize(userId: string): Promise<number> {
     return Math.min(maxUpload, remainingQuota);
 }
 
-export async function enforceAvatarUpload(userId: string, fileSize: number): Promise<void> {
+export function enforceMaxUploadSize(fileSize: number): void {
     if (fileSize > getMaxUploadSize()) {
         throw new ApiError(413, 'File exceeds max upload size');
     }
+}
+
+export async function enforceAvatarUpload(userId: string, fileSize: number): Promise<void> {
+    enforceMaxUploadSize(fileSize);
     const { home, quotas } = await resolveQuotas(userId, userId, 'default');
     const mailContactsSize = ((await home.mail?.size()) || 0) + ((await home.contacts?.size()) || 0);
     if (mailContactsSize + fileSize > quotas.mailAndContactsMax) {

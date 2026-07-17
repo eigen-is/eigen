@@ -133,6 +133,11 @@ export const auth = betterAuth({
                 afterAddTeamMember: async ({ teamMember }) => {
                     await reconcileSharesForNewTeamMember(teamMember.userId, teamMember.teamId);
                 },
+                afterDeleteTeam: async ({ team }) => {
+                    // Lazy import to avoid the static cycle (home-relay → get-home → team → auth).
+                    const { pushTeamAvatar } = await import('../home/home-relay');
+                    await pushTeamAvatar(team.id, null);
+                },
             },
         }),
         apiKey({

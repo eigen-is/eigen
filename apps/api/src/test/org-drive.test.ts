@@ -12,6 +12,7 @@ import {
     driveUpload,
     getTestContext,
     type PermissionResult,
+    TEST_PNG_BYTES,
 } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -179,13 +180,7 @@ describe('Team Drives', () => {
         const mountsRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/mounts`);
         const mountId = (await assertJson<MountInfo[]>(mountsRes))[0].id;
         const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, mountId, 'root');
-        const pngBytes = new Uint8Array([
-            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
-            147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73,
-            68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0,
-            0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
-        ]);
-        const file = new File([pngBytes], 'team-image.png', { type: 'image/png' });
+        const file = new File([TEST_PNG_BYTES], 'team-image.png', { type: 'image/png' });
         const uploaded = await driveUpload(ctx.alice.user.sessionToken, teamOwner, mountId, root.id, file);
 
         const res = await authedRequest(

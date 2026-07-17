@@ -22,7 +22,6 @@ export function useMembers(organizationId?: string) {
                 role: m.role,
                 email: m.user?.email ?? '',
                 name: m.user?.name ?? '',
-                image: m.user?.image ?? null,
                 createdAt: new Date(m.createdAt),
             }));
         },

@@ -1,11 +1,11 @@
 import * as path from 'node:path';
-import { parseOwnerId } from '@workspace/lib/types';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { PublicUser } from '@workspace/lib/types/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { BunFile } from 'bun';
 import { getAvatarsDir } from '../config/paths';
 import { ApiError } from '../core';
-import { getTeam } from '../team';
+import { getTeam, getTeamExists } from '../team';
 import type { User } from '../user';
 import { getUserByEmail, getUserById } from '../user/';
 
@@ -51,7 +51,15 @@ export async function getBatchPublicInfo(ids: string[]): Promise<Record<string, 
 
 export async function getAvatarByEmailOrId(emailOrId: string): Promise<BunFile | null> {
     const parsed = parseOwnerId(emailOrId);
-    if (parsed.type === 'team') return null;
+    if (parsed.type === 'team') {
+        // Build the filename from the parsed id, never the raw input — the `team_` owner prefix
+        // keeps it clear of user UUIDs. Existence is the only source of truth. Cheap file check
+        // first: most teams have no avatar, so skip the team lookup unless there's actually a
+        // file that must not be served for a deleted team.
+        const file = Bun.file(path.join(getAvatarsDir(), `${teamOwnerId(parsed.id)}.webp`));
+        if (!(await file.exists())) return null;
+        return (await getTeamExists(parsed.id)) ? file : null;
+    }
 
     const user = await getUserByEmailOrId(emailOrId);
     if (!user) return null;
