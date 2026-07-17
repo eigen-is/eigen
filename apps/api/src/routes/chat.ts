@@ -1,10 +1,11 @@
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
-import { DRIVE_TYPE_CHAT, type DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_EXTENSIONS, DRIVE_TYPE_CHAT, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import { findChatsByMembers } from '../lib/chat/find-by-members';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { getDrive, getSharedDrive } from '../lib/drive';
+import { getUniqueFileName } from '../lib/drive/naming';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -45,7 +46,21 @@ export const chatRouter = new Elysia({ name: 'chat' })
             const drive = await getDrive(user);
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
-            const chat = await drive.create(params.mountId, parentId, body.fileName, DRIVE_TYPE_CHAT, user);
+
+            // Auto-named wizard chats opt into server-side dedupe so a default name never 409s on a
+            // collision (the client used to retry with counters); a user-typed name omits the flag and
+            // still 409s. Drive.create appends the .eigenchat extension, so dedupe in the full-name
+            // space against the folder's siblings, then strip it back off for create.
+            let fileName = body.fileName;
+            if (body.dedupeName) {
+                const desired = `${fileName}${DRIVE_EXTENSIONS[DRIVE_TYPE_CHAT]}`;
+                const siblings = await drive.getFolderContents(params.mountId, parentId);
+                const used = new Set(siblings.map((s) => s.name.toLowerCase()));
+                if (used.has(desired.toLowerCase())) {
+                    fileName = stripEigenExtension(getUniqueFileName(desired, used));
+                }
+            }
+            const chat = await drive.create(params.mountId, parentId, fileName, DRIVE_TYPE_CHAT, user);
 
             // A wizard chat is born shared. The share email is suppressed (in-app notification + SSE
             // still fire, see docs/PROPOSAL_CHAT_WIZARD.md decision 6); a created-but-unshared orphan
@@ -79,6 +94,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 parentId: t.Optional(t.String()),
                 fileName: t.String(),
                 members: t.Array(t.String(), { minItems: 1 }),
+                dedupeName: t.Optional(t.Boolean()),
             }),
             auth: true,
         },

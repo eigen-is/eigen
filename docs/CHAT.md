@@ -104,12 +104,13 @@ standalone chats whose current member set exactly equals `{me} ∪ emails`, sort
 `getMimeTypeContents(DRIVE_MIME_CHAT, {excludeDocumentChildren})` (own mounts + shared-with-me mirror) — no cross-home
 calls (SCALABILITY rule).
 
-**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members[]}`** → the created `DrivePath`. Create + share as
-one server-side sequence: resolve/ensure the `Chats` folder when `parentId` is omitted, `Drive.create(…, 'chat')`, then
-`updateACLDelta` adding `{read, write}` per member with the share email suppressed (see Email suppression). On ACL
-failure the fresh container is trashed + purged (best-effort) and the error rethrown — "a wizard chat is born shared",
-so a created-but-unshared orphan is worse than a clean error. Duplicate name → 409 (the wizard auto-suffixes a default
-name, or shows an inline error for a user-typed one).
+**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members[], dedupeName?}`** → the created `DrivePath`. Create
++ share as one server-side sequence: resolve/ensure the `Chats` folder when `parentId` is omitted, resolve a free name
+via the shared `getUniqueFileName` helper when `dedupeName` is set, `Drive.create(…, 'chat')`, then `updateACLDelta`
+adding `{read, write}` per member with the share email suppressed (see Email suppression). On ACL failure the fresh
+container is trashed + purged (best-effort) and the error rethrown — "a wizard chat is born shared", so a
+created-but-unshared orphan is worse than a clean error. `dedupeName` (set by the wizard for auto-generated default
+names) suffixes a collision server-side (`Name (2)`); a user-typed name omits it and a duplicate → 409, shown inline.
 
 ### Matching semantics
 

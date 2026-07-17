@@ -29,9 +29,6 @@ import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserItem } from '../user-item';
 
 const MATCH_DEBOUNCE_MS = 300;
-// A duplicate default name is rare (the exact-member match opens instead of creating), but a bounded
-// counter loop still resolves the odd collision without ever spinning forever.
-const MAX_RENAME_ATTEMPTS = 20;
 
 type PickedPerson = { email: string; displayName: string };
 
@@ -48,18 +45,13 @@ type ChatCreateWizardProps = {
     onNavigate?: (path: DrivePath) => void;
 };
 
-// "Alice, Bob & Carol" — comma-joined with a trailing ampersand, the auto-name for a group chat.
-function joinNames(names: string[]): string {
-    if (names.length <= 1) return names[0] ?? '';
-    return `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
-}
-
 // One person reads as "<Them> & <Me>" (both names, since the file name is shared); two or more read
-// as the picked members alone ("Alice, Bob & Carol"), WhatsApp's optional-auto-name model.
+// as the picked members alone, comma-joined with a trailing ampersand ("Alice, Bob & Carol"),
+// WhatsApp's optional-auto-name model.
 function defaultChatName(pickedNames: string[], myName: string): string {
     if (pickedNames.length === 0) return '';
     if (pickedNames.length === 1) return `${pickedNames[0]} & ${myName}`;
-    return joinNames(pickedNames);
+    return `${pickedNames.slice(0, -1).join(', ')} & ${pickedNames[pickedNames.length - 1]}`;
 }
 
 export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate }: ChatCreateWizardProps) {
@@ -114,11 +106,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const canCreate = teamMode ? !!name.trim() && !!teamRootId : picked.length > 0;
     const showBrowser = !teamMode && locationTouched && locationExpanded;
 
-    const excludeEmails = useMemo(() => {
-        const list = picked.map((p) => p.email);
-        if (myEmail) list.push(myEmail);
-        return list;
-    }, [picked, myEmail]);
+    const excludeEmails = useMemo(() => (myEmail ? [...pickedEmails, myEmail] : pickedEmails), [pickedEmails, myEmail]);
 
     // Serialized so a fresh array literal from the caller doesn't re-run the reset effect (which would
     // wipe in-progress edits); the effect re-seeds only when the prefill's contents actually change.
@@ -202,22 +190,18 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         const base = name.trim();
         const parentId = locationTouched ? location.folderId || undefined : undefined;
         try {
-            goToRoom(await createRoom.mutateAsync({ parentId, fileName: base, members: pickedEmails }));
+            // A default (non-dirty) name lets the server dedupe a collision (" (2)", " (3)"…); a
+            // user-typed name is created verbatim, so its collision surfaces the 409 inline below.
+            goToRoom(
+                await createRoom.mutateAsync({
+                    parentId,
+                    fileName: base,
+                    members: pickedEmails,
+                    dedupeName: !nameDirty,
+                }),
+            );
         } catch (e) {
             if (!(e instanceof AppError) || e.status !== 409) return; // non-409 already toasted by the hook
-            if (!nameDirty) {
-                for (let n = 2; n <= MAX_RENAME_ATTEMPTS; n++) {
-                    try {
-                        goToRoom(
-                            await createRoom.mutateAsync({ parentId, fileName: `${base} ${n}`, members: pickedEmails }),
-                        );
-                        return;
-                    } catch (retryErr) {
-                        if (retryErr instanceof AppError && retryErr.status === 409) continue;
-                        return;
-                    }
-                }
-            }
             setCreateError(`A chat named "${base}" already exists here. Rename it, or open the existing one.`);
         }
     };

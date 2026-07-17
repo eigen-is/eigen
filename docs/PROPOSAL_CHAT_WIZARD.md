@@ -307,23 +307,27 @@ flags it, `chat/chat.ts:154`); with the direct-ACL screen only a handful of cand
 pay for the walk. All in-process on the caller's Home — mirror reads plus local auth-DB lookups, no
 cross-home calls, per the SCALABILITY rule.
 
-**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members: string[]}`** — create + share
-as one server-side sequence:
+**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members: string[], dedupeName?}`** —
+create + share as one server-side sequence:
 
 1. resolve/ensure the `Chats` folder when `parentId` is omitted;
-2. `Drive.create(…, 'chat', user)`;
-3. merge `{id: email.toLowerCase(), read: true, write: true}` per member through the same ACL-update
+2. when `dedupeName` is set, resolve a free name against the target folder's siblings via the shared
+   `getUniqueFileName` helper (the upload/copy auto-suffix), so an auto-generated default name lands
+   as `Alice & Reinder (2)` instead of 409ing; omitted → create verbatim;
+3. `Drive.create(…, 'chat', user)`;
+4. merge `{id: email.toLowerCase(), read: true, write: true}` per member through the same ACL-update
    path the share dialog uses — **with the share email suppressed** (thread a notify option through
    `updateACL` → `propagateSharedPathChange` so the mirror fan-out, `DRIVE_ACL_SHARED` SSE, and the
    in-app "X shared a chat" notification still fire, and only `composeShareEmail` is skipped). A
    "someone shared a file with you" email for being added to a chat is wrong-tone and spammy for
    groups; the first message is the real notification. (Chat-specific email copy can come later if
    wanted.)
-4. **on failure of step 3, hard-delete the freshly created container before rethrowing** — the
+5. **on failure of step 4, hard-delete the freshly created container before rethrowing** — the
    invariant is "a wizard chat is born shared", and a created-but-unshared orphan is worse than a
    clean error. (Overlaps ROADMAP "Create/open resilience", which wants `Drive.create` atomic.)
 
-Returns the created `DrivePath`. Name collisions surface the existing 409.
+Returns the created `DrivePath`. A user-typed name collision still surfaces the existing 409; a
+defaulted name passes `dedupeName` so the server suffixes it instead.
 
 Rejected alternative — FE composing the two existing endpoints (`create` + `PUT …/acl`): two
 mutations with a partial-failure gap the client can't clean up, and the ensure-`Chats`-folder logic
@@ -349,9 +353,10 @@ would leak into the client.
 
 - **Zero people picked** → Create disabled (the only time it is). Self is unpickable
   (`excludeEmails`).
-- **Name collision** in the target folder → 409 surfaces inline; for prefilled defaults, append a
-  counter client-side (`Alice & Reinder 2`). Rarer than in v1 of this proposal, since the exact-match
-  path now opens instead of creating.
+- **Name collision** in the target folder → a user-typed name surfaces the 409 inline; a prefilled
+  default passes `dedupeName`, so the server suffixes it (`Alice & Reinder (2)`) with the shared
+  `getUniqueFileName` helper. Rarer than in v1 of this proposal, since the exact-match path now opens
+  instead of creating.
 - **Matching chat in trash** → invisible by design (listings filter trashed, mirror rows are deleted
   on trash) → wizard creates a new chat. Fine: restore would resurface two chats, but matching is
   best-effort.

@@ -500,6 +500,25 @@ describe('Chat wizard — create with members', () => {
         expect(second.status).toBe(409);
     });
 
+    test('dedupeName resolves a free name instead of 409ing on a duplicate', async () => {
+        const first = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: 'Dedupe wizard chat',
+            members: [bobEmail],
+            dedupeName: true,
+        });
+        const firstChat = await assertJson<DrivePath>(first);
+        expect(firstChat.name).toBe('Dedupe wizard chat.eigenchat');
+
+        const second = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: 'Dedupe wizard chat',
+            members: [bobEmail],
+            dedupeName: true,
+        });
+        const secondChat = await assertJson<DrivePath>(second);
+        // getUniqueFileName appends the drive-wide " (2)" suffix in the full-name (.eigenchat) space.
+        expect(secondChat.name).toBe('Dedupe wizard chat (2).eigenchat');
+    });
+
     test('rejects guest callers with 403', async () => {
         const email = `wizard-guest-${randomUUID()}@external.com`;
         const password = randomUUID();

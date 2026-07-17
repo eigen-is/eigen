@@ -1,3 +1,4 @@
+import { parseOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
 import { DRIVE_MIME_CHAT, type DriveACL } from '@workspace/lib/types/drive';
 import type { Drive } from '../drive';
@@ -16,6 +17,9 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: strin
     // paths carry the caller's ownerId; mirror rows carry the foreign owner's — that split drives
     // the two matching strategies below.
     const candidates = await drive.getMimeTypeContents(DRIVE_MIME_CHAT, { excludeDocumentChildren: true });
+
+    // Repeat sharers show up across many candidate rows — resolve each owner id once per request.
+    const ownerCache = new Map<string, User | null>();
 
     const matches: ChatMatch[] = [];
     for (const path of candidates) {
@@ -37,11 +41,21 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: strin
             ) {
                 matches.push({ path, canWrite: true });
             }
-        } else if (!path.ownerId.startsWith('team_')) {
+        } else if (parseOwnerId(path.ownerId).type !== 'team') {
             // Shared-with-me chat: the mirror row carries only the direct ACL and the owner's id, so
             // the member set is {owner email} ∪ direct ACL emails (shared-with-me.ts). Team-owned
             // drives (team_* ownerId) imply all-team membership — never a fixed set — so skip them.
-            const owner = await getUserById(path.ownerId);
+            if (!directEmailsWithinTarget(path.acl, target)) continue;
+            // Size floor is sound ONLY here: mirror rows carry no inherited ancestor members, so
+            // |effective| ≤ |direct ACL| + 1 (owner) — a larger target can never match. (The own
+            // branch walks ancestors, so a smaller direct ACL can still match — no floor there.)
+            // `<=` not `==`: an owner listed in their own ACL makes |effective| = |direct|.
+            if (target.size > (path.acl?.length ?? 0) + 1) continue;
+            let owner = ownerCache.get(path.ownerId);
+            if (owner === undefined) {
+                owner = await getUserById(path.ownerId);
+                ownerCache.set(path.ownerId, owner);
+            }
             if (!owner) continue;
             const memberEmails = (path.acl ?? []).map((e) => e.id.toLowerCase());
             memberEmails.push(owner.email.toLowerCase());
@@ -59,7 +73,7 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: strin
 }
 
 function hasTeamEntry(acl: DriveACL[] | null): boolean {
-    return acl?.some((e) => e.id.startsWith('team_')) ?? false;
+    return acl?.some((e) => parseOwnerId(e.id).type === 'team') ?? false;
 }
 
 // Cheap necessary condition for the own-chat walk: every directly-shared email must be in the

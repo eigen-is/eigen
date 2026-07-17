@@ -165,12 +165,19 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
             parentId,
             fileName,
             members,
+            dedupeName,
         }: {
             parentId?: string;
             fileName: string;
             members: string[];
+            dedupeName?: boolean;
         }): Promise<DrivePath> => {
-            const response = await chatApi({ ownerId })({ mountId }).rooms.post({ parentId, fileName, members });
+            const response = await chatApi({ ownerId })({ mountId }).rooms.post({
+                parentId,
+                fileName,
+                members,
+                dedupeName,
+            });
             if (response.error) throw new AppError(response);
             return response.data;
         },
