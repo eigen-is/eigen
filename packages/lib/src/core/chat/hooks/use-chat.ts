@@ -174,7 +174,12 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
         },
         // Refresh the parent folder + the aggregate chat listing the sidebar reads (mimeAll family).
         onSuccess: (data) => invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType),
-        onError: onMutationError,
+        // 409 = duplicate chat name; the wizard resolves it (auto-renames a default name, or shows an
+        // inline error for a user-typed one), so let it surface there instead of toasting twice.
+        onError: (error) => {
+            if (error instanceof AppError && error.status === 409) return;
+            onMutationError(error);
+        },
     });
 }
 

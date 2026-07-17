@@ -18,4 +18,7 @@ export type ContactAutosuggestProps = {
     required?: boolean;
     inputRef?: Ref<HTMLInputElement>;
     onSubmit?: (value: string) => void;
+    // Surface internal team members as default suggestions before the 2-char minimum
+    // (the new-chat wizard's member picker). Off for every other caller.
+    listOnEmptyQuery?: boolean;
 };

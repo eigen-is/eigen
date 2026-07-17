@@ -24,6 +24,7 @@ export function ContactAutosuggest({
     required,
     inputRef: externalInputRef,
     onSubmit,
+    listOnEmptyQuery = false,
 }: ContactAutosuggestProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -33,7 +34,9 @@ export function ContactAutosuggest({
     const [internalValue, setInternalValue] = useState(initialValue);
     const inputValue = controlledValue !== undefined ? controlledValue : internalValue;
 
-    const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyInternalMails, excludeEmails);
+    const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyInternalMails, excludeEmails, {
+        listOnEmptyQuery,
+    });
 
     const handleSelect = useCallback(
         (suggestion: ContactSuggestion) => {

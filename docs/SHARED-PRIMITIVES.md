@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-828 primitives across 6 kinds. `packages/sheet` internals are excluded.
+830 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (114)
+## Components (115)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -29,6 +29,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardForm` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-form.tsx |
 | `CardFormDialog` | `@workspace/ui` | packages/ui/src/components/layout/cards/card-form-dialog.tsx |
 | `CenteredToolbar` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
+| `ChatCreateWizard` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-create-wizard.tsx |
 | `ChatMessageInput` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-message-input.tsx |
 | `ChatMessageList` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-message-list.tsx |
 | `ChatPlayerSuggest` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-player-suggest.tsx |
@@ -151,7 +152,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (211)
+## Hooks (212)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -225,6 +226,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useYjsUndoState` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-state.ts |
 | `useCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `useCommandResults` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-results.ts |
+| `useDebouncedValue` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-debounced-value.ts |
 | `useOptionalCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `usePaletteDocSearch` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-doc-search.ts |
 | `usePaletteDocSelection` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection.ts |
