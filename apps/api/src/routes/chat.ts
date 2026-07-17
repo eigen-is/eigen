@@ -1,7 +1,9 @@
-import type { ChatMessage } from '@workspace/lib/types/chat';
+import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
 import { Elysia, t } from 'elysia';
+import { findChatsByMembers } from '../lib/chat/find-by-members';
+import { requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
-import { getSharedDrive } from '../lib/drive';
+import { getDrive, getSharedDrive } from '../lib/drive';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -9,6 +11,27 @@ import { attachmentReferenceSchema } from './shared-schemas';
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks.
 export const chatRouter = new Elysia({ name: 'chat' })
     .use(betterAuth)
+
+    // Chats whose current members exactly match a picked set — the wizard's open-don't-duplicate
+    // lookup. Reads the caller's own mounts + shared-with-me mirror only, so it runs on the caller's
+    // Home: reject cross-owner callers and use the raw owner Drive (getDrive), not the ACL wrapper.
+    .get(
+        '/chat/:ownerId/rooms/by-members',
+        async ({ params, query, user }): Promise<{ matches: ChatMatch[] }> => {
+            requireSelf(params.ownerId, user.id);
+            const emails = (query.emails ?? '')
+                .split(',')
+                .map((e) => e.trim())
+                .filter((e) => e.length > 0);
+            if (emails.length === 0) throw new ApiError(400, 'At least one email is required');
+            const drive = await getDrive(user);
+            return { matches: await findChatsByMembers(drive, user, emails) };
+        },
+        {
+            query: t.Object({ emails: t.Optional(t.String()) }),
+            auth: true,
+        },
+    )
 
     .get(
         '/chat/:ownerId/:mountId/:chatId/messages',

@@ -1,8 +1,18 @@
+import type { DrivePath } from './drive';
 import type { AttachmentReference } from './drive-reference';
 
 // Default folder new chats land in — seeded per personal drive, resolved by name on each use
 // (so it stays freely renameable/movable/deletable). English-only product, no i18n.
 export const CHATS_FOLDER_NAME = 'Chats';
+
+// A standalone chat whose current members exactly match a picked set — the new-chat wizard's
+// open-don't-duplicate result. `canWrite` is true when the caller can post (owns it or holds a
+// write ACL entry). Produced by GET /chat/:ownerId/rooms/by-members, writable-first then
+// updatedAt desc. See docs/PROPOSAL_CHAT_WIZARD.md § Duplicate detection semantics.
+export type ChatMatch = {
+    path: DrivePath;
+    canWrite: boolean;
+};
 
 export type ChatMessageType = 'message' | 'emote' | 'whisper' | 'system';
 
