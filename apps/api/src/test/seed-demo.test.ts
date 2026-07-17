@@ -220,6 +220,23 @@ describe('seed-demo', () => {
             const calEvents = query<{ n: number }>(calendarDb, 'SELECT count(*) AS n FROM events');
             expect(calEvents[0].n).toBeGreaterThanOrEqual(1);
 
+            // The festival is all-day and MUST be stored as UTC midnight with an exclusive end (the
+            // frontend buckets all-day events by their UTC date — local midnight would shift the
+            // festival a day early in a UTC+ timezone). It always lands on a Saturday and spans Sat+Sun.
+            const allDay = query<{ startTime: number; endTime: number }>(
+                calendarDb,
+                'SELECT startTime, endTime FROM events WHERE allDay = 1',
+            );
+            expect(allDay.length).toBeGreaterThanOrEqual(1);
+            for (const ev of allDay) {
+                const start = new Date(ev.startTime * 1000);
+                const end = new Date(ev.endTime * 1000);
+                expect(start.getUTCHours()).toBe(0);
+                expect(start.getUTCMinutes()).toBe(0);
+                expect(start.getUTCDay()).toBe(6); // Saturday, in UTC
+                expect(end.getTime() - start.getTime()).toBe(2 * 86_400_000); // spans Sat + Sun
+            }
+
             // Doc comments: the panel renders exclusively from the doc's `comments` Y.Map, and
             // only cards anchored by a comment mark in the text. Assert both for the seeded doc.
             const docDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, 'production plan.eigendoc');

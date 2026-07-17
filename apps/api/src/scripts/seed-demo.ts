@@ -565,15 +565,34 @@ async function main(): Promise<void> {
     const defaultCalendar = teamHome.calendar.getCalendars().find((c) => c.isDefault);
     if (!defaultCalendar) throw new Error('Team default calendar missing');
     const now = new Date();
+    // Anchor the festival on a weekend: the first Saturday at least ~3 weeks out (so it lands 20-26
+    // days ahead). Every event is placed relative to this Saturday, so the festival is always Sat/Sun
+    // and the go/no-go the Friday before, whatever weekday the hourly reseed happens to run on.
+    const festivalSaturday = new Date(now);
+    festivalSaturday.setDate(festivalSaturday.getDate() + 20);
+    while (festivalSaturday.getDay() !== 6) festivalSaturday.setDate(festivalSaturday.getDate() + 1);
+    festivalSaturday.setHours(0, 0, 0, 0);
     const resolvePersona = (ref: string) =>
         PERSONAS.some((p) => p.role === ref) ? personaByRole(ref as LeadRole) : personaByKey(ref);
     for (const event of EVENTS) {
-        const start = new Date(now);
-        start.setDate(start.getDate() + event.inDays);
-        start.setHours(event.startHour, 0, 0, 0);
-        const end = new Date(start);
-        if (event.allDay) end.setDate(end.getDate() + 2);
-        else end.setHours(end.getHours() + event.durationHours);
+        // Resolve the event's calendar date by walking from the festival Saturday.
+        const day = new Date(festivalSaturday);
+        day.setDate(day.getDate() + event.daysFromFestival);
+        let start: Date;
+        let end: Date;
+        if (event.allDay) {
+            // All-day events are stored as UTC midnight with an exclusive end — the calendar buckets
+            // all-day events by their UTC date, so local midnight would shift the festival a day early
+            // in a UTC+ timezone. Matches the create-event dialog and CalDAV import.
+            start = new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()));
+            end = new Date(start);
+            end.setUTCDate(end.getUTCDate() + 2); // spans the festival Saturday + Sunday
+        } else {
+            start = new Date(day);
+            start.setHours(event.startHour, 0, 0, 0);
+            end = new Date(start);
+            end.setHours(end.getHours() + event.durationHours);
+        }
         const organizer = userForRole(event.organizer);
         const attendees: Attendee[] = event.attendees.map((ref) => {
             const persona = resolvePersona(ref);

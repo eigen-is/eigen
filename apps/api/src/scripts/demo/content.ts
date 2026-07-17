@@ -729,11 +729,13 @@ export const MAILS: SeededMail[] = [
     },
 ];
 
-// --- Calendar (team calendar; future-dated relative to seed time; cross-persona attendees) ---
+// --- Calendar (team calendar; anchored to the festival Saturday, then worked backwards; cross-persona attendees) ---
 
 export type SeededEvent = {
     title: string;
-    inDays: number;
+    // Days relative to the festival Saturday (0 = festival day, negative = before it). Resolved against
+    // the festival anchor computed at seed time, so the festival always lands on a weekend.
+    daysFromFestival: number;
     startHour: number;
     durationHours: number;
     allDay?: boolean;
@@ -747,10 +749,10 @@ export type SeededEvent = {
 export const EVENTS: SeededEvent[] = [
     {
         title: 'Weekly production meeting',
-        inDays: 2,
+        daysFromFestival: -33,
         startHour: 17,
         durationHours: 1,
-        rrule: 'FREQ=WEEKLY;COUNT=4',
+        rrule: 'FREQ=WEEKLY;COUNT=5',
         location: 'Crew cabin',
         description: 'Standing check-in for all leads.',
         organizer: 'production',
@@ -758,7 +760,7 @@ export const EVENTS: SeededEvent[] = [
     },
     {
         title: 'Site visit',
-        inDays: 5,
+        daysFromFestival: -16,
         startHour: 10,
         durationHours: 3,
         location: 'Hoeve Tuimelaar, Vlierzand',
@@ -768,7 +770,7 @@ export const EVENTS: SeededEvent[] = [
     },
     {
         title: 'Culture fund call',
-        inDays: 6,
+        daysFromFestival: -15,
         startHour: 14,
         durationHours: 1,
         description: 'Grant check-in with the culture fund.',
@@ -777,7 +779,7 @@ export const EVENTS: SeededEvent[] = [
     },
     {
         title: 'Build day',
-        inDays: 18,
+        daysFromFestival: -3,
         startHour: 8,
         durationHours: 10,
         location: 'Hoeve Tuimelaar, Vlierzand',
@@ -787,7 +789,7 @@ export const EVENTS: SeededEvent[] = [
     },
     {
         title: 'Tuimel Festival weekend',
-        inDays: 21,
+        daysFromFestival: 0,
         startHour: 0,
         durationHours: 0,
         allDay: true,
@@ -798,7 +800,7 @@ export const EVENTS: SeededEvent[] = [
     },
     {
         title: 'Go / no-go meeting',
-        inDays: 20,
+        daysFromFestival: -1,
         startHour: 18,
         durationHours: 1,
         location: 'Crew cabin',
