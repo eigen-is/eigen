@@ -208,8 +208,14 @@ Team settings are stored in `data/team/{teamId}/settings.json` via `TeamHome.set
 1. Evicts cached Home singleton (closes databases)
 2. Deletes home directory (`data/home/{userId}/`)
 3. Cleans share registry (entries FROM and TO the user)
-4. Removes org/team memberships (explicit deletion since SQLite CASCADE is off by default)
-5. Deletes auth records via better-auth `auth.api.removeUser()` (sessions, accounts, 2FA)
+4. Removes auth rows referencing the user — org/team memberships, 2FA, API keys — via
+   `authDeleteUserReferences` (explicit deletion since SQLite CASCADE is inert with `PRAGMA foreign_keys` off).
+   Membership deletion also sweeps rows whose user is already gone, healing orphans from past bad deletions
+5. Deletes the user via better-auth `auth.api.removeUser()` (sessions, accounts)
+
+A `databaseHooks.user.delete` hook in `auth.ts` runs the same reference cleanup for deletions that bypass this
+flow (e.g. better-auth's raw `/auth/admin/remove-user` endpoint) — one orphaned `member` row makes
+`listMembers` throw org-wide, locking every admin out of the admin app.
 
 Cannot delete own account (server-side guard).
 

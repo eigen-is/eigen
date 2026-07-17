@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
-import { account, apikey, member, session, teamMember, twoFactor, user as userTable } from '../../../auth-schema';
-import { auth, getAuthDrizzleDb } from '../auth/auth';
+import { account, session, user as userTable } from '../../../auth-schema';
+import { auth, authDeleteUserReferences, getAuthDrizzleDb } from '../auth/auth';
 import { getGuestHomePath, getUserHomePath } from '../config/paths';
 import { ApiError } from '../core';
 import { evictHome } from '../home/get-home';
@@ -38,21 +38,20 @@ export async function deleteUserCompletely(userId: string, requestHeaders: Heade
         await removeEntriesForTarget(user.email);
     }
 
-    // 4. Remove org/team memberships explicitly (orphaned member rows crash
-    //    better-auth's listMembers)
-    const authDb = getAuthDrizzleDb();
-    authDb.delete(teamMember).where(eq(teamMember.userId, userId)).run();
-    authDb.delete(member).where(eq(member.userId, userId)).run();
+    // 4. Remove auth rows referencing the user (org/team membership, 2FA, API keys)
+    //    before the user row goes, so a mid-flow crash can't leave the orphaned
+    //    member rows that crash better-auth's listMembers. Idempotent with the
+    //    user.delete database hook that covers better-auth's own deletion paths.
+    authDeleteUserReferences(userId);
 
     // 5. Delete the user — admin path delegates to better-auth (runs hooks, plugin
-    //    cleanup); system path deletes the auth rows we know about directly.
+    //    cleanup); system path deletes the remaining auth rows directly.
     if (requestHeaders) {
         await auth.api.removeUser({ body: { userId }, headers: requestHeaders });
     } else {
+        const authDb = getAuthDrizzleDb();
         authDb.delete(session).where(eq(session.userId, userId)).run();
         authDb.delete(account).where(eq(account.userId, userId)).run();
-        authDb.delete(twoFactor).where(eq(twoFactor.userId, userId)).run();
-        authDb.delete(apikey).where(eq(apikey.referenceId, userId)).run();
         authDb.delete(userTable).where(eq(userTable.id, userId)).run();
     }
 }

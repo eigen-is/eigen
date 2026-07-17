@@ -2,6 +2,7 @@ import { apiKey } from '@better-auth/api-key';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
+import { eq, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import {
     account as accountScheme,
@@ -75,6 +76,17 @@ export const auth = betterAuth({
                     if (user.role === 'guest') return;
                     await authAddUserToDefaultOrg(user);
                     await reconcileSharesForNewUser(user);
+                },
+            },
+            delete: {
+                // better-auth's own deleteUser (e.g. the admin plugin's /admin/remove-user)
+                // removes only session/account/user rows, and the auth DB's declared FK
+                // cascades are inert (PRAGMA foreign_keys is off). A leftover member row
+                // 500s listMembers org-wide, locking every admin out of the admin app —
+                // so clean referencing rows at this seam, which every better-auth
+                // deletion path passes through.
+                before: async (user) => {
+                    authDeleteUserReferences(user.id);
                 },
             },
         },
@@ -174,6 +186,21 @@ export async function authAddUserToDefaultOrg(user: User): Promise<void> {
             `Failed to auto-join user ${user.id} to default org: ${error instanceof Error ? error.message : String(error)}`,
         );
     }
+}
+
+// Membership deletion also sweeps rows whose user is already gone, so instances that
+// collected orphans through past raw better-auth deletions self-heal on the next delete.
+export function authDeleteUserReferences(userId: string): void {
+    const db = getAuthDrizzleDb();
+    const userIds = db.select({ id: userScheme.id }).from(userScheme);
+    db.delete(memberScheme)
+        .where(or(eq(memberScheme.userId, userId), notInArray(memberScheme.userId, userIds)))
+        .run();
+    db.delete(teamMemberScheme)
+        .where(or(eq(teamMemberScheme.userId, userId), notInArray(teamMemberScheme.userId, userIds)))
+        .run();
+    db.delete(twoFactorScheme).where(eq(twoFactorScheme.userId, userId)).run();
+    db.delete(apikeyScheme).where(eq(apikeyScheme.referenceId, userId)).run();
 }
 
 // Separate Drizzle instance from better-auth's internal one — better-auth controls its own
