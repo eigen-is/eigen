@@ -104,8 +104,8 @@ standalone chats whose current member set exactly equals `{me} ∪ emails`, sort
 `getMimeTypeContents(DRIVE_MIME_CHAT, {excludeDocumentChildren})` (own mounts + shared-with-me mirror) — no cross-home
 calls (SCALABILITY rule).
 
-**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members[], dedupeName?}`** → the created `DrivePath`. Create
-+ share as one server-side sequence: resolve/ensure the `Chats` folder when `parentId` is omitted, resolve a free name
+**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members[], dedupeName?}`** → the created `DrivePath`.
+Create + share as one server-side sequence: resolve/ensure the `Chats` folder when `parentId` is omitted, resolve a free name
 via the shared `getUniqueFileName` helper when `dedupeName` is set, `Drive.create(…, 'chat')`, then `updateACLDelta`
 adding `{read, write}` per member with the share email suppressed (see Email suppression). On ACL failure the fresh
 container is trashed + purged (best-effort) and the error rethrown — "a wizard chat is born shared", so a
