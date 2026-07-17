@@ -39,6 +39,9 @@ type ChatCreateWizardProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     initialEmails?: string[];
+    // In-app router navigation for the target room. Chat apps pass a typed TanStack navigate; when
+    // omitted the wizard falls back to openDocument (window.location) so route-tree-agnostic consumers work.
+    onNavigate?: (path: DrivePath) => void;
 };
 
 // "Alice, Bob & Carol" — comma-joined with a trailing ampersand, the auto-name for a group chat.
@@ -55,7 +58,7 @@ function defaultChatName(pickedNames: string[], myName: string): string {
     return joinNames(pickedNames);
 }
 
-export function ChatCreateWizard({ open, onOpenChange, initialEmails }: ChatCreateWizardProps) {
+export function ChatCreateWizard({ open, onOpenChange, initialEmails, onNavigate }: ChatCreateWizardProps) {
     const { user } = useAuth();
     const isGuest = useIsGuest();
 
@@ -82,7 +85,9 @@ export function ChatCreateWizard({ open, onOpenChange, initialEmails }: ChatCrea
 
     const selectedTeam = myTeams?.find((t) => t.id === selectedTeamId) ?? null;
     const teamMode = !!selectedTeam;
-    const teamMount = selectedTeam?.mounts.find((m) => m.id === DEFAULT_MOUNT_ID) ?? selectedTeam?.mounts[0] ?? null;
+    // Team homes have no 'default' mount (their mounts get random ids); mounts arrive enabled-filtered,
+    // so the first one is the team drive.
+    const teamMount = selectedTeam?.mounts[0] ?? null;
     const teamChatOwnerId = selectedTeam ? teamOwnerId(selectedTeam.id) : '';
     const teamRootId = teamMount?.rootPathId ?? '';
     const teamChats = teamSections.find((t) => t.id === selectedTeamId)?.chats ?? [];
@@ -171,12 +176,13 @@ export function ChatCreateWizard({ open, onOpenChange, initialEmails }: ChatCrea
         }
     };
 
-    // openDocument (window.location) rather than a typed router.navigate: this component is shared across
-    // apps whose route trees don't all carry the chat room route, so a typed in-app navigate wouldn't
-    // compile. It's the same router-agnostic primitive the contacts "start chat" flow uses.
+    // Prefer the consumer's in-app router navigation (onNavigate); fall back to openDocument
+    // (window.location) so apps whose route trees lack the chat room route still work — this shared
+    // component can't depend on a typed navigate itself. openDocument is what contacts' "start chat" uses.
     const goToRoom = (path: DrivePath) => {
         onOpenChange(false);
-        openDocument(path);
+        if (onNavigate) onNavigate(path);
+        else openDocument(path);
     };
 
     const createPersonChat = async () => {
@@ -241,13 +247,18 @@ export function ChatCreateWizard({ open, onOpenChange, initialEmails }: ChatCrea
                     <div className="shrink-0 px-6 pt-4 pb-2">
                         <Label className="text-sm text-muted-foreground">With</Label>
                         {teamMode ? (
-                            <InfoBlock className="mt-1.5 w-full justify-start gap-2 text-sm">
-                                <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                <span>
-                                    Everyone in <span className="font-medium">{selectedTeam.name}</span> is a member,
-                                    now and in the future
-                                </span>
-                            </InfoBlock>
+                            <>
+                                <InfoBlock className="mt-1.5 w-full justify-start gap-2 text-sm">
+                                    <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    <span>
+                                        Everyone in <span className="font-medium">{selectedTeam.name}</span> is a
+                                        member, now and in the future
+                                    </span>
+                                </InfoBlock>
+                                {!teamRootId && (
+                                    <p className="mt-1.5 text-sm text-muted-foreground">This team has no drive yet.</p>
+                                )}
+                            </>
                         ) : (
                             <>
                                 <ContactAddRow

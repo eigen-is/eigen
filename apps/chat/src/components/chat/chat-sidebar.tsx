@@ -1,3 +1,4 @@
+import { useNavigate } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useChatSections, useUnreadChatIds } from '@workspace/lib/chat';
 import { useDriveAccess } from '@workspace/lib/drive';
@@ -58,6 +59,7 @@ function ChatItem({ chat, condensed, hasUnread }: ChatItemProps) {
 }
 
 export function ChatSidebar({ condensed = false, isMobile = false, onClose }: ChatSidebarProps) {
+    const navigate = useNavigate();
     const { user } = useAuth();
     const isGuest = useIsGuest();
     const unreadChatIds = useUnreadChatIds(user?.id ?? '');
@@ -114,7 +116,18 @@ export function ChatSidebar({ condensed = false, isMobile = false, onClose }: Ch
                 )}
             </SidebarBody>
 
-            {!isGuest && <ChatCreateWizard open={createChatOpen} onOpenChange={setCreateChatOpen} />}
+            {!isGuest && (
+                <ChatCreateWizard
+                    open={createChatOpen}
+                    onOpenChange={setCreateChatOpen}
+                    onNavigate={(path) =>
+                        navigate({
+                            to: '/$ownerId/$mountId/$chatId',
+                            params: { ownerId: path.ownerId, mountId: path.mountId, chatId: path.id },
+                        })
+                    }
+                />
+            )}
         </div>
     );
 }

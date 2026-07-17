@@ -42,7 +42,18 @@ function ChatIndex() {
                         )
                     }
                 />
-                {!isGuest && <ChatCreateWizard open={createChatOpen} onOpenChange={setCreateChatOpen} />}
+                {!isGuest && (
+                    <ChatCreateWizard
+                        open={createChatOpen}
+                        onOpenChange={setCreateChatOpen}
+                        onNavigate={(path) =>
+                            navigate({
+                                to: '/$ownerId/$mountId/$chatId',
+                                params: { ownerId: path.ownerId, mountId: path.mountId, chatId: path.id },
+                            })
+                        }
+                    />
+                )}
             </>
         );
     }
