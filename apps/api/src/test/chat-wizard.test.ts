@@ -1,12 +1,18 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { Notification } from '@workspace/lib/types/notification';
+import { eq } from 'drizzle-orm';
+import { user as userSchema } from '../../auth-schema.ts';
+import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getServerConfig } from '../lib/config/server-config';
 import { getHome } from '../lib/home/get-home';
 import {
     addMember,
     addTeamMount,
+    assertJson,
     authedRequest,
     createTeam,
     driveDelete,
@@ -364,5 +370,181 @@ describe('Chat wizard — by-members matching', () => {
             `/chat/${ctx.alice.user.id}/rooms/by-members?emails=${encodeURIComponent(' , ')}`,
         );
         expect(blank.status).toBe(400);
+    });
+});
+
+describe('Chat wizard — create with members', () => {
+    let ctx: TestCtx;
+    let mountId: string;
+    let rootId: string;
+    let chatsFolderId: string;
+    let aliceEmail: string;
+    let bobEmail: string;
+
+    function createRoom(
+        token: string,
+        ownerId: string,
+        roomMountId: string,
+        body: Record<string, unknown>,
+    ): Promise<Response> {
+        return authedRequest(token, `/chat/${ownerId}/${roomMountId}/rooms`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    }
+
+    async function setUserAclEmail(value: boolean): Promise<void> {
+        await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notifications: { email: { userOnAclAdd: value } } }),
+        });
+    }
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        aliceEmail = ctx.alice.user.email;
+        bobEmail = ctx.bob.user.email;
+
+        mountId = await firstMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        rootId = root.id;
+        const children = await driveGetList(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}`,
+        );
+        chatsFolderId = children.find((c) => c.name === 'Chats' && c.type === 'folder')!.id;
+    });
+
+    // userOnAclAdd is shared server state — reset around every test so we neither trust a leaked
+    // value on entry nor leak one to sibling suites (JsonStore is shared across the whole run).
+    beforeEach(() => setUserAclEmail(false));
+    afterEach(() => setUserAclEmail(false));
+
+    test('creates a chat in the Chats folder and shares it with the picked members', async () => {
+        const res = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: 'Alice & Bob wizard',
+            members: [bobEmail],
+        });
+        const chat = await assertJson<DrivePath>(res);
+        expect(chat.parentId).toBe(chatsFolderId);
+        expect(chat.type).toBe('chat');
+        expect(chat.acl).toEqual([{ id: bobEmail, read: true, write: true }]);
+
+        // Bob resolves the same chat through his shared-with-me mirror once the fan-out drains.
+        const matches = await byMembers(ctx.bob.user.sessionToken, ctx.bob.user.id, aliceEmail);
+        const mirrored = matches.find((m) => m.path.id === chat.id);
+        expect(mirrored).toBeDefined();
+        expect(mirrored!.canWrite).toBe(true);
+    });
+
+    test('notifies added members in-app but suppresses the share email', async () => {
+        // Turn userOnAclAdd on so a plain share WOULD email bob — the wizard must still not.
+        await setUserAclEmail(true);
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
+
+        const res = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: 'Suppressed email chat',
+            members: [bobEmail],
+        });
+        const chat = await assertJson<DrivePath>(res);
+
+        const emailed = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === bobEmail));
+        expect(emailed.length).toBe(0);
+        spy.mockRestore();
+
+        // The in-app notification still lands (authedRequest drains the fan-out before listing).
+        const list = await assertJson<Notification[]>(
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+        );
+        const shared = list.find((n) => n.tag === `share:${ctx.alice.user.id}:${mountId}:${chat.id}`);
+        expect(shared?.title).toBe(`${ctx.alice.user.name} shared a chat`);
+        expect(shared?.body).toBe('Suppressed email chat');
+    });
+
+    test('respects an explicit parentId', async () => {
+        const folder = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}`,
+            {
+                folderName: 'Explicit Parent',
+            },
+        );
+        const res = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            parentId: folder.id,
+            fileName: 'Explicit parent chat',
+            members: [bobEmail],
+        });
+        const chat = await assertJson<DrivePath>(res);
+        expect(chat.parentId).toBe(folder.id);
+    });
+
+    test('returns 409 on a duplicate file name in the target folder', async () => {
+        const first = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: 'Duplicate wizard chat',
+            members: [bobEmail],
+        });
+        expect(first.status).toBe(200);
+
+        const second = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: 'Duplicate wizard chat',
+            members: [bobEmail],
+        });
+        expect(second.status).toBe(409);
+    });
+
+    test('rejects guest callers with 403', async () => {
+        const email = `wizard-guest-${randomUUID()}@external.com`;
+        const password = randomUUID();
+        const created = await auth.api.createUser({ body: { email, password, name: 'Wizard Guest', role: 'user' } });
+        // Set to 'guest' directly — the admin plugin only allows 'user'/'admin' via the API.
+        getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();
+        const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
+        const guestToken =
+            (signIn.headers.get('set-cookie') ?? '').match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '';
+
+        // Valid body so schema validation passes and the request reaches the requireNonGuest guard.
+        const res = await createRoom(guestToken, created.user.id, 'default', {
+            fileName: 'Guest chat',
+            members: [aliceEmail],
+        });
+        expect(res.status).toBe(403);
+    });
+
+    test('rejects an empty members array with 422', async () => {
+        const res = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: 'No members',
+            members: [],
+        });
+        expect(res.status).toBe(422);
+    });
+
+    test('a plain PUT acl share still emails when userOnAclAdd is on (suppression is opt-in)', async () => {
+        await setUserAclEmail(true);
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
+
+        const chatId = await createChat(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            chatsFolderId,
+            'Plain share chat',
+        );
+        await updateAcl(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, chatId, {
+            add: [{ id: bobEmail, read: true, write: true }],
+        });
+
+        const emailed = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === bobEmail));
+        expect(emailed.length).toBe(1);
+        spy.mockRestore();
     });
 });

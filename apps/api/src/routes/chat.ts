@@ -1,7 +1,8 @@
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
+import { DRIVE_TYPE_CHAT, type DrivePath } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import { findChatsByMembers } from '../lib/chat/find-by-members';
-import { requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { betterAuth } from './auth';
@@ -29,6 +30,56 @@ export const chatRouter = new Elysia({ name: 'chat' })
         },
         {
             query: t.Object({ emails: t.Optional(t.String()) }),
+            auth: true,
+        },
+    )
+
+    // Create a chat and share it with the picked members in one server-side sequence — the
+    // wizard's create step. Self-only (guests can't share): reject cross-owner callers and use the
+    // raw owner Drive (getDrive), like the by-members lookup above.
+    .post(
+        '/chat/:ownerId/:mountId/rooms',
+        async ({ params, body, user }): Promise<DrivePath> => {
+            requireSelf(params.ownerId, user.id);
+            requireNonGuest(user);
+            const drive = await getDrive(user);
+
+            const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
+            const chat = await drive.create(params.mountId, parentId, body.fileName, DRIVE_TYPE_CHAT, user);
+
+            // A wizard chat is born shared. The share email is suppressed (in-app notification + SSE
+            // still fire, see docs/PROPOSAL_CHAT_WIZARD.md decision 6); a created-but-unshared orphan
+            // is worse than a clean error, so on ACL failure purge the fresh container and rethrow.
+            try {
+                await drive.updateACLDelta(
+                    params.mountId,
+                    chat.id,
+                    { add: body.members.map((email) => ({ id: email.toLowerCase(), read: true, write: true })) },
+                    undefined,
+                    undefined,
+                    user,
+                    { suppressShareEmail: true },
+                );
+            } catch (err) {
+                await drive.deletePath(params.mountId, chat.id).catch((e) => {
+                    console.warn(`Failed to trash orphaned chat ${chat.id} after share failure:`, e);
+                });
+                await drive.permanentlyDelete(params.mountId, chat.id).catch((e) => {
+                    console.warn(`Failed to purge orphaned chat ${chat.id} after share failure:`, e);
+                });
+                throw err;
+            }
+
+            const created = await drive.getPath(params.mountId, chat.id);
+            if (!created) throw new ApiError(500, 'Failed to load created chat');
+            return created;
+        },
+        {
+            body: t.Object({
+                parentId: t.Optional(t.String()),
+                fileName: t.String(),
+                members: t.Array(t.String(), { minItems: 1 }),
+            }),
             auth: true,
         },
     )

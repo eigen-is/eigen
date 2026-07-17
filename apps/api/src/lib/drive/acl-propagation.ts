@@ -9,6 +9,13 @@ import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';
 
+// Threaded route → updateACLDelta → updateACL → propagateSharedPathChange. Opt-in only;
+// omitting it keeps the default share behaviour (email + mirror + notification) byte-identical.
+// `suppressShareEmail` skips only the "someone shared a file with you" email — the mirror
+// fan-out, DRIVE_ACL_SHARED SSE, and in-app notification still fire. Used by the new-chat wizard,
+// where the email is wrong-tone (see docs/PROPOSAL_CHAT_WIZARD.md decision 6).
+export type ACLPropagationOptions = { suppressShareEmail?: boolean };
+
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
     // Dedupe by id up front — only acl.id drives resolution, and the restore path feeds [...acl, ...acl].
@@ -152,6 +159,7 @@ export async function propagateSharedPathChange(
     oldACL: DriveACL[] | null,
     newACL: DriveACL[] | null,
     actor: { name: string; email: string } | null,
+    options?: ACLPropagationOptions,
 ): Promise<void> {
     // Target resolution stays on the awaited path: the registry writes inside are the durable
     // record for not-yet-registered targets and must survive the request.
@@ -159,7 +167,7 @@ export async function propagateSharedPathChange(
 
     queueACLFanOut(ids, path, newACL, actor?.email, actor?.name);
 
-    if (actor && newACL) {
+    if (actor && newACL && !options?.suppressShareEmail) {
         const addedUserEmails = diffACLEmails(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');
         if (addedUserEmails.length > 0) {
             await emailNewlyAddedAclEntries(path, addedUserEmails, actor);

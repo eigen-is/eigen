@@ -60,7 +60,12 @@ import {
     mergeACLDelta,
     normalizeACL,
 } from './acl';
-import { diffACLEmails, propagateSharedPathChange, resolveACLToEmails } from './acl-propagation';
+import {
+    type ACLPropagationOptions,
+    diffACLEmails,
+    propagateSharedPathChange,
+    resolveACLToEmails,
+} from './acl-propagation';
 import { CollabRegistry } from './collab-registry';
 import { LockManager } from './lock-manager';
 import { getSharedDatabase } from './shared';
@@ -780,6 +785,7 @@ export default class Drive {
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
         actor?: User | null,
+        options?: ACLPropagationOptions,
     ): Promise<void> {
         const key = `${mountId}:${pathId}`;
         const prev = this.aclDeltaChains.get(key) ?? Promise.resolve();
@@ -791,7 +797,15 @@ export default class Drive {
             if (!item) {
                 throw new ApiError(404, 'Path not found');
             }
-            await this.updateACL(mountId, pathId, mergeACLDelta(item.acl, delta), visibility, sharingRestricted, actor);
+            await this.updateACL(
+                mountId,
+                pathId,
+                mergeACLDelta(item.acl, delta),
+                visibility,
+                sharingRestricted,
+                actor,
+                options,
+            );
         });
         const tail = run.catch(() => {});
         this.aclDeltaChains.set(key, tail);
@@ -812,6 +826,7 @@ export default class Drive {
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
         actor?: User | null,
+        options?: ACLPropagationOptions,
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
@@ -848,7 +863,7 @@ export default class Drive {
         await mount.updatePath(pathId, updates);
         const updatedItem = await mount.getPath(pathId);
         if (updatedItem) {
-            await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null);
+            await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
             if (actor) {
                 const { added, removed } = diffACLEmails(oldACL, normalizedACL);
@@ -1150,7 +1165,10 @@ export default class Drive {
         return mount.getChildByName(parentId, name);
     }
 
-    // Resolve the default parent for a new chat: the untrashed root child named `Chats` when it's a
+    // Called by: POST /chat/:ownerId/:mountId/rooms — escape-hatch route (requireSelf + getDrive,
+    // like /shared/by-me). No SharedDrive wrapper by design: seeding a caller's own default parent
+    // is owner-scoped, cross-owner access has no meaning. See class doc above.
+    // Resolves the default parent for a new chat: the untrashed root child named `Chats` when it's a
     // plain folder, the root itself when that name is taken by something else, otherwise create it.
     // Resolved by name every call so the folder stays freely renameable/movable/deletable.
     async ensureChatsFolder(mountId: string): Promise<string> {
