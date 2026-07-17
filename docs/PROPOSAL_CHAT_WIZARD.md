@@ -52,13 +52,17 @@ adopt open-don't-duplicate semantics for exact matches instead of a suggestion p
 - `Chats` folder seeded on drive initialization for new users, lazily created for existing users.
 - Contacts app: "Start chat" on a contact / team member → exactly one writable match opens it
   directly; otherwise the wizard opens pre-filled and Create enters the chat.
+- Team chats stay first-class: selecting a **team** (same placement as the share dialog's team
+  control) flips the wizard to team-chat mode — chat on the team drive, implicit all-team
+  membership, name required. See UX § Team chats.
 - The whole flow lives in `packages/ui` + `packages/lib` so chat, contacts, and (later) any userinfo
   chip can trigger it.
 
 ## Non-goals (v1)
 
-- Picking a **team** as chat partner (team chats keep their current home: team drives, where every
-  team member is an implicit member — `drive.ts:895-905`). The wizard picks individual people only.
+- **Mixed member sets** — a team plus extra individuals in one chat. Selecting a team flips the
+  wizard to team-chat mode and locks the person rows; mixing is a follow-up. (Team-chat mode itself
+  IS v1 scope — decision 8; team drives make every member implicit, `drive.ts:895-905`.)
 - Embedded comment-thread chats (`chat/General.eigenchat` inside eigendocs) — out of scope
   everywhere; the mime listing already excludes them (`excludeDocumentChildren`,
   `mount/helpers.ts:40-51`, applied in `mount.ts:1118-1140`).
@@ -201,6 +205,28 @@ One dialog, one form (house convention — no paged steps). Shared component
 
 Replaces `DriveCreateEigenDoc type="chat"` in the chat sidebar and the chat empty state. The drive
 app's generic **New** menu keeps the plain create dialog in v1 (decision 3).
+
+### Team chats (wizard team mode)
+
+Several topic chats on one team drive, implicitly shared with the whole team (the demo's
+`volunteers`/`production` pattern), is the Slack-channel model and stays first-class in the wizard:
+
+- The dialog mirrors the share dialog's layout language (`DriveAccessListEdit`): people picking at
+  the top, and a **team selector in the same position as the share dialog's "Share with team"
+  control** — team selection lives where users already know it from ACL editing. Teams come from
+  the caller's team list; `useContactSuggestions` stays people-only.
+- Selecting a team flips to team-chat mode: person rows are replaced by one line — "Everyone in
+  *<team>* is a member, now and in the future" — the **name is required** (a topic, like a channel
+  name), and the location becomes the team drive (shown on the location line; Change hidden).
+  Deselecting the team returns to person mode.
+- Instead of the duplicate matcher, the panel lists the team's **existing chats** (from the sidebar
+  aggregate the app already loads, filtered to that team's `ownerId`) with per-row **Open**;
+  **Create stays primary** — multiple topics with identical membership are the point here, so
+  open-don't-duplicate applies per row only.
+- **Create uses the existing generic create route** on the team's ownerId (`Drive.create` on the
+  team home; implicit membership → no ACL step, no share email, no new backend). Created at the
+  team drive root, matching existing team chats. Navigation as in person mode.
+- The by-members matcher continues to exclude team-drive chats (unchanged).
 
 ### Duplicate detection semantics
 
@@ -355,6 +381,11 @@ would leak into the client.
 7. **No recency in the match panel** — `updatedAt` is share/create time; showing it as activity
    would mislead. Real per-message activity (also unlocking sidebar sort-by-recency) is a separate
    ROADMAP item.
+8. **Team chats** (2026-07-17) — v1 wizard gets a team-chat mode: team selector placed like the
+   share dialog's team control; selecting a team → name required, team drive root, existing team
+   chats listed, create via the existing generic route. Without this, swapping the sidebar entry
+   point would have removed the chat app's only way to create a team chat. Mixed team+people
+   deferred.
 
 ## Phased implementation
 
@@ -379,7 +410,7 @@ would leak into the client.
      only, using the direct ACL already present on listing rows. This is how every messenger renders
      1:1s and makes the file name nearly invisible.
    - `UserItem` `chatLink` prop → `UserNameCard` hovercards everywhere; command-palette "Start
-     chat" action; drive New-menu swap; team-as-member support if wanted; per-message activity
+     chat" action; drive New-menu swap; mixed team+individual member sets; per-message activity
      timestamp (ROADMAP).
 
 Docs in the same cycle: update `docs/CHAT.md` — it documents a nonexistent
