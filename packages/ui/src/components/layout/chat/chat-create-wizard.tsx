@@ -128,7 +128,12 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     useEffect(() => {
         if (!open) return;
         const seed: InitialPerson[] = JSON.parse(initialPeopleKey);
-        setPicked(seed.map((p) => ({ email: p.email.toLowerCase(), displayName: p.name?.trim() || p.email })));
+        // Drop self from the prefill (same guard as addPerson) — a chat is always with other people.
+        setPicked(
+            seed
+                .map((p) => ({ email: p.email.toLowerCase(), displayName: p.name?.trim() || p.email }))
+                .filter((p) => p.email !== myEmail),
+        );
         setInput('');
         setName('');
         setNameDirty(false);
@@ -137,7 +142,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         setLocationTouched(false);
         setLocationExpanded(false);
         setCreateError(null);
-    }, [open, initialPeopleKey, myOwnerId]);
+    }, [open, initialPeopleKey, myOwnerId, myEmail]);
 
     // Keep the name live-defaulted until the user edits it: team mode requires a typed topic (empty
     // default), person mode tracks the picked set ("Alice & Reinder", "Alice, Bob & Carol").

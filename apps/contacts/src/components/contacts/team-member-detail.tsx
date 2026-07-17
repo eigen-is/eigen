@@ -1,4 +1,5 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
 import { Toolbar, TooltipButton } from '@workspace/ui';
 import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
@@ -8,10 +9,14 @@ import { useState } from 'react';
 import type { TeamMember } from './team-member-list';
 
 // Team members always resolve to an Eigen user, so the action is unconditional here (unlike personal
-// contacts, which gate on eigenId in ContactDetailToolbar).
+// contacts, which gate on eigenId in ContactDetailToolbar) — except on your own row, where there is
+// no one to chat with.
 export function TeamMemberDetailToolbar({ member }: { member: TeamMember }) {
+    const { user } = useAuth();
     const startChatWith = useStartChatWith();
     const [chatOpen, setChatOpen] = useState(false);
+
+    const isSelf = member.email.toLowerCase() === (user?.email ?? '').toLowerCase();
 
     const handleStartChat = async () => {
         // 'opened' means an existing writable 1:1 was navigated to; otherwise open the wizard pre-filled.
@@ -22,12 +27,14 @@ export function TeamMemberDetailToolbar({ member }: { member: TeamMember }) {
         <>
             <Toolbar>
                 <div className="flex items-center gap-1 ml-auto">
-                    <TooltipButton
-                        icon={MessageSquare}
-                        tooltipText="Start chat"
-                        className="h-8 w-8"
-                        onClick={() => void handleStartChat()}
-                    />
+                    {!isSelf && (
+                        <TooltipButton
+                            icon={MessageSquare}
+                            tooltipText="Start chat"
+                            className="h-8 w-8"
+                            onClick={() => void handleStartChat()}
+                        />
+                    )}
                 </div>
             </Toolbar>
             <ChatCreateWizard

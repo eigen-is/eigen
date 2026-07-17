@@ -54,7 +54,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 await drive.updateACLDelta(
                     params.mountId,
                     chat.id,
-                    { add: body.members.map((email) => ({ id: email.toLowerCase(), read: true, write: true })) },
+                    { add: body.members.map((email) => ({ id: email.trim().toLowerCase(), read: true, write: true })) },
                     undefined,
                     undefined,
                     user,

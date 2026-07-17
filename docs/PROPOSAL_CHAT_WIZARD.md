@@ -412,6 +412,12 @@ would leak into the client.
    - `UserItem` `chatLink` prop → `UserNameCard` hovercards everywhere; command-palette "Start
      chat" action; drive New-menu swap; mixed team+individual member sets; per-message activity
      timestamp (ROADMAP).
+   - **From the final branch review (2026-07-17), follow-up-grade:** enforce internal-only in the
+     wizard's `Name <email>` paste path (currently accepts any syntactically valid email, bypassing
+     the internal-only picker; fixing it also retires the near-vestigial `+` button) and pick the
+     eigenId-bearing address for multi-email contacts; gate the wizard's data hooks on `open` (a
+     closed wizard mounted in the contacts toolbars still fetches the chat aggregate); define "the"
+     team drive when a team has multiple mounts (create targets `mounts[0]`, the panel lists all).
 
 Docs in the same cycle: update `docs/CHAT.md` — it documents a nonexistent
 `POST /drive/:o/:m/folder/:pathId/chat` create route (`CHAT.md:66`; the real route is

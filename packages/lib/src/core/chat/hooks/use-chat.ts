@@ -17,10 +17,12 @@ export const chatKeys = {
     owner: (ownerId: string) => [...chatKeys.all, ownerId] as const,
     messages: (ownerId: string, mountId: string, chatId: string) =>
         [...chatKeys.owner(ownerId), 'messages', mountId, chatId] as const,
+    // Prefix over every picked-set entry — used to invalidate the whole family after a create.
+    byMembersAll: (ownerId: string) => [...chatKeys.owner(ownerId), 'by-members'] as const,
     // Lowercased + sorted so member order and case don't fork the cache entry — the same
     // picked set always resolves to one identity, whichever way the caller ordered/typed it.
     byMembers: (ownerId: string, emails: string[]) =>
-        [...chatKeys.owner(ownerId), 'by-members', emails.map((e) => e.toLowerCase()).sort()] as const,
+        [...chatKeys.byMembersAll(ownerId), emails.map((e) => e.toLowerCase()).sort()] as const,
 };
 
 type ChatSections = {
@@ -172,8 +174,12 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        // Refresh the parent folder + the aggregate chat listing the sidebar reads (mimeAll family).
-        onSuccess: (data) => invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType),
+        // Refresh the parent folder + the aggregate chat listing the sidebar reads (mimeAll family),
+        // and the by-members family so the new chat surfaces as an open-don't-duplicate match at once.
+        onSuccess: (data) => {
+            invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType);
+            queryClient.invalidateQueries({ queryKey: chatKeys.byMembersAll(ownerId) });
+        },
         // 409 = duplicate chat name; the wizard resolves it (auto-renames a default name, or shows an
         // inline error for a user-typed one), so let it surface there instead of toasting twice.
         onError: (error) => {
@@ -190,9 +196,13 @@ export function useStartChatWith() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const ownerId = user?.id || '';
+    const myEmail = (user?.email ?? '').toLowerCase();
 
     return async (email: string): Promise<'opened' | ChatMatch[]> => {
         if (!ownerId) return [];
+        // Self is never a chat counterpart, and every unshared solo chat would match a self-only
+        // target — short-circuit without fetching so the caller opens the wizard empty instead.
+        if (email.toLowerCase() === myEmail) return [];
         // A failed lookup degrades to "no matches" so the caller falls through to opening the wizard.
         const matches = await queryClient
             .fetchQuery(byMembersQueryConfig(ownerId, [email]))
