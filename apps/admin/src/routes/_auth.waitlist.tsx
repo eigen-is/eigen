@@ -14,6 +14,7 @@ import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 import { cn } from '@workspace/ui/lib/utils';
@@ -123,7 +124,7 @@ function WaitlistRoute() {
                                     )}
                                     onClick={() => handleRowClick(entry.id)}
                                 >
-                                    <span className="text-sm font-medium truncate">{entry.email}</span>
+                                    <UserItem email={entry.email} />
                                     {entry.notes && (
                                         <span className="text-xs text-muted-foreground truncate">{entry.notes}</span>
                                     )}
