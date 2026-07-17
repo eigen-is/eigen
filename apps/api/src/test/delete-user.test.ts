@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { OrgMember } from '@workspace/lib/types/admin';
-import { assertJson, authedRequest, findOrFail, getTestContext, TEST_DATA_DIR } from './setup';
+import { eq } from 'drizzle-orm';
+import { addMember, assertJson, authedRequest, createTeam, findOrFail, getTestContext, TEST_DATA_DIR } from './setup';
 
 describe('Delete user', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -162,5 +163,113 @@ describe('Delete user', () => {
             method: 'DELETE',
         });
         expect(res.status).toBe(404);
+    });
+
+    test('deleting a user removes org and team membership rows', async () => {
+        const { auth, getAuthDrizzleDb } = await import('../lib/auth/auth');
+        const { member, teamMember } = await import('../../auth-schema');
+        const { getServerConfig } = await import('../lib/config/server-config');
+        const orgId = getServerConfig()!.orgId;
+        const db = getAuthDrizzleDb();
+
+        const signUp = await auth.api.signUpEmail({
+            body: { email: 'member-rows@test.eigen.is', password: 'testpassword123', name: 'Member Rows' },
+        });
+        const userId = signUp.user.id;
+        const teamId = await createTeam(ctx, orgId, 'Delete User Team');
+        await addMember(ctx, teamId, userId);
+
+        // The user-create hook auto-added the user to the default org
+        expect(db.select().from(member).where(eq(member.userId, userId)).all()).toHaveLength(1);
+        expect(db.select().from(teamMember).where(eq(teamMember.userId, userId)).all()).toHaveLength(1);
+
+        const delRes = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${userId}`, {
+            method: 'DELETE',
+        });
+        expect(delRes.status).toBe(200);
+
+        expect(db.select().from(member).where(eq(member.userId, userId)).all()).toHaveLength(0);
+        expect(db.select().from(teamMember).where(eq(teamMember.userId, userId)).all()).toHaveLength(0);
+
+        const listRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/auth/organization/list-members?organizationId=${orgId}`,
+        );
+        expect(listRes.status).toBe(200);
+    });
+
+    test("better-auth's raw admin remove-user leaves no orphaned membership rows", async () => {
+        const { auth, getAuthDrizzleDb } = await import('../lib/auth/auth');
+        const { member, teamMember } = await import('../../auth-schema');
+        const { getServerConfig } = await import('../lib/config/server-config');
+        const orgId = getServerConfig()!.orgId;
+        const db = getAuthDrizzleDb();
+
+        const signUp = await auth.api.signUpEmail({
+            body: { email: 'raw-remove@test.eigen.is', password: 'testpassword123', name: 'Raw Remove' },
+        });
+        const userId = signUp.user.id;
+        const teamId = await createTeam(ctx, orgId, 'Raw Remove Team');
+        await addMember(ctx, teamId, userId);
+
+        // Deletion path that bypasses deleteUserCompletely — better-auth removes only
+        // session/account/user rows itself, and the auth DB's FK cascades are inert
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/admin/remove-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId }),
+        });
+        expect(res.status).toBe(200);
+
+        expect(db.select().from(member).where(eq(member.userId, userId)).all()).toHaveLength(0);
+        expect(db.select().from(teamMember).where(eq(teamMember.userId, userId)).all()).toHaveLength(0);
+
+        // The regression that locked the admin UI: one orphaned member row 500s
+        // listMembers for the whole org
+        const listRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/auth/organization/list-members?organizationId=${orgId}`,
+        );
+        expect(listRes.status).toBe(200);
+    });
+
+    test('user deletion sweeps membership rows orphaned by past deletions', async () => {
+        const { auth, getAuthDrizzleDb } = await import('../lib/auth/auth');
+        const { member } = await import('../../auth-schema');
+        const { getServerConfig } = await import('../lib/config/server-config');
+        const orgId = getServerConfig()!.orgId;
+        const db = getAuthDrizzleDb();
+
+        // Forge the orphan class found in the wild: a member row whose user is gone
+        db.insert(member)
+            .values({
+                id: 'orphaned-member-row',
+                organizationId: orgId,
+                userId: 'ghost-user-id',
+                role: 'member',
+                createdAt: new Date(),
+            })
+            .run();
+        const brokenRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/auth/organization/list-members?organizationId=${orgId}`,
+        );
+        expect(brokenRes.status).toBe(500);
+
+        // Deleting any user through the real route heals the org
+        const signUp = await auth.api.signUpEmail({
+            body: { email: 'sweep-trigger@test.eigen.is', password: 'testpassword123', name: 'Sweep Trigger' },
+        });
+        const delRes = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${signUp.user.id}`, {
+            method: 'DELETE',
+        });
+        expect(delRes.status).toBe(200);
+
+        expect(db.select().from(member).where(eq(member.userId, 'ghost-user-id')).all()).toHaveLength(0);
+        const listRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/auth/organization/list-members?organizationId=${orgId}`,
+        );
+        expect(listRes.status).toBe(200);
     });
 });
