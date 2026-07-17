@@ -233,6 +233,90 @@ describe('Delete user', () => {
         expect(listRes.status).toBe(200);
     });
 
+    test("better-auth's raw admin remove-user runs the complete Eigen teardown", async () => {
+        const { auth, getAuthDrizzleDb } = await import('../lib/auth/auth');
+        const { member, teamMember } = await import('../../auth-schema');
+        const { addRegistryEntry, getEntriesForTarget } = await import('../lib/share/registry');
+        const { getEigenDb } = await import('../lib/share/db');
+        const { shareRegistry } = await import('../lib/share/schema');
+        const { getServerConfig } = await import('../lib/config/server-config');
+        const orgId = getServerConfig()!.orgId;
+        const db = getAuthDrizzleDb();
+
+        const email = 'raw-teardown@test.eigen.is';
+        const signUp = await auth.api.signUpEmail({
+            body: { email, password: 'testpassword123', name: 'Raw Teardown' },
+        });
+        const userId = signUp.user.id;
+        const signIn = await auth.api.signInEmail({
+            returnHeaders: true,
+            body: { email, password: 'testpassword123' },
+        });
+        const token = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/)![1];
+
+        // Materialize the home directory on disk
+        await authedRequest(token, `/home/${userId}/size`);
+        const homePath = join(TEST_DATA_DIR, 'home', userId);
+        expect(existsSync(homePath)).toBe(true);
+
+        // Team membership + share-registry entries in both directions
+        const teamId = await createTeam(ctx, orgId, 'Raw Teardown Team');
+        await addMember(ctx, teamId, userId);
+        await addRegistryEntry(ctx.alice.user.id, email);
+        await addRegistryEntry(userId, 'external-target@example.com');
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/admin/remove-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId }),
+        });
+        expect(res.status).toBe(200);
+
+        // Complete teardown, same as deleteUserCompletely: home directory gone,
+        // share registry cleaned in both directions, auth reference rows gone
+        expect(existsSync(homePath)).toBe(false);
+        expect(await getEntriesForTarget(email)).toHaveLength(0);
+        const eigenDb = await getEigenDb();
+        expect(eigenDb.select().from(shareRegistry).where(eq(shareRegistry.fromUserId, userId)).all()).toHaveLength(0);
+        expect(db.select().from(member).where(eq(member.userId, userId)).all()).toHaveLength(0);
+        expect(db.select().from(teamMember).where(eq(teamMember.userId, userId)).all()).toHaveLength(0);
+
+        const listRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/auth/organization/list-members?organizationId=${orgId}`,
+        );
+        expect(listRes.status).toBe(200);
+    });
+
+    test("better-auth's raw admin remove-user rejects self-removal without tearing data down", async () => {
+        // Materialize Alice's home so a destructive teardown would be observable
+        await authedRequest(ctx.alice.user.sessionToken, `/home/${ctx.alice.user.id}/size`);
+        const homePath = join(TEST_DATA_DIR, 'home', ctx.alice.user.id);
+        expect(existsSync(homePath)).toBe(true);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/admin/remove-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: ctx.alice.user.id }),
+        });
+        expect(res.status).toBe(400);
+        expect(existsSync(homePath)).toBe(true);
+    });
+
+    test("better-auth's raw admin remove-user rejects non-admin callers", async () => {
+        await authedRequest(ctx.charlie.user.sessionToken, `/home/${ctx.charlie.user.id}/size`);
+        const homePath = join(TEST_DATA_DIR, 'home', ctx.charlie.user.id);
+        expect(existsSync(homePath)).toBe(true);
+
+        const res = await authedRequest(ctx.bob.user.sessionToken, '/auth/admin/remove-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: ctx.charlie.user.id }),
+        });
+        expect(res.status).toBe(403);
+        expect(existsSync(homePath)).toBe(true);
+    });
+
     test('user deletion sweeps membership rows orphaned by past deletions', async () => {
         const { auth, getAuthDrizzleDb } = await import('../lib/auth/auth');
         const { member } = await import('../../auth-schema');

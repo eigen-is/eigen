@@ -80,13 +80,19 @@ export const auth = betterAuth({
             },
             delete: {
                 // better-auth's own deleteUser (e.g. the admin plugin's /admin/remove-user)
-                // removes only session/account/user rows, and the auth DB's declared FK
-                // cascades are inert (PRAGMA foreign_keys is off). A leftover member row
-                // 500s listMembers org-wide, locking every admin out of the admin app —
-                // so clean referencing rows at this seam, which every better-auth
-                // deletion path passes through.
-                before: async (user) => {
-                    authDeleteUserReferences(user.id);
+                // removes only session/account/user rows. This seam is the one place every
+                // better-auth deletion path passes through while the user row still exists,
+                // so the COMPLETE Eigen teardown (home directory, share registry, auth
+                // reference rows) runs here — the raw endpoint must not leave user data
+                // behind, and a leftover member row 500s listMembers org-wide. No extra
+                // guard needed: /admin/remove-user already rejects non-admins (403) and
+                // self-removal (400), matching the Eigen route's requireAdmin +
+                // own-account-400. Lazy import to avoid the static cycle
+                // (delete-user → home/get-home → … → auth).
+                before: async (hookUser) => {
+                    const user = hookUser as User;
+                    const { teardownUserData } = await import('../user/delete-user');
+                    await teardownUserData(user);
                 },
             },
         },
