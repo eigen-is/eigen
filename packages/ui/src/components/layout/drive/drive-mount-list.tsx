@@ -18,14 +18,15 @@ type DriveMountListProps = {
     activeMountId: string;
     activeOwnerId: string;
     onMountSelect: (ownerId: string, mountId: string) => void;
+    ownMountsOnly?: boolean;
 };
 
-export function DriveMountList({ activeMountId, activeOwnerId, onMountSelect }: DriveMountListProps) {
+export function DriveMountList({ activeMountId, activeOwnerId, onMountSelect, ownMountsOnly }: DriveMountListProps) {
     const { user } = useAuth();
     const { data: myTeams } = useMyTeams();
     const myDriveOwnerId = user?.id ?? '';
 
-    const teamsWithMounts = myTeams?.filter((t) => t.mounts.length > 0) ?? [];
+    const teamsWithMounts = ownMountsOnly ? [] : (myTeams?.filter((t) => t.mounts.length > 0) ?? []);
 
     const activeClass = 'bg-muted text-primary font-medium';
     const baseClass = 'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm w-full text-left hover:bg-muted';

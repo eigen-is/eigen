@@ -1,18 +1,12 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useBreadcrumb, useRootFolder } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
-import { ChevronDown, Download, FolderPlus } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { InfoBlock } from '../info-block';
-import { TooltipButton } from '../toolbar/tooltip-button';
-import { DriveBreadcrumb } from './drive-breadcrumb';
-import { DriveBrowser } from './drive-browser';
-import { useMountLabel } from './drive-mount-list';
+import { Download } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { DriveLocationField, type DriveLocationValue } from './drive-location-field';
 
 type DriveLocationPickerProps = {
     open: boolean;
@@ -46,35 +40,20 @@ export function DriveLocationPicker({
     abovePreview,
 }: DriveLocationPickerProps) {
     const { user } = useAuth();
-    const initialOwnerId = defaultOwnerId || user?.id || '';
     const [name, setName] = useState(defaultName);
     const [expanded, setExpanded] = useState(mode !== 'create');
-    const [createFolderOpen, setCreateFolderOpen] = useState(false);
-    const [activeMountId, setActiveMountId] = useState(defaultMountId);
-    const [activeOwnerId, setActiveOwnerId] = useState(initialOwnerId);
-    const [folderId, setFolderId] = useState<string | null>(defaultFolderId ?? null);
-
-    const resolvedOwnerId = activeOwnerId || user?.id || '';
-
-    const { data: rootFolder } = useRootFolder(resolvedOwnerId, activeMountId);
-    const mountLabel = useMountLabel(resolvedOwnerId, activeMountId);
-    const currentFolderId = folderId ?? rootFolder?.id ?? '';
-    const { data: breadcrumbPaths = [] } = useBreadcrumb(resolvedOwnerId, activeMountId, currentFolderId);
+    const [location, setLocation] = useState<DriveLocationValue>({
+        ownerId: defaultOwnerId || user?.id || '',
+        mountId: defaultMountId,
+        folderId: defaultFolderId ?? '',
+    });
 
     useEffect(() => {
         if (!user) return;
         setName(defaultName);
         setExpanded(mode !== 'create');
-        setActiveMountId(defaultMountId);
-        setActiveOwnerId(defaultOwnerId || user.id);
-        setFolderId(defaultFolderId ?? null);
+        setLocation({ ownerId: defaultOwnerId || user.id, mountId: defaultMountId, folderId: defaultFolderId ?? '' });
     }, [open, defaultName, mode, defaultOwnerId, defaultMountId, defaultFolderId, user]);
-
-    const handleFolderChange = useCallback((folder: DrivePath, mountId: string) => {
-        setFolderId(folder.id);
-        setActiveMountId(mountId);
-        setActiveOwnerId(folder.ownerId);
-    }, []);
 
     if (!user) return null;
 
@@ -83,9 +62,9 @@ export function DriveLocationPicker({
     const handleSubmit = () => {
         if (hasName && !name.trim()) return;
         onConfirm({
-            ownerId: resolvedOwnerId,
-            mountId: activeMountId,
-            folderId: currentFolderId,
+            ownerId: location.ownerId || user.id,
+            mountId: location.mountId,
+            folderId: location.folderId,
             name: hasName ? name.trim() : undefined,
         });
         onOpenChange(false);
@@ -131,64 +110,13 @@ export function DriveLocationPicker({
                     </div>
                 )}
 
-                {mode !== 'save-as' && (
-                    <div className="px-6 pb-2">
-                        <Label className="text-sm text-muted-foreground">Location</Label>
-                        <InfoBlock
-                            className="mt-1.5 w-full cursor-pointer gap-1.5 text-sm hover:bg-muted"
-                            onClick={() => setExpanded(!expanded)}
-                        >
-                            <div className="flex-1 min-w-0" onClick={expanded ? (e) => e.stopPropagation() : undefined}>
-                                <DriveBreadcrumb
-                                    paths={breadcrumbPaths}
-                                    mountLabel={mountLabel}
-                                    onNavigate={
-                                        expanded ? (path) => handleFolderChange(path, activeMountId) : undefined
-                                    }
-                                    itemClassName="text-xs"
-                                />
-                            </div>
-                            <div className="flex items-center gap-0.5 flex-shrink-0">
-                                {expanded && (
-                                    <div onClick={(e) => e.stopPropagation()}>
-                                        <TooltipButton
-                                            icon={FolderPlus}
-                                            tooltipText="New folder"
-                                            variant="ghost"
-                                            className="h-7 w-7"
-                                            onClick={() => setCreateFolderOpen(true)}
-                                        />
-                                    </div>
-                                )}
-                                {!expanded && <span className="text-xs text-muted-foreground mr-1">Change</span>}
-                                <ChevronDown
-                                    className={cn(
-                                        'h-4 w-4 text-muted-foreground transition-transform duration-200',
-                                        expanded && 'rotate-180',
-                                    )}
-                                />
-                            </div>
-                        </InfoBlock>
-                    </div>
-                )}
-
-                {expanded && (
-                    <div className="flex-1 overflow-hidden border-t px-6 pb-2 pt-2">
-                        <DriveBrowser
-                            ownerId={initialOwnerId}
-                            mode="folder"
-                            onFolderChange={handleFolderChange}
-                            defaultMountId={activeMountId}
-                            defaultFolderId={folderId ?? undefined}
-                            showNewFolder
-                            hideToolbar
-                            hideHeader
-                            createFolderOpen={createFolderOpen}
-                            onCreateFolderOpenChange={setCreateFolderOpen}
-                            className="h-full"
-                        />
-                    </div>
-                )}
+                <DriveLocationField
+                    value={location}
+                    onChange={setLocation}
+                    expanded={expanded}
+                    onExpandedChange={setExpanded}
+                    collapsible={mode !== 'save-as'}
+                />
 
                 <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between">
                     {onDownloadInstead ? (

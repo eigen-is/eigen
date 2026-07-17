@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-821 primitives across 6 kinds. `packages/sheet` internals are excluded.
+828 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (113)
+## Components (114)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -56,6 +56,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveFilePicker` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-file-picker.tsx |
 | `DriveGrid` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-grid.tsx |
 | `DriveItemMenuItems` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-item-menu.tsx |
+| `DriveLocationField` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-location-field.tsx |
 | `DriveLocationPicker` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-location-picker.tsx |
 | `DriveMountList` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-mount-list.tsx |
 | `DrivePickerWithUpload` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-picker-with-upload.tsx |
@@ -150,7 +151,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (208)
+## Hooks (211)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -208,13 +209,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useChatSections` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useComments` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-comments.ts |
 | `useCreateChat` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
+| `useCreateChatRoom` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useDeleteMessage` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useEditMessage` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
+| `useFindChatByMembers` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useInviteToChat` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useMarkChatRead` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
 | `useMessages` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `usePostMessage` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useResolveComment` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-comments.ts |
+| `useStartChatWith` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useUnreadChatIds` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
 | `useCollabDocumentInfo` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab.ts |
 | `useYjsUndoHotkeys` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
@@ -363,7 +367,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (228)
+## Types (230)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -422,6 +426,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CalendarItem` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarShare` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ChatAttachment` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
+| `ChatMatch` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessage` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessageType` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatReadState` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
@@ -568,6 +573,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContactAutosuggestProps` | `@workspace/ui` | packages/ui/src/components/layout/contacts/types.ts |
 | `DriveAccessListProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-access-list.tsx |
 | `DriveGridProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-grid.tsx |
+| `DriveLocationValue` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-location-field.tsx |
 | `DriveTableProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
 | `DriveViewProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
 | `EigenDocAppConfig` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
@@ -596,7 +602,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (261)
+## Utilities & constants (262)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -785,6 +791,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SLIDE_BASE_WIDTH` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `handleSpaceSSEvent` | `@workspace/lib/space` | packages/lib/src/core/space/sse-handlers.ts |
 | `handleTeamSSEvent` | `@workspace/lib/team` | packages/lib/src/core/team/sse-handlers.ts |
+| `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |

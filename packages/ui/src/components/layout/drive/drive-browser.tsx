@@ -46,6 +46,7 @@ type DriveBrowserProps = {
     onCreateFolderOpenChange?: (open: boolean) => void;
     externalSelectedIds?: Set<string>;
     onSelectionChange?: (items: DrivePath[]) => void;
+    ownMountsOnly?: boolean;
     className?: string;
 };
 
@@ -66,6 +67,7 @@ export function DriveBrowser({
     onCreateFolderOpenChange,
     externalSelectedIds,
     onSelectionChange,
+    ownMountsOnly,
     className,
 }: DriveBrowserProps) {
     const [activeMountId, setActiveMountId] = useState(defaultMountId);
@@ -250,6 +252,7 @@ export function DriveBrowser({
                     activeMountId={activeMountId}
                     activeOwnerId={activeOwnerId}
                     onMountSelect={handleMountSelect}
+                    ownMountsOnly={ownMountsOnly}
                 />
             </div>
             {showNewFolder ? (

@@ -5,6 +5,7 @@ export * from './drive-create-eigendoc';
 export * from './drive-file-picker';
 export * from './drive-grid';
 export * from './drive-item-menu';
+export * from './drive-location-field';
 export * from './drive-location-picker';
 export * from './drive-mount-list';
 export * from './drive-picker-with-upload';
