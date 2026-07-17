@@ -267,7 +267,8 @@ Returns `{ matches: { path: DrivePath, canWrite: boolean }[] }` (shared type in
 target = lowercase(emails) ∪ {user.email}
 own:    per mount, getPathsByMimeType(DRIVE_MIME_CHAT, excludeDocumentChildren)
         → skip non-private visibility / team_* entries
-        → cheap pre-filter on the DIRECT acl (direct emails ⊆ target, |direct|+1 ≥ |target|)
+        → cheap pre-filter on the DIRECT acl (direct emails ⊆ target — subset only; no size
+          floor is sound, since inherited-ACL chats carry an EMPTY direct ACL yet must match)
         → only survivors run the full getEffectiveMembers walk; emails == target → match
 shared: listSharedWithMeByMimeType(sharedDb, DRIVE_MIME_CHAT)
         → skip team-owned ownerId / team_* entries / non-private visibility
