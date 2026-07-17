@@ -71,13 +71,7 @@ export function MemberDetail({ member, organizationId }: MemberDetailProps) {
 
     return (
         <div className="app-gutter space-y-6">
-            <UserDetailHero
-                name={member.name}
-                email={member.email}
-                imageUrl={member.image}
-                userId={member.userId}
-                subtitle={member.email}
-            />
+            <UserDetailHero name={member.name} email={member.email} userId={member.userId} subtitle={member.email} />
 
             <div className="space-y-4">
                 <div>

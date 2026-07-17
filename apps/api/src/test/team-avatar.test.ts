@@ -82,4 +82,19 @@ describe('Team Avatar', () => {
         expect(avatarRes.status).toBe(200);
         expect(avatarRes.headers.get('Content-Type')).toBe('image/svg+xml');
     });
+
+    test('org admin uploading to a nonexistent team id gets 404 (no orphan file written)', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId('does-not-exist')}/avatar`, {
+            method: 'POST',
+            body: avatarForm(),
+        });
+        expect(res.status).toBe(404);
+    });
+
+    test('org admin deleting the avatar of a nonexistent team gets 404', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId('does-not-exist')}/avatar`, {
+            method: 'DELETE',
+        });
+        expect(res.status).toBe(404);
+    });
 });

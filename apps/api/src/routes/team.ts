@@ -7,7 +7,7 @@ import { ApiError } from '../lib/core/errors';
 import { getTeamHome } from '../lib/home';
 import { pushTeamAvatar } from '../lib/home/home-relay';
 import { generateImagePreview } from '../lib/shared/thumbnails';
-import { getTeamMembers } from '../lib/team';
+import { getTeamExists, getTeamMembers } from '../lib/team';
 import { betterAuth } from './auth';
 
 function teamId(ownerId: string): string {
@@ -135,6 +135,7 @@ export const teamRouter = new Elysia({ name: 'team' })
         '/team/:ownerId/avatar',
         async ({ params, body, user }): Promise<void> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
+            if (!(await getTeamExists(teamId(params.ownerId)))) throw new ApiError(404, 'Team not found');
             // Global max upload size only — a team avatar shouldn't bill the uploading admin's
             // personal mail+contacts quota (that's what enforceAvatarUpload adds on top).
             enforceMaxUploadSize(body.file.size);
@@ -157,6 +158,7 @@ export const teamRouter = new Elysia({ name: 'team' })
         '/team/:ownerId/avatar',
         async ({ params, user }): Promise<void> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
+            if (!(await getTeamExists(teamId(params.ownerId)))) throw new ApiError(404, 'Team not found');
             await pushTeamAvatar(teamId(params.ownerId), null);
         },
         { auth: true },
