@@ -4,7 +4,7 @@ import { isDemo } from '../lib/config/env';
 import { getPublicConfig } from '../lib/config/server-config';
 import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core/errors';
-import { setCacheHeaders } from '../lib/core/http';
+import { etagMatches, setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo, getPublicInfo } from '../lib/space/public';
 import { registerFromInvite, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
 
@@ -12,10 +12,24 @@ import { registerFromInvite, submitWaitlist, validateInviteToken } from '../lib/
 // (avatar, user info, config, invite, waitlist). Do NOT add `auth: true` / `.use(betterAuth)`: these
 // are consumed by pre-auth pages and external callers, and gating them breaks the public contract.
 export const publicRouter = new Elysia({ name: 'public' })
-    .get('/p/avatar/:emailOrId', async ({ params, set }) => {
+    .get('/p/avatar/:emailOrId', async ({ params, set, request }) => {
         const avatar = await getAvatarByEmailOrId(params.emailOrId);
 
         if (avatar) {
+            // Team avatars live at a stable filename, so a long TTL would pin a replaced image
+            // for a day; revalidate instead (cheap 304s, and only team rows pay them). User
+            // avatars keep the long TTL — member lists fetch them in bulk.
+            if (params.emailOrId.startsWith('team_')) {
+                const etag = `W/"${avatar.size}-${avatar.lastModified}"`;
+                const ifNoneMatch = request.headers.get('if-none-match');
+                if (ifNoneMatch && etagMatches(ifNoneMatch, etag.slice(2))) {
+                    return new Response(null, { status: 304, headers: { ETag: etag } });
+                }
+                set.headers['ETag'] = etag;
+                set.headers['Cache-Control'] = 'public, no-cache';
+                set.headers['Content-Type'] = 'image/webp';
+                return avatar;
+            }
             setCacheHeaders(set, 86400, 'public');
             set.headers['Content-Type'] = 'image/webp';
             return avatar;

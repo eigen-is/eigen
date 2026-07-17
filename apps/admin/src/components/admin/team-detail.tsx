@@ -72,7 +72,9 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const [showAddMount, setShowAddMount] = useState(false);
     const [editingMount, setEditingMount] = useState<{ id: string; mount: MountSettings } | null>(null);
     const [showSettingsForm, setShowSettingsForm] = useState(false);
-    const [avatarVersion, setAvatarVersion] = useState(0);
+    // Fresh URL returned by the last avatar mutation (contacts pattern) — unique per upload,
+    // so it can never hit a stale browser-cache entry for this team's stable avatar URL.
+    const [avatarUrl, setAvatarUrl] = useState<string>();
 
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
@@ -87,8 +89,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const removeMember = useRemoveTeamMember();
 
     const ownerId = teamOwnerId(team.id);
-    // Local cache-bust so the admin sees the new image despite the 24h Cache-Control on /p/avatar.
-    const avatarImageUrl = avatarVersion > 0 ? `p/avatar/${ownerId}?v=${avatarVersion}` : undefined;
     const { data: calendars = [] } = useCalendars(ownerId);
     const updateCalendar = useUpdateCalendar(ownerId);
     const { data: settings } = useTeamSettings(team.id);
@@ -121,7 +121,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
     useEffect(() => {
         setShowSettingsForm(false);
-        setAvatarVersion(0);
+        setAvatarUrl(undefined);
     }, [team.id]);
 
     const openSettingsForm = () => {
@@ -190,20 +190,18 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
 
     const handleAvatarUpload = async (file: File) => {
-        await uploadAvatar.mutateAsync(file);
-        setAvatarVersion((v) => v + 1);
+        setAvatarUrl(await uploadAvatar.mutateAsync(file));
     };
 
     const handleRemoveAvatar = async () => {
-        await removeAvatar.mutateAsync();
-        setAvatarVersion((v) => v + 1);
+        setAvatarUrl(await removeAvatar.mutateAsync());
     };
 
     return (
         <div className="app-gutter space-y-6 h-full overflow-y-auto">
             <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                    <UserAvatar size="lg" userId={ownerId} imageUrl={avatarImageUrl} />
+                    <UserAvatar size="lg" userId={ownerId} imageUrl={avatarUrl} />
                     <h2 className="text-xl font-medium truncate">{team.name}</h2>
                 </div>
                 {!showSettingsForm && (
@@ -221,7 +219,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                         <AvatarEditor
                             className="h-24 w-24"
                             userId={ownerId}
-                            imageUrl={avatarImageUrl}
+                            imageUrl={avatarUrl}
                             showRemove
                             onUpload={handleAvatarUpload}
                             onRemove={handleRemoveAvatar}

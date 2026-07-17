@@ -88,4 +88,61 @@ describe('Team Avatar', () => {
         });
         expect(res.status).toBe(404);
     });
+
+    // Replacing an avatar must be visible immediately: the routes return a fresh, unique
+    // avatar URL per mutation (the contacts pattern — a changed URL can never hit a stale
+    // browser-cache entry), and serving revalidates via ETag so plain-URL surfaces recover
+    // on reload instead of showing a 24h-stale image.
+    test('upload and remove return a fresh avatar URL, unique per call', async () => {
+        const prefix = `p/avatar/${teamOwnerId(teamId)}?v=`;
+
+        const first = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/avatar`, {
+            method: 'POST',
+            body: avatarForm(),
+        });
+        expect(first.status).toBe(200);
+        const firstUrl = await first.text();
+        expect(firstUrl.startsWith(prefix)).toBe(true);
+
+        const second = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/avatar`, {
+            method: 'POST',
+            body: avatarForm(),
+        });
+        const secondUrl = await second.text();
+        expect(secondUrl.startsWith(prefix)).toBe(true);
+        expect(secondUrl).not.toBe(firstUrl);
+
+        const removed = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/avatar`, {
+            method: 'DELETE',
+        });
+        const removedUrl = await removed.text();
+        expect(removedUrl.startsWith(prefix)).toBe(true);
+        expect(removedUrl).not.toBe(secondUrl);
+    });
+
+    test('team avatar serving revalidates: ETag + no-cache, 304 on match, new ETag after replace', async () => {
+        await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/avatar`, {
+            method: 'POST',
+            body: avatarForm(),
+        });
+
+        const url = `http://localhost/p/avatar/${teamOwnerId(teamId)}`;
+        const res = await ctx.app.handle(new Request(url));
+        expect(res.status).toBe(200);
+        expect(res.headers.get('Cache-Control')).toContain('no-cache');
+        const etag = res.headers.get('ETag');
+        expect(etag).toBeTruthy();
+
+        const cached = await ctx.app.handle(new Request(url, { headers: { 'If-None-Match': etag! } }));
+        expect(cached.status).toBe(304);
+
+        await Bun.sleep(2);
+        await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/avatar`, {
+            method: 'POST',
+            body: avatarForm(),
+        });
+        const fresh = await ctx.app.handle(new Request(url, { headers: { 'If-None-Match': etag! } }));
+        expect(fresh.status).toBe(200);
+        expect(fresh.headers.get('ETag')).not.toBe(etag);
+    });
 });
