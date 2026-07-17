@@ -29,7 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
 import { HardDrive, Pencil, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AddMemberDialog } from './add-member-dialog';
 import { MountDialog } from './mount-dialog';
 
@@ -72,10 +72,11 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const [showAddMount, setShowAddMount] = useState(false);
     const [editingMount, setEditingMount] = useState<{ id: string; mount: MountSettings } | null>(null);
     const [showSettingsForm, setShowSettingsForm] = useState(false);
-    // This page always requests the avatar with a fresh ?v=timestamp (set on mount/team switch
-    // and re-stamped after upload/remove): the editing surface must never show the up-to-24h
-    // browser-cached copy of the team's stable /p/avatar URL. Other surfaces accept that TTL.
-    const [avatarUrl, setAvatarUrl] = useState<string>();
+    // This page always requests the avatar with a fresh ?v=timestamp (stamped per mount and after
+    // upload/remove): the editing surface must never show the up-to-24h browser-cached copy of the
+    // team's stable /p/avatar URL. Other surfaces accept that TTL. The route mounts this component
+    // with key={team.id}, so switching teams remounts and re-stamps naturally.
+    const [avatarUrl, setAvatarUrl] = useState(() => `p/avatar/${teamOwnerId(team.id)}?v=${Date.now()}`);
 
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
@@ -119,11 +120,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const defaultMountStorageType = serverSettings
         ? mapStorageType(serverSettings.defaults.mount.storageType)
         : ('local' as const);
-
-    useEffect(() => {
-        setShowSettingsForm(false);
-        setAvatarUrl(`p/avatar/${teamOwnerId(team.id)}?v=${Date.now()}`);
-    }, [team.id]);
 
     const openSettingsForm = () => {
         setDraftName(team.name);
@@ -223,7 +219,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                             className="h-24 w-24"
                             userId={ownerId}
                             imageUrl={avatarUrl}
-                            showRemove
                             onUpload={handleAvatarUpload}
                             onRemove={handleRemoveAvatar}
                         />

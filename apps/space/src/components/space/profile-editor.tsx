@@ -81,8 +81,7 @@ export function ProfileEditor() {
                         name={contact ? `${contact.firstName} ${contact.lastName}` : ''}
                         email={contact?.email?.[0]}
                         imageUrl={avatar || ''}
-                        showRemove={!!avatar}
-                        onRemove={() => setAvatar(null)}
+                        onRemove={avatar ? () => setAvatar(null) : undefined}
                         onUpload={async (file) => {
                             const formData = new FormData();
                             formData.append('file', file);

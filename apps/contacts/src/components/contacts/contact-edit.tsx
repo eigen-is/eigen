@@ -166,8 +166,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                     name={`${contact.firstName} ${contact.lastName}`}
                                     email={contact.email?.[0]}
                                     imageUrl={avatar ?? ''}
-                                    showRemove={!!avatar}
-                                    onRemove={() => setAvatar(null)}
+                                    onRemove={avatar ? () => setAvatar(null) : undefined}
                                     onUpload={async (file) => {
                                         if (!user) return;
                                         const formData = new FormData();

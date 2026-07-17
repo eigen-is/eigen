@@ -12,32 +12,15 @@ export type AvatarEditorProps = {
     imageUrl?: string;
     onUpload: (file: File) => void | Promise<void>;
     onRemove?: () => void | Promise<void>;
-    showRemove?: boolean;
     className?: string;
 };
 
-export function AvatarEditor({
-    name,
-    email,
-    userId,
-    imageUrl,
-    onUpload,
-    onRemove,
-    showRemove = false,
-    className,
-}: AvatarEditorProps) {
+export function AvatarEditor({ name, email, userId, imageUrl, onUpload, onRemove, className }: AvatarEditorProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     return (
         <div className={cn('group relative h-32 w-32', className)}>
-            <UserAvatar
-                name={name}
-                email={email}
-                userId={userId}
-                imageUrl={imageUrl}
-                className="h-full w-full"
-                size="lg"
-            />
+            <UserAvatar name={name} email={email} userId={userId} imageUrl={imageUrl} className="h-full w-full" />
 
             <input
                 ref={fileInputRef}
@@ -66,9 +49,7 @@ export function AvatarEditor({
                     <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
                         Upload from files
                     </DropdownMenuItem>
-                    {showRemove && onRemove && (
-                        <DropdownMenuItem onSelect={() => onRemove()}>Remove avatar</DropdownMenuItem>
-                    )}
+                    {onRemove && <DropdownMenuItem onSelect={() => onRemove()}>Remove avatar</DropdownMenuItem>}
                 </DropdownMenuContent>
             </DropdownMenu>
         </div>

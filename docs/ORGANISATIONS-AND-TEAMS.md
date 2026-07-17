@@ -53,7 +53,8 @@ Teams can have an avatar image, set by org admins from the admin app's team deta
 avatar management is out of scope). Storage mirrors the user-avatar pipeline: a single webp in the server-central
 avatars dir, keyed by owner id — `data/server/avatars/team_{teamId}.webp`. File existence is the only source of
 truth; there's no `TeamSettings` pointer or auth-schema column (`pushTeamAvatar` in `home-relay.ts`, next to
-`pushUserProfile`).
+`pushUserProfile`). Deleting a team removes its avatar file (`afterDeleteTeam` hook in `auth.ts`), and serving
+double-checks the team still exists so an orphaned file is never served.
 
 - `POST /team/:ownerId/avatar` (body `{ file }`) and `DELETE /team/:ownerId/avatar` — gated by `requireTeamAdmin`,
   so org admins/owners pass without needing team membership. Upload converts through `generateImagePreview`

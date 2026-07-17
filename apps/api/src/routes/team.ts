@@ -134,8 +134,9 @@ export const teamRouter = new Elysia({ name: 'team' })
     .post(
         '/team/:ownerId/avatar',
         async ({ params, body, user }): Promise<void> => {
-            await requireTeamAdmin(user.id, teamId(params.ownerId));
-            if (!(await getTeamExists(teamId(params.ownerId)))) throw new ApiError(404, 'Team not found');
+            const id = teamId(params.ownerId);
+            await requireTeamAdmin(user.id, id);
+            if (!(await getTeamExists(id))) throw new ApiError(404, 'Team not found');
             // Global max upload size only — a team avatar shouldn't bill the uploading admin's
             // personal mail+contacts quota (that's what enforceAvatarUpload adds on top).
             enforceMaxUploadSize(body.file.size);
@@ -146,7 +147,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                 fit: 'cover',
             });
             if (!result) throw new ApiError(400, 'Failed to generate avatar thumbnail');
-            await pushTeamAvatar(teamId(params.ownerId), result.data);
+            await pushTeamAvatar(id, result.data);
         },
         {
             body: t.Object({ file: t.File({ format: 'image/*' }) }),
@@ -157,9 +158,10 @@ export const teamRouter = new Elysia({ name: 'team' })
     .delete(
         '/team/:ownerId/avatar',
         async ({ params, user }): Promise<void> => {
-            await requireTeamAdmin(user.id, teamId(params.ownerId));
-            if (!(await getTeamExists(teamId(params.ownerId)))) throw new ApiError(404, 'Team not found');
-            await pushTeamAvatar(teamId(params.ownerId), null);
+            const id = teamId(params.ownerId);
+            await requireTeamAdmin(user.id, id);
+            if (!(await getTeamExists(id))) throw new ApiError(404, 'Team not found');
+            await pushTeamAvatar(id, null);
         },
         { auth: true },
     );

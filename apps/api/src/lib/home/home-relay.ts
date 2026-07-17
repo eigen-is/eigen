@@ -10,6 +10,7 @@
 // server (or enqueues a message), and pull functions become remote API calls.
 
 import * as path from 'node:path';
+import { teamOwnerId } from '@workspace/lib/types';
 import type {
     Attendee,
     CalendarEvent,
@@ -251,7 +252,7 @@ export async function pushUserProfile(userId: string, name: string, avatarWebP: 
 // Team avatars share the user-avatar file layout, but file existence is the only source of truth —
 // there's no auth-schema row to update (unlike pushUserProfile).
 export async function pushTeamAvatar(teamId: string, avatarWebP: Buffer | null): Promise<void> {
-    const avatarPath = path.join(getAvatarsDir(), `team_${teamId}.webp`);
+    const avatarPath = path.join(getAvatarsDir(), `${teamOwnerId(teamId)}.webp`);
 
     if (avatarWebP) {
         await Bun.write(avatarPath, avatarWebP);
@@ -262,15 +263,15 @@ export async function pushTeamAvatar(teamId: string, avatarWebP: Buffer | null):
     }
 }
 
-export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQuotaOverrides> {
-    const home = await getTeamHome(teamOwnerId);
+export async function pullTeamQuotaOverrides(ownerId: string): Promise<TeamQuotaOverrides> {
+    const home = await getTeamHome(ownerId);
     return home.settings.get().memberOverrides ?? {};
 }
 
 export async function pullTeamMounts(
-    teamOwnerId: string,
+    ownerId: string,
 ): Promise<{ id: string; name: string; rootPathId: string | null }[]> {
-    const home = await getTeamHome(teamOwnerId);
+    const home = await getTeamHome(ownerId);
     const mounts = home.settings.get().mounts ?? {};
     const enabled = Object.entries(mounts).filter(([, m]) => m.enabled);
     return Promise.all(

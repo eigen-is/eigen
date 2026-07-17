@@ -34,7 +34,9 @@ function TeamsRoute() {
         <ColumnLayout>
             <Column id="detail" width="flex" toolbar={detailToolbar}>
                 {team ? (
-                    <TeamDetail team={team} organizationId={config?.orgId} />
+                    // key: remount per team so per-team state (drafts, avatar ?v= stamp) resets and
+                    // an in-flight avatar mutation can't write the previous team's URL into the new one.
+                    <TeamDetail key={team.id} team={team} organizationId={config?.orgId} />
                 ) : (
                     <EmptyState message="Select a team to view details" />
                 )}
