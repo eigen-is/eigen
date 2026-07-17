@@ -4,14 +4,29 @@ import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { useMemo } from 'react';
 import { useContacts } from './use-contacts';
 
+type TeamMember = { email: string; name: string; teamId: string };
+
+function toTeamSuggestion(member: TeamMember): ContactSuggestion {
+    return {
+        kind: 'team',
+        id: member.email,
+        displayName: member.name || member.email,
+        email: member.email,
+        teamId: member.teamId,
+    };
+}
+
 // Single source for "match a typed string against personal contacts + team members
 // the user can reach." Consumed by ContactAutosuggest (mail/calendar/drive-share),
 // ChatPlayerSuggest, and the command palette providers. Team members are merged in
 // first (higher priority), personal contacts second; dedup is by lowercased email.
+// `listOnEmptyQuery` opts into showing team members as default suggestions before the
+// 2-char minimum is met (the new-chat wizard's member picker) — off for every other caller.
 export function useContactSuggestions(
     query: string,
     onlyInternalMails: boolean = false,
     excludeEmails: string[] = [],
+    options?: { listOnEmptyQuery?: boolean },
 ): { suggestions: ContactSuggestion[]; isLoading: boolean } {
     const { data: contacts, isLoading: contactsLoading } = useContacts();
     const { data: myTeams } = useMyTeams();
@@ -23,8 +38,8 @@ export function useContactSuggestions(
     // team a member is found in wins their teamId — sufficient for palette nav, which
     // just needs one valid team/<teamId>?contactId=<email> URL.
     const teamMembers = useMemo(() => {
-        if (!myTeams) return new Map<string, { email: string; name: string; teamId: string }>();
-        const members = new Map<string, { email: string; name: string; teamId: string }>();
+        if (!myTeams) return new Map<string, TeamMember>();
+        const members = new Map<string, TeamMember>();
         for (const team of myTeams) {
             for (const member of team.members) {
                 const key = member.email.toLowerCase();
@@ -39,7 +54,19 @@ export function useContactSuggestions(
     const excludeSet = useMemo(() => new Set(excludeEmails.map((e) => e.toLowerCase())), [excludeEmails]);
 
     const suggestions = useMemo(() => {
-        if (!lowerQuery || lowerQuery.length < 2) return [];
+        if (!lowerQuery || lowerQuery.length < 2) {
+            // Before the 2-char minimum, opt-in callers (the chat wizard) still want the
+            // internal team members surfaced as default picks; every other caller gets nothing.
+            if (!options?.listOnEmptyQuery) return [];
+            const defaults: ContactSuggestion[] = [];
+            for (const [emailKey, member] of teamMembers) {
+                if (excludeSet.has(emailKey)) continue;
+                if (onlyInternalMails && !emailKey.endsWith(`@${domain}`)) continue;
+                if (query.includes(member.email)) continue;
+                defaults.push(toTeamSuggestion(member));
+            }
+            return defaults;
+        }
 
         const results: ContactSuggestion[] = [];
         const seenEmails = new Set<string>();
@@ -53,13 +80,7 @@ export function useContactSuggestions(
             if (query.includes(member.email)) continue;
 
             seenEmails.add(emailKey);
-            results.push({
-                kind: 'team',
-                id: member.email,
-                displayName: member.name || member.email,
-                email: member.email,
-                teamId: member.teamId,
-            });
+            results.push(toTeamSuggestion(member));
         }
 
         // Personal contacts (skip duplicates by email)
@@ -90,7 +111,7 @@ export function useContactSuggestions(
         }
 
         return results;
-    }, [contacts, teamMembers, lowerQuery, onlyInternalMails, excludeSet, query, domain]);
+    }, [contacts, teamMembers, lowerQuery, onlyInternalMails, excludeSet, query, domain, options?.listOnEmptyQuery]);
 
     return {
         suggestions,
