@@ -72,8 +72,9 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const [showAddMount, setShowAddMount] = useState(false);
     const [editingMount, setEditingMount] = useState<{ id: string; mount: MountSettings } | null>(null);
     const [showSettingsForm, setShowSettingsForm] = useState(false);
-    // Fresh URL returned by the last avatar mutation (contacts pattern) — unique per upload,
-    // so it can never hit a stale browser-cache entry for this team's stable avatar URL.
+    // This page always requests the avatar with a fresh ?v=timestamp (set on mount/team switch
+    // and re-stamped after upload/remove): the editing surface must never show the up-to-24h
+    // browser-cached copy of the team's stable /p/avatar URL. Other surfaces accept that TTL.
     const [avatarUrl, setAvatarUrl] = useState<string>();
 
     const [draftName, setDraftName] = useState(team.name);
@@ -121,7 +122,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
     useEffect(() => {
         setShowSettingsForm(false);
-        setAvatarUrl(undefined);
+        setAvatarUrl(`p/avatar/${teamOwnerId(team.id)}?v=${Date.now()}`);
     }, [team.id]);
 
     const openSettingsForm = () => {
@@ -190,11 +191,13 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
 
     const handleAvatarUpload = async (file: File) => {
-        setAvatarUrl(await uploadAvatar.mutateAsync(file));
+        await uploadAvatar.mutateAsync(file);
+        setAvatarUrl(`p/avatar/${ownerId}?v=${Date.now()}`);
     };
 
     const handleRemoveAvatar = async () => {
-        setAvatarUrl(await removeAvatar.mutateAsync());
+        await removeAvatar.mutateAsync();
+        setAvatarUrl(`p/avatar/${ownerId}?v=${Date.now()}`);
     };
 
     return (

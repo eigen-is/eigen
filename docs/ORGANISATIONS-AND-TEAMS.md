@@ -58,16 +58,16 @@ truth; there's no `TeamSettings` pointer or auth-schema column (`pushTeamAvatar`
 - `POST /team/:ownerId/avatar` (body `{ file }`) and `DELETE /team/:ownerId/avatar` — gated by `requireTeamAdmin`,
   so org admins/owners pass without needing team membership. Upload converts through `generateImagePreview`
   (512px cover crop, same as user avatars); global max-upload-size check only, not the uploading admin's personal
-  quota. Both return a fresh, unique avatar URL (`p/avatar/team_{id}?v={uuid}`) that the client puts straight
-  into state (the contacts-avatar pattern) — a changed URL can never hit a stale browser-cache entry, so
-  replacements are visible immediately
+  quota
 - **Serving**: `GET /p/avatar/team_{teamId}` (`getAvatarByEmailOrId` in `apps/api/src/lib/space/public.ts`) serves
   the webp if it exists, falling back to the deterministic team SVG otherwise. `getPublicInfo` already returns
   this URL for teams, so `UserAvatar`/`UserItem`/`useResolvedUser` pick it up with zero per-surface changes.
-  Because the filename is stable (unlike per-upload-UUID user avatars), team webp responses are served with
-  `Cache-Control: public, no-cache` + a weak size/mtime `ETag` (304 on `If-None-Match`) instead of the 24h user
-  TTL — plain-URL surfaces (sidebar rows, shares) revalidate on the next load rather than pinning a replaced
-  image for a day
+  Responses carry the same 24h public `Cache-Control` as user avatars — no special casing
+- **Freshness**: the team filename is stable (unlike per-upload-UUID user avatars), so the admin team detail
+  page always renders its avatar with a client-generated `?v={timestamp}` (stamped on mount/team switch and
+  after upload/remove) — the editing surface never shows the browser-cached copy. A `?v` value must never be
+  reused across page loads (a repeated value serves a stale cache entry — never use a counter). Other surfaces
+  (sidebar rows, shares) accept up-to-24h staleness, same as user avatars viewed by others
 
 ### OrgHome
 

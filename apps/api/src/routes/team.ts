@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
@@ -134,7 +133,7 @@ export const teamRouter = new Elysia({ name: 'team' })
 
     .post(
         '/team/:ownerId/avatar',
-        async ({ params, body, user }): Promise<string> => {
+        async ({ params, body, user }): Promise<void> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
             if (!(await getTeamExists(teamId(params.ownerId)))) throw new ApiError(404, 'Team not found');
             // Global max upload size only — a team avatar shouldn't bill the uploading admin's
@@ -148,9 +147,6 @@ export const teamRouter = new Elysia({ name: 'team' })
             });
             if (!result) throw new ApiError(400, 'Failed to generate avatar thumbnail');
             await pushTeamAvatar(teamId(params.ownerId), result.data);
-            // Fresh unique URL per mutation (contacts pattern) — a changed URL can never hit a
-            // stale browser-cache entry, so the client shows the replacement immediately.
-            return `p/avatar/${params.ownerId}?v=${randomUUID()}`;
         },
         {
             body: t.Object({ file: t.File({ format: 'image/*' }) }),
@@ -160,11 +156,10 @@ export const teamRouter = new Elysia({ name: 'team' })
 
     .delete(
         '/team/:ownerId/avatar',
-        async ({ params, user }): Promise<string> => {
+        async ({ params, user }): Promise<void> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
             if (!(await getTeamExists(teamId(params.ownerId)))) throw new ApiError(404, 'Team not found');
             await pushTeamAvatar(teamId(params.ownerId), null);
-            return `p/avatar/${params.ownerId}?v=${randomUUID()}`;
         },
         { auth: true },
     );
