@@ -54,9 +54,11 @@ export async function getAvatarByEmailOrId(emailOrId: string): Promise<BunFile |
     if (parsed.type === 'team') {
         // Build the filename from the parsed id (`team_{id}.webp`), never the raw input — the
         // `team_` prefix keeps it clear of user UUIDs. Existence is the only source of truth.
-        if (!(await getTeam(parsed.id))) return null;
+        // Cheap file check first: most teams have no avatar, so skip the team lookup unless
+        // there's actually a file that must not be served for a deleted team.
         const file = Bun.file(path.join(getAvatarsDir(), `team_${parsed.id}.webp`));
-        return (await file.exists()) ? file : null;
+        if (!(await file.exists())) return null;
+        return (await getTeam(parsed.id)) ? file : null;
     }
 
     const user = await getUserByEmailOrId(emailOrId);

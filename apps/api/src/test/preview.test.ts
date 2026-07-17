@@ -6,7 +6,7 @@ import { isExiftoolCandidate } from '../lib/preview/exiftool-preview';
 import { getTextPreview } from '../lib/preview/preview-cache';
 import { isVideoCandidate } from '../lib/preview/video-preview';
 import { generateImagePreview, saveThumbnail } from '../lib/shared/thumbnails';
-import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
+import { authedRequest, driveGet, driveUpload, getTestContext, TEST_PNG_BYTES } from './setup';
 
 describe('Preview', () => {
     let token: string;
@@ -55,13 +55,7 @@ describe('Preview', () => {
     });
 
     test('image file returns webp preview', async () => {
-        const pngBytes = new Uint8Array([
-            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
-            147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73,
-            68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0,
-            0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
-        ]);
-        const file = new File([pngBytes], 'pixel.png', { type: 'image/png' });
+        const file = new File([TEST_PNG_BYTES], 'pixel.png', { type: 'image/png' });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
         expect(res.status).toBe(200);
@@ -110,13 +104,7 @@ describe('Preview', () => {
     });
 
     test('image preview is cached on second request', async () => {
-        const pngBytes = new Uint8Array([
-            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
-            147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73,
-            68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0,
-            0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
-        ]);
-        const file = new File([pngBytes], 'cached.png', { type: 'image/png' });
+        const file = new File([TEST_PNG_BYTES], 'cached.png', { type: 'image/png' });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
 
         const first = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
@@ -128,13 +116,7 @@ describe('Preview', () => {
     });
 
     test('upload image generates thumbnail', async () => {
-        const pngBytes = new Uint8Array([
-            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
-            147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73,
-            68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0,
-            0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
-        ]);
-        const file = new File([pngBytes], 'thumb-test.png', { type: 'image/png' });
+        const file = new File([TEST_PNG_BYTES], 'thumb-test.png', { type: 'image/png' });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
 
         // Thumbnail is generated in the background — poll for it
@@ -195,12 +177,7 @@ describe('generateImagePreview', () => {
     }
 
     test('converts PNG file to WebP and returns dimensions', async () => {
-        const pngBytes = Buffer.from([
-            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
-            147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73,
-            68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0,
-            0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
-        ]);
+        const pngBytes = Buffer.from(TEST_PNG_BYTES);
         const filePath = await writeTempFile('test.png', pngBytes);
         const result = await generateImagePreview(filePath, 'image/png', 'test.png', tmpDir, 'test-png');
         expect(result).not.toBeNull();
