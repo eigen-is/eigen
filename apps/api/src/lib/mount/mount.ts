@@ -3,11 +3,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isSearchableTextFile } from '@workspace/lib/constants';
 import {
+    CHATS_FOLDER_NAME,
     DRIVE_MIME_FOLDER,
     DRIVE_TYPE_FOLDER,
     type DriveContainerType,
     type DrivePath,
     type MountConfig,
+    parseOwnerId,
 } from '@workspace/lib/types';
 import { type DriveVisibility, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
@@ -246,20 +248,26 @@ export class Mount {
 
     private async ensureRootFolder(): Promise<void> {
         const root = await this.db.select().from(paths).where(isNull(paths.parentId)).get();
+        if (root) return;
 
-        if (!root) {
-            await this.db.insert(paths).values({
-                id: randomUUID(),
-                file: '',
-                name: 'Drive',
-                type: DRIVE_TYPE_FOLDER,
-                parentId: null,
-                ownerId: this.ownerId,
-                mimeType: DRIVE_MIME_FOLDER,
-                acl: null,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
+        const rootId = randomUUID();
+        await this.db.insert(paths).values({
+            id: rootId,
+            file: '',
+            name: 'Drive',
+            type: DRIVE_TYPE_FOLDER,
+            parentId: null,
+            ownerId: this.ownerId,
+            mimeType: DRIVE_MIME_FOLDER,
+            acl: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
+
+        // Seed the default Chats folder on personal drives only — team and extra/S3 mounts stay empty
+        // and opt in lazily via Drive.ensureChatsFolder.
+        if (this.config.isDefault && parseOwnerId(this.ownerId).type === 'user') {
+            await this.createFolder(rootId, CHATS_FOLDER_NAME);
         }
     }
 

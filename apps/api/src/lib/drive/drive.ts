@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+    CHATS_FOLDER_NAME,
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
@@ -1147,6 +1148,20 @@ export default class Drive {
     async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
         return mount.getChildByName(parentId, name);
+    }
+
+    // Resolve the default parent for a new chat: the untrashed root child named `Chats` when it's a
+    // plain folder, the root itself when that name is taken by something else, otherwise create it.
+    // Resolved by name every call so the folder stays freely renameable/movable/deletable.
+    async ensureChatsFolder(mountId: string): Promise<string> {
+        const mount = this.getMount(mountId);
+        const root = await mount.getRootFolder();
+        if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
+
+        const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
+        if (existing) return existing.type === DRIVE_TYPE_FOLDER ? existing.id : root.id;
+
+        return mount.createFolder(root.id, CHATS_FOLDER_NAME);
     }
 
     // Called by: ChatRoom.init — serializes the lazy data.db auto-create against a concurrent

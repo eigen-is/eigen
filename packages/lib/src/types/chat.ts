@@ -1,5 +1,9 @@
 import type { AttachmentReference } from './drive-reference';
 
+// Default folder new chats land in — seeded per personal drive, resolved by name on each use
+// (so it stays freely renameable/movable/deletable). English-only product, no i18n.
+export const CHATS_FOLDER_NAME = 'Chats';
+
 export type ChatMessageType = 'message' | 'emote' | 'whisper' | 'system';
 
 export type ChatAttachment = string | AttachmentReference;
