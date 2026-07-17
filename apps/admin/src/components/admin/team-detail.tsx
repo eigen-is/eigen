@@ -4,11 +4,13 @@ import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
 import { useCheckS3Connection, useServerSettings } from '@workspace/lib/settings';
 import {
     useAddTeamMount,
+    useRemoveTeamAvatar,
     useTeamMembers,
     useTeamMounts,
     useTeamSettings,
     useUpdateTeamMount,
     useUpdateTeamSettings,
+    useUploadTeamAvatar,
 } from '@workspace/lib/team';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
@@ -20,12 +22,13 @@ import { Label } from '@workspace/ui/components/label';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import type { MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
-import { HardDrive, Pencil, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Camera, HardDrive, Pencil, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AddMemberDialog } from './add-member-dialog';
 import { MountDialog } from './mount-dialog';
 
@@ -68,6 +71,8 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const [showAddMount, setShowAddMount] = useState(false);
     const [editingMount, setEditingMount] = useState<{ id: string; mount: MountSettings } | null>(null);
     const [showSettingsForm, setShowSettingsForm] = useState(false);
+    const [avatarVersion, setAvatarVersion] = useState(0);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
@@ -82,6 +87,8 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const removeMember = useRemoveTeamMember();
 
     const ownerId = teamOwnerId(team.id);
+    // Local cache-bust so the admin sees the new image despite the 24h Cache-Control on /p/avatar.
+    const avatarImageUrl = avatarVersion > 0 ? `p/avatar/${ownerId}?v=${avatarVersion}` : undefined;
     const { data: calendars = [] } = useCalendars(ownerId);
     const updateCalendar = useUpdateCalendar(ownerId);
     const { data: settings } = useTeamSettings(team.id);
@@ -92,6 +99,8 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const { data: mounts = {} } = useTeamMounts(team.id);
     const addMount = useAddTeamMount(team.id);
     const updateMount = useUpdateTeamMount(team.id);
+    const uploadAvatar = useUploadTeamAvatar(team.id);
+    const removeAvatar = useRemoveTeamAvatar(team.id);
 
     const defaultCal = calendars.find((c) => c.isDefault);
     const teamTarget = teamOwnerId(team.id);
@@ -112,6 +121,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
     useEffect(() => {
         setShowSettingsForm(false);
+        setAvatarVersion(0);
     }, [team.id]);
 
     const openSettingsForm = () => {
@@ -179,10 +189,26 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
 
+    const handleAvatarSelected = async (e: ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        await uploadAvatar.mutateAsync(file);
+        setAvatarVersion((v) => v + 1);
+    };
+
+    const handleRemoveAvatar = async () => {
+        await removeAvatar.mutateAsync();
+        setAvatarVersion((v) => v + 1);
+    };
+
     return (
         <div className="app-gutter space-y-6 h-full overflow-y-auto">
-            <div className="flex items-center justify-between">
-                <h2 className="text-xl font-medium truncate">{team.name}</h2>
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                    <UserAvatar size="lg" userId={ownerId} imageUrl={avatarImageUrl} />
+                    <h2 className="text-xl font-medium truncate">{team.name}</h2>
+                </div>
                 {!showSettingsForm && (
                     <Button variant="ghost" size="sm" onClick={openSettingsForm}>
                         <Pencil className="h-4 w-4 mr-1" />
@@ -193,6 +219,26 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
             {showSettingsForm ? (
                 <div className="space-y-5 border rounded-lg p-4">
+                    <div className="space-y-1.5">
+                        <Label>Avatar</Label>
+                        <div className="flex items-center gap-3">
+                            <UserAvatar size="lg" userId={ownerId} imageUrl={avatarImageUrl} />
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleAvatarSelected}
+                            />
+                            <TooltipButton
+                                icon={Camera}
+                                tooltipText="Upload image"
+                                onClick={() => fileInputRef.current?.click()}
+                            />
+                            <TooltipButton icon={Trash2} tooltipText="Remove image" onClick={handleRemoveAvatar} />
+                        </div>
+                    </div>
+
                     <div className="space-y-1.5">
                         <Label>Team Name</Label>
                         <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} />
@@ -397,6 +443,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                                     <UserItem
                                         name={tm.name ?? 'Unknown'}
                                         email={tm.email ?? ''}
+                                        userId={tm.userId}
                                         className="flex-1 min-w-0"
                                     />
                                     <Button
