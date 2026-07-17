@@ -76,7 +76,8 @@ POST   /chat/:ownerId/:mountId/:chatId/read
 
 The `:chatId` routes go through `getSharedDrive()` (ACL checks; write routes additionally check `canWrite`). The two
 `rooms` routes are the new-chat wizard's backend — self-only (`requireSelf` + raw `getDrive`, like `/shared/by-me`),
-since they read the caller's own mounts and share on the caller's behalf. See [New-Chat Wizard](#new-chat-wizard) below.
+since they read the caller's own mounts and share on the caller's behalf; the POST additionally requires
+`requireNonGuest` (guests can't share, so the server hard-rejects them too, not just the hidden UI). See [New-Chat Wizard](#new-chat-wizard) below.
 
 ## ACL
 
@@ -159,7 +160,8 @@ never sees team-drive chats (excluded above).
 - **Chat app**: the sidebar "New chat" button (`apps/chat/src/components/chat/chat-sidebar.tsx`) and the chat empty
   state (`apps/chat/src/routes/_auth.index.tsx`).
 - **Contacts**: "Start chat" on a contact toolbar (`contact-detail.tsx`, shown only when the contact resolves to an
-  Eigen user — `eigenId !== ''`) and on a team member (`team-member-detail.tsx`, always). `useStartChatWith(email)`
+  Eigen user — `eigenId !== ''`) and on a team member (`team-member-detail.tsx`, always). `useStartChatWith()`'s
+`startChatWith(email)`
   fetches the `{me, them}` match once: exactly one writable match opens it directly (cross-app `openDocument`, full
   load), otherwise the wizard opens pre-filled with that person.
 
