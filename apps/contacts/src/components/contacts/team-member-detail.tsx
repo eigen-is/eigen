@@ -1,11 +1,42 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
-import { Toolbar } from '@workspace/ui';
+import { useStartChatWith } from '@workspace/lib/chat';
+import { Toolbar, TooltipButton } from '@workspace/ui';
+import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
-import { Mail } from 'lucide-react';
+import { Mail, MessageSquare } from 'lucide-react';
+import { useState } from 'react';
 import type { TeamMember } from './team-member-list';
 
-export function TeamMemberDetailToolbar() {
-    return <Toolbar>{null}</Toolbar>;
+// Team members always resolve to an Eigen user, so the action is unconditional here (unlike personal
+// contacts, which gate on eigenId in ContactDetailToolbar).
+export function TeamMemberDetailToolbar({ member }: { member: TeamMember }) {
+    const startChatWith = useStartChatWith();
+    const [chatOpen, setChatOpen] = useState(false);
+
+    const handleStartChat = async () => {
+        // 'opened' means an existing writable 1:1 was navigated to; otherwise open the wizard pre-filled.
+        if ((await startChatWith(member.email)) !== 'opened') setChatOpen(true);
+    };
+
+    return (
+        <>
+            <Toolbar>
+                <div className="flex items-center gap-1 ml-auto">
+                    <TooltipButton
+                        icon={MessageSquare}
+                        tooltipText="Start chat"
+                        className="h-8 w-8"
+                        onClick={() => void handleStartChat()}
+                    />
+                </div>
+            </Toolbar>
+            <ChatCreateWizard
+                open={chatOpen}
+                onOpenChange={setChatOpen}
+                initialPeople={[{ email: member.email, name: member.name }]}
+            />
+        </>
+    );
 }
 
 type TeamMemberDetailProps = {

@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { getMailComposeUrl } from '@workspace/lib/api';
+import { useStartChatWith } from '@workspace/lib/chat';
 import { useLabels } from '@workspace/lib/contacts';
 import { formatDate } from '@workspace/lib/date';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
@@ -16,10 +17,23 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { EigenLoader } from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
+import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/printElement';
-import { Building, Calendar, Mail, MapPin, MoreVertical, Pencil, Phone, Printer, Trash2 } from 'lucide-react';
+import {
+    Building,
+    Calendar,
+    Mail,
+    MapPin,
+    MessageSquare,
+    MoreVertical,
+    Pencil,
+    Phone,
+    Printer,
+    Trash2,
+} from 'lucide-react';
+import { useState } from 'react';
 
 type ContactDetailToolbarProps = {
     contact: Contact;
@@ -30,67 +44,97 @@ type ContactDetailToolbarProps = {
 
 export function ContactDetailToolbar({ contact, filterType, filterId, onDeleteClick }: ContactDetailToolbarProps) {
     const openWriteEmailTo = useOpenWriteEmailTo();
+    const startChatWith = useStartChatWith();
+    const [chatWith, setChatWith] = useState<{ email: string; name: string } | null>(null);
+
+    const email = contact.email?.[0];
+    // Personal contacts store the internal user id in eigenId, or '' when external — only Eigen users
+    // can be chat partners (team members always qualify, handled in TeamMemberDetailToolbar).
+    const canStartChat = !!email && !!contact.eigenId;
+
+    const handleStartChat = async () => {
+        if (!email) return;
+        // 'opened' means an existing writable 1:1 was navigated to; otherwise open the wizard pre-filled.
+        if ((await startChatWith(email)) !== 'opened') {
+            setChatWith({ email, name: `${contact.firstName} ${contact.lastName}`.trim() });
+        }
+    };
 
     return (
-        <Toolbar>
-            <div className="flex items-center gap-1 ml-auto">
-                <Link
-                    to="/edit/$filterType/$filterId"
-                    params={{
-                        filterType: filterType || 'filter',
-                        filterId: filterId || 'all',
-                    }}
-                    search={{
-                        contactId: contact.id,
-                    }}
-                >
-                    <TooltipButton icon={Pencil} tooltipText="Edit" className="h-8 w-8" />
-                </Link>
-                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDeleteClick} />
+        <>
+            <Toolbar>
+                <div className="flex items-center gap-1 ml-auto">
+                    <Link
+                        to="/edit/$filterType/$filterId"
+                        params={{
+                            filterType: filterType || 'filter',
+                            filterId: filterId || 'all',
+                        }}
+                        search={{
+                            contactId: contact.id,
+                        }}
+                    >
+                        <TooltipButton icon={Pencil} tooltipText="Edit" className="h-8 w-8" />
+                    </Link>
+                    <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDeleteClick} />
 
-                <Separator orientation="vertical" className="h-6 mx-1" />
+                    <Separator orientation="vertical" className="h-6 mx-1" />
 
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                            <MoreVertical className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {contact.email && contact.email.length > 0 && (
-                            <DropdownMenuItem onClick={() => openWriteEmailTo(contact.email[0])}>
-                                <Mail className="mr-2" />
-                                Send email
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
+                                <MoreVertical className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            {email && (
+                                <DropdownMenuItem onClick={() => openWriteEmailTo(email)}>
+                                    <Mail className="mr-2" />
+                                    Send email
+                                </DropdownMenuItem>
+                            )}
+                            {canStartChat && (
+                                <DropdownMenuItem onClick={() => void handleStartChat()}>
+                                    <MessageSquare className="mr-2" />
+                                    Start chat
+                                </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={printDocument}>
+                                <Printer className="mr-2" />
+                                Print
                             </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={printDocument}>
-                            <Printer className="mr-2" />
-                            Print
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild className="cursor-pointer">
-                            <Link
-                                to="/edit/$filterType/$filterId"
-                                params={{
-                                    filterType: filterType || 'filter',
-                                    filterId: filterId || 'all',
-                                }}
-                                search={{
-                                    contactId: contact.id,
-                                }}
-                            >
-                                <Pencil className="mr-2" />
-                                Edit
-                            </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={onDeleteClick}>
-                            <Trash2 className="mr-2" />
-                            Delete
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-        </Toolbar>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild className="cursor-pointer">
+                                <Link
+                                    to="/edit/$filterType/$filterId"
+                                    params={{
+                                        filterType: filterType || 'filter',
+                                        filterId: filterId || 'all',
+                                    }}
+                                    search={{
+                                        contactId: contact.id,
+                                    }}
+                                >
+                                    <Pencil className="mr-2" />
+                                    Edit
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={onDeleteClick}>
+                                <Trash2 className="mr-2" />
+                                Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </Toolbar>
+            <ChatCreateWizard
+                open={!!chatWith}
+                onOpenChange={(open) => {
+                    if (!open) setChatWith(null);
+                }}
+                initialPeople={chatWith ? [chatWith] : undefined}
+            />
+        </>
     );
 }
 

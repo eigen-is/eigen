@@ -114,7 +114,12 @@ function ContactsRoute() {
                         />
                     </div>
                 </Column>
-                <Column id="detail" width="flex" onBack={handleBackToList} toolbar={<TeamMemberDetailToolbar />}>
+                <Column
+                    id="detail"
+                    width="flex"
+                    onBack={handleBackToList}
+                    toolbar={activeMember ? <TeamMemberDetailToolbar member={activeMember} /> : null}
+                >
                     {activeMember ? (
                         <TeamMemberDetail member={activeMember} />
                     ) : (

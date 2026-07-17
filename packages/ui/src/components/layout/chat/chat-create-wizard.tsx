@@ -35,10 +35,14 @@ const MAX_RENAME_ATTEMPTS = 20;
 
 type PickedPerson = { email: string; displayName: string };
 
+// Prefill for callers that already know who the chat is with (e.g. contacts' "Start chat"). The
+// name seeds the picked row and thus the live 1:1 name default; it falls back to the email when absent.
+type InitialPerson = { email: string; name?: string };
+
 type ChatCreateWizardProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    initialEmails?: string[];
+    initialPeople?: InitialPerson[];
     // In-app router navigation for the target room. Chat apps pass a typed TanStack navigate; when
     // omitted the wizard falls back to openDocument (window.location) so route-tree-agnostic consumers work.
     onNavigate?: (path: DrivePath) => void;
@@ -58,7 +62,7 @@ function defaultChatName(pickedNames: string[], myName: string): string {
     return joinNames(pickedNames);
 }
 
-export function ChatCreateWizard({ open, onOpenChange, initialEmails, onNavigate }: ChatCreateWizardProps) {
+export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate }: ChatCreateWizardProps) {
     const { user } = useAuth();
     const isGuest = useIsGuest();
 
@@ -116,12 +120,15 @@ export function ChatCreateWizard({ open, onOpenChange, initialEmails, onNavigate
         return list;
     }, [picked, myEmail]);
 
-    const initialEmailsKey = (initialEmails ?? []).join(',');
+    // Serialized so a fresh array literal from the caller doesn't re-run the reset effect (which would
+    // wipe in-progress edits); the effect re-seeds only when the prefill's contents actually change.
+    const initialPeopleKey = JSON.stringify(initialPeople ?? []);
 
     // Reset to a clean form each time the dialog opens (or its prefill changes).
     useEffect(() => {
         if (!open) return;
-        setPicked(initialEmailsKey ? initialEmailsKey.split(',').map((e) => ({ email: e, displayName: e })) : []);
+        const seed: InitialPerson[] = JSON.parse(initialPeopleKey);
+        setPicked(seed.map((p) => ({ email: p.email.toLowerCase(), displayName: p.name?.trim() || p.email })));
         setInput('');
         setName('');
         setNameDirty(false);
@@ -130,7 +137,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialEmails, onNavigate
         setLocationTouched(false);
         setLocationExpanded(false);
         setCreateError(null);
-    }, [open, initialEmailsKey, myOwnerId]);
+    }, [open, initialPeopleKey, myOwnerId]);
 
     // Keep the name live-defaulted until the user edits it: team mode requires a typed topic (empty
     // default), person mode tracks the picked set ("Alice & Reinder", "Alice, Bob & Carol").
