@@ -203,21 +203,33 @@ Team settings are stored in `data/team/{teamId}/settings.json` via `TeamHome.set
 
 ### User Deletion
 
-`DELETE /settings/user/:userId` — admin-only, permanently deletes a user and all their data:
+One deletion semantic for every entry point. The complete teardown lives in `teardownUserData`
+(`lib/user/delete-user.ts`), invoked from the `databaseHooks.user.delete.before` hook in `auth.ts` — the one
+seam every better-auth deletion path passes through while the user row still exists:
 
 1. Evicts cached Home singleton (closes databases)
-2. Deletes home directory (`data/home/{userId}/`)
-3. Cleans share registry (entries FROM and TO the user)
+2. Deletes home directory (`data/home/{userId}/`, or the guest home for guests)
+3. Cleans share registry (entries FROM the user always; entries TO the user only for non-guests, so re-OTP
+   after guest deletion rehydrates the same shared.db state)
 4. Removes auth rows referencing the user — org/team memberships, 2FA, API keys — via
    `authDeleteUserReferences` (explicit deletion since SQLite CASCADE is inert with `PRAGMA foreign_keys` off).
    Membership deletion also sweeps rows whose user is already gone, healing orphans from past bad deletions
-5. Deletes the user via better-auth `auth.api.removeUser()` (sessions, accounts)
 
-A `databaseHooks.user.delete` hook in `auth.ts` runs the same reference cleanup for deletions that bypass this
-flow (e.g. better-auth's raw `/auth/admin/remove-user` endpoint) — one orphaned `member` row makes
-`listMembers` throw org-wide, locking every admin out of the admin app.
+Entry points, all funneling through better-auth's `deleteUser` (sessions + accounts, then the user row, with
+the hook firing before the user row goes):
 
-Cannot delete own account (server-side guard).
+- `DELETE /settings/user/:userId` — admin-only Eigen route; `deleteUserCompletely` delegates to
+  `auth.api.removeUser()`
+- better-auth's raw `POST /auth/admin/remove-user` — same complete teardown via the hook
+- inactive-guest cleanup (system, no session) — `deleteUserCompletely(id, null)` goes through
+  `auth.$context.internalAdapter.deleteUser()`
+
+A hook error aborts better-auth's user-row deletion (fail-closed); sessions and accounts are already gone at
+that point, so a retry of the deletion completes the removal.
+
+Guards: cannot delete your own account and non-admins are rejected — enforced server-side by the Eigen route
+(`requireAdmin` + own-account 400) and independently by better-auth's `/admin/remove-user` itself (403
+non-admin, 400 self-removal), so the raw endpoint bypasses nothing.
 
 **Frontend**: `useDeleteUser(organizationId)` hook in `packages/lib/src/core/admin/hooks/use-members.ts`.
 "Danger zone" section in member detail with confirmation dialog.
