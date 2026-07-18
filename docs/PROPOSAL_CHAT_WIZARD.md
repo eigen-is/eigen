@@ -1,6 +1,8 @@
 # Proposal: New-Chat Wizard
 
-> **Status — revised draft v2, 2026-07-17.** No code yet. v1 (2026-07-14) was fact-checked against the
+> **Status — implemented as-built, 2026-07-19.** Fully implemented on branch `worktree-chat-wizard`,
+> including the v3 two-step redesign (see § v3 design round at the end); reviewed, gate-green, and
+> browser-verified 11/11. v1 (2026-07-14) was fact-checked against the
 > codebase and against how Signal, WhatsApp, Telegram, Slack, and Google Chat design their new-chat
 > flows; this revision corrects the wrong facts, resolves the open questions, and adjusts the UX to
 > match messenger conventions. Covers: a create-chat dialog (people + name + location),
@@ -472,3 +474,21 @@ duplicate warning, file config) on one surface. Signed-off redesign:
 - **Drive `+ New → New chat` opens the wizard** (closes the drive New-menu-swap follow-up):
   location prefilled to the current folder; in a team drive it opens directly in team mode.
   Guests keep the old direct-create path. Other eigendoc types keep `DriveCreateEigenDoc`.
+  The wizard's person-mode create is strictly own-drive, so only an own personal drive passes
+  `initialLocation`; team drives pass only `initialTeamId`; a foreign-user owner (shared-with-me
+  folder) keeps the bare `DriveCreateEigenDoc` path, and the wizard itself ignores a seeded
+  location whose owner isn't the current user.
+
+### v3 follow-ups (recorded at round close, 2026-07-19)
+
+- Keyboard access to team rows in the step-1 picker (arrows/Enter cover person suggestions;
+  teams are click-only).
+- `useContactSuggestions` has no `enabled` option, so a closed wizard mounted in toolbars still
+  warms the contacts query (rides shared cached queries; low cost).
+- Consider restoring a quiet "Everyone in <team> is a member" hint in team mode — v2 had it,
+  the v3 picker shows only the removable team row.
+- Shared-folder `+ New → New chat` shows the bare-create dialog whose location defaults to the
+  user's own Drive root rather than the shared folder (pre-existing `DriveCreateEigenDoc`
+  behavior, unchanged by this round) — decide whether it should target the shared folder.
+- The lazy `Chats`→`chats` migration rename emits no SSE and doesn't propagate to shared-mirror
+  rows (documented in CHAT.md; mirrors heal on the next rename/ACL touch).
