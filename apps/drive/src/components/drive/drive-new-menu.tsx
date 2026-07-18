@@ -1,12 +1,15 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
+import { useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo } from '@workspace/lib/drive';
-import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { getCreateMenuItems } from '@workspace/ui/components/layout/drive/create-menu';
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
@@ -25,6 +28,7 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
     const [createType, setCreateType] = useState<EigenDocType | null>(null);
     const [uploadOpen, setUploadOpen] = useState(false);
     const navigate = useNavigate();
+    const isGuest = useIsGuest();
 
     const routeMatch = useMatch({
         from: '/_auth/fs/$ownerId/$mountId/$pathId',
@@ -42,6 +46,7 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
     );
 
     const targetPath = currentPath || rootPath;
+    const targetOwner = targetPath ? parseOwnerId(targetPath.ownerId) : null;
 
     const handleAfterAction = () => {
         navigate({
@@ -87,17 +92,34 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
                 onAfterCreate={handleAfterAction}
             />
 
-            {createType && (
-                <DriveCreateEigenDoc
-                    type={createType}
+            {createType === DRIVE_TYPE_CHAT && !isGuest ? (
+                /* Non-guest "New chat" opens the people/team wizard; guests keep the bare create below
+                   (the wizard renders null for them). Navigation uses the wizard's openDocument fallback. */
+                <ChatCreateWizard
                     open={true}
                     onOpenChange={(open) => {
                         if (!open) setCreateType(null);
                     }}
-                    defaultOwnerId={targetPath?.ownerId}
-                    defaultFolderId={targetPath?.id}
-                    defaultMountId={targetPath?.mountId}
+                    initialLocation={
+                        targetPath
+                            ? { ownerId: targetPath.ownerId, mountId: targetPath.mountId, folderId: targetPath.id }
+                            : undefined
+                    }
+                    initialTeamId={targetOwner?.type === 'team' ? targetOwner.id : undefined}
                 />
+            ) : (
+                createType && (
+                    <DriveCreateEigenDoc
+                        type={createType}
+                        open={true}
+                        onOpenChange={(open) => {
+                            if (!open) setCreateType(null);
+                        }}
+                        defaultOwnerId={targetPath?.ownerId}
+                        defaultFolderId={targetPath?.id}
+                        defaultMountId={targetPath?.mountId}
+                    />
+                )
             )}
 
             {targetPath && (

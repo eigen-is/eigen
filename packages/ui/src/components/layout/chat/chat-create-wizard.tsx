@@ -34,6 +34,11 @@ type ChatCreateWizardProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     initialPeople?: InitialPerson[];
+    // Seeds the location as already-touched so step 2 confirms this folder instead of the auto
+    // `chats` default (Drive's "+ New → New chat" passes the browsed folder).
+    initialLocation?: DriveLocationValue;
+    // Opens directly in team mode for that team (Drive passes it when the current drive is a team drive).
+    initialTeamId?: string;
     // In-app router navigation for the target room. Chat apps pass a typed TanStack navigate; when
     // omitted the wizard falls back to openDocument (window.location) so route-tree-agnostic consumers work.
     onNavigate?: (path: DrivePath) => void;
@@ -48,7 +53,14 @@ function defaultChatName(pickedNames: string[], myName: string): string {
     return `${pickedNames.slice(0, -1).join(', ')} & ${pickedNames[pickedNames.length - 1]}`;
 }
 
-export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate }: ChatCreateWizardProps) {
+export function ChatCreateWizard({
+    open,
+    onOpenChange,
+    initialPeople,
+    initialLocation,
+    initialTeamId,
+    onNavigate,
+}: ChatCreateWizardProps) {
     const { user } = useAuth();
     const isGuest = useIsGuest();
 
@@ -114,9 +126,10 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const canCreate = teamMode ? !!name.trim() && !!teamRootId : picked.length > 0;
     const step1CanProceed = teamMode || picked.length > 0;
 
-    // Serialized so a fresh array literal from the caller doesn't re-run the reset effect (which would
-    // wipe in-progress edits); the effect re-seeds only when the prefill's contents actually change.
+    // Serialized so a fresh array/object literal from the caller doesn't re-run the reset effect (which
+    // would wipe in-progress edits); the effect re-seeds only when the prefill's contents actually change.
     const initialPeopleKey = JSON.stringify(initialPeople ?? []);
+    const initialLocationKey = JSON.stringify(initialLocation ?? null);
 
     // Reset to a clean form each time the dialog opens (or its prefill changes).
     useEffect(() => {
@@ -133,12 +146,14 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         setSelectedIndex(0);
         setName('');
         setNameDirty(false);
-        setSelectedTeamId(null);
-        setLocation({ ownerId: myOwnerId, mountId: DEFAULT_MOUNT_ID, folderId: '' });
-        setLocationTouched(false);
+        setSelectedTeamId(initialTeamId ?? null);
+        const seedLocation: DriveLocationValue | null = JSON.parse(initialLocationKey);
+        // A seeded location lands step 2 on the real folder; otherwise the auto `chats` default.
+        setLocation(seedLocation ?? { ownerId: myOwnerId, mountId: DEFAULT_MOUNT_ID, folderId: '' });
+        setLocationTouched(!!seedLocation);
         setLocationExpanded(false);
         setCreateError(null);
-    }, [open, initialPeopleKey, myOwnerId, myEmail]);
+    }, [open, initialPeopleKey, initialLocationKey, initialTeamId, myOwnerId, myEmail]);
 
     // Keep the name live-defaulted until the user edits it: team mode requires a typed topic (empty
     // default), person mode tracks the picked set ("Alice & Reinder", "Alice, Bob & Carol").
