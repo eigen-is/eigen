@@ -1168,16 +1168,22 @@ export default class Drive {
     // Called by: POST /chat/:ownerId/:mountId/rooms — escape-hatch route (requireSelf + getDrive,
     // like /shared/by-me). No SharedDrive wrapper by design: seeding a caller's own default parent
     // is owner-scoped, cross-owner access has no meaning. See class doc above.
-    // Resolves the default parent for a new chat: the untrashed root child named `Chats` when it's a
-    // plain folder, the root itself when that name is taken by something else, otherwise create it.
-    // Resolved by name every call so the folder stays freely renameable/movable/deletable.
+    // Resolves the default parent for a new chat: the untrashed root child named `chats` when it's a
+    // plain folder (migrating a legacy `Chats` to the lowercase name in place, pathId stable), the
+    // root itself when that name is taken by a non-folder, otherwise create it. Resolved by name every
+    // call so the folder stays freely renameable/movable/deletable.
     async ensureChatsFolder(mountId: string): Promise<string> {
         const mount = this.getMount(mountId);
         const root = await mount.getRootFolder();
         if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
 
+        // getChildByName folds case, so one lookup resolves both the new `chats` and a legacy `Chats`.
         const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
-        if (existing) return existing.type === DRIVE_TYPE_FOLDER ? existing.id : root.id;
+        if (existing) {
+            if (existing.type !== DRIVE_TYPE_FOLDER) return root.id;
+            if (existing.name !== CHATS_FOLDER_NAME) await mount.updatePath(existing.id, { name: CHATS_FOLDER_NAME });
+            return existing.id;
+        }
 
         return mount.createFolder(root.id, CHATS_FOLDER_NAME);
     }

@@ -264,7 +264,7 @@ export class Mount {
             updatedAt: new Date(),
         });
 
-        // Seed the default Chats folder on personal drives only — team and extra/S3 mounts stay empty
+        // Seed the default chats folder on personal drives only — team and extra/S3 mounts stay empty
         // and opt in lazily via Drive.ensureChatsFolder.
         if (this.config.isDefault && parseOwnerId(this.ownerId).type === 'user') {
             await this.createFolder(rootId, CHATS_FOLDER_NAME);

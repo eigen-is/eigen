@@ -57,14 +57,24 @@ async function byMembers(token: string, ownerId: string, emails: string): Promis
     return ((await res.json()) as { matches: ChatMatch[] }).matches;
 }
 
-describe('Chat wizard — Chats folder', () => {
+// A throwaway user with a fresh default mount — isolates folder-migration tests from the shared trio.
+async function signUpFreshUser(label: string): Promise<{ id: string; token: string }> {
+    const email = `chats-${label}-${randomUUID()}@test.eigen.is`;
+    const password = 'testpassword123';
+    const signUp = await auth.api.signUpEmail({ body: { email, password, name: `Chats ${label}` } });
+    const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
+    const token = (signIn.headers.get('set-cookie') ?? '').match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '';
+    return { id: signUp.user.id, token };
+}
+
+describe('Chat wizard — chats folder', () => {
     let ctx: TestCtx;
 
     beforeAll(async () => {
         ctx = await getTestContext();
     });
 
-    test('seeds a Chats folder in a fresh user default mount root', async () => {
+    test('seeds a chats folder in a fresh user default mount root', async () => {
         const mountId = await firstMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
         const root = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
         const children = await driveGetList(
@@ -74,12 +84,33 @@ describe('Chat wizard — Chats folder', () => {
             `folder/${root.id}`,
         );
 
-        const chats = children.find((c) => c.name === 'Chats');
+        const chats = children.find((c) => c.name === 'chats');
         expect(chats).toBeDefined();
         expect(chats!.type).toBe('folder');
     });
 
-    test('does not seed a Chats folder in a team drive root', async () => {
+    test('migrates a legacy `Chats` folder to `chats` in place, reusing the same pathId', async () => {
+        const u = await signUpFreshUser('legacy');
+        const mountId = await firstMountId(u.token, u.id);
+        const root = await driveGet(u.token, u.id, mountId, 'root');
+        const before = await driveGetList(u.token, u.id, mountId, `folder/${root.id}`);
+
+        const seeded = before.find((c) => c.name === 'chats' && c.type === 'folder');
+        expect(seeded).toBeDefined();
+
+        // Reproduce the legacy uppercase name the folder shipped with before this rename.
+        const home = await getHome(u.id);
+        await home.drive.renamePath(mountId, seeded!.id, 'Chats');
+
+        const migratedId = await home.drive.ensureChatsFolder(mountId);
+        expect(migratedId).toBe(seeded!.id); // renamed in place, not recreated
+
+        const after = await driveGetList(u.token, u.id, mountId, `folder/${root.id}`);
+        expect(after.find((c) => c.id === seeded!.id)?.name).toBe('chats');
+        expect(after.filter((c) => c.name === 'chats' && c.type === 'folder')).toHaveLength(1);
+    });
+
+    test('does not seed a chats folder in a team drive root', async () => {
         const orgId = getServerConfig()!.orgId;
         await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
             method: 'POST',
@@ -96,7 +127,7 @@ describe('Chat wizard — Chats folder', () => {
         const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
         const children = await driveGetList(ctx.alice.user.sessionToken, teamOwner, teamMountId, `folder/${root.id}`);
 
-        expect(children.find((c) => c.name === 'Chats')).toBeUndefined();
+        expect(children.find((c) => c.name === 'chats')).toBeUndefined();
     });
 
     test('ensureChatsFolder recreates the folder after it is trashed', async () => {
@@ -104,7 +135,7 @@ describe('Chat wizard — Chats folder', () => {
         const root = await driveGet(ctx.bob.user.sessionToken, ctx.bob.user.id, mountId, 'root');
         const before = await driveGetList(ctx.bob.user.sessionToken, ctx.bob.user.id, mountId, `folder/${root.id}`);
 
-        const seeded = before.find((c) => c.name === 'Chats');
+        const seeded = before.find((c) => c.name === 'chats');
         expect(seeded).toBeDefined();
         await driveDelete(ctx.bob.user.sessionToken, ctx.bob.user.id, mountId, `path/${seeded!.id}`);
 
@@ -113,13 +144,13 @@ describe('Chat wizard — Chats folder', () => {
         expect(chatsId).not.toBe(seeded!.id);
 
         const after = await driveGetList(ctx.bob.user.sessionToken, ctx.bob.user.id, mountId, `folder/${root.id}`);
-        const chatsFolders = after.filter((c) => c.name === 'Chats');
+        const chatsFolders = after.filter((c) => c.name === 'chats');
         expect(chatsFolders).toHaveLength(1);
         expect(chatsFolders[0].id).toBe(chatsId);
         expect(chatsFolders[0].type).toBe('folder');
     });
 
-    test('ensureChatsFolder falls back to the root when Chats is a non-folder', async () => {
+    test('ensureChatsFolder falls back to the root when chats is a non-folder', async () => {
         const mountId = await firstMountId(ctx.charlie.user.sessionToken, ctx.charlie.user.id);
         const root = await driveGet(ctx.charlie.user.sessionToken, ctx.charlie.user.id, mountId, 'root');
         const before = await driveGetList(
@@ -129,25 +160,25 @@ describe('Chat wizard — Chats folder', () => {
             `folder/${root.id}`,
         );
 
-        const seeded = before.find((c) => c.name === 'Chats');
+        const seeded = before.find((c) => c.name === 'chats');
         expect(seeded).toBeDefined();
         await driveDelete(ctx.charlie.user.sessionToken, ctx.charlie.user.id, mountId, `path/${seeded!.id}`);
 
-        const file = new File(['not a folder'], 'Chats', { type: 'text/plain' });
+        const file = new File(['not a folder'], 'chats', { type: 'text/plain' });
         await driveUpload(ctx.charlie.user.sessionToken, ctx.charlie.user.id, mountId, root.id, file);
 
         const home = await getHome(ctx.charlie.user.id);
         const result = await home.drive.ensureChatsFolder(mountId);
         expect(result).toBe(root.id);
 
-        // Nothing renamed or created: still exactly one untrashed `Chats`, still the non-folder file.
+        // Nothing renamed or created: still exactly one untrashed `chats`, still the non-folder file.
         const after = await driveGetList(
             ctx.charlie.user.sessionToken,
             ctx.charlie.user.id,
             mountId,
             `folder/${root.id}`,
         );
-        const named = after.filter((c) => c.name === 'Chats');
+        const named = after.filter((c) => c.name === 'chats');
         expect(named).toHaveLength(1);
         expect(named[0].type).not.toBe('folder');
     });
@@ -416,7 +447,7 @@ describe('Chat wizard — create with members', () => {
             mountId,
             `folder/${rootId}`,
         );
-        chatsFolderId = children.find((c) => c.name === 'Chats' && c.type === 'folder')!.id;
+        chatsFolderId = children.find((c) => c.name === 'chats' && c.type === 'folder')!.id;
     });
 
     // userOnAclAdd is shared server state — reset around every test so we neither trust a leaked
@@ -424,7 +455,7 @@ describe('Chat wizard — create with members', () => {
     beforeEach(() => setUserAclEmail(false));
     afterEach(() => setUserAclEmail(false));
 
-    test('creates a chat in the Chats folder and shares it with the picked members', async () => {
+    test('creates a chat in the chats folder and shares it with the picked members', async () => {
         const res = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
             fileName: 'Alice & Bob wizard',
             members: [bobEmail],
