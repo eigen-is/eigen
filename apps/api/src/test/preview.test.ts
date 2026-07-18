@@ -37,6 +37,18 @@ describe('Preview', () => {
         expect(data.mode).toBe('plaintext');
     });
 
+    test('plaintext preview renders prose paragraphs, not a code block', async () => {
+        const content = 'First line\nsecond line\n\nSecond paragraph with <b>markup</b>';
+        const { res } = await uploadAndTextPreview('para.txt', content, 'text/plain');
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        // eigen-prose paints every <pre> as a dark non-wrapping code block — .txt must read
+        // like rendered markdown instead: paragraphs on blank lines, <br> on single newlines.
+        expect(data.body).not.toContain('<pre>');
+        expect(data.body).toContain('<p>First line<br>second line</p>');
+        expect(data.body).toContain('<p>Second paragraph with &lt;b&gt;markup&lt;/b&gt;</p>');
+    });
+
     test('markdown file returns rendered body', async () => {
         const { res } = await uploadAndTextPreview('test.md', '# Title\n\nSome **bold** text', 'text/markdown');
         expect(res.status).toBe(200);

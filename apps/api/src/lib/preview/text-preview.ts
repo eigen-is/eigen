@@ -100,8 +100,14 @@ export async function generateTextPreview(
         }
     }
 
-    // plaintext
-    return { body: `<pre><code>${escapeHtml(content)}</code></pre>`, mode };
+    // plaintext — prose paragraphs, NOT <pre>: eigen-prose paints every <pre> as a dark
+    // non-wrapping code block, and .txt should read exactly like rendered markdown.
+    const paragraphs = content
+        .replace(/\r\n/g, '\n')
+        .split(/\n{2,}/)
+        .filter((block) => block.trim() !== '')
+        .map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`);
+    return { body: paragraphs.join('\n') || '<p></p>', mode };
 }
 
 type HastNode = {
