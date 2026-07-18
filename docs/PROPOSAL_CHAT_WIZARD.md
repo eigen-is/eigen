@@ -442,3 +442,30 @@ chat hooks.
 | Contacts app | `apps/contacts/src/components/contacts/contact-detail.tsx`, `team-member-detail.tsx` |
 | Tests | `apps/api/src/test/chat-wizard.test.ts` (new) |
 | Docs | `docs/CHAT.md` (also fix the stale create-route), `AGENTS.md` |
+
+## v3 design round (2026-07-18) — two-step wizard
+
+Hands-on feedback on the shipped v2 dialog: cramped, the autosuggest popover opens immediately on
+dialog open and covers the Name/Location fields, and the dialog mixes three jobs (pick people,
+duplicate warning, file config) on one surface. Signed-off redesign:
+
+- **Two steps, one fixed dialog size** (no height jumps; inner content scrolls).
+- **Step 1 — who.** Search input (no "With" label), suggestion list rendered *inline* in a
+  dedicated scrollable area (command-palette style), populated immediately on open. **Teams are
+  rows in the same picker** (badge-marked); picking one enters team mode (exclusive, removable).
+  The footer "Team chat" dropdown is gone. Picked people are removable rows above the list.
+  When the picked set exactly matches an existing writable chat, the primary **"Let's chat"**
+  opens it and a secondary **"New chat anyway"** advances to step 2; otherwise "Let's chat"
+  advances. Match rows are clickable and open directly.
+- **Step 2 — confirm.** Prefilled Name (`defaultChatName`; team mode: required, empty), Location
+  (auto `My Drive › chats`; team mode: team drive root; Change expands the browser), **Back**
+  preserves step-1 state, primary **"Let's chat"** creates + opens.
+- **Wizard is pick-only**: the free-text `Name <email>` add path and the `+` button are removed
+  from the wizard (closes the v2 internal-only follow-up; `ContactAddRow` unchanged for the
+  share dialog). Wizard data hooks are gated on `open` (closes that follow-up too).
+- **Folder rename:** the auto-created default folder is now **`chats`** (lowercase). Legacy
+  auto-created `Chats` folders are lazily renamed to `chats` by `ensureChatsFolder` (pathId
+  stable; collision with a non-folder `chats` falls back to using `Chats` unrenamed).
+- **Drive `+ New → New chat` opens the wizard** (closes the drive New-menu-swap follow-up):
+  location prefilled to the current folder; in a team drive it opens directly in team mode.
+  Guests keep the old direct-create path. Other eigendoc types keep `DriveCreateEigenDoc`.
