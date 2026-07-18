@@ -465,7 +465,10 @@ duplicate warning, file config) on one surface. Signed-off redesign:
   share dialog). Wizard data hooks are gated on `open` (closes that follow-up too).
 - **Folder rename:** the auto-created default folder is now **`chats`** (lowercase). Legacy
   auto-created `Chats` folders are lazily renamed to `chats` by `ensureChatsFolder` (pathId
-  stable; collision with a non-folder `chats` falls back to using `Chats` unrenamed).
+  stable). No collision handling is needed: the case-insensitive unique index
+  (`idx_paths_unique_active_name` on `parentId, LOWER(name)`) plus the guarded write paths make a
+  `chats`/`Chats` pair unreachable, and `ensureChatsFolder`'s single case-folded lookup resolves
+  whichever one exists.
 - **Drive `+ New → New chat` opens the wizard** (closes the drive New-menu-swap follow-up):
   location prefilled to the current folder; in a team drive it opens directly in team mode.
   Guests keep the old direct-create path. Other eigendoc types keep `DriveCreateEigenDoc`.

@@ -14,6 +14,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, MessageSquare, Users, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { ContactSuggestList } from '../contacts/contact-suggest-list';
@@ -97,8 +98,8 @@ export function ChatCreateWizard({
     const teamRootId = teamMount?.rootPathId ?? '';
     const teamChats = teamSections.find((t) => t.id === selectedTeamId)?.chats ?? [];
 
-    // Own-mounts-only, so the owner never changes; a untouched location sends no parentId and lets the
-    // route resolve the Chats folder, a touched one carries the browsed folder.
+    // Own mounts only, so the owner never changes: an untouched location sends no parentId and lets the
+    // route resolve the `chats` folder, a touched one carries the browsed folder.
     const createMountId = locationTouched ? location.mountId : DEFAULT_MOUNT_ID;
     const createRoom = useCreateChatRoom(myOwnerId, createMountId);
     const createTeamChat = useCreateChat(teamChatOwnerId, teamMount?.id ?? '');
@@ -147,7 +148,10 @@ export function ChatCreateWizard({
         setName('');
         setNameDirty(false);
         setSelectedTeamId(initialTeamId ?? null);
-        const seedLocation: DriveLocationValue | null = JSON.parse(initialLocationKey);
+        const rawSeed: DriveLocationValue | null = JSON.parse(initialLocationKey);
+        // Person-mode create is own-drive only (own mounts, owner never changes), so a foreign-owner
+        // seed can't be its location — treat it as absent and fall back to the auto `chats` default.
+        const seedLocation = rawSeed && rawSeed.ownerId === myOwnerId ? rawSeed : null;
         // A seeded location lands step 2 on the real folder; otherwise the auto `chats` default.
         setLocation(seedLocation ?? { ownerId: myOwnerId, mountId: DEFAULT_MOUNT_ID, folderId: '' });
         setLocationTouched(!!seedLocation);
@@ -237,7 +241,10 @@ export function ChatCreateWizard({
             goToRoom(matches[0].path);
             return;
         }
-        if (step1CanProceed) setStep(2);
+        if (step1CanProceed) {
+            setCreateError(null);
+            setStep(2);
+        }
     };
 
     const createChat = () => {
@@ -258,9 +265,13 @@ export function ChatCreateWizard({
         }
         if (e.key === 'Enter') {
             e.preventDefault();
-            // A live query with a highlighted suggestion picks it; an empty query with picks proceeds.
-            if (query.trim() && suggestions[selectedIndex]) selectSuggestion(suggestions[selectedIndex]);
-            else advanceOrOpen();
+            // A live query with a highlighted suggestion picks it; only an empty query advances/opens.
+            // A non-empty query with nothing highlighted does nothing — never skip the picker.
+            if (query.trim()) {
+                if (suggestions[selectedIndex]) selectSuggestion(suggestions[selectedIndex]);
+            } else {
+                advanceOrOpen();
+            }
         }
     };
 
@@ -372,7 +383,7 @@ export function ChatCreateWizard({
                         {!teamMode && (
                             <>
                                 {teamMatches.length > 0 && (
-                                    <ul className="shrink-0 px-3">
+                                    <ul className="shrink-0 max-h-32 overflow-y-auto px-3">
                                         {teamMatches.map((team) => (
                                             <li key={team.id}>
                                                 <button
@@ -471,7 +482,14 @@ export function ChatCreateWizard({
                                     Cancel
                                 </Button>
                                 {singleWritable && (
-                                    <Button variant="outline" onClick={() => setStep(2)}>
+                                    <Button
+                                        variant="outline"
+                                        disabled={!step1CanProceed}
+                                        onClick={() => {
+                                            setCreateError(null);
+                                            setStep(2);
+                                        }}
+                                    >
                                         New chat anyway
                                     </Button>
                                 )}
@@ -482,7 +500,13 @@ export function ChatCreateWizard({
                         </>
                     ) : (
                         <>
-                            <Button variant="outline" onClick={() => setStep(1)}>
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setCreateError(null);
+                                    setStep(1);
+                                }}
+                            >
                                 Back
                             </Button>
                             <div className="flex gap-2">
@@ -517,13 +541,29 @@ function MatchPanel({ title, children }: { title: string; children: ReactNode })
 
 function MatchRow({ name, subtitle, onOpen }: { name: string; subtitle: string | null; onOpen?: () => void }) {
     return (
-        <div className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5">
+        // Whole row opens the chat when it has an Open target; the button keeps its own click and
+        // stops propagation so a button press doesn't also fire the row handler.
+        <div
+            className={cn(
+                'flex items-center justify-between gap-2 rounded-md px-2 py-1.5',
+                onOpen && 'cursor-pointer eigen-list-item',
+            )}
+            onClick={onOpen}
+        >
             <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{name}</p>
                 {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
             </div>
             {onOpen && (
-                <Button variant="outline" size="sm" className="shrink-0" onClick={onOpen}>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpen();
+                    }}
+                >
                     Open
                 </Button>
             )}

@@ -1,5 +1,5 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
-import { useIsGuest } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo } from '@workspace/lib/drive';
 import { DRIVE_TYPE_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -29,6 +29,7 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
     const [uploadOpen, setUploadOpen] = useState(false);
     const navigate = useNavigate();
     const isGuest = useIsGuest();
+    const { user } = useAuth();
 
     const routeMatch = useMatch({
         from: '/_auth/fs/$ownerId/$mountId/$pathId',
@@ -47,6 +48,11 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
 
     const targetPath = currentPath || rootPath;
     const targetOwner = targetPath ? parseOwnerId(targetPath.ownerId) : null;
+    // The wizard's person-mode create is strictly own-drive; a team drive opens it in team mode.
+    // A foreign USER owner (a shared-with-me folder) is neither, so chat there falls back to the
+    // bare create dialog — which can still drop a chat file into a writable shared folder.
+    const isOwnDrive = !!targetPath && targetPath.ownerId === user?.id;
+    const chatUsesWizard = createType === DRIVE_TYPE_CHAT && !isGuest && (isOwnDrive || targetOwner?.type === 'team');
 
     const handleAfterAction = () => {
         navigate({
@@ -92,16 +98,17 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
                 onAfterCreate={handleAfterAction}
             />
 
-            {createType === DRIVE_TYPE_CHAT && !isGuest ? (
-                /* Non-guest "New chat" opens the people/team wizard; guests keep the bare create below
-                   (the wizard renders null for them). Navigation uses the wizard's openDocument fallback. */
+            {chatUsesWizard ? (
+                /* Non-guest "New chat" in an own or team drive opens the people/team wizard; guests and
+                   shared-with-me folders keep the bare create below (the wizard renders null for guests).
+                   Navigation uses the wizard's openDocument fallback. */
                 <ChatCreateWizard
                     open={true}
                     onOpenChange={(open) => {
                         if (!open) setCreateType(null);
                     }}
                     initialLocation={
-                        targetPath
+                        isOwnDrive && targetPath
                             ? { ownerId: targetPath.ownerId, mountId: targetPath.mountId, folderId: targetPath.id }
                             : undefined
                     }

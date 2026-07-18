@@ -9,9 +9,7 @@ type ContactSuggestListProps = {
     selectedIndex: number;
     onSelect: (suggestion: ContactSuggestion) => void;
     className?: string;
-    // Inline drops the absolute-dropdown chrome (positioning, border, shadow, fixed height) and
-    // renders a plain scrollable list — the new-chat wizard's in-dialog picker. Every other caller
-    // (share dialog, contact autosuggest) keeps the absolute dropdown, pixel-unchanged.
+    // Inline drops the absolute-dropdown chrome for a plain scrollable list (the new-chat wizard's picker); every other caller keeps the dropdown.
     inline?: boolean;
 };
 

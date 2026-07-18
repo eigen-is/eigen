@@ -130,13 +130,17 @@ only the direct ACL + the owner's id, so their set is `{owner email via getUserB
 chat that gains members purely via a shared parent folder can false-positively match (accepted for v1 — the panel
 suggests, it never guards).
 
-### The `Chats` folder
+### The `chats` folder
 
-`CHATS_FOLDER_NAME = 'Chats'` (`packages/lib/src/types/chat.ts`) is the default parent for wizard chats. Seeded by
+`CHATS_FOLDER_NAME = 'chats'` (`packages/lib/src/types/chat.ts`) is the default parent for wizard chats. Seeded by
 `Mount.ensureRootFolder` only when it first creates the root, and only for default personal mounts (not team, extra, or
-S3 mounts). `Drive.ensureChatsFolder(mountId)` resolves it lazily by name each call (`getChildByName`), recreating it on
-miss and falling back to the root if the name is taken by a non-folder — so it stays an ordinary folder: renameable,
-movable, deletable, never pinned by id. English-only product, literal `Chats`, no i18n.
+S3 mounts). `Drive.ensureChatsFolder(mountId)` resolves it lazily by name each call (`getChildByName`, which folds case),
+recreating it on miss and falling back to the root if the name is taken by a non-folder — so it stays an ordinary
+folder: renameable, movable, deletable, never pinned by id. A legacy auto-created `Chats` folder is renamed in place to
+lowercase `chats` on the next resolve (same pathId; the case-folded lookup finds it). Two accepted caveats of that
+rename: it emits no SSE, so already-open drive lists show the old name until refresh; and it does not propagate to
+shared-mirror rows (`shared_paths` heals on the next rename or ACL touch). English-only product, literal `chats`, no
+i18n.
 
 ### Email suppression
 
