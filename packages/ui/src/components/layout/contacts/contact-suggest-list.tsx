@@ -9,9 +9,19 @@ type ContactSuggestListProps = {
     selectedIndex: number;
     onSelect: (suggestion: ContactSuggestion) => void;
     className?: string;
+    // Inline drops the absolute-dropdown chrome (positioning, border, shadow, fixed height) and
+    // renders a plain scrollable list — the new-chat wizard's in-dialog picker. Every other caller
+    // (share dialog, contact autosuggest) keeps the absolute dropdown, pixel-unchanged.
+    inline?: boolean;
 };
 
-export function ContactSuggestList({ items, selectedIndex, onSelect, className = '' }: ContactSuggestListProps) {
+export function ContactSuggestList({
+    items,
+    selectedIndex,
+    onSelect,
+    className = '',
+    inline = false,
+}: ContactSuggestListProps) {
     const listRef = useRef<HTMLUListElement>(null);
     useScrollToIndex(listRef, selectedIndex);
 
@@ -21,7 +31,9 @@ export function ContactSuggestList({ items, selectedIndex, onSelect, className =
         <ul
             ref={listRef}
             className={cn(
-                'absolute z-10 bg-background border rounded-md shadow-lg overflow-y-auto max-h-48',
+                inline
+                    ? 'overflow-y-auto'
+                    : 'absolute z-10 bg-background border rounded-md shadow-lg overflow-y-auto max-h-48',
                 className,
             )}
             tabIndex={-1}

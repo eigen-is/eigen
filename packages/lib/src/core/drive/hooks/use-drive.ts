@@ -169,7 +169,7 @@ export function useMimeContent(ownerId: string, mimeType: string, staleTime?: nu
 // GET AGGREGATE MIME CONTENTS — personal + every team the signed-in user belongs to, merged and
 // deduped server-side (GET /drive/:ownerId/mime/:mimeType?teams=1). Always scoped to the current
 // user, so it reads useAuth itself rather than taking an ownerId.
-export function useAggregateMimeContent(mimeType: string, staleTime: number = 1000 * 60 * 5) {
+export function useAggregateMimeContent(mimeType: string, staleTime: number = 1000 * 60 * 5, enabled: boolean = true) {
     const { user } = useAuth();
     const ownerId = user?.id || '';
     return useQuery<DrivePath[]>({
@@ -182,7 +182,7 @@ export function useAggregateMimeContent(mimeType: string, staleTime: number = 10
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        enabled: !!mimeType && !!ownerId,
+        enabled: enabled && !!mimeType && !!ownerId,
         retry: 1,
         staleTime,
     });

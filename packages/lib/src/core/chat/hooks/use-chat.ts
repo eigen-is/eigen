@@ -53,9 +53,10 @@ export function groupChatsBySection(chats: DrivePath[], teams: readonly { id: st
 
 // One aggregate request (personal + all team chats), split into sidebar sections. Both the personal
 // and per-team lists keep the aggregate's updatedAt-desc order.
-export function useChatSections(): ChatSections & { isLoading: boolean } {
+export function useChatSections(enabled: boolean = true): ChatSections & { isLoading: boolean } {
     // Chat sidebar wants fresher data than drive-folder browsing: 1 min instead of the 5-min default.
-    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, 60_000);
+    // `enabled` lets the always-mounted new-chat wizard skip the aggregate fetch while closed.
+    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, 60_000, enabled);
     const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
     return useMemo(() => {
         const sections = groupChatsBySection(chats ?? [], myTeams ?? []);
