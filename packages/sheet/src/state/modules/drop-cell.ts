@@ -1455,11 +1455,11 @@ function getCopyData(d: CellMatrix, r1: number, r2: number, c1: number, c2: numb
             // cell value type
             let str: string;
             if (data?.v != null && data.f == null) {
-                if (!!data.ct && data.ct.t === 'n') {
+                if (data.ct && data.ct.t === 'n') {
                     str = 'number';
                     extendNumberBeforeStr = null;
                     extendNumberAfterStr = null;
-                } else if (!!data.ct && data.ct.t === 'd') {
+                } else if (data.ct && data.ct.t === 'd') {
                     str = 'date';
                     extendNumberBeforeStr = null;
                     extendNumberAfterStr = null;

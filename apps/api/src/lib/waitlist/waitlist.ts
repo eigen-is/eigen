@@ -106,7 +106,7 @@ export async function rejectWaitlistEntry(id: string) {
 
 export async function resendWaitlistInvite(id: string) {
     const entry = await getWaitlistEntry(id);
-    if (!entry || entry.status !== 'invited') return null;
+    if (entry?.status !== 'invited') return null;
 
     const d = await db();
     const inviteToken = randomUUID();

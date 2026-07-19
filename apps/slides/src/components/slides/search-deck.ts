@@ -11,7 +11,7 @@ export function searchDeck(deck: DeckData, regex: RegExp): DocSearchMatch[] {
         if (!slide) continue;
         for (const objId of slide.objectIds) {
             const obj = deck.objects[objId];
-            if (!obj || obj.type !== 'text') continue;
+            if (obj?.type !== 'text') continue;
             const text = stripTagsServer(obj.text);
             if ((text.match(regex) ?? []).length === 0) continue;
             matches.push({

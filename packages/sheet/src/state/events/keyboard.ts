@@ -373,7 +373,7 @@ export function handleGlobalKeyDown(
         return;
     }
 
-    if (kstr === 'Escape' && !!ctx.formulaRangeSelections) {
+    if (kstr === 'Escape' && ctx.formulaRangeSelections) {
         ctx.formulaRangeSelections = [];
     }
 

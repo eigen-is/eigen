@@ -159,7 +159,7 @@ export function updateFormatCell(
                         if (textInfo?.textHeightAll == null) continue;
                         const rowHeight = round(textInfo.textHeightAll);
                         const currentRowHeight = cfg.rowlen?.[r] || ctx.sheets[sheetIndex].defaultRowHeight || 19;
-                        if (rowHeight > currentRowHeight && (!cfg.customHeight || cfg.customHeight[r] !== 1)) {
+                        if (rowHeight > currentRowHeight && cfg.customHeight?.[r] !== 1) {
                             if (cfg.rowlen === undefined) cfg.rowlen = {};
                             set(cfg, `rowlen.${r}`, rowHeight);
                         }

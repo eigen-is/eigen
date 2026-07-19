@@ -1264,7 +1264,7 @@ export function showSelected(ctx: Context, type: string) {
 export function isShowHidenCR(ctx: Context): boolean {
     if (!ctx.selections || (!ctx.config.colhidden && !ctx.config.rowhidden)) return false;
     // If the current selection is on a hidden row/column, it is not editable
-    if (!!ctx.config.colhidden && size(ctx.config.colhidden) >= 1) {
+    if (ctx.config.colhidden && size(ctx.config.colhidden) >= 1) {
         const ctxColumn = ctx.selections[0]?.column?.[0];
         const isHidenColumn =
             Object.keys(ctx.config.colhidden).findIndex((o) => {
@@ -1274,7 +1274,7 @@ export function isShowHidenCR(ctx: Context): boolean {
             return true;
         }
     }
-    if (!!ctx.config.rowhidden && size(ctx.config.rowhidden) >= 1) {
+    if (ctx.config.rowhidden && size(ctx.config.rowhidden) >= 1) {
         const ctxRow = ctx.selections[0]?.row?.[0];
         const isHidenRow =
             Object.keys(ctx.config.rowhidden).findIndex((o) => {

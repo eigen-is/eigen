@@ -37,7 +37,7 @@ export function dataRangeSelection(ctx: Context, rangT: string, type: string, va
     ctx.rangeDialog!.show = true;
     ctx.rangeDialog!.type = type;
     ctx.rangeDialog!.rangeTxt = value;
-    if (ctx.selections && !!rangT) {
+    if (ctx.selections && rangT) {
         const last = ctx.selections[ctx.selections.length - 1];
         const row_index = last.row_focus as number;
         const col_index = last.column_focus as number;

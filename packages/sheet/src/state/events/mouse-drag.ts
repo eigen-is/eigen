@@ -390,14 +390,14 @@ export function handleOverlayMouseMove(
     }
 
     if (
-        !!ctx.scrolling ||
-        !!ctx.selectionActive ||
-        !!ctx.rowsSelected ||
-        !!ctx.colsSelected ||
-        !!ctx.cellSelectMoving ||
-        !!ctx.cellSelectExtending ||
-        !!ctx.colsResizing ||
-        !!ctx.rowsResizing
+        ctx.scrolling ||
+        ctx.selectionActive ||
+        ctx.rowsSelected ||
+        ctx.colsSelected ||
+        ctx.cellSelectMoving ||
+        ctx.cellSelectExtending ||
+        ctx.colsResizing ||
+        ctx.rowsResizing
     ) {
         mouseRender(ctx, globalCache, e, cellInput, scrollEl, container, fxInput);
     }

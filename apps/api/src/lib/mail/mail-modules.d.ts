@@ -21,6 +21,7 @@ declare module 'libmime' {
 
 declare module 'libqp' {
     import type { Transform } from 'node:stream';
+
     class Decoder extends Transform {}
     class Encoder extends Transform {}
     const libqp: { Decoder: typeof Decoder; Encoder: typeof Encoder };
@@ -29,6 +30,7 @@ declare module 'libqp' {
 
 declare module 'libbase64' {
     import type { Transform } from 'node:stream';
+
     class Decoder extends Transform {}
     class Encoder extends Transform {}
     const libbase64: { Decoder: typeof Decoder; Encoder: typeof Encoder };
@@ -67,6 +69,7 @@ declare module 'punycode.js' {
 
 declare module 'html-to-text' {
     function htmlToText(html: string, options?: Record<string, unknown>): string;
+
     export { htmlToText };
 }
 
