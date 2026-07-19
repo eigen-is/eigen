@@ -1,7 +1,7 @@
 import { openDocument } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import { useChatSections, useCreateChat, useCreateChatRoom, useFindChatByMembers } from '@workspace/lib/chat';
+import { useChatSections, useCreateChatRoom, useFindChatByMembers } from '@workspace/lib/chat';
 import { useDebouncedValue } from '@workspace/lib/command-palette';
 import { useMyTeams } from '@workspace/lib/home';
 import { CHATS_FOLDER_NAME, type ChatMatch } from '@workspace/lib/types/chat';
@@ -106,7 +106,7 @@ export function ChatCreateWizard({
     // route resolve the `chats` folder, a touched one carries the browsed folder.
     const createMountId = locationTouched ? location.mountId : DEFAULT_MOUNT_ID;
     const createRoom = useCreateChatRoom(myOwnerId, createMountId);
-    const createTeamChat = useCreateChat(teamChatOwnerId, teamMount?.id ?? '');
+    const createTeamRoom = useCreateChatRoom(teamChatOwnerId, teamMount?.id ?? '');
 
     const pickedEmails = useMemo(() => picked.map((p) => p.email), [picked]);
     const debouncedKey = useDebouncedValue(pickedEmails.join(','), MATCH_DEBOUNCE_MS);
@@ -122,7 +122,7 @@ export function ChatCreateWizard({
     // Existing chats to open before creating a new one: by-members matches in person mode, the team's
     // chats in team mode. When any exist the primary opens the first and "Create new chat" makes a new one.
     const hasMatches = teamMode ? teamChats.length > 0 : matches.length > 0;
-    const isBusy = createRoom.isPending || createTeamChat.isPending;
+    const isBusy = createRoom.isPending || createTeamRoom.isPending;
     const canCreate = teamMode ? !!name.trim() && !!teamRootId : picked.length > 0;
     const step1CanProceed = teamMode || picked.length > 0;
 
@@ -229,11 +229,15 @@ export function ChatCreateWizard({
 
     const createTeamChatRoom = async () => {
         setCreateError(null);
-        if (!teamRootId) return;
+        const base = name.trim();
         try {
-            goToRoom(await createTeamChat.mutateAsync({ parentId: teamRootId, fileName: name.trim() }));
-        } catch {
-            // Errors (incl. a duplicate-name 409) are surfaced by the shared create hook's toast.
+            // No parentId → the room lands in the team drive's `chats` folder (lazily ensured);
+            // team membership grants access, so no members are shared. A user-typed topic can 409
+            // on a collision, surfaced inline like person mode.
+            goToRoom(await createTeamRoom.mutateAsync({ fileName: base, members: [] }));
+        } catch (e) {
+            if (!(e instanceof AppError) || e.status !== 409) return; // non-409 already toasted by the hook
+            setCreateError(`A chat named "${base}" already exists here. Rename it, or open the existing one.`);
         }
     };
 
@@ -393,7 +397,9 @@ export function ChatCreateWizard({
                                 <Label className="text-sm text-muted-foreground">Location</Label>
                                 <InfoBlock className="mt-1.5 w-full justify-start gap-2 text-sm">
                                     <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                    <span className="text-xs">{selectedTeam.name} team drive</span>
+                                    <span className="text-xs">
+                                        {selectedTeam.name} team drive › {CHATS_FOLDER_NAME}
+                                    </span>
                                 </InfoBlock>
                             </div>
                         ) : locationTouched ? (
@@ -422,6 +428,12 @@ export function ChatCreateWizard({
                                 </InfoBlock>
                             </div>
                         )}
+
+                        <p className="shrink-0 px-6 pb-2 text-xs text-muted-foreground">
+                            {teamMode
+                                ? 'Each chat is saved as a file on the team drive.'
+                                : 'Each chat is saved as a file in your Drive.'}
+                        </p>
                     </div>
                 )}
 

@@ -1,11 +1,13 @@
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
 import { DRIVE_EXTENSIONS, DRIVE_TYPE_CHAT, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { Elysia, t } from 'elysia';
 import { findChatsByMembers } from '../lib/chat/find-by-members';
-import { requireNonGuest, requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf, requireTeamAccess } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
-import { getDrive, getSharedDrive } from '../lib/drive';
+import { type Drive, getDrive, getSharedDrive } from '../lib/drive';
 import { getUniqueFileName } from '../lib/drive/naming';
+import { getTeamHome } from '../lib/home';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -35,15 +37,30 @@ export const chatRouter = new Elysia({ name: 'chat' })
         },
     )
 
-    // Create a chat and share it with the picked members in one server-side sequence — the
-    // wizard's create step. Self-only (guests can't share): reject cross-owner callers and use the
-    // raw owner Drive (getDrive), like the by-members lookup above.
+    // Create a chat in one server-side sequence — the wizard's create step. A personal chat is born
+    // shared with the picked members; a team chat inherits access from team membership, so it takes
+    // no members and skips the ACL step. Either way the parent defaults to the mount's lazily-ensured
+    // `chats` folder. Escape-hatch raw Drive (no SharedDrive wrapper): an explicit access gate
+    // (requireSelf / requireTeamAccess) stands in for it, like the /shared/by-me routes.
     .post(
         '/chat/:ownerId/:mountId/rooms',
         async ({ params, body, user }): Promise<DrivePath> => {
-            requireSelf(params.ownerId, user.id);
             requireNonGuest(user);
-            const drive = await getDrive(user);
+
+            const owner = parseOwnerId(params.ownerId);
+            const isTeam = owner.type === 'team';
+            let drive: Drive;
+            if (isTeam) {
+                await requireTeamAccess(user.id, owner.id);
+                drive = (await getTeamHome(params.ownerId)).drive;
+            } else {
+                requireSelf(params.ownerId, user.id);
+                drive = await getDrive(user);
+            }
+
+            // A personal chat is defined by its members; reject an empty set before creating anything.
+            const members = body.members ?? [];
+            if (!isTeam && members.length === 0) throw new ApiError(422, 'At least one member is required');
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
 
@@ -62,27 +79,29 @@ export const chatRouter = new Elysia({ name: 'chat' })
             }
             const chat = await drive.create(params.mountId, parentId, fileName, DRIVE_TYPE_CHAT, user);
 
-            // A wizard chat is born shared. The share email is suppressed (in-app notification + SSE
-            // still fire, see docs/PROPOSAL_CHAT_WIZARD.md decision 6); a created-but-unshared orphan
-            // is worse than a clean error, so on ACL failure purge the fresh container and rethrow.
-            try {
-                await drive.updateACLDelta(
-                    params.mountId,
-                    chat.id,
-                    { add: body.members.map((email) => ({ id: email.trim().toLowerCase(), read: true, write: true })) },
-                    undefined,
-                    undefined,
-                    user,
-                    { suppressShareEmail: true },
-                );
-            } catch (err) {
-                await drive.deletePath(params.mountId, chat.id).catch((e) => {
-                    console.warn(`Failed to trash orphaned chat ${chat.id} after share failure:`, e);
-                });
-                await drive.permanentlyDelete(params.mountId, chat.id).catch((e) => {
-                    console.warn(`Failed to purge orphaned chat ${chat.id} after share failure:`, e);
-                });
-                throw err;
+            // A personal wizard chat is born shared. The share email is suppressed (in-app notification
+            // + SSE still fire, see docs/PROPOSAL_CHAT_WIZARD.md decision 6); a created-but-unshared
+            // orphan is worse than a clean error, so on ACL failure purge the fresh container and rethrow.
+            if (!isTeam) {
+                try {
+                    await drive.updateACLDelta(
+                        params.mountId,
+                        chat.id,
+                        { add: members.map((email) => ({ id: email.trim().toLowerCase(), read: true, write: true })) },
+                        undefined,
+                        undefined,
+                        user,
+                        { suppressShareEmail: true },
+                    );
+                } catch (err) {
+                    await drive.deletePath(params.mountId, chat.id).catch((e) => {
+                        console.warn(`Failed to trash orphaned chat ${chat.id} after share failure:`, e);
+                    });
+                    await drive.permanentlyDelete(params.mountId, chat.id).catch((e) => {
+                        console.warn(`Failed to purge orphaned chat ${chat.id} after share failure:`, e);
+                    });
+                    throw err;
+                }
             }
 
             const created = await drive.getPath(params.mountId, chat.id);
@@ -93,7 +112,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
             body: t.Object({
                 parentId: t.Optional(t.String()),
                 fileName: t.String(),
-                members: t.Array(t.String(), { minItems: 1 }),
+                members: t.Optional(t.Array(t.String())),
                 dedupeName: t.Optional(t.Boolean()),
             }),
             auth: true,

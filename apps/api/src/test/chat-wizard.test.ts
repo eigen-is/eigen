@@ -640,3 +640,140 @@ describe('Chat wizard — create with members', () => {
         spy.mockRestore();
     });
 });
+
+describe('Chat wizard — team create', () => {
+    let ctx: TestCtx;
+    let teamOwner: string;
+    let teamMountId: string;
+    let teamRootId: string;
+
+    function createRoom(
+        token: string,
+        ownerId: string,
+        mountId: string,
+        body: Record<string, unknown>,
+    ): Promise<Response> {
+        return authedRequest(token, `/chat/${ownerId}/${mountId}/rooms`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    }
+
+    async function teamChatsFolderId(): Promise<string | undefined> {
+        const children = await driveGetList(
+            ctx.alice.user.sessionToken,
+            teamOwner,
+            teamMountId,
+            `folder/${teamRootId}`,
+        );
+        return children.find((c) => c.name === 'chats' && c.type === 'folder')?.id;
+    }
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const orgId = getServerConfig()!.orgId;
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        const teamId = await createTeam(ctx, orgId, 'Team Create Team');
+        await addMember(ctx, teamId, ctx.alice.user.id);
+        await addTeamMount(ctx, teamId, 'Team Drive');
+        teamOwner = teamOwnerId(teamId);
+        teamMountId = await firstMountId(ctx.alice.user.sessionToken, teamOwner);
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
+        teamRootId = root.id;
+    });
+
+    test('defaults a team chat into a lazily-created chats folder on the team drive', async () => {
+        // Teams never seed a chats folder, so the first wizard create must create it.
+        expect(await teamChatsFolderId()).toBeUndefined();
+
+        const res = await createRoom(ctx.alice.user.sessionToken, teamOwner, teamMountId, {
+            fileName: 'Team default chat',
+            members: [],
+        });
+        const chat = await assertJson<DrivePath>(res);
+        expect(chat.type).toBe('chat');
+
+        const chatsId = await teamChatsFolderId();
+        expect(chatsId).toBeDefined();
+        expect(chat.parentId).toBe(chatsId!);
+    });
+
+    test('reuses the same chats folder on a second create', async () => {
+        const chatsId = await teamChatsFolderId();
+        expect(chatsId).toBeDefined();
+        const res = await createRoom(ctx.alice.user.sessionToken, teamOwner, teamMountId, {
+            fileName: 'Team second chat',
+            members: [],
+        });
+        const chat = await assertJson<DrivePath>(res);
+        expect(chat.parentId).toBe(chatsId!);
+
+        const children = await driveGetList(
+            ctx.alice.user.sessionToken,
+            teamOwner,
+            teamMountId,
+            `folder/${teamRootId}`,
+        );
+        expect(children.filter((c) => c.name === 'chats' && c.type === 'folder')).toHaveLength(1);
+    });
+
+    test('respects an explicit parentId in a team folder', async () => {
+        const folder = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            teamOwner,
+            teamMountId,
+            `folder/${teamRootId}`,
+            { folderName: 'Team Explicit' },
+        );
+        const res = await createRoom(ctx.alice.user.sessionToken, teamOwner, teamMountId, {
+            parentId: folder.id,
+            fileName: 'Team explicit chat',
+            members: [],
+        });
+        const chat = await assertJson<DrivePath>(res);
+        expect(chat.parentId).toBe(folder.id);
+    });
+
+    test('lists both root-level and chats-folder team chats (mount-wide)', async () => {
+        const rootRes = await createRoom(ctx.alice.user.sessionToken, teamOwner, teamMountId, {
+            parentId: teamRootId,
+            fileName: 'Team root chat',
+            members: [],
+        });
+        const rootChat = await assertJson<DrivePath>(rootRes);
+        expect(rootChat.parentId).toBe(teamRootId);
+
+        const defaultRes = await createRoom(ctx.alice.user.sessionToken, teamOwner, teamMountId, {
+            fileName: 'Team listed chat',
+            members: [],
+        });
+        const folderChat = await assertJson<DrivePath>(defaultRes);
+        const chatsId = await teamChatsFolderId();
+        expect(chatsId).toBeDefined();
+        expect(folderChat.parentId).toBe(chatsId!);
+
+        const listed = await driveGetList(
+            ctx.alice.user.sessionToken,
+            teamOwner,
+            teamMountId,
+            'mime',
+            'application-eigenchat',
+        );
+        const ids = listed.map((p) => p.id);
+        expect(ids).toContain(rootChat.id);
+        expect(ids).toContain(folderChat.id);
+    });
+
+    test('rejects a non-member with 403', async () => {
+        const res = await createRoom(ctx.bob.user.sessionToken, teamOwner, teamMountId, {
+            fileName: 'Intruder chat',
+            members: [],
+        });
+        expect(res.status).toBe(403);
+    });
+});
