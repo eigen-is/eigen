@@ -84,8 +84,8 @@ function ContactsRoute() {
         <ContactsListToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            sortBy={sortBy}
-            onSortChange={setSortBy}
+            // Team members carry a single display name — no first/last sort to offer.
+            onSortChange={filterType === 'team' ? undefined : setSortBy}
         />
     );
 

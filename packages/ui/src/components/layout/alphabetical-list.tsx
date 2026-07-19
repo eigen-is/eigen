@@ -1,5 +1,11 @@
 import { Fragment, type ReactNode } from 'react';
 
+// Group initial for person lists: diacritics fold (É → E), anything non-A–Z buckets under '#'.
+export function alphaGroupKey(label: string): string {
+    const first = label.normalize('NFD').charAt(0).toUpperCase();
+    return /[A-Z]/.test(first) ? first : '#';
+}
+
 type AlphabeticalListProps<T> = {
     items: T[];
     getKey: (item: T) => string;
