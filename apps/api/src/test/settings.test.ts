@@ -77,6 +77,55 @@ describe('Server Settings', () => {
     });
 });
 
+describe('landing links', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('admin can set and read back landing links', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ landing: { links: [{ title: 'Docs', url: 'https://docs.eigen.is' }] } }),
+        });
+        expect(res.status).toBe(200);
+        const settings = await assertJson<ServerSettings>(
+            await authedRequest(ctx.alice.user.sessionToken, '/settings/server'),
+        );
+        expect(settings.landing.links).toEqual([{ title: 'Docs', url: 'https://docs.eigen.is' }]);
+    });
+
+    test('rejects non-http(s) urls', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ landing: { links: [{ title: 'Evil', url: 'javascript:alert(1)' }] } }),
+        });
+        expect(res.status).toBe(422);
+    });
+
+    test('rejects empty title', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ landing: { links: [{ title: '', url: 'https://ok.example' }] } }),
+        });
+        expect(res.status).toBe(422);
+    });
+
+    // Reset to defaults — JsonStore is shared across the whole suite.
+    test('reset landing links', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ landing: { links: [] } }),
+        });
+        expect(res.status).toBe(200);
+    });
+});
+
 describe('Quota Enforcement', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let aliceMountId: string;

@@ -22,6 +22,7 @@ export function HomeComponent() {
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const { data: config } = usePublicConfig();
     const waitlistEnabled = config?.waitlistEnabled ?? false;
+    const landingLinks = config?.landingLinks ?? [];
     const demoMode = config?.demoMode ?? false;
     const { isAuthenticated } = useAuth();
 
@@ -89,7 +90,7 @@ export function HomeComponent() {
 
             {!showWaitlistForm ? (
                 <>
-                    <div className="flex gap-4">
+                    <div className="flex flex-wrap gap-4">
                         <Button className="px-8 py-2 font-medium flex-3" onClick={handleLogin}>
                             {demoMode ? 'Enter demo' : 'Login'}
                         </Button>
@@ -98,6 +99,18 @@ export function HomeComponent() {
                                 Join Waitlist
                             </Button>
                         )}
+                        {landingLinks.map((link) => (
+                            <Button
+                                key={`${link.title}:${link.url}`}
+                                variant="outline"
+                                className="px-6 py-2 flex-3"
+                                asChild
+                            >
+                                <a href={link.url} rel="noopener">
+                                    {link.title}
+                                </a>
+                            </Button>
+                        ))}
                     </div>
                     <div className="flex justify-center gap-4 mt-4 text-sm">
                         <Link to="/support" className="text-link hover:text-link/80 underline">

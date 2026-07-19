@@ -39,6 +39,9 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
         openSignup: true,
         inactivityDays: 7,
     },
+    landing: {
+        links: [],
+    },
     notifications: {
         email: {
             guestOnAclAdd: true,
