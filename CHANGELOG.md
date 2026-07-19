@@ -3,6 +3,145 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.1.0] - 2026-07-19
+
+Search, mail & collaboration release. Find & replace inside every editor and full-content search
+across Drive, a much faster Mail with Gmail-style keyboard shortcuts, comment assignment with live
+activity panels in the editors, a Drive grid view, a guided new-chat wizard, team avatars, a public
+demo, a monochrome dark theme, and the fixes from two security audits.
+
+### Added
+
+- **Find & replace** — press `Mod+F` in Docs, Sheets, Slides, and Stickies for an in-document find
+  bar with highlighted matches and next/previous; `Mod+Alt+F` opens replace and replace-all
+  (case-preserving). The command palette gains a `doc:` scope that reveals matches inside the open
+  document — including its comment threads — and opening a search result highlights and scrolls to
+  the match, in documents and mail alike; the inline text editor in Drive gets the same find bar
+- **Search** — Drive search now looks inside files, not just at names: documents, sheets, slides,
+  boards, chats, and plain-text files are content-indexed in the background, with name matches
+  ranked above content-only matches
+- **Mail** — Gmail-style keyboard shortcuts: navigate and select with the keyboard, archive,
+  delete, and reply with auto-advance, undo the last action with `z`, and send with `Mod+Enter`;
+  press `?` for the full list, and turn shortcuts or auto-advance off in settings; flagged messages
+  show a star in the list
+- **Comment assignment** — assign a comment card to a person in Docs, Slides, Sheets, and Stickies
+  (in Sheets straight from the cell comment menu); assignees are notified and shown on the card,
+  and comments can be filtered by assignee, color, and status — per panel, and board-wide in
+  Stickies
+- **Activity in editors** — the Recent Activity timeline from Drive is now available inside Docs,
+  Sheets, Slides, and Stickies through an Activity toggle next to sharing; it updates live while
+  the document is open, and every row links to what it describes
+- **New-chat wizard** — starting a chat is now a two-step dialog: pick the people (anyone you can
+  share with, or a whole team), then name the chat and choose where it lives; if a chat with
+  exactly those members already exists it opens instead of creating a duplicate, with a "Create new
+  chat" escape hatch. Team chats are filed in a chats folder on the team drive, members with an
+  account are no longer emailed about the share (invitees without one still are), and the wizard
+  opens from the chat sidebar, Drive's + New menu, and a new Start chat action on contacts and team
+  members
+- **Drive views** — a list/grid toggle with a thumbnail grid view, a sort menu (name, modified,
+  size), and remembered per-user view and sort preferences; grid tiles support keyboard
+  navigation, drag-to-move onto folders, and unread badges, and Trash gains the same views,
+  sorting, and multi-select
+- **Team drives everywhere** — the per-type views (Documents, Sheets, and so on), search, the
+  Watched view, and the chat sidebar now include your team drives alongside your personal drive
+- **Sheets** — live collaborator cursors: everyone editing a shared sheet sees the others'
+  selections in their color, with the same name labels as Docs
+- **Sheets** — while editing a formula, `F4` cycles the reference under the caret through absolute
+  and relative forms
+- **Mail** — paste files or images from the clipboard straight into the composer as attachments
+- **Teams** — team avatars: upload an image for a team from its Admin page and it shows wherever
+  the team appears; profile, contact, and team pictures share one avatar editor
+- **Demo mode** — a server can run as a public, self-resetting demo: visitors press a single
+  "Enter demo" button and land in a seeded festival workspace as one of its members, with a
+  warning banner, outgoing mail disabled, and periodic resets — live at demo.eigen.is
+- **Landing page** — admins can add their own link buttons (a title and a URL) to the landing page
+  from Server Settings
+- **Marketing site** — a `/changelog` page generated from this file, linked from the site footer
+  and the app's About dialog
+- **Chat** — new `/whoami` and `/hide` slash commands
+
+### Changed
+
+- **Dark mode** — a monochrome dark theme with layered surfaces: cards, popovers, and dialogs sit
+  visibly above the background, native scrollbars follow the theme, and note cards match the mail
+  list's dark treatment; the spreadsheet canvas deliberately stays white so sheets read as sheets.
+  The app-coloured topbar option is gone
+- **Mail** — big-mailbox performance: the message list is virtualized and loads in pages, actions
+  (move, read, flag, delete) apply instantly and sync in the background, mailbox sync no longer
+  blocks the list, and search runs on the server; unread rows are marked with a dot instead of a
+  border
+- **Notifications** — rebuilt on one activity-row design shared with Recent Activity:
+  notifications name who did what to what, chat notifications preview the message, and each row
+  deep-links to the exact card, comment, or email; notification links open in the same tab
+- **People** — users are shown by display name with a hover card consistently — chat authors,
+  @-mentions and their suggestions, "Created by" lines, and activity rows
+- **Sheets** — editing recalculates only the cells that depend on the change instead of the whole
+  workbook, keeping large sheets responsive while typing
+- **Uploads** — uploads stream to disk in constant memory, so a large upload no longer holds its
+  full size in server RAM
+- **Drive** — empty folders and views explain what belongs there and how to add it; files you have
+  already viewed revalidate with ETags instead of re-downloading
+
+### Fixed
+
+- **Docs, Slides & Sheets** — images inserted into a document no longer vanish right after upload
+  (the finished upload was misread as failed and the editors removed the image)
+- **Sheets** — imported spreadsheets that were never opened now compute their formulas on the
+  server, so previews and exports show values instead of blanks; imported `m`/`M` date formats
+  resolve to months or minutes correctly
+- **Sheets** — the selection stats read a cell's real value, so formatted cells sum and count
+  correctly; drag-fill keeps the number format in every direction; `=` and `<>` compare
+  case-insensitively like Google Sheets; sorting uses English collation; overlays and header
+  highlights clip correctly at frozen panes; and collaborator cursors survive switching sheets
+- **Mail** — a moved or deleted message shows up in its target mailbox without a reload; the list
+  scrolls back to the top when you change mailbox or search (and search gains a clear button); an
+  inbox opened from a notification can no longer get stuck empty; and a sync race no longer drops
+  just-moved messages from the list
+- **Calendar** — events no longer disappear from the 25-hour day when DST falls back, and
+  ambiguous local times resolve per RFC 5545; the calendar link in invitation emails opens the
+  right month instead of the year 57479
+- **CalDAV** — deleted occurrences are advertised as EXDATE so a client edit can't resurrect them,
+  older stored events serve correctly instead of erroring, and several recurrence-exception edge
+  cases (timezones, floating times) were fixed for clients like Thunderbird
+- **Chat** — very tall new messages scroll into view; with no personal chats, the first team chat
+  opens automatically
+- **Drive** — `.txt` previews render as readable paragraphs like `.md`; file names are normalized
+  (NFC) so accented names no longer appear twice; files on a team drive open correctly from the
+  per-type views and sidebar links
+- **Contacts** — the contact and team-member detail views behave the same, and Edit/Delete are
+  hidden when they don't apply instead of shown disabled
+- **Admin** — deleting a user now removes everything tied to the account on every deletion path;
+  previously some paths could leave orphaned team memberships behind
+- **Self-hosting** — the bundled Caddy revalidates the app shell on every load and reloads its
+  config after an update, so a new version is picked up immediately instead of serving a stale
+  page
+- **Reliability** — continued storage hardening: interrupted uploads to S3-compatible storage that
+  timed out mid-write are detected and repaired, corrupt staged copies are refused, same-name
+  create races are closed with a unique index, and database open/close races that could bite under
+  load were serialized
+
+### Security
+
+- **Admin** — a privilege-escalation hole is closed: a signed-in user could create their own
+  organization and pass the server's admin check; admin rights are now scoped to the server's
+  organization and self-created organizations are disabled
+- **Protocol sign-in** — accounts with 2FA can no longer be accessed over IMAP, CalDAV, or WebDAV
+  with just email and password (use an app password); protocol sign-in attempts are rate-limited,
+  and a valid app password is never blocked by that limiter
+- **Exports** — slides and sheets HTML exports escape untrusted styling (a stored-XSS vector), and
+  PDF export can no longer be steered into fetching internal URLs
+- **Calendar** — events are verified to belong to their calendar on update and delete; incoming
+  invitation mail (iMIP) is bound to the envelope sender, validates timezone ids, ignores replayed
+  cancellations, and scopes replies to the right occurrence; recurrence expansion is bounded
+- **Server** — internal API endpoints are unreachable through the reverse proxy, clients can no
+  longer spoof their rate-limit identity via forwarded headers, API documentation and timing
+  headers are disabled in production, and websocket message size is capped
+- **Sheets** — crafted `.xlsx` files with forged headers or oversized contents are rejected with
+  hard caps on decompressed size and cell count
+- **Mail** — the mail parser is hardened against hostile input (boundary and text-extraction caps)
+  and pinned by a deterministic fuzz-test suite
+- **Chat** — deleting a chat attachment is confined to that chat's own media folder
+
 ## [0.0.6] - 2026-06-25
 
 Activity & history release. A per-file activity timeline with file and folder watching,
