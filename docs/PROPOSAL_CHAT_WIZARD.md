@@ -378,8 +378,9 @@ would leak into the client.
    creation demotes to "Create anyway". Matches Slack `conversations.open` semantics while keeping
    intentional duplicates one click away.
 2. **Read-only matches** — shown, deprioritized below writable, never primary/auto-open.
-   *(Superseded 2026-07-19 by the open-first rule: with zero writable matches, "Let's chat" now
-   opens the first read-only match — writable-first ordering makes this the rare case.)*
+   *(Superseded 2026-07-19 by the open-first rule, confirmed intent: "Let's chat" prefers the
+   most recent writable match — the writable-first sort guarantees it — and opens a read-only
+   match only when no writable one exists.)*
 3. **Drive New menu** — keeps the plain name+folder dialog in v1; swap is a follow-up.
 4. **Deleted `Chats` folder** — silently recreated on next default-location use. Resolve-by-name
    respects the user's structure; remembering a deletion is statefulness with no payoff.
