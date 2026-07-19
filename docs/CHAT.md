@@ -75,9 +75,10 @@ POST   /chat/:ownerId/:mountId/:chatId/read
 ```
 
 The `:chatId` routes go through `getSharedDrive()` (ACL checks; write routes additionally check `canWrite`). The two
-`rooms` routes are the new-chat wizard's backend — self-only (`requireSelf` + raw `getDrive`, like `/shared/by-me`),
-since they read the caller's own mounts and share on the caller's behalf; the POST additionally requires
-`requireNonGuest` (guests can't share, so the server hard-rejects them too, not just the hidden UI). See [New-Chat Wizard](#new-chat-wizard) below.
+`rooms` routes are the new-chat wizard's backend — the GET is self-only (`requireSelf` + raw `getDrive`, like
+`/shared/by-me`) since it reads the caller's own mounts; the POST accepts the caller's own ownerId (`requireSelf`) or
+a team ownerId (`requireTeamAccess` + the team home's drive) and additionally requires `requireNonGuest` (guests can't
+share, so the server hard-rejects them too, not just the hidden UI). See [New-Chat Wizard](#new-chat-wizard) below.
 
 ## ACL
 
@@ -89,10 +90,14 @@ Chat invites (`/invite` command or `POST .../invite`) bubble ACL to the outermos
 
 ## New-Chat Wizard
 
-`ChatCreateWizard` (`packages/ui/src/components/layout/chat/chat-create-wizard.tsx`) is a single-form dialog for
-starting a chat with picked people (or a whole team) instead of the bare drive-file create. It replaces
-`DriveCreateEigenDoc type="chat"` at the chat sidebar's "New chat" button and the chat empty state; contacts trigger
-it too (see Entry points). Hidden for guests (`useIsGuest`) — they can't share, so it can never succeed for them.
+`ChatCreateWizard` (`packages/ui/src/components/layout/chat/chat-create-wizard.tsx`) is a two-step dialog for
+starting a chat with picked people (or a whole team) instead of the bare drive-file create: step 1 picks who
+(share-dialog-style `ContactAddRow`, guest emails allowed, "Team chat" footer dropdown) and applies the
+open-vs-create rule (any existing match → primary opens the first, "Create new chat" advances); step 2 confirms name
+and location. It replaces `DriveCreateEigenDoc type="chat"` at the chat sidebar's "New chat" button, the chat empty
+state, and Drive's `+ New → New chat` for non-guests in own/team drives (foreign-owner shared folders keep the bare
+create); contacts trigger it too (see Entry points). Hidden for guests (`useIsGuest`) — they can't share, so it can
+never succeed for them.
 Full rationale + messenger prior-art in [PROPOSAL_CHAT_WIZARD.md](PROPOSAL_CHAT_WIZARD.md).
 
 ### The two routes
@@ -104,13 +109,16 @@ standalone chats whose current member set exactly equals `{me} ∪ emails`, sort
 `getMimeTypeContents(DRIVE_MIME_CHAT, {excludeDocumentChildren})` (own mounts + shared-with-me mirror) — no cross-home
 calls (SCALABILITY rule).
 
-**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members[], dedupeName?}`** → the created `DrivePath`.
-Create + share as one server-side sequence: resolve/ensure the `Chats` folder when `parentId` is omitted, resolve a free name
-via the shared `getUniqueFileName` helper when `dedupeName` is set, `Drive.create(…, 'chat')`, then `updateACLDelta`
-adding `{read, write}` per member with the share email suppressed (see Email suppression). On ACL failure the fresh
-container is trashed + purged (best-effort) and the error rethrown — "a wizard chat is born shared", so a
-created-but-unshared orphan is worse than a clean error. `dedupeName` (set by the wizard for auto-generated default
-names) suffixes a collision server-side (`Name (2)`); a user-typed name omits it and a duplicate → 409, shown inline.
+**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members?, dedupeName?}`** → the created `DrivePath`.
+`ownerId` may be the caller (`requireSelf`) or a team (`requireTeamAccess` membership gate on the team home's drive).
+Create + share as one server-side sequence: resolve/ensure the `chats` folder when `parentId` is omitted, resolve a free name
+via the shared `getUniqueFileName` helper when `dedupeName` is set, `Drive.create(…, 'chat')`, then — personal owners
+only — `updateACLDelta` adding `{read, write}` per member with the share email suppressed (see Email suppression);
+team owners skip the ACL step entirely (membership is implicit), and an empty/missing `members` on a personal owner is
+a 422 before anything is created. On ACL failure the fresh container is trashed + purged (best-effort) and the error
+rethrown — "a wizard chat is born shared", so a created-but-unshared orphan is worse than a clean error. `dedupeName`
+(set by the wizard for auto-generated default names) suffixes a collision server-side (`Name (2)`); a user-typed name
+omits it and a duplicate → 409, shown inline.
 
 ### Matching semantics
 
@@ -147,18 +155,22 @@ i18n.
 Wizard create shares the new chat with each member but suppresses the "someone shared a file with you" email — a share
 email for being added to a chat is wrong-tone and spammy for groups; the first message is the real notification.
 `ACLPropagationOptions.suppressShareEmail` (`apps/api/src/lib/drive/acl-propagation.ts`) skips only `composeShareEmail`;
-the mirror fan-out, `DRIVE_ACL_SHARED` SSE, and the in-app "X shared a chat" notification still fire. Opt-in — omitting
-it leaves the default share path byte-identical, so `/invite` and the share dialog keep sending the email.
+the mirror fan-out, `DRIVE_ACL_SHARED` SSE, and the in-app "X shared a chat" notification still fire. One exception:
+an email with no account is only reachable by email, so suppression applies solely to addresses that resolve to a
+registered user (guest accounts included) — account-less addresses still get the share email as their invite. Opt-in —
+omitting the flag leaves the default share path byte-identical, so `/invite` and the share dialog keep sending the email.
 
 ### Team mode
 
 Selecting a team (team selector in the dialog footer, placed like the share dialog's team control) flips the wizard to
 team-chat mode: person rows collapse to "Everyone in *<team>* is a member", the name becomes required (a topic, like a
-channel), and the location is the team drive root. Instead of the duplicate matcher, the panel lists that team's
-existing chats (from the sidebar aggregate, filtered by `ownerId`) with a per-row Open; Create stays primary (multiple
-same-membership topics are the point). Team chats create through the **generic** create route (`useCreateChat`) on the
-team `ownerId` — implicit all-team membership means no ACL step, no share email, no new backend. The by-members matcher
-never sees team-drive chats (excluded above).
+channel), and the location defaults to the team drive's `chats` folder (lazily ensured, same `CHATS_FOLDER_NAME`
+mechanics as the personal drive). Instead of the duplicate matcher, the panel lists that team's existing chats (from
+the sidebar aggregate, filtered by `ownerId`) with a per-row Open. The footer follows the same open-vs-create rule as
+person mode: when any team chat exists the primary "Let's chat" opens the first listed one and "Create new chat" is
+the explicit route to the create step. Team chats create through the same **rooms route** with the team `ownerId`
+(membership-gated; implicit all-team membership means no ACL step, no share email). The by-members matcher never sees
+team-drive chats (excluded above).
 
 ### Entry points
 

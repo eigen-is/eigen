@@ -384,7 +384,9 @@ would leak into the client.
 5. **Superset hints** ("your Standup chat contains these people plus Carol") — no. v1 is exact-only;
    none of the researched apps do near-miss suggestions either.
 6. **Share email on wizard create** — suppressed (in-app notification + SSE remain). Flipping this
-   back is one flag if it turns out people miss invitations.
+   back is one flag if it turns out people miss invitations. *(Updated 2026-07-19: suppression is
+   now conditional — emails that resolve to no account still get the share email, since it is the
+   only channel that can reach them; registered users, guests included, stay suppressed.)*
 7. **No recency in the match panel** — `updatedAt` is share/create time; showing it as activity
    would mislead. Real per-message activity (also unlocking sidebar sort-by-recency) is a separate
    ROADMAP item.
@@ -392,7 +394,10 @@ would leak into the client.
    share dialog's team control; selecting a team → name required, team drive root, existing team
    chats listed, create via the existing generic route. Without this, swapping the sidebar entry
    point would have removed the chat app's only way to create a team chat. Mixed team+people
-   deferred.
+   deferred. *(Superseded 2026-07-19: team creates now go through `POST /chat/:o/:m/rooms` with a
+   team ownerId — membership-gated, no member ACL, `dedupeName` supported — so absent `parentId`
+   defaults to the team drive's `chats` folder; the generic route's mandatory parent segment could
+   not express that default.)*
 
 ## Phased implementation
 
@@ -481,10 +486,11 @@ duplicate warning, file config) on one surface. Signed-off redesign:
 
 ### v3 follow-ups (recorded at round close, 2026-07-19)
 
-- Keyboard access to team rows in the step-1 picker (arrows/Enter cover person suggestions;
-  teams are click-only).
-- `useContactSuggestions` has no `enabled` option, so a closed wizard mounted in toolbars still
-  warms the contacts query (rides shared cached queries; low cost).
+- ~~Keyboard access to team rows in the step-1 picker~~ *(moot since v4: teams moved to the
+  footer dropdown, which is Radix-keyboard-accessible).*
+- ~~`useContactSuggestions` closed-wizard fetch~~ *(structurally resolved in v4: suggestions
+  moved into the dialog-gated `ContactAddRow` subtree, so a closed wizard runs no suggestion
+  hook at all).*
 - Consider restoring a quiet "Everyone in <team> is a member" hint in team mode — v2 had it,
   the v3 picker shows only the removable team row.
 - Shared-folder `+ New → New chat` shows the bare-create dialog whose location defaults to the
@@ -492,3 +498,41 @@ duplicate warning, file config) on one surface. Signed-off redesign:
   behavior, unchanged by this round) — decide whether it should target the shared folder.
 - The lazy `Chats`→`chats` migration rename emits no SSE and doesn't propagate to shared-mirror
   rows (documented in CHAT.md; mirrors heal on the next rename/ACL touch).
+
+## v4 design round (2026-07-19) — ACL-consistent step 1, open-first, team `chats` folder
+
+Reinder's hands-on pass on the v3 build set the direction: *"this is basically an ACL screen, so
+it should work exactly the same to make things consistent across the whole UX (rule number one
+of eigen UX)."* Five changes shipped, each browser-verified:
+
+- **Step 1 mirrors the share dialog.** `ContactAddRow` with the `+` button and the share
+  dialog's exact configuration: popover suggestions only after typing, no list on open. Typed
+  **guest/external emails are allowed** (they become members via the ACL exactly like sharing —
+  this reverses v3's pick-only/internal-only stance, and retires that follow-up). Team selection
+  moved back to a bottom-left **"Team chat"** dropdown mirroring "Share with team"; teams are no
+  longer picker rows. Team mode shows the quiet "Everyone in \<team\> is a member" line again.
+  The existing-chat panel is anchored to the bottom, just above the footer. Enter adds the
+  selected/typed address when valid; Enter on an empty input fires the step-1 primary action.
+- **Guest reachability fix.** Because in-app notification/SSE need a resolved user, the wizard's
+  share-email suppression is now conditional (see Decision 6 update): account-less emails get
+  the share email as their invite vehicle.
+- **One open-vs-create rule, both modes.** Whenever one or more existing chats match (exact
+  member set in person mode, the team's chats in team mode), the primary **"Let's chat" opens
+  the first listed chat** and the secondary **"Create new chat"** (renamed from "New chat
+  anyway") is the only route to step 2. No matches → primary advances as before.
+- **Team chats default into `<team drive>/chats`**, lazily ensured, via the extended rooms route
+  (see Decision 8 update). Explicit-parent creates (Drive + New inside a team folder) keep the
+  chosen folder. Step 2's team location line reads "\<team\> team drive › chats".
+- **File-ness note.** Under the step-2 Location selector, both modes: "Each chat is saved as a
+  file in your Drive." / "Each chat is saved as a file on the team drive."
+
+### v4 follow-ups (recorded)
+
+- The chat.ts router header comment still credits `getSharedDrive` for access control; the
+  rooms/by-members routes use the `requireSelf`/`requireTeamAccess` + raw-Drive escape-hatch
+  (pre-existing imprecision; one-word tweak).
+- Benign console 404 when the wizard resolves an avatar for an external (account-less) member.
+- Person-mode debounce window (300 ms) can briefly act on the previous picked set — pre-existing,
+  internally consistent, unchanged by these rounds.
+- `requireTeamAccess` grants org admins access without team membership (matches every team
+  route; by design).
