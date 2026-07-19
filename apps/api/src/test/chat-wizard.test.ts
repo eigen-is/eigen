@@ -614,6 +614,37 @@ describe('Chat wizard — create with members', () => {
         expect(res.status).toBe(422);
     });
 
+    test('rejects a non-email member with 422 before creating anything', async () => {
+        const before = await driveGetList(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${chatsFolderId}`,
+        );
+        // Owner-shaped ids pass the generic ACL validator — the route must reject them as members.
+        const res = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: 'Owner-shaped member',
+            members: [`team_${'a'.repeat(32)}`],
+        });
+        expect(res.status).toBe(422);
+
+        const after = await driveGetList(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${chatsFolderId}`,
+        );
+        expect(after.length).toBe(before.length);
+    });
+
+    test('by-members rejects a non-email target with 422', async () => {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/chat/${ctx.alice.user.id}/rooms/by-members?emails=${encodeURIComponent(`team_${'a'.repeat(32)}`)}`,
+        );
+        expect(res.status).toBe(422);
+    });
+
     test('a plain PUT acl share still emails when userOnAclAdd is on (suppression is opt-in)', async () => {
         await setUserAclEmail(true);
         const mailer = await import('../lib/core/mailer');

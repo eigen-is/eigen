@@ -10,7 +10,7 @@ import {
     useExportDocument,
     useMovePath,
 } from '@workspace/lib/drive';
-import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_CHAT, type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ import { Column, ColumnLayout } from '../app/column-layout.tsx';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
 import { DriveAccessDialog } from './drive-access-dialog';
+import { DriveCreateChat } from './drive-create-chat';
 import { DriveCreateEigenDoc } from './drive-create-eigendoc';
 import { DriveCreateFolder } from './drive-create-folder';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
@@ -393,17 +394,26 @@ export function DriveLayout({
                 />
             )}
 
-            {EIGEN_DOC_TYPES.filter((type) => createTypes.has(type)).map((type) => (
-                <DriveCreateEigenDoc
-                    key={type}
-                    type={type}
-                    open={dialogs.create[type].open}
-                    onOpenChange={dialogs.create[type].setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            ))}
+            {EIGEN_DOC_TYPES.filter((type) => createTypes.has(type)).map((type) =>
+                type === DRIVE_TYPE_CHAT ? (
+                    <DriveCreateChat
+                        key={type}
+                        open={dialogs.create[type].open}
+                        onOpenChange={dialogs.create[type].setOpen}
+                        targetPath={currentPath}
+                    />
+                ) : (
+                    <DriveCreateEigenDoc
+                        key={type}
+                        type={type}
+                        open={dialogs.create[type].open}
+                        onOpenChange={dialogs.create[type].setOpen}
+                        defaultOwnerId={currentPath?.ownerId}
+                        defaultFolderId={currentPath?.id}
+                        defaultMountId={currentPath?.mountId}
+                    />
+                ),
+            )}
 
             {allowUpload && currentPath && (
                 <DriveUploadFiles

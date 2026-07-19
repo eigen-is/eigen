@@ -179,7 +179,7 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
         // Refresh the parent folder, the sidebar aggregate, and the by-members family.
         onSuccess: (data) => {
             invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType);
-            queryClient.invalidateQueries({ queryKey: chatKeys.byMembersAll(ownerId) });
+            invalidateChatMatches(queryClient, ownerId);
         },
         // 409 = duplicate name, handled inline by the wizard — don't toast twice.
         onError: (error) => {
@@ -265,4 +265,11 @@ export function useDeleteMessage(ownerId: string, mountId: string, chatId: strin
 // SSE invalidation functions
 export function invalidateMessages(queryClient: QueryClient, ownerId: string, mountId: string, chatId: string): void {
     queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
+}
+
+// By-members matches derive from ACLs, breadcrumbs and liveness, which change via drive events —
+// the drive SSE handler calls this so a cached lookup can't keep serving a trashed or re-shared
+// chat for its 30s staleTime.
+export function invalidateChatMatches(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: chatKeys.byMembersAll(ownerId) });
 }

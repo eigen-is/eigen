@@ -1,16 +1,14 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
-import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo } from '@workspace/lib/drive';
 import { DRIVE_TYPE_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
-import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { getCreateMenuItems } from '@workspace/ui/components/layout/drive/create-menu';
+import { DriveCreateChat } from '@workspace/ui/components/layout/drive/drive-create-chat';
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
 import { DriveUploadFiles } from '@workspace/ui/components/layout/drive/drive-upload-files';
@@ -28,8 +26,6 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
     const [createType, setCreateType] = useState<EigenDocType | null>(null);
     const [uploadOpen, setUploadOpen] = useState(false);
     const navigate = useNavigate();
-    const isGuest = useIsGuest();
-    const { user } = useAuth();
 
     const routeMatch = useMatch({
         from: '/_auth/fs/$ownerId/$mountId/$pathId',
@@ -47,11 +43,6 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
     );
 
     const targetPath = currentPath || rootPath;
-    const targetOwner = targetPath ? parseOwnerId(targetPath.ownerId) : null;
-    // Person-mode create is strictly own-drive; team drives open team mode; a foreign user owner
-    // (shared-with-me folder) keeps the bare create dialog.
-    const isOwnDrive = !!targetPath && targetPath.ownerId === user?.id;
-    const chatUsesWizard = createType === DRIVE_TYPE_CHAT && !isGuest && (isOwnDrive || targetOwner?.type === 'team');
 
     const handleAfterAction = () => {
         navigate({
@@ -97,33 +88,25 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
                 onAfterCreate={handleAfterAction}
             />
 
-            {chatUsesWizard ? (
-                <ChatCreateWizard
+            <DriveCreateChat
+                open={createType === DRIVE_TYPE_CHAT}
+                onOpenChange={(open) => {
+                    if (!open) setCreateType(null);
+                }}
+                targetPath={targetPath}
+            />
+
+            {createType && createType !== DRIVE_TYPE_CHAT && (
+                <DriveCreateEigenDoc
+                    type={createType}
                     open={true}
                     onOpenChange={(open) => {
                         if (!open) setCreateType(null);
                     }}
-                    initialLocation={
-                        // Only a real subfolder pins the location — at the root the `chats` default wins.
-                        isOwnDrive && targetPath?.parentId
-                            ? { ownerId: targetPath.ownerId, mountId: targetPath.mountId, folderId: targetPath.id }
-                            : undefined
-                    }
-                    initialTeamId={targetOwner?.type === 'team' ? targetOwner.id : undefined}
+                    defaultOwnerId={targetPath?.ownerId}
+                    defaultFolderId={targetPath?.id}
+                    defaultMountId={targetPath?.mountId}
                 />
-            ) : (
-                createType && (
-                    <DriveCreateEigenDoc
-                        type={createType}
-                        open={true}
-                        onOpenChange={(open) => {
-                            if (!open) setCreateType(null);
-                        }}
-                        defaultOwnerId={targetPath?.ownerId}
-                        defaultFolderId={targetPath?.id}
-                        defaultMountId={targetPath?.mountId}
-                    />
-                )
             )}
 
             {targetPath && (

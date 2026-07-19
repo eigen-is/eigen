@@ -10,12 +10,10 @@ type TeamMember = { email: string; name: string; teamId: string };
 // the user can reach." Consumed by ContactAutosuggest (mail/calendar/drive-share),
 // ChatPlayerSuggest, and the command palette providers. Team members are merged in
 // first (higher priority), personal contacts second; dedup is by lowercased email.
-// `listOnEmptyQuery`: show team members before the 2-char minimum (the chat wizard's picker).
 export function useContactSuggestions(
     query: string,
     onlyInternalMails: boolean = false,
     excludeEmails: string[] = [],
-    options?: { listOnEmptyQuery?: boolean },
 ): { suggestions: ContactSuggestion[]; isLoading: boolean } {
     const { data: contacts, isLoading: contactsLoading } = useContacts();
     const { data: myTeams } = useMyTeams();
@@ -43,9 +41,7 @@ export function useContactSuggestions(
     const excludeSet = useMemo(() => new Set(excludeEmails.map((e) => e.toLowerCase())), [excludeEmails]);
 
     const suggestions = useMemo(() => {
-        // Below the 2-char minimum only opt-in callers get team members as default picks.
-        const shortQuery = !lowerQuery || lowerQuery.length < 2;
-        if (shortQuery && !options?.listOnEmptyQuery) return [];
+        if (!lowerQuery || lowerQuery.length < 2) return [];
 
         const results: ContactSuggestion[] = [];
         const seenEmails = new Set<string>();
@@ -54,7 +50,7 @@ export function useContactSuggestions(
         for (const [emailKey, member] of teamMembers) {
             if (excludeSet.has(emailKey)) continue;
             const name = (member.name || '').toLowerCase();
-            if (!shortQuery && !name.includes(lowerQuery) && !emailKey.includes(lowerQuery)) continue;
+            if (!name.includes(lowerQuery) && !emailKey.includes(lowerQuery)) continue;
             if (onlyInternalMails && !emailKey.endsWith(`@${domain}`)) continue;
             if (query.includes(member.email)) continue;
 
@@ -67,7 +63,6 @@ export function useContactSuggestions(
                 teamId: member.teamId,
             });
         }
-        if (shortQuery) return results;
 
         // Personal contacts (skip duplicates by email)
         if (contacts) {
@@ -97,7 +92,7 @@ export function useContactSuggestions(
         }
 
         return results;
-    }, [contacts, teamMembers, lowerQuery, onlyInternalMails, excludeSet, query, domain, options?.listOnEmptyQuery]);
+    }, [contacts, teamMembers, lowerQuery, onlyInternalMails, excludeSet, query, domain]);
 
     return {
         suggestions,

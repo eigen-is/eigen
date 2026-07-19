@@ -95,9 +95,10 @@ starting a chat with picked people (or a whole team) instead of the bare drive-f
 (share-dialog-style `ContactAddRow`, guest emails allowed, "Team chat" footer dropdown) and applies the
 open-vs-create rule (any existing match → primary opens the first, "Create new chat" advances); step 2 confirms name
 and location. It replaces `DriveCreateEigenDoc type="chat"` at the chat sidebar's "New chat" button, the chat empty
-state, and Drive's `+ New → New chat` for non-guests in own/team drives (foreign-owner shared folders keep the bare
-create); contacts trigger it too (see Entry points). Hidden for guests (`useIsGuest`) — they can't share, so it can
-never succeed for them.
+state, and every Drive "New chat" entry; contacts trigger it too (see Entry points). Drive entries share one decision
+point — `DriveCreateChat` (`packages/ui/src/components/layout/drive/drive-create-chat.tsx`): non-guests in own/team
+drives get the wizard, foreign-owner shared folders keep the bare create. Hidden for guests (`useIsGuest`) — they
+can't share, so it can never succeed for them.
 Full rationale + messenger prior-art in [PROPOSAL_CHAT_WIZARD.md](PROPOSAL_CHAT_WIZARD.md).
 
 ### The two routes
@@ -114,8 +115,10 @@ calls (SCALABILITY rule).
 Create + share as one server-side sequence: resolve/ensure the `chats` folder when `parentId` is omitted, resolve a free name
 via the shared `getUniqueFileName` helper when `dedupeName` is set, `Drive.create(…, 'chat')`, then — personal owners
 only — `updateACLDelta` adding `{read, write}` per member with the share email suppressed (see Email suppression);
-team owners skip the ACL step entirely (membership is implicit), and an empty/missing `members` on a personal owner is
-a 422 before anything is created. On ACL failure the fresh container is trashed + purged (best-effort) and the error
+team owners skip the ACL step entirely (membership is implicit). Members are emails by contract: both routes normalize
+(trim + lowercase) and validate them up front (`normalizeMemberEmails`, ≤ 100, real addresses only — owner-shaped ids
+like `team_*` are rejected), and an empty/missing `members` on a personal owner is
+a 422 — all before anything is created. On ACL failure the fresh container is trashed + purged (best-effort) and the error
 rethrown — "a wizard chat is born shared", so a created-but-unshared orphan is worse than a clean error. `dedupeName`
 (set by the wizard for auto-generated default names) suffixes a collision server-side (`Name (2)`); a user-typed name
 omits it and a duplicate → 409, shown inline.
@@ -132,10 +135,11 @@ membership is not a fixed set of people:
 
 Own chats are screened by a cheap **direct-ACL subset** pre-filter (every directly-shared email must already be in the
 target set) before paying for the `getEffectiveMembers` breadcrumb + per-team walk that the code flags as costly
-(`chat/chat.ts`); the surviving candidates' walks run concurrently. The pre-filter is a subset test with **no size
-floor**: an inherited-ACL chat carries an empty direct ACL yet must still match, so the walk fills in the ancestor
-members. Shared-with-me candidates skip the walk — the mirror row carries only the direct ACL + the owner's id, so
-their set is `{owner email via getUserById} ∪ direct ACL emails`.
+(`chat/chat.ts`); the surviving candidates' walks run concurrently, capped at the `MAX_MEMBER_WALKS = 200`
+most-recently-updated candidates — a match past the cap is missed and the wizard offers create instead (accepted
+caveat). The pre-filter is a subset test with **no size floor**: an inherited-ACL chat carries an empty direct ACL yet
+must still match, so the walk fills in the ancestor members. Shared-with-me candidates skip the walk — the mirror row
+carries only the direct ACL + the owner's id, so their set is `{owner email via getUserById} ∪ direct ACL emails`.
 
 Two accepted point-in-time caveats (the panel suggests, it never guards): a foreign chat that gains members purely via
 a shared parent folder can false-positively match, and a `team_*` entry **inherited from an ancestor folder** is not
@@ -145,9 +149,11 @@ that expansion happens to equal the picked set.
 ### The `chats` folder
 
 `CHATS_FOLDER_NAME = 'chats'` (`packages/lib/src/types/chat.ts`) is the default parent for wizard chats. Seeded by
-`Mount.ensureRootFolder` only when it first creates the root, and only for default personal mounts (not team, extra, or
-S3 mounts). `Drive.ensureChatsFolder(mountId)` resolves it lazily by name each call (`getChildByName`, which folds case),
-recreating it on miss and falling back to the root if the name is taken by a non-folder — so it stays an ordinary
+`Mount.ensureRootFolder` only when it first creates the root, and only for default personal mounts (not team or extra
+mounts; the storage backend doesn't matter, so a default S3 mount seeds too). `Drive.ensureChatsFolder(mountId)`
+resolves it lazily by name each call (`getChildByName`, which folds case), recreating it on miss (Drive-level create,
+so the new root child reaches other tabs via SSE; a concurrent-create 409 adopts the winner's folder) and falling back
+to the root if the name is taken by a non-folder — so it stays an ordinary
 folder: renameable, movable, deletable, never pinned by id. A legacy auto-created `Chats` folder is renamed in place to
 lowercase `chats` on the next resolve (same pathId; the case-folded lookup finds it). Two accepted caveats of that
 rename: it emits no SSE, so already-open drive lists show the old name until refresh; and it does not propagate to
@@ -180,11 +186,15 @@ team-drive chats (excluded above).
 
 - **Chat app**: the sidebar "New chat" button (`apps/chat/src/components/chat/chat-sidebar.tsx`) and the chat empty
   state (`apps/chat/src/routes/_auth.index.tsx`).
-- **Contacts**: "Start chat" on a contact toolbar (`contact-detail.tsx`, shown only when the contact resolves to an
-  Eigen user — `eigenId !== ''`) and on a team member (`team-member-detail.tsx`, always). `useStartChatWith()`'s
-`startChatWith(email)`
-  fetches the `{me, them}` match once: exactly one writable match opens it directly (cross-app `openDocument`, full
-  load), otherwise the wizard opens pre-filled with that person.
+- **Drive**: the sidebar `+ New` menu (`apps/drive/src/components/drive/drive-new-menu.tsx`) and `DriveLayout`'s
+  list context menu + mobile toolbar "New" button — all through the shared `DriveCreateChat`, which decides wizard
+  vs bare create and pins the browsed subfolder as the initial location (team drives open team mode).
+- **Contacts**: "Start chat" on a contact toolbar (`contact-detail.tsx`, shown only when the contact resolves to
+  another Eigen user — `eigenId !== ''` and not the auto-seeded self contact) and on a team member
+  (`team-member-detail.tsx`, non-self). The contact toolbar chats with the account address behind `eigenId`
+  (`usePublicUser`), not `email[0]`, which can be a later-added non-account alias. `useStartChatWith()`'s
+  `startChatWith(email)` fetches the `{me, them}` match once: exactly one writable match opens it directly
+  (cross-app `openDocument`, full load), otherwise the wizard opens pre-filled with that person.
 
 ## Slash Commands
 

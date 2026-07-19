@@ -10,7 +10,6 @@ type ContactAddRowProps = {
     excludeEmails?: string[];
     placeholder?: string;
     onlyInternalMails?: boolean;
-    listOnEmptyQuery?: boolean;
     onEmptyEnter?: () => void;
     id?: string;
     className?: string;
@@ -23,7 +22,6 @@ export function ContactAddRow({
     excludeEmails,
     placeholder = 'Enter email addresses',
     onlyInternalMails = false,
-    listOnEmptyQuery = false,
     onEmptyEnter,
     id,
     className,
@@ -36,7 +34,6 @@ export function ContactAddRow({
                     value={value}
                     onChange={onChange}
                     onlyInternalMails={onlyInternalMails}
-                    listOnEmptyQuery={listOnEmptyQuery}
                     excludeEmails={excludeEmails}
                     placeholder={placeholder}
                     onSubmit={onSubmit}

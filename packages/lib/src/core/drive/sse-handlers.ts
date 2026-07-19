@@ -1,6 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { invalidateChatMatches } from '../chat/hooks/use-chat';
 import { collabKeys } from '../collab/hooks/use-collab';
 import { invalidateSearchOwner } from '../search';
 import {
@@ -21,6 +23,16 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
     if (!('path' in event)) return false;
 
     const { path } = event;
+
+    // Chat by-members matches derive from ACLs, breadcrumbs and liveness — refresh the cached
+    // lookups when a chat row changes, or on ACL/move events anywhere (folder ACLs inherit down).
+    const affectsChatMatches =
+        path.mimeType === DRIVE_MIME_CHAT ||
+        event.type === SSEventType.DRIVE_ACL_SHARED ||
+        event.type === SSEventType.DRIVE_ACL_UNSHARED ||
+        event.type === SSEventType.DRIVE_ACL_UPDATED ||
+        event.type === SSEventType.DRIVE_PATH_MOVED;
+    if (userId && affectsChatMatches) invalidateChatMatches(queryClient, userId);
 
     switch (event.type) {
         case SSEventType.DRIVE_ACL_SHARED:

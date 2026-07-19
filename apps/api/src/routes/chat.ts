@@ -1,6 +1,7 @@
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
 import { DRIVE_EXTENSIONS, DRIVE_TYPE_CHAT, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
+import { validateEmailTarget } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { findChatsByMembers } from '../lib/chat/find-by-members';
 import { requireNonGuest, requireSelf, requireTeamAccess } from '../lib/core/access';
@@ -10,6 +11,20 @@ import { getUniqueFileName } from '../lib/drive/naming';
 import { getTeamHome } from '../lib/home';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
+
+const MAX_CHAT_MEMBERS = 100;
+
+// Person-mode members are email addresses by contract — reject owner-shaped ids (`team_*`,
+// bare user ids would pass the generic ACL validator) before any folder or chat side effect.
+function normalizeMemberEmails(raw: string[]): string[] {
+    const emails = raw.map((e) => e.trim().toLowerCase()).filter((e) => e.length > 0);
+    if (emails.length > MAX_CHAT_MEMBERS) throw new ApiError(422, `A chat takes at most ${MAX_CHAT_MEMBERS} members`);
+    for (const email of emails) {
+        const error = validateEmailTarget(email, 'Member');
+        if (error) throw new ApiError(422, error);
+    }
+    return emails;
+}
 
 // Chat routes allow cross-owner access (chats live inside shared/team drives).
 // Access control: the :chatId routes go through getSharedDrive() (SharedDrive ACL checks); the two
@@ -23,10 +38,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
         '/chat/:ownerId/rooms/by-members',
         async ({ params, query, user }): Promise<{ matches: ChatMatch[] }> => {
             requireSelf(params.ownerId, user.id);
-            const emails = (query.emails ?? '')
-                .split(',')
-                .map((e) => e.trim())
-                .filter((e) => e.length > 0);
+            const emails = normalizeMemberEmails((query.emails ?? '').split(','));
             if (emails.length === 0) throw new ApiError(400, 'At least one email is required');
             const drive = await getDrive(user);
             return { matches: await findChatsByMembers(drive, user, emails) };
@@ -55,13 +67,15 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 drive = await getDrive(user);
             }
 
-            const members = body.members ?? [];
+            const members = normalizeMemberEmails(body.members ?? []);
             if (!isTeam && members.length === 0) throw new ApiError(422, 'At least one member is required');
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
 
-            // Auto-named chats dedupe server-side so a default name never 409s; user-typed names
-            // still 409. Dedupe in the full-name space — Drive.create re-appends the extension.
+            // Auto-named chats dedupe against a sibling snapshot; user-typed names 409 on conflict.
+            // Concurrent same-name creates can slip past the snapshot — the unique index 409s the
+            // loser (the race net every create path shares). Dedupe in the full-name space —
+            // Drive.create re-appends the extension.
             let fileName = body.fileName;
             if (body.dedupeName) {
                 const desired = `${fileName}${DRIVE_EXTENSIONS[DRIVE_TYPE_CHAT]}`;
@@ -80,7 +94,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
                     await drive.updateACLDelta(
                         params.mountId,
                         chat.id,
-                        { add: members.map((email) => ({ id: email.trim().toLowerCase(), read: true, write: true })) },
+                        { add: members.map((email) => ({ id: email, read: true, write: true })) },
                         undefined,
                         undefined,
                         user,
@@ -105,7 +119,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
             body: t.Object({
                 parentId: t.Optional(t.String()),
                 fileName: t.String(),
-                members: t.Optional(t.Array(t.String())),
+                members: t.Optional(t.Array(t.String({ maxLength: 320 }), { maxItems: MAX_CHAT_MEMBERS })),
                 dedupeName: t.Optional(t.Boolean()),
             }),
             auth: true,

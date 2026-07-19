@@ -1182,7 +1182,17 @@ export default class Drive {
             return existing.id;
         }
 
-        return mount.createFolder(root.id, CHATS_FOLDER_NAME);
+        // Drive-level create so the new root child reaches other tabs (SSE); concurrent first-chat
+        // requests race to the unique name index — the loser adopts the winner's folder.
+        try {
+            return (await this.createFolder(mountId, root.id, CHATS_FOLDER_NAME)).id;
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 409) {
+                const winner = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
+                if (winner) return winner.type === DRIVE_TYPE_FOLDER ? winner.id : root.id;
+            }
+            throw err;
+        }
     }
 
     // Called by: ChatRoom.init — serializes the lazy data.db auto-create against a concurrent

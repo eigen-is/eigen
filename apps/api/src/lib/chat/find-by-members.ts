@@ -4,6 +4,8 @@ import { DRIVE_MIME_CHAT, type DriveACL, type DrivePath } from '@workspace/lib/t
 import type { Drive } from '../drive';
 import { getUserById, type User } from '../user/';
 
+const MAX_MEMBER_WALKS = 200;
+
 // Standalone chats whose member set exactly equals {caller} ∪ emails — the wizard's
 // open-don't-duplicate lookup. Runs entirely on the caller's Home (no cross-home calls).
 // Semantics + accepted caveats: docs/CHAT.md § Matching semantics.
@@ -49,9 +51,13 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: strin
         }
     }
 
-    // Every unshared own chat passes the subset screen, so run the walks concurrently.
+    // Every unshared own chat passes the subset screen, so run the walks concurrently — but
+    // capped, newest first: each walk costs a breadcrumb + ACL resolve, and a huge chat history
+    // must not fan out unbounded. A match past the cap is missed (the wizard offers create
+    // instead of open) — accepted caveat, docs/CHAT.md § Matching semantics.
+    ownCandidates.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const ownMatches = await Promise.all(
-        ownCandidates.map(async (path): Promise<ChatMatch | null> => {
+        ownCandidates.slice(0, MAX_MEMBER_WALKS).map(async (path): Promise<ChatMatch | null> => {
             const members = await drive.getEffectiveMembers(path.mountId, path.id);
             return sameSet(
                 members.map((m) => m.email.toLowerCase()),

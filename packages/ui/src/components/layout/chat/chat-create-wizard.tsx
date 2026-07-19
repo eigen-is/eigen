@@ -92,7 +92,7 @@ export function ChatCreateWizard({
     const teamChatOwnerId = selectedTeam ? teamOwnerId(selectedTeam.id) : '';
     const teamRootId = teamMount?.rootPathId ?? '';
     // The aggregate backs only the team-mode panel — closed or person-mode wizards skip the fetch.
-    const { teams: teamSections } = useChatSections(open && teamMode);
+    const { teams: teamSections, isLoading: teamChatsLoading } = useChatSections(open && teamMode);
     const teamChats = teamSections.find((t) => t.id === selectedTeamId)?.chats ?? [];
 
     // An untouched location sends no parentId, letting the route resolve the `chats` folder.
@@ -105,9 +105,15 @@ export function ChatCreateWizard({
     const debouncedKey = useDebouncedValue(pickedKey, MATCH_DEBOUNCE_MS);
     const debouncedEmails = useMemo(() => (debouncedKey ? debouncedKey.split(',') : []), [debouncedKey]);
     // Gated on open + person mode: a closed or team-mode wizard runs no by-members lookup.
-    const { data: fetchedMatches = [] } = useFindChatByMembers(myOwnerId, open && !teamMode ? debouncedEmails : []);
-    // Hide results until the debounced key settles — never open a match found for a previous set.
-    const matches = debouncedKey === pickedKey ? fetchedMatches : [];
+    const { data: fetchedMatches = [], isPending: matchesPending } = useFindChatByMembers(
+        myOwnerId,
+        open && !teamMode ? debouncedEmails : [],
+    );
+    // Settled = debounce caught up AND the current key resolved or errored (isPending covers the
+    // pre-fetch idle frame isLoading misses). One predicate gates both the match panel and step 1,
+    // so they can't disagree; an errored lookup settles and falls through to create.
+    const personLookupPending = debouncedKey !== pickedKey || matchesPending;
+    const matches = personLookupPending ? [] : fetchedMatches;
 
     // Already-picked people and self are excluded from the ACL suggestion popover (mirrors the share dialog).
     const excludeEmails = useMemo(() => (myEmail ? [...pickedEmails, myEmail] : pickedEmails), [pickedEmails, myEmail]);
@@ -119,7 +125,10 @@ export function ChatCreateWizard({
     const isBusy = createRoom.isPending || createTeamRoom.isPending;
     // Both modes need a name — an emptied one would create a bare '.eigenchat' file.
     const canCreate = !!name.trim() && (teamMode ? !!teamRootId : picked.length > 0);
-    const step1CanProceed = teamMode || picked.length > 0;
+    // Open-first is only trustworthy once the lookup settles — hold step 1 so a quick Enter can't
+    // race past an existing match. Mountless teams stay on step 1 ("no drive yet" note).
+    const lookupPending = teamMode ? teamChatsLoading : personLookupPending;
+    const step1CanProceed = (teamMode ? !!teamRootId : picked.length > 0) && !lookupPending;
 
     const addPerson = (person: PickedPerson) => {
         const email = person.email.toLowerCase();
