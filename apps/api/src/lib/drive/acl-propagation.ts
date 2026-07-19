@@ -11,9 +11,11 @@ import { getUserByEmail } from '../user/';
 
 // Threaded route → updateACLDelta → updateACL → propagateSharedPathChange. Opt-in only;
 // omitting it keeps the default share behaviour (email + mirror + notification) byte-identical.
-// `suppressShareEmail` skips only the "someone shared a file with you" email — the mirror
-// fan-out, DRIVE_ACL_SHARED SSE, and in-app notification still fire. Used by the new-chat wizard,
-// where the email is wrong-tone (see docs/PROPOSAL_CHAT_WIZARD.md decision 6).
+// `suppressShareEmail` skips the "someone shared a file with you" email only for newly added
+// entries that resolve to a registered user (guest accounts included) — they learn about it via
+// the still-firing mirror fan-out, DRIVE_ACL_SHARED SSE, and in-app notification. Account-less
+// emails have no home to notify, so they keep the share email as their only invite vehicle. Used
+// by the new-chat wizard, where the email is wrong-tone (see docs/PROPOSAL_CHAT_WIZARD.md decision 6).
 export type ACLPropagationOptions = { suppressShareEmail?: boolean };
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
@@ -88,10 +90,13 @@ async function emailNewlyAddedAclEntries(
     path: DrivePath,
     addedUserEmails: string[],
     actor: { name: string; email: string },
+    suppressForRegistered: boolean,
 ): Promise<void> {
     const settings = getServerSettings();
     for (const email of addedUserEmails) {
         const target = await getUserByEmail(email);
+        // Suppression only covers users reachable in-app; an account-less email still needs the invite.
+        if (suppressForRegistered && target) continue;
         const isGuest = !target || target.role === 'guest';
         const enabled = isGuest
             ? settings.notifications.email.guestOnAclAdd
@@ -167,10 +172,10 @@ export async function propagateSharedPathChange(
 
     queueACLFanOut(ids, path, newACL, actor?.email, actor?.name);
 
-    if (actor && newACL && !options?.suppressShareEmail) {
+    if (actor && newACL) {
         const addedUserEmails = diffACLEmails(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');
         if (addedUserEmails.length > 0) {
-            await emailNewlyAddedAclEntries(path, addedUserEmails, actor);
+            await emailNewlyAddedAclEntries(path, addedUserEmails, actor, options?.suppressShareEmail ?? false);
         }
     }
 }

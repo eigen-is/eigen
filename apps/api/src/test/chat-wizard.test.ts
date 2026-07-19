@@ -433,6 +433,14 @@ describe('Chat wizard — create with members', () => {
         });
     }
 
+    async function setGuestAclEmail(value: boolean): Promise<void> {
+        await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notifications: { email: { guestOnAclAdd: value } } }),
+        });
+    }
+
     beforeAll(async () => {
         ctx = await getTestContext();
         aliceEmail = ctx.alice.user.email;
@@ -496,6 +504,40 @@ describe('Chat wizard — create with members', () => {
         const shared = list.find((n) => n.tag === `share:${ctx.alice.user.id}:${mountId}:${chat.id}`);
         expect(shared?.title).toBe(`${ctx.alice.user.name} shared a chat`);
         expect(shared?.body).toBe('Suppressed email chat');
+    });
+
+    test('still emails an unregistered external member while suppressing registered ones', async () => {
+        // userOnAclAdd on so a plain share WOULD email bob; guestOnAclAdd on (its default) so an
+        // account-less address is emailable. The wizard must suppress the registered member (bob,
+        // who gets the in-app notification) yet still send the invite email to the outsider — the
+        // share email is the only way an unregistered person ever learns about the chat.
+        await setUserAclEmail(true);
+        await setGuestAclEmail(true);
+        const outsiderEmail = `outsider-${randomUUID()}@example.org`;
+
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
+
+        const res = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: 'Outsider invite chat',
+            members: [bobEmail, outsiderEmail],
+            dedupeName: true,
+        });
+        const chat = await assertJson<DrivePath>(res);
+
+        const toOutsider = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === outsiderEmail));
+        const toBob = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === bobEmail));
+        expect(toOutsider.length).toBe(1);
+        expect(toBob.length).toBe(0);
+        spy.mockRestore();
+
+        // Bob (registered) still gets the in-app notification; the outsider has no home to notify.
+        const list = await assertJson<Notification[]>(
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+        );
+        const shared = list.find((n) => n.tag === `share:${ctx.alice.user.id}:${mountId}:${chat.id}`);
+        expect(shared?.title).toBe(`${ctx.alice.user.name} shared a chat`);
     });
 
     test('respects an explicit parentId', async () => {
