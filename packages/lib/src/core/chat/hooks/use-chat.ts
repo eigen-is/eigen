@@ -8,6 +8,8 @@ import { teamOwnerId } from '@workspace/lib/types/owner';
 import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateItemCreated, useAggregateMimeContent } from '../../drive/hooks/use-drive';
+import { publicUserKeys } from '../../public/hooks/use-public';
+import { fetchPublicUser } from '../../public/user-batcher';
 
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_MIME_SLUG = EIGEN_DOC_TYPE_INFO.chat.urlSlug; // 'application-eigenchat'
@@ -189,18 +191,34 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
     });
 }
 
-// Contacts' "start a chat": exactly one writable match opens directly ('opened'), otherwise the
-// matches come back so the caller opens the wizard pre-filled.
+// Contacts' "start a chat": takes the person's addresses and prefers the one that belongs to a
+// registered account — email[0] can be a later-added alias, and the by-members match is keyed by
+// the account address. Exactly one writable match opens directly ('opened'); otherwise the chosen
+// address comes back so the caller opens the wizard pre-filled with it.
 export function useStartChatWith() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const ownerId = user?.id || '';
     const myEmail = (user?.email ?? '').toLowerCase();
 
-    return async (email: string): Promise<'opened' | ChatMatch[]> => {
-        if (!ownerId) return [];
+    return async (emails: string[]): Promise<'opened' | { email: string }> => {
+        const list = emails.map((e) => e.trim().toLowerCase()).filter((e) => e.length > 0);
+        // Registered-account lookups batch and cache misses as null (staleTime Infinity).
+        const resolved = await Promise.all(
+            list.map((e) =>
+                queryClient
+                    .fetchQuery({
+                        queryKey: publicUserKeys.detail(e),
+                        queryFn: () => fetchPublicUser(e),
+                        staleTime: Infinity,
+                    })
+                    .catch(() => null),
+            ),
+        );
+        const account = resolved.find((u) => u);
+        const email = account ? account.email.toLowerCase() : (list[0] ?? '');
         // Self is never a counterpart — and every unshared solo chat would match a self-only target.
-        if (email.toLowerCase() === myEmail) return [];
+        if (!ownerId || !email || email === myEmail) return { email };
         // A failed lookup degrades to "no matches" so the caller falls through to opening the wizard.
         const matches = await queryClient
             .fetchQuery(byMembersQueryConfig(ownerId, [email]))
@@ -210,7 +228,7 @@ export function useStartChatWith() {
             openDocument(writable[0].path);
             return 'opened';
         }
-        return matches;
+        return { email };
     };
 }
 

@@ -194,12 +194,13 @@ team-drive chats (excluded above).
 - **Drive is intentionally not one**: its `+ New` / context-menu "New chat" creates a plain chat file in the
   browsed folder via the generic `DriveCreateEigenDoc`, exactly like every other eigen type (see the product
   decision at the top of this section). Don't re-wire the wizard into Drive.
-- **Contacts**: "Start chat" on a contact toolbar (`contact-detail.tsx`, shown only when the contact resolves to
-  another Eigen user — `eigenId !== ''` and not the auto-seeded self contact) and on a team member
-  (`team-member-detail.tsx`, non-self). The contact toolbar chats with the account address behind `eigenId`
-  (`usePublicUser`), not `email[0]`, which can be a later-added non-account alias. `useStartChatWith()`'s
-  `startChatWith(email)` fetches the `{me, them}` match once: exactly one writable match opens it directly
-  (cross-app `openDocument`, full load), otherwise the wizard opens pre-filled with that person.
+- **Contacts**: "Start chat" on a contact toolbar (`contact-detail.tsx`, any contact with an email address except
+  your own card — an address without an account becomes an ACL invite, so there is no registered-user gate) and on
+  a team member (`team-member-detail.tsx`, non-self). `useStartChatWith(emails)` first resolves which of the
+  person's addresses belongs to a registered account (batched public-user lookup, misses cached as null) and
+  prefers it over `email[0]`, which can be a later-added alias; it then fetches the `{me, them}` match once —
+  exactly one writable match opens directly (cross-app `openDocument`, full load), otherwise the caller opens the
+  wizard pre-filled with the chosen address.
 
 ## Slash Commands
 

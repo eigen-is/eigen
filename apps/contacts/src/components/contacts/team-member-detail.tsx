@@ -18,7 +18,7 @@ export function TeamMemberDetailToolbar({ member }: { member: TeamMember }) {
 
     const handleStartChat = async () => {
         // An existing writable 1:1 opens directly; otherwise the wizard opens pre-filled.
-        if ((await startChatWith(member.email)) !== 'opened') setChatOpen(true);
+        if ((await startChatWith([member.email])) !== 'opened') setChatOpen(true);
     };
 
     return (

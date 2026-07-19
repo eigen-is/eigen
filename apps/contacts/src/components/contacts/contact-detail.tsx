@@ -5,7 +5,6 @@ import { useStartChatWith } from '@workspace/lib/chat';
 import { useLabels } from '@workspace/lib/contacts';
 import { formatDate } from '@workspace/lib/date';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
-import { useResolvedUser } from '@workspace/lib/public';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { Toolbar, TooltipButton } from '@workspace/ui';
@@ -51,21 +50,18 @@ export function ContactDetailToolbar({ contact, filterType, filterId, onDeleteCl
     const [chatWith, setChatWith] = useState<{ email: string; name: string } | null>(null);
 
     const email = contact.email?.[0];
-    // Chat targets the account address behind eigenId — email[0] can be a later-added or
-    // reordered non-account alias ("Send email" keeps the contact's own primary address).
-    const { resolvedEmail: chatEmail, isLoading: resolvingChatEmail } = useResolvedUser({
-        userId: contact.eigenId || undefined,
-        email,
-    });
-    // eigenId is '' for external contacts, and the auto-seeded self contact is no chat partner.
-    // Gated on the resolver settling so a fast click can't still target an email[0] alias.
-    const canStartChat = !resolvingChatEmail && !!chatEmail && !!contact.eigenId && contact.eigenId !== user?.id;
+    const emails = (contact.email ?? []).filter((e) => e.trim().length > 0);
+    // Any address can start a chat — one without an account becomes an ACL invite. Only the
+    // caller's own card is excluded: a chat is always with someone else.
+    const isSelf = emails.some((e) => e.toLowerCase() === (user?.email ?? '').toLowerCase());
+    const canStartChat = emails.length > 0 && !isSelf;
 
     const handleStartChat = async () => {
-        if (!chatEmail) return;
-        // An existing writable 1:1 opens directly; otherwise the wizard opens pre-filled.
-        if ((await startChatWith(chatEmail)) !== 'opened') {
-            setChatWith({ email: chatEmail, name: `${contact.firstName} ${contact.lastName}`.trim() });
+        // startChatWith prefers the registered account address among the contact's emails; an
+        // existing writable 1:1 opens directly, otherwise the wizard opens pre-filled.
+        const result = await startChatWith(emails);
+        if (result !== 'opened') {
+            setChatWith({ email: result.email, name: `${contact.firstName} ${contact.lastName}`.trim() });
         }
     };
 
