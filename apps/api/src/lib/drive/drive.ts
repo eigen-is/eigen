@@ -1165,9 +1165,9 @@ export default class Drive {
         return mount.getChildByName(parentId, name);
     }
 
-    // Called by: POST /chat/:ownerId/:mountId/rooms — escape-hatch route (requireSelf + getDrive,
-    // like /shared/by-me). No SharedDrive wrapper by design: seeding a caller's own default parent
-    // is owner-scoped, cross-owner access has no meaning. See class doc above.
+    // Called by: POST /chat/:ownerId/:mountId/rooms — escape-hatch route (requireSelf + getDrive for
+    // own mounts, requireTeamAccess + the team home's drive for team mounts). No SharedDrive wrapper
+    // by design: the guard IS the access check, and the default parent is drive-local. See class doc.
     // Resolves the default parent for a new chat: the untrashed root child named `chats` when it's a
     // plain folder (migrating a legacy `Chats` to the lowercase name in place, pathId stable), the
     // root itself when that name is taken by a non-folder, otherwise create it. Resolved by name every

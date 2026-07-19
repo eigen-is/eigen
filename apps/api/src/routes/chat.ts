@@ -12,7 +12,7 @@ import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
 // Chat routes allow cross-owner access (chats live inside shared/team drives).
-// Access control is enforced by getSharedDrive() → SharedDrive ACL checks.
+// Access control: requireSelf/requireTeamAccess guards on the rooms + by-members escape-hatch routes.
 export const chatRouter = new Elysia({ name: 'chat' })
     .use(betterAuth)
 

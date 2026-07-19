@@ -65,7 +65,7 @@ The generic create-chat route lives in the Drive router: `apps/api/src/routes/dr
 ```
 POST   /drive/:ownerId/:mountId/folder/:pathId/create/:type           (create chat — generic Drive route, type=chat)
 GET    /chat/:ownerId/rooms/by-members?emails=a@x,b@y                 (wizard duplicate lookup — self-only)
-POST   /chat/:ownerId/:mountId/rooms                                  (wizard create + share — self-only)
+POST   /chat/:ownerId/:mountId/rooms                                  (wizard create + share — self or team)
 GET    /chat/:ownerId/:mountId/:chatId/messages?before=&limit=
 POST   /chat/:ownerId/:mountId/:chatId/messages
 PATCH  /chat/:ownerId/:mountId/:chatId/messages/:messageId

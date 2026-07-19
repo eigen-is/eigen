@@ -378,6 +378,8 @@ would leak into the client.
    creation demotes to "Create anyway". Matches Slack `conversations.open` semantics while keeping
    intentional duplicates one click away.
 2. **Read-only matches** — shown, deprioritized below writable, never primary/auto-open.
+   *(Superseded 2026-07-19 by the open-first rule: with zero writable matches, "Let's chat" now
+   opens the first read-only match — writable-first ordering makes this the rare case.)*
 3. **Drive New menu** — keeps the plain name+folder dialog in v1; swap is a follow-up.
 4. **Deleted `Chats` folder** — silently recreated on next default-location use. Resolve-by-name
    respects the user's structure; remembering a deletion is statefulness with no payoff.
@@ -521,8 +523,10 @@ of eigen UX)."* Five changes shipped, each browser-verified:
   the first listed chat** and the secondary **"Create new chat"** (renamed from "New chat
   anyway") is the only route to step 2. No matches → primary advances as before.
 - **Team chats default into `<team drive>/chats`**, lazily ensured, via the extended rooms route
-  (see Decision 8 update). Explicit-parent creates (Drive + New inside a team folder) keep the
-  chosen folder. Step 2's team location line reads "\<team\> team drive › chats".
+  (see Decision 8 update). Every UI path targets that default — a `+ New` inside a team subfolder
+  opens the wizard in team mode, whose create sends no `parentId`, so the chat lands in
+  `<team drive>/chats` (step 2 says so honestly); only the raw rooms route honors an explicit
+  `parentId` (test-pinned). Step 2's team location line reads "\<team\> team drive › chats".
 - **File-ness note.** Under the step-2 Location selector, both modes: "Each chat is saved as a
   file in your Drive." / "Each chat is saved as a file on the team drive."
 
