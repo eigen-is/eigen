@@ -533,11 +533,34 @@ of eigen UX)."* Five changes shipped, each browser-verified:
 
 ### v4 follow-ups (recorded)
 
-- The chat.ts router header comment still credits `getSharedDrive` for access control; the
-  rooms/by-members routes use the `requireSelf`/`requireTeamAccess` + raw-Drive escape-hatch
-  (pre-existing imprecision; one-word tweak).
+- ~~The chat.ts router header comment still credits `getSharedDrive` for access control~~
+  *(fixed in the review round below: it now names both mechanisms).*
 - Benign console 404 when the wizard resolves an avatar for an external (account-less) member.
-- Person-mode debounce window (300 ms) can briefly act on the previous picked set — pre-existing,
-  internally consistent, unchanged by these rounds.
+- ~~Person-mode debounce window (300 ms) can briefly act on the previous picked set~~ *(fixed in
+  the review round below: match results are hidden until the debounced key equals the live
+  picked set, so the primary can never open a chat found for a previous set).*
 - `requireTeamAccess` grants org admins access without team membership (matches every team
   route; by design).
+
+## Review round (2026-07-19) — post-branch code review + simplify
+
+Full-branch review (8 finder angles, verified findings only) plus a simplify pass. Behaviour was
+already browser-verified; these are code-quality changes:
+
+- **Shared contact-input plumbing.** The wizard was the third copy of the `"Name <email>"`
+  sentinel-parse-and-add flow (drive share dialog, calendar attendee editor, wizard). Extracted
+  `useContactInput` (`packages/ui/.../contacts/use-contact-input.ts`) and migrated all three;
+  the attendee editor's hand-rolled input+plus row became `ContactAddRow` as well. Per-consumer
+  semantics preserved via the `onAdd → boolean` accept contract (the share dialog keeps rejected
+  duplicates in the field).
+- **Empty-name guard.** Person mode now requires a non-empty name like team mode — an emptied
+  step-2 name would have created a bare `.eigenchat` file.
+- **Debounce freshness gate** (closes the follow-up above).
+- **Matcher comment honesty + concurrency.** `find-by-members.ts` documents that only *direct*
+  team entries are excluded (an ancestor-inherited team entry expands to its point-in-time
+  members — accepted caveat, now also in CHAT.md § Matching semantics), and the surviving own
+  candidates' `getEffectiveMembers` walks run via `Promise.all` instead of serializing.
+- **Wizard fetch gating.** The team-chat aggregate (`useChatSections`) is fetched only once a
+  team is selected, not on every wizard open.
+- **Simplifications.** Merged the two 409-handling create paths into one `createChat`; unified
+  `useContactSuggestions`' short-query branch into the main team-member loop.

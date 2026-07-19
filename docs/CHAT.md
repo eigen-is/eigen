@@ -127,16 +127,20 @@ lowercased) equals `{me} ∪ picked`. "Writable" = I own it, or my ACL entry has
 membership is not a fixed set of people:
 
 - `visibility !== 'private'` (public link = unbounded members),
-- any `team_*` ACL entry (dynamic membership),
+- any **direct** `team_*` ACL entry (dynamic membership),
 - team-owned drives (`ownerId` starts with `team_` = implicit all-team membership).
 
 Own chats are screened by a cheap **direct-ACL subset** pre-filter (every directly-shared email must already be in the
 target set) before paying for the `getEffectiveMembers` breadcrumb + per-team walk that the code flags as costly
-(`chat/chat.ts`). It is a subset test with **no size floor**: an inherited-ACL chat carries an empty direct ACL yet must
-still match, so the walk fills in the ancestor members. Shared-with-me candidates skip the walk — the mirror row carries
-only the direct ACL + the owner's id, so their set is `{owner email via getUserById} ∪ direct ACL emails`; a foreign
-chat that gains members purely via a shared parent folder can false-positively match (accepted for v1 — the panel
-suggests, it never guards).
+(`chat/chat.ts`); the surviving candidates' walks run concurrently. The pre-filter is a subset test with **no size
+floor**: an inherited-ACL chat carries an empty direct ACL yet must still match, so the walk fills in the ancestor
+members. Shared-with-me candidates skip the walk — the mirror row carries only the direct ACL + the owner's id, so
+their set is `{owner email via getUserById} ∪ direct ACL emails`.
+
+Two accepted point-in-time caveats (the panel suggests, it never guards): a foreign chat that gains members purely via
+a shared parent folder can false-positively match, and a `team_*` entry **inherited from an ancestor folder** is not
+excluded — the walk expands it to the team's current members, so an own chat in a team-shared folder matches whenever
+that expansion happens to equal the picked set.
 
 ### The `chats` folder
 
