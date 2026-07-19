@@ -44,7 +44,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
             return { matches: await findChatsByMembers(drive, user, emails) };
         },
         {
-            query: t.Object({ emails: t.Optional(t.String()) }),
+            // 321 = one ≤320-char address plus its comma, so the string cap matches the member cap.
+            query: t.Object({ emails: t.Optional(t.String({ maxLength: MAX_CHAT_MEMBERS * 321 })) }),
             auth: true,
         },
     )
@@ -69,6 +70,10 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
             const members = normalizeMemberEmails(body.members ?? []);
             if (!isTeam && members.length === 0) throw new ApiError(422, 'At least one member is required');
+            // The wizard guards this client-side, but the API contract must too — an empty name
+            // would create (and share) a bare '.eigenchat' dotfile.
+            let fileName = body.fileName.trim();
+            if (!fileName) throw new ApiError(422, 'A chat name is required');
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
 
@@ -76,7 +81,6 @@ export const chatRouter = new Elysia({ name: 'chat' })
             // Concurrent same-name creates can slip past the snapshot — the unique index 409s the
             // loser (the race net every create path shares). Dedupe in the full-name space —
             // Drive.create re-appends the extension.
-            let fileName = body.fileName;
             if (body.dedupeName) {
                 const desired = `${fileName}${DRIVE_EXTENSIONS[DRIVE_TYPE_CHAT]}`;
                 const siblings = await drive.getFolderContents(params.mountId, parentId);
@@ -118,7 +122,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
         {
             body: t.Object({
                 parentId: t.Optional(t.String()),
-                fileName: t.String(),
+                fileName: t.String({ maxLength: 255 }),
                 members: t.Optional(t.Array(t.String({ maxLength: 320 }), { maxItems: MAX_CHAT_MEMBERS })),
                 dedupeName: t.Optional(t.Boolean()),
             }),

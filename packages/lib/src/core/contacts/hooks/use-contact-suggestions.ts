@@ -4,7 +4,7 @@ import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { useMemo } from 'react';
 import { useContacts } from './use-contacts';
 
-type TeamMember = { email: string; name: string; teamId: string };
+type TeamMemberSuggestion = { email: string; name: string; teamId: string };
 
 // Single source for "match a typed string against personal contacts + team members
 // the user can reach." Consumed by ContactAutosuggest (mail/calendar/drive-share),
@@ -25,8 +25,8 @@ export function useContactSuggestions(
     // team a member is found in wins their teamId — sufficient for palette nav, which
     // just needs one valid team/<teamId>?contactId=<email> URL.
     const teamMembers = useMemo(() => {
-        if (!myTeams) return new Map<string, TeamMember>();
-        const members = new Map<string, TeamMember>();
+        if (!myTeams) return new Map<string, TeamMemberSuggestion>();
+        const members = new Map<string, TeamMemberSuggestion>();
         for (const team of myTeams) {
             for (const member of team.members) {
                 const key = member.email.toLowerCase();

@@ -1,6 +1,7 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
 import { DRIVE_MIME_CHAT, type DriveACL, type DrivePath } from '@workspace/lib/types/drive';
+import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import { getUserById, type User } from '../user/';
 
@@ -58,7 +59,13 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: strin
     ownCandidates.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const ownMatches = await Promise.all(
         ownCandidates.slice(0, MAX_MEMBER_WALKS).map(async (path): Promise<ChatMatch | null> => {
-            const members = await drive.getEffectiveMembers(path.mountId, path.id);
+            // A candidate trashed between the snapshot and its walk 404s — skip it, don't
+            // fail the whole batch.
+            const members = await drive.getEffectiveMembers(path.mountId, path.id).catch((err) => {
+                if (err instanceof ApiError && err.status === 404) return null;
+                throw err;
+            });
+            if (!members) return null;
             return sameSet(
                 members.map((m) => m.email.toLowerCase()),
                 target,

@@ -18,7 +18,6 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, MessageSquare, User, Users, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
@@ -495,33 +494,28 @@ function MatchPanel({ title, children }: { title: string; children: ReactNode })
     );
 }
 
-function MatchRow({ name, subtitle, onOpen }: { name: string; subtitle: string | null; onOpen?: () => void }) {
+function MatchRow({ name, subtitle, onOpen }: { name: string; subtitle: string | null; onOpen: () => void }) {
     return (
         // The whole row opens the chat; the button stops propagation so a press doesn't double-fire.
         <div
-            className={cn(
-                'flex items-center justify-between gap-2 rounded-md px-2 py-1.5',
-                onOpen && 'cursor-pointer eigen-list-item',
-            )}
+            className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 eigen-list-item"
             onClick={onOpen}
         >
             <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{name}</p>
                 {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
             </div>
-            {onOpen && (
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onOpen();
-                    }}
-                >
-                    Open
-                </Button>
-            )}
+            <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen();
+                }}
+            >
+                Open
+            </Button>
         </div>
     );
 }

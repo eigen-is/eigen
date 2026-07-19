@@ -614,6 +614,14 @@ describe('Chat wizard — create with members', () => {
         expect(res.status).toBe(422);
     });
 
+    test('rejects an empty or whitespace-only file name with 422', async () => {
+        const res = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
+            fileName: '   ',
+            members: [bobEmail],
+        });
+        expect(res.status).toBe(422);
+    });
+
     test('rejects a non-email member with 422 before creating anything', async () => {
         const before = await driveGetList(
             ctx.alice.user.sessionToken,

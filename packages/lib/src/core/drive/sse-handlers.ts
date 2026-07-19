@@ -25,13 +25,18 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
     const { path } = event;
 
     // Chat by-members matches derive from ACLs, breadcrumbs and liveness — refresh the cached
-    // lookups when a chat row changes, or on ACL/move events anywhere (folder ACLs inherit down).
+    // lookups when a chat row changes, or on ACL/move/trash/restore/folder-delete events anywhere:
+    // folder ACLs inherit down, and descendants of a trashed/restored/deleted folder emit no
+    // events of their own (bulk SQL), so the folder's event must stand in for its chats.
     const affectsChatMatches =
         path.mimeType === DRIVE_MIME_CHAT ||
         event.type === SSEventType.DRIVE_ACL_SHARED ||
         event.type === SSEventType.DRIVE_ACL_UNSHARED ||
         event.type === SSEventType.DRIVE_ACL_UPDATED ||
-        event.type === SSEventType.DRIVE_PATH_MOVED;
+        event.type === SSEventType.DRIVE_PATH_MOVED ||
+        event.type === SSEventType.DRIVE_PATH_TRASHED ||
+        event.type === SSEventType.DRIVE_PATH_RESTORED ||
+        event.type === SSEventType.DRIVE_FOLDER_DELETED;
     if (userId && affectsChatMatches) invalidateChatMatches(queryClient, userId);
 
     switch (event.type) {

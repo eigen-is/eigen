@@ -48,13 +48,14 @@ export function DriveLocationField({
         [onChange],
     );
 
-    // Collapsed, DriveBrowser never mounts to emit the root — resolve it into the value here
-    // so a no-browse submit still carries a concrete folderId.
+    // Resolve an empty folderId to the mount root as soon as it's known: collapsed, DriveBrowser
+    // never mounts to emit it; expanded, its async emit can lose a race with an immediate submit
+    // (a cold root query + a fast "Move here" would otherwise confirm folderId '').
     useEffect(() => {
-        if (!expanded && !value.folderId && rootFolder) {
+        if (!value.folderId && rootFolder) {
             onChange({ ...value, folderId: rootFolder.id });
         }
-    }, [expanded, value, rootFolder, onChange]);
+    }, [value, rootFolder, onChange]);
 
     return (
         <>
