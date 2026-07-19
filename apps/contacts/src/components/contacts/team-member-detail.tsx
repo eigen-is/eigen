@@ -1,47 +1,12 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
-import { useStartChatWith } from '@workspace/lib/chat';
-import { Toolbar, TooltipButton } from '@workspace/ui';
-import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
-import { Mail, MessageSquare } from 'lucide-react';
-import { useState } from 'react';
+import { Mail } from 'lucide-react';
+import { PersonDetailToolbar } from './person-detail-toolbar';
 import type { TeamMember } from './team-member-list';
 
-// Team members always resolve to an Eigen user — no eigenId gate; hidden on your own row.
+// Team members aren't editable contact rows — the shared toolbar disables Edit/Delete.
 export function TeamMemberDetailToolbar({ member }: { member: TeamMember }) {
-    const { user } = useAuth();
-    const startChatWith = useStartChatWith();
-    const [chatOpen, setChatOpen] = useState(false);
-
-    const isSelf = member.email.toLowerCase() === (user?.email ?? '').toLowerCase();
-
-    const handleStartChat = async () => {
-        // An existing writable 1:1 opens directly; otherwise the wizard opens pre-filled.
-        if ((await startChatWith([member.email])) !== 'opened') setChatOpen(true);
-    };
-
-    return (
-        <>
-            <Toolbar>
-                <div className="flex items-center gap-1 ml-auto">
-                    {!isSelf && (
-                        <TooltipButton
-                            icon={MessageSquare}
-                            tooltipText="Start chat"
-                            className="h-8 w-8"
-                            onClick={() => void handleStartChat()}
-                        />
-                    )}
-                </div>
-            </Toolbar>
-            <ChatCreateWizard
-                open={chatOpen}
-                onOpenChange={setChatOpen}
-                initialPeople={[{ email: member.email, name: member.name }]}
-            />
-        </>
-    );
+    return <PersonDetailToolbar name={member.name} emails={[member.email]} />;
 }
 
 type TeamMemberDetailProps = {
@@ -50,7 +15,7 @@ type TeamMemberDetailProps = {
 
 export function TeamMemberDetail({ member }: TeamMemberDetailProps) {
     return (
-        <div className="h-full flex flex-col overflow-hidden">
+        <div className="h-full flex flex-col overflow-hidden" data-document="team-member-detail">
             <div className="flex-1 overflow-auto app-gutter">
                 <div className="flex flex-col md:flex-row gap-8">
                     <UserDetailHero layout="profile" name={member.name} email={member.email} />
