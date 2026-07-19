@@ -47,6 +47,11 @@ export type S3CheckResult = {
     versioning?: 'enabled' | 'suspended' | 'disabled' | 'unknown';
 };
 
+export type LandingLink = {
+    title: string;
+    url: string;
+};
+
 export type ServerSettings = {
     quotas: {
         mailAndContactsMaxMB: number;
@@ -78,6 +83,9 @@ export type ServerSettings = {
     guests: {
         openSignup: boolean;
         inactivityDays: number;
+    };
+    landing: {
+        links: LandingLink[];
     };
     notifications: {
         email: {
