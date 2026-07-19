@@ -11,6 +11,7 @@ type ContactAddRowProps = {
     placeholder?: string;
     onlyInternalMails?: boolean;
     listOnEmptyQuery?: boolean;
+    onEmptyEnter?: () => void;
     id?: string;
     className?: string;
 };
@@ -23,6 +24,7 @@ export function ContactAddRow({
     placeholder = 'Enter email addresses',
     onlyInternalMails = false,
     listOnEmptyQuery = false,
+    onEmptyEnter,
     id,
     className,
 }: ContactAddRowProps) {
@@ -38,6 +40,7 @@ export function ContactAddRow({
                     excludeEmails={excludeEmails}
                     placeholder={placeholder}
                     onSubmit={onSubmit}
+                    onEmptyEnter={onEmptyEnter}
                 />
             </div>
             <Button size="icon" variant="outline" className="ml-2" onClick={onSubmit} disabled={!value}>

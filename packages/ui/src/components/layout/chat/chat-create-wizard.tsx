@@ -3,21 +3,26 @@ import { AppError } from '@workspace/lib/api-error';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useChatSections, useCreateChat, useCreateChatRoom, useFindChatByMembers } from '@workspace/lib/chat';
 import { useDebouncedValue } from '@workspace/lib/command-palette';
-import { useContactSuggestions } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import { CHATS_FOLDER_NAME, type ChatMatch } from '@workspace/lib/types/chat';
-import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
+import { parseContactInput } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
-import { ChevronDown, MessageSquare, Users, X } from 'lucide-react';
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { ContactSuggestList } from '../contacts/contact-suggest-list';
+import { ChevronDown, MessageSquare, User, Users, X } from 'lucide-react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { ContactAddRow } from '../contacts/contact-add-row';
 import { DriveLocationField, type DriveLocationValue } from '../drive/drive-location-field';
 import { InfoBlock } from '../info-block';
 import { TooltipButton } from '../toolbar/tooltip-button';
@@ -75,7 +80,6 @@ export function ChatCreateWizard({
 
     const [step, setStep] = useState<1 | 2>(1);
     const [query, setQuery] = useState('');
-    const [selectedIndex, setSelectedIndex] = useState(0);
     const [picked, setPicked] = useState<PickedPerson[]>([]);
     const [name, setName] = useState('');
     const [nameDirty, setNameDirty] = useState(false);
@@ -110,15 +114,8 @@ export function ChatCreateWizard({
     // Gated on open + person mode: a closed or team-mode wizard runs no by-members lookup.
     const { data: matches = [] } = useFindChatByMembers(myOwnerId, open && !teamMode ? debouncedEmails : []);
 
+    // Already-picked people and self are excluded from the ACL suggestion popover (mirrors the share dialog).
     const excludeEmails = useMemo(() => (myEmail ? [...pickedEmails, myEmail] : pickedEmails), [pickedEmails, myEmail]);
-    // Pick-only: internal users from the shared suggestion source (self + picked excluded), teams surfaced on empty query.
-    const { suggestions } = useContactSuggestions(query, true, excludeEmails, { listOnEmptyQuery: true });
-
-    // Teams as picker rows, filtered by the same query as person suggestions.
-    const teamMatches = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        return (myTeams ?? []).filter((t) => !q || t.name.toLowerCase().includes(q));
-    }, [myTeams, query]);
 
     // Every match shares the picked set's membership by definition, so the count is uniform (+1 = me).
     const memberCount = debouncedEmails.length + 1;
@@ -144,7 +141,6 @@ export function ChatCreateWizard({
         );
         setStep(1);
         setQuery('');
-        setSelectedIndex(0);
         setName('');
         setNameDirty(false);
         setSelectedTeamId(initialTeamId ?? null);
@@ -183,16 +179,20 @@ export function ChatCreateWizard({
         );
     };
 
-    const selectSuggestion = (suggestion: ContactSuggestion) => {
-        addPerson({ email: suggestion.email, displayName: suggestion.displayName });
+    // Adds a typed contact — a picked "Name <email>" suggestion or a raw guest/external email — as a
+    // person the same way the share dialog does; returns whether it parsed so the caller can clear.
+    const addTypedContact = (value: string) => {
+        const parsed = parseContactInput(value);
+        if (!parsed) return false;
+        addPerson({ email: parsed.email, displayName: parsed.displayName });
         setQuery('');
-        setSelectedIndex(0);
+        return true;
     };
 
-    const selectTeam = (teamId: string) => {
-        setSelectedTeamId(teamId);
-        setQuery('');
-        setSelectedIndex(0);
+    const handleQueryChange = (value: string) => {
+        // A picked suggestion arrives formatted as "Name <email>": add it and clear, otherwise track the query.
+        if (value.includes('<') && value.includes('>') && addTypedContact(value)) return;
+        setQuery(value);
     };
 
     // Prefer the consumer's in-app router navigation (onNavigate); fall back to openDocument
@@ -252,29 +252,6 @@ export function ChatCreateWizard({
         void (teamMode ? createTeamChatRoom() : createPersonChat());
     };
 
-    const handleSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-        if (suggestions.length > 0 && e.key === 'ArrowDown') {
-            e.preventDefault();
-            setSelectedIndex((prev) => Math.min(prev + 1, suggestions.length - 1));
-            return;
-        }
-        if (suggestions.length > 0 && e.key === 'ArrowUp') {
-            e.preventDefault();
-            setSelectedIndex((prev) => Math.max(prev - 1, 0));
-            return;
-        }
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            // A live query with a highlighted suggestion picks it; only an empty query advances/opens.
-            // A non-empty query with nothing highlighted does nothing — never skip the picker.
-            if (query.trim()) {
-                if (suggestions[selectedIndex]) selectSuggestion(suggestions[selectedIndex]);
-            } else {
-                advanceOrOpen();
-            }
-        }
-    };
-
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="flex flex-col p-0 gap-0 sm:max-w-[560px] max-w-[90vw] h-[620px] max-h-[85vh]">
@@ -283,26 +260,28 @@ export function ChatCreateWizard({
                 </DialogHeader>
 
                 {step === 1 ? (
-                    /* Step 1 — who. Fixed-height picker; the suggestion list is the sole scroller so the
-                       frame never jumps as suggestions/matches populate. */
+                    /* Step 1 — who. An ACL-style people picker (mirrors the share dialog): ContactAddRow with an
+                       absolute suggestion popover, picked people as removable rows, and the existing-chat panel
+                       anchored to the bottom just above the footer. */
                     <div className="flex flex-1 flex-col min-h-0">
                         {teamMode ? (
                             <div className="shrink-0 px-6 pt-4 pb-2">
-                                <div className="group flex items-center justify-between rounded-md pr-1 hover:bg-muted/50">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                                            <Users className="h-4 w-4 text-muted-foreground" />
-                                        </div>
-                                        <span className="text-sm font-medium">{selectedTeam.name}</span>
+                                <InfoBlock className="w-full text-sm">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                        <span className="truncate">
+                                            Everyone in <span className="font-medium">{selectedTeam.name}</span> is a
+                                            member
+                                        </span>
                                     </div>
                                     <TooltipButton
                                         icon={X}
                                         tooltipText="Remove"
                                         variant="ghost"
-                                        className="h-7 w-7"
+                                        className="h-7 w-7 shrink-0"
                                         onClick={() => setSelectedTeamId(null)}
                                     />
-                                </div>
+                                </InfoBlock>
                                 {!teamRootId && (
                                     <p className="mt-1.5 text-sm text-muted-foreground">This team has no drive yet.</p>
                                 )}
@@ -310,16 +289,14 @@ export function ChatCreateWizard({
                         ) : (
                             <>
                                 <div className="shrink-0 px-6 pt-4 pb-2">
-                                    <Input
+                                    <ContactAddRow
                                         id="chat-wizard-people"
                                         value={query}
-                                        onChange={(e) => {
-                                            setQuery(e.target.value);
-                                            setSelectedIndex(0);
-                                        }}
-                                        onKeyDown={handleSearchKeyDown}
-                                        placeholder="Search people or teams…"
-                                        autoComplete="off"
+                                        onChange={handleQueryChange}
+                                        onSubmit={() => addTypedContact(query)}
+                                        onEmptyEnter={advanceOrOpen}
+                                        excludeEmails={excludeEmails}
+                                        placeholder="Add people by name or email…"
                                     />
                                 </div>
                                 {picked.length > 0 && (
@@ -347,6 +324,9 @@ export function ChatCreateWizard({
                                 )}
                             </>
                         )}
+
+                        {/* Flexible spacer keeps the existing-chat panel pinned to the bottom, just above the footer. */}
+                        <div className="flex-1" />
 
                         {teamMode
                             ? teamChats.length > 0 && (
@@ -379,36 +359,6 @@ export function ChatCreateWizard({
                                       ))}
                                   </MatchPanel>
                               )}
-
-                        {!teamMode && (
-                            <>
-                                {teamMatches.length > 0 && (
-                                    <ul className="shrink-0 max-h-32 overflow-y-auto px-3">
-                                        {teamMatches.map((team) => (
-                                            <li key={team.id}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => selectTeam(team.id)}
-                                                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left eigen-list-item"
-                                                >
-                                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                                                        <Users className="h-4 w-4 text-muted-foreground" />
-                                                    </div>
-                                                    <span className="text-sm font-medium">{team.name}</span>
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                                <ContactSuggestList
-                                    inline
-                                    items={suggestions}
-                                    selectedIndex={selectedIndex}
-                                    onSelect={selectSuggestion}
-                                    className="flex-1 min-h-0 px-3 pb-2"
-                                />
-                            </>
-                        )}
                     </div>
                 ) : (
                     /* Step 2 — confirm. Name + location; the location browser flex-grows into the fixed
@@ -476,7 +426,36 @@ export function ChatCreateWizard({
                 <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between shrink-0">
                     {step === 1 ? (
                         <>
-                            <div />
+                            {myTeams && myTeams.length > 0 ? (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" className="gap-2">
+                                            <Users className="h-4 w-4" />
+                                            Team chat
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                        {selectedTeam && (
+                                            <DropdownMenuItem onClick={() => setSelectedTeamId(null)}>
+                                                <User className="h-4 w-4 mr-2" />
+                                                Personal chat
+                                            </DropdownMenuItem>
+                                        )}
+                                        {myTeams.map((team) => (
+                                            <DropdownMenuItem
+                                                key={team.id}
+                                                onClick={() => setSelectedTeamId(team.id)}
+                                                disabled={team.id === selectedTeamId}
+                                            >
+                                                <Users className="h-4 w-4 mr-2" />
+                                                {team.name}
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            ) : (
+                                <div />
+                            )}
                             <div className="flex gap-2">
                                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                                     Cancel
