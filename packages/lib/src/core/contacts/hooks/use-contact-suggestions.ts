@@ -6,16 +6,6 @@ import { useContacts } from './use-contacts';
 
 type TeamMember = { email: string; name: string; teamId: string };
 
-function toTeamSuggestion(member: TeamMember): ContactSuggestion {
-    return {
-        kind: 'team',
-        id: member.email,
-        displayName: member.name || member.email,
-        email: member.email,
-        teamId: member.teamId,
-    };
-}
-
 // Single source for "match a typed string against personal contacts + team members
 // the user can reach." Consumed by ContactAutosuggest (mail/calendar/drive-share),
 // ChatPlayerSuggest, and the command palette providers. Team members are merged in
@@ -54,19 +44,10 @@ export function useContactSuggestions(
     const excludeSet = useMemo(() => new Set(excludeEmails.map((e) => e.toLowerCase())), [excludeEmails]);
 
     const suggestions = useMemo(() => {
-        if (!lowerQuery || lowerQuery.length < 2) {
-            // Before the 2-char minimum, opt-in callers (the chat wizard) still want the
-            // internal team members surfaced as default picks; every other caller gets nothing.
-            if (!options?.listOnEmptyQuery) return [];
-            const defaults: ContactSuggestion[] = [];
-            for (const [emailKey, member] of teamMembers) {
-                if (excludeSet.has(emailKey)) continue;
-                if (onlyInternalMails && !emailKey.endsWith(`@${domain}`)) continue;
-                if (query.includes(member.email)) continue;
-                defaults.push(toTeamSuggestion(member));
-            }
-            return defaults;
-        }
+        // Before the 2-char minimum only opt-in callers (the chat wizard's member picker) get
+        // anything: every team member as a default pick, personal contacts never.
+        const shortQuery = !lowerQuery || lowerQuery.length < 2;
+        if (shortQuery && !options?.listOnEmptyQuery) return [];
 
         const results: ContactSuggestion[] = [];
         const seenEmails = new Set<string>();
@@ -75,13 +56,20 @@ export function useContactSuggestions(
         for (const [emailKey, member] of teamMembers) {
             if (excludeSet.has(emailKey)) continue;
             const name = (member.name || '').toLowerCase();
-            if (!name.includes(lowerQuery) && !emailKey.includes(lowerQuery)) continue;
+            if (!shortQuery && !name.includes(lowerQuery) && !emailKey.includes(lowerQuery)) continue;
             if (onlyInternalMails && !emailKey.endsWith(`@${domain}`)) continue;
             if (query.includes(member.email)) continue;
 
             seenEmails.add(emailKey);
-            results.push(toTeamSuggestion(member));
+            results.push({
+                kind: 'team',
+                id: member.email,
+                displayName: member.name || member.email,
+                email: member.email,
+                teamId: member.teamId,
+            });
         }
+        if (shortQuery) return results;
 
         // Personal contacts (skip duplicates by email)
         if (contacts) {

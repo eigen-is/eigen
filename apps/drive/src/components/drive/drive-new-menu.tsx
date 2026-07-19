@@ -108,7 +108,9 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
                         if (!open) setCreateType(null);
                     }}
                     initialLocation={
-                        isOwnDrive && targetPath
+                        // Only a real subfolder pins the location; at the drive root the wizard's
+                        // `chats` default is better than pinning the root itself.
+                        isOwnDrive && targetPath?.parentId
                             ? { ownerId: targetPath.ownerId, mountId: targetPath.mountId, folderId: targetPath.id }
                             : undefined
                     }

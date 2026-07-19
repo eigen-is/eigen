@@ -1,6 +1,6 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
-import { DRIVE_MIME_CHAT, type DriveACL } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_CHAT, type DriveACL, type DrivePath } from '@workspace/lib/types/drive';
 import type { Drive } from '../drive';
 import { getUserById, type User } from '../user/';
 
@@ -22,25 +22,21 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: strin
     const ownerCache = new Map<string, User | null>();
 
     const matches: ChatMatch[] = [];
+    const ownCandidates: DrivePath[] = [];
     for (const path of candidates) {
-        // A public link or a team entry makes membership unbounded/dynamic, never a fixed set of
-        // people — those chats are excluded from member matching entirely.
+        // A public link or a direct team entry makes membership unbounded/dynamic, never a fixed
+        // set of people — those chats are excluded from member matching. (A team entry inherited
+        // from an ancestor folder is invisible here; the effective-members walk expands it to its
+        // current members, so such a chat can still match its point-in-time membership — accepted,
+        // like the mirror branch's inherited-ACL caveat. See CHAT.md § Matching semantics.)
         if (path.visibility !== 'private') continue;
         if (hasTeamEntry(path.acl)) continue;
 
         if (path.ownerId === user.id) {
             // Own chat: screen on the direct ACL before paying for the full effective-members walk
-            // (a breadcrumb + per-team query — chat/chat.ts:154 flags the cost), then confirm equality.
-            if (!directEmailsWithinTarget(path.acl, target)) continue;
-            const members = await drive.getEffectiveMembers(path.mountId, path.id);
-            if (
-                sameSet(
-                    members.map((m) => m.email.toLowerCase()),
-                    target,
-                )
-            ) {
-                matches.push({ path, canWrite: true });
-            }
+            // (a breadcrumb + per-team query — chat/chat.ts:154 flags the cost); survivors confirm
+            // set equality in the concurrent pass below.
+            if (directEmailsWithinTarget(path.acl, target)) ownCandidates.push(path);
         } else if (parseOwnerId(path.ownerId).type !== 'team') {
             // Shared-with-me chat: the mirror row carries only the direct ACL and the owner's id, so
             // the member set is {owner email} ∪ direct ACL emails (shared-with-me.ts). Team-owned
@@ -64,6 +60,21 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: strin
             }
         }
     }
+
+    // Every unshared own chat passes the subset screen (empty ACL ⊆ target), so this walk runs for
+    // most own candidates — run the independent walks concurrently instead of serializing on await.
+    const ownMatches = await Promise.all(
+        ownCandidates.map(async (path): Promise<ChatMatch | null> => {
+            const members = await drive.getEffectiveMembers(path.mountId, path.id);
+            return sameSet(
+                members.map((m) => m.email.toLowerCase()),
+                target,
+            )
+                ? { path, canWrite: true }
+                : null;
+        }),
+    );
+    matches.push(...ownMatches.filter((m) => m !== null));
 
     // Writable first (a chat you can post in beats a read-only one), then most-recently-touched.
     matches.sort(

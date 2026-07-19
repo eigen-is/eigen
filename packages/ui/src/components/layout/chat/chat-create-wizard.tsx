@@ -8,7 +8,6 @@ import { CHATS_FOLDER_NAME, type ChatMatch } from '@workspace/lib/types/chat';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
-import { parseContactInput } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import {
@@ -23,6 +22,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, MessageSquare, User, Users, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
+import { useContactInput } from '../contacts/use-contact-input';
 import { DriveLocationField, type DriveLocationValue } from '../drive/drive-location-field';
 import { InfoBlock } from '../info-block';
 import { TooltipButton } from '../toolbar/tooltip-button';
@@ -75,11 +75,8 @@ export function ChatCreateWizard({
     const myEmail = (user?.email ?? '').toLowerCase();
 
     const { data: myTeams } = useMyTeams();
-    // Only the open wizard needs the team-chat aggregate; a closed one mounted in a contacts toolbar shouldn't fetch it.
-    const { teams: teamSections } = useChatSections(open);
 
     const [step, setStep] = useState<1 | 2>(1);
-    const [query, setQuery] = useState('');
     const [picked, setPicked] = useState<PickedPerson[]>([]);
     const [name, setName] = useState('');
     const [nameDirty, setNameDirty] = useState(false);
@@ -100,6 +97,9 @@ export function ChatCreateWizard({
     const teamMount = selectedTeam?.mounts[0] ?? null;
     const teamChatOwnerId = selectedTeam ? teamOwnerId(selectedTeam.id) : '';
     const teamRootId = teamMount?.rootPathId ?? '';
+    // The chat aggregate backs only the team-mode panel — fetch it once a team is actually
+    // selected, not for every (possibly closed) wizard mounted in a contacts toolbar.
+    const { teams: teamSections } = useChatSections(open && teamMode);
     const teamChats = teamSections.find((t) => t.id === selectedTeamId)?.chats ?? [];
 
     // Own mounts only, so the owner never changes: an untouched location sends no parentId and lets the
@@ -109,22 +109,43 @@ export function ChatCreateWizard({
     const createTeamRoom = useCreateChatRoom(teamChatOwnerId, teamMount?.id ?? '');
 
     const pickedEmails = useMemo(() => picked.map((p) => p.email), [picked]);
-    const debouncedKey = useDebouncedValue(pickedEmails.join(','), MATCH_DEBOUNCE_MS);
+    const pickedKey = pickedEmails.join(',');
+    const debouncedKey = useDebouncedValue(pickedKey, MATCH_DEBOUNCE_MS);
     const debouncedEmails = useMemo(() => (debouncedKey ? debouncedKey.split(',') : []), [debouncedKey]);
     // Gated on open + person mode: a closed or team-mode wizard runs no by-members lookup.
-    const { data: matches = [] } = useFindChatByMembers(myOwnerId, open && !teamMode ? debouncedEmails : []);
+    const { data: fetchedMatches = [] } = useFindChatByMembers(myOwnerId, open && !teamMode ? debouncedEmails : []);
+    // The lookup lags the picked set by the debounce window; hide its result until the key settles
+    // so the primary action can never open a chat found for a previous picked set.
+    const matches = debouncedKey === pickedKey ? fetchedMatches : [];
 
     // Already-picked people and self are excluded from the ACL suggestion popover (mirrors the share dialog).
     const excludeEmails = useMemo(() => (myEmail ? [...pickedEmails, myEmail] : pickedEmails), [pickedEmails, myEmail]);
 
     // Every match shares the picked set's membership by definition, so the count is uniform (+1 = me).
-    const memberCount = debouncedEmails.length + 1;
+    const memberCount = picked.length + 1;
     // Existing chats to open before creating a new one: by-members matches in person mode, the team's
     // chats in team mode. When any exist the primary opens the first and "Create new chat" makes a new one.
     const hasMatches = teamMode ? teamChats.length > 0 : matches.length > 0;
     const isBusy = createRoom.isPending || createTeamRoom.isPending;
-    const canCreate = teamMode ? !!name.trim() && !!teamRootId : picked.length > 0;
+    // Both modes need a non-empty name — an emptied person-mode name would otherwise create a bare
+    // '.eigenchat' file (team mode never defaults the name, person mode only loses it when edited).
+    const canCreate = !!name.trim() && (teamMode ? !!teamRootId : picked.length > 0);
     const step1CanProceed = teamMode || picked.length > 0;
+
+    const addPerson = (person: PickedPerson) => {
+        const email = person.email.toLowerCase();
+        if (email === myEmail) return;
+        setPicked((prev) =>
+            prev.some((p) => p.email === email) ? prev : [...prev, { email, displayName: person.displayName || email }],
+        );
+    };
+
+    // Typed input and picked "Name <email>" suggestions join the picked set through the shared
+    // contact-input plumbing — the same flow as the share dialog and calendar attendees.
+    const contactInput = useContactInput((contact) => {
+        addPerson(contact);
+        return true;
+    });
 
     // Serialized so a fresh array/object literal from the caller doesn't re-run the reset effect (which
     // would wipe in-progress edits); the effect re-seeds only when the prefill's contents actually change.
@@ -142,7 +163,7 @@ export function ChatCreateWizard({
                 .filter((p) => p.email !== myEmail),
         );
         setStep(1);
-        setQuery('');
+        contactInput.setValue('');
         setName('');
         setNameDirty(false);
         setSelectedTeamId(initialTeamId ?? null);
@@ -155,7 +176,7 @@ export function ChatCreateWizard({
         setLocationTouched(!!seedLocation);
         setLocationExpanded(false);
         setCreateError(null);
-    }, [open, initialPeopleKey, initialLocationKey, initialTeamId, myOwnerId, myEmail]);
+    }, [open, initialPeopleKey, initialLocationKey, initialTeamId, myOwnerId, myEmail, contactInput.setValue]);
 
     // Keep the name live-defaulted until the user edits it: team mode requires a typed topic (empty
     // default), person mode tracks the picked set ("Alice & Reinder", "Alice, Bob & Carol").
@@ -173,30 +194,6 @@ export function ChatCreateWizard({
 
     if (!user || isGuest) return null;
 
-    const addPerson = (person: PickedPerson) => {
-        const email = person.email.toLowerCase();
-        if (email === myEmail) return;
-        setPicked((prev) =>
-            prev.some((p) => p.email === email) ? prev : [...prev, { email, displayName: person.displayName || email }],
-        );
-    };
-
-    // Adds a typed contact — a picked "Name <email>" suggestion or a raw guest/external email — as a
-    // person the same way the share dialog does; returns whether it parsed so the caller can clear.
-    const addTypedContact = (value: string) => {
-        const parsed = parseContactInput(value);
-        if (!parsed) return false;
-        addPerson({ email: parsed.email, displayName: parsed.displayName });
-        setQuery('');
-        return true;
-    };
-
-    const handleQueryChange = (value: string) => {
-        // A picked suggestion arrives formatted as "Name <email>": add it and clear, otherwise track the query.
-        if (value.includes('<') && value.includes('>') && addTypedContact(value)) return;
-        setQuery(value);
-    };
-
     // Prefer the consumer's in-app router navigation (onNavigate); fall back to openDocument
     // (window.location) so apps whose route trees lack the chat room route still work — this shared
     // component can't depend on a typed navigate itself. openDocument is what contacts' "start chat" uses.
@@ -206,39 +203,9 @@ export function ChatCreateWizard({
         else openDocument(path);
     };
 
-    const createPersonChat = async () => {
+    const goToCreateStep = () => {
         setCreateError(null);
-        const base = name.trim();
-        const parentId = locationTouched ? location.folderId || undefined : undefined;
-        try {
-            // A default (non-dirty) name lets the server dedupe a collision (" (2)", " (3)"…); a
-            // user-typed name is created verbatim, so its collision surfaces the 409 inline below.
-            goToRoom(
-                await createRoom.mutateAsync({
-                    parentId,
-                    fileName: base,
-                    members: pickedEmails,
-                    dedupeName: !nameDirty,
-                }),
-            );
-        } catch (e) {
-            if (!(e instanceof AppError) || e.status !== 409) return; // non-409 already toasted by the hook
-            setCreateError(`A chat named "${base}" already exists here. Rename it, or open the existing one.`);
-        }
-    };
-
-    const createTeamChatRoom = async () => {
-        setCreateError(null);
-        const base = name.trim();
-        try {
-            // No parentId → the room lands in the team drive's `chats` folder (lazily ensured);
-            // team membership grants access, so no members are shared. A user-typed topic can 409
-            // on a collision, surfaced inline like person mode.
-            goToRoom(await createTeamRoom.mutateAsync({ fileName: base, members: [] }));
-        } catch (e) {
-            if (!(e instanceof AppError) || e.status !== 409) return; // non-409 already toasted by the hook
-            setCreateError(`A chat named "${base}" already exists here. Rename it, or open the existing one.`);
-        }
+        setStep(2);
     };
 
     // Step 1 primary: open the first existing match if there is one, otherwise advance to confirm.
@@ -247,15 +214,33 @@ export function ChatCreateWizard({
             goToRoom(teamMode ? teamChats[0] : matches[0].path);
             return;
         }
-        if (step1CanProceed) {
-            setCreateError(null);
-            setStep(2);
-        }
+        if (step1CanProceed) goToCreateStep();
     };
 
-    const createChat = () => {
+    const createChat = async () => {
         if (!canCreate || isBusy) return;
-        void (teamMode ? createTeamChatRoom() : createPersonChat());
+        setCreateError(null);
+        const fileName = name.trim();
+        try {
+            // A team room takes no members (membership is implicit) and lands in the team drive's
+            // `chats` folder (no parentId, lazily ensured). A personal chat is born shared with the
+            // picked people; a default (non-dirty) name lets the server dedupe a collision
+            // (" (2)", " (3)"…), while a user-typed name is created verbatim so its collision
+            // surfaces the 409 inline below.
+            goToRoom(
+                teamMode
+                    ? await createTeamRoom.mutateAsync({ fileName, members: [] })
+                    : await createRoom.mutateAsync({
+                          parentId: locationTouched ? location.folderId || undefined : undefined,
+                          fileName,
+                          members: pickedEmails,
+                          dedupeName: !nameDirty,
+                      }),
+            );
+        } catch (e) {
+            if (!(e instanceof AppError) || e.status !== 409) return; // non-409 already toasted by the hook
+            setCreateError(`A chat named "${fileName}" already exists here. Rename it, or open the existing one.`);
+        }
     };
 
     return (
@@ -297,9 +282,9 @@ export function ChatCreateWizard({
                                 <div className="shrink-0 px-6 pt-4 pb-2">
                                     <ContactAddRow
                                         id="chat-wizard-people"
-                                        value={query}
-                                        onChange={handleQueryChange}
-                                        onSubmit={() => addTypedContact(query)}
+                                        value={contactInput.value}
+                                        onChange={contactInput.handleChange}
+                                        onSubmit={contactInput.submit}
                                         onEmptyEnter={advanceOrOpen}
                                         excludeEmails={excludeEmails}
                                         placeholder="Add people by name or email…"
@@ -385,7 +370,7 @@ export function ChatCreateWizard({
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                         e.preventDefault();
-                                        createChat();
+                                        void createChat();
                                     }
                                 }}
                             />
@@ -475,14 +460,7 @@ export function ChatCreateWizard({
                                     Cancel
                                 </Button>
                                 {hasMatches && (
-                                    <Button
-                                        variant="outline"
-                                        disabled={!step1CanProceed}
-                                        onClick={() => {
-                                            setCreateError(null);
-                                            setStep(2);
-                                        }}
-                                    >
+                                    <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
                                         Create new chat
                                     </Button>
                                 )}
@@ -506,7 +484,7 @@ export function ChatCreateWizard({
                                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                                     Cancel
                                 </Button>
-                                <Button onClick={createChat} disabled={!canCreate || isBusy}>
+                                <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
                                     Let's chat
                                 </Button>
                             </div>
