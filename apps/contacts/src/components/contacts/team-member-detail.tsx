@@ -8,9 +8,7 @@ import { Mail, MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 import type { TeamMember } from './team-member-list';
 
-// Team members always resolve to an Eigen user, so the action is unconditional here (unlike personal
-// contacts, which gate on eigenId in ContactDetailToolbar) — except on your own row, where there is
-// no one to chat with.
+// Team members always resolve to an Eigen user — no eigenId gate; hidden on your own row.
 export function TeamMemberDetailToolbar({ member }: { member: TeamMember }) {
     const { user } = useAuth();
     const startChatWith = useStartChatWith();
@@ -19,7 +17,7 @@ export function TeamMemberDetailToolbar({ member }: { member: TeamMember }) {
     const isSelf = member.email.toLowerCase() === (user?.email ?? '').toLowerCase();
 
     const handleStartChat = async () => {
-        // 'opened' means an existing writable 1:1 was navigated to; otherwise open the wizard pre-filled.
+        // An existing writable 1:1 opens directly; otherwise the wizard opens pre-filled.
         if ((await startChatWith(member.email)) !== 'opened') setChatOpen(true);
     };
 

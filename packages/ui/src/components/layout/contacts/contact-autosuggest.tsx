@@ -106,7 +106,7 @@ export function ContactAutosuggest({
 
     const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key !== 'Enter' || event.defaultPrevented) return;
-        // Empty input runs the caller's primary action instead of a no-op submit (new-chat wizard's step-1 advance/open).
+        // Empty-input Enter runs the caller's primary action instead of a no-op submit.
         if (!inputValue.trim() && onEmptyEnter) {
             event.preventDefault();
             onEmptyEnter();

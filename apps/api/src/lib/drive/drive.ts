@@ -1165,19 +1165,16 @@ export default class Drive {
         return mount.getChildByName(parentId, name);
     }
 
-    // Called by: POST /chat/:ownerId/:mountId/rooms — escape-hatch route (requireSelf + getDrive for
-    // own mounts, requireTeamAccess + the team home's drive for team mounts). No SharedDrive wrapper
-    // by design: the guard IS the access check, and the default parent is drive-local. See class doc.
-    // Resolves the default parent for a new chat: the untrashed root child named `chats` when it's a
-    // plain folder (migrating a legacy `Chats` to the lowercase name in place, pathId stable), the
-    // root itself when that name is taken by a non-folder, otherwise create it. Resolved by name every
-    // call so the folder stays freely renameable/movable/deletable.
+    // Called by: POST /chat/:ownerId/:mountId/rooms (escape-hatch route — its guard IS the access
+    // check). Resolves the default chat parent by name on every call so the folder stays freely
+    // renameable/movable/deletable; a legacy `Chats` is renamed in place, a non-folder squatter
+    // falls back to the root.
     async ensureChatsFolder(mountId: string): Promise<string> {
         const mount = this.getMount(mountId);
         const root = await mount.getRootFolder();
         if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
 
-        // getChildByName folds case, so one lookup resolves both the new `chats` and a legacy `Chats`.
+        // getChildByName folds case, so one lookup resolves both `chats` and a legacy `Chats`.
         const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
         if (existing) {
             if (existing.type !== DRIVE_TYPE_FOLDER) return root.id;

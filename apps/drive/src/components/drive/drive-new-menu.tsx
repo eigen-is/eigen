@@ -48,9 +48,8 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
 
     const targetPath = currentPath || rootPath;
     const targetOwner = targetPath ? parseOwnerId(targetPath.ownerId) : null;
-    // The wizard's person-mode create is strictly own-drive; a team drive opens it in team mode.
-    // A foreign USER owner (a shared-with-me folder) is neither, so chat there falls back to the
-    // bare create dialog — which can still drop a chat file into a writable shared folder.
+    // Person-mode create is strictly own-drive; team drives open team mode; a foreign user owner
+    // (shared-with-me folder) keeps the bare create dialog.
     const isOwnDrive = !!targetPath && targetPath.ownerId === user?.id;
     const chatUsesWizard = createType === DRIVE_TYPE_CHAT && !isGuest && (isOwnDrive || targetOwner?.type === 'team');
 
@@ -99,17 +98,13 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
             />
 
             {chatUsesWizard ? (
-                /* Non-guest "New chat" in an own or team drive opens the people/team wizard; guests and
-                   shared-with-me folders keep the bare create below (the wizard renders null for guests).
-                   Navigation uses the wizard's openDocument fallback. */
                 <ChatCreateWizard
                     open={true}
                     onOpenChange={(open) => {
                         if (!open) setCreateType(null);
                     }}
                     initialLocation={
-                        // Only a real subfolder pins the location; at the drive root the wizard's
-                        // `chats` default is better than pinning the root itself.
+                        // Only a real subfolder pins the location — at the root the `chats` default wins.
                         isOwnDrive && targetPath?.parentId
                             ? { ownerId: targetPath.ownerId, mountId: targetPath.mountId, folderId: targetPath.id }
                             : undefined

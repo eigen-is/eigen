@@ -32,27 +32,22 @@ const MATCH_DEBOUNCE_MS = 300;
 
 type PickedPerson = { email: string; displayName: string };
 
-// Prefill for callers that already know who the chat is with (e.g. contacts' "Start chat"). The
-// name seeds the picked row and thus the live 1:1 name default; it falls back to the email when absent.
+// Prefill for callers that already know who the chat is with (contacts' "Start chat").
 type InitialPerson = { email: string; name?: string };
 
 type ChatCreateWizardProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     initialPeople?: InitialPerson[];
-    // Seeds the location as already-touched so step 2 confirms this folder instead of the auto
-    // `chats` default (Drive's "+ New → New chat" passes the browsed folder).
+    // Seeds the location as already-touched (Drive's "+ New → New chat" passes the browsed folder).
     initialLocation?: DriveLocationValue;
-    // Opens directly in team mode for that team (Drive passes it when the current drive is a team drive).
+    // Opens directly in team mode (Drive passes it when the current drive is a team drive).
     initialTeamId?: string;
-    // In-app router navigation for the target room. Chat apps pass a typed TanStack navigate; when
-    // omitted the wizard falls back to openDocument (window.location) so route-tree-agnostic consumers work.
+    // Typed router navigation for the target room; omitted → openDocument (window.location) fallback.
     onNavigate?: (path: DrivePath) => void;
 };
 
-// One person reads as "<Them> & <Me>" (both names, since the file name is shared); two or more read
-// as the picked members alone, comma-joined with a trailing ampersand ("Alice, Bob & Carol"),
-// WhatsApp's optional-auto-name model.
+// A 1:1 carries both names (the file name is shared); groups list the picked members only.
 function defaultChatName(pickedNames: string[], myName: string): string {
     if (pickedNames.length === 0) return '';
     if (pickedNames.length === 1) return `${pickedNames[0]} & ${myName}`;
@@ -92,18 +87,15 @@ export function ChatCreateWizard({
 
     const selectedTeam = myTeams?.find((t) => t.id === selectedTeamId) ?? null;
     const teamMode = !!selectedTeam;
-    // Team homes have no 'default' mount (their mounts get random ids); mounts arrive enabled-filtered,
-    // so the first one is the team drive.
+    // Mounts arrive enabled-filtered, so the first is the team drive (team homes have no 'default' id).
     const teamMount = selectedTeam?.mounts[0] ?? null;
     const teamChatOwnerId = selectedTeam ? teamOwnerId(selectedTeam.id) : '';
     const teamRootId = teamMount?.rootPathId ?? '';
-    // The chat aggregate backs only the team-mode panel — fetch it once a team is actually
-    // selected, not for every (possibly closed) wizard mounted in a contacts toolbar.
+    // The aggregate backs only the team-mode panel — closed or person-mode wizards skip the fetch.
     const { teams: teamSections } = useChatSections(open && teamMode);
     const teamChats = teamSections.find((t) => t.id === selectedTeamId)?.chats ?? [];
 
-    // Own mounts only, so the owner never changes: an untouched location sends no parentId and lets the
-    // route resolve the `chats` folder, a touched one carries the browsed folder.
+    // An untouched location sends no parentId, letting the route resolve the `chats` folder.
     const createMountId = locationTouched ? location.mountId : DEFAULT_MOUNT_ID;
     const createRoom = useCreateChatRoom(myOwnerId, createMountId);
     const createTeamRoom = useCreateChatRoom(teamChatOwnerId, teamMount?.id ?? '');
@@ -114,21 +106,18 @@ export function ChatCreateWizard({
     const debouncedEmails = useMemo(() => (debouncedKey ? debouncedKey.split(',') : []), [debouncedKey]);
     // Gated on open + person mode: a closed or team-mode wizard runs no by-members lookup.
     const { data: fetchedMatches = [] } = useFindChatByMembers(myOwnerId, open && !teamMode ? debouncedEmails : []);
-    // The lookup lags the picked set by the debounce window; hide its result until the key settles
-    // so the primary action can never open a chat found for a previous picked set.
+    // Hide results until the debounced key settles — never open a match found for a previous set.
     const matches = debouncedKey === pickedKey ? fetchedMatches : [];
 
     // Already-picked people and self are excluded from the ACL suggestion popover (mirrors the share dialog).
     const excludeEmails = useMemo(() => (myEmail ? [...pickedEmails, myEmail] : pickedEmails), [pickedEmails, myEmail]);
 
-    // Every match shares the picked set's membership by definition, so the count is uniform (+1 = me).
+    // Every match shares the picked set's membership by definition (+1 = me).
     const memberCount = picked.length + 1;
-    // Existing chats to open before creating a new one: by-members matches in person mode, the team's
-    // chats in team mode. When any exist the primary opens the first and "Create new chat" makes a new one.
+    // When any existing chat matches, the primary opens the first; "Create new chat" leads to step 2.
     const hasMatches = teamMode ? teamChats.length > 0 : matches.length > 0;
     const isBusy = createRoom.isPending || createTeamRoom.isPending;
-    // Both modes need a non-empty name — an emptied person-mode name would otherwise create a bare
-    // '.eigenchat' file (team mode never defaults the name, person mode only loses it when edited).
+    // Both modes need a name — an emptied one would create a bare '.eigenchat' file.
     const canCreate = !!name.trim() && (teamMode ? !!teamRootId : picked.length > 0);
     const step1CanProceed = teamMode || picked.length > 0;
 
@@ -140,15 +129,13 @@ export function ChatCreateWizard({
         );
     };
 
-    // Typed input and picked "Name <email>" suggestions join the picked set through the shared
-    // contact-input plumbing — the same flow as the share dialog and calendar attendees.
+    // Typed input and picked suggestions join the picked set — same flow as the share dialog.
     const contactInput = useContactInput((contact) => {
         addPerson(contact);
         return true;
     });
 
-    // Serialized so a fresh array/object literal from the caller doesn't re-run the reset effect (which
-    // would wipe in-progress edits); the effect re-seeds only when the prefill's contents actually change.
+    // Serialized so a caller's fresh array/object literal can't re-run the reset effect mid-edit.
     const initialPeopleKey = JSON.stringify(initialPeople ?? []);
     const initialLocationKey = JSON.stringify(initialLocation ?? null);
 
@@ -156,7 +143,7 @@ export function ChatCreateWizard({
     useEffect(() => {
         if (!open) return;
         const seed: InitialPerson[] = JSON.parse(initialPeopleKey);
-        // Drop self from the prefill (same guard as addPerson) — a chat is always with other people.
+        // Drop self from the prefill — a chat is always with other people.
         setPicked(
             seed
                 .map((p) => ({ email: p.email.toLowerCase(), displayName: p.name?.trim() || p.email }))
@@ -168,18 +155,15 @@ export function ChatCreateWizard({
         setNameDirty(false);
         setSelectedTeamId(initialTeamId ?? null);
         const rawSeed: DriveLocationValue | null = JSON.parse(initialLocationKey);
-        // Person-mode create is own-drive only (own mounts, owner never changes), so a foreign-owner
-        // seed can't be its location — treat it as absent and fall back to the auto `chats` default.
+        // Person-mode create is own-drive only — a foreign-owner seed is treated as absent.
         const seedLocation = rawSeed && rawSeed.ownerId === myOwnerId ? rawSeed : null;
-        // A seeded location lands step 2 on the real folder; otherwise the auto `chats` default.
         setLocation(seedLocation ?? { ownerId: myOwnerId, mountId: DEFAULT_MOUNT_ID, folderId: '' });
         setLocationTouched(!!seedLocation);
         setLocationExpanded(false);
         setCreateError(null);
     }, [open, initialPeopleKey, initialLocationKey, initialTeamId, myOwnerId, myEmail, contactInput.setValue]);
 
-    // Keep the name live-defaulted until the user edits it: team mode requires a typed topic (empty
-    // default), person mode tracks the picked set ("Alice & Reinder", "Alice, Bob & Carol").
+    // Live-default the name until the user edits it; team mode requires a typed topic instead.
     useEffect(() => {
         if (!open || nameDirty) return;
         setName(
@@ -194,9 +178,7 @@ export function ChatCreateWizard({
 
     if (!user || isGuest) return null;
 
-    // Prefer the consumer's in-app router navigation (onNavigate); fall back to openDocument
-    // (window.location) so apps whose route trees lack the chat room route still work — this shared
-    // component can't depend on a typed navigate itself. openDocument is what contacts' "start chat" uses.
+    // openDocument works from any app's route tree — this shared component can't own a typed navigate.
     const goToRoom = (path: DrivePath) => {
         onOpenChange(false);
         if (onNavigate) onNavigate(path);
@@ -222,11 +204,8 @@ export function ChatCreateWizard({
         setCreateError(null);
         const fileName = name.trim();
         try {
-            // A team room takes no members (membership is implicit) and lands in the team drive's
-            // `chats` folder (no parentId, lazily ensured). A personal chat is born shared with the
-            // picked people; a default (non-dirty) name lets the server dedupe a collision
-            // (" (2)", " (3)"…), while a user-typed name is created verbatim so its collision
-            // surfaces the 409 inline below.
+            // Team membership is implicit, so team rooms take no members. A default (non-dirty)
+            // name lets the server dedupe a collision; a user-typed one 409s, surfaced inline below.
             goToRoom(
                 teamMode
                     ? await createTeamRoom.mutateAsync({ fileName, members: [] })
@@ -251,9 +230,7 @@ export function ChatCreateWizard({
                 </DialogHeader>
 
                 {step === 1 ? (
-                    /* Step 1 — who. An ACL-style people picker (mirrors the share dialog): ContactAddRow with an
-                       absolute suggestion popover, picked people as removable rows, and the existing-chat panel
-                       anchored to the bottom just above the footer. */
+                    /* Step 1 — who: an ACL-style people picker mirroring the share dialog. */
                     <div className="flex flex-1 flex-col min-h-0">
                         {teamMode ? (
                             <div className="shrink-0 px-6 pt-4 pb-2">
@@ -316,7 +293,7 @@ export function ChatCreateWizard({
                             </>
                         )}
 
-                        {/* Flexible spacer keeps the existing-chat panel pinned to the bottom, just above the footer. */}
+                        {/* Spacer pins the existing-chat panel just above the footer. */}
                         <div className="flex-1" />
 
                         {teamMode
@@ -352,8 +329,7 @@ export function ChatCreateWizard({
                               )}
                     </div>
                 ) : (
-                    /* Step 2 — confirm. Name + location; the location browser flex-grows into the fixed
-                       frame when expanded, otherwise trailing space keeps the footer pinned. */
+                    /* Step 2 — confirm: name + location. */
                     <div className="flex flex-1 flex-col min-h-0">
                         <div className="shrink-0 px-6 pt-4 pb-2">
                             <Label htmlFor="chat-wizard-name" className="text-sm text-muted-foreground">
@@ -512,8 +488,7 @@ function MatchPanel({ title, children }: { title: string; children: ReactNode })
 
 function MatchRow({ name, subtitle, onOpen }: { name: string; subtitle: string | null; onOpen?: () => void }) {
     return (
-        // Whole row opens the chat when it has an Open target; the button keeps its own click and
-        // stops propagation so a button press doesn't also fire the row handler.
+        // The whole row opens the chat; the button stops propagation so a press doesn't double-fire.
         <div
             className={cn(
                 'flex items-center justify-between gap-2 rounded-md px-2 py-1.5',

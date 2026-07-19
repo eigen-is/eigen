@@ -9,13 +9,9 @@ import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';
 
-// Threaded route → updateACLDelta → updateACL → propagateSharedPathChange. Opt-in only;
-// omitting it keeps the default share behaviour (email + mirror + notification) byte-identical.
-// `suppressShareEmail` skips the "someone shared a file with you" email only for newly added
-// entries that resolve to a registered user (guest accounts included) — they learn about it via
-// the still-firing mirror fan-out, DRIVE_ACL_SHARED SSE, and in-app notification. Account-less
-// emails have no home to notify, so they keep the share email as their only invite vehicle. Used
-// by the new-chat wizard, where the email is wrong-tone (see docs/PROPOSAL_CHAT_WIZARD.md decision 6).
+// Opt-in (default share behaviour stays byte-identical): skips the share email for entries that
+// resolve to a registered user — mirror fan-out, SSE, and in-app notification still fire.
+// Account-less emails keep the email as their only invite vehicle. Used by the new-chat wizard.
 export type ACLPropagationOptions = { suppressShareEmail?: boolean };
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {

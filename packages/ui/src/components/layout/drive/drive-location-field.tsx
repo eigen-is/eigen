@@ -18,8 +18,7 @@ type DriveLocationFieldProps = {
     onChange: (value: DriveLocationValue) => void;
     expanded: boolean;
     onExpandedChange: (expanded: boolean) => void;
-    // When false the collapsible breadcrumb header is hidden and only the browser shows
-    // (the save-as flow, which is always expanded with no collapse affordance).
+    // false hides the breadcrumb header and shows only the browser (the always-expanded save-as flow).
     collapsible?: boolean;
     // Restricts the mount list to the user's own drive, hiding team/shared mounts.
     ownMountsOnly?: boolean;
@@ -49,9 +48,8 @@ export function DriveLocationField({
         [onChange],
     );
 
-    // Resolve the mount root into the controlled value so a submit made without browsing
-    // (the collapsed create flow, where DriveBrowser never mounts to emit it) still carries
-    // a concrete folderId. When expanded, DriveBrowser owns this the same way it always has.
+    // Collapsed, DriveBrowser never mounts to emit the root — resolve it into the value here
+    // so a no-browse submit still carries a concrete folderId.
     useEffect(() => {
         if (!expanded && !value.folderId && rootFolder) {
             onChange({ ...value, folderId: rootFolder.id });

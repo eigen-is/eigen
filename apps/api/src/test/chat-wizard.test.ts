@@ -458,8 +458,7 @@ describe('Chat wizard — create with members', () => {
         chatsFolderId = children.find((c) => c.name === 'chats' && c.type === 'folder')!.id;
     });
 
-    // userOnAclAdd is shared server state — reset around every test so we neither trust a leaked
-    // value on entry nor leak one to sibling suites (JsonStore is shared across the whole run).
+    // userOnAclAdd is shared server state — reset around every test (JsonStore spans the run).
     beforeEach(() => setUserAclEmail(false));
     afterEach(() => setUserAclEmail(false));
 
@@ -507,10 +506,7 @@ describe('Chat wizard — create with members', () => {
     });
 
     test('still emails an unregistered external member while suppressing registered ones', async () => {
-        // userOnAclAdd on so a plain share WOULD email bob; guestOnAclAdd on (its default) so an
-        // account-less address is emailable. The wizard must suppress the registered member (bob,
-        // who gets the in-app notification) yet still send the invite email to the outsider — the
-        // share email is the only way an unregistered person ever learns about the chat.
+        // The share email is the only way an account-less person ever learns about the chat.
         await setUserAclEmail(true);
         await setGuestAclEmail(true);
         const outsiderEmail = `outsider-${randomUUID()}@example.org`;

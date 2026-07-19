@@ -48,13 +48,12 @@ export function ContactDetailToolbar({ contact, filterType, filterId, onDeleteCl
     const [chatWith, setChatWith] = useState<{ email: string; name: string } | null>(null);
 
     const email = contact.email?.[0];
-    // Personal contacts store the internal user id in eigenId, or '' when external — only Eigen users
-    // can be chat partners (team members always qualify, handled in TeamMemberDetailToolbar).
+    // eigenId is '' for external contacts — only Eigen users can be chat partners.
     const canStartChat = !!email && !!contact.eigenId;
 
     const handleStartChat = async () => {
         if (!email) return;
-        // 'opened' means an existing writable 1:1 was navigated to; otherwise open the wizard pre-filled.
+        // An existing writable 1:1 opens directly; otherwise the wizard opens pre-filled.
         if ((await startChatWith(email)) !== 'opened') {
             setChatWith({ email, name: `${contact.firstName} ${contact.lastName}`.trim() });
         }

@@ -17,9 +17,8 @@ import { attachmentReferenceSchema } from './shared-schemas';
 export const chatRouter = new Elysia({ name: 'chat' })
     .use(betterAuth)
 
-    // Chats whose current members exactly match a picked set — the wizard's open-don't-duplicate
-    // lookup. Reads the caller's own mounts + shared-with-me mirror only, so it runs on the caller's
-    // Home: reject cross-owner callers and use the raw owner Drive (getDrive), not the ACL wrapper.
+    // The wizard's open-don't-duplicate lookup — reads only the caller's own Home, hence
+    // requireSelf + raw Drive.
     .get(
         '/chat/:ownerId/rooms/by-members',
         async ({ params, query, user }): Promise<{ matches: ChatMatch[] }> => {
@@ -38,11 +37,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
         },
     )
 
-    // Create a chat in one server-side sequence — the wizard's create step. A personal chat is born
-    // shared with the picked members; a team chat inherits access from team membership, so it takes
-    // no members and skips the ACL step. Either way the parent defaults to the mount's lazily-ensured
-    // `chats` folder. Escape-hatch raw Drive (no SharedDrive wrapper): an explicit access gate
-    // (requireSelf / requireTeamAccess) stands in for it, like the /shared/by-me routes.
+    // The wizard's create step: create + share in one server-side sequence, parent defaulting to
+    // the lazily-ensured `chats` folder. Team chats take no members — membership is implicit.
     .post(
         '/chat/:ownerId/:mountId/rooms',
         async ({ params, body, user }): Promise<DrivePath> => {
@@ -59,16 +55,13 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 drive = await getDrive(user);
             }
 
-            // A personal chat is defined by its members; reject an empty set before creating anything.
             const members = body.members ?? [];
             if (!isTeam && members.length === 0) throw new ApiError(422, 'At least one member is required');
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
 
-            // Auto-named wizard chats opt into server-side dedupe so a default name never 409s on a
-            // collision (the client used to retry with counters); a user-typed name omits the flag and
-            // still 409s. Drive.create appends the .eigenchat extension, so dedupe in the full-name
-            // space against the folder's siblings, then strip it back off for create.
+            // Auto-named chats dedupe server-side so a default name never 409s; user-typed names
+            // still 409. Dedupe in the full-name space — Drive.create re-appends the extension.
             let fileName = body.fileName;
             if (body.dedupeName) {
                 const desired = `${fileName}${DRIVE_EXTENSIONS[DRIVE_TYPE_CHAT]}`;
@@ -80,9 +73,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
             }
             const chat = await drive.create(params.mountId, parentId, fileName, DRIVE_TYPE_CHAT, user);
 
-            // A personal wizard chat is born shared. The share email is suppressed (in-app notification
-            // + SSE still fire, see docs/PROPOSAL_CHAT_WIZARD.md decision 6); a created-but-unshared
-            // orphan is worse than a clean error, so on ACL failure purge the fresh container and rethrow.
+            // A wizard chat is born shared — on ACL failure purge the fresh container rather than
+            // leave an unshared orphan. Share email suppressed; in-app notification + SSE still fire.
             if (!isTeam) {
                 try {
                     await drive.updateACLDelta(

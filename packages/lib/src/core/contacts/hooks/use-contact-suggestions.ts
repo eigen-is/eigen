@@ -10,8 +10,7 @@ type TeamMember = { email: string; name: string; teamId: string };
 // the user can reach." Consumed by ContactAutosuggest (mail/calendar/drive-share),
 // ChatPlayerSuggest, and the command palette providers. Team members are merged in
 // first (higher priority), personal contacts second; dedup is by lowercased email.
-// `listOnEmptyQuery` opts into showing team members as default suggestions before the
-// 2-char minimum is met (the new-chat wizard's member picker) — off for every other caller.
+// `listOnEmptyQuery`: show team members before the 2-char minimum (the chat wizard's picker).
 export function useContactSuggestions(
     query: string,
     onlyInternalMails: boolean = false,
@@ -44,8 +43,7 @@ export function useContactSuggestions(
     const excludeSet = useMemo(() => new Set(excludeEmails.map((e) => e.toLowerCase())), [excludeEmails]);
 
     const suggestions = useMemo(() => {
-        // Before the 2-char minimum only opt-in callers (the chat wizard's member picker) get
-        // anything: every team member as a default pick, personal contacts never.
+        // Below the 2-char minimum only opt-in callers get team members as default picks.
         const shortQuery = !lowerQuery || lowerQuery.length < 2;
         if (shortQuery && !options?.listOnEmptyQuery) return [];
 

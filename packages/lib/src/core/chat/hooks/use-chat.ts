@@ -17,10 +17,8 @@ export const chatKeys = {
     owner: (ownerId: string) => [...chatKeys.all, ownerId] as const,
     messages: (ownerId: string, mountId: string, chatId: string) =>
         [...chatKeys.owner(ownerId), 'messages', mountId, chatId] as const,
-    // Prefix over every picked-set entry — used to invalidate the whole family after a create.
     byMembersAll: (ownerId: string) => [...chatKeys.owner(ownerId), 'by-members'] as const,
-    // Lowercased + sorted so member order and case don't fork the cache entry — the same
-    // picked set always resolves to one identity, whichever way the caller ordered/typed it.
+    // Lowercased + sorted so member order and case don't fork the cache entry.
     byMembers: (ownerId: string, emails: string[]) =>
         [...chatKeys.byMembersAll(ownerId), emails.map((e) => e.toLowerCase()).sort()] as const,
 };
@@ -54,8 +52,7 @@ export function groupChatsBySection(chats: DrivePath[], teams: readonly { id: st
 // One aggregate request (personal + all team chats), split into sidebar sections. Both the personal
 // and per-team lists keep the aggregate's updatedAt-desc order.
 export function useChatSections(enabled: boolean = true): ChatSections & { isLoading: boolean } {
-    // Chat sidebar wants fresher data than drive-folder browsing: 1 min instead of the 5-min default.
-    // `enabled` lets the always-mounted new-chat wizard skip the aggregate fetch while closed.
+    // 1-min staleTime (sidebar wants fresher data); `enabled` lets closed wizards skip the fetch.
     const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, 60_000, enabled);
     const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
     return useMemo(() => {
@@ -134,9 +131,7 @@ export function useCreateChat(ownerId: string, mountId: string) {
     });
 }
 
-// Shared config for the by-members lookup — the wizard's live query (useFindChatByMembers)
-// and the one-shot fetch behind useStartChatWith run through it so they hit the same cache
-// entry. The key factory normalises emails, so member order and case never fork the fetch.
+// Shared by the live query and useStartChatWith's one-shot fetch so both hit one cache entry.
 function byMembersQueryConfig(ownerId: string, emails: string[]) {
     return {
         queryKey: chatKeys.byMembers(ownerId, emails),
@@ -152,8 +147,7 @@ function byMembersQueryConfig(ownerId: string, emails: string[]) {
     };
 }
 
-// Chats whose current members exactly match the picked set — the wizard's open-don't-duplicate
-// lookup (writable first, then updatedAt desc). Disabled until at least one member is picked.
+// Open-don't-duplicate lookup (writable first, then updatedAt desc); disabled until someone is picked.
 export function useFindChatByMembers(ownerId: string, emails: string[]) {
     return useQuery<ChatMatch[]>(byMembersQueryConfig(ownerId, emails));
 }
@@ -182,14 +176,12 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        // Refresh the parent folder + the aggregate chat listing the sidebar reads (mimeAll family),
-        // and the by-members family so the new chat surfaces as an open-don't-duplicate match at once.
+        // Refresh the parent folder, the sidebar aggregate, and the by-members family.
         onSuccess: (data) => {
             invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType);
             queryClient.invalidateQueries({ queryKey: chatKeys.byMembersAll(ownerId) });
         },
-        // 409 = duplicate chat name; the wizard resolves it (auto-renames a default name, or shows an
-        // inline error for a user-typed one), so let it surface there instead of toasting twice.
+        // 409 = duplicate name, handled inline by the wizard — don't toast twice.
         onError: (error) => {
             if (error instanceof AppError && error.status === 409) return;
             onMutationError(error);
@@ -197,9 +189,8 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
     });
 }
 
-// Contacts' "start a chat" entry point. Fetches the by-members matches once; when exactly one
-// writable chat already exists it opens that (same tab) and reports 'opened', otherwise it hands
-// the matches back so the caller can open the wizard pre-filled with this person.
+// Contacts' "start a chat": exactly one writable match opens directly ('opened'), otherwise the
+// matches come back so the caller opens the wizard pre-filled.
 export function useStartChatWith() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -208,8 +199,7 @@ export function useStartChatWith() {
 
     return async (email: string): Promise<'opened' | ChatMatch[]> => {
         if (!ownerId) return [];
-        // Self is never a chat counterpart, and every unshared solo chat would match a self-only
-        // target — short-circuit without fetching so the caller opens the wizard empty instead.
+        // Self is never a counterpart — and every unshared solo chat would match a self-only target.
         if (email.toLowerCase() === myEmail) return [];
         // A failed lookup degrades to "no matches" so the caller falls through to opening the wizard.
         const matches = await queryClient
