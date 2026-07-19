@@ -119,7 +119,9 @@ export function ChatCreateWizard({
 
     // Every match shares the picked set's membership by definition, so the count is uniform (+1 = me).
     const memberCount = debouncedEmails.length + 1;
-    const singleWritable = !teamMode && matches.length === 1 && matches[0].canWrite;
+    // Existing chats to open before creating a new one: by-members matches in person mode, the team's
+    // chats in team mode. When any exist the primary opens the first and "Create new chat" makes a new one.
+    const hasMatches = teamMode ? teamChats.length > 0 : matches.length > 0;
     const isBusy = createRoom.isPending || createTeamChat.isPending;
     const canCreate = teamMode ? !!name.trim() && !!teamRootId : picked.length > 0;
     const step1CanProceed = teamMode || picked.length > 0;
@@ -235,10 +237,10 @@ export function ChatCreateWizard({
         }
     };
 
-    // Step 1 primary: open the one writable match if there is one, otherwise advance to confirm.
+    // Step 1 primary: open the first existing match if there is one, otherwise advance to confirm.
     const advanceOrOpen = () => {
-        if (singleWritable) {
-            goToRoom(matches[0].path);
+        if (hasMatches) {
+            goToRoom(teamMode ? teamChats[0] : matches[0].path);
             return;
         }
         if (step1CanProceed) {
@@ -344,7 +346,7 @@ export function ChatCreateWizard({
                             : matches.length > 0 && (
                                   <MatchPanel
                                       title={
-                                          singleWritable
+                                          matches.length === 1
                                               ? 'You already have a chat with these people'
                                               : 'Existing chats with these people'
                                       }
@@ -354,7 +356,7 @@ export function ChatCreateWizard({
                                               key={m.path.id}
                                               name={stripEigenExtension(m.path.name)}
                                               subtitle={`${memberCount} ${memberCount === 1 ? 'member' : 'members'}${m.canWrite ? '' : ' · view only'}`}
-                                              onOpen={singleWritable ? undefined : () => goToRoom(m.path)}
+                                              onOpen={() => goToRoom(m.path)}
                                           />
                                       ))}
                                   </MatchPanel>
@@ -460,7 +462,7 @@ export function ChatCreateWizard({
                                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                                     Cancel
                                 </Button>
-                                {singleWritable && (
+                                {hasMatches && (
                                     <Button
                                         variant="outline"
                                         disabled={!step1CanProceed}
@@ -469,7 +471,7 @@ export function ChatCreateWizard({
                                             setStep(2);
                                         }}
                                     >
-                                        New chat anyway
+                                        Create new chat
                                     </Button>
                                 )}
                                 <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
