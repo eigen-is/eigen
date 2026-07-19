@@ -19,7 +19,7 @@ import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 // Define the form schema
-export const formSchema = z
+const formSchema = z
     .object({
         firstName: z.string().optional(),
         lastName: z.string().optional(),

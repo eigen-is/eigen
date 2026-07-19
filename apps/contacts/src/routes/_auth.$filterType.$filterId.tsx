@@ -12,7 +12,7 @@ import { ContactsList, ContactsListToolbar } from '../components/contacts/contac
 import { TeamMemberDetail, TeamMemberDetailToolbar } from '../components/contacts/team-member-detail';
 import { TeamMemberList } from '../components/contacts/team-member-list';
 
-export type ContactsSearchParams = {
+type ContactsSearchParams = {
     contactId?: string;
 };
 
