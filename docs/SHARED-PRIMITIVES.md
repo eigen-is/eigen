@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-825 primitives across 6 kinds. `packages/sheet` internals are excluded.
+826 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -366,7 +366,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (229)
+## Types (230)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -490,6 +490,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ImipMethod` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `Label` | `@workspace/lib/types` | packages/lib/src/types/label.ts |
+| `LandingLink` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `MaildirMailbox` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `MailHeaders` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `MountConfig` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |

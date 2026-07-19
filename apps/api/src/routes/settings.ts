@@ -88,6 +88,19 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         inactivityDays: t.Optional(t.Number({ minimum: 1, maximum: 365 })),
                     }),
                 ),
+                landing: t.Optional(
+                    t.Object({
+                        links: t.Optional(
+                            t.Array(
+                                t.Object({
+                                    title: t.String({ minLength: 1, maxLength: 80 }),
+                                    url: t.String({ minLength: 1, maxLength: 2048, pattern: '^https?://' }),
+                                }),
+                                { maxItems: 20 },
+                            ),
+                        ),
+                    }),
+                ),
                 notifications: t.Optional(
                     t.Object({
                         email: t.Optional(

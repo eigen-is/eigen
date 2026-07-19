@@ -75,5 +75,10 @@ export const publicRouter = new Elysia({ name: 'public' })
     .get('/p/config', async () => {
         const config = getPublicConfig();
         const settings = getServerSettings();
-        return { ...config, waitlistEnabled: settings.onboarding?.waitlist?.enabled ?? false, demoMode: isDemo() };
+        return {
+            ...config,
+            waitlistEnabled: settings.onboarding?.waitlist?.enabled ?? false,
+            landingLinks: settings.landing?.links ?? [],
+            demoMode: isDemo(),
+        };
     });

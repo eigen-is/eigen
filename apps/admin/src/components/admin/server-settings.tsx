@@ -7,14 +7,16 @@ import {
 } from '@workspace/lib/settings';
 import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
+import type { LandingLink, ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
+import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
@@ -44,6 +46,9 @@ export function ServerSettingsPage() {
         notifications: {
             email: { ...settings.notifications.email, ...draft.notifications?.email },
         },
+        landing: {
+            links: draft.landing?.links ?? settings.landing?.links ?? [],
+        },
     };
 
     const updateQuota = (key: keyof ServerSettings['quotas'], value: number) => {
@@ -60,6 +65,14 @@ export function ServerSettingsPage() {
         }));
     };
 
+    const updateLinks = (links: LandingLink[]) => {
+        setDirty(true);
+        setDraft((prev) => ({ ...prev, landing: { links } }));
+    };
+
+    const patchLink = (index: number, patch: Partial<LandingLink>) =>
+        updateLinks(current.landing.links.map((link, i) => (i === index ? { ...link, ...patch } : link)));
+
     const currentS3 = s3Draft ?? s3Config ?? EMPTY_S3;
     const anyDirty = dirty || s3Dirty;
     const saving = updateSettings.isPending || updateS3Config.isPending;
@@ -68,7 +81,10 @@ export function ServerSettingsPage() {
     const handleSave = async () => {
         if (s3Dirty && s3Draft && current.defaults.mount.storageType === 's3')
             await updateS3Config.mutateAsync(s3Draft);
-        if (dirty) await updateSettings.mutateAsync(draft);
+        if (dirty)
+            await updateSettings.mutateAsync(
+                draft.landing ? { ...draft, landing: { links: normalizeLinks(draft.landing.links ?? []) } } : draft,
+            );
         setDraft({});
         setDirty(false);
         setS3Draft(null);
@@ -190,6 +206,49 @@ export function ServerSettingsPage() {
                 </div>
             </div>
 
+            <Separator />
+
+            <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Landing page</h3>
+                <p className="text-sm text-muted-foreground">
+                    Optional extra buttons on the public landing page. Each button links to a URL.
+                </p>
+
+                <div className="space-y-3">
+                    {current.landing.links.map((link, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                            <Input
+                                placeholder="Title"
+                                maxLength={80}
+                                value={link.title}
+                                onChange={(e) => patchLink(i, { title: e.target.value })}
+                            />
+                            <Input
+                                placeholder="https://..."
+                                maxLength={2048}
+                                value={link.url}
+                                onChange={(e) => patchLink(i, { url: e.target.value })}
+                            />
+                            <TooltipButton
+                                icon={Trash2}
+                                tooltipText="Remove"
+                                onClick={() => updateLinks(current.landing.links.filter((_, j) => j !== i))}
+                            />
+                        </div>
+                    ))}
+                    {current.landing.links.length < 20 && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => updateLinks([...current.landing.links, { title: '', url: '' }])}
+                        >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add button
+                        </Button>
+                    )}
+                </div>
+            </div>
+
             {anyDirty && (
                 <>
                     <Separator />
@@ -210,6 +269,18 @@ export function ServerSettingsPage() {
             )}
         </div>
     );
+}
+
+function normalizeLinks(links: LandingLink[]): LandingLink[] {
+    return links
+        .map((l) => ({ title: l.title.trim(), url: l.url.trim() }))
+        .filter((l) => l.title !== '' && l.url !== '')
+        .map((l) => {
+            const scheme = l.url.match(/^https?:\/\//i)?.[0];
+            return scheme
+                ? { ...l, url: scheme.toLowerCase() + l.url.slice(scheme.length) }
+                : { ...l, url: `https://${l.url}` };
+        });
 }
 
 function SwitchRow({

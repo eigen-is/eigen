@@ -1,5 +1,6 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { PublicConfig, PublicUser } from '@workspace/lib/types/public';
+import type { LandingLink } from '@workspace/lib/types/settings';
 import { assertJson, authedRequest, getTestContext, TEST_PNG_BYTES } from './setup';
 
 // All /p/* routes are intentionally PUBLIC (unauthenticated) — that is what the /p/ prefix means.
@@ -27,6 +28,34 @@ describe('Public Routes', () => {
             expect(data).not.toHaveProperty('storage');
             expect(data).not.toHaveProperty('setupCompleted');
             expect(data).not.toHaveProperty('setupCompletedAt');
+        });
+
+        test('exposes admin-configured landing links', async () => {
+            const empty = await assertJson<{ landingLinks: LandingLink[] }>(
+                await ctx.app.handle(new Request('http://localhost/p/config')),
+            );
+            expect(empty.landingLinks).toEqual([]);
+
+            const link = { title: 'Docs', url: 'https://docs.eigen.is' };
+            await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ landing: { links: [link] } }),
+            });
+
+            const withLink = await assertJson<{ landingLinks: LandingLink[] }>(
+                await ctx.app.handle(new Request('http://localhost/p/config')),
+            );
+            expect(withLink.landingLinks).toEqual([link]);
+        });
+
+        // Reset to defaults even on failure — JsonStore is shared across the whole suite.
+        afterAll(async () => {
+            await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ landing: { links: [] } }),
+            });
         });
     });
 
