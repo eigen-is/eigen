@@ -20,8 +20,8 @@ import { useState } from 'react';
 type PersonDetailToolbarProps = {
     name: string;
     emails: string[];
-    // Contact rows are editable; team members aren't — absent editSearch/onDeleteClick renders
-    // Edit/Delete disabled instead of hidden, so both surfaces read the same.
+    // Contact rows are editable; team members aren't — absent editSearch/onDeleteClick hides
+    // Edit/Delete. Delete also hides on your own card (same guard as the list's context menu).
     editSearch?: { filterType: string; filterId: string; contactId: string };
     onDeleteClick?: () => void;
 };
@@ -40,6 +40,8 @@ export function PersonDetailToolbar({ name, emails: allEmails, editSearch, onDel
     // caller's own card is excluded: a chat is always with someone else.
     const isSelf = emails.some((e) => e.toLowerCase() === (user?.email ?? '').toLowerCase());
     const canStartChat = emails.length > 0 && !isSelf;
+    const showEdit = !!editSearch;
+    const showDelete = !!onDeleteClick && !isSelf;
 
     const handleStartChat = async () => {
         // startChatWith prefers the registered account address among the person's emails; an
@@ -52,7 +54,7 @@ export function PersonDetailToolbar({ name, emails: allEmails, editSearch, onDel
         <>
             <Toolbar>
                 <div className="flex items-center gap-1 ml-auto">
-                    {editSearch ? (
+                    {editSearch && (
                         <Link
                             to="/edit/$filterType/$filterId"
                             params={{ filterType: editSearch.filterType, filterId: editSearch.filterId }}
@@ -60,17 +62,10 @@ export function PersonDetailToolbar({ name, emails: allEmails, editSearch, onDel
                         >
                             <TooltipButton icon={Pencil} tooltipText="Edit" className="h-8 w-8" />
                         </Link>
-                    ) : (
-                        <TooltipButton icon={Pencil} tooltipText="Edit" className="h-8 w-8" disabled />
                     )}
-                    <TooltipButton
-                        icon={Trash2}
-                        tooltipText="Delete"
-                        onClick={onDeleteClick}
-                        disabled={!onDeleteClick}
-                    />
+                    {showDelete && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDeleteClick} />}
 
-                    <Separator orientation="vertical" className="h-6 mx-1" />
+                    {(showEdit || showDelete) && <Separator orientation="vertical" className="h-6 mx-1" />}
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -95,8 +90,8 @@ export function PersonDetailToolbar({ name, emails: allEmails, editSearch, onDel
                                 <Printer className="mr-2" />
                                 Print
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {editSearch ? (
+                            {(showEdit || showDelete) && <DropdownMenuSeparator />}
+                            {editSearch && (
                                 <DropdownMenuItem asChild className="cursor-pointer">
                                     <Link
                                         to="/edit/$filterType/$filterId"
@@ -107,16 +102,13 @@ export function PersonDetailToolbar({ name, emails: allEmails, editSearch, onDel
                                         Edit
                                     </Link>
                                 </DropdownMenuItem>
-                            ) : (
-                                <DropdownMenuItem disabled>
-                                    <Pencil className="mr-2" />
-                                    Edit
+                            )}
+                            {showDelete && (
+                                <DropdownMenuItem onClick={onDeleteClick}>
+                                    <Trash2 className="mr-2" />
+                                    Delete
                                 </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem onClick={onDeleteClick} disabled={!onDeleteClick}>
-                                <Trash2 className="mr-2" />
-                                Delete
-                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
