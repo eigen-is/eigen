@@ -7,12 +7,9 @@ import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column
 import { z } from 'zod';
 import { ContactEdit, ContactEditToolbar, type ContactFormValues } from '../components/contacts/contact-edit';
 
-// Define search params type with Zod schema
 const searchSchema = z.object({
     contactId: z.string().optional(),
 });
-
-export type ContactEditSearchParams = z.infer<typeof searchSchema>;
 
 export const Route = createFileRoute('/_auth/edit/$filterType/$filterId')({
     component: EditContactRoute,

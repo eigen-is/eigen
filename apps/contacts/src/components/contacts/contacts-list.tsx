@@ -11,7 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { AlphabeticalList } from '@workspace/ui/components/layout/alphabetical-list';
+import { AlphabeticalList, alphaGroupKey } from '@workspace/ui/components/layout/alphabetical-list';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { LabelAssignSubMenu } from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
@@ -27,8 +27,8 @@ import { useMemo, useRef } from 'react';
 type ContactsListToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    sortBy: 'firstName' | 'lastName';
-    onSortChange: (sort: 'firstName' | 'lastName') => void;
+    // Absent → no sort toggle (team members carry a single display name, nothing to sort by).
+    onSortChange?: (sort: 'firstName' | 'lastName') => void;
 };
 
 export function ContactsListToolbar({ searchQuery, onSearchChange, onSortChange }: ContactsListToolbarProps) {
@@ -41,17 +41,19 @@ export function ContactsListToolbar({ searchQuery, onSearchChange, onSortChange 
                 maxWidth="full"
                 inputClassName="h-8 bg-background"
             />
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                        <ArrowUpDown className="h-4 w-4" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onSortChange('firstName')}>First name</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onSortChange('lastName')}>Last name</DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+            {onSortChange && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                            <ArrowUpDown className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onSortChange('firstName')}>First name</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onSortChange('lastName')}>Last name</DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
         </Toolbar>
     );
 }
@@ -157,11 +159,7 @@ export function ContactsList({
                     <AlphabeticalList
                         items={searchedContacts}
                         getKey={(c) => c.id}
-                        getGroupKey={(c) =>
-                            sortBy === 'firstName'
-                                ? c.firstName.charAt(0).toUpperCase()
-                                : c.lastName.charAt(0).toUpperCase()
-                        }
+                        getGroupKey={(c) => alphaGroupKey(sortBy === 'firstName' ? c.firstName : c.lastName)}
                         renderItem={(contact, flatIndex) => (
                             <div
                                 className={cn(

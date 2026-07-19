@@ -24,6 +24,7 @@ export function ContactAutosuggest({
     required,
     inputRef: externalInputRef,
     onSubmit,
+    onEmptyEnter,
 }: ContactAutosuggestProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -101,7 +102,14 @@ export function ContactAutosuggest({
     );
 
     const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
-        if (event.key === 'Enter' && onSubmit && !event.defaultPrevented) {
+        if (event.key !== 'Enter' || event.defaultPrevented) return;
+        // Empty-input Enter runs the caller's primary action instead of a no-op submit.
+        if (!inputValue.trim() && onEmptyEnter) {
+            event.preventDefault();
+            onEmptyEnter();
+            return;
+        }
+        if (onSubmit) {
             event.preventDefault();
             onSubmit(inputValue);
         }

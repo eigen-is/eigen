@@ -12,7 +12,7 @@ import { ContactsList, ContactsListToolbar } from '../components/contacts/contac
 import { TeamMemberDetail, TeamMemberDetailToolbar } from '../components/contacts/team-member-detail';
 import { TeamMemberList } from '../components/contacts/team-member-list';
 
-export type ContactsSearchParams = {
+type ContactsSearchParams = {
     contactId?: string;
 };
 
@@ -84,8 +84,8 @@ function ContactsRoute() {
         <ContactsListToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            sortBy={sortBy}
-            onSortChange={setSortBy}
+            // Team members carry a single display name — no first/last sort to offer.
+            onSortChange={filterType === 'team' ? undefined : setSortBy}
         />
     );
 
@@ -114,7 +114,12 @@ function ContactsRoute() {
                         />
                     </div>
                 </Column>
-                <Column id="detail" width="flex" onBack={handleBackToList} toolbar={<TeamMemberDetailToolbar />}>
+                <Column
+                    id="detail"
+                    width="flex"
+                    onBack={handleBackToList}
+                    toolbar={activeMember ? <TeamMemberDetailToolbar member={activeMember} /> : null}
+                >
                     {activeMember ? (
                         <TeamMemberDetail member={activeMember} />
                     ) : (

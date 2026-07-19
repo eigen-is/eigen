@@ -1,11 +1,10 @@
-import { getMailComposeUrl } from '@workspace/lib/api';
-import { Toolbar } from '@workspace/ui';
-import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
-import { Mail } from 'lucide-react';
+import { ContactDetail } from './contact-detail';
+import { PersonDetailToolbar } from './person-detail-toolbar';
 import type { TeamMember } from './team-member-list';
 
-export function TeamMemberDetailToolbar() {
-    return <Toolbar>{null}</Toolbar>;
+// Team members aren't editable contact rows — the shared toolbar hides Edit/Delete.
+export function TeamMemberDetailToolbar({ member }: { member: TeamMember }) {
+    return <PersonDetailToolbar name={member.name} emails={[member.email]} />;
 }
 
 type TeamMemberDetailProps = {
@@ -13,30 +12,11 @@ type TeamMemberDetailProps = {
 };
 
 export function TeamMemberDetail({ member }: TeamMemberDetailProps) {
+    // A team member is a person with one known address — render the shared contact detail
+    // instead of duplicating its sections.
     return (
-        <div className="h-full flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-auto app-gutter">
-                <div className="flex flex-col md:flex-row gap-8">
-                    <UserDetailHero layout="profile" name={member.name} email={member.email} />
-
-                    <div className="flex-1 space-y-6">
-                        <div className="space-y-4">
-                            <h3 className="text-lg font-medium border-b pb-2">Contact Information</h3>
-                            <div className="space-y-2">
-                                <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                                    <Mail className="h-4 w-4" />
-                                    Email
-                                </h4>
-                                <div className="pl-6">
-                                    <a className="text-primary hover:underline" href={getMailComposeUrl(member.email)}>
-                                        {member.email}
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <ContactDetail
+            contact={{ id: member.email, firstName: member.name, lastName: '', email: [member.email], phone: [] }}
+        />
     );
 }

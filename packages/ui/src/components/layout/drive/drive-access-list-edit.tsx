@@ -4,9 +4,7 @@ import { copyToClipboard } from '@workspace/lib/clipboard';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
-import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
-import { parseContactInput } from '@workspace/lib/validation';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -23,6 +21,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { ClipboardCopy, Link, Lock, Mail, Unlock, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
+import { useContactInput } from '../contacts/use-contact-input';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserItem } from '../user-item';
 
@@ -44,8 +43,6 @@ export function DriveAccessListEdit({
     prefillEmail,
 }: DriveAccessListEditProps) {
     const [pendingChanges, setPendingChanges] = useState(false);
-    const [newContactInput, setNewContactInput] = useState('');
-
     const [directListOverride, setDirectListOverride] = useState<DirectAccessItem[] | undefined>();
 
     const { baseDirectList, directList, inheritedList } = useDriveAccess(path, directListOverride);
@@ -70,78 +67,22 @@ export function DriveAccessListEdit({
         setSharingRestricted(path.sharingRestricted ?? false);
     }, [path]);
 
+    // Rejecting a duplicate returns false so the raw text stays in the field for the user to edit.
+    const contactInput = useContactInput((contact) => {
+        if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === contact.email)) return false;
+        setDirectListOverride((prevList) => [
+            ...(prevList || baseDirectList),
+            { id: contact.email, read: true, write: true, owner: false },
+        ]);
+        setPendingChanges(true);
+        return true;
+    });
+
     useEffect(() => {
         if (prefillEmail) {
-            setNewContactInput(prefillEmail);
+            contactInput.setValue(prefillEmail);
         }
-    }, [prefillEmail]);
-
-    const handleAddUser = useCallback(
-        (suggestion: ContactSuggestion) => {
-            if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === suggestion.email.toLowerCase())) {
-                return;
-            }
-
-            const newUser: DirectAccessItem = {
-                id: suggestion.email.toLowerCase(),
-                read: true,
-                write: true,
-                owner: false,
-            };
-
-            setDirectListOverride((prevList) => [...(prevList || baseDirectList), newUser]);
-            setPendingChanges(true);
-            setNewContactInput('');
-        },
-        [directList],
-    );
-
-    const processContactInput = useCallback(
-        (value: string) => {
-            const parsed = parseContactInput(value);
-            if (!parsed) return false;
-            const { email, displayName } = parsed;
-
-            if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === email)) {
-                return false;
-            }
-
-            const suggestion: ContactSuggestion = {
-                kind: 'personal',
-                id: email,
-                email,
-                displayName,
-            };
-
-            handleAddUser(suggestion);
-            return true;
-        },
-        [directList, handleAddUser],
-    );
-
-    const handleContactSelected = useCallback(
-        (value: string) => {
-            if (value.includes('<') && value.includes('>')) {
-                const added = processContactInput(value);
-                if (added) {
-                    setNewContactInput('');
-                } else {
-                    setNewContactInput(value);
-                }
-            } else {
-                setNewContactInput(value);
-            }
-        },
-        [processContactInput],
-    );
-
-    const handleAddContactClick = useCallback(() => {
-        if (!newContactInput) return;
-        const added = processContactInput(newContactInput);
-        if (added) {
-            setNewContactInput('');
-        }
-    }, [newContactInput, processContactInput]);
+    }, [prefillEmail, contactInput.setValue]);
 
     const handleAddTeam = useCallback(
         (teamId: string) => {
@@ -220,9 +161,9 @@ export function DriveAccessListEdit({
             <div className="shrink-0">
                 <ContactAddRow
                     id="new-contact"
-                    value={newContactInput}
-                    onChange={handleContactSelected}
-                    onSubmit={handleAddContactClick}
+                    value={contactInput.value}
+                    onChange={contactInput.handleChange}
+                    onSubmit={contactInput.submit}
                     excludeEmails={excludeEmails}
                     className="mt-2"
                 />

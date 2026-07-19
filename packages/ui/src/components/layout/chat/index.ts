@@ -1,3 +1,4 @@
+export * from './chat-create-wizard';
 export * from './chat-message-input';
 export * from './chat-message-list';
 export * from './chat-player-suggest';

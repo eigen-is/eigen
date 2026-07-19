@@ -4,7 +4,7 @@ import { useChatSections, useUnreadChatIds } from '@workspace/lib/chat';
 import { useDriveAccess } from '@workspace/lib/drive';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
-import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
+import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
@@ -12,7 +12,7 @@ import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/si
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { cn } from '@workspace/ui/lib/utils';
 import { MessageSquare, Plus } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 
 const MAX_AVATARS = 4;
 
@@ -20,9 +20,6 @@ type ChatSidebarProps = {
     condensed?: boolean;
     isMobile?: boolean;
     onClose?: () => void;
-    ownerId: string;
-    mountId: string;
-    rootPath: DrivePath | null;
 };
 
 type ChatItemProps = {
@@ -61,33 +58,16 @@ function ChatItem({ chat, condensed, hasUnread }: ChatItemProps) {
     );
 }
 
-export function ChatSidebar({
-    condensed = false,
-    isMobile = false,
-    onClose,
-    ownerId,
-    mountId,
-    rootPath,
-}: ChatSidebarProps) {
+export function ChatSidebar({ condensed = false, isMobile = false, onClose }: ChatSidebarProps) {
+    const navigate = useNavigate();
     const { user } = useAuth();
     const isGuest = useIsGuest();
     const unreadChatIds = useUnreadChatIds(user?.id ?? '');
     const { personal, teams, isLoading } = useChatSections();
     const [createChatOpen, setCreateChatOpen] = useState(false);
-    const navigate = useNavigate();
 
     // Team chats render under a single "Team Chats" heading, flattened in useMyTeams order.
     const teamChats = teams.flatMap((t) => t.chats);
-
-    const handleAfterCreate = useCallback(
-        (newPath: DrivePath) => {
-            navigate({
-                to: '/$ownerId/$mountId/$chatId',
-                params: { ownerId: newPath.ownerId, mountId: newPath.mountId, chatId: newPath.id },
-            });
-        },
-        [navigate],
-    );
 
     return (
         <div className="flex h-full flex-col">
@@ -137,15 +117,15 @@ export function ChatSidebar({
             </SidebarBody>
 
             {!isGuest && (
-                <DriveCreateEigenDoc
+                <ChatCreateWizard
                     open={createChatOpen}
                     onOpenChange={setCreateChatOpen}
-                    type="chat"
-                    defaultOwnerId={ownerId}
-                    defaultFolderId={rootPath?.id}
-                    defaultMountId={rootPath?.mountId ?? mountId}
-                    openInNewTab={false}
-                    onAfterCreate={handleAfterCreate}
+                    onNavigate={(path) =>
+                        navigate({
+                            to: '/$ownerId/$mountId/$chatId',
+                            params: { ownerId: path.ownerId, mountId: path.mountId, chatId: path.id },
+                        })
+                    }
                 />
             )}
         </div>

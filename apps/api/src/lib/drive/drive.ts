@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+    CHATS_FOLDER_NAME,
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
@@ -59,7 +60,12 @@ import {
     mergeACLDelta,
     normalizeACL,
 } from './acl';
-import { diffACLEmails, propagateSharedPathChange, resolveACLToEmails } from './acl-propagation';
+import {
+    type ACLPropagationOptions,
+    diffACLEmails,
+    propagateSharedPathChange,
+    resolveACLToEmails,
+} from './acl-propagation';
 import { CollabRegistry } from './collab-registry';
 import { LockManager } from './lock-manager';
 import { getSharedDatabase } from './shared';
@@ -779,6 +785,7 @@ export default class Drive {
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
         actor?: User | null,
+        options?: ACLPropagationOptions,
     ): Promise<void> {
         const key = `${mountId}:${pathId}`;
         const prev = this.aclDeltaChains.get(key) ?? Promise.resolve();
@@ -790,7 +797,15 @@ export default class Drive {
             if (!item) {
                 throw new ApiError(404, 'Path not found');
             }
-            await this.updateACL(mountId, pathId, mergeACLDelta(item.acl, delta), visibility, sharingRestricted, actor);
+            await this.updateACL(
+                mountId,
+                pathId,
+                mergeACLDelta(item.acl, delta),
+                visibility,
+                sharingRestricted,
+                actor,
+                options,
+            );
         });
         const tail = run.catch(() => {});
         this.aclDeltaChains.set(key, tail);
@@ -811,6 +826,7 @@ export default class Drive {
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
         actor?: User | null,
+        options?: ACLPropagationOptions,
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
@@ -847,7 +863,7 @@ export default class Drive {
         await mount.updatePath(pathId, updates);
         const updatedItem = await mount.getPath(pathId);
         if (updatedItem) {
-            await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null);
+            await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
             if (actor) {
                 const { added, removed } = diffACLEmails(oldACL, normalizedACL);
@@ -1147,6 +1163,36 @@ export default class Drive {
     async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
         return mount.getChildByName(parentId, name);
+    }
+
+    // Called by: POST /chat/:ownerId/:mountId/rooms (escape-hatch route — its guard IS the access
+    // check). Resolves the default chat parent by name on every call so the folder stays freely
+    // renameable/movable/deletable; a legacy `Chats` is renamed in place, a non-folder squatter
+    // falls back to the root.
+    async ensureChatsFolder(mountId: string): Promise<string> {
+        const mount = this.getMount(mountId);
+        const root = await mount.getRootFolder();
+        if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
+
+        // getChildByName folds case, so one lookup resolves both `chats` and a legacy `Chats`.
+        const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
+        if (existing) {
+            if (existing.type !== DRIVE_TYPE_FOLDER) return root.id;
+            if (existing.name !== CHATS_FOLDER_NAME) await mount.updatePath(existing.id, { name: CHATS_FOLDER_NAME });
+            return existing.id;
+        }
+
+        // Drive-level create so the new root child reaches other tabs (SSE); concurrent first-chat
+        // requests race to the unique name index — the loser adopts the winner's folder.
+        try {
+            return (await this.createFolder(mountId, root.id, CHATS_FOLDER_NAME)).id;
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 409) {
+                const winner = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
+                if (winner) return winner.type === DRIVE_TYPE_FOLDER ? winner.id : root.id;
+            }
+            throw err;
+        }
     }
 
     // Called by: ChatRoom.init — serializes the lazy data.db auto-create against a concurrent

@@ -6,6 +6,13 @@
 > `sticky-moved` + `slide-reordered` only). The email channel (phase 2) and secondary email
 > (phase 3) are designed here but **not yet built**. See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md)
 > for the shipped `coalesce` flag + `file-event` source.
+>
+> **Post-v1 deltas (as built):** stickies boards skip the generic `'edited'` row entirely — every
+> board action already records a specific `sticky-*`/comment event; collab `'edited'` rows are
+> attributed via `CollabDocument`'s conn→user map with a 10-min per-user throttle; and recording a
+> file event also broadcasts a `drive:file-history-updated` SSE event to the owner + effective-member
+> homes (`broadcastFileHistoryUpdated` in `drive/sse-events.ts`, fire-and-forget via `sendToHome`),
+> so open Activity panels refresh live.
 
 > **TLDR**: Every Drive path grows a typed event log — *created, uploaded, edited,
 > renamed, moved, copied, trashed,* and Eigendoc-specific ops like *sticky-moved*.

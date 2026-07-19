@@ -1,6 +1,8 @@
 # Proposal: New-Chat Wizard
 
-> **Status — revised draft v2, 2026-07-17.** No code yet. v1 (2026-07-14) was fact-checked against the
+> **Status — implemented as-built, 2026-07-19.** Fully implemented on branch `worktree-chat-wizard`,
+> including the v3 two-step redesign (see § v3 design round at the end); reviewed, gate-green, and
+> browser-verified 11/11. v1 (2026-07-14) was fact-checked against the
 > codebase and against how Signal, WhatsApp, Telegram, Slack, and Google Chat design their new-chat
 > flows; this revision corrects the wrong facts, resolves the open questions, and adjusts the UX to
 > match messenger conventions. Covers: a create-chat dialog (people + name + location),
@@ -52,13 +54,17 @@ adopt open-don't-duplicate semantics for exact matches instead of a suggestion p
 - `Chats` folder seeded on drive initialization for new users, lazily created for existing users.
 - Contacts app: "Start chat" on a contact / team member → exactly one writable match opens it
   directly; otherwise the wizard opens pre-filled and Create enters the chat.
+- Team chats stay first-class: selecting a **team** (same placement as the share dialog's team
+  control) flips the wizard to team-chat mode — chat on the team drive, implicit all-team
+  membership, name required. See UX § Team chats.
 - The whole flow lives in `packages/ui` + `packages/lib` so chat, contacts, and (later) any userinfo
   chip can trigger it.
 
 ## Non-goals (v1)
 
-- Picking a **team** as chat partner (team chats keep their current home: team drives, where every
-  team member is an implicit member — `drive.ts:895-905`). The wizard picks individual people only.
+- **Mixed member sets** — a team plus extra individuals in one chat. Selecting a team flips the
+  wizard to team-chat mode and locks the person rows; mixing is a follow-up. (Team-chat mode itself
+  IS v1 scope — decision 8; team drives make every member implicit, `drive.ts:895-905`.)
 - Embedded comment-thread chats (`chat/General.eigenchat` inside eigendocs) — out of scope
   everywhere; the mime listing already excludes them (`excludeDocumentChildren`,
   `mount/helpers.ts:40-51`, applied in `mount.ts:1118-1140`).
@@ -202,6 +208,28 @@ One dialog, one form (house convention — no paged steps). Shared component
 Replaces `DriveCreateEigenDoc type="chat"` in the chat sidebar and the chat empty state. The drive
 app's generic **New** menu keeps the plain create dialog in v1 (decision 3).
 
+### Team chats (wizard team mode)
+
+Several topic chats on one team drive, implicitly shared with the whole team (the demo's
+`volunteers`/`production` pattern), is the Slack-channel model and stays first-class in the wizard:
+
+- The dialog mirrors the share dialog's layout language (`DriveAccessListEdit`): people picking at
+  the top, and a **team selector in the same position as the share dialog's "Share with team"
+  control** — team selection lives where users already know it from ACL editing. Teams come from
+  the caller's team list; `useContactSuggestions` stays people-only.
+- Selecting a team flips to team-chat mode: person rows are replaced by one line — "Everyone in
+  *<team>* is a member, now and in the future" — the **name is required** (a topic, like a channel
+  name), and the location becomes the team drive (shown on the location line; Change hidden).
+  Deselecting the team returns to person mode.
+- Instead of the duplicate matcher, the panel lists the team's **existing chats** (from the sidebar
+  aggregate the app already loads, filtered to that team's `ownerId`) with per-row **Open**;
+  **Create stays primary** — multiple topics with identical membership are the point here, so
+  open-don't-duplicate applies per row only.
+- **Create uses the existing generic create route** on the team's ownerId (`Drive.create` on the
+  team home; implicit membership → no ACL step, no share email, no new backend). Created at the
+  team drive root, matching existing team chats. Navigation as in person mode.
+- The by-members matcher continues to exclude team-drive chats (unchanged).
+
 ### Duplicate detection semantics
 
 "Same members" means: the **effective member email set** of the candidate equals
@@ -267,7 +295,8 @@ Returns `{ matches: { path: DrivePath, canWrite: boolean }[] }` (shared type in
 target = lowercase(emails) ∪ {user.email}
 own:    per mount, getPathsByMimeType(DRIVE_MIME_CHAT, excludeDocumentChildren)
         → skip non-private visibility / team_* entries
-        → cheap pre-filter on the DIRECT acl (direct emails ⊆ target, |direct|+1 ≥ |target|)
+        → cheap pre-filter on the DIRECT acl (direct emails ⊆ target — subset only; no size
+          floor is sound, since inherited-ACL chats carry an EMPTY direct ACL yet must match)
         → only survivors run the full getEffectiveMembers walk; emails == target → match
 shared: listSharedWithMeByMimeType(sharedDb, DRIVE_MIME_CHAT)
         → skip team-owned ownerId / team_* entries / non-private visibility
@@ -280,23 +309,27 @@ flags it, `chat/chat.ts:154`); with the direct-ACL screen only a handful of cand
 pay for the walk. All in-process on the caller's Home — mirror reads plus local auth-DB lookups, no
 cross-home calls, per the SCALABILITY rule.
 
-**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members: string[]}`** — create + share
-as one server-side sequence:
+**`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members: string[], dedupeName?}`** —
+create + share as one server-side sequence:
 
 1. resolve/ensure the `Chats` folder when `parentId` is omitted;
-2. `Drive.create(…, 'chat', user)`;
-3. merge `{id: email.toLowerCase(), read: true, write: true}` per member through the same ACL-update
+2. when `dedupeName` is set, resolve a free name against the target folder's siblings via the shared
+   `getUniqueFileName` helper (the upload/copy auto-suffix), so an auto-generated default name lands
+   as `Alice & Reinder (2)` instead of 409ing; omitted → create verbatim;
+3. `Drive.create(…, 'chat', user)`;
+4. merge `{id: email.toLowerCase(), read: true, write: true}` per member through the same ACL-update
    path the share dialog uses — **with the share email suppressed** (thread a notify option through
    `updateACL` → `propagateSharedPathChange` so the mirror fan-out, `DRIVE_ACL_SHARED` SSE, and the
    in-app "X shared a chat" notification still fire, and only `composeShareEmail` is skipped). A
    "someone shared a file with you" email for being added to a chat is wrong-tone and spammy for
    groups; the first message is the real notification. (Chat-specific email copy can come later if
    wanted.)
-4. **on failure of step 3, hard-delete the freshly created container before rethrowing** — the
+5. **on failure of step 4, hard-delete the freshly created container before rethrowing** — the
    invariant is "a wizard chat is born shared", and a created-but-unshared orphan is worse than a
    clean error. (Overlaps ROADMAP "Create/open resilience", which wants `Drive.create` atomic.)
 
-Returns the created `DrivePath`. Name collisions surface the existing 409.
+Returns the created `DrivePath`. A user-typed name collision still surfaces the existing 409; a
+defaulted name passes `dedupeName` so the server suffixes it instead.
 
 Rejected alternative — FE composing the two existing endpoints (`create` + `PUT …/acl`): two
 mutations with a partial-failure gap the client can't clean up, and the ensure-`Chats`-folder logic
@@ -322,9 +355,10 @@ would leak into the client.
 
 - **Zero people picked** → Create disabled (the only time it is). Self is unpickable
   (`excludeEmails`).
-- **Name collision** in the target folder → 409 surfaces inline; for prefilled defaults, append a
-  counter client-side (`Alice & Reinder 2`). Rarer than in v1 of this proposal, since the exact-match
-  path now opens instead of creating.
+- **Name collision** in the target folder → a user-typed name surfaces the 409 inline; a prefilled
+  default passes `dedupeName`, so the server suffixes it (`Alice & Reinder (2)`) with the shared
+  `getUniqueFileName` helper. Rarer than in v1 of this proposal, since the exact-match path now opens
+  instead of creating.
 - **Matching chat in trash** → invisible by design (listings filter trashed, mirror rows are deleted
   on trash) → wizard creates a new chat. Fine: restore would resurface two chats, but matching is
   best-effort.
@@ -344,16 +378,29 @@ would leak into the client.
    creation demotes to "Create anyway". Matches Slack `conversations.open` semantics while keeping
    intentional duplicates one click away.
 2. **Read-only matches** — shown, deprioritized below writable, never primary/auto-open.
+   *(Superseded 2026-07-19 by the open-first rule, confirmed intent: "Let's chat" prefers the
+   most recent writable match — the writable-first sort guarantees it — and opens a read-only
+   match only when no writable one exists.)*
 3. **Drive New menu** — keeps the plain name+folder dialog in v1; swap is a follow-up.
 4. **Deleted `Chats` folder** — silently recreated on next default-location use. Resolve-by-name
    respects the user's structure; remembering a deletion is statefulness with no payoff.
 5. **Superset hints** ("your Standup chat contains these people plus Carol") — no. v1 is exact-only;
    none of the researched apps do near-miss suggestions either.
 6. **Share email on wizard create** — suppressed (in-app notification + SSE remain). Flipping this
-   back is one flag if it turns out people miss invitations.
+   back is one flag if it turns out people miss invitations. *(Updated 2026-07-19: suppression is
+   now conditional — emails that resolve to no account still get the share email, since it is the
+   only channel that can reach them; registered users, guests included, stay suppressed.)*
 7. **No recency in the match panel** — `updatedAt` is share/create time; showing it as activity
    would mislead. Real per-message activity (also unlocking sidebar sort-by-recency) is a separate
    ROADMAP item.
+8. **Team chats** (2026-07-17) — v1 wizard gets a team-chat mode: team selector placed like the
+   share dialog's team control; selecting a team → name required, team drive root, existing team
+   chats listed, create via the existing generic route. Without this, swapping the sidebar entry
+   point would have removed the chat app's only way to create a team chat. Mixed team+people
+   deferred. *(Superseded 2026-07-19: team creates now go through `POST /chat/:o/:m/rooms` with a
+   team ownerId — membership-gated, no member ACL, `dedupeName` supported — so absent `parentId`
+   defaults to the team drive's `chats` folder; the generic route's mandatory parent segment could
+   not express that default.)*
 
 ## Phased implementation
 
@@ -378,8 +425,14 @@ would leak into the client.
      only, using the direct ACL already present on listing rows. This is how every messenger renders
      1:1s and makes the file name nearly invisible.
    - `UserItem` `chatLink` prop → `UserNameCard` hovercards everywhere; command-palette "Start
-     chat" action; drive New-menu swap; team-as-member support if wanted; per-message activity
+     chat" action; drive New-menu swap; mixed team+individual member sets; per-message activity
      timestamp (ROADMAP).
+   - **From the final branch review (2026-07-17), follow-up-grade:** enforce internal-only in the
+     wizard's `Name <email>` paste path (currently accepts any syntactically valid email, bypassing
+     the internal-only picker; fixing it also retires the near-vestigial `+` button) and pick the
+     eigenId-bearing address for multi-email contacts; gate the wizard's data hooks on `open` (a
+     closed wizard mounted in the contacts toolbars still fetches the chat aggregate); define "the"
+     team drive when a team has multiple mounts (create targets `mounts[0]`, the panel lists all).
 
 Docs in the same cycle: update `docs/CHAT.md` — it documents a nonexistent
 `POST /drive/:o/:m/folder/:pathId/chat` create route (`CHAT.md:66`; the real route is
@@ -399,3 +452,115 @@ chat hooks.
 | Contacts app | `apps/contacts/src/components/contacts/contact-detail.tsx`, `team-member-detail.tsx` |
 | Tests | `apps/api/src/test/chat-wizard.test.ts` (new) |
 | Docs | `docs/CHAT.md` (also fix the stale create-route), `AGENTS.md` |
+
+## v3 design round (2026-07-18) — two-step wizard
+
+Hands-on feedback on the shipped v2 dialog: cramped, the autosuggest popover opens immediately on
+dialog open and covers the Name/Location fields, and the dialog mixes three jobs (pick people,
+duplicate warning, file config) on one surface. Signed-off redesign:
+
+- **Two steps, one fixed dialog size** (no height jumps; inner content scrolls).
+- **Step 1 — who.** Search input (no "With" label), suggestion list rendered *inline* in a
+  dedicated scrollable area (command-palette style), populated immediately on open. **Teams are
+  rows in the same picker** (badge-marked); picking one enters team mode (exclusive, removable).
+  The footer "Team chat" dropdown is gone. Picked people are removable rows above the list.
+  When the picked set exactly matches an existing writable chat, the primary **"Let's chat"**
+  opens it and a secondary **"New chat anyway"** advances to step 2; otherwise "Let's chat"
+  advances. Match rows are clickable and open directly.
+- **Step 2 — confirm.** Prefilled Name (`defaultChatName`; team mode: required, empty), Location
+  (auto `My Drive › chats`; team mode: team drive root; Change expands the browser), **Back**
+  preserves step-1 state, primary **"Let's chat"** creates + opens.
+- **Wizard is pick-only**: the free-text `Name <email>` add path and the `+` button are removed
+  from the wizard (closes the v2 internal-only follow-up; `ContactAddRow` unchanged for the
+  share dialog). Wizard data hooks are gated on `open` (closes that follow-up too).
+- **Folder rename:** the auto-created default folder is now **`chats`** (lowercase). Legacy
+  auto-created `Chats` folders are lazily renamed to `chats` by `ensureChatsFolder` (pathId
+  stable). No collision handling is needed: the case-insensitive unique index
+  (`idx_paths_unique_active_name` on `parentId, LOWER(name)`) plus the guarded write paths make a
+  `chats`/`Chats` pair unreachable, and `ensureChatsFolder`'s single case-folded lookup resolves
+  whichever one exists.
+- **Drive `+ New → New chat` opens the wizard** (closes the drive New-menu-swap follow-up):
+  location prefilled to the current folder; in a team drive it opens directly in team mode.
+  Guests keep the old direct-create path. Other eigendoc types keep `DriveCreateEigenDoc`.
+  The wizard's person-mode create is strictly own-drive, so only an own personal drive passes
+  `initialLocation`; team drives pass only `initialTeamId`; a foreign-user owner (shared-with-me
+  folder) keeps the bare `DriveCreateEigenDoc` path, and the wizard itself ignores a seeded
+  location whose owner isn't the current user.
+
+### v3 follow-ups (recorded at round close, 2026-07-19)
+
+- ~~Keyboard access to team rows in the step-1 picker~~ *(moot since v4: teams moved to the
+  footer dropdown, which is Radix-keyboard-accessible).*
+- ~~`useContactSuggestions` closed-wizard fetch~~ *(structurally resolved in v4: suggestions
+  moved into the dialog-gated `ContactAddRow` subtree, so a closed wizard runs no suggestion
+  hook at all).*
+- Consider restoring a quiet "Everyone in <team> is a member" hint in team mode — v2 had it,
+  the v3 picker shows only the removable team row.
+- Shared-folder `+ New → New chat` shows the bare-create dialog whose location defaults to the
+  user's own Drive root rather than the shared folder (pre-existing `DriveCreateEigenDoc`
+  behavior, unchanged by this round) — decide whether it should target the shared folder.
+- The lazy `Chats`→`chats` migration rename emits no SSE and doesn't propagate to shared-mirror
+  rows (documented in CHAT.md; mirrors heal on the next rename/ACL touch).
+
+## v4 design round (2026-07-19) — ACL-consistent step 1, open-first, team `chats` folder
+
+Reinder's hands-on pass on the v3 build set the direction: *"this is basically an ACL screen, so
+it should work exactly the same to make things consistent across the whole UX (rule number one
+of eigen UX)."* Five changes shipped, each browser-verified:
+
+- **Step 1 mirrors the share dialog.** `ContactAddRow` with the `+` button and the share
+  dialog's exact configuration: popover suggestions only after typing, no list on open. Typed
+  **guest/external emails are allowed** (they become members via the ACL exactly like sharing —
+  this reverses v3's pick-only/internal-only stance, and retires that follow-up). Team selection
+  moved back to a bottom-left **"Team chat"** dropdown mirroring "Share with team"; teams are no
+  longer picker rows. Team mode shows the quiet "Everyone in \<team\> is a member" line again.
+  The existing-chat panel is anchored to the bottom, just above the footer. Enter adds the
+  selected/typed address when valid; Enter on an empty input fires the step-1 primary action.
+- **Guest reachability fix.** Because in-app notification/SSE need a resolved user, the wizard's
+  share-email suppression is now conditional (see Decision 6 update): account-less emails get
+  the share email as their invite vehicle.
+- **One open-vs-create rule, both modes.** Whenever one or more existing chats match (exact
+  member set in person mode, the team's chats in team mode), the primary **"Let's chat" opens
+  the first listed chat** and the secondary **"Create new chat"** (renamed from "New chat
+  anyway") is the only route to step 2. No matches → primary advances as before.
+- **Team chats default into `<team drive>/chats`**, lazily ensured, via the extended rooms route
+  (see Decision 8 update). Every UI path targets that default — a `+ New` inside a team subfolder
+  opens the wizard in team mode, whose create sends no `parentId`, so the chat lands in
+  `<team drive>/chats` (step 2 says so honestly); only the raw rooms route honors an explicit
+  `parentId` (test-pinned). Step 2's team location line reads "\<team\> team drive › chats".
+- **File-ness note.** Under the step-2 Location selector, both modes: "Each chat is saved as a
+  file in your Drive." / "Each chat is saved as a file on the team drive."
+
+### v4 follow-ups (recorded)
+
+- ~~The chat.ts router header comment still credits `getSharedDrive` for access control~~
+  *(fixed in the review round below: it now names both mechanisms).*
+- Benign console 404 when the wizard resolves an avatar for an external (account-less) member.
+- ~~Person-mode debounce window (300 ms) can briefly act on the previous picked set~~ *(fixed in
+  the review round below: match results are hidden until the debounced key equals the live
+  picked set, so the primary can never open a chat found for a previous set).*
+- `requireTeamAccess` grants org admins access without team membership (matches every team
+  route; by design).
+
+## Review round (2026-07-19) — post-branch code review + simplify
+
+Full-branch review (8 finder angles, verified findings only) plus a simplify pass. Behaviour was
+already browser-verified; these are code-quality changes:
+
+- **Shared contact-input plumbing.** The wizard was the third copy of the `"Name <email>"`
+  sentinel-parse-and-add flow (drive share dialog, calendar attendee editor, wizard). Extracted
+  `useContactInput` (`packages/ui/.../contacts/use-contact-input.ts`) and migrated all three;
+  the attendee editor's hand-rolled input+plus row became `ContactAddRow` as well. Per-consumer
+  semantics preserved via the `onAdd → boolean` accept contract (the share dialog keeps rejected
+  duplicates in the field).
+- **Empty-name guard.** Person mode now requires a non-empty name like team mode — an emptied
+  step-2 name would have created a bare `.eigenchat` file.
+- **Debounce freshness gate** (closes the follow-up above).
+- **Matcher comment honesty + concurrency.** `find-by-members.ts` documents that only *direct*
+  team entries are excluded (an ancestor-inherited team entry expands to its point-in-time
+  members — accepted caveat, now also in CHAT.md § Matching semantics), and the surviving own
+  candidates' `getEffectiveMembers` walks run via `Promise.all` instead of serializing.
+- **Wizard fetch gating.** The team-chat aggregate (`useChatSections`) is fetched only once a
+  team is selected, not on every wizard open.
+- **Simplifications.** Merged the two 409-handling create paths into one `createChat`; unified
+  `useContactSuggestions`' short-query branch into the main team-member loop.

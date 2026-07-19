@@ -1,4 +1,15 @@
+import type { DrivePath } from './drive';
 import type { AttachmentReference } from './drive-reference';
+
+// Default folder new chats land in — resolved by name on each use, so it stays freely
+// renameable/movable/deletable.
+export const CHATS_FOLDER_NAME = 'chats';
+
+// A by-members match: `canWrite` = the caller owns it or holds a write ACL entry.
+export type ChatMatch = {
+    path: DrivePath;
+    canWrite: boolean;
+};
 
 export type ChatMessageType = 'message' | 'emote' | 'whisper' | 'system';
 

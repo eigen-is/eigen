@@ -1,14 +1,14 @@
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import type { Attendee } from '@workspace/lib/types/calendar';
-import { parseContactInput } from '@workspace/lib/validation';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { CollapsibleUserList } from '@workspace/ui/components/layout/collapsible-user-list';
-import { ContactAutosuggest } from '@workspace/ui/components/layout/contacts/contact-autosuggest';
+import { ContactAddRow } from '@workspace/ui/components/layout/contacts/contact-add-row';
+import { useContactInput } from '@workspace/ui/components/layout/contacts/use-contact-input';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
-import { Check, CircleDashed, ClipboardCopy, HelpCircle, Plus, X as XIcon } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { Check, CircleDashed, ClipboardCopy, HelpCircle, X as XIcon } from 'lucide-react';
+import { useCallback } from 'react';
 import { toast } from 'sonner';
 
 type AttendeeEditorProps = {
@@ -32,46 +32,18 @@ const statusLabel: Record<Attendee['status'], string> = {
 };
 
 export function AttendeeEditor({ attendees, onChange, currentUserEmail }: AttendeeEditorProps) {
-    const [input, setInput] = useState('');
-
-    const addAttendee = useCallback(
-        (email: string, name?: string) => {
-            const normalized = email.toLowerCase();
-            if (attendees.some((a) => a.email.toLowerCase() === normalized)) return;
-            if (currentUserEmail && normalized === currentUserEmail.toLowerCase()) {
+    const contactInput = useContactInput((contact) => {
+        const email = contact.email;
+        if (!attendees.some((a) => a.email.toLowerCase() === email)) {
+            if (currentUserEmail && email === currentUserEmail.toLowerCase()) {
                 toast.info('You cannot invite yourself');
-                return;
-            }
-            onChange([...attendees, { email: normalized, name, status: 'pending', role: 'required' }]);
-        },
-        [attendees, onChange, currentUserEmail],
-    );
-
-    const processInput = useCallback(
-        (value: string) => {
-            const parsed = parseContactInput(value);
-            if (!parsed) return false;
-            addAttendee(parsed.email, parsed.displayName !== parsed.email ? parsed.displayName : undefined);
-            return true;
-        },
-        [addAttendee],
-    );
-
-    const handleContactSelected = useCallback(
-        (value: string) => {
-            if (value.includes('<') && value.includes('>')) {
-                if (processInput(value)) setInput('');
-                else setInput(value);
             } else {
-                setInput(value);
+                const name = contact.displayName !== email ? contact.displayName : undefined;
+                onChange([...attendees, { email, name, status: 'pending', role: 'required' }]);
             }
-        },
-        [processInput],
-    );
-
-    const handleAddClick = useCallback(() => {
-        if (processInput(input)) setInput('');
-    }, [input, processInput]);
+        }
+        return true;
+    });
 
     const removeAttendee = useCallback(
         (email: string) => {
@@ -82,21 +54,13 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
 
     return (
         <div className="space-y-2">
-            <div className="flex gap-2">
-                <div className="flex-1 relative">
-                    <ContactAutosuggest
-                        id="attendee-input"
-                        value={input}
-                        onChange={handleContactSelected}
-                        onlyInternalMails={false}
-                        placeholder="Add guests"
-                        onSubmit={handleAddClick}
-                    />
-                </div>
-                <Button size="icon" variant="outline" onClick={handleAddClick} disabled={!input}>
-                    <Plus className="h-4 w-4" />
-                </Button>
-            </div>
+            <ContactAddRow
+                id="attendee-input"
+                value={contactInput.value}
+                onChange={contactInput.handleChange}
+                onSubmit={contactInput.submit}
+                placeholder="Add guests"
+            />
 
             {attendees.length > 0 && (
                 <div className="space-y-1">

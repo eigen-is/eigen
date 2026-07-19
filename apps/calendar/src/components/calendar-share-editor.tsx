@@ -2,7 +2,6 @@ import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
-import { parseContactInput } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -11,11 +10,12 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ContactAddRow } from '@workspace/ui/components/layout/contacts/contact-add-row';
+import { useContactInput } from '@workspace/ui/components/layout/contacts/use-contact-input';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { Users } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 
 type CalendarShareEditorProps = {
     shares: CalendarShare[] | null;
@@ -23,7 +23,6 @@ type CalendarShareEditorProps = {
 };
 
 export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorProps) {
-    const [newContactInput, setNewContactInput] = useState('');
     const currentShares = shares || [];
 
     const { data: myTeams } = useMyTeams();
@@ -43,34 +42,10 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
         [currentShares, onChange],
     );
 
-    const processContactInput = useCallback(
-        (value: string) => {
-            const parsed = parseContactInput(value);
-            if (!parsed) return false;
-            addShare(parsed.email);
-            return true;
-        },
-        [addShare],
-    );
-
-    const handleContactSelected = useCallback(
-        (value: string) => {
-            if (value.includes('<') && value.includes('>')) {
-                const added = processContactInput(value);
-                if (added) setNewContactInput('');
-                else setNewContactInput(value);
-            } else {
-                setNewContactInput(value);
-            }
-        },
-        [processContactInput],
-    );
-
-    const handleAddContactClick = useCallback(() => {
-        if (!newContactInput) return;
-        const added = processContactInput(newContactInput);
-        if (added) setNewContactInput('');
-    }, [newContactInput, processContactInput]);
+    const contactInput = useContactInput((contact) => {
+        addShare(contact.email);
+        return true;
+    });
 
     const handlePermissionChange = useCallback(
         (targetId: string, permission: string) => {
@@ -100,9 +75,9 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
 
             <ContactAddRow
                 id="share-contact"
-                value={newContactInput}
-                onChange={handleContactSelected}
-                onSubmit={handleAddContactClick}
+                value={contactInput.value}
+                onChange={contactInput.handleChange}
+                onSubmit={contactInput.submit}
                 excludeEmails={excludeEmails}
             />
 

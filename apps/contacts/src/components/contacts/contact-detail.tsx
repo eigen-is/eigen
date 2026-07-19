@@ -1,25 +1,13 @@
-import { Link } from '@tanstack/react-router';
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { useLabels } from '@workspace/lib/contacts';
 import { formatDate } from '@workspace/lib/date';
-import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
-import { Toolbar, TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
-import { Button } from '@workspace/ui/components/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@workspace/ui/components/dropdown-menu';
 import { EigenLoader } from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
 import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
-import { Separator } from '@workspace/ui/components/separator';
-import { printDocument } from '@workspace/ui/lib/printElement';
-import { Building, Calendar, Mail, MapPin, MoreVertical, Pencil, Phone, Printer, Trash2 } from 'lucide-react';
+import { Building, Calendar, Mail, MapPin, Phone } from 'lucide-react';
+import { PersonDetailToolbar } from './person-detail-toolbar';
 
 type ContactDetailToolbarProps = {
     contact: Contact;
@@ -29,68 +17,13 @@ type ContactDetailToolbarProps = {
 };
 
 export function ContactDetailToolbar({ contact, filterType, filterId, onDeleteClick }: ContactDetailToolbarProps) {
-    const openWriteEmailTo = useOpenWriteEmailTo();
-
     return (
-        <Toolbar>
-            <div className="flex items-center gap-1 ml-auto">
-                <Link
-                    to="/edit/$filterType/$filterId"
-                    params={{
-                        filterType: filterType || 'filter',
-                        filterId: filterId || 'all',
-                    }}
-                    search={{
-                        contactId: contact.id,
-                    }}
-                >
-                    <TooltipButton icon={Pencil} tooltipText="Edit" className="h-8 w-8" />
-                </Link>
-                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDeleteClick} />
-
-                <Separator orientation="vertical" className="h-6 mx-1" />
-
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                            <MoreVertical className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {contact.email && contact.email.length > 0 && (
-                            <DropdownMenuItem onClick={() => openWriteEmailTo(contact.email[0])}>
-                                <Mail className="mr-2" />
-                                Send email
-                            </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={printDocument}>
-                            <Printer className="mr-2" />
-                            Print
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild className="cursor-pointer">
-                            <Link
-                                to="/edit/$filterType/$filterId"
-                                params={{
-                                    filterType: filterType || 'filter',
-                                    filterId: filterId || 'all',
-                                }}
-                                search={{
-                                    contactId: contact.id,
-                                }}
-                            >
-                                <Pencil className="mr-2" />
-                                Edit
-                            </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={onDeleteClick}>
-                            <Trash2 className="mr-2" />
-                            Delete
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-        </Toolbar>
+        <PersonDetailToolbar
+            name={`${contact.firstName} ${contact.lastName}`.trim()}
+            emails={contact.email ?? []}
+            editSearch={{ filterType: filterType || 'filter', filterId: filterId || 'all', contactId: contact.id }}
+            onDeleteClick={onDeleteClick}
+        />
     );
 }
 

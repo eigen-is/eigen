@@ -1,12 +1,15 @@
-import { type QueryClient, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { chatApi, driveApi } from '@workspace/lib/api';
+import { type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { chatApi, driveApi, openDocument } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
-import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
+import type { ChatAttachment, ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
 import { DRIVE_MIME_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateItemCreated, useAggregateMimeContent } from '../../drive/hooks/use-drive';
+import { publicUserKeys } from '../../public/hooks/use-public';
+import { fetchPublicUser } from '../../public/user-batcher';
 
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_MIME_SLUG = EIGEN_DOC_TYPE_INFO.chat.urlSlug; // 'application-eigenchat'
@@ -16,6 +19,10 @@ export const chatKeys = {
     owner: (ownerId: string) => [...chatKeys.all, ownerId] as const,
     messages: (ownerId: string, mountId: string, chatId: string) =>
         [...chatKeys.owner(ownerId), 'messages', mountId, chatId] as const,
+    byMembersAll: (ownerId: string) => [...chatKeys.owner(ownerId), 'by-members'] as const,
+    // Lowercased + sorted so member order and case don't fork the cache entry.
+    byMembers: (ownerId: string, emails: string[]) =>
+        [...chatKeys.byMembersAll(ownerId), emails.map((e) => e.toLowerCase()).sort()] as const,
 };
 
 type ChatSections = {
@@ -46,9 +53,9 @@ export function groupChatsBySection(chats: DrivePath[], teams: readonly { id: st
 
 // One aggregate request (personal + all team chats), split into sidebar sections. Both the personal
 // and per-team lists keep the aggregate's updatedAt-desc order.
-export function useChatSections(): ChatSections & { isLoading: boolean } {
-    // Chat sidebar wants fresher data than drive-folder browsing: 1 min instead of the 5-min default.
-    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, 60_000);
+export function useChatSections(enabled: boolean = true): ChatSections & { isLoading: boolean } {
+    // 1-min staleTime (sidebar wants fresher data); `enabled` lets closed wizards skip the fetch.
+    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, 60_000, enabled);
     const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
     return useMemo(() => {
         const sections = groupChatsBySection(chats ?? [], myTeams ?? []);
@@ -126,6 +133,105 @@ export function useCreateChat(ownerId: string, mountId: string) {
     });
 }
 
+// Shared by the live query and useStartChatWith's one-shot fetch so both hit one cache entry.
+function byMembersQueryConfig(ownerId: string, emails: string[]) {
+    return {
+        queryKey: chatKeys.byMembers(ownerId, emails),
+        queryFn: async (): Promise<ChatMatch[]> => {
+            const response = await chatApi({ ownerId }).rooms['by-members'].get({
+                query: { emails: emails.join(',') },
+            });
+            if (response.error) throw new AppError(response);
+            return response.data.matches;
+        },
+        enabled: emails.length > 0 && !!ownerId,
+        staleTime: 30_000,
+    };
+}
+
+// Open-don't-duplicate lookup (writable first, then updatedAt desc); disabled until someone is picked.
+export function useFindChatByMembers(ownerId: string, emails: string[]) {
+    return useQuery<ChatMatch[]>(byMembersQueryConfig(ownerId, emails));
+}
+
+// Create a chat pre-shared with the picked members (server-side create + ACL in one step).
+export function useCreateChatRoom(ownerId: string, mountId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({
+            parentId,
+            fileName,
+            members,
+            dedupeName,
+        }: {
+            parentId?: string;
+            fileName: string;
+            members: string[];
+            dedupeName?: boolean;
+        }): Promise<DrivePath> => {
+            const response = await chatApi({ ownerId })({ mountId }).rooms.post({
+                parentId,
+                fileName,
+                members,
+                dedupeName,
+            });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        // Refresh the parent folder, the sidebar aggregate, and the by-members family.
+        onSuccess: (data) => {
+            invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType);
+            invalidateChatMatches(queryClient, ownerId);
+        },
+        // 409 = duplicate name, handled inline by the wizard — don't toast twice.
+        onError: (error) => {
+            if (error instanceof AppError && error.status === 409) return;
+            onMutationError(error);
+        },
+    });
+}
+
+// Contacts' "start a chat": takes the person's addresses and prefers the one that belongs to a
+// registered account — email[0] can be a later-added alias, and the by-members match is keyed by
+// the account address. Exactly one writable match opens directly ('opened'); otherwise the chosen
+// address comes back so the caller opens the wizard pre-filled with it.
+export function useStartChatWith() {
+    const queryClient = useQueryClient();
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
+    const myEmail = (user?.email ?? '').toLowerCase();
+
+    return async (emails: string[]): Promise<'opened' | { email: string }> => {
+        const list = emails.map((e) => e.trim().toLowerCase()).filter((e) => e.length > 0);
+        // Registered-account lookups batch and cache misses as null (staleTime Infinity).
+        const resolved = await Promise.all(
+            list.map((e) =>
+                queryClient
+                    .fetchQuery({
+                        queryKey: publicUserKeys.detail(e),
+                        queryFn: () => fetchPublicUser(e),
+                        staleTime: Infinity,
+                    })
+                    .catch(() => null),
+            ),
+        );
+        const account = resolved.find((u) => u);
+        const email = account ? account.email.toLowerCase() : (list[0] ?? '');
+        // Self is never a counterpart — and every unshared solo chat would match a self-only target.
+        if (!ownerId || !email || email === myEmail) return { email };
+        // A failed lookup degrades to "no matches" so the caller falls through to opening the wizard.
+        const matches = await queryClient
+            .fetchQuery(byMembersQueryConfig(ownerId, [email]))
+            .catch(() => [] as ChatMatch[]);
+        const writable = matches.filter((m) => m.canWrite);
+        if (writable.length === 1) {
+            openDocument(writable[0].path);
+            return 'opened';
+        }
+        return { email };
+    };
+}
+
 export function useInviteToChat(ownerId: string, mountId: string, chatId: string) {
     const queryClient = useQueryClient();
     return useMutation({
@@ -177,4 +283,11 @@ export function useDeleteMessage(ownerId: string, mountId: string, chatId: strin
 // SSE invalidation functions
 export function invalidateMessages(queryClient: QueryClient, ownerId: string, mountId: string, chatId: string): void {
     queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
+}
+
+// By-members matches derive from ACLs, breadcrumbs and liveness, which change via drive events —
+// the drive SSE handler calls this so a cached lookup can't keep serving a trashed or re-shared
+// chat for its 30s staleTime.
+export function invalidateChatMatches(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: chatKeys.byMembersAll(ownerId) });
 }

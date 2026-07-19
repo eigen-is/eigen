@@ -9,6 +9,11 @@ import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';
 
+// Opt-in (default share behaviour stays byte-identical): skips the share email for entries that
+// resolve to a registered user — mirror fan-out, SSE, and in-app notification still fire.
+// Account-less emails keep the email as their only invite vehicle. Used by the new-chat wizard.
+export type ACLPropagationOptions = { suppressShareEmail?: boolean };
+
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
     // Dedupe by id up front — only acl.id drives resolution, and the restore path feeds [...acl, ...acl].
@@ -81,10 +86,13 @@ async function emailNewlyAddedAclEntries(
     path: DrivePath,
     addedUserEmails: string[],
     actor: { name: string; email: string },
+    suppressForRegistered: boolean,
 ): Promise<void> {
     const settings = getServerSettings();
     for (const email of addedUserEmails) {
         const target = await getUserByEmail(email);
+        // Suppression only covers users reachable in-app; an account-less email still needs the invite.
+        if (suppressForRegistered && target) continue;
         const isGuest = !target || target.role === 'guest';
         const enabled = isGuest
             ? settings.notifications.email.guestOnAclAdd
@@ -152,6 +160,7 @@ export async function propagateSharedPathChange(
     oldACL: DriveACL[] | null,
     newACL: DriveACL[] | null,
     actor: { name: string; email: string } | null,
+    options?: ACLPropagationOptions,
 ): Promise<void> {
     // Target resolution stays on the awaited path: the registry writes inside are the durable
     // record for not-yet-registered targets and must survive the request.
@@ -162,7 +171,7 @@ export async function propagateSharedPathChange(
     if (actor && newACL) {
         const addedUserEmails = diffACLEmails(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');
         if (addedUserEmails.length > 0) {
-            await emailNewlyAddedAclEntries(path, addedUserEmails, actor);
+            await emailNewlyAddedAclEntries(path, addedUserEmails, actor, options?.suppressShareEmail ?? false);
         }
     }
 }
