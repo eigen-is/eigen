@@ -140,4 +140,31 @@ need no file movement. Trash counts toward quota. Auto-purge after configurable 
 
 See: [SOFT-DELETE.md](SOFT-DELETE.md) for full design.
 
+## File Versioning
+
+File-level snapshots live in `<container>/versions/<iso-ts>.db` (`apps/api/src/lib/versioning/`).
+Trigger: opt-in `snapshot` config fires `ManagedDatabase.snapshotIfDue()` from `tick()`/`close()`.
+Mechanics in `versioning/snapshot.ts` — plain functions over the mount, `Mount` keeps the facades:
+`snapshotContainerDataDb` is self-locked on the container (save/pre-restore paths block on the
+lock), while the timer/close paths go through `trySnapshotContainerDataDb` (skip-if-contended, so a
+close can never park on a held container lock). `replaceContainerDataDb` overwrites chat `data.db`
+bytes in place. Restore orchestration in `versioning/restore.ts`: grab the target into the OS temp
+dir, take a pre-restore snapshot, then Yjs surgery (collab docs) vs chat byte-overwrite — no lock
+held across steps, nothing staged inside the container. Routes live in the drive router
+(`routes/drive.ts`): `/drive/:o/:m/file/:p/versions[/save | /:name/restore]`.
+
+## Copy / Move
+
+Move stays in-mount (`Drive.movePath`). Copy goes anywhere (`apps/api/src/lib/drive/copy-across.ts`):
+same owner+mount uses the fast same-storage `Drive.copyPath` → `Mount.copyPath` (recursive,
+container-aware); cross-mount/owner uses the recursive bridge `copyPathAcross` (download +
+`createFileFromData` per node, `createFolder` typed for containers). Containers copy safely by
+design — eigen-doc containers reference internal children by NAME, not pathId, so a byte copy is a
+valid independent doc; copy flushes the live `data.db` first and skips the `versions/` snapshot
+folder. Route `POST /drive/:o/:m/path/:p/copy` (body `{targetOwnerId, targetMountId, targetParentId,
+name?}`) picks fast-path vs bridge, dedups the destination name at the route level (kept out of
+`Drive.copyPath` so WebDAV COPY keeps overwrite/409 semantics), and rejects copying/moving a folder
+into its own subtree via `Mount.isSelfOrDescendant`. Cross-mount MOVE is deferred — it would change
+`ownerId/mountId/pathId`, breaking shares, links, and history.
+
 See: [DATABASE.md](DATABASE.md) for schema details, [ACL.md](ACL.md) for permissions
