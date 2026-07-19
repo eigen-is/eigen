@@ -129,9 +129,9 @@ of changes needs all of it.
    sibling files in the target dir), exact file pointers and encodings, scoped test commands,
    and the hard rules — stay strictly in scope, diagnose failures by reading source (never
    blind-retry), never `git push`.
-5. **Independent review before merge** — a reviewer subagent that did NOT write the code, in
-   two stages: spec compliance first, then quality (bugs, edge cases, conventions). Signal over
-   volume: report only genuinely real findings; "clean" is a valid verdict.
+5. **Independent review before merge** — a reviewer that did NOT write the code, in two
+   stages: spec compliance first, then quality (bugs, edge cases, conventions), held to the
+   [Review Standard](#review-standard) below.
 6. **Real-world verification is mandatory** — drive the running dev app headless against REAL
    documents with a throwaway test user, and read the screenshots: verdicts come from pixels
    plus behavioral probes (scroll, click, reload-persistence), not from data-shape assertions
@@ -148,6 +148,35 @@ of changes needs all of it.
    look for them.
 9. **Design changes go in small rounds** — one or two visual changes at a time, screenshots
    first, a human verdict before merge.
+
+### Review Standard
+
+Applies to every reviewer — subagent, external LLM, or a developer driving one. The goal of review
+is code that is clean, easy to read and understand, simple, and stable — and consistent: in
+patterns, naming, comment density, how solutions are implemented, and how the UX behaves, the
+change must be indistinguishable from the code around it.
+
+- **Brief reviewers cold and unopinionated.** A reviewer reads this file and
+  [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) itself and judges against those written standards,
+  not personal taste. Give it the task and the files — never the author's narrative of what was
+  already "addressed" or "accepted": inherited framing is how half-fixed problems survive review.
+- **Review the blast radius, not the diff.** Trace the changed behavior through code the diff did
+  not touch — other apps' entry points, SSE handlers, callers and callees of every changed
+  function. Most escaped bugs live in files the diff never opened.
+- **Hunt absences, not only mistakes.** A diff review can only judge code that exists. For every
+  new seam ask: every cache → who invalidates it (including SSE)? every route → what validates
+  and bounds its input, and before which side effects? every fan-out or loop → what bounds it?
+  every check-then-create → what closes the race? every "fixed" class of bug → are ALL its
+  instances fixed, or only the one that was reviewed?
+- **Every touched file comes out better.** Fix broken windows. Remove dead code and duplication.
+  Replace hand-rolled logic with the shared components and helpers
+  ([SHARED-PRIMITIVES.md](docs/SHARED-PRIMITIVES.md)). No over-engineering. Types come from
+  `packages/lib/src/types/[domain].ts` — never redefined, never declared at the wrong layer.
+- **Signal over volume, both ways.** Report only genuinely real findings — "clean" is a valid
+  verdict — but before merge run one recall-biased pass with the absence checklist above: a cold
+  reviewer that over-reports and gets pruned beats a polite one that misses. (2026-07: an outside
+  reviewer found ten real issues on a twice-reviewed branch; nearly all were absences, half-fixed
+  classes, or bugs outside the diff's blast radius.)
 
 ## Architecture Patterns
 
