@@ -103,10 +103,12 @@ export function HomeComponent() {
                             <Button
                                 key={`${link.title}:${link.url}`}
                                 variant="outline"
-                                className="px-6 py-2 flex-1"
+                                className="px-6 py-2 flex-3"
                                 asChild
                             >
-                                <a href={link.url}>{link.title}</a>
+                                <a href={link.url} rel="noopener">
+                                    {link.title}
+                                </a>
                             </Button>
                         ))}
                     </div>
