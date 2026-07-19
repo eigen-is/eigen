@@ -94,11 +94,16 @@ Chat invites (`/invite` command or `POST .../invite`) bubble ACL to the outermos
 starting a chat with picked people (or a whole team) instead of the bare drive-file create: step 1 picks who
 (share-dialog-style `ContactAddRow`, guest emails allowed, "Team chat" footer dropdown) and applies the
 open-vs-create rule (any existing match → primary opens the first, "Create new chat" advances); step 2 confirms name
-and location. It replaces `DriveCreateEigenDoc type="chat"` at the chat sidebar's "New chat" button, the chat empty
-state, and every Drive "New chat" entry; contacts trigger it too (see Entry points). Drive entries share one decision
-point — `DriveCreateChat` (`packages/ui/src/components/layout/drive/drive-create-chat.tsx`): non-guests in own/team
-drives get the wizard, foreign-owner shared folders keep the bare create. Hidden for guests (`useIsGuest`) — they
-can't share, so it can never succeed for them.
+and location. It replaces `DriveCreateEigenDoc type="chat"` at the chat sidebar's "New chat" button and the chat
+empty state; contacts trigger it too (see Entry points). Hidden for guests (`useIsGuest`) — they can't share, so it
+can never succeed for them.
+**Deliberately NOT wired into Drive** (product decision 2026-07-19): Drive is a place-first surface, so its `+ New`
+menu, list context menu, and mobile toolbar create a chat like any other eigen type — plain
+`DriveCreateEigenDoc type="chat"` in the browsed folder, on whichever drive/mount you're standing in. That keeps the
+file model visible: a drive-created chat starts with exactly the members its location's ACL implies (inherited from
+the folder, or none), no people picker in the way. The wizard — with open-don't-duplicate and the `chats`-folder
+default — belongs to the person-first surfaces (chat app, contacts, future profile views) where the intent is "talk
+to someone", not "create a file here".
 Full rationale + messenger prior-art in [PROPOSAL_CHAT_WIZARD.md](PROPOSAL_CHAT_WIZARD.md).
 
 ### The two routes
@@ -186,9 +191,9 @@ team-drive chats (excluded above).
 
 - **Chat app**: the sidebar "New chat" button (`apps/chat/src/components/chat/chat-sidebar.tsx`) and the chat empty
   state (`apps/chat/src/routes/_auth.index.tsx`).
-- **Drive**: the sidebar `+ New` menu (`apps/drive/src/components/drive/drive-new-menu.tsx`) and `DriveLayout`'s
-  list context menu + mobile toolbar "New" button — all through the shared `DriveCreateChat`, which decides wizard
-  vs bare create and pins the browsed subfolder as the initial location (team drives open team mode).
+- **Drive is intentionally not one**: its `+ New` / context-menu "New chat" creates a plain chat file in the
+  browsed folder via the generic `DriveCreateEigenDoc`, exactly like every other eigen type (see the product
+  decision at the top of this section). Don't re-wire the wizard into Drive.
 - **Contacts**: "Start chat" on a contact toolbar (`contact-detail.tsx`, shown only when the contact resolves to
   another Eigen user — `eigenId !== ''` and not the auto-seeded self contact) and on a team member
   (`team-member-detail.tsx`, non-self). The contact toolbar chats with the account address behind `eigenId`

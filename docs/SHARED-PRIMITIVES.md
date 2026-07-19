@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-837 primitives across 6 kinds. `packages/sheet` internals are excluded.
+836 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (117)
+## Components (116)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -54,7 +54,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DocumentModeButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
 | `DriveAccessList` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-access-list.tsx |
 | `DriveBrowser` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-browser.tsx |
-| `DriveCreateChat` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-create-chat.tsx |
 | `DriveCreateEigenDoc` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-create-eigendoc.tsx |
 | `DriveFilePicker` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-file-picker.tsx |
 | `DriveGrid` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-grid.tsx |

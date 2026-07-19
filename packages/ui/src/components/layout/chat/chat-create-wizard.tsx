@@ -38,10 +38,6 @@ type ChatCreateWizardProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     initialPeople?: InitialPerson[];
-    // Seeds the location as already-touched (Drive's "+ New → New chat" passes the browsed folder).
-    initialLocation?: DriveLocationValue;
-    // Opens directly in team mode (Drive passes it when the current drive is a team drive).
-    initialTeamId?: string;
     // Typed router navigation for the target room; omitted → openDocument (window.location) fallback.
     onNavigate?: (path: DrivePath) => void;
 };
@@ -53,14 +49,7 @@ function defaultChatName(pickedNames: string[], myName: string): string {
     return `${pickedNames.slice(0, -1).join(', ')} & ${pickedNames[pickedNames.length - 1]}`;
 }
 
-export function ChatCreateWizard({
-    open,
-    onOpenChange,
-    initialPeople,
-    initialLocation,
-    initialTeamId,
-    onNavigate,
-}: ChatCreateWizardProps) {
+export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate }: ChatCreateWizardProps) {
     const { user } = useAuth();
     const isGuest = useIsGuest();
 
@@ -143,9 +132,8 @@ export function ChatCreateWizard({
         return true;
     });
 
-    // Serialized so a caller's fresh array/object literal can't re-run the reset effect mid-edit.
+    // Serialized so a caller's fresh array literal can't re-run the reset effect mid-edit.
     const initialPeopleKey = JSON.stringify(initialPeople ?? []);
-    const initialLocationKey = JSON.stringify(initialLocation ?? null);
 
     // Reset to a clean form each time the dialog opens (or its prefill changes).
     useEffect(() => {
@@ -161,15 +149,12 @@ export function ChatCreateWizard({
         contactInput.setValue('');
         setName('');
         setNameDirty(false);
-        setSelectedTeamId(initialTeamId ?? null);
-        const rawSeed: DriveLocationValue | null = JSON.parse(initialLocationKey);
-        // Person-mode create is own-drive only — a foreign-owner seed is treated as absent.
-        const seedLocation = rawSeed && rawSeed.ownerId === myOwnerId ? rawSeed : null;
-        setLocation(seedLocation ?? { ownerId: myOwnerId, mountId: DEFAULT_MOUNT_ID, folderId: '' });
-        setLocationTouched(!!seedLocation);
+        setSelectedTeamId(null);
+        setLocation({ ownerId: myOwnerId, mountId: DEFAULT_MOUNT_ID, folderId: '' });
+        setLocationTouched(false);
         setLocationExpanded(false);
         setCreateError(null);
-    }, [open, initialPeopleKey, initialLocationKey, initialTeamId, myOwnerId, myEmail, contactInput.setValue]);
+    }, [open, initialPeopleKey, myOwnerId, myEmail, contactInput.setValue]);
 
     // Live-default the name until the user edits it; team mode requires a typed topic instead.
     useEffect(() => {

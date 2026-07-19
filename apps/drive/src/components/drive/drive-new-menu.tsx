@@ -1,6 +1,6 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
 import { DEFAULT_MOUNT_ID, usePathInfo } from '@workspace/lib/drive';
-import { DRIVE_TYPE_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -8,7 +8,6 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { getCreateMenuItems } from '@workspace/ui/components/layout/drive/create-menu';
-import { DriveCreateChat } from '@workspace/ui/components/layout/drive/drive-create-chat';
 import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
 import { DriveUploadFiles } from '@workspace/ui/components/layout/drive/drive-upload-files';
@@ -88,15 +87,7 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
                 onAfterCreate={handleAfterAction}
             />
 
-            <DriveCreateChat
-                open={createType === DRIVE_TYPE_CHAT}
-                onOpenChange={(open) => {
-                    if (!open) setCreateType(null);
-                }}
-                targetPath={targetPath}
-            />
-
-            {createType && createType !== DRIVE_TYPE_CHAT && (
+            {createType && (
                 <DriveCreateEigenDoc
                     type={createType}
                     open={true}
