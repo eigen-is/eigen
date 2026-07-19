@@ -57,12 +57,7 @@ export function AddMemberDialog({ open, onOpenChange, availableMembers, onAdd }:
                                     setSearch('');
                                 }}
                             >
-                                <UserItem
-                                    name={m.name}
-                                    email={m.email}
-                                    imageUrl={m.image ?? undefined}
-                                    className="flex-1 min-w-0"
-                                />
+                                <UserItem name={m.name} email={m.email} userId={m.userId} className="flex-1 min-w-0" />
                                 <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
                             </div>
                         ))

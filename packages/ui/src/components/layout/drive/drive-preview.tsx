@@ -115,9 +115,9 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     if (!data?.body) return null;
 
     const mode = data.mode;
-    // eigen-prose for rendered prose (eigendoc, markdown). drive-preview-code for raw
-    // <pre><code> blocks — eigen-prose's <pre> rule paints a dark code-block background
-    // that's wrong for a whole-file plaintext/code thumbnail.
+    // eigen-prose for rendered prose (eigendoc, markdown, plaintext paragraphs).
+    // drive-preview-code for raw <pre><code> blocks — eigen-prose's <pre> rule paints a
+    // dark code-block background that's wrong for a whole-file code thumbnail.
     const wrapperClass =
         mode === 'eigendoc'
             ? 'eigen-prose tiptap'
@@ -125,7 +125,7 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
               ? 'drive-preview-slides'
               : mode === 'eigensheets'
                 ? 'eigensheets-preview'
-                : mode === 'markdown'
+                : mode === 'markdown' || mode === 'plaintext'
                   ? 'eigen-prose'
                   : 'drive-preview-code';
 

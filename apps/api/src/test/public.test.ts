@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { PublicConfig, PublicUser } from '@workspace/lib/types/public';
-import { assertJson, authedRequest, getTestContext } from './setup';
+import { assertJson, authedRequest, getTestContext, TEST_PNG_BYTES } from './setup';
 
 // All /p/* routes are intentionally PUBLIC (unauthenticated) — that is what the /p/ prefix means.
 // Do not gate them (see routes/public.ts).
@@ -70,13 +70,7 @@ describe('Public Routes', () => {
 
         test('returns uploaded avatar as WebP after profile update', async () => {
             // Create a small test image (4x4 PNG — same bytes used in preview.test.ts)
-            const pngBytes = new Uint8Array([
-                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
-                147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17,
-                73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72,
-                35, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
-            ]);
-            const file = new File([pngBytes], 'test-avatar.png', { type: 'image/png' });
+            const file = new File([TEST_PNG_BYTES], 'test-avatar.png', { type: 'image/png' });
 
             // Upload avatar via contacts route
             const formData = new FormData();

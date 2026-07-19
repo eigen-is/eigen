@@ -209,7 +209,8 @@ async function main(): Promise<void> {
     const { convertToDocument } = await import('../lib/import/import-document');
     const { writeEigendocToYjs } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/import/doc/from-docx');
-    const { sendToHome } = await import('../lib/home/home-relay');
+    const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
+    const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/core/mail-template');
     const { default: htmlToDocx } = await import('@turbodocx/html-to-docx');
 
@@ -296,6 +297,21 @@ async function main(): Promise<void> {
             body: { teamId, userId: userByKey.get(persona.key)!.id, organizationId: orgId },
             headers: adminHeaders,
         });
+    }
+
+    // --- Team avatar: the festival logo through the same pipeline as the avatar route
+    // (512px cover webp). Resilient like the persona avatars: logged, never fatal. ---
+    try {
+        const logoBytes = readFileSync(join(FIXTURES_DIR, 'branding', 'logo.webp'));
+        const result = await generateImagePreview(logoBytes, 'image/webp', 'logo.webp', '', 'avatar', {
+            maxSize: 512,
+            quality: 80,
+            fit: 'cover',
+        });
+        if (!result) throw new Error('avatar thumbnail generation failed');
+        await pushTeamAvatar(teamId, result.data);
+    } catch (err) {
+        console.warn('team avatar seed failed:', err instanceof Error ? err.message : err);
     }
 
     // --- Team home: enable the calendar (starts disabled) and add the shared mount. ---

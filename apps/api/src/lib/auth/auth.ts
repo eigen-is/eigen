@@ -2,6 +2,7 @@ import { apiKey } from '@better-auth/api-key';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
+import { eq, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import {
     account as accountScheme,
@@ -77,6 +78,23 @@ export const auth = betterAuth({
                     await reconcileSharesForNewUser(user);
                 },
             },
+            delete: {
+                // better-auth's own deleteUser (e.g. the admin plugin's /admin/remove-user)
+                // removes only session/account/user rows. This seam is the one place every
+                // better-auth deletion path passes through while the user row still exists,
+                // so the COMPLETE Eigen teardown (home directory, share registry, auth
+                // reference rows) runs here — the raw endpoint must not leave user data
+                // behind, and a leftover member row 500s listMembers org-wide. No extra
+                // guard needed: /admin/remove-user already rejects non-admins (403) and
+                // self-removal (400), matching the Eigen route's requireAdmin +
+                // own-account-400. Lazy import to avoid the static cycle
+                // (delete-user → home/get-home → … → auth).
+                before: async (hookUser) => {
+                    const user = hookUser as User;
+                    const { teardownUserData } = await import('../user/delete-user');
+                    await teardownUserData(user);
+                },
+            },
         },
     },
     emailAndPassword: {
@@ -133,6 +151,11 @@ export const auth = betterAuth({
                 afterAddTeamMember: async ({ teamMember }) => {
                     await reconcileSharesForNewTeamMember(teamMember.userId, teamMember.teamId);
                 },
+                afterDeleteTeam: async ({ team }) => {
+                    // Lazy import to avoid the static cycle (home-relay → get-home → team → auth).
+                    const { pushTeamAvatar } = await import('../home/home-relay');
+                    await pushTeamAvatar(team.id, null);
+                },
             },
         }),
         apiKey({
@@ -169,6 +192,21 @@ export async function authAddUserToDefaultOrg(user: User): Promise<void> {
             `Failed to auto-join user ${user.id} to default org: ${error instanceof Error ? error.message : String(error)}`,
         );
     }
+}
+
+// Membership deletion also sweeps rows whose user is already gone, so instances that
+// collected orphans through past raw better-auth deletions self-heal on the next delete.
+export function authDeleteUserReferences(userId: string): void {
+    const db = getAuthDrizzleDb();
+    const userIds = db.select({ id: userScheme.id }).from(userScheme);
+    db.delete(memberScheme)
+        .where(or(eq(memberScheme.userId, userId), notInArray(memberScheme.userId, userIds)))
+        .run();
+    db.delete(teamMemberScheme)
+        .where(or(eq(teamMemberScheme.userId, userId), notInArray(teamMemberScheme.userId, userIds)))
+        .run();
+    db.delete(twoFactorScheme).where(eq(twoFactorScheme.userId, userId)).run();
+    db.delete(apikeyScheme).where(eq(apikeyScheme.referenceId, userId)).run();
 }
 
 // Separate Drizzle instance from better-auth's internal one — better-auth controls its own

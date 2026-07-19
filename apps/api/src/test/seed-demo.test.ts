@@ -117,6 +117,10 @@ describe('seed-demo', () => {
             const teamId = teams.map((t) => t.id).find((id) => existsSync(join(root, 'team', id, 'mounts')));
             expect(teamId).toBeDefined();
 
+            // Team avatar: the festival logo fixture went through the same 512px-cover pipeline
+            // as the avatar route — file existence under server/avatars is the source of truth.
+            expect(existsSync(join(root, 'server', 'avatars', `team_${teamId}.webp`))).toBe(true);
+
             // Sample a persona: home dir exists, mail is indexed into mail.db.
             const personas = query<{ id: string }>(
                 usersDb,

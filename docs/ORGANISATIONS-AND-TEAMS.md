@@ -47,6 +47,29 @@ to the new member's Home.
 - Calendar can be disabled via `settings.calendar.enabled`
 - Created lazily, auto-destructs after 5min inactivity
 
+### Team Avatars
+
+Teams can have an avatar image, set by org admins from the admin app's team detail page (member-facing/self-serve
+avatar management is out of scope). Storage mirrors the user-avatar pipeline: a single webp in the server-central
+avatars dir, keyed by owner id — `data/server/avatars/team_{teamId}.webp`. File existence is the only source of
+truth; there's no `TeamSettings` pointer or auth-schema column (`pushTeamAvatar` in `home-relay.ts`, next to
+`pushUserProfile`). Deleting a team removes its avatar file (`afterDeleteTeam` hook in `auth.ts`), and serving
+double-checks the team still exists so an orphaned file is never served.
+
+- `POST /team/:ownerId/avatar` (body `{ file }`) and `DELETE /team/:ownerId/avatar` — gated by `requireTeamAdmin`,
+  so org admins/owners pass without needing team membership. Upload converts through `generateImagePreview`
+  (512px cover crop, same as user avatars); global max-upload-size check only, not the uploading admin's personal
+  quota
+- **Serving**: `GET /p/avatar/team_{teamId}` (`getAvatarByEmailOrId` in `apps/api/src/lib/space/public.ts`) serves
+  the webp if it exists, falling back to the deterministic team SVG otherwise. `getPublicInfo` already returns
+  this URL for teams, so `UserAvatar`/`UserItem`/`useResolvedUser` pick it up with zero per-surface changes.
+  Responses carry the same 24h public `Cache-Control` as user avatars — no special casing
+- **Freshness**: the team filename is stable (unlike per-upload-UUID user avatars), so the admin team detail
+  page always renders its avatar with a client-generated `?v={timestamp}` (stamped on mount/team switch and
+  after upload/remove) — the editing surface never shows the browser-cached copy. A `?v` value must never be
+  reused across page loads (a repeated value serves a stale cache entry — never use a counter). Other surfaces
+  (sidebar rows, shares) accept up-to-24h staleness, same as user avatars viewed by others
+
 ### OrgHome
 
 **File**: `apps/api/src/lib/home/org-home.ts`
@@ -151,7 +174,8 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
   Supports drag-and-drop of members onto team sidebar items
 - **Teams**: Team list in sidebar with create dialog. Team detail as main content
 - **Team Detail**: List/add/remove team members, toggle team calendar on/off, set calendar member access
-  (free-busy/read/write), manage mounts (add/edit/enable/disable), set quota overrides (mail & contacts, default mount)
+  (free-busy/read/write), manage mounts (add/edit/enable/disable), set quota overrides (mail & contacts, default
+  mount), set/remove the team avatar (see [Team Avatars](#team-avatars))
 - **Settings**: Server-wide settings — quotas, storage defaults (mount type), S3 configuration
 
 ### Access
@@ -179,15 +203,33 @@ Team settings are stored in `data/team/{teamId}/settings.json` via `TeamHome.set
 
 ### User Deletion
 
-`DELETE /settings/user/:userId` — admin-only, permanently deletes a user and all their data:
+One deletion semantic for every entry point. The complete teardown lives in `teardownUserData`
+(`lib/user/delete-user.ts`), invoked from the `databaseHooks.user.delete.before` hook in `auth.ts` — the one
+seam every better-auth deletion path passes through while the user row still exists:
 
 1. Evicts cached Home singleton (closes databases)
-2. Deletes home directory (`data/home/{userId}/`)
-3. Cleans share registry (entries FROM and TO the user)
-4. Removes org/team memberships (explicit deletion since SQLite CASCADE is off by default)
-5. Deletes auth records via better-auth `auth.api.removeUser()` (sessions, accounts, 2FA)
+2. Deletes home directory (`data/home/{userId}/`, or the guest home for guests)
+3. Cleans share registry (entries FROM the user always; entries TO the user only for non-guests, so re-OTP
+   after guest deletion rehydrates the same shared.db state)
+4. Removes auth rows referencing the user — org/team memberships, 2FA, API keys — via
+   `authDeleteUserReferences` (explicit deletion since SQLite CASCADE is inert with `PRAGMA foreign_keys` off).
+   Membership deletion also sweeps rows whose user is already gone, healing orphans from past bad deletions
 
-Cannot delete own account (server-side guard).
+Entry points, all funneling through better-auth's `deleteUser` (sessions + accounts, then the user row, with
+the hook firing before the user row goes):
+
+- `DELETE /settings/user/:userId` — admin-only Eigen route; `deleteUserCompletely` delegates to
+  `auth.api.removeUser()`
+- better-auth's raw `POST /auth/admin/remove-user` — same complete teardown via the hook
+- inactive-guest cleanup (system, no session) — `deleteUserCompletely(id, null)` goes through
+  `auth.$context.internalAdapter.deleteUser()`
+
+A hook error aborts better-auth's user-row deletion (fail-closed); sessions and accounts are already gone at
+that point, so a retry of the deletion completes the removal.
+
+Guards: cannot delete your own account and non-admins are rejected — enforced server-side by the Eigen route
+(`requireAdmin` + own-account 400) and independently by better-auth's `/admin/remove-user` itself (403
+non-admin, 400 self-removal), so the raw endpoint bypasses nothing.
 
 **Frontend**: `useDeleteUser(organizationId)` hook in `packages/lib/src/core/admin/hooks/use-members.ts`.
 "Danger zone" section in member detail with confirmation dialog.

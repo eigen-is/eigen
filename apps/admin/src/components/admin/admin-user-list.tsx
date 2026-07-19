@@ -67,6 +67,7 @@ export function AdminUserList({ users, searchQuery, activeUserId, onRowClick, em
                         <UserItem
                             name={user.name}
                             email={user.email}
+                            userId={user.id}
                             label={
                                 user.role && (
                                     <Badge variant="outline" className="text-xs">
@@ -111,7 +112,7 @@ type AdminUserDetailProps = {
 export function AdminUserDetail({ user }: AdminUserDetailProps) {
     return (
         <div className="app-gutter space-y-6">
-            <UserDetailHero name={user.name} email={user.email} imageUrl={user.image} subtitle={user.email} />
+            <UserDetailHero name={user.name} email={user.email} userId={user.id} subtitle={user.email} />
 
             <div className="space-y-4">
                 {user.role && (

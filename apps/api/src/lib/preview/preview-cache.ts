@@ -25,8 +25,12 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
     return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.screen.${ext}`;
 }
 
+// Renderer format version — bump when generated HTML changes shape (e.g. plaintext moved
+// from <pre> to prose paragraphs) so cached previews regenerate despite an unchanged updatedAt.
+const TEXT_FORMAT = 'f2';
+
 function textCacheName(drivePath: DrivePath): string {
-    return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.json`;
+    return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.${TEXT_FORMAT}.json`;
 }
 
 // Delete previously-cached versions of this path (older updatedAt stamps) so previewsDir
@@ -147,9 +151,11 @@ async function readNewestStaleText(
         return null;
     }
 
+    // Accept prior-format names too (plain `<stamp>.json` from before TEXT_FORMAT existed) —
+    // a pre-bump copy is exactly what stale-while-revalidate is for.
     const candidates = files
         .filter((name) => name !== cacheName && name.startsWith(prefix) && name.endsWith('.json'))
-        .map((name) => ({ name, stamp: Number(name.slice(prefix.length, -'.json'.length)) }))
+        .map((name) => ({ name, stamp: Number(name.slice(prefix.length).replace(/(?:\.f\d+)?\.json$/, '')) }))
         .filter((c) => Number.isFinite(c.stamp))
         .sort((a, b) => b.stamp - a.stamp);
 

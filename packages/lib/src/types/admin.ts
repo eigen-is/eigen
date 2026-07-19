@@ -2,7 +2,6 @@ export type AdminUser = {
     id: string;
     email: string;
     name: string;
-    image: string | null;
     role: string | null;
     createdAt: Date;
 };
@@ -13,7 +12,6 @@ export type OrgMember = {
     role: string;
     email: string;
     name: string;
-    image?: string | null;
     createdAt: Date;
 };
 

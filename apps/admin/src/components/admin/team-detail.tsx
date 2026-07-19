@@ -4,11 +4,13 @@ import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
 import { useCheckS3Connection, useServerSettings } from '@workspace/lib/settings';
 import {
     useAddTeamMount,
+    useRemoveTeamAvatar,
     useTeamMembers,
     useTeamMounts,
     useTeamSettings,
     useUpdateTeamMount,
     useUpdateTeamSettings,
+    useUploadTeamAvatar,
 } from '@workspace/lib/team';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
@@ -17,15 +19,17 @@ import { type MountSettings, mapStorageType } from '@workspace/lib/types/setting
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { AvatarEditor } from '@workspace/ui/components/layout/avatar-editor';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import type { MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
 import { HardDrive, Pencil, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AddMemberDialog } from './add-member-dialog';
 import { MountDialog } from './mount-dialog';
 
@@ -68,6 +72,11 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const [showAddMount, setShowAddMount] = useState(false);
     const [editingMount, setEditingMount] = useState<{ id: string; mount: MountSettings } | null>(null);
     const [showSettingsForm, setShowSettingsForm] = useState(false);
+    // This page always requests the avatar with a fresh ?v=timestamp (stamped per mount and after
+    // upload/remove): the editing surface must never show the up-to-24h browser-cached copy of the
+    // team's stable /p/avatar URL. Other surfaces accept that TTL. The route mounts this component
+    // with key={team.id}, so switching teams remounts and re-stamps naturally.
+    const [avatarUrl, setAvatarUrl] = useState(() => `p/avatar/${teamOwnerId(team.id)}?v=${Date.now()}`);
 
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
@@ -92,6 +101,8 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const { data: mounts = {} } = useTeamMounts(team.id);
     const addMount = useAddTeamMount(team.id);
     const updateMount = useUpdateTeamMount(team.id);
+    const uploadAvatar = useUploadTeamAvatar(team.id);
+    const removeAvatar = useRemoveTeamAvatar(team.id);
 
     const defaultCal = calendars.find((c) => c.isDefault);
     const teamTarget = teamOwnerId(team.id);
@@ -109,10 +120,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const defaultMountStorageType = serverSettings
         ? mapStorageType(serverSettings.defaults.mount.storageType)
         : ('local' as const);
-
-    useEffect(() => {
-        setShowSettingsForm(false);
-    }, [team.id]);
 
     const openSettingsForm = () => {
         setDraftName(team.name);
@@ -179,10 +186,23 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
 
+    const handleAvatarUpload = async (file: File) => {
+        await uploadAvatar.mutateAsync(file);
+        setAvatarUrl(`p/avatar/${ownerId}?v=${Date.now()}`);
+    };
+
+    const handleRemoveAvatar = async () => {
+        await removeAvatar.mutateAsync();
+        setAvatarUrl(`p/avatar/${ownerId}?v=${Date.now()}`);
+    };
+
     return (
         <div className="app-gutter space-y-6 h-full overflow-y-auto">
-            <div className="flex items-center justify-between">
-                <h2 className="text-xl font-medium truncate">{team.name}</h2>
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                    <UserAvatar size="lg" userId={ownerId} imageUrl={avatarUrl} />
+                    <h2 className="text-xl font-medium truncate">{team.name}</h2>
+                </div>
                 {!showSettingsForm && (
                     <Button variant="ghost" size="sm" onClick={openSettingsForm}>
                         <Pencil className="h-4 w-4 mr-1" />
@@ -193,6 +213,17 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
             {showSettingsForm ? (
                 <div className="space-y-5 border rounded-lg p-4">
+                    <div className="space-y-1.5">
+                        <Label>Avatar</Label>
+                        <AvatarEditor
+                            className="h-24 w-24"
+                            userId={ownerId}
+                            imageUrl={avatarUrl}
+                            onUpload={handleAvatarUpload}
+                            onRemove={handleRemoveAvatar}
+                        />
+                    </div>
+
                     <div className="space-y-1.5">
                         <Label>Team Name</Label>
                         <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} />
@@ -397,6 +428,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                                     <UserItem
                                         name={tm.name ?? 'Unknown'}
                                         email={tm.email ?? ''}
+                                        userId={tm.userId}
                                         className="flex-1 min-w-0"
                                     />
                                     <Button
