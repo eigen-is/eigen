@@ -37,11 +37,9 @@ function AuthenticatedMailRoot() {
         <AppShell
             appName="mail"
             rootRoute={Route}
-            sidebar={({ condensed, isMobile, onClose }) => (
+            sidebar={({ condensed }) => (
                 <EmailSidebar
                     condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
                     mailboxes={mailboxes}
                     isLoading={isLoading}
                     error={error}

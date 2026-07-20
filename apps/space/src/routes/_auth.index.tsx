@@ -11,7 +11,7 @@ export const Route = createFileRoute('/_auth/')({
 function HomeComponent() {
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex">
+            <Column id="detail" width="flex" onBack="sidebar">
                 <div className="h-full overflow-y-auto">
                     <div className="flex flex-col items-center justify-center w-full px-4 py-8">
                         <EigenCyclingLogo className="text-3xl mb-6" />

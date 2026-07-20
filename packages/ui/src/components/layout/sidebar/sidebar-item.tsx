@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
+import { useLayout } from '../app/layout-context.tsx';
 
 export type SidebarItemProps = {
     icon: ReactNode;
@@ -32,6 +33,7 @@ export function SidebarItem({
     children,
     exact = false,
 }: SidebarItemProps) {
+    const { setSidebarOpen } = useLayout();
     const baseStyles = cn(
         'flex items-center rounded-md px-2.5 py-1.5 text-sm font-normal select-none',
         condensed ? 'justify-center' : 'gap-2.5',
@@ -53,6 +55,8 @@ export function SidebarItem({
             <Link
                 to={to}
                 params={params}
+                // A tap on the already-current route is a router no-op, so close explicitly.
+                onClick={() => setSidebarOpen(false)}
                 className={baseStyles}
                 activeProps={{
                     className: 'bg-primary/10 text-primary',

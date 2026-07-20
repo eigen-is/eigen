@@ -41,6 +41,7 @@ function GuestsRoute() {
             <Column
                 id="list"
                 width="350px"
+                onBack="sidebar"
                 toolbar={
                     <AdminUserListToolbar
                         searchQuery={searchQuery}

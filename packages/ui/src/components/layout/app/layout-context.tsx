@@ -7,6 +7,9 @@ export type LayoutContextType = {
     setDocumentTitle: (title: string) => void;
     sidebarOpen: boolean;
     setSidebarOpen: (open: boolean) => void;
+    // True while the mobile sidebar column has taken over the viewport — the one
+    // source both AppShell (<main> hide) and SidebarContainer (show) read.
+    sidebarColumnShown: boolean;
     sidebarMode: 'collapsible' | 'none';
     sidebarHidden: boolean;
     setSidebarHidden: (hidden: boolean) => void;
@@ -21,6 +24,7 @@ export const LayoutContext = createContext<LayoutContextType>({
     setDocumentTitle: () => {},
     sidebarOpen: false,
     setSidebarOpen: () => {},
+    sidebarColumnShown: false,
     sidebarMode: 'collapsible',
     sidebarHidden: false,
     setSidebarHidden: () => {},

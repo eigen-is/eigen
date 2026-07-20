@@ -22,9 +22,7 @@ function CalendarRoot() {
         <AppShell
             appName="calendar"
             rootRoute={Route}
-            sidebar={({ condensed, isMobile, onClose }) => (
-                <CalendarSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
-            )}
+            sidebar={({ condensed }) => <CalendarSidebar condensed={condensed} />}
         >
             <Outlet />
         </AppShell>

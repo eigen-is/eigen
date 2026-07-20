@@ -35,13 +35,7 @@ function DriveRoot() {
 
 function GuestDriveRoot() {
     return (
-        <AppShell
-            appName="drive"
-            rootRoute={Route}
-            sidebar={({ condensed, isMobile, onClose }) => (
-                <AppSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
-            )}
-        >
+        <AppShell appName="drive" rootRoute={Route} sidebar={({ condensed }) => <AppSidebar condensed={condensed} />}>
             <DriveContext.Provider value={{ rootPath: null }}>
                 <Outlet />
             </DriveContext.Provider>
@@ -75,11 +69,9 @@ function AuthenticatedDriveRoot() {
         <AppShell
             appName="drive"
             rootRoute={Route}
-            sidebar={({ condensed, isMobile, onClose }) => (
+            sidebar={({ condensed }) => (
                 <AppSidebar
                     condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
                     newButton={<DriveNewMenu rootPath={rootPath} condensed={condensed} />}
                 />
             )}

@@ -6,7 +6,6 @@ import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive'
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
 import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -18,8 +17,6 @@ const MAX_AVATARS = 4;
 
 type ChatSidebarProps = {
     condensed?: boolean;
-    isMobile?: boolean;
-    onClose?: () => void;
 };
 
 type ChatItemProps = {
@@ -58,7 +55,7 @@ function ChatItem({ chat, condensed, hasUnread }: ChatItemProps) {
     );
 }
 
-export function ChatSidebar({ condensed = false, isMobile = false, onClose }: ChatSidebarProps) {
+export function ChatSidebar({ condensed = false }: ChatSidebarProps) {
     const navigate = useNavigate();
     const { user } = useAuth();
     const isGuest = useIsGuest();
@@ -71,8 +68,6 @@ export function ChatSidebar({ condensed = false, isMobile = false, onClose }: Ch
 
     return (
         <div className="flex h-full flex-col">
-            {isMobile && <SidebarHeader appName="chat" onClose={onClose} />}
-
             <SidebarBody>
                 {!isGuest && (
                     <SidebarPrimaryButton

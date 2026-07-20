@@ -78,7 +78,7 @@ function ChatView() {
     return (
         <>
             <ColumnLayout>
-                <Column id="messages" width="flex" toolbar={toolbar}>
+                <Column id="messages" width="flex" onBack="sidebar" toolbar={toolbar}>
                     <div className="flex flex-col h-full bg-background">
                         <ChatMessageList
                             key={chatId}

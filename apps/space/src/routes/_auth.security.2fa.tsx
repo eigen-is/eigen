@@ -91,7 +91,7 @@ function TwoFaComponent() {
     if (twoFactorEnabled) {
         return (
             <ColumnLayout>
-                <Column id="detail" width="flex" toolbar={toolbar}>
+                <Column id="detail" width="flex" onBack="sidebar" toolbar={toolbar}>
                     <div className="h-full overflow-y-auto">
                         <div className="w-full max-w-3xl app-gutter">
                             <div className="space-y-6">
@@ -163,7 +163,7 @@ function TwoFaComponent() {
 
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex" toolbar={toolbar}>
+            <Column id="detail" width="flex" onBack="sidebar" toolbar={toolbar}>
                 <div className="h-full overflow-y-auto">
                     <div className="w-full max-w-3xl app-gutter">
                         <TwoFactorSetup

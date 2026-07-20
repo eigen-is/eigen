@@ -1,11 +1,10 @@
 import { useLocation } from '@tanstack/react-router';
 import { type ReactNode, useEffect } from 'react';
+import { cn } from '../../../lib/utils';
 import { useLayout } from '../app/layout-context.tsx';
 
 export type SidebarProps = {
     condensed: boolean;
-    isMobile: boolean;
-    onClose: () => void;
 };
 
 type SidebarContainerProps = {
@@ -13,35 +12,27 @@ type SidebarContainerProps = {
 };
 
 export function SidebarContainer({ sidebar }: SidebarContainerProps) {
-    const { sidebarOpen, setSidebarOpen, sidebarMode, isMobile, isTablet } = useLayout();
-    const { pathname } = useLocation();
+    const { sidebarOpen, setSidebarOpen, sidebarColumnShown, sidebarMode, isMobile, isTablet } = useLayout();
+    // href (not pathname) so the mobile sidebar column also closes on search-param
+    // navigation — e.g. mail's ?mode=compose, which keeps the same pathname.
+    const { href } = useLocation();
 
     useEffect(() => {
         if (isMobile && sidebarOpen) setSidebarOpen(false);
-    }, [pathname]);
+    }, [href]);
 
     if (sidebarMode === 'none') return null;
 
-    const sidebarContent =
-        typeof sidebar === 'function'
-            ? sidebar({ condensed: isTablet, isMobile, onClose: () => setSidebarOpen(false) })
-            : sidebar;
+    const sidebarContent = typeof sidebar === 'function' ? sidebar({ condensed: isTablet }) : sidebar;
 
     return (
-        <>
-            <div
-                className={`
-                    ${isMobile ? (sidebarOpen ? 'fixed inset-0 z-50' : 'hidden') : 'block'}
-                    ${isTablet ? 'w-16' : 'w-64'}
-                    border-r h-full overflow-y-auto overflow-x-hidden bg-sidebar
-                `}
-            >
-                {sidebarContent}
-            </div>
-
-            {isMobile && sidebarOpen && (
-                <div className="fixed inset-0 z-40 bg-background/80" onClick={() => setSidebarOpen(false)} />
+        <div
+            className={cn(
+                'border-r h-full overflow-y-auto overflow-x-hidden bg-sidebar',
+                isMobile ? (sidebarColumnShown ? 'block w-full' : 'hidden') : isTablet ? 'block w-16' : 'block w-64',
             )}
-        </>
+        >
+            {sidebarContent}
+        </div>
     );
 }

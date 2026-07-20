@@ -10,7 +10,7 @@ export const Route = createFileRoute('/_auth/onboarding')({
 function OnboardingRoute() {
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex" toolbar={<ToolbarTitle>Onboarding</ToolbarTitle>}>
+            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Onboarding</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
                     <OnboardingSettingsPage />
                 </div>

@@ -6,6 +6,7 @@ import { useIsMobile, useIsTablet } from '@workspace/lib/media';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import type { CommandContext } from '@workspace/lib/types/command-palette';
 import type { EigenDocType } from '@workspace/lib/types/drive';
+import { cn } from '@workspace/ui/lib/utils';
 import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react';
 import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc.tsx';
 import { DriveCreateFolder } from '../drive/drive-create-folder.tsx';
@@ -51,6 +52,10 @@ export function AppShell({
 
     const effectiveSidebarMode = sidebar && !sidebarHidden ? sidebarMode : 'none';
 
+    // On mobile the sidebar renders as a full-width column in place of <main>. Hide main
+    // via CSS instead of unmounting so editors keep Yjs/WS state and lists keep scroll.
+    const sidebarColumnShown = isMobile && sidebarOpen && effectiveSidebarMode === 'collapsible';
+
     // Memoize so the context value keeps a stable identity across AppShell
     // re-renders (resize, sidebar toggle, title changes) — without it every
     // useLayout() consumer re-renders on each render. useState setters are stable.
@@ -62,13 +67,23 @@ export function AppShell({
             setDocumentTitle,
             sidebarOpen,
             setSidebarOpen,
+            sidebarColumnShown,
             sidebarMode: effectiveSidebarMode,
             sidebarHidden,
             setSidebarHidden,
             isMobile,
             isTablet,
         }),
-        [appName, documentTitle, sidebarOpen, effectiveSidebarMode, sidebarHidden, isMobile, isTablet],
+        [
+            appName,
+            documentTitle,
+            sidebarOpen,
+            sidebarColumnShown,
+            effectiveSidebarMode,
+            sidebarHidden,
+            isMobile,
+            isTablet,
+        ],
     );
 
     return (
@@ -78,7 +93,9 @@ export function AppShell({
                 <PaletteRunner />
                 <div className="flex flex-1 w-full overflow-hidden">
                     {sidebar && !sidebarHidden && <SidebarContainer sidebar={sidebar} />}
-                    <main className="flex-1 flex h-full overflow-hidden">{children ?? <Outlet />}</main>
+                    <main className={cn('flex-1 flex h-full overflow-hidden', sidebarColumnShown && 'hidden')}>
+                        {children ?? <Outlet />}
+                    </main>
                 </div>
                 <DemoBanner />
             </div>

@@ -97,7 +97,7 @@ function WaitlistRoute() {
 
     return (
         <ColumnLayout mobileColumn={entryId ? 'detail' : 'list'}>
-            <Column id="list" width="400px" toolbar={listToolbar}>
+            <Column id="list" width="400px" onBack="sidebar" toolbar={listToolbar}>
                 <div className="flex h-full flex-col border-r overflow-y-auto">
                     <div className="p-2">
                         <Tabs value={activeTab} onValueChange={handleTabChange}>

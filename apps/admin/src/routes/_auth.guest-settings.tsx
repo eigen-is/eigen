@@ -10,7 +10,7 @@ export const Route = createFileRoute('/_auth/guest-settings')({
 function GuestSettingsRoute() {
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex" toolbar={<ToolbarTitle>Guest access</ToolbarTitle>}>
+            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Guest access</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
                     <GuestSettingsPage />
                 </div>

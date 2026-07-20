@@ -10,7 +10,7 @@ export const Route = createFileRoute('/_auth/settings')({
 function SettingsRoute() {
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex" toolbar={<ToolbarTitle>Server Settings</ToolbarTitle>}>
+            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Server Settings</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
                     <ServerSettingsPage />
                 </div>

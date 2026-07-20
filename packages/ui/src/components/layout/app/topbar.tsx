@@ -6,7 +6,7 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { cn } from '@workspace/ui/lib/utils.ts';
-import { Grip, LifeBuoy, LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
+import { Grip, LifeBuoy, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
 import {
@@ -83,7 +83,7 @@ function useLogout(rootRoute: TopbarProps['rootRoute']) {
 }
 
 function AppSwitcher({ isGuest }: { isGuest: boolean }) {
-    const { appName, isMobile } = useLayout();
+    const { appName } = useLayout();
     const isAdmin = useIsAdmin();
     const appList = isGuest ? apps.filter((app) => GUEST_APPS.has(app.name)) : apps;
 
@@ -99,7 +99,7 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                     <Grip className="h-5 w-5" />
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="min-w-56 p-3" align={isMobile ? 'end' : 'start'} forceMount>
+            <DropdownMenuContent className="min-w-56 p-3" align="start" forceMount>
                 <div className="grid grid-cols-3 w-full gap-2">
                     {appList.map((app) => {
                         const isActive = app.name.toLowerCase() === appName.toLowerCase();
@@ -267,7 +267,7 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
 }
 
 export function Topbar({ rootRoute }: TopbarProps) {
-    const { appName, documentTitle, isMobile, sidebarMode, setSidebarOpen } = useLayout();
+    const { appName, documentTitle, isMobile } = useLayout();
     const auth = useAuth();
     const isGuest = useIsGuest();
     const { data: unreadCount = 0 } = useUnreadNotificationCount(auth.user?.id ?? '');
@@ -276,8 +276,6 @@ export function Topbar({ rootRoute }: TopbarProps) {
         const base = documentTitle ? `${documentTitle} — eigen|${appName}>` : `eigen|${appName}>`;
         document.title = unreadCount > 0 ? `(${unreadCount}) ${base}` : base;
     }, [appName, documentTitle, unreadCount]);
-
-    const showBurger = isMobile && sidebarMode !== 'none';
 
     return (
         <header
@@ -288,25 +286,13 @@ export function Topbar({ rootRoute }: TopbarProps) {
                 center, independent of the left (logo) and right (actions) block widths */}
             <div className="grid h-12 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
                 <div className="flex items-center pl-2 pr-4">
-                    {showBurger && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setSidebarOpen(true)}
-                            className="mr-1 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
-                        >
-                            <Menu className="h-5 w-5" />
-                            <span className="sr-only">Open menu</span>
-                        </Button>
+                    {auth.isAuthenticated ? (
+                        <AppSwitcher isGuest={isGuest} />
+                    ) : (
+                        <div className="mr-1 flex h-8 w-8 items-center justify-center text-[var(--topbar-icon)]">
+                            <EigenLogo className="h-5 w-5" />
+                        </div>
                     )}
-                    {!isMobile &&
-                        (auth.isAuthenticated ? (
-                            <AppSwitcher isGuest={isGuest} />
-                        ) : (
-                            <div className="mr-1 flex h-8 w-8 items-center justify-center text-[var(--topbar-icon)]">
-                                <EigenLogo className="h-5 w-5" />
-                            </div>
-                        ))}
                     <AppLogo appName={appName.toLowerCase()} />
                 </div>
 
@@ -317,7 +303,6 @@ export function Topbar({ rootRoute }: TopbarProps) {
                 <div className="flex items-center justify-end gap-1 px-4">
                     {isMobile && auth.isAuthenticated && <CommandPaletteTrigger />}
                     <NotificationBell />
-                    {isMobile && auth.isAuthenticated && <AppSwitcher isGuest={isGuest} />}
                     {isGuest ? <GuestUserDropdown rootRoute={rootRoute} /> : <UserDropdown rootRoute={rootRoute} />}
                 </div>
             </div>

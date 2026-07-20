@@ -10,7 +10,7 @@ export const Route = createFileRoute('/_auth/data')({
 function DataExportComponent() {
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex" toolbar={<ToolbarTitle>Data Export</ToolbarTitle>}>
+            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Data Export</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
                     <div className="w-full max-w-3xl app-gutter">
                         <DownloadHome />

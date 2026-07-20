@@ -12,7 +12,7 @@ export const Route = createFileRoute('/_auth/email')({
 function RouteComponent() {
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex" toolbar={<ToolbarTitle>Mail</ToolbarTitle>}>
+            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Mail</ToolbarTitle>}>
                 <div className="h-full overflow-y-auto">
                     <div className="w-full max-w-3xl app-gutter space-y-8">
                         <SignatureSection />

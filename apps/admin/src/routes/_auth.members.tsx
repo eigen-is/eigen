@@ -55,7 +55,7 @@ function MembersRoute() {
 
     return (
         <ColumnLayout mobileColumn={memberId ? 'detail' : 'list'}>
-            <Column id="list" width="350px" toolbar={listToolbar}>
+            <Column id="list" width="350px" onBack="sidebar" toolbar={listToolbar}>
                 <div className="flex h-full flex-col border-r overflow-y-auto">
                     <MembersList
                         members={members}

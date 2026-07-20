@@ -367,7 +367,7 @@ export function DriveLayout({
     return (
         <>
             <ColumnLayout mobileColumn={mobileShowDetail ? 'detail' : 'list'}>
-                <Column id="list" width="flex" toolbar={listToolbar}>
+                <Column id="list" width="flex" onBack="sidebar" toolbar={listToolbar}>
                     <DriveList {...listProps} />
                 </Column>
                 {showDetail && (

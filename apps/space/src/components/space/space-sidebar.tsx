@@ -2,23 +2,18 @@ import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl } from '@workspace/lib/api';
 import { SidebarItem, StorageUsage } from '@workspace/ui';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { BookUser, KeySquare, LockKeyholeIcon, Mail, MonitorSmartphone, Shield, UserRound } from 'lucide-react';
 
 type SpaceSidebarProps = {
     condensed?: boolean;
-    onClose?: () => void;
-    isMobile?: boolean;
 };
 
-export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: SpaceSidebarProps) {
+export function SpaceSidebar({ condensed = false }: SpaceSidebarProps) {
     const isAdmin = useIsAdmin();
 
     return (
         <div className="flex h-full flex-col">
-            {isMobile && <SidebarHeader appName="space" onClose={onClose} />}
-
             <SidebarBody>
                 <SidebarSection condensed={condensed}>
                     <SidebarItem

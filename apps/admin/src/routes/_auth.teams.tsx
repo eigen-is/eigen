@@ -32,7 +32,7 @@ function TeamsRoute() {
 
     return (
         <ColumnLayout>
-            <Column id="detail" width="flex" toolbar={detailToolbar}>
+            <Column id="detail" width="flex" onBack="sidebar" toolbar={detailToolbar}>
                 {team ? (
                     // key: remount per team so per-team state (drafts, avatar ?v= stamp) resets and
                     // an in-flight avatar mutation can't write the previous team's URL into the new one.

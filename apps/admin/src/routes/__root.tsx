@@ -58,11 +58,9 @@ function AuthenticatedAdmin() {
             appName="admin"
             rootRoute={Route}
             sidebarMode="collapsible"
-            sidebar={({ condensed, isMobile, onClose }) => (
+            sidebar={({ condensed }) => (
                 <AdminSidebar
                     condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
                     teams={teams}
                     isOwner={isOwner}
                     waitlistEnabled={waitlistEnabled}

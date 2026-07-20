@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@workspace/ui/components/input';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
@@ -27,8 +26,6 @@ import { useState } from 'react';
 
 type AdminSidebarProps = {
     condensed?: boolean;
-    onClose?: () => void;
-    isMobile?: boolean;
     teams?: OrgTeam[];
     isOwner?: boolean;
     waitlistEnabled?: boolean;
@@ -37,8 +34,6 @@ type AdminSidebarProps = {
 
 export function AdminSidebar({
     condensed = false,
-    onClose,
-    isMobile = false,
     teams = [],
     isOwner = false,
     waitlistEnabled = false,
@@ -59,8 +54,6 @@ export function AdminSidebar({
 
     return (
         <div className="h-full flex flex-col">
-            {isMobile && <SidebarHeader appName="admin" onClose={onClose} />}
-
             <SidebarBody>
                 <SidebarSection condensed={condensed}>
                     {isOwner && (
