@@ -17,13 +17,15 @@ type ColumnProps = {
     // 'auto' (default) fades the toolbar border in on scroll; 'always' keeps it
     // visible — for columns with a canvas below (docs, slides, stickies).
     toolbarBorder?: 'auto' | 'always';
-    onBack?: () => void;
+    // A function runs on back; the 'sidebar' sentinel opens the mobile sidebar column
+    // (self-gated on sidebarMode so hidden-sidebar surfaces never show a dead arrow).
+    onBack?: (() => void) | 'sidebar';
     children: ReactNode;
     className?: string;
 };
 
 function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, className }: ColumnProps) {
-    const { isMobile } = useLayout();
+    const { isMobile, sidebarMode, setSidebarOpen } = useLayout();
     const { mobileColumn } = useContext(ColumnContext);
     const [scrolled, setScrolled] = useState(false);
     const cleanupRef = useRef<(() => void) | null>(null);
@@ -44,6 +46,9 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
 
     if (isMobile && mobileColumn !== null && mobileColumn !== id) return null;
 
+    const backHandler =
+        onBack === 'sidebar' ? (sidebarMode === 'collapsible' ? () => setSidebarOpen(true) : null) : (onBack ?? null);
+
     const style = isMobile
         ? { width: '100%', flex: '1 1 auto' }
         : width === 'flex'
@@ -59,8 +64,8 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
                         toolbarBorder === 'always' || scrolled ? 'border-b-border' : 'border-b-transparent',
                     )}
                 >
-                    {isMobile && onBack && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}>
+                    {isMobile && backHandler && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={backHandler}>
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                     )}

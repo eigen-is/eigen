@@ -22,14 +22,11 @@ import { useLayout } from '../app/layout-context';
 import { StorageUsage } from '../home/usage';
 import { UserAvatar } from '../user-avatar';
 import { SidebarBody } from './sidebar-body';
-import { SidebarHeader } from './sidebar-header';
 import { SidebarItem } from './sidebar-item';
 import { SidebarSection } from './sidebar-section';
 
 type AppSidebarProps = {
     condensed?: boolean;
-    isMobile?: boolean;
-    onClose?: () => void;
     newButton?: ReactNode;
 };
 
@@ -124,20 +121,9 @@ function FilterRow({
     return <SidebarItem icon={entry.icon} href={entry.appHref()} label={entry.label} condensed={condensed} />;
 }
 
-function GuestAppSidebar({
-    currentApp,
-    condensed,
-    isMobile,
-    onClose,
-}: {
-    currentApp: string;
-    condensed: boolean;
-    isMobile: boolean;
-    onClose?: () => void;
-}) {
+function GuestAppSidebar({ condensed }: { condensed: boolean }) {
     return (
         <div className="flex h-full flex-col">
-            {isMobile && <SidebarHeader appName={currentApp} onClose={onClose} />}
             <SidebarBody>
                 <SidebarSection condensed={condensed}>
                     <SidebarItem
@@ -152,13 +138,13 @@ function GuestAppSidebar({
     );
 }
 
-export function AppSidebar({ condensed = false, isMobile = false, onClose, newButton }: AppSidebarProps) {
+export function AppSidebar({ condensed = false, newButton }: AppSidebarProps) {
     const { appName } = useLayout();
     const isGuest = useIsGuest();
     const { user } = useAuth();
 
     if (isGuest) {
-        return <GuestAppSidebar currentApp={appName} condensed={condensed} isMobile={isMobile} onClose={onClose} />;
+        return <GuestAppSidebar condensed={condensed} />;
     }
 
     const currentApp: FilterApp = isFilterApp(appName) ? appName : 'drive';
@@ -182,8 +168,6 @@ export function AppSidebar({ condensed = false, isMobile = false, onClose, newBu
 
     return (
         <div className="flex h-full flex-col">
-            {isMobile && <SidebarHeader appName={appName} onClose={onClose} />}
-
             <SidebarBody>
                 {newButton}
 

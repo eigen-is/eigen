@@ -14,13 +14,7 @@ function ChatRoot() {
         <AppShell
             appName="chat"
             rootRoute={Route}
-            sidebar={
-                user
-                    ? ({ condensed, isMobile, onClose }) => (
-                          <ChatSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
-                      )
-                    : undefined
-            }
+            sidebar={user ? ({ condensed }) => <ChatSidebar condensed={condensed} /> : undefined}
         >
             <Outlet />
         </AppShell>

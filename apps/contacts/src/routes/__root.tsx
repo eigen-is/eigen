@@ -45,13 +45,8 @@ function AuthenticatedContactsRoot() {
         <AppShell
             appName="contacts"
             rootRoute={Route}
-            sidebar={({ condensed, isMobile, onClose }) => (
-                <ContactsSidebar
-                    condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
-                    onAssignLabel={handleAssignLabelByDrop}
-                />
+            sidebar={({ condensed }) => (
+                <ContactsSidebar condensed={condensed} onAssignLabel={handleAssignLabelByDrop} />
             )}
         >
             <Outlet />

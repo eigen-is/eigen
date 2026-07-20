@@ -2,7 +2,6 @@ import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import { EigenLoader, StorageUsage } from '@workspace/ui';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2 } from 'lucide-react';
@@ -86,8 +85,6 @@ function getStandardMailboxFlag(flags: string[] = []): string | null {
 
 type AppSidebarProps = {
     condensed?: boolean;
-    onClose?: () => void;
-    isMobile?: boolean;
     mailboxes?: MaildirMailbox[];
     isLoading?: boolean;
     error?: Error | null;
@@ -96,8 +93,6 @@ type AppSidebarProps = {
 
 export function EmailSidebar({
     condensed = false,
-    onClose,
-    isMobile = false,
     mailboxes = [],
     isLoading = false,
     error = null,
@@ -149,8 +144,6 @@ export function EmailSidebar({
 
     return (
         <div className="flex h-full flex-col">
-            {isMobile && <SidebarHeader appName="mail" onClose={onClose} />}
-
             <SidebarBody>
                 <EmailComposeButton condensed={condensed} />
 

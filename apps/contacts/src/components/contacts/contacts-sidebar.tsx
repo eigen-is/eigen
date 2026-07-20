@@ -6,19 +6,16 @@ import type { Label } from '@workspace/lib/types/label';
 import { EigenLoader, SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
 import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { UserRoundPlus, UsersRound } from 'lucide-react';
 
 type ContactsSidebarProps = {
     condensed?: boolean;
-    onClose?: () => void;
-    isMobile?: boolean;
     onAssignLabel?: (contactIds: string[], labelId: string) => void;
 };
 
-export function ContactsSidebar({ condensed = false, onClose, isMobile = false, onAssignLabel }: ContactsSidebarProps) {
+export function ContactsSidebar({ condensed = false, onAssignLabel }: ContactsSidebarProps) {
     const { data: labels = [], isLoading: loading, error } = useLabels();
     const { data: myTeams = [] } = useMyTeams();
 
@@ -26,8 +23,6 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false, 
 
     return (
         <div className="h-full flex flex-col">
-            {isMobile && <SidebarHeader appName="contacts" onClose={onClose} />}
-
             <SidebarBody>
                 <SidebarPrimaryButton
                     icon={UserRoundPlus}

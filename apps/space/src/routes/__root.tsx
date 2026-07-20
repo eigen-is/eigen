@@ -19,13 +19,7 @@ function SpaceRoot() {
     }
 
     return (
-        <AppShell
-            appName="space"
-            rootRoute={Route}
-            sidebar={({ condensed, isMobile, onClose }) => (
-                <SpaceSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
-            )}
-        >
+        <AppShell appName="space" rootRoute={Route} sidebar={({ condensed }) => <SpaceSidebar condensed={condensed} />}>
             <div className="flex-1 overflow-auto">
                 <Outlet />
             </div>

@@ -5,7 +5,6 @@ import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EigenLoader, StorageUsage, TooltipButton } from '@workspace/ui';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { cn } from '@workspace/ui/lib/utils';
@@ -17,8 +16,6 @@ import { SharedCalendarConfigDialog } from './shared-calendar-config-dialog';
 
 type CalendarSidebarProps = {
     condensed?: boolean;
-    isMobile?: boolean;
-    onClose?: () => void;
 };
 
 function CalendarCheckbox({ color, checked, onChange }: { color: string; checked: boolean; onChange: () => void }) {
@@ -79,7 +76,7 @@ function SharedCalendarItem({
     );
 }
 
-export function CalendarSidebar({ condensed = false, isMobile = false, onClose }: CalendarSidebarProps) {
+export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const { user } = useAuth();
     const ownerId = user?.id || '';
     const { data: calendars = [], isLoading: calendarsLoading } = useCalendars(ownerId);
@@ -132,8 +129,6 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
 
     return (
         <div className="h-full flex flex-col">
-            {isMobile && <SidebarHeader appName="calendar" onClose={onClose} />}
-
             <SidebarBody>
                 <SidebarPrimaryButton
                     icon={CalendarPlus}

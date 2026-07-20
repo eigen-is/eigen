@@ -45,11 +45,9 @@ export function EigenDocRoot({ config, rootRoute, isFullScreen = false, teamOwne
             sidebarMode={isFullScreen ? 'none' : 'collapsible'}
             sidebar={
                 !isFullScreen
-                    ? ({ condensed, isMobile, onClose }) => (
+                    ? ({ condensed }) => (
                           <AppSidebar
                               condensed={condensed}
-                              isMobile={isMobile}
-                              onClose={onClose}
                               newButton={
                                   isGuest ? undefined : (
                                       <EigenDocNewButton config={config} rootPath={rootPath} condensed={condensed} />
