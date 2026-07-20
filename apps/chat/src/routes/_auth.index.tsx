@@ -33,9 +33,8 @@ function ChatIndex() {
     return (
         <>
             <ColumnLayout>
-                {/* Chat's list is the sidebar, so this is the only column. The empty toolbar
-                    node keeps the bar rendering — it hosts the mobile back-to-sidebar arrow. */}
-                <Column id="messages" width="flex" onBack="sidebar" toolbar={<span />}>
+                {/* Chat's list is the sidebar, so this is the only column. */}
+                <Column id="messages" width="flex" onBack="sidebar">
                     {noChats ? (
                         <EmptyState
                             message="No chats yet"
