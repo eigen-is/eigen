@@ -99,6 +99,7 @@ function TrashRoute() {
                 <Column
                     id="trash"
                     width="flex"
+                    onBack="sidebar"
                     toolbar={
                         <TrashToolbar itemCount={trashedItems.length} onEmptyTrash={() => setEmptyTrashOpen(true)} />
                     }

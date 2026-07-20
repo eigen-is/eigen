@@ -104,7 +104,7 @@ function ContactsRoute() {
 
         return (
             <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
-                <Column id="list" width="350px" toolbar={listToolbar}>
+                <Column id="list" width="350px" onBack="sidebar" toolbar={listToolbar}>
                     <div className="flex h-full flex-col border-r overflow-y-auto">
                         <TeamMemberList
                             members={activeTeam?.members || []}
@@ -137,7 +137,7 @@ function ContactsRoute() {
     return (
         <>
             <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
-                <Column id="list" width="350px" toolbar={listToolbar}>
+                <Column id="list" width="350px" onBack="sidebar" toolbar={listToolbar}>
                     <div className="flex h-full flex-col border-r overflow-y-auto">
                         {filterType === 'label' && <LabelFilterHeader labels={labels} labelId={filterId} />}
                         <ContactsList

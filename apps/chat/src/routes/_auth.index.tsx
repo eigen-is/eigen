@@ -3,6 +3,7 @@ import { useIsGuest } from '@workspace/lib/auth';
 import { useAllChats } from '@workspace/lib/chat';
 import { EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { MessageSquare, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -27,38 +28,47 @@ function ChatIndex() {
         }
     }, [chats, navigate]);
 
-    if (!isLoading && chats.length === 0) {
-        return (
-            <>
-                <EmptyState
-                    message="No chats yet"
-                    icon={<MessageSquare className="h-12 w-12" />}
-                    action={
-                        isGuest ? undefined : (
-                            <Button onClick={() => setCreateChatOpen(true)}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Create your first chat
-                            </Button>
-                        )
+    const noChats = !isLoading && chats.length === 0;
+
+    return (
+        <>
+            <ColumnLayout>
+                {/* Chat's list is the sidebar, so this is the only column. The empty toolbar
+                    node keeps the bar rendering — it hosts the mobile back-to-sidebar arrow. */}
+                <Column id="messages" width="flex" onBack="sidebar" toolbar={<span />}>
+                    {noChats ? (
+                        <EmptyState
+                            message="No chats yet"
+                            icon={<MessageSquare className="h-12 w-12" />}
+                            action={
+                                isGuest ? undefined : (
+                                    <Button onClick={() => setCreateChatOpen(true)}>
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Create your first chat
+                                    </Button>
+                                )
+                            }
+                        />
+                    ) : (
+                        <EmptyState message="Select a chat to view details" />
+                    )}
+                </Column>
+            </ColumnLayout>
+
+            {noChats && !isGuest && (
+                <ChatCreateWizard
+                    open={createChatOpen}
+                    onOpenChange={setCreateChatOpen}
+                    onNavigate={(path) =>
+                        navigate({
+                            to: '/$ownerId/$mountId/$chatId',
+                            params: { ownerId: path.ownerId, mountId: path.mountId, chatId: path.id },
+                        })
                     }
                 />
-                {!isGuest && (
-                    <ChatCreateWizard
-                        open={createChatOpen}
-                        onOpenChange={setCreateChatOpen}
-                        onNavigate={(path) =>
-                            navigate({
-                                to: '/$ownerId/$mountId/$chatId',
-                                params: { ownerId: path.ownerId, mountId: path.mountId, chatId: path.id },
-                            })
-                        }
-                    />
-                )}
-            </>
-        );
-    }
-
-    return <EmptyState message="Select a chat to view details" />;
+            )}
+        </>
+    );
 }
 
 export const Route = createFileRoute('/_auth/')({

@@ -120,6 +120,7 @@ function CalendarView() {
             <Column
                 id="calendar-main"
                 width="flex"
+                onBack="sidebar"
                 toolbar={
                     <CalendarToolbar
                         currentDate={currentDate}

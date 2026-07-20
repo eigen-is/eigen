@@ -313,7 +313,7 @@ function MailRoute() {
                 onDelete={confirmDeleteEmails}
             />
             <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
-                <Column id="list" width={listWidth} toolbar={listToolbar}>
+                <Column id="list" width={listWidth} onBack="sidebar" toolbar={listToolbar}>
                     <div className="flex flex-col border-r h-full overflow-hidden">
                         <EmailList
                             // View identity: on a mailbox switch OR any change to the search text,
