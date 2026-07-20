@@ -114,18 +114,18 @@ export function DriveListToolbar({
 
     const createItems = getCreateMenuItems({ onCreateFolder, onUploadFile, onCreateEigenDoc });
 
+    // Icon-only: this button renders on mobile only, and the row must fit a 390px
+    // viewport beside the back arrow.
     const newItemButton =
         createItems.length === 0 ? null : createItems.length === 1 ? (
-            <Button size="default" onClick={createItems[0].onSelect}>
+            <Button size="icon" aria-label={createItems[0].buttonLabel} onClick={createItems[0].onSelect}>
                 <Plus />
-                <span className="mr-2">{createItems[0].buttonLabel}</span>
             </Button>
         ) : (
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button size="default">
+                    <Button size="icon" aria-label="New">
                         <Plus />
-                        <span className="mr-2">New</span>
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
