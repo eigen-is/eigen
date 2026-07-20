@@ -134,8 +134,7 @@ menu needs submenu.
 
 | Component              | File                                 | Description                                       |
 |------------------------|--------------------------------------|---------------------------------------------------|
-| `SidebarContainer`     | `sidebar/sidebar-container.tsx`      | Responsive wrapper: full/condensed/overlay        |
-| `SidebarHeader`        | `sidebar/sidebar-header.tsx`         | Mobile sidebar header with close button + AppLogo |
+| `SidebarContainer`     | `sidebar/sidebar-container.tsx`      | Responsive wrapper: full (desktop) / condensed rail (tablet) / in-flow full-width column when open (mobile) |
 | `SidebarItem`          | `sidebar/sidebar-item.tsx`           | Nav item: icon + label + colorDot. Link or Button |
 | `SidebarSection`       | `sidebar/sidebar-section.tsx`        | Grouped section with optional title               |
 | `DroppableSidebarItem` | `sidebar/droppable-sidebar-item.tsx` | SidebarItem + drop target                         |
@@ -244,7 +243,7 @@ publish 1-item selections).
 
 | Component                 | File                       | Description                         |
 |---------------------------|----------------------------|-------------------------------------|
-| `AppLogo`                 | `app/app-logo.tsx`         | `eigen\|appname>` with app switcher |
+| `AppLogo`                 | `app/app-logo.tsx`         | `eigen\|appname>` wordmark links (the app switcher is the separate `AppSwitcher` in the Topbar) |
 | `EigenLoader`             | `braket/eigen-loader.tsx`  | Animated loading indicator          |
 | `LoadingScreen`           | `pages/loading-screen.tsx` | Full-screen loader                  |
 | `LoginPage`               | `pages/loginpage.tsx`      | Login form                          |

@@ -1,6 +1,12 @@
 # Proposal: Mobile Pass
 
-> **Status (2026-07-20): research + audit complete, implementation NOT started.** A codebase research
+> **Status (2026-07-20): Phase 1 (navigation shell) IMPLEMENTED on branch `mobile-nav-shell`** —
+> sidebar-as-column, per-app back arrows, topbar switcher-left, hamburger/overlay/backdrop/
+> SidebarHeader deleted; sidebar items close the mobile column on tap (current-route taps included).
+> Cold-reviewed clean; awaiting browser verification + design verdict before merge. Phases 2–5 not
+> started.
+>
+> A codebase research
 > pass and a full headless-browser audit (12 apps, ~90 views, ~60 dialogs, 296 reviewed screenshots at
 > 390×844 / 360×800) were run on 2026-07-20. Raw evidence — screenshots, driver scripts, the full
 > per-app audit tables, and the research report — lives in `docs/superpowers/mobile-audit/`

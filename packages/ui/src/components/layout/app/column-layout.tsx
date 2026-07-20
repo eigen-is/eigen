@@ -56,22 +56,24 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
           ? { flex: '1 1 auto', minWidth: 0 }
           : { width, flexShrink: 0 };
 
-    const showBackArrow = isMobile && backHandler !== null;
+    const backButton =
+        isMobile && backHandler ? (
+            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={backHandler}>
+                <ArrowLeft className="h-4 w-4" />
+                <span className="sr-only">Back</span>
+            </Button>
+        ) : null;
 
     return (
         <div className={cn('h-full flex flex-col overflow-hidden', className)} style={style}>
-            {(toolbar || showBackArrow) && (
+            {(toolbar || backButton) && (
                 <div
                     className={cn(
                         'h-12 flex items-center app-gutter-x shrink-0 border-r border-b transition-colors duration-200',
                         toolbarBorder === 'always' || scrolled ? 'border-b-border' : 'border-b-transparent',
                     )}
                 >
-                    {showBackArrow && backHandler && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={backHandler}>
-                            <ArrowLeft className="h-4 w-4" />
-                        </Button>
-                    )}
+                    {backButton}
                     {toolbar}
                 </div>
             )}

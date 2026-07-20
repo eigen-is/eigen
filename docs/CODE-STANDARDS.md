@@ -259,7 +259,6 @@ with a comment.
 | Document content                             | auto    | Default; everything flows                               |
 | In-content floating UI                       | 10      | Inline autocompletes, chat/contact suggestion lists     |
 | Sheet canvas-internal overlays               | 8–30    | Selection, freeze handles, scrollbars, hint boxes — scoped under `cellArea` |
-| Mobile sidebar backdrop                      | 40      | `sidebar-container.tsx`                                 |
 | Portaled UI (dropdowns, popovers, dialogs)   | 50      | shadcn / Radix default — leave it alone                 |
 | Full-screen overlay                          | 100     | `FilePreview`                                           |
 | Dialog above preview                         | 200     | `DialogContent` with `abovePreview` prop                |
