@@ -28,6 +28,11 @@
    before the AppLogo — exactly as on desktop today. It leaves the mobile right-side cluster (which
    keeps palette trigger, notification bell, user menu). The hamburger's left slot is what the
    switcher takes over.
+4. **Editor routes get NO back arrow.** An open doc/sheet/slides/stickies editor is a "separate
+   app": it has no sidebar, and its toolbar stays as it is. The back arrow only ever appears in the
+   main column when a sidebar exists — which is exactly what the sentinel's
+   `sidebarMode === 'collapsible'` gate implements. Escape hatches from an editor remain the topbar
+   logo links, the app switcher, and browser back.
 
 ## Current mechanics (the seams everything hangs on)
 
@@ -90,12 +95,11 @@ Smallest surface found; desktop pixels untouched (every change is behind `isMobi
 
 ### Editor routes (docs / sheets / slides / stickies)
 
-Editor routes mount with `sidebarMode: 'none'` on all viewports and today have **no back affordance
-at all** (escape hatches: logo links, app switcher, browser back). They get a real function
-`onBack={() => navigate({ to: '/' })}` to the app list — mobile-only arrow via the existing Column
-mechanism. Sheets is bespoke (no `Column`; Workbook `toolbarLeftItems`) and needs an ArrowLeft
-prepended there when `isMobile`. Target `/` beats `history.back()` (which breaks on refresh/deep
-link). Drive's native-file-editor already has its own back button — unchanged.
+**No back arrow (settled decision 4).** Editor routes mount with `sidebarMode: 'none'` on all
+viewports, so the sentinel no-ops there by construction — no per-editor work, and the bespoke
+sheets toolbar is untouched. Escape hatches from an editor remain the topbar logo links, the app
+switcher, and browser back. Drive's native-file-editor keeps its existing own back button —
+unchanged (it's an in-drive surface, not a separate app).
 
 ### Edge cases (all verified in research)
 
@@ -208,8 +212,8 @@ browser-verified at 390×844 + 360×800 per VERIFICATION.md before merge.
 
 - **Phase 1 — Navigation shell** (Design 1): sidebar-as-column, `onBack: 'sidebar'` sentinel +
   per-app migration, topbar switcher-left, hamburger/overlay/backdrop/SidebarHeader deletions,
-  editor-route back arrows, chat empty-state route, auto-close on search-param nav (fixes
-  finding 14). Also the 360px topbar overflow (finding 12) — it's topbar work.
+  chat empty-state route, auto-close on search-param nav (fixes finding 14). Also the 360px topbar
+  overflow (finding 12) — it's topbar work.
 - **Phase 2 — Editor toolbar kebab** (Design 2): cluster collapse, docs comments-item gating
   (finding 5's "lying button"), verify it clears findings 3 + 4; chat adopts the same pattern
   (open decision 2).
