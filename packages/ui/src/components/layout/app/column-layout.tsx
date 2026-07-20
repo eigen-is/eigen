@@ -1,7 +1,7 @@
 import { cn } from '@workspace/ui/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import { createContext, type ReactNode, useCallback, useContext, useRef, useState } from 'react';
-import { Button } from '../../button.tsx';
+import { TooltipButton } from '../toolbar/tooltip-button.tsx';
 import { useLayout } from './layout-context.tsx';
 
 type ColumnContextType = {
@@ -58,10 +58,7 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
 
     const backButton =
         isMobile && backHandler ? (
-            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={backHandler}>
-                <ArrowLeft className="h-4 w-4" />
-                <span className="sr-only">Back</span>
-            </Button>
+            <TooltipButton icon={ArrowLeft} tooltipText="Back" className="mr-1" onClick={backHandler} />
         ) : null;
 
     return (

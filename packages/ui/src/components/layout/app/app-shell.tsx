@@ -67,13 +67,23 @@ export function AppShell({
             setDocumentTitle,
             sidebarOpen,
             setSidebarOpen,
+            sidebarColumnShown,
             sidebarMode: effectiveSidebarMode,
             sidebarHidden,
             setSidebarHidden,
             isMobile,
             isTablet,
         }),
-        [appName, documentTitle, sidebarOpen, effectiveSidebarMode, sidebarHidden, isMobile, isTablet],
+        [
+            appName,
+            documentTitle,
+            sidebarOpen,
+            sidebarColumnShown,
+            effectiveSidebarMode,
+            sidebarHidden,
+            isMobile,
+            isTablet,
+        ],
     );
 
     return (

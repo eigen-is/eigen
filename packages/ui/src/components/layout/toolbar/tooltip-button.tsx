@@ -44,6 +44,8 @@ export const TooltipButton = ({
                     disabled={disabled}
                     type={type}
                     form={form}
+                    // Icon-only buttons have no text content — the tooltip text is the name.
+                    aria-label={label ? undefined : tooltipText}
                     {...(preventFocusLoss
                         ? {
                               onMouseDown: (e: React.MouseEvent) => {
