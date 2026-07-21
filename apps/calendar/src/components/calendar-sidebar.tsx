@@ -1,14 +1,22 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCalendars, useSharedCalendars, useUpdateCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
+import {
+    getMonthRange,
+    getWeekRange,
+    useCalendars,
+    useSharedCalendars,
+    useUpdateCalendar,
+    useUpdateSharedCalendar,
+} from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EigenLoader, StorageUsage, TooltipButton } from '@workspace/ui';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
+import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { cn } from '@workspace/ui/lib/utils';
-import { CalendarPlus, Check, Pencil, Plus } from 'lucide-react';
+import { CalendarDays, CalendarPlus, CalendarRange, Check, Pencil, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { CalendarConfigDialog } from './calendar-config-dialog';
 import { CreateEventDialog } from './create-event-dialog';
@@ -127,6 +135,10 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
         setSharedConfigDialogOpen(true);
     };
 
+    // Today-anchored, like the index redirect — the links jump to the current period.
+    const monthRange = getMonthRange(new Date());
+    const weekRange = getWeekRange(new Date());
+
     return (
         <div className="h-full flex flex-col">
             <SidebarBody>
@@ -136,6 +148,23 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     condensed={condensed}
                     onClick={() => setCreateEventOpen(true)}
                 />
+
+                <SidebarSection condensed={condensed}>
+                    <SidebarItem
+                        icon={<CalendarDays className="h-4 w-4" />}
+                        label="View Month"
+                        to="/view/$mode/$from/$to"
+                        params={{ mode: 'month', from: String(monthRange.from), to: String(monthRange.to) }}
+                        condensed={condensed}
+                    />
+                    <SidebarItem
+                        icon={<CalendarRange className="h-4 w-4" />}
+                        label="View Week"
+                        to="/view/$mode/$from/$to"
+                        params={{ mode: 'week', from: String(weekRange.from), to: String(weekRange.to) }}
+                        condensed={condensed}
+                    />
+                </SidebarSection>
 
                 <div className="overflow-auto flex-1">
                     <SidebarSection

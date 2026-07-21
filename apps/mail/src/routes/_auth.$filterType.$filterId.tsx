@@ -346,12 +346,8 @@ function MailRoute() {
                         />
                     </div>
                 </Column>
-                <Column
-                    id="detail"
-                    width="flex"
-                    onBack={isDraft ? undefined : actions.navigateToList}
-                    toolbar={detailToolbar}
-                >
+                {/* Leaving compose is safe: EmailDraft saves the draft on unmount. */}
+                <Column id="detail" width="flex" onBack={actions.navigateToList} toolbar={detailToolbar}>
                     {showDetail ? (
                         isDraft ? (
                             <EmailDraft
