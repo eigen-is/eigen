@@ -139,13 +139,17 @@ function GuestAppSidebar({ condensed }: { condensed: boolean }) {
 }
 
 export function AppSidebar({ condensed = false, newButton }: AppSidebarProps) {
-    const { appName } = useLayout();
     const isGuest = useIsGuest();
-    const { user } = useAuth();
-
     if (isGuest) {
         return <GuestAppSidebar condensed={condensed} />;
     }
+    return <UserAppSidebar condensed={condensed} newButton={newButton} />;
+}
+
+// Split from AppSidebar so its hooks sit under the guest fork without breaking hook order.
+function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
+    const { appName } = useLayout();
+    const { user } = useAuth();
 
     const currentApp: FilterApp = isFilterApp(appName) ? appName : 'drive';
     const userId = user!.id;

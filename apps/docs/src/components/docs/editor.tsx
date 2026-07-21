@@ -678,10 +678,13 @@ const TiptapEditor = ({
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
-            setActivityPanelOpen(false);
-            setCommentPanelOpen(true);
+            // Below the panel's isWide gate a reveal can only scroll to the mark.
+            if (isWide) {
+                setActivityPanelOpen(false);
+                setCommentPanelOpen(true);
+            }
             handleScrollToComment(cardId);
-            setOpenCardId(cardId);
+            if (isWide) setOpenCardId(cardId);
         },
     };
 

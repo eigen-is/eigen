@@ -40,8 +40,3 @@ export function useApp() {
     const { appName, setAppName } = useLayout();
     return { appName, setAppName };
 }
-
-export function useSidebar() {
-    const { sidebarOpen, setSidebarOpen } = useLayout();
-    return { sidebarOpen, setSidebarOpen };
-}

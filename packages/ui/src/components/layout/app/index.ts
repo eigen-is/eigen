@@ -9,7 +9,7 @@ export { EmptyState } from './empty-state.tsx';
 export { ErrorBoundary } from './error-boundary.tsx';
 export { ErrorState } from './error-state.tsx';
 export type { LayoutContextType } from './layout-context.tsx';
-export { LayoutContext, useApp, useLayout, useSidebar } from './layout-context.tsx';
+export { LayoutContext, useApp, useLayout } from './layout-context.tsx';
 export { LoadingState } from './loading-state.tsx';
 export { NotFound } from './not-found.tsx';
 export { RequestAccessView } from './request-access-view.tsx';
