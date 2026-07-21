@@ -156,7 +156,8 @@ Collapse **internally** in `DocumentShareCluster` — zero API change for docs/s
   `formatToolbarQuery` seam (nothing to center there) with an `overflow-x-auto` scrolling menu row.
 - **Phase 5 carry-overs from the kebab:** menu items carry no open-state cue (desktop buttons had
   `active`); docs mobile shows no Comments item/CountBadge until the panels get a mobile
-  presentation.
+  presentation; a palette comment-search reveal below 1200px only scrolls to the mark (panel can't
+  render there).
 
 ## Audit findings — ranked (2026-07-20, 390×844 + 360×800 re-shoots)
 

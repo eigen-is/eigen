@@ -24,20 +24,22 @@ Every app wraps its root route in `AppShell`:
 <AppShell
     appName="contacts"
     rootRoute={Route}
-    sidebar={({ condensed, isMobile, onClose }) => (
-        <ContactsSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
-    )}
+    sidebar={({ condensed }) => <ContactsSidebar condensed={condensed} />}
 >
     <Outlet />
 </AppShell>
 ```
 
-| Prop          | Type                                  | Description                           |
-|---------------|---------------------------------------|---------------------------------------|
-| `appName`     | `string`                              | Shown in Topbar and `document.title`  |
-| `rootRoute`   | `{ useNavigate }`                     | TanStack Router root route            |
-| `sidebar`     | `ReactNode \| (props) => ReactNode`   | Sidebar content (omit for no sidebar) |
-| `sidebarMode` | `'collapsible' \| 'hidden' \| 'none'` | Default: `'collapsible'`              |
+| Prop          | Type                                | Description                           |
+|---------------|-------------------------------------|---------------------------------------|
+| `appName`     | `string`                            | Shown in Topbar and `document.title`  |
+| `rootRoute`   | `{ useNavigate }`                   | TanStack Router root route            |
+| `sidebar`     | `ReactNode \| (props) => ReactNode` | Sidebar content (omit for no sidebar) |
+| `sidebarMode` | `'collapsible' \| 'none'`           | Default: `'collapsible'`              |
+
+`SidebarProps` carries only `condensed` (true on tablet, where the sidebar renders as a `w-16`
+rail). On mobile the sidebar is a full navigation column, not an overlay: the first `Column` of a
+`ColumnLayout` opts in with `onBack="sidebar"`, which renders the ← arrow that shows it.
 
 ## EigenApp Provider Stack
 
@@ -58,7 +60,7 @@ omit the palette stack — `PaletteRunner` exits early via `useOptionalCommandPa
 
 ```tsx
 <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
-    <Column id="list" width="350px" toolbar={<ListToolbar />}>
+    <Column id="list" width="350px" onBack="sidebar" toolbar={<ListToolbar />}>
         <ContactsList />
     </Column>
     <Column id="detail" width="flex" onBack={handleBackToList} toolbar={<DetailToolbar />}>
@@ -67,22 +69,26 @@ omit the palette stack — `PaletteRunner` exits early via `useOptionalCommandPa
 </ColumnLayout>
 ```
 
-| Column Prop | Type         | Description                                       |
-|-------------|--------------|---------------------------------------------------|
-| `id`        | `string`     | Must match `mobileColumn` to be visible on mobile |
-| `width`     | `string`     | CSS width or `"flex"`                             |
-| `toolbar`   | `ReactNode`  | h-12 bar above content                            |
-| `onBack`    | `() => void` | Shows ← button on mobile                          |
+| Column Prop | Type                        | Description                                       |
+|-------------|-----------------------------|---------------------------------------------------|
+| `id`        | `string`                    | Must match `mobileColumn` to be visible on mobile |
+| `width`     | `string`                    | CSS width or `"flex"`                             |
+| `toolbar`   | `ReactNode`                 | h-12 bar above content                            |
+| `onBack`    | `(() => void) \| 'sidebar'` | Shows ← button on mobile                          |
 
 **Desktop**: All columns visible side-by-side.
-**Mobile**: Only `mobileColumn` visible. `onBack` provides back navigation.
+**Mobile**: Only `mobileColumn` visible. `onBack` provides back navigation. A function navigates
+up a level (detail → list); the `'sidebar'` sentinel goes on FIRST columns and shows the sidebar
+as a full column — it self-gates on `sidebarMode === 'collapsible'`, so sidebar-less surfaces
+(editors, RequestAccessView) never render a dead arrow.
 
 ## LayoutContext
 
 `useLayout()` provides: `appName`, `setAppName`, `documentTitle`, `setDocumentTitle`, `sidebarOpen`,
-`setSidebarOpen`, `sidebarMode`, `sidebarHidden`, `setSidebarHidden`, `isMobile`, `isTablet`.
+`setSidebarOpen`, `sidebarColumnShown` (mobile: the sidebar currently renders as the visible column
+and `<main>` is CSS-hidden), `sidebarMode`, `sidebarHidden`, `setSidebarHidden`, `isMobile`, `isTablet`.
 
-Convenience hooks: `useApp()` → `{appName, setAppName}`, `useSidebar()` → `{sidebarOpen, setSidebarOpen}`. Use
+Convenience hook: `useApp()` → `{appName, setAppName}`. Use
 `setDocumentTitle()` to update the browser tab title dynamically (e.g., showing the current document name).
 
 `setSidebarHidden(true)` removes the sidebar entirely from the layout. Used by `RequestAccessView` and the admin
