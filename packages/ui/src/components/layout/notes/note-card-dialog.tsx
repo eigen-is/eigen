@@ -13,7 +13,11 @@ function IconAction({ icon: Icon, tooltip, onClick }: { icon?: LucideIcon; toolt
     return (
         <Tooltip>
             <TooltipTrigger asChild>
-                <button type="button" onClick={onClick} className="cursor-pointer opacity-70 hover:opacity-100">
+                <button
+                    type="button"
+                    onClick={onClick}
+                    className="shrink-0 cursor-pointer opacity-70 hover:opacity-100"
+                >
                     <Icon className="size-4" />
                 </button>
             </TooltipTrigger>
@@ -146,7 +150,8 @@ export function NoteCardDialog({
                                         !description && !attachments && 'pt-2',
                                     )}
                                 >
-                                    {meta && <p className="flex-1 text-xs text-muted-foreground">{meta}</p>}
+                                    {/* min-w-0 lets long meta shrink/truncate so the shrink-0 icons stay on-screen at phone widths. */}
+                                    {meta && <p className="min-w-0 flex-1 text-xs text-muted-foreground">{meta}</p>}
                                     {copyLinkUrl && (
                                         <IconAction
                                             icon={LinkIcon}
