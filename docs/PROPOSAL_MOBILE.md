@@ -15,8 +15,8 @@
 > `MenuBar` — findings 3, 4, 5 verified cleared in-browser at 390/360 (10/10 scenarios).
 > **Phase 3 MERGED** (branch `mobile-dialog-submenu`): mobile submenus are now **drill-in pages** —
 > settled 2026-07-21 (over full-width sheet / clamped cascade) and implemented ONCE in
-> `packages/ui/src/components/dropdown-menu.tsx`, so every menu (incl. `packages/sheet`'s) inherits
-> it with zero call-site edits: at ≤768px a submenu replaces the panel content in place with a
+> `packages/ui/src/components/dropdown-menu.tsx`, so every dropdown menu (incl. `packages/sheet`'s)
+> inherits it with zero call-site edits: at ≤768px a submenu replaces the panel content in place with a
 > "‹ Back" row (nesting ≥3 deep works; desktop side-cascade byte-identical; the drill-in stack
 > lives on the root so controlled/forceMount menus reset correctly on close). Calendar create/edit
 > event dialog rows wrap (unconditional `flex-wrap`, all-day inputs `min-w-fit`), and the stickies
@@ -24,7 +24,10 @@
 > verified cleared in-browser at 390/360 (18/18 scenarios incl. stale-stack/forceMount/3-deep
 > probes; desktop cascades + dialogs pixel-checked unchanged). Accepted drifts: keyboard roving
 > degrades inside drill-in pages (touch-first); a `DropdownMenuSub` nested directly inside a
-> `DropdownMenuGroup` would not drill (no consumer does this today).
+> `DropdownMenuGroup` would not drill (no consumer does this today); raw non-item JSX on an
+> ancestor page would stay visible while a deeper page is open (all such JSX sits on leaf pages
+> today); the separate Radix ContextMenu primitive's submenus (sheet-tab long-press menu) still
+> cascade — that surface is phase 4/5 scope (findings 8, 17).
 > **Next: Phase 4.** Phases 4–5 not started.
 >
 > A codebase research
