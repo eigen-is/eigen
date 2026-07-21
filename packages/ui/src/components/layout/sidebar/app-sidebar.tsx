@@ -147,7 +147,7 @@ export function AppSidebar({ condensed = false, newButton }: AppSidebarProps) {
 }
 
 // Split from AppSidebar so its hooks sit under the guest fork without breaking hook order.
-function UserAppSidebar({ condensed, newButton }: AppSidebarProps) {
+function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
     const { appName } = useLayout();
     const { user } = useAuth();
 
