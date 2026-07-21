@@ -161,9 +161,10 @@ export function CardForm({
                     onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
                 />
                 {/* min-w-0: as a grid item this row's min-content width would otherwise widen the
-                    whole track past the dialog (clipping every field's right edge); the assignee
-                    side shrinks/truncates instead. */}
-                <div className="flex min-w-0 items-center justify-between gap-4">
+                    whole track past the dialog (clipping every field's right edge). flex-wrap drops
+                    the Assignee onto its own line at phone widths so all 8 swatches and the full
+                    assignee button stay visible; on desktop it stays one line, unchanged. */}
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
                     <div className="flex shrink-0 items-center gap-2">
                         <Label>Color</Label>
                         <ColorSwatchRow currentColor={color} onChangeColor={setColor} />

@@ -1,10 +1,80 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { useIsMobile } from '@workspace/lib/media';
 import { cn } from '@workspace/ui/lib/utils';
-import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react';
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CircleIcon } from 'lucide-react';
 import type * as React from 'react';
+import { Children, createContext, isValidElement, useContext, useEffect, useId, useMemo, useState } from 'react';
+
+// Mobile drill-in state, provided by the root so it survives forceMount close; null on desktop.
+type MobileMenuState = {
+    stack: string[];
+    activePage: string | null;
+    push: (id: string) => void;
+    pop: () => void;
+};
+const MobileMenuContext = createContext<MobileMenuState | null>(null);
+
+// The page a row sits on: null = root, otherwise the enclosing sub's id.
+const PageContext = createContext<{ id: string | null }>({ id: null });
+
+// A sub's id + the label lifted from its trigger, shared by its trigger and its content.
+const SubContext = createContext<{ id: string; label: React.ReactNode } | null>(null);
+
+const subTriggerClassName =
+    "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+
+// A row is hidden unless the active page matches the page it sits on.
+function useRowHidden(): boolean {
+    const menu = useContext(MobileMenuContext);
+    const page = useContext(PageContext);
+    return !!menu && page.id !== menu.activePage;
+}
+
+function subTriggerLabel(children: React.ReactNode): React.ReactNode {
+    for (const child of Children.toArray(children)) {
+        if (isValidElement(child) && child.type === DropdownMenuSubTrigger) {
+            return (child.props as { children?: React.ReactNode }).children;
+        }
+    }
+    return null;
+}
 
 function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-    return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
+    const isMobile = useIsMobile();
+    const [stack, setStack] = useState<string[]>([]);
+    const value = useMemo<MobileMenuState>(
+        () => ({
+            stack,
+            activePage: stack.at(-1) ?? null,
+            push: (id) => setStack((s) => [...s, id]),
+            pop: () => setStack((s) => s.slice(0, -1)),
+        }),
+        [stack],
+    );
+
+    // A controlled root can close via an external open→false flip that never fires onOpenChange
+    // (e.g. context menus whose plain-button rows call close()); reset so the next open is root.
+    useEffect(() => {
+        if (props.open === false) setStack((s) => (s.length ? [] : s));
+    }, [props.open]);
+
+    if (!isMobile) {
+        return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
+    }
+
+    return (
+        <MobileMenuContext.Provider value={value}>
+            <DropdownMenuPrimitive.Root
+                data-slot="dropdown-menu"
+                {...props}
+                onOpenChange={(open) => {
+                    props.onOpenChange?.(open);
+                    // Reset on close so reopening lands on root (forceMount keeps Content mounted, so unmount can't).
+                    if (!open) setStack([]);
+                }}
+            />
+        </MobileMenuContext.Provider>
+    );
 }
 
 function DropdownMenuPortal({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
@@ -35,8 +105,15 @@ function DropdownMenuContent({
     );
 }
 
-function DropdownMenuGroup({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
-    return <DropdownMenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />;
+function DropdownMenuGroup({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
+    const hidden = useRowHidden();
+    return (
+        <DropdownMenuPrimitive.Group
+            data-slot="dropdown-menu-group"
+            className={cn(className, hidden && 'hidden') || undefined}
+            {...props}
+        />
+    );
 }
 
 function DropdownMenuItem({
@@ -48,6 +125,7 @@ function DropdownMenuItem({
     inset?: boolean;
     variant?: 'default' | 'destructive';
 }) {
+    const hidden = useRowHidden();
     return (
         <DropdownMenuPrimitive.Item
             data-slot="dropdown-menu-item"
@@ -57,6 +135,7 @@ function DropdownMenuItem({
                 "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
                 props.onClick || props.asChild ? 'cursor-pointer' : 'cursor-default',
                 className,
+                hidden && 'hidden',
             )}
             {...props}
         />
@@ -69,12 +148,14 @@ function DropdownMenuCheckboxItem({
     checked,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+    const hidden = useRowHidden();
     return (
         <DropdownMenuPrimitive.CheckboxItem
             data-slot="dropdown-menu-checkbox-item"
             className={cn(
                 "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
                 className,
+                hidden && 'hidden',
             )}
             checked={checked}
             {...props}
@@ -89,8 +170,18 @@ function DropdownMenuCheckboxItem({
     );
 }
 
-function DropdownMenuRadioGroup({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
-    return <DropdownMenuPrimitive.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
+function DropdownMenuRadioGroup({
+    className,
+    ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
+    const hidden = useRowHidden();
+    return (
+        <DropdownMenuPrimitive.RadioGroup
+            data-slot="dropdown-menu-radio-group"
+            className={cn(className, hidden && 'hidden') || undefined}
+            {...props}
+        />
+    );
 }
 
 function DropdownMenuRadioItem({
@@ -98,12 +189,14 @@ function DropdownMenuRadioItem({
     children,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+    const hidden = useRowHidden();
     return (
         <DropdownMenuPrimitive.RadioItem
             data-slot="dropdown-menu-radio-item"
             className={cn(
                 "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
                 className,
+                hidden && 'hidden',
             )}
             {...props}
         >
@@ -124,21 +217,23 @@ function DropdownMenuLabel({
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Label> & {
     inset?: boolean;
 }) {
+    const hidden = useRowHidden();
     return (
         <DropdownMenuPrimitive.Label
             data-slot="dropdown-menu-label"
             data-inset={inset}
-            className={cn('px-2 py-1.5 text-sm font-medium data-[inset]:pl-8', className)}
+            className={cn('px-2 py-1.5 text-sm font-medium data-[inset]:pl-8', className, hidden && 'hidden')}
             {...props}
         />
     );
 }
 
 function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+    const hidden = useRowHidden();
     return (
         <DropdownMenuPrimitive.Separator
             data-slot="dropdown-menu-separator"
-            className={cn('bg-border -mx-1 my-1 h-px', className)}
+            className={cn('bg-border -mx-1 my-1 h-px', className, hidden && 'hidden')}
             {...props}
         />
     );
@@ -154,8 +249,20 @@ function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'spa
     );
 }
 
-function DropdownMenuSub({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
-    return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />;
+function DropdownMenuSub({ children, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
+    const menu = useContext(MobileMenuContext);
+    const id = useId();
+    const value = useMemo(() => (menu ? { id, label: subTriggerLabel(children) } : null), [menu, id, children]);
+
+    if (!menu) {
+        return (
+            <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props}>
+                {children}
+            </DropdownMenuPrimitive.Sub>
+        );
+    }
+
+    return <SubContext.Provider value={value}>{children}</SubContext.Provider>;
 }
 
 function DropdownMenuSubTrigger({
@@ -166,14 +273,34 @@ function DropdownMenuSubTrigger({
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & {
     inset?: boolean;
 }) {
+    const menu = useContext(MobileMenuContext);
+    const sub = useContext(SubContext);
+    const hidden = useRowHidden();
+
+    if (menu && sub) {
+        // A root-collection Item; opening a page must not close the menu, so preventDefault.
+        return (
+            <DropdownMenuPrimitive.Item
+                {...props}
+                data-slot="dropdown-menu-sub-trigger"
+                data-inset={inset}
+                onSelect={(event) => {
+                    event.preventDefault();
+                    menu.push(sub.id);
+                }}
+                className={cn(subTriggerClassName, className, hidden && 'hidden')}
+            >
+                {children}
+                <ChevronRightIcon className="ml-auto size-4" />
+            </DropdownMenuPrimitive.Item>
+        );
+    }
+
     return (
         <DropdownMenuPrimitive.SubTrigger
             data-slot="dropdown-menu-sub-trigger"
             data-inset={inset}
-            className={cn(
-                "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-                className,
-            )}
+            className={cn(subTriggerClassName, className)}
             {...props}
         >
             {children}
@@ -184,8 +311,39 @@ function DropdownMenuSubTrigger({
 
 function DropdownMenuSubContent({
     className,
+    children,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+    const menu = useContext(MobileMenuContext);
+    const sub = useContext(SubContext);
+    const pageValue = useMemo(() => ({ id: sub?.id ?? null }), [sub?.id]);
+
+    if (menu && sub) {
+        // contents keeps rows flat in the scrolling Content; none hides the whole page (incl. non-item JSX) off-path, while on-path ancestors stay contents so nested pages still show.
+        return (
+            <PageContext.Provider value={pageValue}>
+                <div
+                    data-slot="dropdown-menu-sub-page"
+                    className={cn('contents', !menu.stack.includes(sub.id) && 'hidden')}
+                >
+                    <DropdownMenuItem
+                        data-slot="dropdown-menu-sub-back"
+                        className="cursor-pointer font-medium"
+                        onSelect={(event) => {
+                            event.preventDefault();
+                            menu.pop();
+                        }}
+                    >
+                        <ChevronLeftIcon />
+                        {sub.label}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    {children}
+                </div>
+            </PageContext.Provider>
+        );
+    }
+
     return (
         <DropdownMenuPrimitive.SubContent
             data-slot="dropdown-menu-sub-content"
@@ -194,7 +352,9 @@ function DropdownMenuSubContent({
                 className,
             )}
             {...props}
-        />
+        >
+            {children}
+        </DropdownMenuPrimitive.SubContent>
     );
 }
 
