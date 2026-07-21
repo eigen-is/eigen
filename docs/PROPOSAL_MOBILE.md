@@ -6,8 +6,14 @@
 > 390/360/tablet/desktop; audit findings 12 + 14 fixed en route. **Follow-up round MERGED**
 > (`65f8aa70`): calendar sidebar gained View Month / View Week nav links (fixes the no-exit wart;
 > today-anchored, desktop too) and the mail composer back arrow is un-suppressed (safe: EmailDraft
-> saves on unmount; an explicit Discard button stays parked). **Next: Phase 2 — the editor toolbar
-> kebab (Design 2).** Phases 3–5 not started.
+> saves on unmount; an explicit Discard button stays parked). **Phase 2 MERGED** (branch
+> `mobile-toolbar-kebab`): `DocumentShareCluster` collapses internally into a ⋮ kebab at the 768px
+> seam (desktop byte-identical; read-only Eye dropped on mobile), a new optional `onRename` prop,
+> chat adopted the cluster (Watch + write-gated Edit/Share; no activity/find for now), the docs AND
+> slides lying comments toggles gated on their panel conditions (finding 5 + a slides twin caught in
+> final review), and the toolbar tap-eating/off-screen overflow fixed in `CenteredToolbar` + sheets
+> `MenuBar` — findings 3, 4, 5 verified cleared in-browser at 390/360 (10/10 scenarios).
+> **Next: Phase 3.** Phases 3–5 not started.
 >
 > A codebase research
 > pass and a full headless-browser audit (12 apps, ~90 views, ~60 dialogs, 296 reviewed screenshots at
@@ -143,6 +149,14 @@ Collapse **internally** in `DocumentShareCluster` — zero API change for docs/s
   untappable Insert menu (audit finding 4 — the right cluster paints over the left menu slot in
   `CenteredToolbar`'s `1fr auto 1fr` grid) and sheets' fully off-screen cluster (finding 3). If the
   grid can still collide at 360px, fix `CenteredToolbar` min-widths in the same change.
+- **As built (phase 2):** the kebab alone did NOT clear findings 3/4 — the stretched right `1fr`
+  column still ate taps (docs) and sheets' un-shrinkable left column pushed even the kebab
+  off-screen. Fixed at the grid layer: `CenteredToolbar`'s right column hugs its content
+  (`justify-self-end`), and sheets' `MenuBar` switches to `minmax(0,1fr) auto auto` below the
+  `formatToolbarQuery` seam (nothing to center there) with an `overflow-x-auto` scrolling menu row.
+- **Phase 5 carry-overs from the kebab:** menu items carry no open-state cue (desktop buttons had
+  `active`); docs mobile shows no Comments item/CountBadge until the panels get a mobile
+  presentation.
 
 ## Audit findings — ranked (2026-07-20, 390×844 + 360×800 re-shoots)
 
@@ -241,12 +255,14 @@ Phases 1+2 are the settled decisions and should land first; 3–5 in any order a
 
 ## Open decisions
 
-1. **Read-only Eye marker** (`DocumentModeButton`) on mobile: keep outside the kebab (costs 32px),
-   drop it, or move the info into the menu. A passive tooltip-only marker inside a menu is useless.
-2. **Chat toolbar**: adopt `DocumentShareCluster` wholesale (gets Find/Watch — needs a
-   DocSearchProvider decision) or just reuse the kebab pattern for its Edit/Share pair.
-3. **Kebab breakpoint**: 768px (recommended — at 769–1200 the 3–5 icon row still fits) vs docs'
-   1200px formatting breakpoint.
+1. **Read-only Eye marker** — settled 2026-07-21: **dropped on mobile** (its tooltip can't show on
+   touch, so the explanation is lost either way; desktop unchanged).
+2. **Chat toolbar** — settled 2026-07-21: **adopts `DocumentShareCluster`** with Watch + write-gated
+   Edit/Share; activity panel and find/search deliberately omitted for now (no DocSearchProvider in
+   chat, so Find self-omits). Known consequence: a read-only member of a *team* chat has no
+   access-dialog entry point (personal chats keep the left-slot `DriveShareSummary`).
+3. **Kebab breakpoint** — settled 2026-07-21: **768px** (`useIsMobile()`), not docs' 1200px
+   formatting breakpoint.
 4. **Slides on mobile**: bless view-only (then remove the dead affordances so it doesn't lie) vs
    invest in mobile editing. Present-mode already works well.
 5. **Hover-only policy**: always-visible icons on touch devices (e.g. a `pointer-coarse` variant on

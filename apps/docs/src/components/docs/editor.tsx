@@ -708,13 +708,17 @@ const TiptapEditor = ({
                             canUndo={canUndo}
                             canRedo={canRedo}
                             onAccessDialogOpen={onAccessDialogOpen}
-                            onToggleCommentPanel={() => {
-                                setActivityPanelOpen(false);
-                                setCommentPanelOpen((v) => !v);
-                            }}
-                            commentPanelOpen={commentPanelOpen}
-                            // Only offer the toggle where the panel can actually render (isWide),
+                            // Only offer these toggles where the panel can actually render (isWide),
                             // else the button is an enabled no-op. DocumentShareCluster hides it when absent.
+                            onToggleCommentPanel={
+                                isWide
+                                    ? () => {
+                                          setActivityPanelOpen(false);
+                                          setCommentPanelOpen((v) => !v);
+                                      }
+                                    : undefined
+                            }
+                            commentPanelOpen={commentPanelOpen}
                             onToggleActivityPanel={
                                 isWide
                                     ? () => {
