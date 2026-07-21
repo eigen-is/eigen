@@ -179,14 +179,14 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                                         type="date"
                                         value={startDate}
                                         onChange={(e) => setStartDate(e.target.value)}
-                                        className="flex-1 h-8 text-sm"
+                                        className="flex-1 min-w-fit h-8 text-sm"
                                     />
                                     <span className="text-muted-foreground text-sm">to</span>
                                     <Input
                                         type="date"
                                         value={endDate}
                                         onChange={(e) => setEndDate(e.target.value)}
-                                        className="flex-1 h-8 text-sm"
+                                        className="flex-1 min-w-fit h-8 text-sm"
                                     />
                                 </div>
                             ) : (
