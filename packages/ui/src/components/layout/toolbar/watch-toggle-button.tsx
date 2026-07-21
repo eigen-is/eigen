@@ -10,46 +10,43 @@ type WatchToggleButtonProps = {
     pathId: string;
 };
 
-export function WatchToggleButton({ ownerId, mountId, pathId }: WatchToggleButtonProps) {
+function useWatchToggle(ownerId: string, mountId: string, pathId: string) {
     const { data: status } = useIsPathWatched(ownerId, mountId, pathId);
     const watch = useWatchPath(ownerId, mountId, pathId);
     const unwatch = useUnwatchPath(ownerId, mountId, pathId);
 
     const direct = status?.direct ?? false;
-    const isPending = watch.isPending || unwatch.isPending;
-    const tooltip = direct
+    const label = direct
         ? 'Stop watching'
         : status?.viaAncestor
           ? `Watching via ${stripEigenExtension(status.viaAncestor.name)}`
           : 'Watch';
+    return {
+        direct,
+        label,
+        isPending: watch.isPending || unwatch.isPending,
+        toggle: () => (direct ? unwatch.mutate() : watch.mutate()),
+    };
+}
 
+export function WatchToggleButton({ ownerId, mountId, pathId }: WatchToggleButtonProps) {
+    const { direct, label, isPending, toggle } = useWatchToggle(ownerId, mountId, pathId);
     return (
         <TooltipButton
             icon={direct ? BellRing : Bell}
-            tooltipText={tooltip}
+            tooltipText={label}
             active={direct}
             disabled={isPending}
-            onClick={() => (direct ? unwatch.mutate() : watch.mutate())}
+            onClick={toggle}
         />
     );
 }
 
 // Kebab-menu counterpart of WatchToggleButton, used by DocumentShareCluster on mobile.
 export function WatchMenuItem({ ownerId, mountId, pathId }: WatchToggleButtonProps) {
-    const { data: status } = useIsPathWatched(ownerId, mountId, pathId);
-    const watch = useWatchPath(ownerId, mountId, pathId);
-    const unwatch = useUnwatchPath(ownerId, mountId, pathId);
-
-    const direct = status?.direct ?? false;
-    const isPending = watch.isPending || unwatch.isPending;
-    const label = direct
-        ? 'Stop watching'
-        : status?.viaAncestor
-          ? `Watching via ${stripEigenExtension(status.viaAncestor.name)}`
-          : 'Watch';
-
+    const { direct, label, isPending, toggle } = useWatchToggle(ownerId, mountId, pathId);
     return (
-        <DropdownMenuItem disabled={isPending} onClick={() => (direct ? unwatch.mutate() : watch.mutate())}>
+        <DropdownMenuItem disabled={isPending} onClick={toggle}>
             {direct ? <BellRing className="mr-2" /> : <Bell className="mr-2" />}
             {label}
         </DropdownMenuItem>

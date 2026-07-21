@@ -1,10 +1,9 @@
 import { useIsMobile } from '@workspace/lib/media';
-import { Activity, MessageSquare, MoreVertical, Pencil, Search, UserRoundPlus } from 'lucide-react';
+import { Activity, MessageSquare, MoreVertical, Pencil, UserRoundPlus } from 'lucide-react';
 import { Button } from '../../button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../dropdown-menu';
 import { CountBadge } from '../count-badge';
-import { useOptionalDocSearchBar } from '../search/doc-search-provider';
-import { FindInDocumentButton } from '../search/find-in-document-button';
+import { FindInDocumentButton, FindInDocumentMenuItem } from '../search/find-in-document-button';
 import { DocumentModeButton } from './document-mode-button';
 import { TooltipButton } from './tooltip-button';
 import { WatchMenuItem, WatchToggleButton } from './watch-toggle-button';
@@ -33,7 +32,6 @@ export function DocumentShareCluster({
     activityPanelOpen,
 }: DocumentShareClusterProps) {
     const isMobile = useIsMobile();
-    const docSearchBar = useOptionalDocSearchBar();
 
     // Mobile: collapse the icon row into a kebab. No read-only Eye marker here (settled decision).
     if (isMobile) {
@@ -52,12 +50,8 @@ export function DocumentShareCluster({
                                 Edit
                             </DropdownMenuItem>
                         )}
-                        {docSearchBar && (
-                            <DropdownMenuItem onClick={docSearchBar.open}>
-                                <Search className="mr-2" />
-                                Find in document
-                            </DropdownMenuItem>
-                        )}
+                        {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
+                        <FindInDocumentMenuItem />
                         {onToggleActivityPanel && (
                             <DropdownMenuItem onClick={onToggleActivityPanel}>
                                 <Activity className="mr-2" />
