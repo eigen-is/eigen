@@ -1,10 +1,10 @@
 import { useIsMobile } from '@workspace/lib/media';
-import { Activity, MessageSquare, MoreVertical, Pencil, UserRoundPlus } from 'lucide-react';
-import { Button } from '../../button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../dropdown-menu';
+import { Activity, MessageSquare, Pencil, UserRoundPlus } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '../../dropdown-menu';
 import { CountBadge } from '../count-badge';
 import { FindInDocumentButton, FindInDocumentMenuItem } from '../search/find-in-document-button';
 import { DocumentModeButton } from './document-mode-button';
+import { KebabTrigger } from './kebab-trigger';
 import { TooltipButton } from './tooltip-button';
 import { WatchMenuItem, WatchToggleButton } from './watch-toggle-button';
 
@@ -38,11 +38,7 @@ export function DocumentShareCluster({
         return (
             <div className="relative">
                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                            <MoreVertical className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
+                    <KebabTrigger />
                     <DropdownMenuContent align="end">
                         {onRename && (
                             <DropdownMenuItem onClick={onRename}>

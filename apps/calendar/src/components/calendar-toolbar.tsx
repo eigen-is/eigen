@@ -1,9 +1,16 @@
 import type { ViewMode } from '@workspace/lib/calendar';
 import { formatMonth } from '@workspace/lib/date';
+import { useIsMobile } from '@workspace/lib/media';
 import { Button } from '@workspace/ui/components/button';
-import { Toolbar, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+} from '@workspace/ui/components/dropdown-menu';
+import { KebabTrigger, Toolbar, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type CalendarToolbarProps = {
     currentDate: Date;
@@ -43,12 +50,16 @@ export function CalendarToolbar({
     onPrev,
     onNext,
 }: CalendarToolbarProps) {
+    const isMobile = useIsMobile();
+
     return (
         <Toolbar>
             <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={onToday}>
-                    Today
-                </Button>
+                {!isMobile && (
+                    <Button variant="outline" size="sm" onClick={onToday}>
+                        Today
+                    </Button>
+                )}
                 <div className="flex items-center">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPrev}>
                         <ChevronLeft className="h-4 w-4" />
@@ -60,17 +71,36 @@ export function CalendarToolbar({
                 <ToolbarTitle className="text-lg">{formatTitle(currentDate, viewMode)}</ToolbarTitle>
             </div>
 
-            <div className="flex items-center gap-2">
-                <Select value={viewMode} onValueChange={(v) => onViewModeChange(v as ViewMode)}>
-                    <SelectTrigger className="w-24 h-8">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="month">Month</SelectItem>
-                        <SelectItem value="week">Week</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
+            {/* Mobile folds Today + the view select into a kebab. */}
+            {isMobile ? (
+                <DropdownMenu>
+                    <KebabTrigger title="View options" />
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={onToday}>Today</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => onViewModeChange('month')}>
+                            Month
+                            {viewMode === 'month' && <Check className="h-4 w-4 ml-auto" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onViewModeChange('week')}>
+                            Week
+                            {viewMode === 'week' && <Check className="h-4 w-4 ml-auto" />}
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            ) : (
+                <div className="flex items-center gap-2">
+                    <Select value={viewMode} onValueChange={(v) => onViewModeChange(v as ViewMode)}>
+                        <SelectTrigger className="w-24 h-8">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="month">Month</SelectItem>
+                            <SelectItem value="week">Week</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
         </Toolbar>
     );
 }

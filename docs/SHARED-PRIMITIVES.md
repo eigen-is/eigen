@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-837 primitives across 6 kinds. `packages/sheet` internals are excluded.
+838 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (116)
+## Components (117)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -79,6 +79,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FileMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `FilterSummary` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-filter-summary.tsx |
 | `ImageResizeHandles` | `@workspace/ui` | packages/ui/src/components/layout/media/image-resize-handles.tsx |
+| `KebabTrigger` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/kebab-trigger.tsx |
 | `Ket` | `@workspace/ui` | packages/ui/src/components/layout/braket/ket.tsx |
 | `LabelAssignSubMenu` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-assign-sub-menu.tsx |
 | `LabelDialog` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-dialog.tsx |

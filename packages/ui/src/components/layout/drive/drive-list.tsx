@@ -1,5 +1,6 @@
 import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
+import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath, DriveSortDir, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -12,13 +13,15 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { DriveGrid, DriveTable } from '@workspace/ui/components/layout/drive';
-import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { KebabTrigger, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
 import { cn } from '@workspace/ui/lib/utils';
-import { ArrowDown, ArrowUp, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
 import { useFileDropTarget } from '../../../hooks/use-file-drop-target';
@@ -34,14 +37,59 @@ import { useMountLabel } from './drive-mount-list';
 const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
 const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
 
-// Sort dropdown + list/grid toggle bound to the shared view preference.
-// Lives in every drive listing toolbar (browser, filter views, trash).
-export function DriveViewControls() {
-    const { mode, setMode, sortKey, sortDir, setSort } = useDriveViewPreferences();
-
-    // Re-selecting the active field flips direction; switching field uses that field's default.
+// The three sort options, shared by the desktop sort dropdown and the mobile kebab.
+// Re-selecting the active field flips direction; switching field uses that field's default.
+function SortMenuItems() {
+    const { sortKey, sortDir, setSort } = useDriveViewPreferences();
     const chooseSort = (key: DriveSortKey) =>
         setSort(key, key === sortKey ? (sortDir === 'asc' ? 'desc' : 'asc') : DEFAULT_DIR[key]);
+
+    return (
+        <>
+            {(Object.keys(SORT_LABELS) as DriveSortKey[]).map((key) => (
+                <DropdownMenuItem key={key} onClick={() => chooseSort(key)}>
+                    {SORT_LABELS[key]}
+                    {key === sortKey &&
+                        (sortDir === 'asc' ? (
+                            <ArrowUp className="h-4 w-4 ml-auto" />
+                        ) : (
+                            <ArrowDown className="h-4 w-4 ml-auto" />
+                        ))}
+                </DropdownMenuItem>
+            ))}
+        </>
+    );
+}
+
+// Sort dropdown + list/grid toggle bound to the shared view preference.
+// Lives in every drive listing toolbar (browser, filter views, trash).
+// Mobile collapses both controls into a single kebab.
+export function DriveViewControls() {
+    const isMobile = useIsMobile();
+    const { mode, setMode, sortKey } = useDriveViewPreferences();
+
+    if (isMobile) {
+        return (
+            <DropdownMenu>
+                <KebabTrigger title="View options" />
+                <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                    <SortMenuItems />
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setMode('list')}>
+                        <List className="mr-2" />
+                        List
+                        {mode === 'list' && <Check className="h-4 w-4 ml-auto" />}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setMode('grid')}>
+                        <LayoutGrid className="mr-2" />
+                        Grid
+                        {mode === 'grid' && <Check className="h-4 w-4 ml-auto" />}
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        );
+    }
 
     return (
         <>
@@ -53,17 +101,7 @@ export function DriveViewControls() {
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {(Object.keys(SORT_LABELS) as DriveSortKey[]).map((key) => (
-                        <DropdownMenuItem key={key} onClick={() => chooseSort(key)}>
-                            {SORT_LABELS[key]}
-                            {key === sortKey &&
-                                (sortDir === 'asc' ? (
-                                    <ArrowUp className="h-4 w-4 ml-auto" />
-                                ) : (
-                                    <ArrowDown className="h-4 w-4 ml-auto" />
-                                ))}
-                        </DropdownMenuItem>
-                    ))}
+                    <SortMenuItems />
                 </DropdownMenuContent>
             </DropdownMenu>
             <ToggleGroup

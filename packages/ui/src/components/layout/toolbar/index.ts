@@ -1,6 +1,7 @@
 export * from './document-mode-button';
 export * from './edit-menu';
 export * from './file-menu';
+export * from './kebab-trigger';
 export * from './toolbar';
 export * from './toolbar-separator';
 export * from './toolbar-title';
