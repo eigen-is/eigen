@@ -252,7 +252,7 @@ function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'spa
 function DropdownMenuSub({ children, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
     const menu = useContext(MobileMenuContext);
     const id = useId();
-    const value = useMemo(() => ({ id, label: subTriggerLabel(children) }), [id, children]);
+    const value = useMemo(() => (menu ? { id, label: subTriggerLabel(children) } : null), [menu, id, children]);
 
     if (!menu) {
         return (
@@ -275,11 +275,10 @@ function DropdownMenuSubTrigger({
 }) {
     const menu = useContext(MobileMenuContext);
     const sub = useContext(SubContext);
-    const page = useContext(PageContext);
+    const hidden = useRowHidden();
 
     if (menu && sub) {
         // A root-collection Item; opening a page must not close the menu, so preventDefault.
-        const hidden = page.id !== menu.activePage;
         return (
             <DropdownMenuPrimitive.Item
                 {...props}
@@ -320,7 +319,6 @@ function DropdownMenuSubContent({
     const pageValue = useMemo(() => ({ id: sub?.id ?? null }), [sub?.id]);
 
     if (menu && sub) {
-        const active = menu.activePage === sub.id;
         // contents keeps rows flat in the scrolling Content; none hides the whole page (incl. non-item JSX) off-path, while on-path ancestors stay contents so nested pages still show.
         return (
             <PageContext.Provider value={pageValue}>
@@ -328,21 +326,18 @@ function DropdownMenuSubContent({
                     data-slot="dropdown-menu-sub-page"
                     className={cn('contents', !menu.stack.includes(sub.id) && 'hidden')}
                 >
-                    <DropdownMenuPrimitive.Item
+                    <DropdownMenuItem
                         data-slot="dropdown-menu-sub-back"
+                        className="cursor-pointer font-medium"
                         onSelect={(event) => {
                             event.preventDefault();
                             menu.pop();
                         }}
-                        className={cn(
-                            "focus:bg-accent focus:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-medium whitespace-nowrap outline-hidden select-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-                            !active && 'hidden',
-                        )}
                     >
                         <ChevronLeftIcon />
                         {sub.label}
-                    </DropdownMenuPrimitive.Item>
-                    <DropdownMenuPrimitive.Separator className={cn('bg-border -mx-1 my-1 h-px', !active && 'hidden')} />
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     {children}
                 </div>
             </PageContext.Provider>

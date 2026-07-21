@@ -1,7 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import { toLocalDateString, useCalendars, useCreateEvent, useSharedCalendars } from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
-import { useIsMobile } from '@workspace/lib/media';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -10,7 +9,6 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Textarea } from '@workspace/ui/components/textarea';
-import { cn } from '@workspace/ui/lib/utils';
 import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
@@ -36,7 +34,6 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
     const { data: calendars = [] } = useCalendars(ownerId);
     const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
     const { data: myTeams } = useMyTeams();
-    const isMobile = useIsMobile();
 
     const calendarOptions = useMemo(() => {
         const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
@@ -177,7 +174,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                         <Clock className="h-4 w-4 mt-2 text-muted-foreground shrink-0" />
                         <div className="flex-1 space-y-3">
                             {allDay ? (
-                                <div className={cn('flex items-center gap-2', isMobile && 'flex-wrap')}>
+                                <div className="flex flex-wrap items-center gap-2">
                                     <Input
                                         type="date"
                                         value={startDate}
@@ -193,7 +190,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                                     />
                                 </div>
                             ) : (
-                                <div className={cn('flex items-center gap-2', isMobile && 'flex-wrap')}>
+                                <div className="flex flex-wrap items-center gap-2">
                                     <Input
                                         type="date"
                                         value={startDate}
@@ -214,7 +211,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                                 </div>
                             )}
 
-                            <div className={cn('flex items-center gap-4', isMobile && 'flex-wrap')}>
+                            <div className="flex flex-wrap items-center gap-4">
                                 <div className="flex items-center gap-2">
                                     <Checkbox
                                         id="all-day"
