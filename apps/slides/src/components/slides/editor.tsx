@@ -772,13 +772,17 @@ function SlideEditorInner({
                                 onAddImage={() => setImagePickerOpen(true)}
                                 onAddSlide={() => addSlide()}
                                 onPresent={handlePresent}
-                                onToggleCommentPanel={() => {
-                                    setActivityPanelOpen(false);
-                                    setCommentPanelOpen((v) => !v);
-                                }}
+                                // Only offer the toggles where the panels can render (!isMobile), else
+                                // they're enabled no-ops. DocumentShareCluster hides them when absent.
+                                onToggleCommentPanel={
+                                    !isMobile
+                                        ? () => {
+                                              setActivityPanelOpen(false);
+                                              setCommentPanelOpen((v) => !v);
+                                          }
+                                        : undefined
+                                }
                                 commentPanelOpen={commentPanelOpen}
-                                // Only offer the toggle where the panel can render (!isMobile), else
-                                // it's an enabled no-op. DocumentShareCluster hides it when absent.
                                 onToggleActivityPanel={
                                     !isMobile
                                         ? () => {
