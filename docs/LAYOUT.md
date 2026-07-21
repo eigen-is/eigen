@@ -123,7 +123,7 @@ menu needs submenu.
 |-----------------|----------------------------|------------------------------------------------------------------------------------|
 | `EigenApp`      | `app/eigen-app.tsx`        | Root provider stack (QueryClient, Auth, Theme, SSE, Upload, Tooltip, Toaster)      |
 | `AppShell`      | `app/app-shell.tsx`        | App shell: Topbar + sidebar + content                                              |
-| `LayoutContext` | `app/layout-context.tsx`   | Layout state context. Hooks: `useLayout`, `useApp`, `useSidebar`                   |
+| `LayoutContext` | `app/layout-context.tsx`   | Layout state context. Hooks: `useLayout`, `useApp`                                 |
 | `ColumnLayout`  | `app/column-layout.tsx`    | Multi-column layout with mobile switching                                          |
 | `Column`        | `app/column-layout.tsx`    | Single column with toolbar slot                                                    |
 | `Topbar`        | `app/topbar.tsx`           | Themed header (`bg-app`): app logo, notification bell, user dropdown               |
