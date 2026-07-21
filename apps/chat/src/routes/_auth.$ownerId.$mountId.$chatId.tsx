@@ -10,7 +10,6 @@ import {
     LoadingState,
     RequestAccessView,
     ToolbarTitle,
-    TooltipButton,
     UserAvatar,
 } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
@@ -19,7 +18,7 @@ import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-a
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
 import { DriveShareSummary } from '@workspace/ui/components/layout/drive/drive-share-summary';
-import { Pencil, UserRoundPlus } from 'lucide-react';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
 import { useRef, useState } from 'react';
 
 function ChatView() {
@@ -58,17 +57,11 @@ function ChatView() {
             center={chat.chatPath && <ToolbarTitle>{chat.chatName}</ToolbarTitle>}
             right={
                 <div className="flex items-center gap-1">
-                    <TooltipButton
-                        icon={Pencil}
-                        tooltipText="Edit"
-                        variant="ghost"
-                        onClick={() => setRenameDialogOpen(true)}
-                    />
-                    <TooltipButton
-                        icon={UserRoundPlus}
-                        tooltipText="Share"
-                        variant="ghost"
-                        onClick={() => setAccessDialogOpen(true)}
+                    <DocumentShareCluster
+                        canWrite={permissions.canWrite}
+                        onAccessDialogOpen={() => setAccessDialogOpen(true)}
+                        onRename={permissions.canWrite ? () => setRenameDialogOpen(true) : undefined}
+                        watchTarget={{ ownerId, mountId, pathId: chatId }}
                     />
                 </div>
             }
