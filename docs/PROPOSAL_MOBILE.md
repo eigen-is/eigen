@@ -1,10 +1,13 @@
 # Proposal: Mobile Pass
 
-> **Status (2026-07-20): Phase 1 (navigation shell) IMPLEMENTED on branch `mobile-nav-shell`** —
-> sidebar-as-column, per-app back arrows, topbar switcher-left, hamburger/overlay/backdrop/
-> SidebarHeader deleted; sidebar items close the mobile column on tap (current-route taps included).
-> Cold-reviewed clean; browser-verified 13/13 at 390/360/tablet/desktop (audit findings 12 + 14
-> fixed en route); awaiting Reinder's design verdict before merge. Phases 2–5 not started.
+> **Status (2026-07-21): Phase 1 MERGED to main** (`b939efba`) — sidebar-as-column, per-app back
+> arrows, topbar switcher-left, hamburger/overlay/backdrop/SidebarHeader deleted, sidebar items
+> close the mobile column on tap; cold-reviewed, /simplify'd, browser-verified 13/13 at
+> 390/360/tablet/desktop; audit findings 12 + 14 fixed en route. **Follow-up round MERGED**
+> (`65f8aa70`): calendar sidebar gained View Month / View Week nav links (fixes the no-exit wart;
+> today-anchored, desktop too) and the mail composer back arrow is un-suppressed (safe: EmailDraft
+> saves on unmount; an explicit Discard button stays parked). **Next: Phase 2 — the editor toolbar
+> kebab (Design 2).** Phases 3–5 not started.
 >
 > A codebase research
 > pass and a full headless-browser audit (12 apps, ~90 views, ~60 dialogs, 296 reviewed screenshots at
