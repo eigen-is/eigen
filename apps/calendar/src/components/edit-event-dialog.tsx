@@ -11,6 +11,7 @@ import {
     useUpdateEvent,
 } from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
+import { useIsMobile } from '@workspace/lib/media';
 import type {
     Attendee,
     CalendarEventOccurrence,
@@ -25,6 +26,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Textarea } from '@workspace/ui/components/textarea';
+import { cn } from '@workspace/ui/lib/utils';
 import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AttendeeEditor, AttendeeList } from './attendee-editor';
@@ -65,6 +67,7 @@ export function EditEventDialog({
     const { data: fetchedCalendars = [] } = useCalendars(ownerId);
     const { data: fetchedSharedCalendars = [] } = useSharedCalendars(ownerId);
     const { data: myTeams } = useMyTeams();
+    const isMobile = useIsMobile();
     const calendars = calendarsProp || fetchedCalendars;
     const sharedCalendars = sharedCalendarsProp || fetchedSharedCalendars;
 
@@ -267,7 +270,7 @@ export function EditEventDialog({
                             <Clock className="h-4 w-4 mt-2 text-muted-foreground shrink-0" />
                             <div className="flex-1 space-y-3">
                                 {allDay ? (
-                                    <div className="flex items-center gap-2">
+                                    <div className={cn('flex items-center gap-2', isMobile && 'flex-wrap')}>
                                         <Input
                                             type="date"
                                             value={startDate}
@@ -283,7 +286,7 @@ export function EditEventDialog({
                                         />
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-2">
+                                    <div className={cn('flex items-center gap-2', isMobile && 'flex-wrap')}>
                                         <Input
                                             type="date"
                                             value={startDate}
@@ -304,7 +307,7 @@ export function EditEventDialog({
                                     </div>
                                 )}
 
-                                <div className="flex items-center gap-4">
+                                <div className={cn('flex items-center gap-4', isMobile && 'flex-wrap')}>
                                     <div className="flex items-center gap-2">
                                         <Checkbox
                                             id="edit-all-day"
