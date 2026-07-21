@@ -1,6 +1,6 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { Search } from 'lucide-react';
-import type { MutableRefObject } from 'react';
+import { type RefObject, useRef } from 'react';
 import { DropdownMenuItem } from '../../dropdown-menu';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { useOptionalDocSearchBar } from './doc-search-provider';
@@ -20,9 +20,9 @@ export function FindInDocumentButton() {
 }
 
 // Kebab-menu counterpart of FindInDocumentButton, used by DocumentShareCluster on mobile.
-// focusFindBarRef flags the pick so the menu's onCloseAutoFocus can re-focus the bar after
-// Radix's exit steals focus back to the trigger (same machinery as EditMenu's Find items).
-export function FindInDocumentMenuItem({ focusFindBarRef }: { focusFindBarRef: MutableRefObject<boolean> }) {
+// focusFindBarRef (from useFindBarRefocus) flags the pick so the menu's onCloseAutoFocus can
+// re-focus the bar after Radix's exit steals focus back to the trigger.
+export function FindInDocumentMenuItem({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
     const docSearchBar = useOptionalDocSearchBar();
     if (!docSearchBar) return null;
     return (
@@ -36,4 +36,21 @@ export function FindInDocumentMenuItem({ focusFindBarRef }: { focusFindBarRef: M
             Find in document
         </DropdownMenuItem>
     );
+}
+
+// Radix keeps focus inside the closing menu until its exit finishes, so a focus set by a Find pick is
+// stolen back to the trigger. A pick flags focusFindBarRef; onCloseAutoFocus then suppresses the
+// trigger-restore AND re-opens the bar (open() re-focuses when already open). Shared by the doc + sheet
+// Edit menus and the mobile kebab: spread onCloseAutoFocus onto the DropdownMenuContent, hand
+// focusFindBarRef to the Find item(s).
+export function useFindBarRefocus() {
+    const docSearchBar = useOptionalDocSearchBar();
+    const focusFindBarRef = useRef(false);
+    const onCloseAutoFocus = (e: Event) => {
+        if (!focusFindBarRef.current) return;
+        focusFindBarRef.current = false;
+        e.preventDefault();
+        docSearchBar?.open();
+    };
+    return { docSearchBar, focusFindBarRef, onCloseAutoFocus };
 }

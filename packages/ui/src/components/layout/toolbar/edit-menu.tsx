@@ -9,8 +9,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { Redo, Search, TextSearch, Undo } from 'lucide-react';
-import { useRef } from 'react';
-import { useOptionalDocSearchBar } from '../search/doc-search-provider';
+import { useFindBarRefocus } from '../search/find-in-document-button';
 
 type EditMenuProps = {
     // Gates the undo/redo section — pass the same condition the surface used for its icon
@@ -27,27 +26,14 @@ type EditMenuProps = {
 // per-app (Yjs UndoManager, TipTap history), so handlers come in as props; the find entries come
 // from the DocSearchProvider the toolbar is mounted under (null-safe: absent provider → no items).
 export function EditMenu({ canEdit, canUndo, canRedo, onUndo, onRedo }: EditMenuProps) {
-    const docSearchBar = useOptionalDocSearchBar();
-    // Radix keeps focus inside the closing menu until its exit finishes, so a focus set by the Find
-    // handlers is stolen back mid-close. Flag a find pick so onCloseAutoFocus can suppress the
-    // trigger-restore AND re-focus the (now open) bar after the close completes — open() re-focuses
-    // when already open. Undo/Redo keep the default (they don't focus the bar).
-    const focusFindBarRef = useRef(false);
+    const { docSearchBar, focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
 
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Button variant="ghost">Edit</Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent
-                align="start"
-                onCloseAutoFocus={(e) => {
-                    if (!focusFindBarRef.current) return;
-                    focusFindBarRef.current = false;
-                    e.preventDefault();
-                    docSearchBar?.open();
-                }}
-            >
+            <DropdownMenuContent align="start" onCloseAutoFocus={onCloseAutoFocus}>
                 {canEdit && (
                     <>
                         <DropdownMenuItem onClick={onUndo} disabled={!canUndo}>

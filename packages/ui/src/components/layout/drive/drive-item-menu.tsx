@@ -1,6 +1,5 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { useIsPathWatched, useUnwatchPath, useWatchPath } from '@workspace/lib/drive';
 import { type DrivePath, isFolderType, isOpenable } from '@workspace/lib/types';
 import {
     DropdownMenuItem,
@@ -12,6 +11,7 @@ import {
 import {
     ArrowRight,
     Bell,
+    BellRing,
     Copy,
     CopyPlus,
     Download,
@@ -28,6 +28,7 @@ import {
     UserRoundPlus,
 } from 'lucide-react';
 import { formatDownloadLabel } from '../toolbar/file-menu';
+import { useWatchToggle } from '../toolbar/watch-toggle-button';
 
 type DriveItemMenuItemsProps = {
     item: DrivePath;
@@ -81,10 +82,7 @@ export function DriveItemMenuItems({
     const canExport = (item.type === 'doc' || item.type === 'slides' || item.type === 'sheets') && !!onExport;
     const accessible = !!item.acl?.length || item.visibility !== 'private';
 
-    const { data: watchStatus } = useIsPathWatched(item.ownerId, item.mountId, item.id);
-    const watchMutation = useWatchPath(item.ownerId, item.mountId, item.id);
-    const unwatchMutation = useUnwatchPath(item.ownerId, item.mountId, item.id);
-    const isWatched = watchStatus?.direct ?? false;
+    const { direct, label, isPending, toggle } = useWatchToggle(item.ownerId, item.mountId, item.id);
 
     const run = (fn: () => void) => () => {
         fn();
@@ -183,12 +181,9 @@ export function DriveItemMenuItems({
                 </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-                onClick={run(() => (isWatched ? unwatchMutation.mutate() : watchMutation.mutate()))}
-                className="flex items-center"
-            >
-                <Bell className="h-4 w-4 mr-2" />
-                {isWatched ? 'Stop watching' : 'Watch'}
+            <DropdownMenuItem disabled={isPending} onClick={run(toggle)} className="flex items-center">
+                {direct ? <BellRing className="h-4 w-4 mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
+                {label}
             </DropdownMenuItem>
 
             {onShareClick && (

@@ -10,7 +10,7 @@ type WatchToggleButtonProps = {
     pathId: string;
 };
 
-function useWatchToggle(ownerId: string, mountId: string, pathId: string) {
+export function useWatchToggle(ownerId: string, mountId: string, pathId: string) {
     const { data: status } = useIsPathWatched(ownerId, mountId, pathId);
     const watch = useWatchPath(ownerId, mountId, pathId);
     const unwatch = useUnwatchPath(ownerId, mountId, pathId);
