@@ -3,7 +3,7 @@ import { useIsMobile } from '@workspace/lib/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CircleIcon } from 'lucide-react';
 import type * as React from 'react';
-import { Children, createContext, isValidElement, useContext, useId, useMemo, useState } from 'react';
+import { Children, createContext, isValidElement, useContext, useEffect, useId, useMemo, useState } from 'react';
 
 // Mobile drill-in state, provided by the root so it survives forceMount close; null on desktop.
 type MobileMenuState = {
@@ -51,6 +51,12 @@ function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrim
         }),
         [stack],
     );
+
+    // A controlled root can close via an external open→false flip that never fires onOpenChange
+    // (e.g. context menus whose plain-button rows call close()); reset so the next open is root.
+    useEffect(() => {
+        if (props.open === false) setStack((s) => (s.length ? [] : s));
+    }, [props.open]);
 
     if (!isMobile) {
         return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
