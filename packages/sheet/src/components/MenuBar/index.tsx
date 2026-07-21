@@ -1,3 +1,4 @@
+import { useMediaQuery } from '@workspace/lib/media';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
 import { useOptionalDocSearchBar } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { cn } from '@workspace/ui/lib/utils';
@@ -5,7 +6,7 @@ import { type ReactNode, useRef } from 'react';
 import { DataMenu } from './data-menu';
 import { EditMenu } from './edit-menu';
 import { FormatMenu } from './format-menu';
-import { FormatToolbar } from './format-toolbar';
+import { FormatToolbar, formatToolbarQuery } from './format-toolbar';
 import { InsertMenu } from './insert-menu';
 import { ViewMenu } from './view-menu';
 
@@ -19,18 +20,21 @@ const triggerClass = cn('px-3 h-8 text-sm rounded-sm', 'hover:bg-muted focus-vis
 // 1fr·auto·1fr grid: the equal side columns keep the center column at the bar's true
 // center, so FormatToolbar sits dead-center regardless of the menu / right-icon widths.
 // The center slot is always rendered so the columns stay put when the toolbar hides.
+// Below FormatToolbar's own seam nothing needs centering, so the side columns give way:
+// the menu row scrolls in the leftover space and the right icons keep their width on-screen.
 export function MenuBar({ leftItems, rightItems }: Props) {
     // A Find pick in EditMenu sets this so onCloseAutoFocus below suppresses Radix's focus-restore to
     // the Edit trigger AND re-focuses the bar (open() re-focuses when already open) — Radix holds
     // focus inside the closing menu until its exit finishes, so an earlier focus is stolen back.
     const focusFindBarRef = useRef(false);
     const docSearchBar = useOptionalDocSearchBar();
+    const centered = useMediaQuery(formatToolbarQuery);
     return (
         <div
             className="grid items-center gap-1 app-gutter-x h-12 border-b border-border bg-background"
-            style={{ gridTemplateColumns: '1fr auto 1fr' }}
+            style={{ gridTemplateColumns: centered ? '1fr auto 1fr' : 'minmax(0, 1fr) auto auto' }}
         >
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 min-w-0 overflow-x-auto">
                 {leftItems}
                 <DropdownMenu>
                     <DropdownMenuTrigger className={triggerClass}>Edit</DropdownMenuTrigger>
@@ -81,7 +85,7 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                 <FormatToolbar />
             </div>
 
-            <div className="flex items-center justify-end gap-1">{rightItems}</div>
+            <div className="flex items-center justify-self-end gap-1">{rightItems}</div>
         </div>
     );
 }

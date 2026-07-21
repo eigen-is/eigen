@@ -19,13 +19,16 @@ import {
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 import { FontSizeStepper } from './font-size-stepper';
 
+// Width seam below which this toolbar hides — MenuBar keys its grid on the same seam.
+export const formatToolbarQuery = '(min-width: 1360px)';
+
 // Quick-format controls mirrored from the docs toolbar, driving the exact same
 // handlers as the Format menu — an extra surface, not a replacement. The menu bar's
 // 1fr·auto·1fr grid centers this on the bar; the min-width gate hides it (with
 // read-only) below the width where the side blocks still leave room to sit centered.
 export function FormatToolbar() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
-    const hasSpace = useMediaQuery('(min-width: 1360px)');
+    const hasSpace = useMediaQuery(formatToolbarQuery);
     // Reflect the anchor cell so the swatches + active alignment track the selection,
     // the way the docs toolbar follows the caret.
     const cell = useAnchorCell();
