@@ -13,7 +13,19 @@
 > slides lying comments toggles gated on their panel conditions (finding 5 + a slides twin caught in
 > final review), and the toolbar tap-eating/off-screen overflow fixed in `CenteredToolbar` + sheets
 > `MenuBar` — findings 3, 4, 5 verified cleared in-browser at 390/360 (10/10 scenarios).
-> **Next: Phase 3.** Phases 3–5 not started.
+> **Phase 3 MERGED** (branch `mobile-dialog-submenu`): mobile submenus are now **drill-in pages** —
+> settled 2026-07-21 (over full-width sheet / clamped cascade) and implemented ONCE in
+> `packages/ui/src/components/dropdown-menu.tsx`, so every menu (incl. `packages/sheet`'s) inherits
+> it with zero call-site edits: at ≤768px a submenu replaces the panel content in place with a
+> "‹ Back" row (nesting ≥3 deep works; desktop side-cascade byte-identical; the drill-in stack
+> lives on the root so controlled/forceMount menus reset correctly on close). Calendar create/edit
+> event dialog rows wrap (unconditional `flex-wrap`, all-day inputs `min-w-fit`), and the stickies
+> note-card meta row + card-form color/assignee row shrink/wrap. Findings 1, 2, 9, 10, 18, 22
+> verified cleared in-browser at 390/360 (18/18 scenarios incl. stale-stack/forceMount/3-deep
+> probes; desktop cascades + dialogs pixel-checked unchanged). Accepted drifts: keyboard roving
+> degrades inside drill-in pages (touch-first); a `DropdownMenuSub` nested directly inside a
+> `DropdownMenuGroup` would not drill (no consumer does this today).
+> **Next: Phase 4.** Phases 4–5 not started.
 >
 > A codebase research
 > pass and a full headless-browser audit (12 apps, ~90 views, ~60 dialogs, 296 reviewed screenshots at
@@ -222,8 +234,9 @@ stickies board pan/drag (92vw scroll-snap columns work well).
 ### Cross-cutting classes
 
 - **Radix nested submenus are systematically broken at phone widths** (findings 9, 10, 22):
-  second-level menus open toward a viewport edge and clip. One mobile submenu strategy (e.g.
-  flatten to a second-level `DropdownMenu` page or a full-width sheet) fixes several findings at once.
+  second-level menus open toward a viewport edge and clip. **Settled + fixed in phase 3**: one
+  strategy — drill-in pages inside the shared `dropdown-menu.tsx` primitive — cleared all three
+  findings at once (see phase-3 status note above).
 - **`overflow:hidden` + portals hide breakage from DOM-level probes** — mobile verification must
   stay pixel-based (per VERIFICATION.md discipline).
 - **Hover-only affordance class** — always means "invisible on touch"; needs one policy, not
@@ -241,9 +254,9 @@ browser-verified at 390×844 + 360×800 per VERIFICATION.md before merge.
 - **Phase 2 — Editor toolbar kebab** (Design 2): cluster collapse, docs comments-item gating
   (finding 5's "lying button"), verify it clears findings 3 + 4; chat adopts the same pattern
   (open decision 2).
-- **Phase 3 — Dialog + submenu overflow**: calendar create/edit dialog (finding 1), stickies card
-  dialog + add/edit form (2, 18), shared-FileMenu version-history submenu (10), sheets format
-  submenus + the mobile submenu strategy (9, 22).
+- **Phase 3 — Dialog + submenu overflow** ✅ (2026-07-21): calendar create/edit dialog (finding 1),
+  stickies card dialog + add/edit form (2, 18), shared-FileMenu version-history submenu (10), sheets
+  format submenus + the mobile submenu strategy (9, 22) — drill-in pages at the primitive.
 - **Phase 4 — Touch affordances**: hover-only policy + sweep (15), drive row actions + Move/Copy on
   mobile (6, 7), long-press context menus (8) — extend the existing singleton `useContextMenu`
   (`openAt`), don't add per-row menus —, doc comment creation via touch (16), delete confirm (19),
@@ -279,7 +292,9 @@ Phases 1+2 are the settled decisions and should land first; 3–5 in any order a
 - Every phase: screenshot round at 390×844 + 360×800 with a throwaway user (the audit's
   `mobile-audit@eigen.is` account + seeded content is still on the dev server as a reproducer set),
   pixel verdicts, plus behavioral probes (tap, long-press, scroll, reload-persistence). Real-device
-  spot check before calling the program done (sheets touch-scroll was not verifiable headless).
+  spot check before calling the program done (sheets touch-scroll was not verifiable headless;
+  phase 3's all-day date inputs were verified in Chromium — confirm the native date field doesn't
+  clip in real iOS Safari).
 - Same-cycle doc updates: CODE-STANDARDS § Z-Index (z-40 backdrop row), LAYOUT.md (sidebar overlay,
   SidebarHeader, hamburger; its "AppLogo has app switcher" note is already stale), AGENTS.md
   pattern tables where `Column`/`SidebarProps` APIs change, and this file's status line per phase.
