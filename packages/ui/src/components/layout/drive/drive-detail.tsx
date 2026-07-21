@@ -3,10 +3,11 @@ import { formatFileSize } from '@workspace/lib/format';
 import { type DrivePath, isDocumentType, isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
 import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
 import { DriveAccessList } from '@workspace/ui/components/layout/drive';
+import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch-toggle-button';
-import { Download, MoreVertical, UserRoundPlus, X } from 'lucide-react';
+import { Download, UserRoundPlus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useLayout } from '../app/layout-context.tsx';
 import { useOptionalPreview } from '../preview-provider/preview-provider';
@@ -109,11 +110,7 @@ export function DriveDetail({
                         )}
                         <WatchToggleButton ownerId={path.ownerId} mountId={path.mountId} pathId={path.id} />
                         <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="icon" className="h-8 w-8" aria-label="More actions">
-                                    <MoreVertical className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
+                            <KebabTrigger variant="outline" />
                             <DropdownMenuContent className="w-48">
                                 <DriveItemMenuItems
                                     item={path}

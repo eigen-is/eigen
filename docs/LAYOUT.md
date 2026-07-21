@@ -226,6 +226,7 @@ publish 1-item selections).
 | `TooltipButton`      | `toolbar/tooltip-button.tsx`       | Icon button + tooltip                          |
 | `TooltipToggle`      | `toolbar/tooltip-toggle.tsx`       | Toggle button + tooltip                        |
 | `Toolbar`            | `toolbar/toolbar.tsx`              | Base toolbar component                         |
+| `KebabTrigger`       | `toolbar/kebab-trigger.tsx`        | ⋮ overflow-menu trigger (inside a DropdownMenu) |
 | `DocumentModeButton` | `toolbar/document-mode-button.tsx` | Read-only/editing mode toggle                  |
 | `FileMenu`           | `toolbar/file-menu.tsx`            | File dropdown: rename, delete, revision history |
 | `DeleteDialog`       | `delete/delete-dialog.tsx`         | Confirmation dialog for destructive actions    |

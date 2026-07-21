@@ -273,7 +273,7 @@ toolbar height across all pages.
 
 ```tsx
 <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
-    <Column id="list" width="flex" toolbar={<MyToolbar />}>
+    <Column id="list" width="flex" onBack="sidebar" toolbar={<MyToolbar />}>
         <MyContent />
     </Column>
     <Column id="detail" width="400px" onBack={handleBack} toolbar={<DetailToolbar />}>
@@ -282,7 +282,9 @@ toolbar height across all pages.
 </ColumnLayout>
 ```
 
-Use `width="flex"` for a single full-width column. For a plain page title in the toolbar, use the shared
+The first column passes `onBack="sidebar"` — the sentinel renders the mobile back arrow that steps
+up to the sidebar column, and self-gates away when the app has no sidebar. Without it a mobile user
+has no path back to navigation. Use `width="flex"` for a single full-width column. For a plain page title in the toolbar, use the shared
 `ToolbarTitle` component (`@workspace/ui/components/layout/toolbar`), which applies the `.eigen-toolbar-title`
 class (`text-sm font-normal text-foreground truncate` — thin, matching the breadcrumb) rather than
 hand-rolling a styled span. Richer toolbars (drive's path) compose a `BreadcrumbPage` (`font-normal`), so
