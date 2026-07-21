@@ -2,19 +2,17 @@ import { Link } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
-import { Toolbar, TooltipButton } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
+import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
-    DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/printElement';
-import { Mail, MessageSquare, MoreVertical, Pencil, Printer, Trash2 } from 'lucide-react';
+import { Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 type PersonDetailToolbarProps = {
@@ -68,11 +66,7 @@ export function PersonDetailToolbar({ name, emails: allEmails, editSearch, onDel
                     {(showEdit || showDelete) && <Separator orientation="vertical" className="h-6 mx-1" />}
 
                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                                <MoreVertical className="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
+                        <KebabTrigger />
                         <DropdownMenuContent align="end">
                             {email && (
                                 <DropdownMenuItem onClick={() => openWriteEmailTo(email)}>

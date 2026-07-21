@@ -18,10 +18,10 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { DriveGrid, DriveTable } from '@workspace/ui/components/layout/drive';
-import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { KebabTrigger, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
 import { cn } from '@workspace/ui/lib/utils';
-import { ArrowDown, ArrowUp, Check, ChevronDown, LayoutGrid, List, MoreVertical, Plus, UploadIcon } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
 import { useFileDropTarget } from '../../../hooks/use-file-drop-target';
@@ -71,11 +71,7 @@ export function DriveViewControls() {
     if (isMobile) {
         return (
             <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="View options">
-                        <MoreVertical className="h-4 w-4" />
-                    </Button>
-                </DropdownMenuTrigger>
+                <KebabTrigger title="View options" />
                 <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Sort by</DropdownMenuLabel>
                     <SortMenuItems />
