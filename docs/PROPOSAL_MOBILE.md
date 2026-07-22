@@ -1,303 +1,77 @@
-# Proposal: Mobile Pass
+# Proposal: Mobile Pass — remaining work
 
-> **Status (2026-07-21): Phase 1 MERGED to main** (`b939efba`) — sidebar-as-column, per-app back
-> arrows, topbar switcher-left, hamburger/overlay/backdrop/SidebarHeader deleted, sidebar items
-> close the mobile column on tap; cold-reviewed, /simplify'd, browser-verified 13/13 at
-> 390/360/tablet/desktop; audit findings 12 + 14 fixed en route. **Follow-up round MERGED**
-> (`65f8aa70`): calendar sidebar gained View Month / View Week nav links (fixes the no-exit wart;
-> today-anchored, desktop too) and the mail composer back arrow is un-suppressed (safe: EmailDraft
-> saves on unmount; an explicit Discard button stays parked). **Phase 2 MERGED** (branch
-> `mobile-toolbar-kebab`): `DocumentShareCluster` collapses internally into a ⋮ kebab at the 768px
-> seam (desktop byte-identical; read-only Eye dropped on mobile), a new optional `onRename` prop,
-> chat adopted the cluster (Watch + write-gated Edit/Share; no activity/find for now), the docs AND
-> slides lying comments toggles gated on their panel conditions (finding 5 + a slides twin caught in
-> final review), and the toolbar tap-eating/off-screen overflow fixed in `CenteredToolbar` + sheets
-> `MenuBar` — findings 3, 4, 5 verified cleared in-browser at 390/360 (10/10 scenarios).
-> **Phase 3 MERGED** (branch `mobile-dialog-submenu`): mobile submenus are now **drill-in pages** —
-> settled 2026-07-21 (over full-width sheet / clamped cascade) and implemented ONCE in
-> `packages/ui/src/components/dropdown-menu.tsx`, so every dropdown menu (incl. `packages/sheet`'s)
-> inherits it with zero call-site edits: at ≤768px a submenu replaces the panel content in place with a
-> "‹ Back" row (nesting ≥3 deep works; desktop side-cascade byte-identical; the drill-in stack
-> lives on the root so controlled/forceMount menus reset correctly on close). Calendar create/edit
-> event dialog rows wrap (unconditional `flex-wrap`, all-day inputs `min-w-fit`), and the stickies
-> note-card meta row + card-form color/assignee row shrink/wrap. Findings 1, 2, 9, 10, 18, 22
-> verified cleared in-browser at 390/360 (18/18 scenarios incl. stale-stack/forceMount/3-deep
-> probes; desktop cascades + dialogs pixel-checked unchanged). Accepted drifts: keyboard roving
-> degrades inside drill-in pages (touch-first); a `DropdownMenuSub` nested directly inside a
-> `DropdownMenuGroup` would not drill (no consumer does this today); raw non-item JSX on an
-> ancestor page would stay visible while a deeper page is open (all such JSX sits on leaf pages
-> today); the separate Radix ContextMenu primitive's submenus (sheet-tab long-press menu) still
-> cascade — that surface is phase 4/5 scope (findings 8, 17).
-> **Next: Phase 4.** Phases 4–5 not started.
->
-> A codebase research
-> pass and a full headless-browser audit (12 apps, ~90 views, ~60 dialogs, 296 reviewed screenshots at
-> 390×844 / 360×800) were run on 2026-07-20. Raw evidence — screenshots, driver scripts, the full
-> per-app audit tables, and the research report — lives in `docs/superpowers/mobile-audit/`
-> (local-only, gitignored). The three core UX decisions below are settled; per-phase design decisions
-> are marked open.
+> **Status (2026-07-22): Phases 1–3 shipped** (navigation shell, editor + list/calendar toolbar
+> kebabs, dialog + submenu overflow — merged and pushed through `46eb4f61`). Audit findings
+> 1, 2, 3, 4, 9, 10, 12, 14, 18, 22 and the toggle-lie half of 5 are cleared; the as-built record
+> lives in git history, [LAYOUT.md](LAYOUT.md), and AGENTS.md. This doc now tracks ONLY what
+> remains. Raw audit evidence (per-app tables, 296 screenshots, finding numbers referenced below)
+> stays in gitignored `docs/superpowers/mobile-audit/`.
 
-> **TLDR**: Eigen's column/shell architecture is fundamentally mobile-sound — `ColumnLayout` already
-> switches to a single column with a back arrow, dialogs are responsive by default, and the worst app
-> (mail) is nearly clean. What breaks is concentrated in five classes: (1) the mobile sidebar is an
-> overlay instead of a navigation level, (2) editor toolbar icon clusters overflow 390px, (3) a
-> handful of dialogs and every nested Radix submenu clip at phone widths, (4) hover-only and
-> right-click-only affordances are dead on touch, and (5) two editors (slides, partially sheets) are
-> structurally desktop-gated. This doc fixes (1) and (2) by design decision, and phases the rest.
+## Phase 4 — touch affordances
 
-## Settled decisions (Reinder, 2026-07-20)
+Mobile is navigable now; these are the actions a touch user still cannot reach.
 
-1. **Editor toolbar icon row collapses to a kebab on mobile.** The right-side icon cluster in the
-   eigendoc editors (find / activity / watch / comments / share) becomes a single ⋮ button opening a
-   menu with the same actions.
-2. **The mobile hamburger + sidebar overlay are removed.** Instead, the FIRST column of every
-   `ColumnLayout` gets a mobile back arrow (the same affordance detail columns already have) that
-   shows the sidebar as a full column in the layout. Mobile navigation becomes 2–3 nested levels:
-   sidebar → list → detail. No more sidebar-over-content.
-3. **The mobile topbar becomes identical to the desktop topbar.** App switcher (Grip) at the LEFT,
-   before the AppLogo — exactly as on desktop today. It leaves the mobile right-side cluster (which
-   keeps palette trigger, notification bell, user menu). The hamburger's left slot is what the
-   switcher takes over.
-4. **Editor routes get NO back arrow.** An open doc/sheet/slides/stickies editor is a "separate
-   app": it has no sidebar, and its toolbar stays as it is. The back arrow only ever appears in the
-   main column when a sidebar exists — which is exactly what the sentinel's
-   `sidebarMode === 'collapsible'` gate implements. Escape hatches from an editor remain the topbar
-   logo links, the app switcher, and browser back.
+- **Hover-only affordance policy + sweep** (finding 15). *Open decision:* always-visible icons on
+  touch (e.g. a `pointer-coarse` variant on the shared `invisible group-hover:visible` pattern) vs
+  long-press/swipe alternatives per surface. Known instances: calendar sidebar edit/share pencils
+  (`calendar-sidebar.tsx`, opacity-0 idle), chat wizard picked-person remove-X, contacts sidebar
+  label pencil, chat message actions (28px, hover-gated), drive row icons.
+- **Drive per-file actions reachable by touch** (finding 6): row ⋮ hidden below 800px *container*
+  width; long-press/right-click surface DriveList's folder-create context menu instead of the
+  file's menu.
+- **Move to… / Copy to… on mobile** (finding 7): absent from the DriveDetail More menu; only in
+  the masked/hidden row menu.
+- **Long-press context menus** (finding 8): long-press is dead in sheets (cut/copy/paste/sort/
+  filter/comment), stickies (delete/resolve), slides (thumbnail menu gated `!mobile`), mail rows;
+  drive long-press opens the wrong menu. Extend the existing singleton `useContextMenu` (`openAt`)
+  — no per-row menus. Include the sheet-tab menu here: `SheetItem` uses the separate Radix
+  ContextMenu primitive, the one submenu surface that still side-cascades on phones (the drill-in
+  fix covers dropdown menus only).
+- **Touch path to CREATE a doc comment** (finding 16): keyboard shortcut or right-click only today
+  (replying to an existing thread works by tapping the highlight).
+- **Drive "Move to trash" confirm** (finding 19). *Open decision:* mobile-only mis-tap guard, or
+  desktop too, or rely on restorability.
+- **Mail shortcuts cheat-sheet on touch** (finding 20): `?`-key only AND gated behind a
+  default-off setting — no touch entry point.
 
-## Current mechanics (the seams everything hangs on)
+## Phase 5 — structural
 
-- Breakpoints are a **JS hook, not CSS**: `useIsMobile()` = `max-width: 768px`, `useIsTablet()`
-  769–1024 (`packages/lib/src/core/media/hooks/use-media-query.ts`). `AppShell` publishes both via
-  `LayoutContext`; everything reads `useLayout().isMobile`. Watch out: docs' `EditorToolbar` has a
-  local 1200px query *named* `isMobile` — that is the formatting-collapse breakpoint, not the real one.
-- `Column` hides on mobile unless `id === mobileColumn`
-  (`packages/ui/src/components/layout/app/column-layout.tsx:45`); `onBack` renders an ArrowLeft
-  **only on mobile** (`:62-66`). Shown-column state is derived per route from URL params;
-  `ColumnLayout` is stateless.
-- The mobile sidebar is a `fixed inset-0 z-50` overlay + `z-40` backdrop that auto-closes on pathname
-  change (`packages/ui/src/components/layout/sidebar/sidebar-container.tsx:19-44`). The hamburger
-  lives in `topbar.tsx` (`showBurger = isMobile && sidebarMode !== 'none'`). `sidebarOpen` state
-  lives in `AppShell`, travels via `LayoutContext`.
-- `setSidebarHidden` (RequestAccessView, admin AccessDenied) collapses `effectiveSidebarMode` to
-  `'none'` — the seam that must gate any new sidebar affordance.
-- The editor icon row is already ONE shared primitive: `DocumentShareCluster`
-  (`packages/ui/src/components/layout/toolbar/document-share-cluster.tsx`) — Find, Activity toggle,
-  **Watch bell** (watch/unwatch — NOT the notification center; that bell is in the topbar and is
-  untouched), Comments + `CountBadge`, Share-or-read-only-Eye. Consumers: docs, sheets, slides,
-  stickies. Chat hand-rolls its own pair (Pencil + UserRoundPlus) instead.
+- **Mobile presentation for comment/activity panels** (finding 5's remaining half): full-width
+  overlay instead of the `w-64` side panel — unlocks docs comments/activity below 1200px for the
+  first time. Then also: restore the docs mobile kebab's Comments item + CountBadge (deliberately
+  omitted while the panel can't render), give kebab menu items an open-state cue (desktop buttons
+  had `active`), and let the palette comment-reveal open the card dialog on mobile (today it only
+  scrolls to the mark below 1200px).
+- **Calendar week view** (finding 13): ~55px columns, one-letter titles, no time grid. *Open
+  decision:* redesign as an agenda/day list on mobile vs accept degraded.
+- **Slides on mobile** (finding 11): editor is structurally view-only < 768px (no canvas, no
+  add-slide, no per-slide menu). *Open decision:* bless view-only and remove the dead affordances
+  so it doesn't lie, vs invest in mobile editing. Present-mode already works well.
+- **Sheet tabs below 640px** (finding 17): tab strip hidden — only "+" and the all-sheets
+  dropdown; no rename/reorder/recolor.
+- **Tap-target pass** (finding 21): recurring 24–36px icon buttons vs the ~44px guideline
+  (stickies column-header 24px, chat message actions 28px, toolbar/topbar 32–36px).
 
-## Design 1 — sidebar-as-column navigation (settled decisions 2 + 3)
+Phases 4 and 5 are independently shippable, FE-only, own branch each, in any order.
 
-Smallest surface found; desktop pixels untouched (every change is behind `isMobile`).
+## Accepted drifts (decided — don't re-flag, don't fix)
 
-1. **`SidebarContainer` mobile branch** becomes in-flow: `sidebarOpen ? 'block w-full' : 'hidden'`
-   instead of the fixed overlay. **Delete the backdrop div** — the z-40 layer disappears
-   (update CODE-STANDARDS § Z-Index in the same cycle).
-2. **`AppShell` `<main>`** is hidden via CSS while `isMobile && sidebarOpen` — hidden, NOT unmounted,
-   so editors keep Yjs/WS state and lists keep scroll position.
-3. **The existing pathname auto-close effect stays** — it already implements "navigate down a level".
-   Extend it to also fire on search-param navigation: today mail's Compose (a `?mode=compose` nav)
-   leaves the drawer covering the composer (audit finding 14).
-4. **Back arrow**: widen `ColumnProps.onBack` to `(() => void) | 'sidebar'`. The `'sidebar'` sentinel
-   renders the same ArrowLeft calling `setSidebarOpen(true)`, and **self-gates on
-   `sidebarMode === 'collapsible'`** so RequestAccessView / AccessDenied / sidebar-less apps never
-   show a dead arrow. (Per-app closures were considered and rejected: every app repeats them and
-   none can cheaply know the sidebar is hidden — a dead-arrow bug class.)
-5. **Topbar**: delete the hamburger block; render `AppSwitcher` on the left before `AppLogo` on
-   mobile (as desktop); remove the Grip from the mobile right cluster.
-6. **Deletions**: hamburger + `showBurger`, backdrop, overlay classes, `SidebarHeader` (the mobile
-   X-close header at the top of every sidebar — 8 call sites in 7 files) and the
-   `isMobile`/`onClose` members of `SidebarProps` (`condensed` stays for tablet).
+- Drill-in submenu pages (the shared dropdown primitive): keyboard roving degrades inside pages
+  (touch-first by design); a `DropdownMenuSub` nested directly inside a `DropdownMenuGroup` would
+  not drill (no consumer does this); raw non-item JSX on an *ancestor* page stays visible while a
+  deeper page is open (all such JSX sits on leaf pages today).
+- Read-only member of a *team* chat has no access-dialog entry point on any viewport (personal
+  chats keep the left-slot `DriveShareSummary`).
+- Read-only Eye marker is dropped on mobile (its tooltip can't show on touch, so the explanation
+  is lost either way; desktop unchanged).
 
-### Migration list (add `onBack="sidebar"` to first columns)
+## Verification (every phase)
 
-| App | Where | Effort |
-|---|---|---|
-| drive + all 4 eigendoc list views | ONE edit in shared `DriveLayout` (covers fs/mime/shared/watched + list/shared views) | trivial, high leverage |
-| drive trash | `_auth.trash.tsx` | trivial |
-| mail | list column | trivial |
-| contacts | 2 list columns (editor routes keep their function `onBack`) | trivial |
-| calendar | single `calendar-main` column | trivial |
-| chat | `messages` column; **plus** `_auth.index.tsx` empty state needs a Column/toolbar — without the hamburger a chat-less user has no path to the sidebar | small |
-| space | 7 single columns | mechanical |
-| admin | 4 list + 4 single columns | mechanical |
-| index | nothing (no sidebars) | — |
-
-### Editor routes (docs / sheets / slides / stickies)
-
-**No back arrow (settled decision 4).** Editor routes mount with `sidebarMode: 'none'` on all
-viewports, so the sentinel no-ops there by construction — no per-editor work, and the bespoke
-sheets toolbar is untouched. Escape hatches from an editor remain the topbar logo links, the app
-switcher, and browser back. Drive's native-file-editor keeps its existing own back button —
-unchanged (it's an in-drive surface, not a separate app).
-
-### Edge cases (all verified in research)
-
-- Single-column apps (calendar/chat/space/admin-settings): 2-level nav, sidebar → page. Works.
-- Deep links to detail: unchanged — each level's back affordance is independent.
-- Default mobile view stays the content column (`sidebarOpen` starts `false`).
-- Cross-app sidebar links are full-page loads → land with the sidebar closed. Correct.
-- Tablet (769–1024) untouched: condensed `w-16` rail keeps rendering.
-- Known warts to verify while implementing: `Mod+B` now toggles the mobile column (harmless?);
-  a sidebar link to the *current* pathname doesn't auto-close (fix in `SidebarItem` if it annoys).
-
-## Design 2 — editor toolbar kebab (settled decision 1)
-
-Collapse **internally** in `DocumentShareCluster` — zero API change for docs/sheets/slides/stickies:
-
-- At `useIsMobile()` (the 768px seam, NOT docs' local 1200px), render a single ⋮ `MoreVertical`
-  ghost button with a shadcn `DropdownMenu align="end"` (the established toolbar-overflow pattern —
-  see `person-detail-toolbar.tsx`, `drive-detail.tsx`; the singleton `useContextMenu` is for
-  list-row right-click and does not apply here). Desktop renders the current row unchanged.
-- Menu items: Find in document (present only when `useOptionalDocSearchBar()` is non-null, carrying
-  over `FindInDocumentButton`'s null-safety) · Activity · Watch/Stop watching (new small
-  `WatchMenuItem` next to `WatchToggleButton`, same hooks; `BellRing` icon when watching) ·
-  Comments with unresolved count in the label · Share (when `canWrite`).
-- The unresolved-comments `CountBadge` moves onto the kebab trigger (same `relative` wrapper pattern
-  as the comments button today).
-- **A kebab item must not open a panel that can't render.** Today docs' Comments toggle is already
-  an enabled no-op < 1200px (button activates, panel is gated on `isWide`) — audit confirmed
-  (finding 5). Scope for this change: collapse what actually works per app, gate the docs comments
-  item on the same condition as the panel, and fix panel *presentation* on mobile as its own
-  follow-up (phase 5). The kebab API doesn't depend on it.
-- Side effect worth verifying: shrinking the right cluster to one 32px button should also fix docs'
-  untappable Insert menu (audit finding 4 — the right cluster paints over the left menu slot in
-  `CenteredToolbar`'s `1fr auto 1fr` grid) and sheets' fully off-screen cluster (finding 3). If the
-  grid can still collide at 360px, fix `CenteredToolbar` min-widths in the same change.
-- **As built (phase 2):** the kebab alone did NOT clear findings 3/4 — the stretched right `1fr`
-  column still ate taps (docs) and sheets' un-shrinkable left column pushed even the kebab
-  off-screen. Fixed at the grid layer: `CenteredToolbar`'s right column hugs its content
-  (`justify-self-end`), and sheets' `MenuBar` switches to `minmax(0,1fr) auto auto` below the
-  `formatToolbarQuery` seam (nothing to center there) with an `overflow-x-auto` scrolling menu row.
-- **Phase 5 carry-overs from the kebab:** menu items carry no open-state cue (desktop buttons had
-  `active`); docs mobile shows no Comments item/CountBadge until the panels get a mobile
-  presentation; a palette comment-search reveal below 1200px only scrolls to the mark (panel can't
-  render there — though the card dialog itself would render on mobile, an option for phase 5).
-
-## Audit findings — ranked (2026-07-20, 390×844 + 360×800 re-shoots)
-
-Screenshot refs are in `docs/superpowers/mobile-audit/AUDIT.md` (local-only) with per-app tables.
-Verdicts came from reading pixels; note that page-level horizontal-overflow probes report 0 for most
-of the worst items — they clip inside `overflow:hidden` containers or portalled layers.
-
-1. **Calendar event create/edit dialog overflows right** — end-time picker, add-guest "+", Save/
-   Cancel partly off-screen; the core calendar flow (`create-event-dialog.tsx` + edit twin: date
-   input + two TimeSelects + attendee row don't shrink). Verified from pixels.
-2. **Stickies card dialog actions off-screen** — Edit/Resolve/Copy-link render past the viewport
-   (meta row missing `min-w-0` in `note-card-dialog.tsx`); stickies can't be edited or resolved by
-   touch at all. Verified from pixels.
-3. **Sheets action cluster off-screen** under `overflow:hidden` — Comments/Activity have NO mobile
-   entry point (Share/Find have File-menu fallbacks). Fixed by Design 2. Verified from pixels.
-4. **Docs Insert menu untappable** — right cluster paints over it; Link/Image/Table/HR/Code-block
-   unreachable by touch. Largely fixed by Design 2 (verify the grid at 360px).
-5. **Docs comments + activity panels gated to >1200px** — comments button activates but renders
-   nothing; activity has no button at all on mobile. Kebab gating (Design 2) removes the lie;
-   phase 5 makes the panels actually usable.
-6. **Drive per-file actions unreachable by touch** — row ⋮ hidden below 800px *container* width;
-   long-press/right-click surface DriveList's folder-create context menu instead of the file menu.
-7. **Drive Move to… / Copy to… impossible on mobile** — absent from the detail More menu; only in
-   the masked/hidden row menu.
-8. **No touch context menus anywhere** — long-press is dead in sheets (cut/copy/paste/sort/filter/
-   comment), stickies (delete/resolve), slides (thumbnail menu gated `!mobile`), mail rows; drive
-   long-press opens the wrong menu.
-9. **Sheets Format submenus cascade off-screen-left** — Number/Borders/Fill/Conditional clipped;
-   conditional-formatting rule dialogs (3 levels deep) fully unreachable.
-10. **Version-history Restore clipped in the shared FileMenu submenu** — docs, slides, stickies
-    ("Restore" reads "Re…" at 390, fully off-screen at 360). One shared-FileMenu fix serves all
-    three; drive shows history inline in the detail panel and is fine.
-11. **Slides editor is structurally view-only < 768px** — no canvas, no add-slide, no text editing,
-    no per-slide menu; plus a dead comments toggle. Needs a product decision (open decision 4).
-12. **Shared topbar overflows ~30px at 360w in long-wordmark apps** — every contacts screen and the
-    calendar grids clip the avatar; short wordmarks (space) fit.
-13. **Calendar week view unusable** — ~55px columns, one-letter titles, top-anchored list rather
-    than a time grid, no scroll.
-14. **Mail compose from the sidebar leaves the drawer covering the composer** — auto-close keys on
-    pathname; compose is a search-param nav. Fixed by Design 1 step 3.
-15. **Hover-only affordances dead on touch** (a class, 5+ instances): calendar sidebar edit/share
-    pencils, chat wizard picked-person remove-X, contacts sidebar label pencil, chat message
-    actions, drive row icons. The `invisible group-hover:visible` pattern AGENTS.md documents is a
-    desktop-only pattern by construction — needs a policy (open decision 5).
-16. **No touch path to CREATE a doc comment** — keyboard shortcut or right-click only (replying to
-    an existing thread works by tapping the highlight).
-17. **Sheet tabs hidden < 640px** — only "+" and the all-sheets dropdown; no rename/reorder/recolor.
-18. **Stickies Add/Edit Sticky dialog** — 8-swatch color row + Assignee picker clip at the right edge.
-19. **Drive "Move to trash" fires with no confirm** from the detail More menu (restorable, but no
-    mis-tap guard; desktop has the same behavior — decide whether this is mobile-only).
-20. **Mail shortcuts cheat-sheet unreachable on touch** — `?`-key only AND gated behind a
-    default-off setting.
-21. **Small tap targets throughout** — recurring 24–36px icon buttons vs the ~44px guideline
-    (stickies column-header 24px, chat message actions 28px, toolbar/topbar 32–36px).
-22. **Minor clipping** — docs comment-create Assignee control; docs format submenus flip left and
-    clip icon padding.
-
-Clean surfaces worth naming: mail (best app of the audit), index landing/support, space + auth
-pages, admin (as far as reachable), drive's dialogs, chat's core messaging, present-mode in slides,
-stickies board pan/drag (92vw scroll-snap columns work well).
-
-### Cross-cutting classes
-
-- **Radix nested submenus are systematically broken at phone widths** (findings 9, 10, 22):
-  second-level menus open toward a viewport edge and clip. **Settled + fixed in phase 3**: one
-  strategy — drill-in pages inside the shared `dropdown-menu.tsx` primitive — cleared all three
-  findings at once (see phase-3 status note above).
-- **`overflow:hidden` + portals hide breakage from DOM-level probes** — mobile verification must
-  stay pixel-based (per VERIFICATION.md discipline).
-- **Hover-only affordance class** — always means "invisible on touch"; needs one policy, not
-  per-spot fixes.
-
-## Phased plan
-
-Each phase is independently shippable, FE-only (eigen.is formats untouched), own branch,
-browser-verified at 390×844 + 360×800 per VERIFICATION.md before merge.
-
-- **Phase 1 — Navigation shell** (Design 1): sidebar-as-column, `onBack: 'sidebar'` sentinel +
-  per-app migration, topbar switcher-left, hamburger/overlay/backdrop/SidebarHeader deletions,
-  chat empty-state route, auto-close on search-param nav (fixes finding 14). Also the 360px topbar
-  overflow (finding 12) — it's topbar work.
-- **Phase 2 — Editor toolbar kebab** (Design 2): cluster collapse, docs comments-item gating
-  (finding 5's "lying button"), verify it clears findings 3 + 4; chat adopts the same pattern
-  (open decision 2).
-- **Phase 3 — Dialog + submenu overflow** ✅ (2026-07-21): calendar create/edit dialog (finding 1),
-  stickies card dialog + add/edit form (2, 18), shared-FileMenu version-history submenu (10), sheets
-  format submenus + the mobile submenu strategy (9, 22) — drill-in pages at the primitive.
-- **Phase 4 — Touch affordances**: hover-only policy + sweep (15), drive row actions + Move/Copy on
-  mobile (6, 7), long-press context menus (8) — extend the existing singleton `useContextMenu`
-  (`openAt`), don't add per-row menus —, doc comment creation via touch (16), delete confirm (19),
-  mail row actions + cheat-sheet entry point (20).
-- **Phase 5 — Structural**: mobile presentation for comment/activity panels (full-width overlay
-  instead of `w-64` side panel — unlocks docs/sheets panels for the first time), calendar week view
-  (13), slides mobile decision (11), sheet tabs (17), tap-target pass (21).
-
-Phases 1+2 are the settled decisions and should land first; 3–5 in any order after.
-
-## Open decisions
-
-1. **Read-only Eye marker** — settled 2026-07-21: **dropped on mobile** (its tooltip can't show on
-   touch, so the explanation is lost either way; desktop unchanged).
-2. **Chat toolbar** — settled 2026-07-21: **adopts `DocumentShareCluster`** with Watch + write-gated
-   Edit/Share; activity panel and find/search deliberately omitted for now (no DocSearchProvider in
-   chat, so Find self-omits). Known consequence: a read-only member of a *team* chat has no
-   access-dialog entry point (personal chats keep the left-slot `DriveShareSummary`).
-3. **Kebab breakpoint** — settled 2026-07-21: **768px** (`useIsMobile()`), not docs' 1200px
-   formatting breakpoint.
-4. **Slides on mobile**: bless view-only (then remove the dead affordances so it doesn't lie) vs
-   invest in mobile editing. Present-mode already works well.
-5. **Hover-only policy**: always-visible icons on touch devices (e.g. a `pointer-coarse` variant on
-   the shared pattern) vs long-press/swipe alternatives per surface.
-6. **Calendar week view**: redesign as an agenda/day list on mobile vs accept degraded.
-7. **Sidebar look without `SidebarHeader`**: the mobile X-header (app logo row) disappears; the
-   topbar sits above the sidebar-column instead. Confirm the presentation once Phase 1 screenshots
-   exist.
-8. **Drive trash confirm** (finding 19): mobile-only guard, or desktop too, or rely on restorability.
-
-## Verification + docs to update
-
-- Every phase: screenshot round at 390×844 + 360×800 with a throwaway user (the audit's
-  `mobile-audit@eigen.is` account + seeded content is still on the dev server as a reproducer set),
-  pixel verdicts, plus behavioral probes (tap, long-press, scroll, reload-persistence). Real-device
-  spot check before calling the program done (sheets touch-scroll was not verifiable headless;
-  phase 3's all-day date inputs were verified in Chromium — confirm the native date field doesn't
-  clip in real iOS Safari).
-- Same-cycle doc updates: CODE-STANDARDS § Z-Index (z-40 backdrop row), LAYOUT.md (sidebar overlay,
-  SidebarHeader, hamburger; its "AppLogo has app switcher" note is already stale), AGENTS.md
-  pattern tables where `Column`/`SidebarProps` APIs change, and this file's status line per phase.
+- Screenshot round at 390×844 + 360×800 with the seeded `mobile-audit@eigen.is` account
+  (reproducer set, still on the dev server), pixel verdicts + behavioral probes (tap, long-press,
+  scroll, reload-persistence). `hOverflow`-style page probes report 0 on the worst bugs
+  (portalled layers / `overflow:hidden` clip without widening the page) — pixel review is
+  mandatory. Full recipe: [VERIFICATION.md](VERIFICATION.md).
+- Real-device spot check before calling the program done: sheets touch-scroll, and native date
+  inputs in iOS Safari (phase 3 verified them in Chromium only).
+- Same-cycle doc updates: LAYOUT.md / AGENTS.md tables when APIs change, and this file per phase.
