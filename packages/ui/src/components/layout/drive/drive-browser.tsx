@@ -8,15 +8,11 @@ import {
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
-import {
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuTrigger,
-} from '@workspace/ui/components/context-menu';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { FolderPlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
@@ -76,6 +72,10 @@ export function DriveBrowser({
     const [internalCreateFolderOpen, setInternalCreateFolderOpen] = useState(false);
     const createFolderOpen = controlledCreateFolderOpen ?? internalCreateFolderOpen;
     const setCreateFolderOpen = onCreateFolderOpenChange ?? setInternalCreateFolderOpen;
+
+    // Background "New folder" menu, opened by right-clicking the listing area (rows
+    // stop propagation, so their right-clicks surface the per-item menu instead).
+    const newFolderMenu = useContextMenu<true>();
 
     const prevDefaultFolderId = useRef(defaultFolderId);
     useEffect(() => {
@@ -212,7 +212,10 @@ export function DriveBrowser({
     );
 
     const contentArea = (
-        <div className="flex-1 flex flex-col min-w-0">
+        <div
+            className="flex-1 flex flex-col min-w-0"
+            onContextMenu={showNewFolder ? (e) => newFolderMenu.handleContextMenu(e, true) : undefined}
+        >
             {!hideToolbar && (
                 <div className="flex items-center gap-2 h-10 px-3 border-b shrink-0">
                     <DriveBreadcrumb
@@ -255,18 +258,19 @@ export function DriveBrowser({
                     ownMountsOnly={ownMountsOnly}
                 />
             </div>
-            {showNewFolder ? (
-                <ContextMenu>
-                    <ContextMenuTrigger asChild>{contentArea}</ContextMenuTrigger>
-                    <ContextMenuContent>
-                        <ContextMenuItem onSelect={() => setCreateFolderOpen(true)}>
-                            <FolderPlus className="h-4 w-4 mr-2" />
-                            New folder
-                        </ContextMenuItem>
-                    </ContextMenuContent>
-                </ContextMenu>
-            ) : (
-                contentArea
+            {contentArea}
+            {showNewFolder && (
+                <ContextMenuAnchor contextMenu={newFolderMenu} className="min-w-48">
+                    <DropdownMenuItem
+                        onClick={() => {
+                            setCreateFolderOpen(true);
+                            newFolderMenu.close();
+                        }}
+                    >
+                        <FolderPlus className="h-4 w-4 mr-2" />
+                        New folder
+                    </DropdownMenuItem>
+                </ContextMenuAnchor>
             )}
             {showNewFolder && currentPath && (
                 <DriveCreateItemDialog

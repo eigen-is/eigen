@@ -4,12 +4,6 @@ import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath, DriveSortDir, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuTrigger,
-} from '@workspace/ui/components/context-menu';
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -30,6 +24,7 @@ import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
+import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { type CreateCallbacks, getCreateMenuItems } from './create-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { useMountLabel } from './drive-mount-list';
@@ -285,6 +280,11 @@ export function DriveList({
         [selection.selectedItems],
     );
     usePaletteSelection(paletteSelection);
+
+    // Background create menu, opened by right-clicking the empty listing area (rows
+    // stop propagation, so their right-clicks surface the per-item menu instead).
+    const createMenu = useContextMenu<true>();
+
     // Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {
@@ -348,7 +348,11 @@ export function DriveList({
           : undefined;
 
     const contentDiv = (
-        <div className="h-full flex flex-col relative border-r" {...targetProps}>
+        <div
+            className="h-full flex flex-col relative border-r"
+            {...targetProps}
+            onContextMenu={createItems.length > 0 ? (e) => createMenu.handleContextMenu(e, true) : undefined}
+        >
             {allowUpload && (
                 <div
                     className={cn(
@@ -383,16 +387,22 @@ export function DriveList({
     if (createItems.length === 0) return contentDiv;
 
     return (
-        <ContextMenu>
-            <ContextMenuTrigger asChild>{contentDiv}</ContextMenuTrigger>
-            <ContextMenuContent>
+        <>
+            {contentDiv}
+            <ContextMenuAnchor contextMenu={createMenu} className="min-w-48">
                 {createItems.map(({ kind, icon: Icon, label, onSelect }) => (
-                    <ContextMenuItem key={kind} onSelect={onSelect}>
+                    <DropdownMenuItem
+                        key={kind}
+                        onClick={() => {
+                            onSelect();
+                            createMenu.close();
+                        }}
+                    >
                         <Icon className="h-4 w-4 mr-2" />
                         {label}
-                    </ContextMenuItem>
+                    </DropdownMenuItem>
                 ))}
-            </ContextMenuContent>
-        </ContextMenu>
+            </ContextMenuAnchor>
+        </>
     );
 }
