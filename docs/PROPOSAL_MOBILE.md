@@ -24,9 +24,16 @@ Mobile is navigable now; these are the actions a touch user still cannot reach.
 - **Long-press context menus** (finding 8): long-press is dead in sheets (cut/copy/paste/sort/
   filter/comment), stickies (delete/resolve), slides (thumbnail menu gated `!mobile`), mail rows;
   drive long-press opens the wrong menu. Extend the existing singleton `useContextMenu` (`openAt`)
-  — no per-row menus. Include the sheet-tab menu here: `SheetItem` uses the separate Radix
-  ContextMenu primitive, the one submenu surface that still side-cascades on phones (the drill-in
-  fix covers dropdown menus only).
+  — no per-row menus.
+- **Consolidate on the singleton menu, delete the raw ContextMenu primitive** (decided
+  2026-07-23; do first — it's half of findings 6/8). Exactly three call sites still use raw Radix
+  `components/context-menu.tsx`: the drive background create menus (`drive-list.tsx:386`,
+  `drive-browser.tsx:259` — their triggers wrap the rows and MASK row right-click/long-press,
+  which IS finding 6/8's wrong-menu bug) and the sheet-tab menu (`SheetItem.tsx` — the one
+  submenu surface still side-cascading on phones; migrating it inherits drill-in for free).
+  Everything else (drive rows, comments, slides, sheets grid) already uses the singleton. After
+  migration the primitive has zero consumers → delete it (also kills the `context-menu.tsx` vs
+  `layout/context-menu/` naming collision).
 - **Touch path to CREATE a doc comment** (finding 16): keyboard shortcut or right-click only today
   (replying to an existing thread works by tapping the highlight).
 - **Drive "Move to trash" confirm** (finding 19). *Open decision:* mobile-only mis-tap guard, or
