@@ -105,9 +105,7 @@ export const EditorToolbar = ({
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
-    // Controlled so each open re-renders the toolbar and the Comment item's disabled check reads the
-    // live selection — useEditor skips selection-only re-renders, so an uncontrolled menu would bake a
-    // stale selection into the item.
+    // Controlled: useEditor skips selection-only re-renders, so opening must re-render for a live disabled check.
     const [insertMenuOpen, setInsertMenuOpen] = useState(false);
     const { exportDocument, isExporting } = useExportDocument();
     const importMutation = useImportDocument(path.ownerId, path.mountId);

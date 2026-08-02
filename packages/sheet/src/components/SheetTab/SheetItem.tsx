@@ -140,110 +140,108 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         [context.allowEdit, setContext, sheet],
     );
 
-    const renderMenuItems = useCallback(() => {
-        return settings.sheetTabContextMenu?.map((name, i) => {
-            // biome-ignore lint/suspicious/noArrayIndexKey: separator in static config menu
-            if (name === '|') return <DropdownMenuSeparator key={`divide-${i}`} />;
-            if (name === 'delete') {
-                return (
-                    <DropdownMenuItem
-                        key={name}
-                        onClick={() => {
-                            const shownSheets = context.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
-                            if (context.sheets.length > 1 && shownSheets.length > 1) {
-                                showAlert(sheetconfig.confirmDelete, 'yesno', () => {
-                                    setContext(
-                                        (ctx) => {
-                                            deleteSheet(ctx, sheet.id!);
-                                        },
-                                        { deleteSheetOp: { id: sheet.id! } },
-                                    );
-                                    hideAlert();
-                                });
-                            } else {
-                                showAlert(sheetconfig.noMoreSheet, 'ok');
-                            }
-                        }}
-                    >
-                        {sheetconfig.delete}
-                    </DropdownMenuItem>
-                );
-            }
-            if (name === 'rename')
-                return (
-                    <DropdownMenuItem key={name} onClick={() => setEditing(true)}>
-                        {sheetconfig.rename}
-                    </DropdownMenuItem>
-                );
-            if (name === 'copy') {
-                return (
-                    <DropdownMenuItem
-                        key={name}
-                        onClick={() => {
-                            if (context.allowEdit === false || !sheet?.id) return;
-                            setContext(
-                                (ctx) => {
-                                    api.copySheet(ctx, sheet.id!);
-                                },
-                                { addSheetOp: true },
-                            );
-                        }}
-                    >
-                        {sheetconfig.copy}
-                    </DropdownMenuItem>
-                );
-            }
-            if (name === 'hide') {
-                return (
-                    <DropdownMenuItem
-                        key={name}
-                        onClick={() => {
-                            if (context.allowEdit === false || !sheet) return;
-                            setContext((ctx) => {
-                                const shownSheets = ctx.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
-                                if (shownSheets.length > 1) api.hideSheet(ctx, sheet.id as string);
-                                else showAlert(sheetconfig.noMoreSheet, 'ok');
+    const menuItems = settings.sheetTabContextMenu?.map((name, i) => {
+        // biome-ignore lint/suspicious/noArrayIndexKey: separator in static config menu
+        if (name === '|') return <DropdownMenuSeparator key={`divide-${i}`} />;
+        if (name === 'delete') {
+            return (
+                <DropdownMenuItem
+                    key={name}
+                    onClick={() => {
+                        const shownSheets = context.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
+                        if (context.sheets.length > 1 && shownSheets.length > 1) {
+                            showAlert(sheetconfig.confirmDelete, 'yesno', () => {
+                                setContext(
+                                    (ctx) => {
+                                        deleteSheet(ctx, sheet.id!);
+                                    },
+                                    { deleteSheetOp: { id: sheet.id! } },
+                                );
+                                hideAlert();
                             });
-                        }}
-                    >
-                        {sheetconfig.hide}
-                    </DropdownMenuItem>
-                );
-            }
-            if (name === 'move') {
-                return (
-                    <React.Fragment key={name}>
-                        <DropdownMenuItem onClick={() => moveSheet(-1.5)}>{sheetconfig.moveLeft}</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => moveSheet(1.5)}>{sheetconfig.moveRight}</DropdownMenuItem>
-                    </React.Fragment>
-                );
-            }
-            if (name === 'color') {
-                return (
-                    <DropdownMenuSub key={name}>
-                        <DropdownMenuSubTrigger>{sheetconfig.changeColor}</DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>{context.allowEdit && <ChangeColor />}</DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                );
-            }
-            if (name === 'focus') {
-                return (
-                    <DropdownMenuItem
-                        key={name}
-                        onClick={() => {
-                            if (context.allowEdit === false || !sheet?.id) return;
-                            setContext((ctx) => {
-                                for (const f of ctx.sheets) f.status = sheet.id === f.id ? 1 : 0;
-                            });
-                        }}
-                    >
-                        {sheetconfig.focus}
-                    </DropdownMenuItem>
-                );
-            }
-            return null;
-        });
-    }, [context, settings.sheetTabContextMenu, sheet, showAlert, hideAlert, setContext, moveSheet]);
+                        } else {
+                            showAlert(sheetconfig.noMoreSheet, 'ok');
+                        }
+                    }}
+                >
+                    {sheetconfig.delete}
+                </DropdownMenuItem>
+            );
+        }
+        if (name === 'rename')
+            return (
+                <DropdownMenuItem key={name} onClick={() => setEditing(true)}>
+                    {sheetconfig.rename}
+                </DropdownMenuItem>
+            );
+        if (name === 'copy') {
+            return (
+                <DropdownMenuItem
+                    key={name}
+                    onClick={() => {
+                        if (context.allowEdit === false || !sheet?.id) return;
+                        setContext(
+                            (ctx) => {
+                                api.copySheet(ctx, sheet.id!);
+                            },
+                            { addSheetOp: true },
+                        );
+                    }}
+                >
+                    {sheetconfig.copy}
+                </DropdownMenuItem>
+            );
+        }
+        if (name === 'hide') {
+            return (
+                <DropdownMenuItem
+                    key={name}
+                    onClick={() => {
+                        if (context.allowEdit === false || !sheet) return;
+                        setContext((ctx) => {
+                            const shownSheets = ctx.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
+                            if (shownSheets.length > 1) api.hideSheet(ctx, sheet.id as string);
+                            else showAlert(sheetconfig.noMoreSheet, 'ok');
+                        });
+                    }}
+                >
+                    {sheetconfig.hide}
+                </DropdownMenuItem>
+            );
+        }
+        if (name === 'move') {
+            return (
+                <React.Fragment key={name}>
+                    <DropdownMenuItem onClick={() => moveSheet(-1.5)}>{sheetconfig.moveLeft}</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => moveSheet(1.5)}>{sheetconfig.moveRight}</DropdownMenuItem>
+                </React.Fragment>
+            );
+        }
+        if (name === 'color') {
+            return (
+                <DropdownMenuSub key={name}>
+                    <DropdownMenuSubTrigger>{sheetconfig.changeColor}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>{context.allowEdit && <ChangeColor />}</DropdownMenuSubContent>
+                </DropdownMenuSub>
+            );
+        }
+        if (name === 'focus') {
+            return (
+                <DropdownMenuItem
+                    key={name}
+                    onClick={() => {
+                        if (context.allowEdit === false || !sheet?.id) return;
+                        setContext((ctx) => {
+                            for (const f of ctx.sheets) f.status = sheet.id === f.id ? 1 : 0;
+                        });
+                    }}
+                >
+                    {sheetconfig.focus}
+                </DropdownMenuItem>
+            );
+        }
+        return null;
+    });
 
     const selectSheet = useCallback(() => {
         if (isDropPlaceholder) return;
@@ -339,7 +337,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                         </span>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="top" align="start" collisionPadding={8}>
-                        {renderMenuItems()}
+                        {menuItems}
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
