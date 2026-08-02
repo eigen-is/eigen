@@ -53,7 +53,8 @@ export function SlidePanel({
         },
         [openSlideMenuAt],
     );
-    const slideLongPress = useLongPress(handleSlideLongPress);
+    // dragActiveId cancels an armed press the moment a drag starts (same mechanism as stickies cards).
+    const slideLongPress = useLongPress(handleSlideLongPress, { disabled: !!dragActiveId });
 
     const slideList = deck.slideOrder.map((slideId, index) => {
         const slide = deck.slides[slideId];
