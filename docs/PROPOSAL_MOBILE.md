@@ -1,45 +1,16 @@
 # Proposal: Mobile Pass — remaining work
 
-> **Status (2026-07-22): Phases 1–3 shipped** (navigation shell, editor + list/calendar toolbar
-> kebabs, dialog + submenu overflow — merged and pushed through `46eb4f61`). Audit findings
-> 1, 2, 3, 4, 9, 10, 12, 14, 18, 22 and the toggle-lie half of 5 are cleared; the as-built record
-> lives in git history, [LAYOUT.md](LAYOUT.md), and AGENTS.md. This doc now tracks ONLY what
-> remains. Raw audit evidence (per-app tables, 296 screenshots, finding numbers referenced below)
-> stays in gitignored `docs/superpowers/mobile-audit/`.
-
-## Phase 4 — touch affordances
-
-Mobile is navigable now; these are the actions a touch user still cannot reach.
-
-- **Hover-only affordance policy + sweep** (finding 15). *Open decision:* always-visible icons on
-  touch (e.g. a `pointer-coarse` variant on the shared `invisible group-hover:visible` pattern) vs
-  long-press/swipe alternatives per surface. Known instances: calendar sidebar edit/share pencils
-  (`calendar-sidebar.tsx`, opacity-0 idle), chat wizard picked-person remove-X, contacts sidebar
-  label pencil, chat message actions (28px, hover-gated), drive row icons.
-- **Drive per-file actions reachable by touch** (finding 6): row ⋮ hidden below 800px *container*
-  width; long-press/right-click surface DriveList's folder-create context menu instead of the
-  file's menu.
-- **Move to… / Copy to… on mobile** (finding 7): absent from the DriveDetail More menu; only in
-  the masked/hidden row menu.
-- **Long-press context menus** (finding 8): long-press is dead in sheets (cut/copy/paste/sort/
-  filter/comment), stickies (delete/resolve), slides (thumbnail menu gated `!mobile`), mail rows;
-  drive long-press opens the wrong menu. Extend the existing singleton `useContextMenu` (`openAt`)
-  — no per-row menus.
-- **Consolidate on the singleton menu, delete the raw ContextMenu primitive** (decided
-  2026-07-23; do first — it's half of findings 6/8). Exactly three call sites still use raw Radix
-  `components/context-menu.tsx`: the drive background create menus (`drive-list.tsx:386`,
-  `drive-browser.tsx:259` — their triggers wrap the rows and MASK row right-click/long-press,
-  which IS finding 6/8's wrong-menu bug) and the sheet-tab menu (`SheetItem.tsx` — the one
-  submenu surface still side-cascading on phones; migrating it inherits drill-in for free).
-  Everything else (drive rows, comments, slides, sheets grid) already uses the singleton. After
-  migration the primitive has zero consumers → delete it (also kills the `context-menu.tsx` vs
-  `layout/context-menu/` naming collision).
-- **Touch path to CREATE a doc comment** (finding 16): keyboard shortcut or right-click only today
-  (replying to an existing thread works by tapping the highlight).
-- **Drive "Move to trash" confirm** (finding 19). *Open decision:* mobile-only mis-tap guard, or
-  desktop too, or rely on restorability.
-- **Mail shortcuts cheat-sheet on touch** (finding 20): `?`-key only AND gated behind a
-  default-off setting — no touch entry point.
+> **Status (2026-08-02): Phases 1–4 shipped.** Phases 1–3 (navigation shell, toolbar kebabs,
+> dialog + submenu overflow) merged and pushed through `46eb4f61`. Phase 4 (touch affordances —
+> findings 6, 7, 8, 15, 16, 19, 20 + menu-system consolidation) complete on branch
+> `mobile-touch-affordances`: the raw ContextMenu primitive is deleted (all menus now on the
+> singleton), drive row actions and Move/Copy are touch-reachable, long-press opens the context
+> menus on all five audited surfaces via the shared `useLongPress` hook, hover-only affordances
+> rest visible on coarse pointers (policy: match the hover value; pattern documented in
+> AGENTS.md), docs gained Insert → Comment (sheets already had it), drive trash confirms on
+> coarse pointers only, and the mail cheat-sheet has a toolbar entry point. Browser-verified
+> 21/21 at 390/360/768/1280 (Chromium). This doc now tracks ONLY what remains. Raw audit
+> evidence stays in gitignored `docs/superpowers/mobile-audit/`.
 
 ## Phase 5 — structural
 
@@ -53,13 +24,18 @@ Mobile is navigable now; these are the actions a touch user still cannot reach.
   decision:* redesign as an agenda/day list on mobile vs accept degraded.
 - **Slides on mobile** (finding 11): editor is structurally view-only < 768px (no canvas, no
   add-slide, no per-slide menu). *Open decision:* bless view-only and remove the dead affordances
-  so it doesn't lie, vs invest in mobile editing. Present-mode already works well.
+  so it doesn't lie, vs invest in mobile editing. Present-mode already works well. New inputs
+  from phase 4: thumbnail long-press now offers Duplicate/Delete to writers on mobile (the two
+  operations that don't need a canvas — decide whether that lone edit affordance stays), and
+  read-only viewers see those items as inert no-ops (pre-existing on desktop right-click,
+  mirrored on mobile) — fix the gating with whatever this decision lands on.
 - **Sheet tabs below 640px** (finding 17): tab strip hidden — only "+" and the all-sheets
   dropdown; no rename/reorder/recolor.
 - **Tap-target pass** (finding 21): recurring 24–36px icon buttons vs the ~44px guideline
   (stickies column-header 24px, chat message actions 28px, toolbar/topbar 32–36px).
-
-Phases 4 and 5 are independently shippable, FE-only, own branch each, in any order.
+- Observation for this phase (from phase-4 verification): drive multi-select has no pure-touch
+  affordance (modifier-click only), so the multi-item menus are effectively
+  keyboard-assisted-only on touch.
 
 ## Accepted drifts (decided — don't re-flag, don't fix)
 
@@ -71,6 +47,16 @@ Phases 4 and 5 are independently shippable, FE-only, own branch each, in any ord
   chats keep the left-slot `DriveShareSummary`).
 - Read-only Eye marker is dropped on mobile (its tooltip can't show on touch, so the explanation
   is lost either way; desktop unchanged).
+- Sheet-tab menu (phase 4): right-click opens the tab's chevron dropdown (anchored at the
+  chevron, not the pointer); long-press on a tab opens nothing — the always-visible chevron IS
+  the touch path. ≥640px surface only (strip hidden below, finding 17).
+- Drive background create menus (list + picker) are contextmenu-event-only — no long-press timer.
+  Long-press on empty space works where the engine synthesizes contextmenu (Android-class), not
+  on iOS; the `+` / "New folder" buttons are the primary touch create paths.
+- Chat message actions stay JS tap-to-reveal (tap emulates hover and shows the floating bar —
+  verified working on touch). Not converted to always-visible; the 28px targets are finding 21.
+- Beyond the audit's five long-press surfaces, some context menus remain right-click-only by
+  scope: contacts list rows, slides canvas objects, sheet row/column headers.
 
 ## Verification (every phase)
 
@@ -78,7 +64,10 @@ Phases 4 and 5 are independently shippable, FE-only, own branch each, in any ord
   (reproducer set, still on the dev server), pixel verdicts + behavioral probes (tap, long-press,
   scroll, reload-persistence). `hOverflow`-style page probes report 0 on the worst bugs
   (portalled layers / `overflow:hidden` clip without widening the page) — pixel review is
-  mandatory. Full recipe: [VERIFICATION.md](VERIFICATION.md).
-- Real-device spot check before calling the program done: sheets touch-scroll, and native date
-  inputs in iOS Safari (phase 3 verified them in Chromium only).
+  mandatory. Full recipe: [VERIFICATION.md](VERIFICATION.md). Long-press needs real CDP touch
+  synthesis; account passwords + fresh-cookie recipe live in the phase1-verify helper header.
+- Real-device spot check before calling the program done (all Chromium-only so far): sheets
+  touch-scroll; native date inputs in iOS Safari; and from phase 4 — long-press on the five
+  surfaces under real iOS (timer path + link-callout suppression on drive rows/tiles + no
+  first-menu-item activation on finger lift).
 - Same-cycle doc updates: LAYOUT.md / AGENTS.md tables when APIs change, and this file per phase.
