@@ -6,8 +6,10 @@ import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { Copy, Trash2 } from 'lucide-react';
+import { useCallback, useRef } from 'react';
 import { SlideThumbnail } from './slide-thumbnail';
 import { type DeckData, SLIDE_ASPECT_RATIO } from './types';
 
@@ -40,6 +42,20 @@ export function SlidePanel({
     const { resolveMediaUrl } = useMediaResolver();
     const slideContextMenu = useContextMenu<string>();
 
+    // Mobile thumbnails render bare (no SortableSlide, no per-item component to hang a hook on), so
+    // one panel-level useLongPress reads the pressed slide from a ref set on pointerdown. This is the
+    // only touch path to the menu on mobile — the desktop panel keeps its onContextMenu right-click.
+    const { openAt: openSlideMenuAt } = slideContextMenu;
+    const pressedSlide = useRef<string | null>(null);
+    const handleSlideLongPress = useCallback(
+        (x: number, y: number) => {
+            const slideId = pressedSlide.current;
+            if (slideId) openSlideMenuAt(slideId, x, y);
+        },
+        [openSlideMenuAt],
+    );
+    const slideLongPress = useLongPress(handleSlideLongPress);
+
     const slideList = deck.slideOrder.map((slideId, index) => {
         const slide = deck.slides[slideId];
         if (!slide) return null;
@@ -56,7 +72,23 @@ export function SlidePanel({
             />
         );
 
-        if (mobile) return <div key={slideId}>{thumbnail}</div>;
+        if (mobile)
+            return (
+                <div
+                    key={slideId}
+                    onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}
+                    onPointerDown={(e) => {
+                        pressedSlide.current = slideId;
+                        slideLongPress.onPointerDown(e);
+                    }}
+                    onPointerMove={slideLongPress.onPointerMove}
+                    onPointerUp={slideLongPress.onPointerUp}
+                    onPointerCancel={slideLongPress.onPointerCancel}
+                    onClickCapture={slideLongPress.onClickCapture}
+                >
+                    {thumbnail}
+                </div>
+            );
 
         return (
             <SortableSlide key={slideId} slideId={slideId} isDragOverlay={false}>
@@ -96,25 +128,24 @@ export function SlidePanel({
                     </DndContext>
                 )}
             </div>
-            {!mobile && (
-                <ContextMenuAnchor contextMenu={slideContextMenu}>
-                    {menuSlideId && (
-                        <>
-                            <DropdownMenuItem onClick={() => onDuplicateSlide?.(menuSlideId)}>
-                                <Copy className="h-4 w-4 mr-2" /> Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                                variant="destructive"
-                                disabled={deck.slideOrder.length <= 1}
-                                onClick={() => onDeleteSlide?.(menuSlideId)}
-                            >
-                                <Trash2 className="h-4 w-4 mr-2" /> Delete
-                            </DropdownMenuItem>
-                        </>
-                    )}
-                </ContextMenuAnchor>
-            )}
+            {/* Rendered on mobile too — long-press is the only way to reach it there. */}
+            <ContextMenuAnchor contextMenu={slideContextMenu}>
+                {menuSlideId && (
+                    <>
+                        <DropdownMenuItem onClick={() => onDuplicateSlide?.(menuSlideId)}>
+                            <Copy className="h-4 w-4 mr-2" /> Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            variant="destructive"
+                            disabled={deck.slideOrder.length <= 1}
+                            onClick={() => onDeleteSlide?.(menuSlideId)}
+                        >
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                        </DropdownMenuItem>
+                    </>
+                )}
+            </ContextMenuAnchor>
         </div>
     );
 }

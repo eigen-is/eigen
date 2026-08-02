@@ -225,12 +225,23 @@ export function StickiesBoard({
 
     const handleEditColumn = useCallback((columnId: string) => setEditColumnId(columnId), []);
 
-    const { handleContextMenu } = cardContextMenu;
+    const { handleContextMenu, openAt: openCardContextMenuAt } = cardContextMenu;
     const handleCardContextMenu = useCallback(
         (e: React.MouseEvent, card: CommentCard) => {
             handleContextMenu(e, { card, entry: card.chatName ? entryByChatName.get(card.chatName) : undefined });
         },
         [handleContextMenu, entryByChatName],
+    );
+    // Long-press opens the same card menu on touch (`touch-none` cards get no native contextmenu).
+    const handleCardLongPress = useCallback(
+        (card: CommentCard, x: number, y: number) => {
+            openCardContextMenuAt(
+                { card, entry: card.chatName ? entryByChatName.get(card.chatName) : undefined },
+                x,
+                y,
+            );
+        },
+        [openCardContextMenuAt, entryByChatName],
     );
 
     // Per-column card arrays with stable identity, so memoized columns only re-render
@@ -369,6 +380,7 @@ export function StickiesBoard({
                                                             onCardContextMenu={
                                                                 canWrite ? handleCardContextMenu : undefined
                                                             }
+                                                            onCardLongPress={canWrite ? handleCardLongPress : undefined}
                                                             highlighted={highlightedColumnIds.has(column.id)}
                                                             highlightedCardIds={highlightedCardIds}
                                                             isMobile={isMobile}

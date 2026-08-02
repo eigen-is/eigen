@@ -1,5 +1,6 @@
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './index.css';
@@ -41,7 +42,14 @@ export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const { info } = en;
     const { showDialog } = useDialog();
-    const { onContextMenu: cellAreaContextMenu, anchor: cellMenuAnchor } = useSheetContextMenu('cell');
+    const {
+        onContextMenu: cellAreaContextMenu,
+        openAtPoint: cellAreaLongPressOpen,
+        anchor: cellMenuAnchor,
+    } = useSheetContextMenu('cell');
+    // Long-press opens the cell menu on touch, running the same select-then-open flow as right-click.
+    // The 10 px cancel leaves grid scrolling untouched; the allowEdit gate lives in openAtPoint.
+    const cellAreaLongPress = useLongPress(cellAreaLongPressOpen);
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
     const [lastRangeText, setLastRangeText] = useState('');
@@ -408,6 +416,7 @@ export const SheetOverlay: React.FC = () => {
                     onDoubleClick={cellAreaDoubleClick}
                     onContextMenu={cellAreaContextMenu}
                     onScroll={onCellAreaScroll}
+                    {...cellAreaLongPress}
                     style={{
                         width: context.cellmainWidth,
                         height: context.cellmainHeight,

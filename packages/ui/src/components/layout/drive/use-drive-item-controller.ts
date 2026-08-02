@@ -103,6 +103,15 @@ export function useDriveItemController({
         contextMenu.openAt(item, rect.right, rect.bottom);
     };
 
+    // Long-press opener (touch): same selection side effect as right-click, positioned at the coords
+    // the useLongPress hook reports instead of an event.
+    const openContextMenuAt = (item: DrivePath, x: number, y: number) => {
+        if (!selection.isSelected(item.id)) {
+            selection.select(item.id);
+        }
+        contextMenu.openAt(item, x, y);
+    };
+
     const isValidFolderDrop = (targetItem: DrivePath) => {
         if (targetItem.type !== 'folder') return false;
         return !drag.draggedItems.some((d) => d.id === targetItem.id);
@@ -136,6 +145,7 @@ export function useDriveItemController({
         contextMenu,
         handleContextMenu,
         openContextMenuFromButton,
+        openContextMenuAt,
         isValidFolderDrop,
         dragOverItemId,
         getDropProps,

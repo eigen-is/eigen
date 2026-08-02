@@ -2,6 +2,7 @@ import { formatDateTime } from '@workspace/lib/date';
 import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
+import { useLongPress } from '../../../hooks/use-long-press';
 import { UnreadDot } from '../unread-dot';
 import { UserAvatar } from '../user-avatar';
 import { DriveItemNameLink } from './drive-item-name-link';
@@ -55,12 +56,14 @@ export function DriveRow({
         drag,
         handleContextMenu,
         openContextMenuFromButton,
+        openContextMenuAt,
         isValidFolderDrop,
         getDropProps,
         dragOverItemId,
     } = controller;
     const presentation = getFilePresentation(item.mimeType, item.type);
     const itemDate = getItemDate(item);
+    const longPress = useLongPress((x, y) => openContextMenuAt(item, x, y), { disabled });
 
     return (
         <div
@@ -81,6 +84,7 @@ export function DriveRow({
                 }
             }}
             onContextMenu={(e) => handleContextMenu(e, item)}
+            {...longPress}
             {...drag.getDragProps(item)}
             {...getDropProps(item)}
         >

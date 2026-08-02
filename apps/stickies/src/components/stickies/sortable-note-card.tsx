@@ -3,6 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { NoteCard } from '@workspace/ui';
 import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useCallback, useRef } from 'react';
 
@@ -15,6 +16,7 @@ type SortableNoteCardProps = {
     highlighted?: boolean;
     onOpen?: (cardId: string) => void;
     onContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
+    onLongPress?: (card: CommentCard, x: number, y: number) => void;
 };
 
 export const SortableNoteCard = memo(function SortableNoteCard({
@@ -26,6 +28,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
     highlighted,
     onOpen,
     onContextMenu,
+    onLongPress,
 }: SortableNoteCardProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
@@ -43,6 +46,16 @@ export const SortableNoteCard = memo(function SortableNoteCard({
         },
         [setNodeRef, card.id],
     );
+
+    // Long-press opens the same menu on touch. `touch-none` (required by the drag sensor) suppresses
+    // the browser's native contextmenu, so the timer-based hook is the only path here. dnd-kit's
+    // onPointerDown listener is composed with the hook's (not clobbered) — the 5 px drag activation
+    // and the 10 px long-press cancel keep a stationary press from starting a drag.
+    const longPress = useLongPress((x, y) => onLongPress?.(card, x, y), { disabled: !canWrite || !onLongPress });
+    const handlePointerDown = (e: React.PointerEvent) => {
+        if (canWrite) listeners?.onPointerDown?.(e);
+        longPress.onPointerDown(e);
+    };
 
     const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -72,7 +85,12 @@ export const SortableNoteCard = memo(function SortableNoteCard({
                 pointerStart.current = { x: e.clientX, y: e.clientY };
             }}
             onClick={handleClick}
+            onClickCapture={longPress.onClickCapture}
             onContextMenu={onContextMenu ? (e) => onContextMenu(e, card) : undefined}
+            onPointerDown={handlePointerDown}
+            onPointerMove={longPress.onPointerMove}
+            onPointerUp={longPress.onPointerUp}
+            onPointerCancel={longPress.onPointerCancel}
             className={cn(
                 canWrite && 'cursor-grab touch-none',
                 isDragging && 'opacity-50',
@@ -83,7 +101,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
                 transition,
                 zIndex: isDragging ? 10 : 0,
             }}
-            {...(canWrite ? { ...attributes, ...listeners } : {})}
+            {...(canWrite ? attributes : {})}
         />
     );
 });

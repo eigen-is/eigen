@@ -445,6 +445,7 @@ export function useSheetContextMenu(area: SheetMenuArea) {
     const contextMenu = useContextMenu<boolean>();
     const { allowEdit } = context;
     const openMenu = contextMenu.handleContextMenu;
+    const openMenuAt = contextMenu.openAt;
 
     const onContextMenu = useCallback(
         (e: React.MouseEvent) => {
@@ -457,8 +458,27 @@ export function useSheetContextMenu(area: SheetMenuArea) {
         [allowEdit, setContext, refs.cellArea, area, openMenu],
     );
 
+    // Long-press (touch) entry: same select-then-open flow, positioned at viewport coords. The state
+    // layer works in page coords, so add the scroll offset back on.
+    const openAtPoint = useCallback(
+        (x: number, y: number) => {
+            if (!allowEdit) return;
+            setContext((d) => {
+                handleContextMenu(
+                    d,
+                    { pageX: x + window.scrollX, pageY: y + window.scrollY },
+                    refs.cellArea.current!,
+                    STATE_AREA[area],
+                );
+            });
+            openMenuAt(true, x, y);
+        },
+        [allowEdit, setContext, refs.cellArea, area, openMenuAt],
+    );
+
     return {
         onContextMenu,
+        openAtPoint,
         anchor: (
             <ContextMenuAnchor
                 contextMenu={contextMenu}

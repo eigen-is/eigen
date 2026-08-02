@@ -3,6 +3,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
 import { useState } from 'react';
+import { useLongPress } from '../../../hooks/use-long-press';
 import { UnreadDot } from '../unread-dot';
 import { DriveItemNameLink } from './drive-item-name-link';
 import { getFileIcon, getFilePresentation } from './file-presentation';
@@ -34,6 +35,7 @@ export function DriveTile({
         drag,
         handleContextMenu,
         openContextMenuFromButton,
+        openContextMenuAt,
         isValidFolderDrop,
         getDropProps,
         dragOverItemId,
@@ -41,6 +43,7 @@ export function DriveTile({
     const presentation = getFilePresentation(item.mimeType, item.type);
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(item);
     const [thumbFailed, setThumbFailed] = useState(false);
+    const longPress = useLongPress((x, y) => openContextMenuAt(item, x, y), { disabled });
 
     return (
         <div
@@ -49,6 +52,7 @@ export function DriveTile({
                 if (!e.shiftKey && !e.metaKey && !e.ctrlKey) onItemClick?.(item);
             }}
             onContextMenu={(e) => handleContextMenu(e, item)}
+            {...longPress}
             {...drag.getDragProps(item)}
             {...getDropProps(item)}
             className={cn(

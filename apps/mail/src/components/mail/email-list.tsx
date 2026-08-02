@@ -6,9 +6,10 @@ import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layo
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { Paperclip, Star } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { EmailContextMenu } from './email-context-menu';
 
 type EmailListToolbarProps = {
@@ -231,6 +232,23 @@ export function EmailList({
         contextMenu.handleContextMenu(e, email);
     };
 
+    // Long-press opens the same menu on touch. Rows are mapped inline (no per-row component to hang a
+    // hook on), so one list-level useLongPress reads the pressed row from a ref set on pointerdown.
+    const pressedEmail = useRef<EmailSummary | null>(null);
+    const openMenuAt = contextMenu.openAt;
+    const handleLongPress = useCallback(
+        (x: number, y: number) => {
+            const email = pressedEmail.current;
+            if (!email) return;
+            if (!selection.isSelected(email.id)) {
+                selection.select(email.id);
+            }
+            openMenuAt(email, x, y);
+        },
+        [selection, openMenuAt],
+    );
+    const longPress = useLongPress(handleLongPress);
+
     const contextIds = contextMenu.item
         ? selection.selectedCount > 1
             ? selection.selectedItems.map((e) => e.id)
@@ -282,6 +300,14 @@ export function EmailList({
                                             }
                                         }}
                                         onContextMenu={(e) => handleContextMenu(e, email)}
+                                        onPointerDown={(e) => {
+                                            pressedEmail.current = email;
+                                            longPress.onPointerDown(e);
+                                        }}
+                                        onPointerMove={longPress.onPointerMove}
+                                        onPointerUp={longPress.onPointerUp}
+                                        onPointerCancel={longPress.onPointerCancel}
+                                        onClickCapture={longPress.onClickCapture}
                                         {...drag.getDragProps(email)}
                                     >
                                         {/* Reserved dot gutter — fixed width so read/unread rows don't shift. */}
