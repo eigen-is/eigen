@@ -246,13 +246,10 @@ export function EmailList({
     };
 
     // Long-press opens the same menu on touch. Rows are mapped inline (no per-row component to hang a
-    // hook on), so one list-level useLongPress reads the pressed row from a ref set on pointerdown.
-    const pressedEmail = useRef<EmailSummary | null>(null);
+    // hook on), so one list-level useLongPress carries the pressed row via bind(email).
     const openMenuAt = contextMenu.openAt;
     const handleLongPress = useCallback(
-        (x: number, y: number) => {
-            const email = pressedEmail.current;
-            if (!email) return;
+        (email: EmailSummary, x: number, y: number) => {
             if (!selection.isSelected(email.id)) {
                 selection.select(email.id);
             }
@@ -313,14 +310,7 @@ export function EmailList({
                                             }
                                         }}
                                         onContextMenu={(e) => handleContextMenu(e, email)}
-                                        onPointerDown={(e) => {
-                                            pressedEmail.current = email;
-                                            longPress.onPointerDown(e);
-                                        }}
-                                        onPointerMove={longPress.onPointerMove}
-                                        onPointerUp={longPress.onPointerUp}
-                                        onPointerCancel={longPress.onPointerCancel}
-                                        onClickCapture={longPress.onClickCapture}
+                                        {...longPress.bind(email)}
                                         {...drag.getDragProps(email)}
                                     >
                                         {/* Reserved dot gutter — fixed width so read/unread rows don't shift. */}

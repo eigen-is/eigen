@@ -48,8 +48,9 @@ export const SheetOverlay: React.FC = () => {
         anchor: cellMenuAnchor,
     } = useSheetContextMenu('cell');
     // Long-press opens the cell menu on touch, running the same select-then-open flow as right-click.
-    // The 10 px cancel leaves grid scrolling untouched; the allowEdit gate lives in openAtPoint.
-    const cellAreaLongPress = useLongPress(cellAreaLongPressOpen);
+    // The 10 px cancel leaves grid scrolling untouched; the allowEdit gate lives in openAtPoint. The
+    // cell surface has a single menu, so bind carries no item — bind(null).
+    const cellAreaLongPress = useLongPress<null>((_item, x, y) => cellAreaLongPressOpen(x, y));
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
     const [lastRangeText, setLastRangeText] = useState('');
@@ -416,7 +417,7 @@ export const SheetOverlay: React.FC = () => {
                     onDoubleClick={cellAreaDoubleClick}
                     onContextMenu={cellAreaContextMenu}
                     onScroll={onCellAreaScroll}
-                    {...cellAreaLongPress}
+                    {...cellAreaLongPress.bind(null)}
                     style={{
                         width: context.cellmainWidth,
                         height: context.cellmainHeight,

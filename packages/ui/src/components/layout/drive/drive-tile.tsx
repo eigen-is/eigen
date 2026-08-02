@@ -3,7 +3,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
 import { useState } from 'react';
-import { useLongPress } from '../../../hooks/use-long-press';
+import type { useLongPress } from '../../../hooks/use-long-press';
 import { UnreadDot } from '../unread-dot';
 import { DriveItemNameLink } from './drive-item-name-link';
 import { getFileIcon, getFilePresentation } from './file-presentation';
@@ -15,6 +15,9 @@ type DriveTileProps = {
     isSelected: boolean;
     disabled: boolean;
     controller: ReturnType<typeof useDriveItemController>;
+    // Stable bind from the grid-level useLongPress (hoisted in DriveGrid) — bind(item) yields the
+    // spreadable touch handlers for this tile.
+    longPressBind: ReturnType<typeof useLongPress<DrivePath>>['bind'];
     getItemHref?: (item: DrivePath) => string | undefined;
     onItemClick?: (item: DrivePath) => void;
     unreadPathIds?: Set<string>;
@@ -26,6 +29,7 @@ export function DriveTile({
     isSelected,
     disabled,
     controller,
+    longPressBind,
     getItemHref,
     onItemClick,
     unreadPathIds,
@@ -35,7 +39,6 @@ export function DriveTile({
         drag,
         handleContextMenu,
         openContextMenuFromButton,
-        openContextMenuAt,
         isValidFolderDrop,
         getDropProps,
         dragOverItemId,
@@ -43,7 +46,6 @@ export function DriveTile({
     const presentation = getFilePresentation(item.mimeType, item.type);
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(item);
     const [thumbFailed, setThumbFailed] = useState(false);
-    const longPress = useLongPress((x, y) => openContextMenuAt(item, x, y), { disabled });
 
     return (
         <div
@@ -52,7 +54,7 @@ export function DriveTile({
                 if (!e.shiftKey && !e.metaKey && !e.ctrlKey) onItemClick?.(item);
             }}
             onContextMenu={(e) => handleContextMenu(e, item)}
-            {...longPress}
+            {...(disabled ? {} : longPressBind(item))}
             {...drag.getDragProps(item)}
             {...getDropProps(item)}
             className={cn(

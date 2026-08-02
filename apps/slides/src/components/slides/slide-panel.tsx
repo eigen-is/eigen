@@ -9,7 +9,7 @@ import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layo
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { Copy, Trash2 } from 'lucide-react';
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { SlideThumbnail } from './slide-thumbnail';
 import { type DeckData, SLIDE_ASPECT_RATIO } from './types';
 
@@ -43,14 +43,12 @@ export function SlidePanel({
     const slideContextMenu = useContextMenu<string>();
 
     // Mobile thumbnails render bare (no SortableSlide, no per-item component to hang a hook on), so
-    // one panel-level useLongPress reads the pressed slide from a ref set on pointerdown. This is the
-    // only touch path to the menu on mobile — the desktop panel keeps its onContextMenu right-click.
+    // one panel-level useLongPress carries the pressed slide via bind(slideId). This is the only touch
+    // path to the menu on mobile — the desktop panel keeps its onContextMenu right-click.
     const { openAt: openSlideMenuAt } = slideContextMenu;
-    const pressedSlide = useRef<string | null>(null);
     const handleSlideLongPress = useCallback(
-        (x: number, y: number) => {
-            const slideId = pressedSlide.current;
-            if (slideId) openSlideMenuAt(slideId, x, y);
+        (slideId: string, x: number, y: number) => {
+            openSlideMenuAt(slideId, x, y);
         },
         [openSlideMenuAt],
     );
@@ -77,14 +75,7 @@ export function SlidePanel({
                 <div
                     key={slideId}
                     onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}
-                    onPointerDown={(e) => {
-                        pressedSlide.current = slideId;
-                        slideLongPress.onPointerDown(e);
-                    }}
-                    onPointerMove={slideLongPress.onPointerMove}
-                    onPointerUp={slideLongPress.onPointerUp}
-                    onPointerCancel={slideLongPress.onPointerCancel}
-                    onClickCapture={slideLongPress.onClickCapture}
+                    {...slideLongPress.bind(slideId)}
                 >
                     {thumbnail}
                 </div>

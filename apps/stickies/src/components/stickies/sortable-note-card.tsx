@@ -51,10 +51,13 @@ export const SortableNoteCard = memo(function SortableNoteCard({
     // the browser's native contextmenu, so the timer-based hook is the only path here. dnd-kit's
     // onPointerDown listener is composed with the hook's (not clobbered) — the 5 px drag activation
     // and the 10 px long-press cancel keep a stationary press from starting a drag.
-    const longPress = useLongPress((x, y) => onLongPress?.(card, x, y), { disabled: !canWrite || !onLongPress });
+    const longPress = useLongPress<CommentCard>((c, x, y) => onLongPress?.(c, x, y), {
+        disabled: !canWrite || !onLongPress,
+    });
+    const bound = longPress.bind(card);
     const handlePointerDown = (e: React.PointerEvent) => {
         if (canWrite) listeners?.onPointerDown?.(e);
-        longPress.onPointerDown(e);
+        bound.onPointerDown(e);
     };
 
     const pointerStart = useRef<{ x: number; y: number } | null>(null);
@@ -85,12 +88,12 @@ export const SortableNoteCard = memo(function SortableNoteCard({
                 pointerStart.current = { x: e.clientX, y: e.clientY };
             }}
             onClick={handleClick}
-            onClickCapture={longPress.onClickCapture}
+            onClickCapture={bound.onClickCapture}
             onContextMenu={onContextMenu ? (e) => onContextMenu(e, card) : undefined}
             onPointerDown={handlePointerDown}
-            onPointerMove={longPress.onPointerMove}
-            onPointerUp={longPress.onPointerUp}
-            onPointerCancel={longPress.onPointerCancel}
+            onPointerMove={bound.onPointerMove}
+            onPointerUp={bound.onPointerUp}
+            onPointerCancel={bound.onPointerCancel}
             className={cn(
                 canWrite && 'cursor-grab touch-none',
                 isDragging && 'opacity-50',

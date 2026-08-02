@@ -5,6 +5,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import { useRef } from 'react';
 import type { UseListSelectionReturn } from '../../../hooks/use-list-selection';
+import { useLongPress } from '../../../hooks/use-long-press';
 import { DriveItemContextMenu } from './drive-item-context-menu';
 import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
@@ -129,6 +130,9 @@ export function DriveTable({
         onSelectionChange,
     });
 
+    // One long-press instance for the whole list — rows spread bind(item); disabled rows skip it.
+    const longPress = useLongPress<DrivePath>((item, x, y) => controller.openContextMenuAt(item, x, y));
+
     // On touch devices the row ⋮ has no hover/right-click affordance, so the 40px kebab
     // column renders at every container width; on fine pointers the classes are unchanged.
     const coarse = useIsCoarsePointer();
@@ -190,6 +194,7 @@ export function DriveTable({
                                 gridCols={gridCols}
                                 coarse={coarse}
                                 controller={controller}
+                                longPressBind={longPress.bind}
                                 isActive={activeItemId === item.id || controller.selectedIndex === vi.index}
                                 isSelected={
                                     controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)

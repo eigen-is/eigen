@@ -95,21 +95,18 @@ export function useDriveItemController({
         contextMenu.handleContextMenu(e, item);
     };
 
-    const openContextMenuFromButton = (button: HTMLElement, item: DrivePath) => {
-        if (!selection.isSelected(item.id)) {
-            selection.select(item.id);
-        }
-        const rect = button.getBoundingClientRect();
-        contextMenu.openAt(item, rect.right, rect.bottom);
-    };
-
-    // Long-press opener (touch): same selection side effect as right-click, positioned at the coords
-    // the useLongPress hook reports instead of an event.
+    // Opens the menu at the given viewport coords with the same selection side effect as right-click —
+    // the shared path for both the long-press (touch) opener and the kebab button below.
     const openContextMenuAt = (item: DrivePath, x: number, y: number) => {
         if (!selection.isSelected(item.id)) {
             selection.select(item.id);
         }
         contextMenu.openAt(item, x, y);
+    };
+
+    const openContextMenuFromButton = (button: HTMLElement, item: DrivePath) => {
+        const rect = button.getBoundingClientRect();
+        openContextMenuAt(item, rect.right, rect.bottom);
     };
 
     const isValidFolderDrop = (targetItem: DrivePath) => {
