@@ -734,6 +734,7 @@ const TiptapEditor = ({
                             unresolvedCommentCount={unresolvedCount}
                             onImageUpload={mediaFolderId ? handleImageUpload : undefined}
                             onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
+                            onAddComment={chatFolderId ? handleAddComment : undefined}
                         />
                     }
                 >
