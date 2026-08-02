@@ -2,13 +2,15 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { formatDateTime } from '@workspace/lib/date';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { EmptyState, ErrorState, LoadingState, Toolbar } from '@workspace/ui';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
+import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
-import { Paperclip, Star } from 'lucide-react';
+import { Keyboard, Paperclip, Star } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { EmailContextMenu } from './email-context-menu';
 
@@ -17,9 +19,12 @@ type EmailListToolbarProps = {
     onSearchChange: (query: string) => void;
     // Handle for the `/` shortcut to focus the search input.
     inputRef?: React.RefObject<HTMLInputElement | null>;
+    // Opens the shortcuts cheat-sheet — the only discoverable entry point (`?` is gated on the
+    // default-off keyboardShortcuts setting), so the kebab shows on every viewport.
+    onShowShortcuts: () => void;
 };
 
-export function EmailListToolbar({ searchQuery, onSearchChange, inputRef }: EmailListToolbarProps) {
+export function EmailListToolbar({ searchQuery, onSearchChange, inputRef, onShowShortcuts }: EmailListToolbarProps) {
     return (
         <Toolbar>
             <SearchBar
@@ -30,6 +35,14 @@ export function EmailListToolbar({ searchQuery, onSearchChange, inputRef }: Emai
                 inputClassName="h-8 bg-background"
                 inputRef={inputRef}
             />
+            <DropdownMenu>
+                <KebabTrigger />
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={onShowShortcuts}>
+                        <Keyboard className="mr-2" /> Keyboard shortcuts
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
         </Toolbar>
     );
 }

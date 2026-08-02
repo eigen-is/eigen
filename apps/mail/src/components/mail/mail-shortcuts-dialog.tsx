@@ -1,3 +1,4 @@
+import { getSpaceAppUrl } from '@workspace/lib/api';
 import {
     Dialog,
     DialogContent,
@@ -80,9 +81,12 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
 type MailShortcutsDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    // Whether the keyboard layer is actually active (the opt-in space setting). When off, the
+    // sheet is still reachable from the toolbar, so it says so rather than implying the keys work.
+    enabled: boolean;
 };
 
-export function MailShortcutsDialog({ open, onOpenChange }: MailShortcutsDialogProps) {
+export function MailShortcutsDialog({ open, onOpenChange, enabled }: MailShortcutsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             {/* flex + max-h so the header stays put and the groups scroll when they don't fit the viewport. */}
@@ -124,6 +128,15 @@ export function MailShortcutsDialog({ open, onOpenChange }: MailShortcutsDialogP
                         ))}
                     </div>
                 </div>
+                {!enabled && (
+                    <p className="text-xs text-muted-foreground">
+                        Keyboard shortcuts are turned off.{' '}
+                        <a href={getSpaceAppUrl('email')} className="text-link hover:underline">
+                            Turn them on in Mail settings
+                        </a>
+                        .
+                    </p>
+                )}
                 <DialogFooter showCloseButton />
             </DialogContent>
         </Dialog>

@@ -268,7 +268,12 @@ function MailRoute() {
     const isDraft = mode === 'compose' || selectedEmail?.isDraft;
 
     const listToolbar = (
-        <EmailListToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} inputRef={searchInputRef} />
+        <EmailListToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            inputRef={searchInputRef}
+            onShowShortcuts={() => setHelpOpen(true)}
+        />
     );
 
     const detailToolbar = isDraft ? (
@@ -294,7 +299,7 @@ function MailRoute() {
 
     return (
         <>
-            <MailShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
+            <MailShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} enabled={shortcutsEnabled} />
             <DeleteDialog
                 open={deleteDialogOpen}
                 onOpenChange={(open) => {
