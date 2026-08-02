@@ -1,4 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
@@ -128,12 +129,16 @@ export function DriveTable({
         onSelectionChange,
     });
 
+    // On touch devices the row ⋮ has no hover/right-click affordance, so the 40px kebab
+    // column renders at every container width; on fine pointers the classes are unchanged.
+    const coarse = useIsCoarsePointer();
     const colsKey = [!hideOwner && 'owner', !hideShared && 'shared', !hideModified && 'modified']
         .filter(Boolean)
         .join('-');
     const gridCols = cn(
-        'grid-cols-[minmax(0,1fr)]',
-        !hideModified && '@[600px]:grid-cols-[minmax(0,1fr)_15%]',
+        coarse ? 'grid-cols-[minmax(0,1fr)_40px]' : 'grid-cols-[minmax(0,1fr)]',
+        !hideModified &&
+            (coarse ? '@[600px]:grid-cols-[minmax(0,1fr)_15%_40px]' : '@[600px]:grid-cols-[minmax(0,1fr)_15%]'),
         GRID_COLS_800[colsKey],
     );
 
@@ -164,7 +169,7 @@ export function DriveTable({
                             {dateLabel}
                         </div>
                     )}
-                    <div className="hidden @[800px]:block" />
+                    <div className={coarse ? 'block' : 'hidden @[800px]:block'} />
                 </div>
             )}
 
@@ -183,6 +188,7 @@ export function DriveTable({
                                 item={item}
                                 index={vi.index}
                                 gridCols={gridCols}
+                                coarse={coarse}
                                 controller={controller}
                                 isActive={activeItemId === item.id || controller.selectedIndex === vi.index}
                                 isSelected={

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-837 primitives across 6 kinds. `packages/sheet` internals are excluded.
+838 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -154,7 +154,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (214)
+## Hooks (215)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -319,6 +319,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useToggleReadEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useUpdateDraft` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `useUploadDraftAttachment` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
+| `useIsCoarsePointer` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
 | `useIsDesktop` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
 | `useIsMobile` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
 | `useIsTablet` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |

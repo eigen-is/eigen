@@ -16,6 +16,7 @@ type DriveRowProps = {
     isSelected: boolean;
     disabled: boolean;
     gridCols: string;
+    coarse: boolean;
     controller: ReturnType<typeof useDriveItemController>;
     getItemHref?: (item: DrivePath) => string | undefined;
     onItemClick?: (item: DrivePath) => void;
@@ -36,6 +37,7 @@ export function DriveRow({
     isSelected,
     disabled,
     gridCols,
+    coarse,
     controller,
     getItemHref,
     onItemClick,
@@ -114,7 +116,7 @@ export function DriveRow({
                     {itemDate ? formatDateTime(itemDate) : 'Unknown'}
                 </div>
             )}
-            <div className="hidden @[800px]:flex items-center justify-center py-1.5">
+            <div className={cn(coarse ? 'flex' : 'hidden @[800px]:flex', 'items-center justify-center py-1.5')}>
                 <button
                     type="button"
                     onClick={(e) => {
