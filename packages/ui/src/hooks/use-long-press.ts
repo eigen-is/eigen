@@ -31,10 +31,21 @@ export function useLongPress(onLongPress: (x: number, y: number) => void, opts?:
         if (disabled) cancel();
     }, [disabled, cancel]);
 
+    // Cancel a pending timer if the host unmounts mid-press (a virtualized drive/mail row removed by
+    // a data refresh, a sticky deleted by a collaborator) — it must not fire onLongPress for a gone
+    // component.
+    useEffect(() => cancel, [cancel]);
+
     const onPointerDown = useCallback(
         (e: React.PointerEvent) => {
-            if (disabled || e.pointerType !== 'touch') return;
+            // Runs for every pointer type: cancel a still-pending timer so a second finger on a
+            // shared list-level instance can't orphan the first (pointerup/cancel would then never
+            // reach it), and clear a leftover fired flag so it can't swallow a later click — the
+            // native contextmenu can eat the compat click that would otherwise reset it. Arming
+            // stays touch-only.
+            cancel();
             fired.current = false;
+            if (disabled || e.pointerType !== 'touch') return;
             start.current = { x: e.clientX, y: e.clientY };
             current.current = { x: e.clientX, y: e.clientY };
             timer.current = setTimeout(() => {
@@ -43,7 +54,7 @@ export function useLongPress(onLongPress: (x: number, y: number) => void, opts?:
                 onLongPress(current.current.x, current.current.y);
             }, LONG_PRESS_MS);
         },
-        [disabled, onLongPress],
+        [disabled, onLongPress, cancel],
     );
 
     const onPointerMove = useCallback(
